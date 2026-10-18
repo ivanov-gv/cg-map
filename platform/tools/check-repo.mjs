@@ -17,8 +17,8 @@ for (const file of docs) {
   }
 }
 const imports = {
-  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js', './transport.js'],
-  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': []
+  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js'],
+  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': [], 'point-selection.js': []
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;

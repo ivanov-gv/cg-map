@@ -355,3 +355,7 @@ The latest cloud-browser inspection could not render because that browser disabl
 ## Optional transport
 
 [transport.js](src/transport.js) installs static stop circles/names and live vehicle circles/route labels. Transport visibility controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See [transport behavior](../../docs/transport.md).
+
+## Point selection
+
+[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.

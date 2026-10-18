@@ -18,3 +18,5 @@
 .layer-controls .transport-control,.layer-controls .satellite-control{position:static;max-width:100%}
 .layer-controls~.place-card{z-index:5;top:140px}
 @media(max-width:720px){.layer-controls{top:62px;left:12px;max-width:calc(100% - 72px)}.layer-controls~.place-card{top:auto}}
+
+.point-actions{display:flex;gap:10px;margin:0 0 18px}.point-actions button{flex:1;min-height:44px;border-radius:10px;background:#193f36;color:white;font-weight:600}.point-actions button:last-child{background:#a34c35}.route-endpoints{padding:12px 23px;border-bottom:1px solid var(--line);background:#edf2e8}.route-endpoints p{display:flex;gap:9px;margin:0 0 6px;font-size:12px}.route-endpoints strong{min-width:35px}.route-endpoints span{overflow-wrap:anywhere}.route-endpoints button{font-size:11px}@media(max-width:720px){.route-endpoints{padding:8px 15px}.route-endpoints p{font-size:10px;margin-bottom:3px}.route-endpoints span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.route-endpoints button{font-size:10px}.point-actions{margin-bottom:12px}}

@@ -16,3 +16,5 @@ See [team ownership](ownership.md). Start with [current architecture](../ARCHITE
 | Detailed design and future options | [Implementation guide](design/implementation-guide.md) |
 
 Update documentation in the same change as affected behavior. Current architecture and runbooks take precedence over historical verification notes. Keep each fact in one authoritative location; link instead of duplicating.
+
+- [Point selection](point-selection.md): feature details and From/To endpoint state.

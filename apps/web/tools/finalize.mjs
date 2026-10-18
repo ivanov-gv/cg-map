@@ -10,7 +10,7 @@ const data=fs.readFileSync(archive),hash=sha(data),archiveName='data/montenegro-
 if(check&&path.resolve(archive)!==path.join(web,archiveName))throw new Error('Archive filename is stale. Run npm run release:prepare.');
 if(!check&&path.resolve(archive)!==path.join(web,archiveName))fs.renameSync(archive,path.join(web,archiveName));
 for(const name of fs.readdirSync(path.join(web,'data')))if(!check&&name.endsWith('.pmtiles')&&'data/'+name!==archiveName)fs.unlinkSync(path.join(web,'data',name));
-const shell=['index.html','app.js','core.js','offline.js','map-style.js','satellite.js','transport.js','style.css','icon.svg','icon-192.png','icon-512.png','manifest.webmanifest','vendor/maplibre-gl.js','vendor/maplibre-gl.css','vendor/pmtiles.js','data/places.geojson','data/transport-stops.geojson'];
+const shell=['index.html','app.js','core.js','offline.js','map-style.js','satellite.js','transport.js','point-selection.js','style.css','icon.svg','icon-192.png','icon-512.png','manifest.webmanifest','vendor/maplibre-gl.js','vendor/maplibre-gl.css','vendor/pmtiles.js','data/places.geojson','data/transport-stops.geojson'];
 for(const stack of fs.readdirSync(path.join(web,'fonts'))){const p=path.join(web,'fonts',stack);if(fs.statSync(p).isDirectory())for(const f of fs.readdirSync(p))if(f.endsWith('.pbf'))shell.push('fonts/'+stack+'/'+f);}
 // Satellite is deliberately small: include every sample asset in offline releases.
 function collectSatellite(dir) {

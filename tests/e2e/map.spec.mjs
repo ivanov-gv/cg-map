@@ -47,6 +47,10 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.254951, 42.446057], zoom: 17}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-stops']}).length)).toBeGreaterThan(0);
   await expect(page.locator('#transport-status')).toHaveText(/internet connection/);
+  await tapMapCenter(page,[19.254951,42.446057]);
+  await expect(page.locator('#place-category')).toHaveText('Bus stop');
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await expect(page.locator('#route-from')).toContainText('Ul. 13. jula (B)');
   expect(errors).toEqual([]);
 });
 
@@ -101,9 +105,59 @@ test('stop snapshot renders and selects independently of live bus availability',
     return {x: box.left + p.x, y: box.top + p.y};
   });
   await page.mouse.click(point.x, point.y);
-  await expect(page.locator('.maplibregl-popup')).toContainText('Ul. 13. jula (B)');
-  await expect(page.locator('.maplibregl-popup')).toContainText('Bus stop · ID 1');
+  await expect(page.locator('#place-card')).toContainText('Ul. 13. jula (B)');
+  await expect(page.locator('#place-card')).toContainText('Stop ID: 1');
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
-  await expect(page.locator('.maplibregl-popup')).toHaveCount(0);
+  await expect(page.locator('#place-card')).toBeHidden();
   expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
+});
+
+async function tapMapCenter(page, coordinates) {
+  await page.evaluate(point => window.kompasDebug.map.jumpTo({center: point, zoom: 17}), coordinates);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+  const point = await page.evaluate(() => {
+    const m=window.kompasDebug.map, p=m.project(m.getCenter()), b=m.getCanvas().getBoundingClientRect();
+    return {x:b.left+p.x,y:b.top+p.y};
+  });
+  await page.mouse.click(point.x,point.y);
+}
+
+test('map points offer From/To, preserve both endpoints, and clear them', async ({page}) => {
+  await ready(page);
+  await tapMapCenter(page,[20.8,43.7]);
+  await expect(page.locator('#place-name')).toHaveText('Map point');
+  await expect(page.getByRole('button',{name:'From',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#route-from')).toContainText('43.70000, 20.80000');
+  await tapMapCenter(page,[20.81,43.71]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-to')).toContainText('43.71000, 20.81000');
+  expect(await page.evaluate(()=>window.kompasDebug.map.getSource('route-points')._data.features.length)).toBe(2);
+  await tapMapCenter(page,[20.8,43.7]);
+  await expect(page.locator('#place-category')).toHaveText('From point');
+  await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-to')).toContainText('43.70000, 20.80000');
+  await page.getByRole('button',{name:'Clear points',exact:true}).click();
+  await expect(page.locator('#route-endpoints')).toBeHidden();
+  expect(await page.evaluate(()=>window.kompasDebug.map.getSource('route-points')._data.features.length)).toBe(0);
+});
+
+test('building selection provides feature details and point actions', async ({page}) => {
+  await ready(page);
+  await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[19.26,42.437],zoom:17}));
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['buildings']}).length)).toBeGreaterThan(0);
+  const picked=await page.evaluate(()=>{
+    const m=window.kompasDebug.map, b=m.getCanvas().getBoundingClientRect();
+    // Find a visible building interior away from controls and place markers.
+    for(let y=150;y<b.height-65;y+=8)for(let x=b.width*.5;x<b.width-65;x+=8){
+      const hits=m.queryRenderedFeatures([x,y],{layers:['buildings','place-circles','place-names']});
+      if(hits.some(f=>f.layer.id==='buildings')&&!hits.some(f=>f.layer.id!=='buildings'))return {x:b.left+x,y:b.top+y};
+    }
+    return null;
+  });
+  expect(picked).not.toBeNull();await page.mouse.click(picked.x,picked.y);
+  await expect(page.locator('#place-category')).toHaveText('Building');
+  await expect(page.locator('#place-details')).toContainText('Type: building');
+  await expect(page.getByRole('button',{name:'To',exact:true})).toBeVisible();
 });

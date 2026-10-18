@@ -9,6 +9,7 @@ This is a concern-based monorepo. Source boundaries follow ownership; deployment
 | Web | Plain JavaScript ES modules, HTML/CSS; MapLibre GL JS 5.12.0 |
 | Vector map | PMTiles v3, PMTiles JS 4.3.0, precomputed MVT |
 | Directory | GeoJSON snapshot with browser-side search |
+| Point selection | Feature details and From/To endpoints in browser session state |
 | Satellite | Local bounded zoom-17 WebP sample and preview |
 | Offline | Service worker/Cache Storage for shell; OPFS for verified archive |
 | Data pipeline | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely |
