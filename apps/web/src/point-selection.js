@@ -3,13 +3,14 @@ export function describePoint(feature, coordinates) {
   const p = feature?.properties ?? {};
   const layer = feature?.layer?.id;
   const stop = layer === 'transport-stops';
-  const kind = stop ? 'Bus stop' : layer === 'buildings' ? 'Building' :
+  const building = ['buildings','building-numbers'].includes(layer);
+  const kind = stop ? 'Bus stop' : building ? 'Building' :
     layer === 'land' ? (p.kind === 'park' ? 'Park' : 'Land') :
     ['water', 'rivers'].includes(layer) ? 'Water' :
     layer ? (p.bridge && p.bridge !== 'no' ? 'Bridge' : 'Road') : 'Map point';
   return {
     coordinates: stop ? [...feature.geometry.coordinates] : [...coordinates],
-    name: typeof p.name === 'string' && p.name.trim() ? p.name : kind,
+    name: typeof p.name === 'string' && p.name.trim() ? p.name : building && p['addr:housenumber'] ? `Building ${p['addr:housenumber']}` : kind,
     kind,
     details: stop ? [`Stop ID: ${p.stopId}`, 'Source: ePodgorica · snapshot 18 October 2026'] :
       layer ? [p.kind ? `Type: ${p.kind.replaceAll('_', ' ')}` : '',

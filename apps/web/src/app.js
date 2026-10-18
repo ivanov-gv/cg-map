@@ -124,8 +124,8 @@ async function start(){
    else showPlace(hit.properties.id);
    return;
   }
-  const features=map.queryRenderedFeatures(e.point,{layers:['buildings','road-labels','minor-roads','major-roads','land','water','rivers']});
-  const feature=features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='road-labels'||f.layer.id==='minor-roads'||f.layer.id==='major-roads')??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
+  const features=map.queryRenderedFeatures(e.point,{layers:['building-numbers','buildings','road-labels','minor-roads','major-roads','land','water','rivers']});
+  const feature=features.find(f=>f.layer.id==='building-numbers')??features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='road-labels'||f.layer.id==='minor-roads'||f.layer.id==='major-roads')??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
   showPoint(describePoint(feature,e.lngLat.toArray()));
  });
  map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});

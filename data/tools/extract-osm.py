@@ -54,7 +54,11 @@ class Extract(osmium.SimpleHandler):
    self.layers['water'].append(feature({'type':'LineString','coordinates':coords},{'kind':'river','name':t.get('name','')}))
   if w.is_closed() and len(coords)>3:
    poly={'type':'Polygon','coordinates':[coords]}
-   if t.get('building') and local:self.layers['buildings'].append(feature(poly,{'kind':'building'}))
+   if t.get('building') and local:
+    props={'kind':'building','osm_id':'way/'+str(w.id)}
+    for key in ['name','addr:housenumber','addr:street']:
+     if t.get(key):props[key]=t[key]
+    self.layers['buildings'].append(feature(poly,props))
    if (t.get('landuse') in ['forest','grass','meadow','recreation_ground'] or t.get('leisure') in ['park','garden']) and local:
     self.layers['land'].append(feature(poly,{'kind':'park','name':t.get('name','')}))
    if t.get('natural')=='water':self.layers['water'].append(feature(mapping(shape(poly).simplify(.0001)),{'kind':'water'}))

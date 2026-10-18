@@ -64,6 +64,9 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await page.getByRole('button',{name:'Public transport',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveAttribute('data-state','ready');
   await expect(page.locator('#route-status')).toContainText('+ waiting');
+  const numbered=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson')).features[0];
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:20}),numbered.geometry.coordinates);
+  await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),numbered.id)).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -250,4 +253,21 @@ test('one-finger tap then drag zooms and never opens point actions', async ({pag
   await page.waitForTimeout(650);
   await expect(page.locator('#place-card')).toBeHidden();
   expect(await page.evaluate(()=>window.kompasDebug.endpoints)).toEqual({from:null,to:null});
+});
+
+test('building house numbers render at close zoom and open address details', async ({page}) => {
+  const labels=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson'));
+  const places=JSON.parse(fs.readFileSync('data/sources/places.geojson'));
+  const label=labels.features.find(f=>!places.features.some(p=>Math.hypot(p.geometry.coordinates[0]-f.geometry.coordinates[0],p.geometry.coordinates[1]-f.geometry.coordinates[1])<.00005));
+  expect(label).toBeTruthy();
+  await ready(page);
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:17}),label.geometry.coordinates);
+  expect(await page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).length)).toBe(0);
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:20}),label.geometry.coordinates);
+  await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),label.id)).toBe(true);
+  const point=await page.evaluate(c=>{const m=window.kompasDebug.map,p=m.project(c),b=m.getCanvas().getBoundingClientRect();return {x:b.left+p.x,y:b.top+p.y};},label.geometry.coordinates);
+  await page.mouse.click(point.x,point.y);
+  await expect(page.locator('#place-category')).toHaveText('Building');
+  await expect(page.locator('#place-name')).toHaveText('Building '+label.properties['addr:housenumber']);
+  await expect(page.locator('#point-from')).toBeVisible();
 });

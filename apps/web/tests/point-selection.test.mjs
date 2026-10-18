@@ -19,3 +19,8 @@ test('endpoint features keep both roles and do not share mutable coordinate arra
   data.features[0].geometry.coordinates[0]=0;assert.equal(endpoints.from.coordinates[0],19);
   assert.equal(endpointFeatures({}).features.length,0);
 });
+
+test('numbered building labels expose an address without inventing a building name', () => {
+  const point=describePoint({layer:{id:'building-numbers'},properties:{kind:'building','addr:housenumber':'12B','addr:street':'Test street'}},[19.26,42.44]);
+  assert.equal(point.kind,'Building');assert.equal(point.name,'Building 12B');assert.ok(point.details.includes('Test street 12B'));
+});

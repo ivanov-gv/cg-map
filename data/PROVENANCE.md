@@ -17,3 +17,7 @@ The added `data/tools/extract-osm.py` is an adaptation of the original small ext
 ## Transit route patterns
 
 transit-network.json and transit-network.provenance.json are a separately dated public ePodgorica import. They contain stop coordinates and representative ordered route patterns with relative running times, sampled by direction/headsign/stop count from weekday, Saturday, and Sunday trips. They are not an exhaustive timetable or service calendar. Refresh with data/tools/import-transit.py; raw API responses are temporary and excluded from Git. Source URLs, sampling limits, counts, hash, and license status are recorded.
+
+## Building address labels
+
+`building-labels.geojson` recovers published OSM house numbers for existing building footprints from the same reviewed 2026-10-17 extract. Its independent provenance file binds labels to the unchanged buildings.geojson hash and records direct/node-derived counts. Real way IDs are recovered by exact rounded footprint matching; point addresses are joined only through unambiguous node membership or containment. No-number placeholders and ambiguous joins are excluded. The runtime label layer is separate from the unchanged geography archive; it is bundled for offline use. See [building numbers](../docs/building-numbers.md).

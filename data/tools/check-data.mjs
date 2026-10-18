@@ -77,7 +77,37 @@ export function validateTransitNetwork(data) {
   }
   return data.patterns.length;
 }
+function insideRing(point, ring) {
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++) {
+    const a=ring[i],b=ring[j];
+    if((a[1]>point[1])!==(b[1]>point[1]) && point[0]<(b[0]-a[0])*(point[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }
+  return inside;
+}
+export function validateBuildingLabels(data, buildings) {
+  const count=validateCollection(data,{label:'building labels',geometryTypes:['Point'],requireKind:true});
+  const ids=new Set(),footprints=new Set();
+  for(const f of data.features) {
+    const p=f.properties,index=p.footprintIndex,number=p['addr:housenumber'];
+    requireValue(p.kind==='building' && typeof number==='string' && number.trim().length>0 && number.length<=128 && !['','bb','бб','bezbroja','безброја','na','?'].includes(number.toLowerCase().replace(/[\s./_-]/g,'')), 'Missing building house number');
+    requireValue(typeof f.id==='string' && /^way\/\d+$/.test(f.id) && p.osm_id===f.id && !ids.has(f.id), 'Invalid or duplicate building source ID');
+    requireValue(Number.isInteger(index) && index>=0 && index<buildings.features.length && !footprints.has(index), 'Invalid or duplicate footprint reference');
+    requireValue(Array.isArray(p.address_sources) && p.address_sources.length>0 && p.address_sources.every(id=>/^(way|node)\/\d+$/.test(id)), 'Building address source missing');
+    const g=buildings.features[index].geometry,point=f.geometry.coordinates;
+    requireValue(g.type==='Polygon' && point.length===2 && insideRing(point,g.coordinates[0]) && !g.coordinates.slice(1).some(r=>insideRing(point,r)), 'Building label outside its polygon');
+    ids.add(f.id);footprints.add(index);
+  }
+  requireValue(count>0, 'Empty building address snapshot');
+  return count;
+}
 export function checkData(root = rootDirectory) {
+  const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
+  const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
+  const labelProvenance=JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-labels.provenance.json')));
+  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),JSON.parse(buildingBytes));
+  requireValue(labelCount===labelProvenance.features && labelBytes.length===labelProvenance.bytes && crypto.createHash('sha256').update(labelBytes).digest('hex')===labelProvenance.sha256 && crypto.createHash('sha256').update(buildingBytes).digest('hex')===labelProvenance.buildings_sha256, 'Building label provenance mismatch');
+
   const transitBytes = fs.readFileSync(path.join(root, 'data/sources/transit-network.json'));
   const transitProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transit-network.provenance.json')));
   const transit = JSON.parse(transitBytes);
@@ -89,6 +119,7 @@ export function checkData(root = rootDirectory) {
   requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
+  requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');

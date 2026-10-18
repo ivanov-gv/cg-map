@@ -20,3 +20,5 @@ Update documentation in the same change as affected behavior. Current architectu
 - [Point selection](point-selection.md): feature details and From/To endpoint state.
 
 - [Routing](routing.md): car/foot services, bus suggestions, data refresh, and limitations.
+
+- [Building numbers](building-numbers.md): source recovery, label placement, and refresh.

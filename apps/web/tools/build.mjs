@@ -16,6 +16,7 @@ fs.cpSync(path.join(root, 'apps/web/src'), output, {recursive: true});
 fs.mkdirSync(path.join(output, 'data'), {recursive: true});
 fs.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
 fs.copyFileSync(path.join(root, 'data/sources/places.geojson'), path.join(output, 'data/places.geojson'));
+fs.copyFileSync(path.join(root, 'data/sources/building-labels.geojson'), path.join(output, 'data/building-labels.geojson'));
 fs.copyFileSync(path.join(root, 'data/sources/transit-network.json'), path.join(output, 'data/transit-network.json'));
 fs.copyFileSync(path.join(root, 'data/sources/transport-stops.geojson'), path.join(output, 'data/transport-stops.geojson'));
 fs.cpSync(path.join(root, 'data/imagery/podgorica'), path.join(output, 'data/satellite'), {recursive: true, filter: source => !source.endsWith('.md')});
