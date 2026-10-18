@@ -1,4 +1,4 @@
-"""Serve generated root assets at / and /cg-map/ for deployment-path tests."""
+"""Serve repository entry and web assets at / and /cg-map/ for deployment-path tests."""
 import argparse
 from functools import partial
 from http.server import ThreadingHTTPServer
@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from server import Handler
+from tools.serve import Handler
 
 
 class PagesHandler(Handler):

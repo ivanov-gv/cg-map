@@ -10,17 +10,17 @@ make test-e2e
 make check-go  # Optional Go toolchain
 ```
 
-`make check` runs ESLint, structural data/provenance validation, documentation links and module boundaries, 26 Node tests, five Python HTTP/range tests, Python compilation, and byte parity between source and generated root Pages assets.
+`make check` runs ESLint, structural data/provenance validation, documentation links and module boundaries, 27 Node tests, five Python HTTP/range tests, Python compilation, and repository layout checks.
 
-The Node suite covers real archive/MVT decoding, style validity, local search, offline transaction failures, service-worker behavior, vendor contracts, geometry/place validation, and safe root publication. Tests use actual shipped archive data plus a small approved Podgorica directory fixture. The validator does not prove GIS topology.
+The Node suite covers real archive/MVT decoding, style validity, local search, offline transaction failures, service-worker behavior, vendor contracts, geometry/place validation, and root-entry routing and legacy worker retirement. Tests use actual shipped archive data plus a small approved Podgorica directory fixture. The validator does not prove GIS topology.
 
-Playwright covers desktop at `/` and mobile viewport at `/cg-map/`: fixture-backed search/selection, satellite toggling with a persistent map, and downloading/reloading the real snapshot offline. It runs against generated root output using a local range-capable host. Browser tests produce traces/screenshots on failure. It is a functional check, not a phone GPU or storage-retention benchmark.
+Playwright covers desktop at `/` and mobile viewport at `/cg-map/`: fixture-backed search/selection, satellite toggling with a persistent map, and downloading/reloading the real snapshot offline. It follows the root entry into the single web/ tree using a local range-capable host. Browser tests produce traces/screenshots on failure. It is a functional check, not a phone GPU or storage-retention benchmark.
 
 The GitHub workflow independently runs source/data checks, browser tests, and Go vet/test/build. See workflow runs for remote evidence; local test results do not establish remote CI success.
 
 ## Agent foundation verification — 2026-10-18
 
-Local source/data checks passed: 26 Node tests, five Python tests, lint, geometry/provenance, docs/boundaries, offline manifests, and root Pages parity. Four Playwright tests passed across root-desktop and project-prefix mobile configurations, including real archive download and offline reload. The static export command also passed. Go is not installed in the local environment; see CI for the optional host validation.
+Local source/data checks passed: 27 Node tests, five Python tests, lint, geometry/provenance, docs/boundaries, offline manifests, and repository layout. Four Playwright tests passed across root-desktop and project-prefix mobile configurations, including real archive download and offline reload. The static export command also passed. Root routing now forwards to web/; the browser suite verifies that transition. Go is not installed in the local environment; see CI for the optional host validation.
 
 ## Historical baseline evidence
 

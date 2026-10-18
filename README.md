@@ -5,10 +5,10 @@ A read-only Montenegro map and place directory: vector map, local search, place 
 ## Start
 
 ```sh
-python3 server.py
+python3 tools/serve.py
 ```
 
-Open http://localhost:8080/. No external runtime services or API keys are required. The optional Go host is `go run .`. Phone offline use requires HTTPS; desktop localhost also works.
+Open http://localhost:8080/. No external runtime services or API keys are required. The optional Go host is `go run ./cmd/kompas`. Phone offline use requires HTTPS; desktop localhost also works.
 
 ## Develop and verify
 
@@ -40,10 +40,11 @@ make test-e2e
 | [docs/](docs/README.md) | Runbooks, decisions, plans, detailed design |
 | [web/](web/README.md) | Editable app and ready-to-serve source assets |
 | source-data/ | Editable display geometry and provenance |
-| tools/ | Builds, publication, validation |
+| tools/ | Development server, data builds, validation, static export |
 | tests/ | Unit, data, transport, publication, and browser tests |
 | deployment/ | Example Caddy configurations |
-| Root app assets | Generated GitHub Pages copy; edit web/ instead |
+| cmd/kompas/ | Optional Go static host |
+| index.html | Root Pages entry forwarding to web/ |
 
 ## GitHub Pages
 
@@ -52,3 +53,5 @@ Public URL: https://ivanov-gv.github.io/cg-map/
 The prepared publishing source is **main → / (root)**. The owner must change the Pages folder setting from /docs separately. `docs/` now holds actual documentation. See [release and rollback](docs/runbooks/release.md).
 
 The satellite sample is local imagery served by eMapa as Ortofoto 2025; redistribution rights remain unverified. Application code is MIT; data and fonts retain separate licenses. See [DATA_LICENSE.md](DATA_LICENSE.md).
+
+The optional Go binary serves assets from disk (`-dir web` by default); distribute `web/` alongside it or select another asset directory.

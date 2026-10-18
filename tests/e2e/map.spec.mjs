@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const fixture = JSON.parse(fs.readFileSync('tests/fixtures/podgorica-places.geojson'));
 async function ready(page) {
   await page.goto('./');
+  await expect(page).toHaveURL(/\/web\/$/);
   await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-circles'));
   await expect(page.locator('#loading')).toBeHidden();
 }

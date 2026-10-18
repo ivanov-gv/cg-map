@@ -2,7 +2,7 @@
 
 Read [the implementation guide](README.md) for detailed code behavior.
 
-- Edit these source files, not generated root copies.
+- Keep application source and static assets here; do not make root copies.
 - Keep `core.js` independent of browser globals. Put DOM orchestration in `app.js`.
 - Preserve one map instance; toggle layers without reconstructing the map.
 - Keep PMTiles/range responses outside the shell service-worker cache.

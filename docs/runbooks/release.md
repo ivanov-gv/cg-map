@@ -1,10 +1,12 @@
 # Release and rollback
 
-## GitHub Pages migration
+## GitHub Pages
 
-The repository now prepares branch-based Pages output at the root. After merging/pushing this change, set **Settings → Pages → Deploy from a branch → main → / (root)**. The repository settings are changed by the owner separately.
+Use **Settings → Pages → Deploy from a branch → main → / (root)**. The public entry remains https://ivanov-gv.github.io/cg-map/ and opens the app at `/cg-map/web/`.
 
-`docs/` now contains Markdown documentation. Until the Pages setting changes, the former `/docs` source will no longer serve the map. Public URL remains https://ivanov-gv.github.io/cg-map/.
+There is one application tree: `web/`. Root `index.html` forwards there while preserving query/hash. Root `.nojekyll` disables Jekyll processing. `docs/` contains documentation, not deployable app copies.
+
+Root `sw.js` is a migration shim for browsers that previously registered a worker at the project root. It unregisters that worker without deleting shared caches or verified OPFS downloads. The current application registers `web/sw.js` within `web/`.
 
 ## Prepare and verify
 
@@ -16,21 +18,19 @@ git diff --check
 git status --short
 ```
 
-`make pages` refreshes offline manifests and copies runtime assets from `web/` into managed root paths. The publisher excludes Markdown and instructions, records outputs in `.pages-manifest.json`, and only removes obsolete entries in that inventory. It never mirrors over or deletes the repository root or docs directory.
+`make pages` refreshes offline manifests in web/. It never copies application files into the repository root. Review and commit relevant source, manifests, tests, and docs together. CI checks the layout and offline manifest freshness without silently rebuilding them.
 
-Review and commit the source, generated output, inventory, and relevant documentation together. `make check` fails on stale root copies. CI does not regenerate output to conceal drift.
-
-For other hosts, `npm run build:static` creates an untracked `dist/` copy of `web/`. Optional Python/Go hosts continue serving `web/`, avoiding exposure of repository documentation and build files in local hosting.
+For standalone hosting, `npm run build:static` creates an ignored `dist/` containing only runtime assets. Serve that directory directly. The Python host (`tools/serve.py`) serves web/ locally; the optional Go command (`cmd/kompas/`) serves an asset directory selected with `-dir`.
 
 ## Verify deployment
 
-- Confirm the GitHub checks and Pages deployment succeeded.
-- Open the public project URL, toggle satellite, search, and select a place.
-- Confirm archive responses support ranges or the documented full-response fallback.
+- Confirm checks and Pages deployment succeeded.
+- Open the root project URL; confirm it reaches the app, then toggle satellite, search, and select a place.
+- Confirm archive range reads or the documented full-response fallback.
 - Verify HTTPS offline download/reload on a target phone; CI is not phone performance evidence.
 
 ## Rollback
 
-Revert the release commit on main and let Pages redeploy. For the migration commit itself, restoring the old `/docs` layout also requires restoring the Pages folder setting.
+Revert the release commit and let Pages redeploy. The Pages source remains main / (root). Reverting all the way to the earlier /docs layout also requires restoring that folder setting.
 
-Future larger deployments must retain old content-addressed archives for an explicit compatibility window: clients with cached older shells may still request them. Root publishing currently removes obsolete local managed files; it is not a production archive retention service.
+Future larger releases must retain old content-addressed archives for a compatibility window: clients with cached shells may still request them. Local finalization is not a production archive retention service.

@@ -30,3 +30,14 @@ for (const file of fs.readdirSync('web').filter(f => f.endsWith('.js'))) {
   }
 }
 console.log('Documentation links, docs-only layout, and browser module boundaries passed.');
+
+// Root contains project entry/configuration only; runtime assets live in web/.
+const rootFiles = new Set(['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
+  'DATA_LICENSE.md', 'LICENSE', 'Makefile', 'go.mod', 'go.sum', 'package.json',
+  'package-lock.json', 'eslint.config.mjs', 'playwright.config.mjs', 'index.html', 'sw.js']);
+for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
+  if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name),
+    `Root clutter: ${entry.name}. Put application assets in web/, Go commands in cmd/, or utilities in tools/.`);
+}
+assert.ok(!fs.existsSync('.pages-manifest.json'), 'Remove obsolete root asset inventory');
+for (const old of ['server.py', 'main.go', 'data', 'fonts', 'vendor']) assert.ok(!fs.existsSync(old), `Obsolete root layout: ${old}`);

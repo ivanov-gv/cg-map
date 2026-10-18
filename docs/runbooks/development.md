@@ -15,7 +15,7 @@ npx playwright install chromium
 make test-e2e
 ```
 
-`make check` runs ESLint, structural data/provenance checks, documentation links, module boundaries, Node/Python tests, Python compilation, and generated Pages parity. It does not modify generated files. If runtime assets changed, first run `make pages`.
+`make check` runs ESLint, structural data/provenance checks, documentation links, module boundaries, Node/Python tests, Python compilation, and repository layout. It does not modify generated files. If runtime assets changed, first run `make pages` to refresh offline manifests.
 
 Playwright starts its own server at an available localhost port and tests both origin-root and project-prefix paths. Use `E2E_PORT` to isolate simultaneous runs. Browser artifacts are ignored by Git and uploaded on CI failure.
 

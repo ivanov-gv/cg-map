@@ -1,7 +1,7 @@
 import sys,unittest,io,json
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from server import parse_range,Handler
+from tools.serve import parse_range,Handler
 class Ranges(unittest.TestCase):
     def test_ranges(self):
         for value,want in [('bytes=0-99',(0,99)),('bytes=900-',(900,999)),('bytes=-30',(970,999)),('bytes=950-2000',(950,999))]:

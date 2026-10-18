@@ -9,8 +9,8 @@ A code-level walkthrough of the deployed application: module responsibilities, s
 | Browser main thread | app.js, core.js, map-style.js, satellite.js, offline.js | UI state, event handlers, map configuration and archive access |
 | MapLibre internals | vendor/maplibre-gl.js and its workers | Tile preparation, label placement and WebGL rendering |
 | Service-worker context | sw.js, offline-manifest.js | Serve cached application assets and manage shell-cache lifecycle |
-| Build process | ../tools/ | Generate map artifacts, cache manifests and the root deployment output |
-| Static host | GitHub Pages | Serve the generated root assets over HTTPS, including archive byte ranges |
+| Build process | ../tools/ | Generate map artifacts, cache manifests and the standalone static export |
+| Static host | GitHub Pages | Open the single web/ application tree through the root entry page, including archive byte ranges |
 
 The browser keeps one MapLibre instance alive. Search, selection and layer switching update existing DOM elements and map sources/layers. There is no per-interaction backend request.
 
@@ -269,7 +269,7 @@ When changing mobile CSS, test rotation, keyboard opening, long place names, scr
 
 | Goal | Start here | Follow-up |
 | --- | --- | --- |
-| Change button wording | index.html or app.js, depending on who creates it | Regenerate manifests and root output |
+| Change button wording | index.html or app.js, depending on who creates it | Regenerate offline manifests |
 | Change sidebar/card spacing | style.css | Check desktop and mobile |
 | Change road/building colors | map-style.js | No geometry rebuild needed |
 | Change marker colors | colors in core.js | Check list icons and map |
@@ -292,7 +292,7 @@ Run commands from the repository root.
 
 ~~~sh
 npm ci --ignore-scripts
-python3 server.py
+python3 tools/serve.py
 ~~~
 
 Open http://localhost:8080/. Python serves the committed web assets; npm dependencies are used by build tools and tests, not a frontend development server. There is no automatic hot reload.
@@ -301,34 +301,20 @@ Open http://localhost:8080/. Python serves the committed web assets; npm depende
 
 ~~~sh
 node tools/finalize.mjs
-node tools/publish-pages.mjs
 npm test
 ~~~
 
 finalize.mjs regenerates cache identity and manifests. It also reads/hashes the existing archive; it does not regenerate road/building geometry.
 
-publish-pages.mjs copies runtime assets from web/ to managed paths in the repository root and adds .nojekyll. Edit web/; root output is generated. It never deletes docs/.
+The application lives only in web/. GitHub Pages publishes the repository root; its index.html forwards to web/. There are no generated root copies to refresh. The root sw.js retires the previous root-scoped worker.
 
-The current tests include checks comparing satellite assets in web/ and the root output, so refresh the root output before running them.
-
-Review and publish:
-
-~~~sh
-git diff --check
-git status
-git diff
-git add web .pages-manifest.json index.html *.js *.css data fonts vendor *.png *.svg *.webmanifest .nojekyll
-git commit -m "Describe the frontend change"
-git push
-~~~
-
-Stage any modified tools or tests as well. GitHub Pages publishes main → /. GitHub Actions runs source/data checks independently.
+Review and commit the relevant source, manifests, tests, and documentation together. Run make check and make test-e2e before publishing.
 
 ### After changing geographic geometry
 
 Run npm run build first. It executes the tile generation/packaging/finalization pipeline, needs its Node/Python build dependencies, and can be substantially more expensive than a UI change. See the repository README for Python setup.
 
-Then refresh the root output, run checks and publish. You do not need a vector rebuild just to change CSS.
+Then regenerate manifests, run checks and publish. You do not need a vector rebuild just to change CSS.
 
 ### Documentation-only changes
 

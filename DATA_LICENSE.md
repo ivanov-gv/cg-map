@@ -13,4 +13,4 @@ No company research article text or proprietary map datasets are bundled; resear
 
 ## Orthophoto sample
 
-`web/data/satellite/` and its generated root `data/satellite/` copy contain eMapa Ortofoto 2025 sample imagery and provenance. Its reuse licence has not been established. This imagery is not licensed under MIT, ODbL, or Natural Earth's public-domain terms by this project. Original download URLs and hashes are recorded in the sample manifest.
+`web/data/satellite/` contains eMapa Ortofoto 2025 sample imagery and provenance. Its reuse licence has not been established. This imagery is not licensed under MIT, ODbL, or Natural Earth's public-domain terms by this project. Original download URLs and hashes are recorded in the sample manifest.

@@ -28,7 +28,7 @@ This is the implemented and deployed stack as of 18 October 2026. The prepared P
 
 **There is no backend API, application database, React framework, or server-side search in the deployed PoC.** Go/PostGIS and internal editorial services elsewhere in this guide are future options, not deployed dependencies.
 
-`web/` is the application source/public asset tree. Run `node tools/publish-pages.mjs` after changes to refresh the committed root deployment output. Run `node tools/finalize.mjs` first when app or dataset changes require new offline manifests. Downloaded satellite imagery is bundled locally; the deployed app does not call eMapa at runtime.
+`web/` is the application source/public asset tree. Run `node tools/finalize.mjs` first when app or dataset changes require new offline manifests. Downloaded satellite imagery is bundled locally; the deployed app does not call eMapa at runtime.
 
 ## Contents
 
@@ -460,8 +460,8 @@ The service-worker file participates in shell version hashing. That prevents a w
 | [tools/finalize.mjs](../../tools/finalize.mjs) | Hashes, archive name, offline manifests |
 | [tools/extract-osm.py](../../tools/extract-osm.py) | Added CLI adaptation of the original small OSM extractor |
 | [tools/add-ocean.py](../../tools/add-ocean.py) | Derive sea geometry from supplied country shapes |
-| [server.py](../../server.py) | Standard-library development host with range support |
-| [main.go](../../main.go) | Optional standard-library Go host with embedded assets |
+| [tools/serve.py](../../tools/serve.py) | Standard-library development host with range support |
+| [cmd/kompas/main.go](../../cmd/kompas/main.go) | Optional standard-library Go host serving an asset directory |
 | `tests/` | Data, style, API-contract, offline, transport, and handler checks |
 
 The GitHub export adds documentation, deployment examples, a `go.mod`, and a CI workflow. Those additions do not change the working `web/` application. The source export has no previous Git history, Site project identity, credentials, or dependency/build caches.
@@ -473,7 +473,7 @@ The GitHub export adds documentation, deployment examples, a `go.mod`, and a CI 
 From the repository root:
 
 ```sh
-python3 server.py
+python3 tools/serve.py
 ```
 
 Open `http://localhost:8080/`. No dependency installation is necessary to view the shipped map. Localhost is treated as a secure context by supporting browsers, unlike an arbitrary plain-HTTP LAN address.
@@ -481,10 +481,10 @@ Open `http://localhost:8080/`. No dependency installation is necessary to view t
 Alternatively:
 
 ```sh
-go run main.go
+go run ./cmd/kompas
 ```
 
-Use the wheel/trackpad or zoom buttons, click markers, search/filter, and open nearby results. `/` focuses search; Escape closes details. The result distance is from the map center. The optional Go host embeds the current `web/`; a compiled binary must be rebuilt when embedded assets change.
+Use the wheel/trackpad or zoom buttons, click markers, search/filter, and open nearby results. `/` focuses search; Escape closes details. The result distance is from the map center. The optional Go host serves `web/` from disk; use `-dir` to select another application asset directory.
 
 ### 12.2 Android browser / installed PWA
 
@@ -673,7 +673,7 @@ React/Svelte can be adopted later if application complexity warrants them. They 
 
 ### 15.1 What actually needs hosting
 
-The deployed public PoC uses GitHub Pages, publishing `main` → `/`. This is an exact static copy of `web/`, refreshed with `node tools/publish-pages.mjs`. For other hosts, only `web/` is needed to serve the shipped application. No application database, external API, npm process, or cloud-specific backend is required. A Linux VPS running Caddy or Nginx is sufficient to start. The supplied Python host is useful for local development; its existence does not make it a production-hardened internet server.
+The deployed public PoC uses GitHub Pages, publishing `main` → `/`. The root entry page opens `web/`; there is one committed application tree. For other hosts, only `web/` is needed to serve the shipped application. No application database, external API, npm process, or cloud-specific backend is required. A Linux VPS running Caddy or Nginx is sufficient to start. The supplied Python host is useful for local development; its existence does not make it a production-hardened internet server.
 
 The optional Go host is deliberately small. Before exposing it directly at production scale, add appropriate HTTP timeouts, graceful shutdown, operational metrics, and TLS/proxy integration—or simply let a mature static server deliver the files.
 
@@ -1066,7 +1066,7 @@ Create an empty repository and replace the placeholder URL yourself. This reposi
 
 Application code is MIT; map data and fonts retain separate licenses/notices. A GitHub MIT badge must not be interpreted as relicensing all geographic data. Review [DATA_LICENSE.md](../../DATA_LICENSE.md).
 
-For a minimal first run, use `python3 server.py`. For a deeper handoff, run the checks, read the source map above, then try one place-only change and one geometry change on a branch. That will exercise the essential boundaries without requiring new infrastructure.
+For a minimal first run, use `python3 tools/serve.py`. For a deeper handoff, run the checks, read the source map above, then try one place-only change and one geometry change on a branch. That will exercise the essential boundaries without requiring new infrastructure.
 
 ## 25. References
 

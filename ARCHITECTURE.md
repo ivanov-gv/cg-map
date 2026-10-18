@@ -1,6 +1,6 @@
 # Current architecture
 
-Kompas is a static, read-only Montenegro map and place directory. Application source is `web/`; GitHub Pages serves a generated copy from the repository root. Change the Pages setting to **main / (root)** after this migration. `docs/` is documentation.
+Kompas is a static, read-only Montenegro map and place directory. Application source is `web/`; GitHub Pages publishes from the repository root, whose small entry page opens `web/`. There is one application asset tree. Change the Pages setting to **main / (root)** after this migration. `docs/` is documentation.
 
 ## Implemented stack
 
@@ -16,7 +16,7 @@ Kompas is a static, read-only Montenegro map and place directory. Application so
 | Data build | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles | GeoJSON → MVT → content-addressed archive |
 | Optional import | Python osmium / Shapely | OSM extraction; not needed to run the snapshot |
 | Hosting | GitHub Pages; optional Python or Go static hosts | Static files; range transport |
-| Verification | ESLint, Node tests, Python unittest, Playwright, GitHub Actions | Contracts, provenance, browser behavior, root output parity |
+| Verification | ESLint, Node tests, Python unittest, Playwright, GitHub Actions | Contracts, provenance, browser behavior, repository layout |
 
 There is no backend API, database, React application, routing graph, or server-side search. Go is an optional static host, not an application backend.
 
@@ -37,8 +37,8 @@ There is no backend API, database, React application, routing graph, or server-s
 
 1. Editable geometry lives in `source-data/`; place records live in `web/data/places.geojson`.
 2. `npm run build` generates tiles, packages PMTiles, and finalizes manifests. This expensive pipeline is only needed for geometry changes.
-3. `npm run release:prepare` regenerates offline identity and publishes runtime assets to managed root paths. It does not rebuild geometry.
-4. `.pages-manifest.json` inventories generated root files. `npm run check:pages` verifies byte parity with `web/`.
+3. `npm run release:prepare` regenerates offline identity and keeps runtime assets in place. It does not rebuild geometry.
+4. Root `index.html` forwards to `web/`, preserving query/hash and the project prefix. Root `sw.js` retires the old root-scoped worker; the application owns `web/sw.js`.
 5. Browser requests use relative paths, supporting both `/` and the `/cg-map/` project prefix. Root and prefix browser tests cover this contract.
 
 The browser fetches manifests and places, loads the vector archive through PMTiles, and renders one persistent map. Explicit offline download verifies the archive before switching to local storage. The service worker caches shell assets and excludes archive/range requests.
@@ -50,7 +50,7 @@ The browser fetches manifests and places, loads the vector archive through PMTil
 - Basemap extracts do not preserve reliable upstream identity for conflation.
 - Satellite redistribution rights remain unverified; preserve its existing provenance record.
 - Device GPU performance, browser eviction, and phone offline behavior require real-device checks.
-- Root publishing requires a committed generated copy while branch-based Pages is used. Large future artifacts should move to versioned artifact storage.
+- Branch-based Pages serves the single `web/` tree through a root entry page. Large future artifacts should move to versioned artifact storage.
 
 ## Further reading
 
@@ -60,3 +60,7 @@ The browser fetches manifests and places, loads the vector archive through PMTil
 - [Data pipeline](docs/runbooks/data.md)
 - [Release and rollback](docs/runbooks/release.md)
 - [Testing](docs/testing.md)
+
+## Host layout
+
+`cmd/kompas/main.go` is the optional Go static host. It serves assets from disk (`-dir web` by default). `tools/serve.py` is the Python development host. Neither is part of the browser runtime.

@@ -9,7 +9,7 @@ Start with [current architecture](../ARCHITECTURE.md) and [agent instructions](.
 | Data contracts and rebuilding | [Data runbook](runbooks/data.md) |
 | Publishing, Pages migration, rollback | [Release runbook](runbooks/release.md) |
 | Test commands, evidence, device checks | [Testing](testing.md) |
-| Why source/output/docs are separate | [ADR 0001](decisions/0001-agent-foundation.md) |
+| Why source/output/docs are separate | [ADR 0002](decisions/0002-single-web-tree.md) (current), [ADR 0001](decisions/0001-agent-foundation.md) (history) |
 | Multi-session task state | [Plan template](plans/TEMPLATE.md) |
 | Known gaps | [Technical debt](technical-debt.md) |
 | Detailed design and future options | [Implementation guide](design/implementation-guide.md) |

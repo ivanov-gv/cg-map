@@ -1,4 +1,5 @@
 import fs from 'node:fs';
-fs.rmSync('dist',{recursive:true,force:true});
-fs.cpSync('web','dist',{recursive:true});
-console.log('Copied portable web assets to dist for the optional hosted demo.');
+fs.rmSync('dist', {recursive: true, force: true});
+fs.cpSync('web', 'dist', {recursive: true, filter: source => !source.endsWith('.md')});
+fs.writeFileSync('dist/.nojekyll', '');
+console.log('Prepared standalone application in dist/.');

@@ -1,3 +1,5 @@
+> The generated root-output decision below is superseded by [ADR 0002](0002-single-web-tree.md).
+
 # ADR 0001: Repository-owned agent foundation and root Pages output
 
 Date: 2026-10-18. Status: accepted.

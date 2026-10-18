@@ -3,7 +3,7 @@ setup:
 	npm ci --ignore-scripts
 
 dev:
-	python3 server.py --port $${PORT:-8080}
+	python3 tools/serve.py --port $${PORT:-8080}
 
 check:
 	npm run check
@@ -26,4 +26,4 @@ check-go:
 	mkdir -p .build
 	go vet ./...
 	go test ./...
-	go build -o .build/kompas .
+	go build -o .build/kompas ./cmd/kompas

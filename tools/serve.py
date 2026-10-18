@@ -44,6 +44,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__=='__main__':
     args=argparse.ArgumentParser();args.add_argument('--host',default='127.0.0.1');args.add_argument('--port',type=int,default=8080);opts=args.parse_args()
-    root=Path(__file__).resolve().parent/'web'
+    root=Path(__file__).resolve().parents[1]/'web'
     print(f'Kompas: http://{opts.host}:{opts.port}/',flush=True)
     ThreadingHTTPServer((opts.host,opts.port),partial(Handler,directory=str(root))).serve_forever()
