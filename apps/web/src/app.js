@@ -5,7 +5,7 @@ import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false,transport;
+let satelliteVisible=false,transport,stopPopup;
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function renderTransportStatus({state,count,fetchedAt}){
@@ -16,8 +16,8 @@ function renderTransportStatus({state,count,fetchedAt}){
 }
 function notify(message){$('error-text').textContent=message;$('error').hidden=false;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
-function closePlace(){selected=null;$('place-card').hidden=true;map?.getSource('selected')?.setData(collection([]));for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});returnFocus=null;}
-function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selected=f;returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
+function closePlace(){stopPopup?.remove();selected=null;$('place-card').hidden=true;map?.getSource('selected')?.setData(collection([]));for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});returnFocus=null;}
+function showPlace(id,trigger){stopPopup?.remove();const f=byId.get(String(id));if(!f)return;selected=f;returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
  const details=$('place-details');details.replaceChildren();
  const add=text=>{if(text)details.append(node('p',text,'detail'));};
  add(p['name:en']&&p['name:en']!==p.name?p['name:en']:'');add([p['addr:street'],p['addr:housenumber']].filter(Boolean).join(' '));add(p.kind?.replaceAll('_',' '));add(p.opening_hours?'OSM hours: '+p.opening_hours:'');add(p.phone);add(f.geometry.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', '));
@@ -27,6 +27,12 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
  $('place-card').hidden=false;document.querySelector('.sidebar').classList.remove('results-open');$('toggle-results').setAttribute('aria-expanded','false');
  map.getSource('selected').setData(collection([f]));map.easeTo({center:f.geometry.coordinates,zoom:Math.max(map.getZoom(),15),duration:reduced?0:450});$('close-place').focus({preventScroll:true});
+}
+function showStop(stop) {
+ closePlace();
+ const details=node('div');
+ details.append(node('strong',stop.properties.name),node('p',`Bus stop · ID ${stop.properties.stopId}`),node('small','Source: ePodgorica · snapshot 18 October 2026'));
+ stopPopup=new maplibregl.Popup({maxWidth:'280px'}).setLngLat(stop.geometry.coordinates).setDOMContent(details).addTo(map);
 }
 function renderResults(){if(!map)return;const center=map.getCenter().toArray();const nearest=selectNearest(filtered,center);const list=$('results');list.replaceChildren();
  $('toggle-results').textContent=`${filtered.length.toLocaleString()} places · nearest first`;
@@ -79,8 +85,8 @@ async function start(){
   loaded=true;$('loading').hidden=true;renderResults();
  });
  map.on('moveend',renderResults);
- map.on('click',async e=>{if(!loaded)return;const hits=map.queryRenderedFeatures(e.point,{layers:['place-circles','place-names','clusters']});const hit=hits[0];if(!hit){closePlace();return;}if(hit.properties.cluster){const zoom=await map.getSource('places').getClusterExpansionZoom(hit.properties.cluster_id);map.easeTo({center:hit.geometry.coordinates,zoom,duration:reduced?0:350});}else showPlace(hit.properties.id);});
- map.on('mousemove',e=>{if(loaded)map.getCanvas().style.cursor=map.queryRenderedFeatures(e.point,{layers:['place-circles','clusters']}).length?'pointer':'';});
+ map.on('click',async e=>{if(!loaded)return;stopPopup?.remove();const stops=map.queryRenderedFeatures(e.point,{layers:['transport-stops']});if(stops.length){showStop(stops[0]);return;}const hits=map.queryRenderedFeatures(e.point,{layers:['place-circles','place-names','clusters']});const hit=hits[0];if(!hit){closePlace();return;}if(hit.properties.cluster){const zoom=await map.getSource('places').getClusterExpansionZoom(hit.properties.cluster_id);map.easeTo({center:hit.geometry.coordinates,zoom,duration:reduced?0:350});}else showPlace(hit.properties.id);});
+ map.on('mousemove',e=>{if(loaded)map.getCanvas().style.cursor=map.queryRenderedFeatures(e.point,{layers:['transport-stops','place-circles','clusters']}).length?'pointer':'';});
  map.on('error',e=>{console.error('Map error',e.error);clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify('Some map data could not load. Check your connection or download the map for offline use.'),1500);});
  map.on('webglcontextlost',()=>notify('The browser paused graphics rendering. Waiting for it to recover…'));map.on('webglcontextrestored',()=>{$('error').hidden=true;map.triggerRepaint();});
  setTimeout(()=>{if(!loaded){$('loading').hidden=true;notify('Map startup is taking longer than expected. Check your connection and try again.');}},20000);
@@ -103,6 +109,7 @@ $('satellite-toggle').addEventListener('click',()=>{
 $('transport-toggle').addEventListener('click',()=>{
  if(!transport)return;
  const enabled=!transport.enabled;
+ stopPopup?.remove();
  $('transport-toggle').setAttribute('aria-pressed',String(enabled));
  $('transport-info').hidden=!enabled;
  transport.setEnabled(enabled);

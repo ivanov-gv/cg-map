@@ -5,3 +5,5 @@ Published formats shared by data producers and application consumers. Changes re
 `places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported category, and WGS84 longitude/latitude point. The data validator enforces this contract and directory-wide uniqueness. Integration tests check that web categories agree with it.
 
 Version breaking changes deliberately. This package is a contract boundary, not a place for miscellaneous shared implementation helpers.
+
+`stops.schema.json` defines static stop snapshot features. Preserve upstream stopId as feature id; IDs must be unique within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro. data/tools/check-data.mjs enforces these rules and provenance integrity; browser acceptance verifies selection and offline rendering.

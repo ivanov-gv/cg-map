@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {validateCollection} from '../tools/check-data.mjs';
+import {validateCollection, validateStops} from '../tools/check-data.mjs';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 test('reviewed Podgorica places satisfy the directory contract', () => {
   assert.equal(validateCollection(fixture, {places: true}), 3);
@@ -19,4 +19,17 @@ test('invalid coordinates, duplicate identities, and unknown categories are reje
 test('unclosed polygon rings are rejected', () => {
   assert.throws(() => validateCollection({type: 'FeatureCollection', features: [{type: 'Feature', properties: {},
     geometry: {type: 'Polygon', coordinates: [[[19,42],[20,42],[20,43],[19,43]]]}}]}), /not closed/);
+});
+
+test('bus stops preserve unique source IDs and reject invalid locations or names', () => {
+  const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
+  assert.equal(validateStops(stops), 719);
+  for (const mutate of [
+    data => {data.features[1].properties.stopId = data.features[0].properties.stopId;},
+    data => {data.features[0].geometry.coordinates = [0, 0];},
+    data => {data.features[0].properties.name = '';}
+  ]) {
+    const data = structuredClone(stops); mutate(data);
+    assert.throws(() => validateStops(data));
+  }
 });

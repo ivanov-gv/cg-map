@@ -1,0 +1,9 @@
+{
+  "source": "https://adminapi.prevoz.podgorica.me/api/gtfs/stops/all",
+  "source_ui": "https://epodgorica.me/javniprevoz/mapa",
+  "retrieved_at": "2026-10-18T19:20:12.525325+00:00",
+  "features": 719,
+  "bytes": 110092,
+  "sha256": "465bcfa13de48c1bda41414f764732aefb8a81f06f33f1b4f673c05f344bed5f",
+  "license": "No explicit reuse license found; attribution retained. Not covered by the code MIT license."
+}

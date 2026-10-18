@@ -43,6 +43,10 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await expect(page.locator('#loading')).toBeHidden();
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.256, 42.442], zoom: 16}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.254951, 42.446057], zoom: 17}));
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-stops']}).length)).toBeGreaterThan(0);
+  await expect(page.locator('#transport-status')).toHaveText(/internet connection/);
   expect(errors).toEqual([]);
 });
 
@@ -82,4 +86,24 @@ test('transport failure is visible and does not break the map', async ({page}) =
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
   expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('place-circles'))).toBe(true);
+});
+
+test('stop snapshot renders and selects independently of live bus availability', async ({page}) => {
+  await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => route.fulfill({status: 503, json: {error: 'unavailable'}}));
+  await ready(page);
+  expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.254951, 42.446057], zoom: 17}));
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-stops']}).length)).toBeGreaterThan(0);
+  const point = await page.evaluate(() => {
+    const map = window.kompasDebug.map, p = map.project([19.254951, 42.446057]), box = map.getCanvas().getBoundingClientRect();
+    return {x: box.left + p.x, y: box.top + p.y};
+  });
+  await page.mouse.click(point.x, point.y);
+  await expect(page.locator('.maplibregl-popup')).toContainText('Ul. 13. jula (B)');
+  await expect(page.locator('.maplibregl-popup')).toContainText('Bus stop · ID 1');
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect(page.locator('.maplibregl-popup')).toHaveCount(0);
+  expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
 });

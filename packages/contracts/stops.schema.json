@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bus stop snapshot feature",
+  "type": "object",
+  "required": [
+    "type",
+    "id",
+    "geometry",
+    "properties"
+  ],
+  "properties": {
+    "type": {
+      "const": "Feature"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "geometry": {
+      "type": "object",
+      "required": [
+        "type",
+        "coordinates"
+      ],
+      "properties": {
+        "type": {
+          "const": "Point"
+        },
+        "coordinates": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": 17.8,
+              "maximum": 21
+            },
+            {
+              "type": "number",
+              "minimum": 41.3,
+              "maximum": 44.1
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "required": [
+        "stopId",
+        "name"
+      ],
+      "properties": {
+        "stopId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

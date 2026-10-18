@@ -15,6 +15,9 @@ export function validTransportFeed(value, now = Date.now()) {
 }
 
 export function installTransport(map) {
+  map.addSource('transport-stops', {type: 'geojson', data: 'data/transport-stops.geojson'});
+  map.addLayer({id: 'transport-stops', type: 'circle', source: 'transport-stops', minzoom: 13, layout: {visibility: 'none'}, paint: {'circle-color': '#ffffff', 'circle-radius': 5, 'circle-stroke-color': '#195c9e', 'circle-stroke-width': 2}});
+  map.addLayer({id: 'transport-stop-names', type: 'symbol', source: 'transport-stops', minzoom: 16, layout: {visibility: 'none', 'text-field': ['get', 'name'], 'text-font': ['Open Sans Semibold'], 'text-size': 11, 'text-anchor': 'top', 'text-offset': [0, 0.8], 'text-max-width': 14}, paint: {'text-color': '#195c9e', 'text-halo-color': '#ffffff', 'text-halo-width': 2}});
   map.addSource('transport', {type: 'geojson', data: empty()});
   map.addLayer({id: 'transport-buses', type: 'circle', source: 'transport', layout: {visibility: 'none'}, paint: {'circle-color': '#195c9e', 'circle-radius': 13, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2}});
   map.addLayer({id: 'transport-routes', type: 'symbol', source: 'transport', layout: {visibility: 'none', 'text-field': ['get', 'route'], 'text-font': ['Open Sans Semibold'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true}, paint: {'text-color': '#ffffff'}});
@@ -27,7 +30,7 @@ export class TransportFeed {
   }
   clearTimer() { if (this.timer !== undefined) this.cancel(this.timer); this.timer = undefined; }
   visible(value) {
-    for (const id of ['transport-buses', 'transport-routes']) this.map.setLayoutProperty(id, 'visibility', value ? 'visible' : 'none');
+    for (const id of ['transport-stops', 'transport-stop-names', 'transport-buses', 'transport-routes']) this.map.setLayoutProperty(id, 'visibility', value ? 'visible' : 'none');
   }
   setEnabled(enabled) {
     this.enabled = enabled; this.generation++; this.clearTimer(); this.controller?.abort();

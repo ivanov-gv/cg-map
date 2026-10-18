@@ -351,3 +351,7 @@ For a UI change, manually check:
 
 The latest cloud-browser inspection could not render because that browser disables WebGL. Do not interpret it as a successful visual test of the satellite layer.
 
+
+## Optional transport
+
+[transport.js](src/transport.js) installs static stop circles/names and live vehicle circles/route labels. Transport visibility controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See [transport behavior](../../docs/transport.md).

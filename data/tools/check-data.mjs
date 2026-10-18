@@ -48,7 +48,26 @@ export function validateCollection(data, {places = false, label = 'GeoJSON', geo
   }
   return data.features.length;
 }
+export function validateStops(data) {
+  const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point']});
+  const ids = new Set();
+  for (const f of data.features) {
+    const {stopId, name} = f.properties;
+    const [lon, lat] = f.geometry.coordinates;
+    requireValue(typeof stopId === 'string' && stopId.length > 0 && !ids.has(stopId) && f.id === stopId, 'Missing or duplicate stop ID');
+    requireValue(typeof name === 'string' && name.trim().length > 0, 'Missing stop name');
+    requireValue(f.geometry.coordinates.length === 2 && lon >= 17.8 && lon <= 21 && lat >= 41.3 && lat <= 44.1, 'Stop outside Montenegro');
+    ids.add(stopId);
+  }
+  requireValue(count > 0, 'Empty transport stop snapshot');
+  return count;
+}
 export function checkData(root = rootDirectory) {
+  const stopBytes = fs.readFileSync(path.join(root, 'data/sources/transport-stops.geojson'));
+  const stopProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transport-stops.provenance.json')));
+  const stopCount = validateStops(JSON.parse(stopBytes));
+  requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
+
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {

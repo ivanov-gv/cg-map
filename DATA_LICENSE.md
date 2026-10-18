@@ -14,3 +14,7 @@ No company research article text or proprietary map datasets are bundled; resear
 ## Orthophoto sample
 
 `data/imagery/podgorica/` contains eMapa Ortofoto 2025 sample imagery and provenance. Its reuse licence has not been established. This imagery is not licensed under MIT, ODbL, or Natural Earth's public-domain terms by this project. Original download URLs and hashes are recorded in the sample manifest.
+
+## Bus stops
+
+The dated ePodgorica stop snapshot is attributed to Glavni grad Podgorica / ePodgorica. Source and integrity metadata: data/sources/transport-stops.provenance.json. No explicit reuse license was found; this dataset is not relicensed by the application's MIT license or the basemap's ODbL.

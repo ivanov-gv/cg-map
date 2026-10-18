@@ -21,3 +21,9 @@ The hosted relay is public following explicit owner authorization. An anonymous 
 The GitHub Pages client calls the public hosted endpoint. Deployment runs through the web Actions workflow after merge to main.
 
 Hosting identity and source version are in [deployment.json](../services/transit-relay/deployment.json). The service implementation and update procedure are in [its README](../services/transit-relay/README.md).
+
+## Bus stops
+
+Transport also shows 719 official stops from a reviewed ePodgorica snapshot retrieved 18 October 2026. Hollow blue circles appear at zoom 13; names appear at zoom 16. Tap a stop for its name, source ID, and snapshot date. Stops remain visible offline and while live vehicle updates are unavailable; disabling Transport hides both layers and closes stop details.
+
+The snapshot is data/sources/transport-stops.geojson with its own provenance JSON, source URL, count, byte size, and SHA-256. It is copied into the web artifact and offline shell; vehicle positions remain excluded. To refresh deliberately, fetch /api/gtfs/stops/all, preserve stopId/name/longitude/latitude, validate unique IDs and coordinates, update provenance/date UI, and run make check plus browser acceptance. This refresh does not require rebuilding the basemap archive. Stop details do not imply live arrival predictions.
