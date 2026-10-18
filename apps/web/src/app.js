@@ -5,6 +5,7 @@ import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
+import {installMapTaps} from './map-taps.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
 let satelliteVisible=false,transport,selectedPoint,routePlanner;
@@ -110,7 +111,7 @@ async function start(){
   loaded=true;$('loading').hidden=true;renderResults();
  });
  map.on('moveend',renderResults);
- map.on('click',async e=>{
+ installMapTaps(map,async e=>{
   if(!loaded)return;
   const routePoints=map.queryRenderedFeatures(e.point,{layers:['route-point-circles']});
   if(routePoints.length){const f=routePoints[0];showPoint({name:f.properties.name,coordinates:[...f.geometry.coordinates],kind:f.properties.role==='from'?'From point':'To point',details:[]});return;}

@@ -17,8 +17,8 @@ for (const file of docs) {
   }
 }
 const imports = {
-  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js'],
-  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': [], 'point-selection.js': [], 'routing.js': [], 'transit-routing.js': ['./core.js'], 'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
+  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js', './map-taps.js'],
+  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': [], 'point-selection.js': [], 'map-taps.js': [], 'routing.js': [], 'transit-routing.js': ['./core.js'], 'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;

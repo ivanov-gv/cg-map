@@ -213,3 +213,41 @@ test('route errors and identical endpoints stay explicit without leaving old lin
 });
 
 });
+
+test('single tap opens point actions after a delay; double tap zooms without opening them', async ({page,isMobile}) => {
+  await ready(page);
+  await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
+  // Programmatic camera movement also cancels pending point actions.
+  await page.waitForTimeout(550);
+  const p=await page.evaluate(()=>{const b=window.kompasDebug.map.getCanvas().getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};});
+  if(isMobile)await page.touchscreen.tap(p.x,p.y);else await page.mouse.click(p.x,p.y);
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect(page.locator('#point-from')).toBeVisible();
+  await page.locator('#close-place').click();
+  const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
+  if(isMobile){await page.touchscreen.tap(p.x,p.y);await page.touchscreen.tap(p.x,p.y);}else await page.mouse.dblclick(p.x,p.y);
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
+  await page.waitForTimeout(650);
+  await expect(page.locator('#place-card')).toBeHidden();
+});
+
+test('one-finger tap then drag zooms and never opens point actions', async ({page,context,isMobile}) => {
+  test.skip(!isMobile,'Native mobile touch gesture');
+  await ready(page);
+  await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
+  await page.waitForTimeout(550);
+  const p=await page.evaluate(()=>{const b=window.kompasDebug.map.getCanvas().getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};});
+  const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
+  const cdp=await context.newCDPSession(page);
+  const touch=(type,y=p.y)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:p.x,y,id:7}]});
+  await touch('touchStart');await touch('touchEnd');
+  await page.waitForTimeout(60);
+  await touch('touchStart');
+  for(const dy of [15,35,60,90]){await touch('touchMove',p.y+dy);await page.waitForTimeout(25);}
+  await touch('touchEnd');
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
+  await page.waitForTimeout(650);
+  await expect(page.locator('#place-card')).toBeHidden();
+  expect(await page.evaluate(()=>window.kompasDebug.endpoints)).toEqual({from:null,to:null});
+});
