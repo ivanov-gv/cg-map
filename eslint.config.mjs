@@ -1,6 +1,6 @@
 import js from '@eslint/js';
 import globals from 'globals';
-const nodeFiles = ['apps/web/tools/*.mjs', 'apps/web/tests/*.mjs', 'data/**/*.mjs', 'platform/**/*.mjs', 'tests/**/*.mjs', '*.mjs'];
+const nodeFiles = ['apps/web/tools/*.mjs', 'apps/web/tests/*.mjs', 'data/**/*.mjs', 'services/transit-relay/*.mjs', 'platform/**/*.mjs', 'tests/**/*.mjs', '*.mjs'];
 export default [
   {ignores: ['node_modules/**', 'dist/**', '.build/**', 'apps/web/public/vendor/**']},
   js.configs.recommended,

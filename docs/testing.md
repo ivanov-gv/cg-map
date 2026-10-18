@@ -21,7 +21,7 @@ make check-go
 | tests/integration | Real archive/MVT decoding, style/glyph coverage, imagery, shared-category agreement, transport |
 | tests/e2e | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload |
 
-make check builds dist/web and runs 28 Node tests, five Python tests, lint, data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. The backend workflow independently runs Go vet, tests, and build.
+make check builds dist/web and runs 35 Node tests, five Python tests, lint, data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. The backend workflow independently runs Go vet, tests, and build.
 
 Playwright runs against the actual deployable artifact. It tests / and /cg-map/, fixture-backed search/selection, satellite switching with one map instance, and downloading/reloading the reviewed archive offline. Compatibility tests preserve old /web/ entry behavior. On failure, traces/screenshots are uploaded by CI.
 
@@ -31,4 +31,6 @@ The detailed earlier design guide includes historical verification evidence. Cur
 
 ## Monorepo verification — 2026-10-18
 
-Executed locally: 28 Node tests, five Python tests, six Playwright tests, lint, source/release/contract validation, documentation/boundary checks, offline manifests, and both workspace-local test commands. The full geography pipeline was not rerun: source geometry and archive bytes were moved unchanged. Backend Go checks and the actual Pages deployment are verified by their GitHub workflows.
+Executed locally: 35 Node tests, five Python tests, six Playwright tests, lint, source/release/contract validation, documentation/boundary checks, offline manifests, and both workspace-local test commands. The full geography pipeline was not rerun: source geometry and archive bytes were moved unchanged. Backend Go checks and the actual Pages deployment are verified by their GitHub workflows.
+
+Transport feature verification: relay/cache/stale lifecycle unit tests, client late-response/expiry tests, desktop/mobile toggling and failure/offline acceptance. Hosted protected relay returned actual upstream positions; public access is still a release gate.

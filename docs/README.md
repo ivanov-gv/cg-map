@@ -8,6 +8,7 @@ See [team ownership](ownership.md). Start with [current architecture](../ARCHITE
 | UI implementation | [Frontend guide](../apps/web/README.md) |
 | Data contracts and rebuilding | [Data runbook](runbooks/data.md) |
 | Publishing, Pages migration, rollback | [Release runbook](runbooks/release.md) |
+| Live bus feed and release gate | [Transport](transport.md) |
 | Test commands, evidence, device checks | [Testing](testing.md) |
 | Why source/output/docs are separate | [ADR 0003](decisions/0003-concern-monorepo-and-actions-pages.md) (current) |
 | Multi-session task state | [Plan template](plans/TEMPLATE.md) |

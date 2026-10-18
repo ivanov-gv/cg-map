@@ -2,11 +2,18 @@ import {categories,colors,matches,selectNearest,safeWebsite,collection} from './
 import {mapStyle} from './map-style.js';
 import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
 import {ArchiveSource,downloadLabel} from './offline.js';
+import {installTransport,TransportFeed} from './transport.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false;
+let satelliteVisible=false,transport;
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function renderTransportStatus({state,count,fetchedAt}){
+ const checked=fetchedAt?new Date(fetchedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
+ const labels={off:'Transport off',loading:'Loading live buses…',live:count?`${count} bus positions · checked ${checked}`:`No buses reported · checked ${checked}`,stale:`Updates delayed · last checked ${checked}`,unavailable:'Live buses temporarily unavailable · retrying',offline:'Live buses need an internet connection',paused:'Bus updates paused while map is hidden'};
+ $('transport-status').textContent=labels[state]??labels.unavailable;
+ $('transport-status').dataset.state=state;
+}
 function notify(message){$('error-text').textContent=message;$('error').hidden=false;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
 function closePlace(){selected=null;$('place-card').hidden=true;map?.getSource('selected')?.setData(collection([]));for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});returnFocus=null;}
@@ -52,7 +59,7 @@ async function start(){
  const protocol=new pmtiles.Protocol();protocol.add(new pmtiles.PMTiles(archive));maplibregl.addProtocol('pmtiles',protocol.tile);
  map=new maplibregl.Map({container:'map',style:mapStyle(archive.url),center:[19.26,42.437],zoom:14,minZoom:7,maxZoom:23,maxBounds:[[17.8,41.3],[21,44.1]],renderWorldCopies:false,attributionControl:{compact:true},fadeDuration:0,maxTileCacheSize:160,pixelRatio:Math.min(devicePixelRatio||1,2),refreshExpiredTiles:false});
  // Exposed for the supplied browser QA script and manual performance inspection.
- window.kompasDebug={get map(){return map;},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;}};
+ window.kompasDebug={get map(){return map;},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;},get transport(){return !!transport?.enabled;}};
  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');map.addControl(new maplibregl.ScaleControl({maxWidth:100}),'bottom-left');
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>map.resize());});observer.observe($('map'));
  map.on('load',()=>{
@@ -66,6 +73,9 @@ async function start(){
   map.addSource('selected',{type:'geojson',data:collection([])});map.addLayer({id:'selected-halo',type:'circle',source:'selected',paint:{'circle-radius':17,'circle-color':'#193f36','circle-opacity':.18,'circle-stroke-color':'#193f36','circle-stroke-width':2}});
   const cities=[['Podgorica',19.26,42.437],['Nikšić',18.944,42.774],['Cetinje',18.922,42.39],['Budva',18.84,42.286],['Kotor',18.771,42.424],['Bar',19.098,42.092],['Ulcinj',19.206,41.929],['Herceg Novi',18.537,42.454],['Žabljak',19.121,43.154],['Pljevlja',19.359,43.357],['Kolašin',19.522,42.824],['Berane',19.87,42.843]];
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
+  installTransport(map);
+  transport=new TransportFeed(map,{onStatus:renderTransportStatus});
+  $('transport-toggle').disabled=false;
   loaded=true;$('loading').hidden=true;renderResults();
  });
  map.on('moveend',renderResults);
@@ -90,6 +100,17 @@ $('satellite-toggle').addEventListener('click',()=>{
  $('satellite-note').hidden=!satelliteVisible;
  if(satelliteVisible){closePlace();const [w,s,e,n]=satelliteBounds;map.easeTo({center:[(w+e)/2,(s+n)/2],zoom:17.5,duration:reduced?0:600});}
 });
+$('transport-toggle').addEventListener('click',()=>{
+ if(!transport)return;
+ const enabled=!transport.enabled;
+ $('transport-toggle').setAttribute('aria-pressed',String(enabled));
+ $('transport-info').hidden=!enabled;
+ transport.setEnabled(enabled);
+ if(enabled){closePlace();map.easeTo({center:[19.26,42.44],zoom:12,duration:reduced?0:450});if(!navigator.onLine)transport.pause('offline');}
+});
+document.addEventListener('visibilitychange',()=>{if(!transport?.enabled)return;if(document.hidden)transport.pause('paused');else if(navigator.onLine)transport.refresh();});
+addEventListener('offline',()=>transport?.pause('offline'));
+addEventListener('online',()=>{if(transport?.enabled&&!document.hidden)transport.refresh();});
 $('download').addEventListener('click',startDownload);$('cancel-download').addEventListener('click',()=>downloadAbort?.abort());$('remove-download').addEventListener('click',async()=>{await archive.remove();updateDownload();});
 $('retry').addEventListener('click',()=>location.reload());addEventListener('online',updateConnection);addEventListener('offline',updateConnection);
 start().catch(e=>{console.error(e);$('loading').hidden=true;notify(e.message||'Map startup failed.');});
