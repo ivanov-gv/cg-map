@@ -1,57 +1,44 @@
-# cg-map / Kompas
+# Maps for Montenegro / Kompas
 
-A read-only Montenegro map and place directory: vector map, local search, place details, a central Podgorica satellite sample, and explicit offline download. Coverage is incomplete; the current snapshot and counts are recorded in source provenance.
+Monorepo for a Montenegro map and place directory. The current product is a static, read-only PoC with local search, place details, a satellite sample, and explicit offline download.
 
-## Start
+## Components
 
-```sh
-python3 tools/serve.py
-```
+| Path | Responsibility |
+| --- | --- |
+| [apps/web](apps/web/README.md) | Browser experience, rendering, offline UI |
+| [services/backend](services/backend/README.md) | Independent Go module; currently an optional static host |
+| [data](data/README.md) | Source datasets, imagery, validation, tile pipeline, reviewed artifacts |
+| [packages/contracts](packages/contracts/README.md) | Published data formats shared by producers/consumers |
+| [platform](platform/README.md) | Development hosting, release infrastructure, repository checks |
+| [tests](tests/README.md) | Cross-component integration and browser acceptance |
+| [docs](docs/README.md) | Architecture, ownership, decisions, and runbooks |
 
-Open http://localhost:8080/. No external runtime services or API keys are required. The optional Go host is `go run ./cmd/kompas`. Phone offline use requires HTTPS; desktop localhost also works.
+See [team boundaries](docs/ownership.md) and [current architecture](ARCHITECTURE.md). Future backend/editorial capabilities are proposals, not implemented services.
 
-## Develop and verify
+## Develop
 
-Use Node 24 and Python 3.12:
+Node 24 and Python 3.12:
 
 ```sh
 make setup
 make dev
-make check
 ```
 
-After editing runtime assets or places:
+Open http://localhost:8080/. The web build assembles apps/web, the current data release, and compatibility assets into ignored dist/web. No runtime API keys or external services are required.
 
 ```sh
-make pages
-make check
-npx playwright install chromium
-make test-e2e
+make check       # Build and validate web/data/contracts/platform
+make test-e2e    # Real browser acceptance
+make check-go    # Independent Go module; requires Go
 ```
 
-`make build` rebuilds geometry and needs the optional Python build dependencies. UI changes do not need it. See [development](docs/runbooks/development.md), [data](docs/runbooks/data.md), and [testing](docs/testing.md).
+`make build` builds the web artifact. `make build-data` deliberately regenerates geography and requires [optional Python dependencies](docs/runbooks/data.md). Do not rebuild geography for UI changes.
 
-## Repository map
+## Publication
 
-| Path | Purpose |
-| --- | --- |
-| [AGENTS.md](AGENTS.md) | Agent entry point and commands |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Current stack, boundaries, data flow |
-| [docs/](docs/README.md) | Runbooks, decisions, plans, detailed design |
-| [web/](web/README.md) | Editable app and ready-to-serve source assets |
-| source-data/ | Editable display geometry and provenance |
-| tools/ | Development server, data builds, validation, static export |
-| tests/ | Unit, data, transport, publication, and browser tests |
-| deployment/ | Example Caddy configurations |
-| cmd/kompas/ | Optional Go static host |
-| index.html | Root Pages entry forwarding to web/ |
+[Web checks and Pages](.github/workflows/web.yml) builds and tests dist/web, then deploys that artifact to GitHub Pages on main. Pull requests run checks without deploying. Backend checks run separately.
 
-## GitHub Pages
+Public URL: https://ivanov-gv.github.io/cg-map/. GitHub Pages source is **GitHub Actions**; no branch-folder setting or committed deployment copy is needed.
 
-Public URL: https://ivanov-gv.github.io/cg-map/
-
-The prepared publishing source is **main → / (root)**. The owner must change the Pages folder setting from /docs separately. `docs/` now holds actual documentation. See [release and rollback](docs/runbooks/release.md).
-
-The satellite sample is local imagery served by eMapa as Ortofoto 2025; redistribution rights remain unverified. Application code is MIT; data and fonts retain separate licenses. See [DATA_LICENSE.md](DATA_LICENSE.md).
-
-The optional Go binary serves assets from disk (`-dir web` by default); distribute `web/` alongside it or select another asset directory.
+Application code is MIT. Datasets/fonts have separate terms; satellite redistribution rights remain unverified. See [DATA_LICENSE.md](DATA_LICENSE.md).

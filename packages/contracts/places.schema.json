@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/place/v1",
+  "title": "Published place feature v1",
+  "type": "object",
+  "required": ["type", "geometry", "properties"],
+  "properties": {
+    "type": {"const": "Feature"},
+    "geometry": {
+      "type": "object",
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": {"const": "Point"},
+        "coordinates": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "prefixItems": [
+            {"type": "number", "minimum": -180, "maximum": 180},
+            {"type": "number", "minimum": -90, "maximum": 90}
+          ]
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "required": ["id", "name", "category"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "category": {"enum": ["food", "sights", "shops", "stay", "essentials"]}
+      }
+    }
+  }
+}

@@ -1,3 +1,5 @@
+> Historical PoC implementation and design exploration. Current layout, build commands, ownership, and deployment are documented in [architecture](../../ARCHITECTURE.md) and [runbooks](../README.md).
+
 > Detailed design and historical verification notes. Start with [current architecture](../../ARCHITECTURE.md), [testing](../testing.md), and [release procedure](../runbooks/release.md) for maintained operational guidance. Future proposals below are not implemented features.
 
 # Kompas: architecture, implementation, operations, and growth
@@ -28,7 +30,7 @@ This is the implemented and deployed stack as of 18 October 2026. The prepared P
 
 **There is no backend API, application database, React framework, or server-side search in the deployed PoC.** Go/PostGIS and internal editorial services elsewhere in this guide are future options, not deployed dependencies.
 
-`web/` is the application source/public asset tree. Run `node tools/finalize.mjs` first when app or dataset changes require new offline manifests. Downloaded satellite imagery is bundled locally; the deployed app does not call eMapa at runtime.
+`web/` is the application source/public asset tree. Run `node apps/web/tools/finalize.mjs` first when app or dataset changes require new offline manifests. Downloaded satellite imagery is bundled locally; the deployed app does not call eMapa at runtime.
 
 ## Contents
 
@@ -114,7 +116,7 @@ Public users cannot edit. Internal editing is a future operational capability. F
 | Archive size | 12,516,471 bytes, about 11.94 MiB |
 | App, places, fonts, satellite sample, and archive | Approximately 15.31 MB decimal / 14.60 MiB |
 
-The authoritative runtime artifact information is in [web/data/manifest.json](../../web/data/manifest.json). The total is a payload estimate, not an exact measure of HTTP traffic, storage overhead, or peak memory. Countrywide buildings, full street detail, and complete business coverage are not included yet.
+The authoritative runtime artifact information is in [dist/web/data/manifest.json](../../apps/web/tools/finalize.mjs). The total is a payload estimate, not an exact measure of HTTP traffic, storage overhead, or peak memory. Countrywide buildings, full street detail, and complete business coverage are not included yet.
 
 ### Evidence level
 
@@ -349,7 +351,7 @@ Desktop has a sidebar and map. Small screens have a compact header and an overla
 
 ### 9.1 Included sources
 
-`source-data/` contains editable display GeoJSON for land, water, roads, and buildings. `web/data/places.geojson` is the directory input and runtime snapshot. The original raw OSM PBF is an external dataset and is not required to rebuild the included current map. Its original checksum and download information are recorded in [source-data/PROVENANCE.md](../../source-data/PROVENANCE.md).
+`data/sources/` contains editable display GeoJSON for land, water, roads, and buildings. `data/sources/places.geojson` is the directory input and runtime snapshot. The original raw OSM PBF is an external dataset and is not required to rebuild the included current map. Its original checksum and download information are recorded in [data/sources/PROVENANCE.md](../../data/PROVENANCE.md).
 
 These are display extracts, not a complete authoritative OSM database. Basemap features currently lack the stable upstream identity needed for reliable long-term conflation. Keep raw/high-fidelity source records when building the future editorial system.
 
@@ -359,7 +361,7 @@ These are display extracts, not a complete authoritative OSM database. Basemap f
 npm ci --ignore-scripts
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install -r tools/requirements.txt
+python3 -m pip install -r data/tools/requirements.txt
 npm run build
 ```
 
@@ -389,7 +391,7 @@ Changing this schema requires compatible changes to `map-style.js`. A Protomaps/
 
 ### 9.4 Metadata and reproducibility limits
 
-The finalizer reads the source timestamp and coverage description from `source-data/provenance.json`. Some tests hard-code the baseline place count. Update those deliberately when refreshing data; rebuilding does not infer everything from the PBF.
+The finalizer reads the source timestamp and coverage description from `data/sources/provenance.json`. Some tests hard-code the baseline place count. Update those deliberately when refreshing data; rebuilding does not infer everything from the PBF.
 
 The packer asks for some metadata zoom values of 17, while generated tiles and the actual archive header end at 16. The writer derives the header from tile IDs; that is what the current reader uses. Align this metadata before treating the build as a production specification.
 
@@ -444,24 +446,24 @@ The service-worker file participates in shell version hashing. That prevents a w
 
 | Path | Responsibility |
 | --- | --- |
-| [web/index.html](../../web/index.html) | Page structure and accessible controls |
-| [web/style.css](../../web/style.css) | Responsive shell, map overlays, sidebar/card styling |
-| [web/app.js](../../web/app.js) | Startup, map integration, picking, UI events, places, download state |
-| [web/core.js](../../web/core.js) | Search folding/filtering, approximate distance, URL validation |
-| [web/map-style.js](../../web/map-style.js) | Basemap source and cartographic layers |
-| [web/offline.js](../../web/offline.js) | Archive byte-source abstraction, transport fallback, local downloads |
-| [web/sw.js](../../web/sw.js) | Shell caching, safe cached navigation, cache-version migration |
-| `web/data/manifest.json` | Archive identity, coverage metadata, offline shell inventory |
-| `web/offline-manifest.js` | Generated worker-readable shell configuration |
+| [web/index.html](../../apps/web/public/index.html) | Page structure and accessible controls |
+| [web/style.css](../../apps/web/public/style.css) | Responsive shell, map overlays, sidebar/card styling |
+| [web/app.js](../../apps/web/src/app.js) | Startup, map integration, picking, UI events, places, download state |
+| [web/core.js](../../apps/web/src/core.js) | Search folding/filtering, approximate distance, URL validation |
+| [web/map-style.js](../../apps/web/src/map-style.js) | Basemap source and cartographic layers |
+| [web/offline.js](../../apps/web/src/offline.js) | Archive byte-source abstraction, transport fallback, local downloads |
+| [web/sw.js](../../apps/web/src/sw.js) | Shell caching, safe cached navigation, cache-version migration |
+| `dist/web/data/manifest.json` | Archive identity, coverage metadata, offline shell inventory |
+| `dist/web/offline-manifest.js` | Generated worker-readable shell configuration |
 | `web/vendor/` | Shipped runtime libraries and notices |
 | `web/fonts/` | Local glyph blocks and license notices |
-| [tools/build-tiles.mjs](../../tools/build-tiles.mjs) | Build-time geometry tiling and MVT encoding |
-| [tools/pack.py](../../tools/pack.py) | PMTiles packaging |
-| [tools/finalize.mjs](../../tools/finalize.mjs) | Hashes, archive name, offline manifests |
-| [tools/extract-osm.py](../../tools/extract-osm.py) | Added CLI adaptation of the original small OSM extractor |
-| [tools/add-ocean.py](../../tools/add-ocean.py) | Derive sea geometry from supplied country shapes |
-| [tools/serve.py](../../tools/serve.py) | Standard-library development host with range support |
-| [cmd/kompas/main.go](../../cmd/kompas/main.go) | Optional standard-library Go host serving an asset directory |
+| [data/tools/build-tiles.mjs](../../data/tools/build-tiles.mjs) | Build-time geometry tiling and MVT encoding |
+| [data/tools/pack.py](../../data/tools/pack.py) | PMTiles packaging |
+| [apps/web/tools/finalize.mjs](../../apps/web/tools/finalize.mjs) | Hashes, archive name, offline manifests |
+| [data/tools/extract-osm.py](../../data/tools/extract-osm.py) | Added CLI adaptation of the original small OSM extractor |
+| [data/tools/add-ocean.py](../../data/tools/add-ocean.py) | Derive sea geometry from supplied country shapes |
+| [platform/tools/serve.py](../../platform/tools/serve.py) | Standard-library development host with range support |
+| [services/backend/cmd/server/main.go](../../services/backend/cmd/server/main.go) | Optional standard-library Go host serving an asset directory |
 | `tests/` | Data, style, API-contract, offline, transport, and handler checks |
 
 The GitHub export adds documentation, deployment examples, a `go.mod`, and a CI workflow. Those additions do not change the working `web/` application. The source export has no previous Git history, Site project identity, credentials, or dependency/build caches.
@@ -473,7 +475,7 @@ The GitHub export adds documentation, deployment examples, a `go.mod`, and a CI 
 From the repository root:
 
 ```sh
-python3 tools/serve.py
+python3 platform/tools/serve.py
 ```
 
 Open `http://localhost:8080/`. No dependency installation is necessary to view the shipped map. Localhost is treated as a secure context by supporting browsers, unlike an arbitrary plain-HTTP LAN address.
@@ -481,7 +483,7 @@ Open `http://localhost:8080/`. No dependency installation is necessary to view t
 Alternatively:
 
 ```sh
-go run ./cmd/kompas
+go run ./services/backend/cmd/server
 ```
 
 Use the wheel/trackpad or zoom buttons, click markers, search/filter, and open nearby results. `/` focuses search; Escape closes details. The result distance is from the map center. The optional Go host serves `web/` from disk; use `-dir` to select another application asset directory.
@@ -522,8 +524,8 @@ Evaluate iOS, desktop-native, or other wrappers separately. A common archive is 
 
 | Desired change | Edit | Rebuild requirement |
 | --- | --- | --- |
-| Phone, category, name, or point location | `web/data/places.geojson` | Regenerate manifests; no geographic tile rebuild |
-| Building footprint, road, park, or water geometry | `source-data/*.geojson` | Geographic build, packaging, and manifests |
+| Phone, category, name, or point location | `data/sources/places.geojson` | Regenerate manifests; no geographic tile rebuild |
+| Building footprint, road, park, or water geometry | `data/sources/*.geojson` | Geographic build, packaging, and manifests |
 | Colors, line widths, fonts, or label rules | CSS/style/application layer rules | Usually manifests only; geometry rebuild if the required attribute is absent |
 
 Do not edit `.pmtiles` or an arbitrary decoded tile as the master map. Its geometry is clipped, simplified, and possibly repeated between tiles. Do not edit generated manifests manually and then forget to recalculate hashes.
@@ -574,8 +576,8 @@ Keep IDs unique and stable. Names are not identifiers; businesses move or rename
 After a place-only edit:
 
 ```sh
-python3 -m json.tool web/data/places.geojson > /dev/null
-node tools/finalize.mjs
+python3 -m json.tool data/sources/places.geojson > /dev/null
+node apps/web/tools/finalize.mjs
 npm test
 ```
 
@@ -583,7 +585,7 @@ The baseline tests intentionally expect 1,811 places. A legitimate addition requ
 
 ### 13.4 Editing a building or road
 
-Buildings are polygon/multipolygon features in `source-data/buildings.geojson`; `kind: building` is the current convention. Roads are line features with a recognized `kind` and optional `name`. Preserve ring closure and validate geometry. The current road schema does not encode a complete routing graph, access model, bridges/tunnels, or turn restrictions.
+Buildings are polygon/multipolygon features in `data/sources/buildings.geojson`; `kind: building` is the current convention. Roads are line features with a recognized `kind` and optional `name`. Preserve ring closure and validate geometry. The current road schema does not encode a complete routing graph, access model, bridges/tunnels, or turn restrictions.
 
 After a geographic edit:
 
@@ -596,7 +598,7 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 If changing country/coastline geometry, regenerate the derived sea polygon before the build:
 
 ```sh
-python3 tools/add-ocean.py
+python3 data/tools/add-ocean.py
 npm run build
 ```
 
@@ -611,14 +613,14 @@ curl -fL https://download.geofabrik.de/europe/montenegro-latest.osm.pbf \
   -o /tmp/montenegro-latest.osm.pbf
 sha256sum /tmp/montenegro-latest.osm.pbf
 
-python3 tools/extract-osm.py /tmp/montenegro-latest.osm.pbf
-python3 tools/add-ocean.py
+python3 data/tools/extract-osm.py /tmp/montenegro-latest.osm.pbf
+python3 data/tools/add-ocean.py
 ```
 
 For an explicit experiment in broader coverage:
 
 ```sh
-python3 tools/extract-osm.py /tmp/montenegro-latest.osm.pbf \
+python3 data/tools/extract-osm.py /tmp/montenegro-latest.osm.pbf \
   --all-details --all-places
 ```
 
@@ -645,7 +647,7 @@ Change `style.css` for layout, colors of controls/cards, dimensions, and respons
 For a palette/line-width change:
 
 ```sh
-node tools/finalize.mjs
+node apps/web/tools/finalize.mjs
 npm test
 ```
 
@@ -712,7 +714,7 @@ Do not apply an HTTP content encoding to the entire PMTiles file without underst
 
 ### 15.4 Simple VPS layout
 
-An example [Caddyfile](../../deployment/Caddyfile) uses:
+An example [Caddyfile](../../platform/hosting/Caddyfile) uses:
 
 ```text
 /srv/kompas/current/web
@@ -726,7 +728,7 @@ No specific VPS size is guaranteed here. Select a modest host, measure bandwidth
 
 Use a new release directory, validate it, then atomically switch a symlink or equivalent publication pointer. Do not overwrite a live directory file by file while clients fetch a mixture.
 
-However, switching the application directory alone is not enough. Existing clients may still request an old archive URL. Retain immutable archives in shared storage for a defined compatibility window. [Caddyfile-releases](../../deployment/Caddyfile-releases) illustrates serving `/data/montenegro-*.pmtiles` from a retained archive directory while the rest of the app comes from the current release.
+However, switching the application directory alone is not enough. Existing clients may still request an old archive URL. Retain immutable archives in shared storage for a defined compatibility window. [Caddyfile-releases](../../platform/hosting/Caddyfile-releases) illustrates serving `/data/montenegro-*.pmtiles` from a retained archive directory while the rest of the app comes from the current release.
 
 Recommended future release manifest fields include `appVersion`, `mapVersion`, `placesVersion`, `schemaVersion`, generation time, source timestamps, hashes, coverage, and compatibility. Publish all referenced artifacts before changing the active manifest.
 
@@ -736,7 +738,7 @@ Server rollback means restoring a compatible app/manifest and retaining its refe
 
 ### 15.6 Development versus publication
 
-`node tools/finalize.mjs` updates the runtime manifest after source/style changes. `node tools/build-static.mjs` copies `web/` into `dist/` for static-host packaging. It does not generate new geography.
+`node apps/web/tools/finalize.mjs` updates the runtime manifest after source/style changes. `node apps/web/tools/build.mjs` copies `web/` into `dist/` for static-host packaging. It does not generate new geography.
 
 The optional hosted demo uses proprietary hosting only as a replaceable delivery surface. The portable source export has no dependency on its account, project identity, or deployment tooling. Self-hosting the same `web/` remains supported.
 
@@ -1066,7 +1068,7 @@ Create an empty repository and replace the placeholder URL yourself. This reposi
 
 Application code is MIT; map data and fonts retain separate licenses/notices. A GitHub MIT badge must not be interpreted as relicensing all geographic data. Review [DATA_LICENSE.md](../../DATA_LICENSE.md).
 
-For a minimal first run, use `python3 tools/serve.py`. For a deeper handoff, run the checks, read the source map above, then try one place-only change and one geometry change on a branch. That will exercise the essential boundaries without requiring new infrastructure.
+For a minimal first run, use `python3 platform/tools/serve.py`. For a deeper handoff, run the checks, read the source map above, then try one place-only change and one geometry change on a branch. That will exercise the essential boundaries without requiring new infrastructure.
 
 ## 25. References
 

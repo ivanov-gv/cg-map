@@ -1,24 +1,30 @@
 # Development
 
-Requirements: Node 24 (exact local reference in `.node-version`) and Python 3.12. The included snapshot runs without npm or Python third-party packages; checks need npm dependencies.
+Requirements: Node 24 and Python 3.12. Go is needed only for backend checks. Component boundaries and ownership are in [ownership](../ownership.md).
 
 ```sh
 make setup
 make dev
 ```
 
-Open http://localhost:8080/. Set `PORT=8081 make dev` for another worktree. No hot reload is configured.
+The root Makefile orchestrates component commands. npm workspaces are apps/web and data; services/backend is an independent Go module. The local server serves generated dist/web, not repository source. Set PORT for another worktree. Rebuild/restart after source edits; no hot reload is configured.
 
 ```sh
 make check
 npx playwright install chromium
 make test-e2e
+make check-go
 ```
 
-`make check` runs ESLint, structural data/provenance checks, documentation links, module boundaries, Node/Python tests, Python compilation, and repository layout. It does not modify generated files. If runtime assets changed, first run `make pages` to refresh offline manifests.
+make check validates lint, data sources/release, docs, boundaries, the assembled web artifact, Node/Python tests, and offline manifests. make test-e2e builds the app and tests the actual artifact at / and /cg-map/. Browser artifacts are ignored locally and uploaded on CI failure.
 
-Playwright starts its own server at an available localhost port and tests both origin-root and project-prefix paths. Use `E2E_PORT` to isolate simultaneous runs. Browser artifacts are ignored by Git and uploaded on CI failure.
+Targeted component commands:
 
-Go is optional locally; `make check-go` runs vet/tests/build when installed. CI checks the optional host independently.
+```sh
+npm test --workspace @cg-map/web
+npm test --workspace @cg-map/data
+npm run check --workspace @cg-map/data
+cd services/backend && go test ./...
+```
 
-For complex work, copy [the plan template](../plans/TEMPLATE.md) into a task-specific file. Keep acceptance criteria, decisions, progress, and remaining steps there. Small changes need only a clear issue/PR. Avoid parallel edits in one checkout.
+Use [the plan template](../plans/TEMPLATE.md) for multi-session work. Keep acceptance criteria, progress, decisions, and remaining work explicit. Isolate simultaneous tasks in separate worktrees/ports.

@@ -1,48 +1,51 @@
 # Data contracts and pipeline
 
-## Sources of truth
+## Sources and releases
 
-- Geometry: `source-data/{land,water,roads,buildings}.geojson`.
-- Place records: `web/data/places.geojson`; points with unique nonempty string `properties.id`, nonempty `name`, and a category declared in `web/core.js` (excluding `all`).
-- Reviewed counts/hashes, snapshot timestamp, and coverage: `source-data/provenance.json`.
-- Source context and limitations: [PROVENANCE.md](../../source-data/PROVENANCE.md).
-- Imagery provenance: [satellite README](../../web/data/satellite/README.md) and its manifest.
+- Geometry and places: data/sources/.
+- Reviewed counts, SHA-256, snapshot timestamp, coverage: data/sources/provenance.json.
+- Place contract: [places.schema.json](../../packages/contracts/places.schema.json).
+- Source context: [PROVENANCE.md](../../data/PROVENANCE.md).
+- Imagery: [Podgorica sample](../../data/imagery/podgorica/README.md).
+- Reviewed basemap: data/artifacts/, selected by release.json with bytes and SHA-256.
 
-Run `npm run check:data`. It validates supported GeoJSON geometry structure, finite WGS84 coordinates, polygon closure, place IDs/categories, and source hashes/counts. It does not detect self-intersections, invalid polygon topology, incorrect real-world locations, or stale business information. Use QGIS/Shapely for those checks.
+npm run check:data validates supported geometry structure, WGS84 ranges, polygon closure, place IDs/names/categories, provenance, and the recorded release checksum. It is not GIS topology validation or a guarantee that business listings are current.
 
-## Place-only changes
+## Place-only edits
 
-Edit the record, review attribution, update the reviewed place count if needed, then:
+Edit data/sources/places.geojson, review attribution and place count in provenance, then:
 
 ```sh
 npm run check:data
-npm run release:prepare
 make check
 make test-e2e
 ```
 
-The three approved records in `tests/fixtures/podgorica-places.geojson` are a small contract fixture; keep expected behavior explicit when updating it. Browser acceptance uses the shipped snapshot, including real archive and imagery integration.
+The web build incorporates the new directory and regenerates offline manifests in dist/web. Do not regenerate vector tiles for a place-only change. If changing release-level timestamp/coverage deliberately, regenerate data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
 
-## Geometry changes
+The small approved fixture is data/tests/fixtures/podgorica-places.geojson. Keep expected behavior explicit when changing it. Browser tests also exercise the actual reviewed archive and imagery.
 
-Install the optional build environment:
+## Geometry edits or refreshes
+
+Install optional dependencies:
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install -r tools/requirements.txt
+python3 -m pip install -r data/tools/requirements.txt
 ```
 
-After reviewing geometry and updating provenance hashes/counts:
+After reviewing geometry and updating source provenance hashes/counts:
 
 ```sh
+make build-data
 npm run check:data
-make build
-make pages
 make check
 make test-e2e
 ```
 
-The full build can create about 230K temporary tile files and need around 1 GB of temporary space. Raw upstream PBF extraction is a separate, deliberate operation that overwrites local corrections. Preserve original inputs and provenance before refreshing them.
+make build-data clips/encodes MVT into .build/tiles, packages PMTiles into data/artifacts, and writes checksummed release metadata. It can create about 230K temporary files and need around 1 GB of space. It does not deploy.
 
-The finalizer reads timestamp/coverage from provenance, hashes the archive and shell, and regenerates `web/data/manifest.json` and `web/offline-manifest.js`. It deletes superseded local archive files; never run it against shared production retention storage.
+Upstream extraction replaces snapshots rather than merging local corrections. Preserve original inputs outside Git and provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend implementation.
+
+Current artifacts are committed for convenient clean-checkout builds. Move large/frequent releases to immutable artifact storage when needed; local tooling is not a production archive retention policy.

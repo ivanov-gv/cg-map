@@ -6,8 +6,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-from tools.serve import Handler
+sys.path.insert(0, str(ROOT / "platform/tools"))
+from serve import Handler
 
 
 class PagesHandler(Handler):
@@ -24,4 +24,4 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, required=True)
     args = parser.parse_args()
-    ThreadingHTTPServer(('127.0.0.1', args.port), partial(PagesHandler, directory=str(ROOT))).serve_forever()
+    ThreadingHTTPServer(('127.0.0.1', args.port), partial(PagesHandler, directory=str(ROOT / "dist/web"))).serve_forever()

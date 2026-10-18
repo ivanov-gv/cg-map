@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "sourceTimestamp": "2026-10-17T20:20:51Z",
+  "coverage": "Detailed central Podgorica; Montenegro major roads and attractions.",
+  "archive": {
+    "file": "montenegro-d4f4f7de5f0ccb10.pmtiles",
+    "sha256": "d4f4f7de5f0ccb10a83f231b98d12844bf883db6e31382c841baf41cc1300990",
+    "bytes": 12516471
+  }
+}

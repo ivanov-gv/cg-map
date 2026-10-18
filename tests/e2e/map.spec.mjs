@@ -1,9 +1,9 @@
 import {test, expect} from '@playwright/test';
 import fs from 'node:fs';
-const fixture = JSON.parse(fs.readFileSync('tests/fixtures/podgorica-places.geojson'));
+const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 async function ready(page) {
   await page.goto('./');
-  await expect(page).toHaveURL(/\/web\/$/);
+  await expect(page).not.toHaveURL(/\/web\//);
   await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-circles'));
   await expect(page.locator('#loading')).toBeHidden();
 }
@@ -44,4 +44,11 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.256, 42.442], zoom: 16}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test('old /web/ bookmarks open the root app and preserve query/hash', async ({page, baseURL}) => {
+  await page.goto(new URL('web/?lang=sr#place', baseURL).href);
+  await expect(page).toHaveURL(new URL('?lang=sr#place', baseURL).href);
+  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-circles'));
+  await expect(page.locator('#loading')).toBeHidden();
 });

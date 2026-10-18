@@ -1,0 +1,15 @@
+{
+  "name": "@cg-map/data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node tools/check-data.mjs",
+    "build": "node tools/build-tiles.mjs && python3 tools/pack.py && node tools/finalize-archive.mjs",
+    "test": "cd .. && node --test data/tests/*.test.mjs"
+  },
+  "dependencies": {
+    "geojson-vt": "4.0.2",
+    "vt-pbf": "3.1.3"
+  }
+}

@@ -1,3 +1,5 @@
+> Superseded by [ADR 0003](0003-concern-monorepo-and-actions-pages.md).
+
 # ADR 0002: One web tree and conventional host locations
 
 Date: 2026-10-18. Status: accepted. Supersedes ADR 0001's generated root-output decision.

@@ -1,66 +1,52 @@
 # Current architecture
 
-Kompas is a static, read-only Montenegro map and place directory. Application source is `web/`; GitHub Pages publishes from the repository root, whose small entry page opens `web/`. There is one application asset tree. Change the Pages setting to **main / (root)** after this migration. `docs/` is documentation.
+This is a concern-based monorepo. Source boundaries follow ownership; deployments consume built artifacts rather than repository folders.
 
 ## Implemented stack
 
-| Layer | Implementation | Responsibility |
-| --- | --- | --- |
-| UI | Plain JavaScript ES modules, HTML, CSS | Search, categories, results, details, responsive layout |
-| Rendering | MapLibre GL JS 5.12.0 / WebGL | Vector/raster layers, camera, labels, clustered places |
-| Basemap | MVT in PMTiles v3; PMTiles JS 4.3.0 | Land, water, roads, buildings; range reads |
-| Directory | Local GeoJSON | Browser-side search; provenance records the reviewed count |
-| Satellite | 16 local zoom-17 WebP tiles and preview | Bounded central Podgorica sample |
-| Offline shell | Service worker / Cache Storage | UI, glyphs, places, imagery |
-| Offline archive | OPFS | Verified archive download and local reads |
-| Data build | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles | GeoJSON → MVT → content-addressed archive |
-| Optional import | Python osmium / Shapely | OSM extraction; not needed to run the snapshot |
-| Hosting | GitHub Pages; optional Python or Go static hosts | Static files; range transport |
-| Verification | ESLint, Node tests, Python unittest, Playwright, GitHub Actions | Contracts, provenance, browser behavior, repository layout |
+| Concern | Implementation |
+| --- | --- |
+| Web | Plain JavaScript ES modules, HTML/CSS; MapLibre GL JS 5.12.0 |
+| Vector map | PMTiles v3, PMTiles JS 4.3.0, precomputed MVT |
+| Directory | GeoJSON snapshot with browser-side search |
+| Satellite | Local bounded zoom-17 WebP sample and preview |
+| Offline | Service worker/Cache Storage for shell; OPFS for verified archive |
+| Data pipeline | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely |
+| Backend | Independent Go module; optional static HTTP host only |
+| Delivery | GitHub Actions uploads/deploys dist/web to Pages |
+| Verification | ESLint, Node tests, Python unittest, Playwright; separate Go vet/test/build |
 
-There is no backend API, database, React application, routing graph, or server-side search. Go is an optional static host, not an application backend.
+There is no application API, database, routing engine, editorial system, or server-side search today.
 
-## Runtime modules and boundaries
+## Ownership boundaries
 
-| Module | Responsibility | Allowed local imports |
-| --- | --- | --- |
-| `web/app.js` | DOM/map orchestration and UI state | core, map-style, satellite, offline |
-| `web/core.js` | Pure directory/search helpers | None |
-| `web/map-style.js` | Construct MapLibre style | None |
-| `web/satellite.js` | Install/toggle local raster layers | None |
-| `web/offline.js` | Archive transport and verified storage | core |
-| `web/sw.js` | Shell cache lifecycle and navigation | Generated offline-manifest via importScripts |
+- apps/web: UI, rendering, client search, offline behavior, web assembly.
+- services/backend: server implementation; future editorial/auth/search capabilities when required.
+- data: acquisition, source snapshots, imagery/provenance, quality, tile generation, data releases.
+- packages/contracts: stable formats shared across producers and consumers.
+- platform: hosting, CI/deployment, local infrastructure, repository enforcement.
+- tests: cross-component integration and browser acceptance. Unit tests stay with components.
 
-`tools/check-repo.mjs` checks the dependency graph. Add new boundaries deliberately when introducing a module. Build tools may consume source data; runtime modules consume published assets only.
+See [ownership](docs/ownership.md) for teams, interfaces, and future split triggers.
 
-## Data and release flow
+## Build and runtime flow
 
-1. Editable geometry lives in `source-data/`; place records live in `web/data/places.geojson`.
-2. `npm run build` generates tiles, packages PMTiles, and finalizes manifests. This expensive pipeline is only needed for geometry changes.
-3. `npm run release:prepare` regenerates offline identity and keeps runtime assets in place. It does not rebuild geometry.
-4. Root `index.html` forwards to `web/`, preserving query/hash and the project prefix. Root `sw.js` retires the old root-scoped worker; the application owns `web/sw.js`.
-5. Browser requests use relative paths, supporting both `/` and the `/cg-map/` project prefix. Root and prefix browser tests cover this contract.
+1. data/sources and data/imagery hold reviewed editable inputs. data/artifacts/release.json identifies the current content-addressed archive and checksum.
+2. data/tools validates sources against provenance and shared contracts. Full geography regeneration is an explicit, separate operation.
+3. apps/web/tools/build.mjs assembles public assets and runtime modules with the reviewed data release into dist/web. It generates offline manifests there.
+4. CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload.
+5. The Pages deploy job publishes only that verified artifact. Source files, docs, datasets used for generation, and backend code are excluded.
 
-The browser fetches manifests and places, loads the vector archive through PMTiles, and renders one persistent map. Explicit offline download verifies the archive before switching to local storage. The service worker caches shell assets and excludes archive/range requests.
+The app runs directly at /cg-map/. Compatibility entries in the artifact redirect old /cg-map/web/ bookmarks and retire the earlier nested worker. The new app owns the root worker. No deployment redirect or web asset tree is committed in repository root.
 
-## Constraints and known limits
+## Browser dependencies
 
-- Dataset coverage is incomplete; use provenance and manifests for current counts and hashes.
-- Structural validation checks coordinate ranges, shape, IDs for places, and source checksums. It does not prove GIS topology or that listings are current.
-- Basemap extracts do not preserve reliable upstream identity for conflation.
-- Satellite redistribution rights remain unverified; preserve its existing provenance record.
-- Device GPU performance, browser eviction, and phone offline behavior require real-device checks.
-- Branch-based Pages serves the single `web/` tree through a root entry page. Large future artifacts should move to versioned artifact storage.
+app.js orchestrates DOM/map state and imports core.js, map-style.js, satellite.js, and offline.js. offline.js imports core.js for formatting; the other helpers have no local imports. sw.js imports its generated offline manifest. Repository checks enforce these boundaries.
 
-## Further reading
+Shared place categories live in the published contract; integration tests verify UI categories agree. Data validation never imports web code. The backend module builds without npm or raw datasets.
 
-- [Docs index](docs/README.md)
-- [Frontend implementation guide](web/README.md)
-- [Detailed design, research, and growth options](docs/design/implementation-guide.md)
-- [Data pipeline](docs/runbooks/data.md)
-- [Release and rollback](docs/runbooks/release.md)
-- [Testing](docs/testing.md)
+## Known limits
 
-## Host layout
+Incomplete coverage, legacy geometry identity, GIS topology, imagery rights, browser eviction, phone GPU performance, archive retention, and larger editorial workflows remain documented in [technical debt](docs/technical-debt.md).
 
-`cmd/kompas/main.go` is the optional Go static host. It serves assets from disk (`-dir web` by default). `tools/serve.py` is the Python development host. Neither is part of the browser runtime.
+Further reading: [web guide](apps/web/README.md), [data pipeline](docs/runbooks/data.md), [release](docs/runbooks/release.md), [testing](docs/testing.md), and [detailed earlier design](docs/design/implementation-guide.md).
