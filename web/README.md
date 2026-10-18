@@ -9,8 +9,8 @@ A code-level walkthrough of the deployed application: module responsibilities, s
 | Browser main thread | app.js, core.js, map-style.js, satellite.js, offline.js | UI state, event handlers, map configuration and archive access |
 | MapLibre internals | vendor/maplibre-gl.js and its workers | Tile preparation, label placement and WebGL rendering |
 | Service-worker context | sw.js, offline-manifest.js | Serve cached application assets and manage shell-cache lifecycle |
-| Build process | ../tools/ | Generate map artifacts, cache manifests and the docs/ deployment copy |
-| Static host | GitHub Pages | Serve docs/ over HTTPS, including archive byte ranges |
+| Build process | ../tools/ | Generate map artifacts, cache manifests and the root deployment output |
+| Static host | GitHub Pages | Serve the generated root assets over HTTPS, including archive byte ranges |
 
 The browser keeps one MapLibre instance alive. Search, selection and layer switching update existing DOM elements and map sources/layers. There is no per-interaction backend request.
 
@@ -269,7 +269,7 @@ When changing mobile CSS, test rotation, keyboard opening, long place names, scr
 
 | Goal | Start here | Follow-up |
 | --- | --- | --- |
-| Change button wording | index.html or app.js, depending on who creates it | Regenerate manifests and docs |
+| Change button wording | index.html or app.js, depending on who creates it | Regenerate manifests and root output |
 | Change sidebar/card spacing | style.css | Check desktop and mobile |
 | Change road/building colors | map-style.js | No geometry rebuild needed |
 | Change marker colors | colors in core.js | Check list icons and map |
@@ -307,9 +307,9 @@ npm test
 
 finalize.mjs regenerates cache identity and manifests. It also reads/hashes the existing archive; it does not regenerate road/building geometry.
 
-publish-pages.mjs deletes and replaces docs/ with a copy of web/, then adds .nojekyll. Edit web/, not docs/, or the next copy will overwrite your edits.
+publish-pages.mjs copies runtime assets from web/ to managed paths in the repository root and adds .nojekyll. Edit web/; root output is generated. It never deletes docs/.
 
-The current tests include checks comparing satellite assets in web/ and docs/, so refresh docs/ before running them.
+The current tests include checks comparing satellite assets in web/ and the root output, so refresh the root output before running them.
 
 Review and publish:
 
@@ -317,22 +317,22 @@ Review and publish:
 git diff --check
 git status
 git diff
-git add web docs
+git add web .pages-manifest.json index.html *.js *.css data fonts vendor *.png *.svg *.webmanifest .nojekyll
 git commit -m "Describe the frontend change"
 git push
 ~~~
 
-Stage any modified tools or tests as well. GitHub Pages publishes main → /docs. GitHub Actions runs source/data checks independently.
+Stage any modified tools or tests as well. GitHub Pages publishes main → /. GitHub Actions runs source/data checks independently.
 
 ### After changing geographic geometry
 
 Run npm run build first. It executes the tile generation/packaging/finalization pipeline, needs its Node/Python build dependencies, and can be substantially more expensive than a UI change. See the repository README for Python setup.
 
-Then refresh docs/, run checks and publish. You do not need a vector rebuild just to change CSS.
+Then refresh the root output, run checks and publish. You do not need a vector rebuild just to change CSS.
 
 ### Documentation-only changes
 
-A Markdown guide is not a runtime module and need not be included in the offline shell. Adding this guide alone does not require a new map build or offline cache version. A later publish-pages run will also copy it into docs/.
+A Markdown guide is not a runtime module and need not be included in the offline shell. Adding this guide alone does not require a new map build or offline cache version. Documentation and AGENTS.md are excluded from the published runtime asset inventory.
 
 ## 14. Debugging with browser DevTools
 

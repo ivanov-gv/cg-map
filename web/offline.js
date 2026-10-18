@@ -49,12 +49,12 @@ export class ArchiveSource {
    if(hash!==this.manifest.archive.sha256)throw new Error('Map integrity check failed. Please try again.');
    if(signal.aborted)throw new DOMException('Aborted','AbortError');
    const finalHandle=await this.dir.getFileHandle(this.filename,{create:true});const finalWriter=await finalHandle.createWritable();
-   try{await staged.stream().pipeTo(finalWriter);}catch(e){try{await finalWriter.abort();}catch{}throw e;}
+   try{await staged.stream().pipeTo(finalWriter);}catch(e){try{await finalWriter.abort();}catch{/* Best-effort cleanup; keep the original download result/error. */}throw e;}
    // Commit last. An older active archive remains valid until this point.
    const old=localStorage.getItem('kompas-active-map');localStorage.setItem('kompas-active-map',this.filename);this.local=await finalHandle.getFile();this.onlineBlob=null;this.firstBlock=null;this.transportReady=null;
    if(old&&old!==this.filename)await this.dir.removeEntry(old).catch(()=>{});
    const persisted=await navigator.storage.persist?.().catch(()=>false);return {persisted,bytes:loaded};
-  }catch(e){try{await writable.abort();}catch{}throw e;}finally{await this.dir.removeEntry(staging).catch(()=>{});}
+  }catch(e){try{await writable.abort();}catch{/* Best-effort cleanup; keep the original download result/error. */}throw e;}finally{await this.dir.removeEntry(staging).catch(()=>{});}
  }
  async remove(){this.local=null;const active=localStorage.getItem('kompas-active-map');localStorage.removeItem('kompas-active-map');if(active&&this.dir)await this.dir.removeEntry(active).catch(()=>{});}
 }

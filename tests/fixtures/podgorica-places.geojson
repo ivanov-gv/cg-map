@@ -1,0 +1,62 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          19.266094,
+          42.449565
+        ]
+      },
+      "properties": {
+        "id": "node/308873382",
+        "name": "Partizanu borcu",
+        "category": "sights",
+        "kind": "monument",
+        "source": "OpenStreetMap",
+        "name:en": "Memorial Mausoleum to Partisans"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          19.262839,
+          42.439658
+        ]
+      },
+      "properties": {
+        "id": "node/308967902",
+        "name": "Mimoza",
+        "category": "shops",
+        "kind": "supermarket",
+        "source": "OpenStreetMap",
+        "opening_hours": "Mo-Sa 07:30-21:30"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          19.264097,
+          42.439428
+        ]
+      },
+      "properties": {
+        "id": "node/308967921",
+        "name": "Prva Banka Crne Gore a.d osnovana 1901",
+        "category": "essentials",
+        "kind": "bank",
+        "source": "OpenStreetMap",
+        "website": "https://www.prvabankacg.com/",
+        "opening_hours": "Mo-Sa 08:00-20:00; Su",
+        "phone": "19891",
+        "addr:street": "Vuka Karadžića"
+      }
+    }
+  ]
+}

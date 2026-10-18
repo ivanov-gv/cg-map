@@ -7,7 +7,7 @@
     "sha256": "d4f4f7de5f0ccb10a83f231b98d12844bf883db6e31382c841baf41cc1300990",
     "bytes": 12516471
   },
-  "shellCache": "kompas-shell-f7c1a47622edf618-d4f4f7de",
+  "shellCache": "kompas-shell-c9799e0bbddb21c0-d4f4f7de",
   "shell": [
     "index.html",
     "app.js",
@@ -50,5 +50,5 @@
     "data/satellite/tiles/17/72548/48440.webp",
     "data/manifest.json"
   ],
-  "totalBytes": 15307848
+  "totalBytes": 15307982
 }

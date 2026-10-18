@@ -1,0 +1,17 @@
+# Engineering documentation
+
+Start with [current architecture](../ARCHITECTURE.md) and [agent instructions](../AGENTS.md).
+
+| Need | Document |
+| --- | --- |
+| Setup and checks | [Development](runbooks/development.md) |
+| UI implementation | [Frontend guide](../web/README.md) |
+| Data contracts and rebuilding | [Data runbook](runbooks/data.md) |
+| Publishing, Pages migration, rollback | [Release runbook](runbooks/release.md) |
+| Test commands, evidence, device checks | [Testing](testing.md) |
+| Why source/output/docs are separate | [ADR 0001](decisions/0001-agent-foundation.md) |
+| Multi-session task state | [Plan template](plans/TEMPLATE.md) |
+| Known gaps | [Technical debt](technical-debt.md) |
+| Detailed design and future options | [Implementation guide](design/implementation-guide.md) |
+
+Update documentation in the same change as affected behavior. Current architecture and runbooks take precedence over historical verification notes. Keep each fact in one authoritative location; link instead of duplicating.

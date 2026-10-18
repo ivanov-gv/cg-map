@@ -24,6 +24,6 @@ test('all 16 satellite tiles match their source hashes and are available offline
  const sample=JSON.parse(fs.readFileSync('web/data/satellite/manifest.json'));
  const offline=JSON.parse(fs.readFileSync('web/data/manifest.json'));
  assert.equal(sample.tiles.length,16);
- for(const tile of sample.tiles){const rel='data/satellite/'+tile.path;const bytes=fs.readFileSync('web/'+rel);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),tile.sha256);assert.ok(offline.shell.includes(rel));assert.deepEqual(fs.readFileSync('docs/'+rel),bytes);}
- for(const rel of ['satellite.js','data/satellite/podgorica-center.webp']){assert.ok(offline.shell.includes(rel));assert.deepEqual(fs.readFileSync('docs/'+rel),fs.readFileSync('web/'+rel));}
+ for(const tile of sample.tiles){const rel='data/satellite/'+tile.path;const bytes=fs.readFileSync('web/'+rel);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),tile.sha256);assert.ok(offline.shell.includes(rel));assert.deepEqual(fs.readFileSync(rel),bytes);}
+ for(const rel of ['satellite.js','data/satellite/podgorica-center.webp']){assert.ok(offline.shell.includes(rel));assert.deepEqual(fs.readFileSync(rel),fs.readFileSync('web/'+rel));}
 });
