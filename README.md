@@ -8,7 +8,7 @@ Monorepo for a Montenegro map and place directory. The current product is a stat
 | --- | --- |
 | [apps/web](apps/web/README.md) | Browser experience, rendering, offline UI |
 | [services/backend](services/backend/README.md) | Independent Go module; currently an optional static host |
-| [services/transit-relay](services/transit-relay/README.md) | Read-only live bus relay; pending public activation |
+| [services/transit-relay](services/transit-relay/README.md) | Public read-only live bus relay |
 | [data](data/README.md) | Source datasets, imagery, validation, tile pipeline, reviewed artifacts |
 | [packages/contracts](packages/contracts/README.md) | Published data formats shared by producers/consumers |
 | [platform](platform/README.md) | Development hosting, release infrastructure, repository checks |

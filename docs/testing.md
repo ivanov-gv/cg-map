@@ -33,4 +33,4 @@ The detailed earlier design guide includes historical verification evidence. Cur
 
 Executed locally: 35 Node tests, five Python tests, six Playwright tests, lint, source/release/contract validation, documentation/boundary checks, offline manifests, and both workspace-local test commands. The full geography pipeline was not rerun: source geometry and archive bytes were moved unchanged. Backend Go checks and the actual Pages deployment are verified by their GitHub workflows.
 
-Transport feature verification: relay/cache/stale lifecycle unit tests, client late-response/expiry tests, desktop/mobile toggling and failure/offline acceptance. Hosted protected relay returned actual upstream positions; public access is still a release gate.
+Transport feature verification: relay/cache/stale lifecycle unit tests, client late-response/expiry tests, desktop/mobile toggling and failure/offline acceptance. The public hosted relay returned actual upstream positions with anonymous access and public read CORS. Browser acceptance uses deterministic responses; live integration is smoke-tested separately.

@@ -10,7 +10,7 @@ let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function renderTransportStatus({state,count,fetchedAt}){
  const checked=fetchedAt?new Date(fetchedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
- const labels={off:'Transport off',loading:'Loading live buses…',live:count?`${count} bus positions · checked ${checked}`:`No buses reported · checked ${checked}`,stale:`Updates delayed · last checked ${checked}`,unavailable:'Live buses temporarily unavailable · retrying',offline:'Live buses need an internet connection',paused:'Bus updates paused while map is hidden'};
+ const labels={off:'Transport off',loading:'Loading live buses…',live:count?`${count} bus position${count===1?'':'s'} · checked ${checked}`:`No buses reported · checked ${checked}`,stale:`Updates delayed · last checked ${checked}`,unavailable:'Live buses temporarily unavailable · retrying',offline:'Live buses need an internet connection',paused:'Bus updates paused while map is hidden'};
  $('transport-status').textContent=labels[state]??labels.unavailable;
  $('transport-status').dataset.state=state;
 }

@@ -20,4 +20,4 @@ The current deployment is recorded in deployment.json. It was built and deployed
 
 For updates, open that same Site's source using the Sites workflow, copy relay.mjs into lib/relay.mjs, run service tests and the Site build, then save/deploy the matching source version. Preserve Site identity and access settings. Do not create a second instance, expose the service token in browser code, or put credentials in Git.
 
-**Release gate:** this instance starts owner-private. Public access must be explicitly authorized before the GitHub Pages frontend can call it. The feature branch must not be merged before that gate is resolved.
+This instance is public following explicit owner authorization. Anonymous requests from the GitHub Pages origin can read the feed without service credentials.

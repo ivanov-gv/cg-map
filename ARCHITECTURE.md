@@ -16,7 +16,7 @@ This is a concern-based monorepo. Source boundaries follow ownership; deployment
 | Delivery | GitHub Actions uploads/deploys dist/web to Pages |
 | Verification | ESLint, Node tests, Python unittest, Playwright; separate Go vet/test/build |
 
-There is no editorial API, database, routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its public activation is pending.
+There is no editorial API, database, routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its hosted endpoint is public.
 
 ## Ownership boundaries
 
@@ -53,4 +53,4 @@ Further reading: [web guide](apps/web/README.md), [data pipeline](docs/runbooks/
 
 ## Live transport
 
-See [transport](docs/transport.md). The optional client layer polls a read-only relay for public ePodgorica positions. The relay exists because the upstream restricts browser origins. Its owner-private deployment must be made public with authorization before merging the feature. Live data is separate from offline map packages.
+See [transport](docs/transport.md). The optional client layer polls a read-only relay for public ePodgorica positions. The relay exists because the upstream restricts browser origins. The public hosted endpoint and deployment identity are recorded with the service. Live data is separate from offline map packages.

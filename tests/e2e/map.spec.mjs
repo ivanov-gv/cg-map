@@ -64,7 +64,7 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   expect(calls).toBe(0);
   const map = await page.evaluateHandle(() => window.kompasDebug.map);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
-  await expect(page.locator('#transport-status')).toHaveText(/1 bus positions/);
+  await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(1);
   expect(await page.evaluate(original => original === window.kompasDebug.map, map)).toBe(true);
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();

@@ -16,8 +16,8 @@ services/transit-relay implements a fixed-upstream read-only relay with bounded 
 
 ## Current release status
 
-The hosted relay is owner-private pending explicit public-access authorization. Its protected live smoke test returned HTTP 200 and 18 distinct bus positions. Desktop/mobile browser tests use deterministic intercepted feed responses; that is separate from the live relay verification.
+The hosted relay is public following explicit owner authorization. An anonymous live smoke test returned HTTP 200 and actual upstream bus positions with public read CORS. A Chromium fetch from https://ivanov-gv.github.io also returned HTTP 200 with 16 positions and stale=false. Desktop/mobile browser tests use deterministic intercepted feed responses; that is separate from live relay verification.
 
-The feature is prepared on a review branch. Do not merge it or claim publicly working live positions until the relay is public, the GitHub-origin browser fetch succeeds, and the Pages deployment is verified.
+The GitHub Pages client calls the public hosted endpoint. Deployment runs through the web Actions workflow after merge to main.
 
 Hosting identity and source version are in [deployment.json](../services/transit-relay/deployment.json). The service implementation and update procedure are in [its README](../services/transit-relay/README.md).

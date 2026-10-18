@@ -5,6 +5,5 @@
   "endpoint": "/api/vehicles",
   "source_commit": "905a5a5d60171757458672296e6af67c7f74f00a",
   "version_id": "appgprj_6ad5142b1eb881919e3215134bbc6a8b~appgver_c99d9930fc408191a49dd1df038f317c",
-  "access": "owner-private",
-  "release_gate": "Public relay access requires explicit authorization before merging the web feature"
+  "access": "public"
 }
