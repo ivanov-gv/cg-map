@@ -76,3 +76,11 @@ Serve `web/` on HTTPS, preferably with verified range support. Use atomic releas
 The clean export excludes Git history, hosting identity, credentials, dependencies, temporary files, and the raw upstream PBF. It includes all application source, editable GeoJSON, current map artifacts, and build/extraction tools. Original PBF download/checksum information is recorded separately.
 
 Application code is MIT. Data and fonts retain separate licenses; see [DATA_LICENSE.md](DATA_LICENSE.md).
+
+## GitHub Pages
+
+The committed `docs/` folder is the static public map. In repository **Settings → Pages**, select **Deploy from a branch**, branch **main**, folder **/docs**.
+
+Public URL: https://ivanov-gv.github.io/cg-map/
+
+After changing or rebuilding `web/`, run `node tools/publish-pages.mjs` and commit both directories. This copies the complete app, map archive, fonts and offline assets; `.nojekyll` disables Jekyll processing. No backend or map rebuild is needed just to deploy the committed snapshot.

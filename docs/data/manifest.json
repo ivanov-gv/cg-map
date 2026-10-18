@@ -1,0 +1,35 @@
+{
+  "version": "0.1.0",
+  "sourceTimestamp": "2026-10-17T20:20:51Z",
+  "coverage": "Detailed central Podgorica; Montenegro major roads and attractions.",
+  "archive": {
+    "path": "data/montenegro-d4f4f7de5f0ccb10.pmtiles",
+    "sha256": "d4f4f7de5f0ccb10a83f231b98d12844bf883db6e31382c841baf41cc1300990",
+    "bytes": 12516471
+  },
+  "shellCache": "kompas-shell-aac1dc94fbd574c5-d4f4f7de",
+  "shell": [
+    "index.html",
+    "app.js",
+    "core.js",
+    "offline.js",
+    "map-style.js",
+    "style.css",
+    "icon.svg",
+    "icon-192.png",
+    "icon-512.png",
+    "manifest.webmanifest",
+    "vendor/maplibre-gl.js",
+    "vendor/maplibre-gl.css",
+    "vendor/pmtiles.js",
+    "data/places.geojson",
+    "fonts/Open Sans Semibold/0-255.pbf",
+    "fonts/Open Sans Semibold/1024-1279.pbf",
+    "fonts/Open Sans Semibold/1280-1535.pbf",
+    "fonts/Open Sans Semibold/256-511.pbf",
+    "fonts/Open Sans Semibold/8192-8447.pbf",
+    "fonts/Open Sans Semibold/8448-8703.pbf",
+    "data/manifest.json"
+  ],
+  "totalBytes": 14425678
+}
