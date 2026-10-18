@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public live vehicle feed v1",
+  "description": "fetchedAt is the relay check time, not a GPS timestamp. No stable vehicle identity is available.",
+  "type": "object",
+  "required": ["type", "features", "fetchedAt", "stale", "source"],
+  "properties": {
+    "type": {"const": "FeatureCollection"},
+    "fetchedAt": {"type": "string", "format": "date-time"},
+    "stale": {"type": "boolean"},
+    "source": {"const": "https://epodgorica.me/javniprevoz/mapa"},
+    "features": {"type": "array", "maxItems": 2000, "items": {
+      "type": "object", "required": ["type", "geometry", "properties"],
+      "properties": {
+        "type": {"const": "Feature"},
+        "geometry": {"type": "object", "required": ["type", "coordinates"], "properties": {
+          "type": {"const": "Point"},
+          "coordinates": {"type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [
+            {"type": "number", "minimum": 17.8, "maximum": 21},
+            {"type": "number", "minimum": 41.3, "maximum": 44.1}
+          ]}
+        }},
+        "properties": {"type": "object", "required": ["route"], "properties": {"route": {"type": "string", "minLength": 1, "maxLength": 32}}}
+      }
+    }}
+  }
+}

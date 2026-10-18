@@ -6,7 +6,7 @@ function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 }
 const docs = ['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
-  ...['apps/web', 'services/backend', 'data', 'platform', 'packages/contracts'].flatMap(dir => ['README.md', 'AGENTS.md'].map(name => `${dir}/${name}`)), ...walk('docs')];
+  ...['apps/web', 'services/backend', 'services/transit-relay', 'data', 'platform', 'packages/contracts'].flatMap(dir => ['README.md', 'AGENTS.md'].map(name => `${dir}/${name}`)), ...walk('docs')];
 for (const file of docs) {
   assert.ok(file.endsWith('.md'), `docs/ must contain documentation only: ${file}`);
   const text = fs.readFileSync(file, 'utf8');
@@ -17,8 +17,8 @@ for (const file of docs) {
   }
 }
 const imports = {
-  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js'],
-  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js']
+  'app.js': ['./core.js', './map-style.js', './satellite.js', './offline.js', './transport.js'],
+  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': []
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;
@@ -40,7 +40,7 @@ for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
 for (const old of ['web', 'source-data', 'cmd', 'tools', 'deployment', 'go.mod', 'index.html', 'sw.js', '.pages-manifest.json']) {
   assert.ok(!fs.existsSync(old), `Obsolete layout: ${old}`);
 }
-for (const component of ['apps/web', 'services/backend', 'data', 'platform', 'packages/contracts']) {
+for (const component of ['apps/web', 'services/backend', 'services/transit-relay', 'data', 'platform', 'packages/contracts']) {
   assert.ok(fs.existsSync(`${component}/AGENTS.md`), `Missing component instructions: ${component}`);
 }
 console.log('Documentation links, component layout, and dependency boundaries passed.');

@@ -52,3 +52,34 @@ test('old /web/ bookmarks open the root app and preserve query/hash', async ({pa
   await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-circles'));
   await expect(page.locator('#loading')).toBeHidden();
 });
+
+test('transport toggles, renders route positions, pauses offline, and clears on disable', async ({page, context}) => {
+  let calls = 0;
+  await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => {
+    calls++;
+    return route.fulfill({json: {type: 'FeatureCollection', fetchedAt: new Date().toISOString(), stale: false,
+      features: [{type: 'Feature', geometry: {type: 'Point', coordinates: [19.26, 42.44]}, properties: {route: '6A'}}]}});
+  });
+  await ready(page);
+  expect(calls).toBe(0);
+  const map = await page.evaluateHandle(() => window.kompasDebug.map);
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(1);
+  expect(await page.evaluate(original => original === window.kompasDebug.map, map)).toBe(true);
+  await page.getByRole('button', {name: 'Satellite', exact: true}).click();
+  await expect(page.locator('#transport-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await context.setOffline(true);
+  await expect(page.locator('#transport-status')).toHaveText(/internet connection/);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(0);
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect(page.locator('#transport-info')).toBeHidden();
+});
+
+test('transport failure is visible and does not break the map', async ({page}) => {
+  await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => route.fulfill({status: 503, json: {error: 'unavailable'}}));
+  await ready(page);
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
+  expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('place-circles'))).toBe(true);
+});
