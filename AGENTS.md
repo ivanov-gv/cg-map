@@ -34,7 +34,7 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md), [ownership](docs/ownership.md), a
 
 ## Invariants
 
-- Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay only while enabled; never store live positions offline.
+- Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay only while enabled; route requests use external car/foot services. Never store live positions or external route responses offline. Dated bus patterns may be bundled.
 - Range/archive responses stay outside the service-worker shell cache.
 - Existing verified offline downloads survive unsuccessful replacements.
 - No application copies, binaries, or temporary assets in repository root.

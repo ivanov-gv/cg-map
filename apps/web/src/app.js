@@ -4,9 +4,10 @@ import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,endpointFeatures,installRoutePoints} from './point-selection.js';
+import {RoutePlanner} from './route-planner.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false,transport,selectedPoint;
+let satelliteVisible=false,transport,selectedPoint,routePlanner;
 const endpoints={from:null,to:null};
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -49,6 +50,7 @@ function renderEndpoints() {
  }
  $('route-endpoints').hidden=!endpoints.from&&!endpoints.to;
  map.getSource('route-points').setData(endpointFeatures(endpoints));
+ routePlanner?.setEndpoints(endpoints);
 }
 function setEndpoint(role) {
  if(!selectedPoint)return;
@@ -102,6 +104,7 @@ async function start(){
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
   installTransport(map);
   installRoutePoints(map);
+  routePlanner=new RoutePlanner(map);
   transport=new TransportFeed(map,{onStatus:renderTransportStatus});
   $('transport-toggle').disabled=false;
   loaded=true;$('loading').hidden=true;renderResults();

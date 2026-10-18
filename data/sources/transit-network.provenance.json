@@ -1,0 +1,11 @@
+{
+  "source": "https://adminapi.prevoz.podgorica.me/api/gtfs/",
+  "retrieved_at": "2026-10-18T19:54:19.226051+00:00",
+  "bytes": 76763,
+  "sha256": "dbc4fa1d7c67dc4c544a34bd6975c9dc9d0195ed49c149dc877f2aa877f47b04",
+  "stops": 719,
+  "patterns": 60,
+  "routes": 29,
+  "sampling": "Representative direction/headsign/stop-count variants from Monday, Saturday and Sunday trips. Not a complete trip list or service calendar.",
+  "license": "No explicit reuse license found; attribution retained."
+}

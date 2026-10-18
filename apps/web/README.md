@@ -359,3 +359,7 @@ The latest cloud-browser inspection could not render because that browser disabl
 ## Point selection
 
 [point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
+
+## Routes
+
+[routing.js](src/routing.js) handles car/foot requests, [transit-routing.js](src/transit-routing.js) searches local bus patterns, and [route-planner.js](src/route-planner.js) owns mode controls, cancellation, line layers, and itinerary rendering. See [routing](../../docs/routing.md) before changing providers, transit assumptions, or offline behavior.

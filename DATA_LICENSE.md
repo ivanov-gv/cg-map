@@ -18,3 +18,5 @@ No company research article text or proprietary map datasets are bundled; resear
 ## Bus stops
 
 The dated ePodgorica stop snapshot is attributed to Glavni grad Podgorica / ePodgorica. Source and integrity metadata: data/sources/transport-stops.provenance.json. No explicit reuse license was found; this dataset is not relicensed by the application's MIT license or the basemap's ODbL.
+
+Bus route patterns and stop coordinates in data/sources/transit-network.json are separately attributed to ePodgorica / Glavni grad Podgorica. Their provenance file records source and sampling. No explicit reuse license was found; they are not relicensed as MIT or ODbL. Road/foot routing uses FOSSGIS/OSRM with OpenStreetMap attribution retained in the route panel.

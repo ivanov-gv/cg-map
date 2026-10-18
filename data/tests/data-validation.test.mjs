@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {validateCollection, validateStops} from '../tools/check-data.mjs';
+import {validateCollection, validateStops, validateTransitNetwork} from '../tools/check-data.mjs';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 test('reviewed Podgorica places satisfy the directory contract', () => {
   assert.equal(validateCollection(fixture, {places: true}), 3);
@@ -32,4 +32,14 @@ test('bus stops preserve unique source IDs and reject invalid locations or names
     const data = structuredClone(stops); mutate(data);
     assert.throws(() => validateStops(data));
   }
+});
+
+test('transit network rejects missing stops, reversed times, and invalid coordinates', () => {
+  const network=JSON.parse(fs.readFileSync('data/sources/transit-network.json'));
+  assert.ok(validateTransitNetwork(network)>0);
+  for(const mutate of [
+    n=>{n.patterns[0].stops[0]='missing-stop';},
+    n=>{n.patterns[0].offsets[1]=-1;},
+    n=>{Object.values(n.stops)[0].coordinates=[0,0];}
+  ]) {const bad=structuredClone(network);mutate(bad);assert.throws(()=>validateTransitNetwork(bad));}
 });

@@ -18,3 +18,5 @@ See [team ownership](ownership.md). Start with [current architecture](../ARCHITE
 Update documentation in the same change as affected behavior. Current architecture and runbooks take precedence over historical verification notes. Keep each fact in one authoritative location; link instead of duplicating.
 
 - [Point selection](point-selection.md): feature details and From/To endpoint state.
+
+- [Routing](routing.md): car/foot services, bus suggestions, data refresh, and limitations.

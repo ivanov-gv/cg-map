@@ -1,5 +1,8 @@
 import {test, expect} from '@playwright/test';
 import fs from 'node:fs';
+test.beforeEach(async ({page}) => {
+  await page.route('https://routing.openstreetmap.de/**', route => route.fulfill({status:503,json:{code:'Unavailable'}}));
+});
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 async function ready(page) {
   await page.goto('./');
@@ -51,6 +54,16 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await expect(page.locator('#place-category')).toHaveText('Bus stop');
   await page.getByRole('button',{name:'From',exact:true}).click();
   await expect(page.locator('#route-from')).toContainText('Ul. 13. jula (B)');
+  const busNetwork=JSON.parse(fs.readFileSync('data/sources/transit-network.json'));
+  const pattern=busNetwork.patterns.find(p=>p.offsets.at(-1)>0);
+  await tapMapCenter(page,busNetwork.stops[pattern.stops[0]].coordinates);
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,busNetwork.stops[pattern.stops.at(-1)].coordinates);
+  await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-status')).toContainText('internet connection');
+  await page.getByRole('button',{name:'Public transport',exact:true}).click();
+  await expect(page.locator('#route-status')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#route-status')).toContainText('+ waiting');
   expect(errors).toEqual([]);
 });
 
@@ -160,4 +173,43 @@ test('building selection provides feature details and point actions', async ({pa
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-details')).toContainText('Type: building');
   await expect(page.getByRole('button',{name:'To',exact:true})).toBeVisible();
+});
+
+test.describe('isolated routing provider checks',()=>{
+ test.use({serviceWorkers:'block'});
+test('route modes draw different street routes and a bus itinerary; clearing removes the line', async ({page}) => {
+  const calls=[];
+  await page.route('https://routing.openstreetmap.de/**', route => {
+    const walking=route.request().url().includes('routed-foot');calls.push(walking?'walk':'car');
+    return route.fulfill({json:{code:'Ok',routes:[{distance:walking?850:1200,duration:walking?650:180,geometry:{type:'LineString',coordinates:[[19.254951,42.446057],[19.26,42.445],[19.26345,42.443523]]},legs:[{steps:[{distance:850,name:'Test street',maneuver:{type:'depart'}}]}]}]}});
+  });
+  await page.route('**/data/transit-network.json', route => route.fulfill({json:{version:1,retrievedAt:'2026-10-18T19:00:00Z',stops:{a:{name:'Start stop',coordinates:[19.254951,42.446057]},b:{name:'End stop',coordinates:[19.26345,42.443523]}},patterns:[{route:'6',name:'Test bus',headsign:'End stop',stops:['a','b'],offsets:[0,600]}]}}));
+  await ready(page);
+  await tapMapCenter(page,[19.254951,42.446057]);await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[19.26345,42.443523]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-status')).toHaveText('3 min · 1.2 km');
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(1);
+  await page.getByRole('button',{name:'Walk',exact:true}).click();
+  await expect(page.locator('#route-status')).toHaveText('11 min · 850 m');
+  expect(calls).toContain('walk');expect(calls).toContain('car');
+  await page.getByRole('button',{name:'Public transport',exact:true}).click();
+  await expect(page.locator('#route-status')).toHaveText(/10 min \+ waiting/);
+  await page.locator('#route-itinerary summary').click();
+  await expect(page.locator('#route-steps')).toContainText('Bus 6');
+  await expect(page.locator('#route-note')).toContainText('Check departures');
+  await page.getByRole('button',{name:'Clear points',exact:true}).click();
+  expect(await page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(0);
+});
+
+test('route errors and identical endpoints stay explicit without leaving old lines', async ({page}) => {
+  await ready(page);
+  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-status')).toContainText('same point');
+  await tapMapCenter(page,[20.81,43.71]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await expect(page.locator('#route-status')).toContainText('unavailable');
+  expect(await page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(0);
+  await expect(page.locator('#route-retry')).toBeVisible();
+});
+
 });

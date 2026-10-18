@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Representative bus route network v1",
+  "type": "object",
+  "required": [
+    "version",
+    "retrievedAt",
+    "source",
+    "stops",
+    "patterns"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "retrievedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string"
+    },
+    "stops": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "name",
+          "coordinates"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "coordinates": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "route",
+          "name",
+          "headsign",
+          "stops",
+          "offsets"
+        ],
+        "properties": {
+          "route": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "headsign": {
+            "type": "string"
+          },
+          "stops": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 300,
+            "items": {
+              "type": "string"
+            }
+          },
+          "offsets": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 300,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 172800
+            }
+          }
+        }
+      }
+    }
+  }
+}

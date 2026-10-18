@@ -10,6 +10,7 @@ This is a concern-based monorepo. Source boundaries follow ownership; deployment
 | Vector map | PMTiles v3, PMTiles JS 4.3.0, precomputed MVT |
 | Directory | GeoJSON snapshot with browser-side search |
 | Point selection | Feature details and From/To endpoints in browser session state |
+| Routing | FOSSGIS/OSRM car + foot APIs; local representative bus-pattern search with up to one transfer |
 | Satellite | Local bounded zoom-17 WebP sample and preview |
 | Offline | Service worker/Cache Storage for shell; OPFS for verified archive |
 | Data pipeline | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely |
@@ -17,7 +18,7 @@ This is a concern-based monorepo. Source boundaries follow ownership; deployment
 | Delivery | GitHub Actions uploads/deploys dist/web to Pages |
 | Verification | ESLint, Node tests, Python unittest, Playwright; separate Go vet/test/build |
 
-There is no editorial API, database, routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its hosted endpoint is public.
+There is no editorial API, database, self-hosted routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its hosted endpoint is public. Route planning uses external car/foot routing and local dated bus patterns; see [routing](docs/routing.md).
 
 ## Ownership boundaries
 
