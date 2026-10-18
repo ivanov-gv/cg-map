@@ -1,0 +1,19 @@
+import test from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
+import {ArchiveSource} from '../web/offline.js';
+const payload=new TextEncoder().encode('a complete verified vector archive');
+const hash=crypto.createHash('sha256').update(payload).digest('hex');
+function setup({badHash=false}={}){
+ const files=new Map([['map-old.pmtiles',new Blob(['old map'])]]),storage=new Map([['kompas-active-map','map-old.pmtiles']]);let remoteReads=0;
+ const directory={async getFileHandle(name,{create=false}={}){if(!create&&!files.has(name))throw new Error('Missing file');return {getFile:async()=>files.get(name),async createWritable(){const chunks=[];const stream=new WritableStream({write(chunk){chunks.push(chunk);},close(){files.set(name,new Blob(chunks));}});stream.write=async value=>{const w=stream.getWriter();try{await w.write(value);}finally{w.releaseLock();}};stream.close=async()=>{const w=stream.getWriter();try{await w.close();}finally{w.releaseLock();}};return stream;}};},async removeEntry(name){files.delete(name);}};
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{storage:{getDirectory:async()=>directory,estimate:async()=>({quota:1e9,usage:1}),persist:async()=>true}}});
+ globalThis.location={href:'https://kompas.test/'};globalThis.localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+ globalThis.pmtiles={FetchSource:class{async getBytes(){remoteReads++;return {data:payload.buffer};}}};
+ globalThis.caches={open:async()=>({put:async()=>{}})};
+ globalThis.fetch=async url=>new Response(String(url).endsWith('.pmtiles')?payload:'app shell');
+ const manifest={archive:{bytes:payload.length,sha256:badHash?'0'.repeat(64):hash},shell:['index.html'],shellCache:'test-shell'};
+ return {files,storage,manifest,source:new ArchiveSource('https://kompas.test/map.pmtiles',manifest),get remoteReads(){return remoteReads;}};
+}
+test('verified download activates and subsequent reads use local file slices',async()=>{const env=setup();await env.source.init();const result=await env.source.download(new AbortController().signal,()=>{});assert.equal(result.persisted,true);assert.equal(env.storage.get('kompas-active-map'),env.source.filename);assert.equal(env.files.has('map-old.pmtiles'),false);const read=await env.source.getBytes(2,6);assert.equal(new TextDecoder().decode(read.data),'comple');assert.equal(env.remoteReads,0);assert.equal(env.files.has(env.source.filename+'.partial'),false);});
+test('integrity failure preserves previous map and activation marker',async()=>{const env=setup({badHash:true});await env.source.init();await assert.rejects(env.source.download(new AbortController().signal,()=>{}),/integrity/);assert.equal(env.storage.get('kompas-active-map'),'map-old.pmtiles');assert.equal(await env.files.get('map-old.pmtiles').text(),'old map');assert.equal(env.source.local,null);assert.equal(env.files.has(env.source.filename+'.partial'),false);});
+test('cancelled download never activates partial data',async()=>{const env=setup();await env.source.init();const abort=new AbortController();await assert.rejects(env.source.download(abort.signal,()=>abort.abort()),{name:'AbortError'});assert.equal(env.storage.get('kompas-active-map'),'map-old.pmtiles');assert.equal(env.files.has(env.source.filename+'.partial'),false);});
+test('fresh instance reopens a completed package without network reads',async()=>{const env=setup();await env.source.init();await env.source.download(new AbortController().signal,()=>{});const restored=new ArchiveSource('https://kompas.test/map.pmtiles',env.manifest);assert.equal(await restored.init(),true);const read=await restored.getBytes(0,payload.length);assert.equal(new TextDecoder().decode(read.data),new TextDecoder().decode(payload));assert.equal(env.remoteReads,0);});

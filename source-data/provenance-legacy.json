@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-10-18T08:14:55.429343+00:00",
+  "source": "Geofabrik / OpenStreetMap",
+  "license": "ODbL 1.0",
+  "detail_bbox": [
+    19.2,
+    42.405,
+    19.295,
+    42.465
+  ],
+  "counts": {
+    "roads": 17881,
+    "buildings": 25213,
+    "land": 284,
+    "water": 1490,
+    "places": 1811
+  },
+  "coverage": "Montenegro major roads and attractions; detailed buildings and directory in central Podgorica only.",
+  "source_timestamp": "2026-10-17T20:20:51Z",
+  "country_outline_fallback": false,
+  "data_files": {
+    "water.geojson": {
+      "bytes": 1367266,
+      "sha256": "90a840342b4cf763e347e752d63f99dac0961c74a6b5ab10cc6c12856232fc3e"
+    },
+    "buildings.geojson": {
+      "bytes": 6130946,
+      "sha256": "d887d10fec733cdbe06b0e343973042f84d87e1d0451dd4a73bf99e360e3acb8"
+    },
+    "land.geojson": {
+      "bytes": 422852,
+      "sha256": "23458e8ec90d5068dcc378e9a8c68cefcd484f83ee6745cd42746be4a0293abb"
+    },
+    "roads.geojson": {
+      "bytes": 3514789,
+      "sha256": "2ab99cb2de4765a3a762963261e614016d45124b16e63e760199c5822d2ed9a5"
+    },
+    "places.geojson": {
+      "bytes": 443918,
+      "sha256": "62b4053d18e7d31907e288438c69d8fdcb7027f3b358dce30262977084f60562"
+    }
+  },
+  "package_bytes": 15089957,
+  "context_source": "Natural Earth public-domain country outlines via johan/world.geo.json",
+  "runtime_map_format": "pre-rendered WebP tile pack, revision 3",
+  "runtime_files": {
+    "data/tiles.json": {
+      "bytes": 14440299,
+      "sha256": "dcefd1c448775e4f056316426b13c3561832aad1f6fd390daeb4a811268f8a09"
+    },
+    "data/street-labels.json": {
+      "bytes": 4153,
+      "sha256": "ca9cbc351187a9feee4a90b0694bd97ce3bcf336aa6867cc10be3d04eee87516"
+    },
+    "data/places.geojson": {
+      "bytes": 443918,
+      "sha256": "62b4053d18e7d31907e288438c69d8fdcb7027f3b358dce30262977084f60562"
+    }
+  }
+}

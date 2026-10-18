@@ -1,0 +1,39 @@
+{
+  "export_date": "2026-10-18",
+  "upstream_snapshot": "2026-10-17T20:20:51Z",
+  "coverage": "Detailed central Podgorica; Montenegro major roads and attractions.",
+  "format": "Editable GeoJSON display extract; precomputed MVT/PMTiles runtime",
+  "layers": {
+    "water.geojson": {
+      "features": 1491,
+      "bytes": 1624402,
+      "sha256": "3b8b36446f384ff26cf3e3ff208ffb0b639152d24ce026066cda9b345bdec881"
+    },
+    "buildings.geojson": {
+      "features": 25213,
+      "bytes": 6130946,
+      "sha256": "d887d10fec733cdbe06b0e343973042f84d87e1d0451dd4a73bf99e360e3acb8"
+    },
+    "land.geojson": {
+      "features": 284,
+      "bytes": 422852,
+      "sha256": "23458e8ec90d5068dcc378e9a8c68cefcd484f83ee6745cd42746be4a0293abb"
+    },
+    "roads.geojson": {
+      "features": 17881,
+      "bytes": 3514789,
+      "sha256": "2ab99cb2de4765a3a762963261e614016d45124b16e63e760199c5822d2ed9a5"
+    },
+    "context-countries.geojson": {
+      "features": 6,
+      "bytes": 5843,
+      "sha256": "9ee2200fb29eee96e59b21930aa2f70dd4592b5163d3a256d7e07fe2722c85a2"
+    }
+  },
+  "places_file": "web/data/places.geojson",
+  "places_count": 1811,
+  "notes": [
+    "water.geojson includes one derived ocean polygon added after the original extraction.",
+    "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
+  ]
+}
