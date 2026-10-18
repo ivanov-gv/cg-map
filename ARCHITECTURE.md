@@ -4,7 +4,33 @@
 
 Date: 18 October 2026. This guide describes the working vector PoC and the GitHub-ready source export. It distinguishes implemented behavior, observed evidence, and proposed production work. It is not a claim that a complete nationwide directory, native application, or navigation system already exists.
 
+## Current stack
+
+This is the implemented and deployed stack as of 18 October 2026. The public app is hosted at https://ivanov-gv.github.io/cg-map/ from the `main` branch's `docs/` directory.
+
+| Layer | Current implementation | Responsibility |
+| --- | --- | --- |
+| Application UI | Plain JavaScript ES modules, HTML, CSS | Search, categories, results, place details, responsive layout, satellite toggle |
+| Map renderer | MapLibre GL JS **5.12.0**, WebGL | Camera, vector/raster rendering, labels, clustered place markers |
+| Vector basemap | MVT geometry in a **PMTiles v3** archive; PMTiles JS **4.3.0** | Prebuilt roads, buildings, water and land; HTTP range reads |
+| Satellite sample | 16 local **256 × 256 WebP XYZ tiles at zoom 17**, plus a WebP preview | Roughly 900 × 900 m of central Podgorica; bounded raster layers beneath street labels and place markers |
+| Place directory | GeoJSON snapshot, searched and filtered in the browser | 1,811 places; no search API |
+| Offline application assets | Service worker and Cache Storage | App, places, fonts, icons and satellite sample |
+| Offline vector archive | Origin Private File System (**OPFS**) | Verified archive download and local byte-range reads |
+| Data sources | OpenStreetMap-derived GeoJSON, Natural Earth context; separate eMapa Ortofoto 2025 sample | Editable source geometry and a separately attributed imagery sample; imagery reuse rights remain unconfirmed |
+| Vector build | Node.js: `geojson-vt` **4.0.2**, `vt-pbf` **3.1.3**; Python packaging tools | Clip/simplify/encode MVT tiles, package archive, generate hashes and offline manifests |
+| OSM extraction | Python, `osmium`, Shapely | Optional upstream import; not needed to view the shipped map |
+| Public hosting | **GitHub Pages**, HTTPS, HTTP byte ranges | Serve committed static assets from `docs/` |
+| CI and tests | **GitHub Actions**, Node.js test runner, Python `unittest`, Go build | Automated source/data checks; latest satellite release passed CI and Pages deployment |
+| Optional local hosting | Python standard library or Go `net/http` | Serve `web/` locally; neither runs on GitHub Pages |
+
+**There is no backend API, application database, React framework, or server-side search in the deployed PoC.** Go/PostGIS and internal editorial services elsewhere in this guide are future options, not deployed dependencies.
+
+`web/` is the application source/public asset tree. Run `node tools/publish-pages.mjs` after changes to refresh the committed `docs/` deployment copy. Run `node tools/finalize.mjs` first when app or dataset changes require new offline manifests. Downloaded satellite imagery is bundled locally; the deployed app does not call eMapa at runtime.
+
 ## Contents
+
+- [Current stack](#current-stack)
 
 1. [The problem](#1-the-problem)
 2. [Scope and present status](#2-scope-and-present-status)
@@ -58,6 +84,7 @@ The architectural objective is to prepare expensive map data before users reques
 
 - Pan, pinch/scroll zoom, zoom buttons, country overview, and return to Podgorica.
 - A vector basemap with land, water, roads, buildings, and road labels.
+- A Satellite / Street map toggle for the bundled central-Podgorica imagery sample; vector coverage remains outside its footprint.
 - Business/attraction markers, clustering, categories, local search, and nearest results.
 - Place details with an explicit close button, Escape, and map-background close.
 - An explicit offline download with progress, cancellation, integrity checking, and removal.
@@ -83,13 +110,13 @@ Public users cannot edit. Internal editing is a future operational capability. F
 | Archive directory entries | 40,034 |
 | Unique tile contents | 27,465 |
 | Archive size | 12,516,471 bytes, about 11.94 MiB |
-| App, places, fonts, and archive | Approximately 14.43 MB decimal / 13.76 MiB |
+| App, places, fonts, satellite sample, and archive | Approximately 15.31 MB decimal / 14.60 MiB |
 
 The authoritative runtime artifact information is in [web/data/manifest.json](web/data/manifest.json). The total is a payload estimate, not an exact measure of HTTP traffic, storage overhead, or peak memory. Countrywide buildings, full street detail, and complete business coverage are not included yet.
 
 ### Evidence level
 
-The owner confirmed that the latest demo met the immediate need. Locally executed checks cover 20 Node tests and five Python tests. Real browser automation and a physical-device performance benchmark were not executed in the build environment. Do not turn acceptance of the PoC into an assertion of measured 60 FPS, certified browser coverage, or guaranteed offline retention.
+The owner confirmed that the latest demo met the immediate need. Current local checks cover 22 Node tests, including satellite layer validation and original tile hashes. Five Python tests passed at the handoff baseline; GitHub CI now runs the Node/Python checks and Go build and passed for the latest release. A cloud-browser startup check could not render the map because WebGL is disabled in that browser. No physical-device performance benchmark has been executed. Do not turn acceptance of the PoC into an assertion of measured 60 FPS, certified browser coverage, or guaranteed offline retention.
 
 ### Explicit exclusions
 
@@ -644,7 +671,7 @@ React/Svelte can be adopted later if application complexity warrants them. They 
 
 ### 15.1 What actually needs hosting
 
-Only `web/` is needed to serve the shipped application. No application database, external API, npm process, or cloud-specific backend is required. A Linux VPS running Caddy or Nginx is sufficient to start. The supplied Python host is useful for local development; its existence does not make it a production-hardened internet server.
+The deployed public PoC uses GitHub Pages, publishing `main` → `/docs`. This is an exact static copy of `web/`, refreshed with `node tools/publish-pages.mjs`. For other hosts, only `web/` is needed to serve the shipped application. No application database, external API, npm process, or cloud-specific backend is required. A Linux VPS running Caddy or Nginx is sufficient to start. The supplied Python host is useful for local development; its existence does not make it a production-hardened internet server.
 
 The optional Go host is deliberately small. Before exposing it directly at production scale, add appropriate HTTP timeouts, graceful shutdown, operational metrics, and TLS/proxy integration—or simply let a mature static server deliver the files.
 
@@ -715,7 +742,7 @@ The optional hosted demo uses proprietary hosting only as a replaceable delivery
 
 ### Executed checks
 
-At the handoff baseline, 20 Node and five Python tests pass. See [TESTING.md](TESTING.md) for the detailed record.
+At the handoff baseline, 20 Node and five Python tests passed. The satellite release adds two Node tests, bringing the current Node total to 22; its GitHub CI passed. See [TESTING.md](TESTING.md) for the detailed record.
 
 - Archive header/type/hash and decoding of actual city/coast/overview MVT geometry.
 - Map style validation against the official style schema.
@@ -758,7 +785,7 @@ Aim near 60 FPS during normal warm gestures on the representative phone, and rep
 
 ### CI
 
-The export includes a GitHub Actions template running Node/Python checks and a Go compilation job. Its external action majors were checked against the maintainers' current usage examples. The workflow has not run on the user's GitHub account; pin reviewed action commits and tool versions when reproducible/security-controlled CI is required.
+The export includes a GitHub Actions template running Node/Python checks and a Go compilation job. Its external action majors were checked against the maintainers' current usage examples. The workflow has run successfully on `ivanov-gv/cg-map`, including the satellite release; pin reviewed action commits and tool versions when reproducible/security-controlled CI is required.
 
 No browser suite or full nationwide data rebuild is implied by that CI template. Add those as separate, deliberately provisioned jobs.
 
