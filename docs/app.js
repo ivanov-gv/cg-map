@@ -1,8 +1,10 @@
 import {categories,colors,matches,selectNearest,safeWebsite,collection} from './core.js';
 import {mapStyle} from './map-style.js';
+import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
 import {ArchiveSource,downloadLabel} from './offline.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
+let satelliteVisible=false;
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function notify(message){$('error-text').textContent=message;$('error').hidden=false;}
@@ -50,10 +52,12 @@ async function start(){
  const protocol=new pmtiles.Protocol();protocol.add(new pmtiles.PMTiles(archive));maplibregl.addProtocol('pmtiles',protocol.tile);
  map=new maplibregl.Map({container:'map',style:mapStyle(archive.url),center:[19.26,42.437],zoom:14,minZoom:7,maxZoom:23,maxBounds:[[17.8,41.3],[21,44.1]],renderWorldCopies:false,attributionControl:{compact:true},fadeDuration:0,maxTileCacheSize:160,pixelRatio:Math.min(devicePixelRatio||1,2),refreshExpiredTiles:false});
  // Exposed for the supplied browser QA script and manual performance inspection.
- window.kompasDebug={get map(){return map;},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;}};
+ window.kompasDebug={get map(){return map;},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;}};
  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');map.addControl(new maplibregl.ScaleControl({maxWidth:100}),'bottom-left');
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>map.resize());});observer.observe($('map'));
  map.on('load',()=>{
+  installSatellite(map,location.href);
+  $('satellite-toggle').disabled=false;
   map.addSource('places',{type:'geojson',data:collection(filtered),cluster:true,clusterRadius:38,clusterMaxZoom:13});
   map.addLayer({id:'clusters',type:'circle',source:'places',filter:['has','point_count'],paint:{'circle-color':'#294d3c','circle-radius':['step',['get','point_count'],17,50,22,200,27],'circle-stroke-color':'#fffef8','circle-stroke-width':2}});
   map.addLayer({id:'cluster-count',type:'symbol',source:'places',filter:['has','point_count'],layout:{'text-field':['to-string',['get','point_count_abbreviated']],'text-font':['Open Sans Semibold'],'text-size':11},paint:{'text-color':'#ffffff'}});
@@ -78,6 +82,14 @@ $('toggle-results').addEventListener('click',()=>{const open=document.querySelec
 $('reset').addEventListener('click',()=>{$('search').value='';$('categories').firstElementChild.click();closePlace();});
 $('overview').addEventListener('click',()=>{closePlace();map?.fitBounds([[18.42,41.84],[20.36,43.57]],{padding:55,duration:reduced?0:700});});
 $('podgorica').addEventListener('click',()=>{closePlace();map?.easeTo({center:[19.26,42.437],zoom:14,duration:reduced?0:600});});
+$('satellite-toggle').addEventListener('click',()=>{
+ if(!loaded)return;
+ satelliteVisible=!satelliteVisible;setSatelliteVisible(map,satelliteVisible);
+ $('satellite-toggle').setAttribute('aria-pressed',String(satelliteVisible));
+ $('satellite-toggle').textContent=satelliteVisible?'Street map':'Satellite';
+ $('satellite-note').hidden=!satelliteVisible;
+ if(satelliteVisible){closePlace();const [w,s,e,n]=satelliteBounds;map.easeTo({center:[(w+e)/2,(s+n)/2],zoom:17.5,duration:reduced?0:600});}
+});
 $('download').addEventListener('click',startDownload);$('cancel-download').addEventListener('click',()=>downloadAbort?.abort());$('remove-download').addEventListener('click',async()=>{await archive.remove();updateDownload();});
 $('retry').addEventListener('click',()=>location.reload());addEventListener('online',updateConnection);addEventListener('offline',updateConnection);
 start().catch(e=>{console.error(e);$('loading').hidden=true;notify(e.message||'Map startup failed.');});

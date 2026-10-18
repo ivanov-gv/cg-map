@@ -10,3 +10,7 @@ Application code: MIT, see LICENSE. Library and data licenses are separate.
 - Build-only geojson-vt: ISC; vt-pbf: MIT; Python PMTiles: BSD 3-clause. Their full npm dependency/license metadata is retained by package-lock.json/npm packages on installation. No paid API or Mapbox service is used.
 
 No company research article text or proprietary map datasets are bundled; research notes summarize public sources and link to them.
+
+## Orthophoto sample
+
+`web/data/satellite/` and its `docs/` copy contain eMapa Ortofoto 2025 sample imagery and provenance. Its reuse licence has not been established. This imagery is not licensed under MIT, ODbL, or Natural Earth's public-domain terms by this project. Original download URLs and hashes are recorded in the sample manifest.

@@ -84,3 +84,9 @@ The committed `docs/` folder is the static public map. In repository **Settings 
 Public URL: https://ivanov-gv.github.io/cg-map/
 
 After changing or rebuilding `web/`, run `node tools/publish-pages.mjs` and commit both directories. This copies the complete app, map archive, fonts and offline assets; `.nojekyll` disables Jekyll processing. No backend or map rebuild is needed just to deploy the committed snapshot.
+
+## Satellite sample
+
+The **Satellite** button displays a locally bundled orthophoto sample (about 900 × 900 m) around central Podgorica and moves the map to it. **Street map** returns to the vector view. Outside the sample rectangle the vector map remains visible. Place markers, search and details work in both views. The sample is included in offline downloads.
+
+Original tiles and provenance are in `web/data/satellite/`. Native sample zoom is 17; higher zoom magnifies the existing photographs. Imagery served by eMapa as Ortofoto 2025; reuse/redistribution rights remain unconfirmed. See its separate README and manifest.
