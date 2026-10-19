@@ -5,6 +5,7 @@ import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
+import {registerAppUpdates} from './app-updates.js';
 import {installMapTaps} from './map-taps.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
@@ -81,11 +82,11 @@ async function start(){
  if(!globalThis.maplibregl||!globalThis.pmtiles){notify('The bundled map libraries did not load. Check the application files.');return;}
  // This MapLibre bundle has no supported() helper. Map construction reports
  // graphics initialization errors through the existing startup catch handler.
+ if('serviceWorker' in navigator&&isSecureContext){serviceWorkerRegistration=await registerAppUpdates().catch(e=>{notify('Offline setup failed: '+e.message);return null;});}
  const responses=await Promise.all([fetch('data/manifest.json'),fetch('data/places.geojson'),fetch('data/building-labels.geojson')]);if(responses.some(r=>!r.ok))throw new Error('Could not load map metadata or places.');
  let labels;
  [manifest,{features:all},labels]=await Promise.all(responses.map(r=>r.json()));all=all.map((f,i)=>({...f,id:i+1}));byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
  const buildingAddresses=buildingAddressIndex(labels);
- if('serviceWorker' in navigator&&isSecureContext){serviceWorkerRegistration=await navigator.serviceWorker.register('sw.js',{scope:'./',updateViaCache:'none'}).catch(e=>{notify('Offline setup failed: '+e.message);return null;});}
  archive=new ArchiveSource(new URL(manifest.archive.path,location.href).href,manifest);try{await archive.init();}catch(e){$('storage-note').textContent='Local storage unavailable. Online map is still usable.';}
  updateDownload();
  const protocol=new pmtiles.Protocol();protocol.add(new pmtiles.PMTiles(archive));maplibregl.addProtocol('pmtiles',protocol.tile);

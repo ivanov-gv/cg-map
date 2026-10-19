@@ -247,9 +247,9 @@ Cancellation uses AbortController. The new archive is not activated before verif
 
 ### Why old UI can survive a deployment
 
-The service worker normally serves cached assets first. A new worker may install but wait until old controlled tabs close. Refreshing an open tab does not always activate the new release.
+The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker every minute while visible and online, when returning to the tab, and when connectivity returns. A replacement shell bypasses the browser HTTP cache and activates only after every required asset is cached.
 
-For ordinary updates, close all cg-map tabs and reopen. During development, Chrome DevTools → Application lets you inspect service workers and caches. Clearing site data is a diagnostic last resort: it removes downloaded maps too.
+A successful update automatically reloads open app tabs at their existing URLs. The worker initiates navigation without awaiting it during activation, avoiding a lifecycle deadlock and also refreshing tabs running older app code. First installation does not reload. Failed replacements keep the working offline shell; verified archives stay in OPFS. A reload resets session selections/routes. See [release updates](../../docs/runbooks/release.md#automatic-app-updates). Browser data does not need to be cleared.
 
 The current "Exploring offline" / READY state mainly reflects the activated local vector archive. It is not proof that the device has no network, every cache is intact, or storage can never be evicted.
 
@@ -321,7 +321,7 @@ Common symptoms:
 
 | Symptom | Check first |
 | --- | --- |
-| Old UI after deployment | Service worker waiting/cached release |
+| Old UI after deployment | Return online and focus the tab; inspect worker update/install failures |
 | Satellite button remains disabled | Map startup failed or load did not finish |
 | WebGL initialization error | Browser/device graphics support; this is before layer interaction |
 | Satellite disappears outside a rectangle | Expected sample coverage |

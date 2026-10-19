@@ -28,3 +28,11 @@ Confirm the web checks and deployment succeeded. Open the project root, exercise
 To roll back, revert the offending source/data release commit on main; Actions rebuilds and redeploys it. For a workflow problem, restore the last known-good workflow first. Larger future deployments must retain old content-addressed archives for cached clients; local source rollback alone is not an archive retention service.
 
 Official workflow guidance: [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+## Automatic app updates
+
+The app checks its service-worker registration every minute while visible and online, on return to the tab, and when connectivity returns. Worker scripts and their imported release manifest bypass the HTTP cache. Installation fetches the entire replacement shell with cache reload requests before calling skipWaiting. A failed installation keeps the current worker and offline shell.
+
+On activation, the worker claims its clients and starts navigation of open app tabs to their existing URLs, including query and fragment. Navigation is deliberately not awaited inside activation: its fetch must wait for activation to finish. This also refreshes tabs running older app code without an update listener. First installation does not reload the page. Successful updates remove obsolete shell caches, preserving the verified map archive in OPFS. Automatic reload resets in-memory selections and route endpoints.
+
+Browser acceptance exercises a real two-release HTTP host with long-lived HTTP caching, multiple tabs, unchanged worker code with a changed imported manifest, an incomplete update, and offline reopening. Clearing browser data is not part of the release process.

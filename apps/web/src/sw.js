@@ -1,8 +1,6 @@
 /* Shell only: PMTiles byte ranges are handled by the archive reader, never cached as full responses. */
 importScripts('offline-manifest.js');
 const config=self.KOMPAS_OFFLINE;
-// One-time recovery for the initial startup and cached-navigation failures.
-const brokenCaches=new Set(['kompas-shell-4c2a2bbe7700c4fe-d4f4f7de','kompas-shell-2be1e80ac42b70e0-d4f4f7de','kompas-shell-d2645f8b2c0612c3-d4f4f7de']);
 function navigationSafeResponse(response){
  if(!response?.redirected)return response;
  // A followed redirect cannot satisfy Chrome's redirect:manual navigation.
@@ -13,14 +11,21 @@ function navigationSafeResponse(response){
 }
 self.addEventListener('install',event=>event.waitUntil((async()=>{
  const cache=await caches.open(config.shellCache);
- await cache.addAll(config.shell.map(p=>new URL(p,self.registration.scope).href));
- // Activate this critical startup repair even while the broken page is open.
- if((await caches.keys()).some(key=>brokenCaches.has(key)))await self.skipWaiting();
+ // Bypass the browser HTTP cache when installing a new release.
+ await cache.addAll(config.shell.map(p=>new Request(new URL(p,self.registration.scope),{cache:'reload'})));
+ await self.skipWaiting();
 })()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
  const keys=await caches.keys();
+ const upgrading=keys.some(key=>key.startsWith('kompas-shell-')&&key!==config.shellCache);
+ const windows=upgrading?await self.clients.matchAll({type:'window',includeUncontrolled:true}):[];
  for(const key of keys)if(key.startsWith('kompas-shell-')&&key!==config.shellCache)await caches.delete(key);
  await self.clients.claim();
+ // Do not await navigation inside activation: its fetch waits for activation
+ // to finish. Initiating it here also updates tabs running older app code.
+ for(const client of windows)if(client.url.startsWith(self.registration.scope)) {
+  void client.navigate(client.url).catch(()=>{});
+ }
 })()));
 self.addEventListener('fetch',event=>{
  const url=new URL(event.request.url);
