@@ -247,7 +247,7 @@ Cancellation uses AbortController. The new archive is not activated before verif
 
 ### Why old UI can survive a deployment
 
-The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker every minute while visible and online, when returning to the tab, and when connectivity returns. A replacement shell bypasses the browser HTTP cache and activates only after every required asset is cached.
+The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker once on page load or reload, without background polling or focus/connectivity checks. A replacement shell bypasses the browser HTTP cache and activates only after every required asset is cached.
 
 A successful update automatically reloads open app tabs at their existing URLs. The worker initiates navigation without awaiting it during activation, avoiding a lifecycle deadlock and also refreshing tabs running older app code. First installation does not reload. Failed replacements keep the working offline shell; verified archives stay in OPFS. A reload resets session selections/routes. See [release updates](../../docs/runbooks/release.md#automatic-app-updates). Browser data does not need to be cleared.
 
@@ -321,7 +321,7 @@ Common symptoms:
 
 | Symptom | Check first |
 | --- | --- |
-| Old UI after deployment | Return online and focus the tab; inspect worker update/install failures |
+| Old UI after deployment | Reload while online; inspect worker update/install failures |
 | Satellite button remains disabled | Map startup failed or load did not finish |
 | WebGL initialization error | Browser/device graphics support; this is before layer interaction |
 | Satellite disappears outside a rectangle | Expected sample coverage |

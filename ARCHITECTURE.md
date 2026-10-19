@@ -43,7 +43,7 @@ The app runs directly at /cg-map/. Compatibility entries in the artifact redirec
 
 ## Browser dependencies
 
-app.js orchestrates DOM/map state and imports core.js, map-style.js, satellite.js, and offline.js. offline.js imports core.js for formatting; the other helpers have no local imports. app-updates.js checks for releases while online and visible; sw.js installs a complete replacement shell before activating and reloading open tabs. sw.js imports its generated offline manifest. Repository checks enforce these boundaries.
+app.js orchestrates DOM/map state and imports core.js, map-style.js, satellite.js, and offline.js. offline.js imports core.js for formatting; the other helpers have no local imports. app-updates.js checks for releases once per page load or reload; sw.js installs a complete replacement shell before activating and reloading open tabs. sw.js imports its generated offline manifest. Repository checks enforce these boundaries.
 
 Shared place categories live in the published contract; integration tests verify UI categories agree. Data validation never imports web code. The backend module builds without npm or raw datasets.
 
