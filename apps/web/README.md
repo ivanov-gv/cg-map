@@ -123,7 +123,7 @@ One places source is rendered by several layers:
 | place-circles | Individual place markers |
 | place-names | Individual place labels |
 
-The selected source contains zero or one feature. selected-halo draws its highlight.
+Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across tiles and zoom levels. No extra point marker is added.
 
 The basemap source is vector tiles. Its source-layer fields refer to named datasets inside each tile, such as roads and buildings. A MapLibre layer ID and an MVT source-layer name are different identifiers.
 
@@ -154,11 +154,11 @@ showPlace():
 2. Stores selected and the originating control, when supplied.
 3. Fills card text and safe links.
 4. Shows the existing card element.
-5. Updates the selected GeoJSON source.
+5. Selects the containing building footprint when one is known.
 6. Moves the camera to the place.
 7. Focuses the close button.
 
-closePlace() clears the feature, hides the card, empties the highlight source and restores focus when possible. Escape also closes the mobile results panel.
+closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape also closes the mobile results panel.
 
 This is all local interaction with already loaded data. No detail endpoint is called.
 
@@ -358,7 +358,7 @@ The latest cloud-browser inspection could not render because that browser disabl
 
 ## Point selection
 
-[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
+[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js) highlights source polygons with a contour and translucent fill, or lines with a stroke, without adding a selection pin. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
 
 ## Routes
 

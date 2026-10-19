@@ -5,11 +5,12 @@ import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
+import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
 import {installMapTaps} from './map-taps.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false,transport,selectedPoint,routePlanner;
+let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection;
 const endpoints={from:null,to:null};
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -21,7 +22,7 @@ function renderTransportStatus({state,count,fetchedAt}){
 }
 function notify(message){$('error-text').textContent=message;$('error').hidden=false;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
-function closePlace(){selectedPoint=null;selected=null;$('place-card').hidden=true;map?.getSource('selected')?.setData(collection([]));for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});returnFocus=null;}
+function closePlace(){selectedPoint=null;selected=null;$('place-card').hidden=true;objectSelection?.clear();for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});returnFocus=null;}
 function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selected=f;selectedPoint={name:f.properties.name,coordinates:[...f.geometry.coordinates]};returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
  const details=$('place-details');details.replaceChildren();
  const add=text=>{if(text)details.append(node('p',text,'detail'));};
@@ -31,9 +32,9 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  const website=safeWebsite(p.website);if(website)link('Website ↗',website);
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
  $('place-card').hidden=false;document.querySelector('.sidebar').classList.remove('results-open');$('toggle-results').setAttribute('aria-expanded','false');
- map.getSource('selected').setData(collection([f]));map.easeTo({center:f.geometry.coordinates,zoom:Math.max(map.getZoom(),15),duration:reduced?0:450});$('close-place').focus({preventScroll:true});
+ objectSelection.selectPlace(f.geometry.coordinates);map.easeTo({center:f.geometry.coordinates,zoom:Math.max(map.getZoom(),15),duration:reduced?0:450});$('close-place').focus({preventScroll:true});
 }
-function showPoint(point) {
+function showPoint(point,feature=null) {
  closePlace();selectedPoint=point;
  $('place-name').textContent=point.name;$('place-category').textContent=point.kind;
  const details=$('place-details');details.replaceChildren();
@@ -42,7 +43,7 @@ function showPoint(point) {
  }
  $('place-card').hidden=false;
  document.querySelector('.sidebar').classList.remove('results-open');$('toggle-results').setAttribute('aria-expanded','false');
- map.getSource('selected').setData(collection([{type:'Feature',geometry:{type:'Point',coordinates:point.coordinates},properties:{}}]));
+ objectSelection.select(feature);
  $('close-place').focus({preventScroll:true});
 }
 function renderEndpoints() {
@@ -104,7 +105,7 @@ async function start(){
   map.addLayer({id:'cluster-count',type:'symbol',source:'places',filter:['has','point_count'],layout:{'text-field':['to-string',['get','point_count_abbreviated']],'text-font':['Open Sans Semibold'],'text-size':11},paint:{'text-color':'#ffffff'}});
   map.addLayer({id:'place-circles',type:'circle',source:'places',filter:['!', ['has','point_count']],paint:{'circle-radius':['interpolate',['linear'],['zoom'],10,5,15,10,18,12],'circle-color':['match',['get','category'],...Object.entries(colors).flat(),'#75899b'],'circle-stroke-color':'#ffffff','circle-stroke-width':2}});
   map.addLayer({id:'place-names',type:'symbol',source:'places',minzoom:15.5,filter:['!', ['has','point_count']],layout:{'text-field':['coalesce',['get','name:en'],['get','name']],'text-font':['Open Sans Semibold'],'text-size':11,'text-anchor':'top','text-offset':[0,1.3],'text-max-width':11},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}});
-  map.addSource('selected',{type:'geojson',data:collection([])});map.addLayer({id:'selected-halo',type:'circle',source:'selected',paint:{'circle-radius':17,'circle-color':'#193f36','circle-opacity':.18,'circle-stroke-color':'#193f36','circle-stroke-width':2}});
+  objectSelection=new ObjectSelection(map);
   const cities=[['Podgorica',19.26,42.437],['Nikšić',18.944,42.774],['Cetinje',18.922,42.39],['Budva',18.84,42.286],['Kotor',18.771,42.424],['Bar',19.098,42.092],['Ulcinj',19.206,41.929],['Herceg Novi',18.537,42.454],['Žabljak',19.121,43.154],['Pljevlja',19.359,43.357],['Kolašin',19.522,42.824],['Berane',19.87,42.843]];
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
   installTransport(map);
@@ -130,7 +131,7 @@ async function start(){
   }
   const features=map.queryRenderedFeatures(e.point,{layers:['building-numbers','buildings','road-labels','minor-roads','major-roads','land','water','rivers']});
   const feature=features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='building-numbers')??features.find(f=>f.layer.id==='road-labels'||f.layer.id==='minor-roads'||f.layer.id==='major-roads')??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
-  showPoint(describePoint(feature,e.lngLat.toArray(),buildingAddresses));
+  showPoint(describePoint(feature,e.lngLat.toArray(),buildingAddresses),feature);
  });
  map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});
  map.on('error',e=>{console.error('Map error',e.error);clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify('Some map data could not load. Check your connection or download the map for offline use.'),1500);});

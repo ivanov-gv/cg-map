@@ -17,8 +17,8 @@ for (const file of docs) {
   }
 }
 const imports = {
-  'app-updates.js': [],
-  'app.js': ['./app-updates.js', './core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js', './map-taps.js'],
+  'app-updates.js': [], 'object-selection.js': [],
+  'app.js': ['./object-selection.js', './app-updates.js', './core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js', './map-taps.js'],
   'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': [], 'point-selection.js': [], 'map-taps.js': [], 'routing.js': [], 'transit-routing.js': ['./core.js'], 'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {

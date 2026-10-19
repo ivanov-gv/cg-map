@@ -71,6 +71,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await tapMapCenter(page,[19.26539,42.43437]);
   await expect(page.locator('#place-name')).toHaveText('Building 105,107');
   await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).some(f=>f.id===71))).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -172,7 +173,7 @@ test('building selection provides feature details and point actions', async ({pa
     // Find a visible building interior away from controls and place markers.
     for(let y=150;y<b.height-65;y+=8)for(let x=b.width*.5;x<b.width-65;x+=8){
       const hits=m.queryRenderedFeatures([x,y],{layers:['buildings','place-circles','place-names']});
-      if(hits.some(f=>f.layer.id==='buildings')&&!hits.some(f=>f.layer.id!=='buildings'))return {x:b.left+x,y:b.top+y};
+      if(hits.some(f=>f.layer.id==='buildings')&&!hits.some(f=>f.layer.id!=='buildings'))return {x:b.left+x,y:b.top+y,id:hits.find(f=>f.layer.id==='buildings').id};
     }
     return null;
   });
@@ -180,6 +181,15 @@ test('building selection provides feature details and point actions', async ({pa
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-details')).toContainText('Type: building');
   await expect(page.getByRole('button',{name:'To',exact:true})).toBeVisible();
+  await expect.poll(()=>page.evaluate(id=>{
+    const m=window.kompasDebug.map;
+    const fill=m.queryRenderedFeatures({layers:['selected-buildings-fill']});
+    const outline=m.queryRenderedFeatures({layers:['selected-buildings-outline']});
+    return fill.length>0&&outline.length>0&&[...fill,...outline].every(f=>f.id===id);
+  },picked.id)).toBe(true);
+  expect(await page.evaluate(()=>!!window.kompasDebug.map.getLayer('selected-halo'))).toBe(false);
+  await page.locator('#close-place').click();
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill','selected-buildings-outline']}).length)).toBe(0);
 });
 
 test.describe('isolated routing provider checks',()=>{
@@ -296,4 +306,29 @@ test('same building keeps its address across zooms and with number labels hidden
     await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
     await page.locator('#close-place').click();
   }
+});
+
+
+test('a place inside a building highlights its footprint across zoom and satellite changes',async({page,isMobile})=>{
+  const label=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson')).features.find(f=>{const [x,y]=f.geometry.coordinates;return x>19.251&&x<19.261&&y>42.438&&y<42.445;});
+  const coordinates=label.geometry.coordinates,footprintId=label.properties.footprintIndex;
+  await page.route('**/data/places.geojson',route=>route.fulfill({json:{type:'FeatureCollection',features:[{
+    type:'Feature',geometry:{type:'Point',coordinates},properties:{id:'node/selection-fixture',name:'Building cafe',category:'food',kind:'cafe'}
+  }]}}));
+  await ready(page);
+  await page.getByRole('button',{name:'Satellite',exact:true}).click();
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:8}),coordinates);
+  if(isMobile)await page.locator('#toggle-results').click();
+  await page.locator('.result').first().click();
+  await expect(page.locator('#place-name')).toHaveText('Building cafe');
+  for(const zoom of [15,17,20]){
+    await page.evaluate(({coordinates,zoom})=>window.kompasDebug.map.jumpTo({center:coordinates,zoom}),{coordinates,zoom});
+    await expect.poll(()=>page.evaluate(id=>{
+      const m=window.kompasDebug.map;
+      const features=m.queryRenderedFeatures({layers:['selected-buildings-fill','selected-buildings-outline']});
+      return features.length>0&&features.every(f=>f.id===id);
+    },footprintId)).toBe(true);
+  }
+  await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).some(f=>f.id===id),footprintId)).toBe(true);
+  expect(await page.evaluate(()=>window.kompasDebug.map.getStyle().layers.filter(l=>l.id.startsWith('selected-')).map(l=>l.type).every(t=>t==='fill'||t==='line'))).toBe(true);
 });
