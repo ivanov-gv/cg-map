@@ -1,9 +1,9 @@
 import {categories,colors,matches,selectNearest,safeWebsite,collection} from './core.js';
-import {mapStyle} from './map-style.js';
+import {mapStyle,installBuildingNumberScale} from './map-style.js';
 import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
-import {describePoint,endpointFeatures,installRoutePoints} from './point-selection.js';
+import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
 import {installMapTaps} from './map-taps.js';
 const $=id=>document.getElementById(id);
@@ -81,8 +81,10 @@ async function start(){
  if(!globalThis.maplibregl||!globalThis.pmtiles){notify('The bundled map libraries did not load. Check the application files.');return;}
  // This MapLibre bundle has no supported() helper. Map construction reports
  // graphics initialization errors through the existing startup catch handler.
- const responses=await Promise.all([fetch('data/manifest.json'),fetch('data/places.geojson')]);if(responses.some(r=>!r.ok))throw new Error('Could not load map metadata or places.');
- [manifest,{features:all}]=await Promise.all(responses.map(r=>r.json()));all=all.map((f,i)=>({...f,id:i+1}));byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
+ const responses=await Promise.all([fetch('data/manifest.json'),fetch('data/places.geojson'),fetch('data/building-labels.geojson')]);if(responses.some(r=>!r.ok))throw new Error('Could not load map metadata or places.');
+ let labels;
+ [manifest,{features:all},labels]=await Promise.all(responses.map(r=>r.json()));all=all.map((f,i)=>({...f,id:i+1}));byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
+ const buildingAddresses=buildingAddressIndex(labels);
  if('serviceWorker' in navigator&&isSecureContext){serviceWorkerRegistration=await navigator.serviceWorker.register('sw.js',{scope:'./',updateViaCache:'none'}).catch(e=>{notify('Offline setup failed: '+e.message);return null;});}
  archive=new ArchiveSource(new URL(manifest.archive.path,location.href).href,manifest);try{await archive.init();}catch(e){$('storage-note').textContent='Local storage unavailable. Online map is still usable.';}
  updateDownload();
@@ -93,6 +95,7 @@ async function start(){
  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');map.addControl(new maplibregl.ScaleControl({maxWidth:100}),'bottom-left');
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>map.resize());});observer.observe($('map'));
  map.on('load',()=>{
+  installBuildingNumberScale(map);
   installSatellite(map,location.href);
   $('satellite-toggle').disabled=false;
   map.addSource('places',{type:'geojson',data:collection(filtered),cluster:true,clusterRadius:38,clusterMaxZoom:13});
@@ -125,8 +128,8 @@ async function start(){
    return;
   }
   const features=map.queryRenderedFeatures(e.point,{layers:['building-numbers','buildings','road-labels','minor-roads','major-roads','land','water','rivers']});
-  const feature=features.find(f=>f.layer.id==='building-numbers')??features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='road-labels'||f.layer.id==='minor-roads'||f.layer.id==='major-roads')??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
-  showPoint(describePoint(feature,e.lngLat.toArray()));
+  const feature=features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='building-numbers')??features.find(f=>f.layer.id==='road-labels'||f.layer.id==='minor-roads'||f.layer.id==='major-roads')??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
+  showPoint(describePoint(feature,e.lngLat.toArray(),buildingAddresses));
  });
  map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});
  map.on('error',e=>{console.error('Map error',e.error);clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify('Some map data could not load. Check your connection or download the map for offline use.'),1500);});

@@ -24,3 +24,14 @@ test('numbered building labels expose an address without inventing a building na
   const point=describePoint({layer:{id:'building-numbers'},properties:{kind:'building','addr:housenumber':'12B','addr:street':'Test street'}},[19.26,42.44]);
   assert.equal(point.kind,'Building');assert.equal(point.name,'Building 12B');assert.ok(point.details.includes('Test street 12B'));
 });
+
+test('polygon address lookup is independent of label rendering and handles footprint zero', async () => {
+  const {buildingAddressIndex}=await import('../src/point-selection.js');
+  const index=buildingAddressIndex({features:[{properties:{footprintIndex:0,'addr:housenumber':'12B','addr:street':'Test street'}}]});
+  const feature={id:0,layer:{id:'buildings'},properties:{kind:'building'}};
+  const point=describePoint(feature,[19.26,42.44],index);
+  assert.equal(point.name,'Building 12B');assert.ok(point.details.includes('Test street 12B'));
+  assert.equal(describePoint({...feature,id:1},[19.26,42.44],index).name,'Building');
+  assert.equal(describePoint({...feature,layer:{id:'land'}},[19.26,42.44],index).kind,'Land');
+  assert.equal(feature.properties['addr:housenumber'],undefined);
+});

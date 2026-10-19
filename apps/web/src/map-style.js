@@ -12,6 +12,20 @@ export function mapStyle(archiveURL){
   line('minor-roads','#fffef8',['interpolate',['exponential',1.5],['zoom'],11,0.8,14,2,17,8,20,35],['!',major],11),
   line('major-roads','#e4c98e',['interpolate',['exponential',1.5],['zoom'],7,0.5,12,1.3,16,6,20,48],major),
   {id:'road-labels',type:'symbol',source,'source-layer':'roads',minzoom:13,filter:['all',['has','name'],['!=',['get','name'],'']],layout:{'symbol-placement':'line','symbol-spacing':350,'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],13,10,17,13]},paint:{'text-color':'#7b7b69','text-halo-color':'#f8f8ee','text-halo-width':1.5}},
-  {id:'building-numbers',type:'symbol',source:'building-addresses',minzoom:18,layout:{'text-field':['get','addr:housenumber'],'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],18,11,21,14],'text-anchor':'center','text-max-width':6,'text-padding':2},paint:{'text-color':'#514d44','text-halo-color':'#fffef8','text-halo-width':1}}
+  {id:'building-numbers',type:'symbol',source:'building-addresses',minzoom:13,layout:{'visibility':'none','text-field':['get','addr:housenumber'],'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],15,11,21,14],'text-anchor':'center','text-max-width':6,'text-padding':2},paint:{'text-color':'#514d44','text-halo-color':'#fffef8','text-halo-width':1}}
  ]};
+}
+
+// Match the 100px metric ScaleControl: it rounds distances below 200m to
+// 100m or less. Unprojecting also follows latitude, viewport and pitch changes.
+export function installBuildingNumberScale(map) {
+ let visible;
+ const update=()=>{
+  const {clientWidth,clientHeight}=map.getContainer();
+  const left=map.unproject([clientWidth/2-50,clientHeight/2]);
+  const right=map.unproject([clientWidth/2+50,clientHeight/2]);
+  const next=left.distanceTo(right)<200;
+  if(next!==visible){map.setLayoutProperty('building-numbers','visibility',next?'visible':'none');visible=next;}
+ };
+ map.on('move',update);map.on('resize',update);update();
 }

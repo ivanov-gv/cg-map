@@ -1,6 +1,14 @@
+// Index only this reviewed snapshot; footprint indices are not stable OSM identities.
+export function buildingAddressIndex(labels) {
+  return new Map(labels.features.map(f => [f.properties.footprintIndex, f.properties]));
+}
+
 // Point descriptions use only published map attributes; unnamed geometry stays unnamed.
-export function describePoint(feature, coordinates) {
-  const p = feature?.properties ?? {};
+export function describePoint(feature, coordinates, buildingAddresses = new Map()) {
+  const original = feature?.properties ?? {};
+  // Vector tile IDs are revision-bound footprint indices, independent of label placement.
+  const address = feature?.layer?.id === 'buildings' ? buildingAddresses.get(feature.id) : null;
+  const p = {...original, ...address};
   const layer = feature?.layer?.id;
   const stop = layer === 'transport-stops';
   const building = ['buildings','building-numbers'].includes(layer);

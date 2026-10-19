@@ -67,6 +67,10 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   const numbered=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson')).features[0];
   await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:20}),numbered.geometry.coordinates);
   await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),numbered.id)).toBe(true);
+  await page.evaluate(()=>window.kompasDebug.map.setLayoutProperty('building-numbers','visibility','none'));
+  await tapMapCenter(page,[19.26539,42.43437]);
+  await expect(page.locator('#place-name')).toHaveText('Building 105,107');
+  await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
   expect(errors).toEqual([]);
 });
 
@@ -255,19 +259,41 @@ test('one-finger tap then drag zooms and never opens point actions', async ({pag
   expect(await page.evaluate(()=>window.kompasDebug.endpoints)).toEqual({from:null,to:null});
 });
 
-test('building house numbers render at close zoom and open address details', async ({page}) => {
+test('building house numbers start at the 100m scale and open address details', async ({page}) => {
   const labels=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson'));
   const places=JSON.parse(fs.readFileSync('data/sources/places.geojson'));
   const label=labels.features.find(f=>!places.features.some(p=>Math.hypot(p.geometry.coordinates[0]-f.geometry.coordinates[0],p.geometry.coordinates[1]-f.geometry.coordinates[1])<.00005));
   expect(label).toBeTruthy();
   await ready(page);
-  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:17}),label.geometry.coordinates);
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:14.5}),label.geometry.coordinates);
   expect(await page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).length)).toBe(0);
-  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:20}),label.geometry.coordinates);
+  await expect(page.locator('.maplibregl-ctrl-scale')).toHaveText('200 m');
+  await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:15}),label.geometry.coordinates);
+  await expect(page.locator('.maplibregl-ctrl-scale')).toHaveText('100 m');
   await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),label.id)).toBe(true);
   const point=await page.evaluate(c=>{const m=window.kompasDebug.map,p=m.project(c),b=m.getCanvas().getBoundingClientRect();return {x:b.left+p.x,y:b.top+p.y};},label.geometry.coordinates);
   await page.mouse.click(point.x,point.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-name')).toHaveText('Building '+label.properties['addr:housenumber']);
   await expect(page.locator('#point-from')).toBeVisible();
+});
+
+
+test('same building keeps its address across zooms and with number labels hidden', async ({page}) => {
+  await ready(page);
+  // Reproduce the building and off-label tap location in the reported screenshots.
+  const coordinates=[19.26539,42.43437];
+  for(const zoom of [15,17,19,20]) {
+    await page.evaluate(({coordinates,zoom})=>{
+      const m=window.kompasDebug.map;m.jumpTo({center:coordinates,zoom});
+      m.setLayoutProperty('building-numbers','visibility','none');
+    },{coordinates,zoom});
+    await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
+    const point=await page.evaluate(c=>{const m=window.kompasDebug.map,p=m.project(c),b=m.getCanvas().getBoundingClientRect();return {x:b.left+p.x,y:b.top+p.y};},coordinates);
+    await page.mouse.click(point.x,point.y);
+    await expect(page.locator('#place-category')).toHaveText('Building');
+    await expect(page.locator('#place-name')).toHaveText('Building 105,107');
+    await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
+    await page.locator('#close-place').click();
+  }
 });

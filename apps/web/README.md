@@ -366,4 +366,4 @@ The latest cloud-browser inspection could not render because that browser disabl
 
 ## Building addresses
 
-map-style.js loads the reviewed building-labels.geojson as a separate local source and renders interior house numbers at zoom 18+. point-selection.js describes visible address labels. The web build includes this source in the offline shell; the basemap archive is unchanged. See [building numbers](../../docs/building-numbers.md).
+map-style.js loads the reviewed building-labels.geojson as a separate local source and renders interior house numbers from the 100 m scale. point-selection.js joins polygon IDs to the reviewed address index, so building details remain consistent even when number labels are hidden. The web build includes this source in the offline shell; the basemap archive is unchanged. See [building numbers](../../docs/building-numbers.md).
