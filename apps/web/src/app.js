@@ -32,7 +32,7 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  const website=safeWebsite(p.website);if(website)link('Website ↗',website);
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
  $('place-card').hidden=false;document.querySelector('.sidebar').classList.remove('results-open');$('toggle-results').setAttribute('aria-expanded','false');
- objectSelection.selectPlace(f.geometry.coordinates);map.easeTo({center:f.geometry.coordinates,zoom:Math.max(map.getZoom(),15),duration:reduced?0:450});$('close-place').focus({preventScroll:true});
+ objectSelection.selectPlace(f);map.easeTo({center:f.geometry.coordinates,zoom:Math.max(map.getZoom(),15),duration:reduced?0:450});$('close-place').focus({preventScroll:true});
 }
 function showPoint(point,feature=null) {
  closePlace();selectedPoint=point;
@@ -43,7 +43,7 @@ function showPoint(point,feature=null) {
  }
  $('place-card').hidden=false;
  document.querySelector('.sidebar').classList.remove('results-open');$('toggle-results').setAttribute('aria-expanded','false');
- objectSelection.select(feature);
+ objectSelection.select(feature,point.coordinates);
  $('close-place').focus({preventScroll:true});
 }
 function renderEndpoints() {
@@ -105,11 +105,11 @@ async function start(){
   map.addLayer({id:'cluster-count',type:'symbol',source:'places',filter:['has','point_count'],layout:{'text-field':['to-string',['get','point_count_abbreviated']],'text-font':['Open Sans Semibold'],'text-size':11},paint:{'text-color':'#ffffff'}});
   map.addLayer({id:'place-circles',type:'circle',source:'places',filter:['!', ['has','point_count']],paint:{'circle-radius':['interpolate',['linear'],['zoom'],10,5,15,10,18,12],'circle-color':['match',['get','category'],...Object.entries(colors).flat(),'#75899b'],'circle-stroke-color':'#ffffff','circle-stroke-width':2}});
   map.addLayer({id:'place-names',type:'symbol',source:'places',minzoom:15.5,filter:['!', ['has','point_count']],layout:{'text-field':['coalesce',['get','name:en'],['get','name']],'text-font':['Open Sans Semibold'],'text-size':11,'text-anchor':'top','text-offset':[0,1.3],'text-max-width':11},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}});
-  objectSelection=new ObjectSelection(map);
   const cities=[['Podgorica',19.26,42.437],['Nikšić',18.944,42.774],['Cetinje',18.922,42.39],['Budva',18.84,42.286],['Kotor',18.771,42.424],['Bar',19.098,42.092],['Ulcinj',19.206,41.929],['Herceg Novi',18.537,42.454],['Žabljak',19.121,43.154],['Pljevlja',19.359,43.357],['Kolašin',19.522,42.824],['Berane',19.87,42.843]];
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
   installTransport(map);
   installRoutePoints(map);
+  objectSelection=new ObjectSelection(map);
   routePlanner=new RoutePlanner(map);
   transport=new TransportFeed(map,{onStatus:renderTransportStatus});
   $('transport-toggle').disabled=false;
@@ -119,9 +119,9 @@ async function start(){
  installMapTaps(map,async e=>{
   if(!loaded)return;
   const routePoints=map.queryRenderedFeatures(e.point,{layers:['route-point-circles']});
-  if(routePoints.length){const f=routePoints[0];showPoint({name:f.properties.name,coordinates:[...f.geometry.coordinates],kind:f.properties.role==='from'?'From point':'To point',details:[]});return;}
+  if(routePoints.length){const f=routePoints[0];showPoint({name:f.properties.name,coordinates:[...f.geometry.coordinates],kind:f.properties.role==='from'?'From point':'To point',details:[]},f);return;}
   const stops=map.queryRenderedFeatures(e.point,{layers:['transport-stops']});
-  if(stops.length){showPoint(describePoint(stops[0],e.lngLat.toArray()));return;}
+  if(stops.length){showPoint(describePoint(stops[0],e.lngLat.toArray()),stops[0]);return;}
   const hits=map.queryRenderedFeatures(e.point,{layers:['place-circles','place-names','clusters']});
   const hit=hits[0];
   if(hit){

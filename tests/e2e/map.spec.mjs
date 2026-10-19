@@ -128,8 +128,10 @@ test('stop snapshot renders and selects independently of live bus availability',
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#place-card')).toContainText('Ul. 13. jula (B)');
   await expect(page.locator('#place-card')).toContainText('Stop ID: 1');
+  expect(await page.evaluate(()=>window.kompasDebug.map.getFeatureState({source:'transport-stops',id:'1'}).selected)).toBe(true);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#place-card')).toBeHidden();
+  expect(await page.evaluate(()=>window.kompasDebug.map.getFeatureState({source:'transport-stops',id:'1'}).selected)).toBe(false);
   expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
 });
 
@@ -331,4 +333,24 @@ test('a place inside a building highlights its footprint across zoom and satelli
   }
   await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).some(f=>f.id===id),footprintId)).toBe(true);
   expect(await page.evaluate(()=>window.kompasDebug.map.getStyle().layers.filter(l=>l.id.startsWith('selected-')).map(l=>l.type).every(t=>t==='fill'||t==='line'))).toBe(true);
+});
+
+test('point-only places highlight their existing markers and restore them on close',async({page})=>{
+  await ready(page);
+  const places=JSON.parse(fs.readFileSync('data/sources/places.geojson')).features;
+  for(const sourceId of ['node/13719099734','node/309892487']) {
+    const index=places.findIndex(f=>f.properties.id===sourceId),place=places[index];
+    await tapMapCenter(page,place.geometry.coordinates);
+    await expect(page.locator('#place-name')).toHaveText(place.properties.name);
+    await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.getFeatureState({source:'places',id}).selected,index+1)).toBe(true);
+    expect(await page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).length)).toBe(0);
+    expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
+    await page.locator('#close-place').click();
+    expect(await page.evaluate(id=>window.kompasDebug.map.getFeatureState({source:'places',id}).selected,index+1)).toBe(false);
+  }
+  await tapMapCenter(page,[20.8,43.7]);
+  await expect(page.locator('#place-category')).toHaveText('Map point');
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(1);
+  await page.locator('#close-place').click();
+  expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
 });

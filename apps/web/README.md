@@ -123,7 +123,7 @@ One places source is rendered by several layers:
 | place-circles | Individual place markers |
 | place-names | Individual place labels |
 
-Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across tiles and zoom levels. No extra point marker is added.
+Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across tiles and zoom levels. Area selection adds no extra point marker.
 
 The basemap source is vector tiles. Its source-layer fields refer to named datasets inside each tile, such as roads and buildings. A MapLibre layer ID and an MVT source-layer name are different identifiers.
 
@@ -358,7 +358,7 @@ The latest cloud-browser inspection could not render because that browser disabl
 
 ## Point selection
 
-[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js) highlights source polygons with a contour and translucent fill, or lines with a stroke, without adding a selection pin. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
+[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js) highlights source polygons with a contour and translucent fill, or lines with a stroke. Point-only places/stops highlight their existing marker; bare coordinates use a small circle. No extra pin is added. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
 
 ## Routes
 
