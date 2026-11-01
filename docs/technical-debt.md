@@ -13,6 +13,7 @@
 | Direction tracking exists in Go and in the browser | The browser copy serves the relay (mock) mode. Remove it with the relay. Until then both trackers run the shared cases in packages/contracts/fixtures/vehicle-direction-cases.json |
 | services/transit-relay follows upstream redirects; the Go source refuses them | Add `redirect: 'error'` to relay.mjs at its next hosted update, or retire the relay |
 | Route-estimated bus directions are often reversed (about 4 in 10 on a live sample, 2026-11-01) | Patterns cover both directions of the same streets. Shown as an outlined arrow until the bus moves; better needs road-snapped route shapes with per-direction offsets |
+| Web CI is pinned to ubuntu-24.04 because Playwright 1.56 has no Chromium for Ubuntu 26.04 (ubuntu-latest) | Upgrade Playwright to a release that supports 26.04, then return to ubuntu-latest and drop the local install override in docs/testing.md |
 | Full-country/editorial backend is a proposal | Add only against concrete user/editor requirements |
 
 Track actionable work in issues or task plans; update this list when a gap is resolved.

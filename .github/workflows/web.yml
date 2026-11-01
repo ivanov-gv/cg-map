@@ -18,7 +18,8 @@ concurrency:
 jobs:
   web:
     name: Build and verify web artifact
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
