@@ -8,7 +8,7 @@ export class ObjectSelection {
   this.map=map;this.anchor=null;this.pointTarget=null;
   map.addSource('point-selection',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
   map.addLayer({id:'point-selection-indicator',type:'circle',source:'point-selection',paint:{'circle-radius':8,'circle-color':'#c43f3f','circle-opacity':.25,'circle-stroke-color':'#c43f3f','circle-stroke-width':2.5}});
-  for(const layer of ['place-circles','transport-stops']) {
+  for(const layer of ['place-highlight','transport-stops']) {
    for(const [property,value] of Object.entries({'circle-color':'#c43f3f','circle-opacity':.25,'circle-stroke-color':'#c43f3f','circle-stroke-width':3})) {
     const original=map.getPaintProperty(layer,property)??1;
     map.setPaintProperty(layer,property,['case',['boolean',['feature-state','selected'],false],value,original]);

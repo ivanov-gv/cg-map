@@ -1,31 +1,14 @@
 #!/usr/bin/env node
 // One verification verb for every component: `make verify PKG=<path>`.
 // PKG may be a component directory or any file/directory inside one. Without PKG, runs everything.
-import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {existsSync} from 'node:fs';
 
-const lintGlobs = {
-  'apps/web': ['apps/web/src', 'apps/web/tools', 'apps/web/tests'],
-  data: ['data/tools', 'data/tests'],
-  platform: ['platform'],
-  'services/transit-relay': ['services/transit-relay/*.mjs'],
-  tests: ['tests']
-};
-const eslint = (component) => ['npx', '--no-install', 'eslint', ...lintGlobs[component]];
-const buildWeb = ['npm', 'run', '-s', 'build:web'];
-const repo = ['node', 'platform/tools/check-repo.mjs'];
-const agents = ['node', 'platform/agents/gen-agent-rules.mjs', '--check'];
-
-export const plans = {
-  'apps/web': [eslint('apps/web'), repo, buildWeb, ['sh', '-c', 'node --test apps/web/tests/*.test.mjs'], ['node', 'apps/web/tools/finalize.mjs', '--check']],
-  data: [eslint('data'), ['npm', 'run', '-s', 'check:data'], ['sh', '-c', 'node --test data/tests/*.test.mjs'], ['sh', '-c', 'python3 -m py_compile data/tools/*.py']],
-  'packages/contracts': [['npm', 'run', '-s', 'check:data'], buildWeb, ['sh', '-c', 'node --test tests/integration/contracts.test.mjs data/tests/*.test.mjs']],
-  'services/backend': [['make', '--no-print-directory', 'check-go']],
-  'services/transit-relay': [eslint('services/transit-relay'), ['sh', '-c', 'node --test services/transit-relay/*.test.mjs']],
-  platform: [eslint('platform'), repo, agents, buildWeb, ['sh', '-c', 'node --test platform/tests/*.test.mjs'], ['python3', '-m', 'unittest', 'discover', '-s', 'platform/tests', '-p', 'test_*.py'], ['sh', '-c', 'python3 -m py_compile platform/tools/*.py']],
-  tests: [eslint('tests'), buildWeb, ['sh', '-c', 'node --test tests/integration/*.test.mjs']],
-  docs: [repo, agents]
-};
+const components = ['apps/web', 'data', 'packages/contracts', 'services/backend', 'services/transit-relay', 'platform', 'tests', 'docs'];
+export const plans = Object.fromEntries(components.map(component => [
+  component,
+  [['make', '--no-print-directory', '-C', component, 'verify']]
+]));
 const aliases = {'.claude': 'platform', '.codex': 'platform', '.github': 'platform', 'AGENTS.md': 'docs', 'ARCHITECTURE.md': 'docs', 'README.md': 'docs'};
 
 export function componentFor(target) {
@@ -41,7 +24,7 @@ function main(target) {
     else console.warn('verify: go not installed; skipping make check-go');
     return runAll('everything', all);
   }
-  if (!fs.existsSync(target)) { console.error(`verify: ${target} does not exist`); return 2; }
+  if (!existsSync(target)) { console.error(`verify: ${target} does not exist`); return 2; }
   const component = componentFor(target);
   if (!component) {
     console.error(`verify: no verification plan covers ${target}. Known: ${Object.keys(plans).join(', ')}. Run \`make check\`, and add a plan in platform/tools/verify.mjs for a new component.`);

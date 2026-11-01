@@ -9,7 +9,9 @@
 - Imagery: [Podgorica sample](../../data/imagery/podgorica/README.md).
 - Reviewed basemap: data/artifacts/, selected by release.json with bytes and SHA-256.
 
-npm run check:data validates supported geometry structure, WGS84 ranges, polygon closure, place IDs/names/categories, provenance, and the recorded release checksum. It is not GIS topology validation or a guarantee that business listings are current.
+npm run check:data validates supported geometry structure, WGS84 ranges, polygon closure, place IDs/names/categories,
+provenance, and the recorded release checksum. It is not GIS topology validation or a guarantee that business listings
+are current.
 
 ## Place-only edits
 
@@ -21,9 +23,12 @@ make check
 make test-e2e
 ```
 
-The web build incorporates the new directory and regenerates offline manifests in dist/web. Do not regenerate vector tiles for a place-only change. If changing release-level timestamp/coverage deliberately, regenerate data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
+The web build incorporates the new directory and regenerates offline manifests in dist/web. Do not regenerate vector
+tiles for a place-only change. If changing release-level timestamp/coverage deliberately, regenerate
+data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
 
-The small approved fixture is data/tests/fixtures/podgorica-places.geojson. Keep expected behavior explicit when changing it. Browser tests also exercise the actual reviewed archive and imagery.
+The small approved fixture is data/tests/fixtures/podgorica-places.geojson. Keep expected behavior explicit when
+changing it. Browser tests also exercise the actual reviewed archive and imagery.
 
 ## Geometry edits or refreshes
 
@@ -44,8 +49,12 @@ make check
 make test-e2e
 ```
 
-make build-data clips/encodes MVT into .build/tiles, packages PMTiles into data/artifacts, and writes checksummed release metadata. It can create about 230K temporary files and need around 1 GB of space. It does not deploy.
+make build-data clips/encodes MVT into .build/tiles, packages PMTiles into data/artifacts, and writes checksummed
+release metadata. It can create about 230K temporary files and need around 1 GB of space. It does not deploy.
 
-Upstream extraction replaces snapshots rather than merging local corrections. Preserve original inputs outside Git and provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend implementation.
+Upstream extraction replaces snapshots rather than merging local corrections. Preserve original inputs outside Git and
+provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend
+implementation.
 
-Current artifacts are committed for convenient clean-checkout builds. Move large/frequent releases to immutable artifact storage when needed; local tooling is not a production archive retention policy.
+Current artifacts are committed for convenient clean-checkout builds. Move large/frequent releases to immutable artifact
+storage when needed; local tooling is not a production archive retention policy.

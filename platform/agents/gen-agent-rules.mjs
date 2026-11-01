@@ -9,13 +9,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {format, resolveConfig} from 'prettier';
 import {repoRoot, loadConfig, readGuideline, stripTitle, rewriteLinks} from './lib.mjs';
 
 const BEGIN = '<!-- BEGIN GENERATED agent-guidelines: edit docs/engineering/*.md and run `make agent-rules` -->';
 const END = '<!-- END GENERATED agent-guidelines -->';
 const RULES_DIR = '.claude/rules';
 
-export function buildOutputs(root = repoRoot) {
+export async function buildOutputs(root = repoRoot) {
   const config = loadConfig(root);
   const outputs = new Map();
   const problems = [];
@@ -33,7 +34,8 @@ export function buildOutputs(root = repoRoot) {
       'paths:',
       ...g.paths.map(p => `  - "${p}"`),
       '---',
-      `<!-- GENERATED from ${g.source} sha256:${hash} by platform/agents/gen-agent-rules.mjs. Do not edit; run \`make agent-rules\`. -->`,
+      `<!-- GENERATED from ${g.source} sha256:${hash}`,
+      'by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->',
       '',
       `# ${title}`,
       '',
@@ -65,6 +67,13 @@ export function buildOutputs(root = repoRoot) {
     outputs.set(file, `${handWritten.trimEnd()}\n\n${block}\n`);
   }
 
+  // Format as part of generation so sources and generated Markdown share the same style.
+  for (const [file, text] of outputs) {
+    const filepath = path.join(root, file);
+    const options = await resolveConfig(filepath);
+    outputs.set(file, await format(text, {...options, filepath}));
+  }
+
   // Codex concatenates AGENTS.md from the project root to the startup cwd under one byte budget.
   const rootAgents = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
   const rootLines = rootAgents.trimEnd().split('\n').length;
@@ -89,8 +98,8 @@ function trackedOverrides(root) {
   }
 }
 
-export function run({check = false, root = repoRoot} = {}) {
-  const {outputs, problems} = buildOutputs(root);
+export async function run({check = false, root = repoRoot} = {}) {
+  const {outputs, problems} = await buildOutputs(root);
   for (const file of trackedOverrides(root)) problems.push(`${file}: AGENTS.override.md replaces AGENTS.md for Codex; keep overrides personal and untracked.`);
   const rulesDir = path.join(root, RULES_DIR);
   const stale = fs.existsSync(rulesDir) ? fs.readdirSync(rulesDir).map(f => `${RULES_DIR}/${f}`).filter(f => !outputs.has(f)) : [];
@@ -113,4 +122,4 @@ export function run({check = false, root = repoRoot} = {}) {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = run({check: process.argv.includes('--check')});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = await run({check: process.argv.includes('--check')});

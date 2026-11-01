@@ -1,20 +1,47 @@
 # Point selection and route endpoints
 
-Click or tap any map point to open the details card with From and To actions. Choosing an action copies its name and WGS84 coordinates into session state, draws A (From) / B (To), updates the endpoint summary, and closes the card. Clear points removes both endpoints. Closing the card or changing map layers does not remove chosen endpoints. With both endpoints selected, the [route planner](routing.md) calculates the selected mode. Reloading clears the selection.
+Click or tap any map point to open the details card with From and To actions. Choosing an action copies its name and
+WGS84 coordinates into session state, draws A (From) / B (To), updates the endpoint summary, and closes the card. Clear
+points removes both endpoints. Closing the card or changing map layers does not remove chosen endpoints. With both
+endpoints selected, the [route planner](routing.md) calculates the selected mode. Reloading clears the selection.
 
-Visible endpoint markers, bus stops, directory places, and clusters take priority over basemap geometry. Clusters retain zoom-to-expand behavior. Otherwise buildings, roads, parks and water expose available map attributes. Building polygons take precedence over house-number label hit boxes; their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label visibility. See [building numbers](building-numbers.md). Unnamed buildings show their feature type and coordinates; names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates alone. No reverse geocoder is used.
+Visible endpoint markers, bus stops, and drawn directory place symbols take priority over basemap geometry. Places are
+not clustered; a place hidden by scale or label collision is reached through the directory list instead. Otherwise
+buildings, roads, parks and water expose available map attributes. Building polygons take precedence over house-number
+label hit boxes; their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label
+visibility. See [building numbers](building-numbers.md). Unnamed buildings show their feature type and coordinates;
+names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a
+directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates
+alone. No reverse geocoder is used.
 
-The same card and actions work for directory results. Existing website/source links remain. Bus-stop details use the dated ePodgorica snapshot. All point selection works with the downloaded offline map; From/To are independent of live bus availability. Coordinates come from the selected point for places/stops and the actual click for basemap polygons/lines.
+The same card and actions work for directory results. Existing website/source links remain. Bus-stop details use the
+dated ePodgorica snapshot. All point selection works with the downloaded offline map; From/To are independent of live
+bus availability. Coordinates come from the selected point for places/stops and the actual click for basemap
+polygons/lines.
 
-point-selection.js owns pure point descriptions, endpoint GeoJSON, and endpoint layer installation. app.js owns session state, hit testing, and DOM updates. Existing basemap data and contracts are unchanged. Browser coverage exercises generic coordinates, real building interiors, stops, directory selection, endpoint replacement/clearing, and offline interaction.
+point-selection.js owns pure point descriptions, endpoint GeoJSON, and endpoint layer installation. app.js owns session
+state, hit testing, and DOM updates. Existing basemap data and contracts are unchanged. Browser coverage exercises
+generic coordinates, real building interiors, stops, directory selection, endpoint replacement/clearing, and offline
+interaction.
 
 ## Tap and zoom gestures
 
-Map point selection waits 500 ms, matching the bundled MapLibre tap-drag recognition window. A second touch/mouse press cancels the pending point action. Double-click/double-tap, map movement, touch cancellation and map removal cancel it too. Native double-tap zoom and one-finger tap-then-drag zoom retain their default handlers; no touch defaults are prevented. Directory result buttons still open details immediately. map-taps.js owns this arbitration; mouse and native touch browser tests cover the distinction.
-
+Map point selection waits 500 ms, matching the bundled MapLibre tap-drag recognition window. A second touch/mouse press
+cancels the pending point action. Double-click/double-tap, map movement, touch cancellation and map removal cancel it
+too. Native double-tap zoom and one-finger tap-then-drag zoom retain their default handlers; no touch defaults are
+prevented. Directory result buttons still open details immediately. map-taps.js owns this arbitration; mouse and native
+touch browser tests cover the distinction.
 
 ## Object highlight
 
-Selected map areas have a red contour and translucent red fill, including polygon holes and multiple parts. Line objects use the contour stroke. object-selection.js filters the original vector feature ID in its source layer, so the full footprint stays highlighted across tile boundaries, zoom changes and satellite mode. It does not copy the clicked tile fragment into a separate geometry. Closing the card or choosing From/To clears the selection highlight.
+Selected map areas have a red contour and translucent red fill, including polygon holes and multiple parts. Line objects
+use the contour stroke. object-selection.js filters the original vector feature ID in its source layer, so the full
+footprint stays highlighted across tile boundaries, zoom changes and satellite mode. It does not copy the clicked tile
+fragment into a separate geometry. Closing the card or choosing From/To clears the selection highlight.
 
-Selecting a directory place inside a rendered building highlights that building footprint. When tiles are still loading or the camera is moving to a search result, this lookup finishes when the map becomes idle. When a place has no building footprint, its existing circle gets a red contour and translucent red fill. Bus stops use the same marker highlight. The normal marker style returns when selection closes or changes. Bare coordinates use a small red selection circle. No additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles. No entrances or arrows are drawn. Selection uses the bundled archive and works offline.
+Selecting a directory place inside a rendered building highlights that building footprint. When tiles are still loading
+or the camera is moving to a search result, this lookup finishes when the map becomes idle. When a place has no building
+footprint, its existing circle gets a red contour and translucent red fill. Bus stops use the same marker highlight. The
+normal marker style returns when selection closes or changes. Bare coordinates use a small red selection circle. No
+additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles. No entrances
+or arrows are drawn. Selection uses the bundled archive and works offline.

@@ -4,8 +4,10 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 
 ## Module boundaries
 
-- services/backend is an independent module. It builds and tests without npm, Node, or raw geography. Enforced: `make check-go` and the backend CI workflow.
-- The server serves an explicitly selected artifact directory. It does not embed or read web source, data/sources, or pipeline output paths directly.
+- services/backend is an independent module. It builds and tests without npm, Node, or raw geography. Enforced:
+  `make check-go` and the backend CI workflow.
+- The server serves an explicitly selected artifact directory. It does not embed or read web source, data/sources, or
+  pipeline output paths directly.
 - Do not scaffold placeholder services, APIs, or packages for future editorial work (see [ownership](../ownership.md)).
 
 ## Code
@@ -14,10 +16,12 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 - `go vet ./...` must pass. Enforced: `make check-go`.
 - Prefer the standard library. Add a module dependency only with a stated reason, and commit `go.sum` with it.
 - Return errors with context (`fmt.Errorf("open %s: %w", path, err)`); do not call `log.Fatal` outside `main`.
-- HTTP handlers set explicit `Content-Type` and caching headers that match the static hosting rules in [platform/hosting](../../platform/hosting).
+- HTTP handlers set explicit `Content-Type` and caching headers that match the static hosting rules in
+  [platform/hosting](../../platform/hosting).
 
 ## Tests
 
-- Table-driven tests with `net/http/httptest` for handlers. Tests create their own temporary directories with `t.TempDir()`.
+- Table-driven tests with `net/http/httptest` for handlers. Tests create their own temporary directories with
+  `t.TempDir()`.
 - Add a test that fails without your change. Do not skip or delete failing tests.
 - Verify: `make verify PKG=services/backend` (same as `make check-go`).

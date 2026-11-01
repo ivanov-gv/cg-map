@@ -5,10 +5,15 @@ import assert from 'node:assert/strict';
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 }
+const docsTree = walk('docs');
+const docTooling = new Set(['docs/Makefile']);
+for (const file of docsTree) {
+  assert.ok(file.endsWith('.md') || docTooling.has(file), `docs/ must contain Markdown and approved tooling only: ${file}`);
+}
 const docs = ['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
-  ...['apps/web', 'services/backend', 'services/transit-relay', 'data', 'platform', 'packages/contracts'].flatMap(dir => ['README.md', 'AGENTS.md'].map(name => `${dir}/${name}`)), ...walk('docs')];
+  ...['apps/web', 'services/backend', 'services/transit-relay', 'data', 'platform', 'packages/contracts'].flatMap(dir => ['README.md', 'AGENTS.md'].map(name => `${dir}/${name}`)),
+  ...docsTree.filter(file => file.endsWith('.md'))];
 for (const file of docs) {
-  assert.ok(file.endsWith('.md'), `docs/ must contain documentation only: ${file}`);
   const text = fs.readFileSync(file, 'utf8');
   for (const match of text.matchAll(/\]\(([^)]+)\)/g)) {
     const target = match[1].split('#')[0];
@@ -18,8 +23,8 @@ for (const file of docs) {
 }
 const imports = {
   'app-updates.js': [], 'object-selection.js': [],
-  'app.js': ['./object-selection.js', './app-updates.js', './core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js', './map-taps.js', './data-mode.js'],
-  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': ['./vehicle-direction.js', './data-mode.js'], 'vehicle-direction.js': [], 'data-mode.js': [], 'point-selection.js': [], 'map-taps.js': [], 'routing.js': [], 'transit-routing.js': ['./core.js'], 'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
+  'app.js': ['./object-selection.js', './app-updates.js', './core.js', './map-style.js', './satellite.js', './offline.js', './transport.js', './point-selection.js', './route-planner.js', './map-taps.js', './data-mode.js', './poi-icons.js', './position.js'],
+  'core.js': [], 'map-style.js': [], 'satellite.js': [], 'offline.js': ['./core.js'], 'transport.js': ['./vehicle-direction.js', './data-mode.js'], 'vehicle-direction.js': [], 'data-mode.js': [], 'point-selection.js': [], 'map-taps.js': [], 'poi-icons.js': [], 'position.js': ['./core.js'], 'routing.js': [], 'transit-routing.js': ['./core.js'], 'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;

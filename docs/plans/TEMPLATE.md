@@ -1,4 +1,4 @@
-# Task: <name>
+# Task: `<name>`
 
 Status: planned / in progress / complete / blocked
 

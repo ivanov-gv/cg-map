@@ -11,7 +11,9 @@
     "build:web": "npm run build --workspace @cg-map/web",
     "build:data": "npm run build --workspace @cg-map/data",
     "build:static": "npm run build:web",
-    "lint": "eslint apps/web/src apps/web/tools apps/web/tests data/tools data/tests platform tests *.mjs services/transit-relay/*.mjs",
+    "lint": "npm run lint:md && eslint apps/web/src apps/web/tools apps/web/tests data/tools data/tests platform tests *.mjs services/transit-relay/*.mjs",
+    "lint:md": "markdownlint-cli2 && prettier --check --ignore-path .gitignore \"**/*.md\"",
+    "format:md": "node platform/tools/format-markdown.mjs",
     "check:data": "npm run check --workspace @cg-map/data",
     "check:repo": "node platform/tools/check-repo.mjs",
     "check:offline": "node apps/web/tools/finalize.mjs --check",
@@ -24,14 +26,24 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@mapbox/vector-tile": "2.0.4",
     "@playwright/test": "1.56.1",
     "eslint": "10.13.0",
     "globals": "17.13.0",
-    "@mapbox/vector-tile": "2.0.4",
-    "pbf": "4.0.1"
+    "markdownlint-cli2": "0.24.0",
+    "pbf": "4.0.1",
+    "prettier": "3.9.10"
   },
   "engines": {
     "node": ">=24 <25"
+  },
+  "overrides": {
+    "markdownlint": {
+      "re2js": "2.8.7"
+    },
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
   },
   "workspaces": [
     "apps/web",

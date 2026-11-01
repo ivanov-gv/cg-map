@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - 'services/backend/**'
+      - 'services/backend/Makefile'
       - 'packages/contracts/**'
       - 'Makefile'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'services/backend/**'
+      - 'services/backend/Makefile'
       - 'packages/contracts/**'
       - 'Makefile'
       - '.github/workflows/backend.yml'
@@ -28,5 +30,5 @@ jobs:
         with:
           go-version-file: services/backend/go.mod
           cache: false
-      # Same target as local checks: gofmt, vet, test, build.
-      - run: make check-go
+      # Go-only target: usable without Node or npm.
+      - run: make -C services/backend check

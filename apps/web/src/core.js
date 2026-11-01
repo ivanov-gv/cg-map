@@ -8,3 +8,29 @@ export function safeWebsite(v){try{const u=new URL(v);return ['https:','http:'].
 export function selectNearest(features,center,limit=40){return features.map(f=>({f,d:distance(center,f.geometry.coordinates)})).sort((a,b)=>a.d-b.d).slice(0,limit);}
 export const collection=features=>({type:'FeatureCollection',features});
 export const formatBytes=n=>`${(n/1048576).toFixed(1)} MB`;
+// Discover scale policy (docs/ui-ux/discover.md). Scale is ground metres per CSS pixel; MapLibre uses 512px tiles.
+const EARTH_CIRCUMFERENCE=40075016.686;
+export const metersPerPixel=(latitude,zoom)=>EARTH_CIRCUMFERENCE*Math.cos(latitude*Math.PI/180)/(512*2**zoom);
+export const zoomForMetersPerPixel=(latitude,mpp)=>Math.log2(EARTH_CIRCUMFERENCE*Math.cos(latitude*Math.PI/180)/(512*mpp));
+export const DEFAULT_CENTER=[19.26,42.437];
+// About 1 ground metre per CSS pixel over central Podgorica.
+export const DISCOVER_ZOOM=Math.round(zoomForMetersPerPixel(DEFAULT_CENTER[1],1)*10)/10;
+// Stopgap until places carry importance ranks: no POIs at country/region scale, sights and essentials from the
+// city/district band (z13 ≈ 7 m/px here), ordinary businesses from the street band (z14 ≈ 3.5 m/px). Filters only
+// evaluate zoom at integer levels and only as a top-level step input.
+export const PLACE_SCALE_FILTER=['step',['zoom'],false,13,['match',['get','category'],['sights','essentials'],true,false],14,true];
+// Location display states (D-06). Thresholds are the proposed initial tuning, not validated release values.
+export const POSITION_FRESH_MS=30000,POSITION_TIMEOUT_MS=15000,POSITION_APPROXIMATE_M=50;
+export function inBounds([x,y],[[west,south],[east,north]]){return x>=west&&x<=east&&y>=south&&y<=north;}
+export function classifyFix(fix,now,bounds){
+ if(!inBounds(fix.coordinates,bounds))return 'outside';
+ if(now-fix.timestamp>POSITION_FRESH_MS)return 'stale';
+ return fix.accuracy>POSITION_APPROXIMATE_M?'approximate':'live';
+}
+// Ground-scaled accuracy ring as a polygon; an equirectangular offset is accurate enough at these radii.
+export function accuracyCircle([x,y],radius,steps=48){
+ const dy=radius/111320,dx=dy/Math.cos(y*Math.PI/180),ring=[];
+ for(let i=0;i<=steps;i++){const a=i/steps*2*Math.PI;ring.push([x+dx*Math.cos(a),y+dy*Math.sin(a)]);}
+ return {type:'Polygon',coordinates:[ring]};
+}
+export function formatAge(ms){const s=Math.max(0,Math.round(ms/1000));return s<90?`${s} s`:`${Math.round(s/60)} min`;}

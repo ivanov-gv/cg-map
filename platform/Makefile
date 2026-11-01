@@ -1,0 +1,35 @@
+ROOT := ..
+
+.PHONY: verify lint markdown-check repo agents-check build-web test python-test python-check agent-rules worktree
+
+verify: lint markdown-check repo agents-check build-web test python-test python-check
+
+lint:
+	cd $(ROOT) && npx --no-install eslint platform
+
+markdown-check:
+	cd $(ROOT) && npm run -s lint:md
+
+repo:
+	cd $(ROOT) && npm run -s check:repo
+
+agents-check:
+	cd $(ROOT) && npm run -s check:agents
+
+build-web:
+	cd $(ROOT) && npm run -s build:web
+
+test:
+	cd $(ROOT) && node --test platform/tests/*.test.mjs
+
+python-test:
+	cd $(ROOT) && python3 -m unittest discover -s platform/tests -p 'test_*.py'
+
+python-check:
+	cd $(ROOT) && python3 -m py_compile platform/tools/*.py
+
+agent-rules:
+	cd $(ROOT) && node platform/agents/gen-agent-rules.mjs
+
+worktree:
+	cd $(ROOT) && sh platform/tools/worktree.sh $(NAME) $(BASE)

@@ -27,8 +27,8 @@ test('generated links resolve from their new location', () => {
   assert.equal(rewriteLinks('[o](../ownership.md#x) [w](https://x.y)', 'docs/engineering/go.md', null), '[o](docs/ownership.md#x) [w](https://x.y)');
 });
 
-test('committed agent adapters match canonical docs and budgets', () => {
-  assert.equal(run({check: true}), 0);
+test('committed agent adapters match canonical docs and budgets', async () => {
+  assert.equal(await run({check: true}), 0);
 });
 
 test('agents are wired without hooks, and the workflow ends with the compliance review', () => {

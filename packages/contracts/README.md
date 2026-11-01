@@ -1,15 +1,36 @@
 # Shared contracts
 
-Published formats shared by data producers and application consumers. Changes require producer and consumer review; see [ownership](../../docs/ownership.md).
+Published formats shared by data producers and application consumers. Changes require producer and consumer review; see
+[ownership](../../docs/ownership.md).
 
-`places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported category, and WGS84 longitude/latitude point. The data validator enforces this contract and directory-wide uniqueness. Integration tests check that web categories agree with it.
+`places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported
+category, and WGS84 longitude/latitude point. The data validator enforces this contract and directory-wide uniqueness.
+Integration tests check that web categories agree with it.
 
-Version breaking changes deliberately. This package is a contract boundary, not a place for miscellaneous shared implementation helpers.
+Version breaking changes deliberately. This package is a contract boundary, not a place for miscellaneous shared
+implementation helpers.
 
-`stops.schema.json` defines static stop snapshot features. Preserve upstream stopId as feature id; IDs must be unique within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro. data/tools/check-data.mjs enforces these rules and provenance integrity; browser acceptance verifies selection and offline rendering.
+`stops.schema.json` defines static stop snapshot features. Preserve upstream stopId as feature id; IDs must be unique
+within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro.
+data/tools/check-data.mjs enforces these rules and provenance integrity; browser acceptance verifies selection and
+offline rendering.
 
-`transit-network.schema.json` describes the published version-1 representative bus network: source date, a stop-ID dictionary (names and WGS84 coordinates), and forward ordered stop IDs with equally sized monotonic relative seconds per pattern. The producer validates referenced stops, coordinates, bounds and provenance. It contains no service calendar or claimed departure predictions. Consumers must label suggestions and waiting-time limits; see [routing](../../docs/routing.md).
+`transit-network.schema.json` describes the published version-1 representative bus network: source date, a stop-ID
+dictionary (names and WGS84 coordinates), and forward ordered stop IDs with equally sized monotonic relative seconds per
+pattern. The producer validates referenced stops, coordinates, bounds and provenance. It contains no service calendar or
+claimed departure predictions. Consumers must label suggestions and waiting-time limits; see
+[routing](../../docs/routing.md).
 
-`vehicles.schema.json` defines the live bus feed: route and position per bus, the check time, stale flag and source. The upstream has no vehicle IDs, GPS times or heading. `bearing` (degrees from north) with `heading: "movement"` is optional: the Go server adds it once a bus has moved between its checks; services/transit-relay does not. Consumers validate both fields together and must not present a missing bearing as known. fixtures/vehicle-direction-cases.json defines the movement rules; the Go producer and the browser tracker both test against it.
+`vehicles.schema.json` defines the live bus feed: route and position per bus, the check time, stale flag and source. The
+upstream has no vehicle IDs, GPS times or heading. `bearing` (degrees from north) with `heading: "movement"` is
+optional: the Go server adds it once a bus has moved between its checks; services/transit-relay does not. Consumers
+validate both fields together and must not present a missing bearing as known. fixtures/vehicle-direction-cases.json
+defines the movement rules; the Go producer and the browser tracker both test against it.
 
-`building-labels.schema.json` defines a house-number label anchored inside a reviewed building polygon. Actual OSM way IDs identify footprints; footprintIndex is a revision-bound array reference tied to the buildings SHA-256, never a stable identity. The current tile producer generates building feature IDs from the same footprint indices; archive acceptance verifies ID and location correspondence for every numbered footprint. Consumers join polygon clicks by this revision-bound index rather than visible label hits. Address source IDs are retained. The producer validates containment (excluding holes), uniqueness, nonblank numbers, no-number placeholders, and source/provenance integrity. Labels do not imply complete address coverage.
+`building-labels.schema.json` defines a house-number label anchored inside a reviewed building polygon. Actual OSM way
+IDs identify footprints; footprintIndex is a revision-bound array reference tied to the buildings SHA-256, never a
+stable identity. The current tile producer generates building feature IDs from the same footprint indices; archive
+acceptance verifies ID and location correspondence for every numbered footprint. Consumers join polygon clicks by this
+revision-bound index rather than visible label hits. Address source IDs are retained. The producer validates containment
+(excluding holes), uniqueness, nonblank numbers, no-number placeholders, and source/provenance integrity. Labels do not
+imply complete address coverage.

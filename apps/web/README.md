@@ -1,40 +1,45 @@
 # cg-map frontend: implementation walkthrough
 
-A code-level walkthrough of the deployed application: module responsibilities, state transitions, rendering, storage and publication. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for broader design decisions and alternatives.
+A code-level walkthrough of the deployed application: module responsibilities, state transitions, rendering, storage and
+publication. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for broader design decisions and alternatives.
 
 ## 1. Runtime boundaries
 
-| Context | Code | Responsibility |
-| --- | --- | --- |
-| Browser main thread | app.js, core.js, map-style.js, satellite.js, offline.js | UI state, event handlers, map configuration and archive access |
-| MapLibre internals | vendor/maplibre-gl.js and its workers | Tile preparation, label placement and WebGL rendering |
-| Service-worker context | sw.js, offline-manifest.js | Serve cached application assets and manage shell-cache lifecycle |
-| Build process | tools/ plus ../../data/ | Assemble the web artifact and generate offline manifests; data owns tile generation |
-| Static host | GitHub Pages | Serve the verified dist/web artifact directly at /cg-map/, including archive byte ranges |
+| Context                | Code                                                                               | Responsibility                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Browser main thread    | app.js, core.js, map-style.js, satellite.js, offline.js, poi-icons.js, position.js | UI state, event handlers, map configuration and archive access                           |
+| MapLibre internals     | vendor/maplibre-gl.js and its workers                                              | Tile preparation, label placement and WebGL rendering                                    |
+| Service-worker context | sw.js, offline-manifest.js                                                         | Serve cached application assets and manage shell-cache lifecycle                         |
+| Build process          | tools/ plus ../../data/                                                            | Assemble the web artifact and generate offline manifests; data owns tile generation      |
+| Static host            | GitHub Pages                                                                       | Serve the verified dist/web artifact directly at /cg-map/, including archive byte ranges |
 
-The browser keeps one MapLibre instance alive. Search, selection and layer switching update existing DOM elements and map sources/layers. There is no per-interaction backend request.
+The browser keeps one MapLibre instance alive. Search, selection and layer switching update existing DOM elements and
+map sources/layers. There is no per-interaction backend request.
 
-Application handlers share the browser main thread. Tile work managed by MapLibre does not make filtering or rebuilding result lists free; avoid expensive application work during gestures.
+Application handlers share the browser main thread. Tile work managed by MapLibre does not make filtering or rebuilding
+result lists free; avoid expensive application work during gestures.
 
 ## 2. A useful reading order
 
-| File | Read it to understand |
-| --- | --- |
-| [index.html](public/index.html) | Which controls exist and their IDs |
-| [style.css](public/style.css) | Desktop/mobile layout, positioning and visual states |
-| [core.js](src/core.js) | Small data functions: search, distances, category definitions |
-| [app.js](src/app.js) | Startup, state, UI handlers, results, markers, place cards |
-| [data-mode.js](src/data-mode.js) | Server or mock data: which basemap and vehicle URLs to use |
-| [vehicle-direction.js](src/vehicle-direction.js) | Direction of travel for bus markers (movement, or route estimate) |
-| [config.json](public/config.json) | Static hosts' data mode (`mock`); the Go server answers `server` instead |
-| [map-style.js](src/map-style.js) | Vector basemap sources, layers, colors and labels |
-| [satellite.js](src/satellite.js) | The bounded raster sample and its visibility switch |
-| [offline.js](src/offline.js) | Archive transport, verified downloads and local file reads |
-| [sw.js](src/sw.js) | Offline file requests, shell caches and worker lifecycle |
-| [offline-manifest.js](tools/finalize.mjs) | Generated list of files for the service worker |
-| [data/manifest.json](tools/finalize.mjs) | Generated archive URL, size, hash and offline inventory |
-| [manifest.webmanifest](public/manifest.webmanifest) | Installation name, icons, start URL and scope |
-| vendor/ | Bundled MapLibre and PMTiles libraries; do not hand-edit them |
+| File                                                | Read it to understand                                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [index.html](public/index.html)                     | Which controls exist and their IDs                                                     |
+| [style.css](public/style.css)                       | Desktop/mobile layout, positioning and visual states                                   |
+| [core.js](src/core.js)                              | Small data functions: search, distances, categories, Discover scale and location rules |
+| [app.js](src/app.js)                                | Startup, state, UI handlers, results, markers, place cards                             |
+| [data-mode.js](src/data-mode.js)                    | Server or mock data: which basemap and vehicle URLs to use                             |
+| [vehicle-direction.js](src/vehicle-direction.js)    | Direction of travel for bus markers (movement, or route estimate)                      |
+| [config.json](public/config.json)                   | Static hosts' data mode (`mock`); the Go server answers `server` instead               |
+| [map-style.js](src/map-style.js)                    | Vector basemap sources, layers, colors and labels                                      |
+| [satellite.js](src/satellite.js)                    | The bounded raster sample and its visibility switch                                    |
+| [poi-icons.js](src/poi-icons.js)                    | Runtime-drawn place category icons for the map and its key                             |
+| [position.js](src/position.js)                      | Device location states, accuracy ring and position layers                              |
+| [offline.js](src/offline.js)                        | Archive transport, verified downloads and local file reads                             |
+| [sw.js](src/sw.js)                                  | Offline file requests, shell caches and worker lifecycle                               |
+| [offline-manifest.js](tools/finalize.mjs)           | Generated list of files for the service worker                                         |
+| [data/manifest.json](tools/finalize.mjs)            | Generated archive URL, size, hash and offline inventory                                |
+| [manifest.webmanifest](public/manifest.webmanifest) | Installation name, icons, start URL and scope                                          |
+| vendor/                                             | Bundled MapLibre and PMTiles libraries; do not hand-edit them                          |
 
 Application modules load directly as browser ES modules; vendor bundles are committed separately.
 
@@ -56,7 +61,8 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 14. When MapLibre emits load, it installs satellite sources, place layers, the selected-place overlay and city labels.
 15. It enables the satellite button, hides the loading message and builds the result list.
 
-MapLibre's load event is not a guarantee that every later camera position, hidden image or future tile is already loaded. The renderer continues requesting data as needed.
+MapLibre's load event is not a guarantee that every later camera position, hidden image or future tile is already
+loaded. The renderer continues requesting data as needed.
 
 The top-level start().catch(...) handler displays startup errors. Later map errors use a separate map event handler.
 
@@ -64,23 +70,24 @@ The top-level start().catch(...) handler displays startup errors. Later map erro
 
 app.js currently uses module variables instead of a state-management library:
 
-| Variable | Meaning |
-| --- | --- |
-| map | The single long-lived MapLibre instance |
-| all | Complete loaded place array |
-| filtered | Places matching current text/category |
-| byId | Lookup from place ID to feature |
-| category | Active category key |
-| selected | Selected place, or null |
-| satelliteVisible | Whether the two satellite layers are shown |
+| Variable           | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| map                | The single long-lived MapLibre instance        |
+| all                | Complete loaded place array                    |
+| filtered           | Places matching current text/category          |
+| byId               | Lookup from place ID to feature                |
+| category           | Active category key                            |
+| selected           | Selected place, or null                        |
+| satelliteVisible   | Whether the two satellite layers are shown     |
 | archive / manifest | Archive reader and downloaded dataset metadata |
-| loaded | Whether application map-layer setup completed |
-| downloadAbort | Active download's cancellation controller |
-| returnFocus | Element to focus when closing place details |
+| loaded             | Whether application map-layer setup completed  |
+| downloadAbort      | Active download's cancellation controller      |
+| returnFocus        | Element to focus when closing place details    |
 
 Changing a variable alone does not update the screen. The handler must also update DOM elements and/or MapLibre data.
 
-There is no automatic React-style reconciliation. Read each handler as a short transaction: change state, update the affected views, and restore a usable focus/state.
+There is no automatic React-style reconciliation. Read each handler as a short transaction: change state, update the
+affected views, and restore a usable focus/state.
 
 ## 5. Search: follow one event end to end
 
@@ -95,21 +102,25 @@ Suppose the user types "museum".
 7. It assigns the resulting array to filtered.
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
-10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result buttons.
+10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result
+    buttons.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
 
-Distance is an approximation in kilometers from the map center, not a route length or necessarily distance from the user.
+Distance is an approximation in kilometers from the map center, not a route length or necessarily distance from the
+user.
 
 Selecting a category updates category and calls the same filterPlaces() path.
 
-Panning calls renderResults() on moveend. It changes nearest ordering, not the text/category filters. It does not restrict the search dataset to the visible rectangle.
+Panning calls renderResults() on moveend. It changes nearest ordering, not the text/category filters. It does not
+restrict the search dataset to the visible rectangle.
 
 ## 6. Two rendering systems share the screen
 
 The browser displays ordinary HTML controls. MapLibre draws the geographic scene into a canvas.
 
-A result button is a DOM element. A place circle is a feature drawn by a MapLibre layer; it is not an individual HTML button.
+A result button is a DOM element. A place circle is a feature drawn by a MapLibre layer; it is not an individual HTML
+button.
 
 This distinction keeps thousands of map features out of the DOM.
 
@@ -119,35 +130,43 @@ Sources hold geometry or imagery. Layers apply rendering rules to a source; chan
 
 One places source is rendered by several layers:
 
-| Layer | Purpose |
-| --- | --- |
-| clusters | Circle representing several nearby places |
-| cluster-count | Number inside the cluster |
-| place-circles | Individual place markers |
-| place-names | Individual place labels |
+| Layer           | Purpose                                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| place-symbols   | Category icon and name, collision-placed below road names and house numbers, scale-gated |
+| place-highlight | Invisible ring that becomes the selection highlight through feature state                |
 
-Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across tiles and zoom levels. Area selection adds no extra point marker.
+`PLACE_SCALE_FILTER` in core.js hides places at country/region scale and ordinary businesses until street scale
+([Discover D-05](../../docs/ui-ux/discover.md#d-05-points-of-interest-without-clutter)); a search or category choice
+lifts it. poi-icons.js draws the category icons at runtime, so no sprite file is needed. position.js owns device
+location: its state machine, accuracy ring and layers; coordinates never leave memory.
 
-The basemap source is vector tiles. Its source-layer fields refer to named datasets inside each tile, such as roads and buildings. A MapLibre layer ID and an MVT source-layer name are different identifiers.
+Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across
+tiles and zoom levels. Area selection adds no extra point marker.
+
+The basemap source is vector tiles. Its source-layer fields refer to named datasets inside each tile, such as roads and
+buildings. A MapLibre layer ID and an MVT source-layer name are different identifiers.
 
 ### Camera movement
 
-MapLibre owns pan/zoom gestures, projection, tile selection and rendering. The app asks it to move using easeTo() or fitBounds().
+MapLibre owns pan/zoom gestures, projection, tile selection and rendering. The app asks it to move using easeTo() or
+fitBounds().
 
-Do not destroy and recreate map when switching a category, showing details or changing layer visibility. That would throw away camera state and rendering resources.
+Do not destroy and recreate map when switching a category, showing details or changing layer visibility. That would
+throw away camera state and rendering resources.
 
 ### Map style expressions
 
-In map-style.js, arrays such as interpolate and match are MapLibre expression syntax. They describe zoom-dependent widths, colors and filters; they are not JavaScript function calls.
+In map-style.js, arrays such as interpolate and match are MapLibre expression syntax. They describe zoom-dependent
+widths, colors and filters; they are not JavaScript function calls.
 
 CSS does not set vector-road colors. Change map-style.js for cartography and style.css for HTML controls.
 
 ## 7. Selecting and closing a place
 
-Map clicks use queryRenderedFeatures() on the marker/cluster layers.
+Map clicks use queryRenderedFeatures() on the place-symbols layer. Places are not clustered; one hidden by scale or
+label collision is reached through the result list.
 
-- A cluster click asks MapLibre for an expansion zoom, then moves the camera.
-- An individual marker click passes the place ID to showPlace().
+- A place symbol click passes the place ID to showPlace().
 - A background click closes the card.
 - A result-list button calls showPlace() directly.
 
@@ -161,7 +180,8 @@ showPlace():
 6. Moves the camera to the place.
 7. Focuses the close button.
 
-closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape also closes the mobile results panel.
+closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape
+also closes the mobile results panel.
 
 This is all local interaction with already loaded data. No detail endpoint is called.
 
@@ -174,7 +194,8 @@ satellite.js installs two sources and two raster layers, initially hidden:
 
 The preview remains beneath the detailed tiles. It covers the footprint at lower zooms and while native tiles load.
 
-Both layers are inserted before road-labels. Existing road labels and the place layers remain above the photographs. Outside the small image footprint the vector basemap remains visible.
+Both layers are inserted before road-labels. Existing road labels and the place layers remain above the photographs.
+Outside the small image footprint the vector basemap remains visible.
 
 Clicking Satellite:
 
@@ -186,26 +207,29 @@ Clicking Satellite:
 
 Clicking Street map hides the imagery; it does not reset the camera.
 
-The sample covers roughly 900 × 900 meters, not all Podgorica. Further zoom magnifies the existing photos. MapLibre can draw raster imagery and vector geometry together; the photographs do not make vector buildings blurry.
+The sample covers roughly 900 × 900 meters, not all Podgorica. Further zoom magnifies the existing photos. MapLibre can
+draw raster imagery and vector geometry together; the photographs do not make vector buildings blurry.
 
-The app requests bundled local files, not eMapa at runtime. Source URLs and licensing uncertainty are recorded separately in data/satellite/.
+The app requests bundled local files, not eMapa at runtime. Source URLs and licensing uncertainty are recorded
+separately in data/satellite/.
 
 ## 9. Coordinate order: an easy mistake
 
 GeoJSON and the MapLibre calls used here use:
 
-~~~js
+```js
 [longitude, latitude]
 [19.26, 42.437] // Podgorica
-~~~
+```
 
-This is the reverse of many human-readable GPS displays. showPlace() reverses a copy only to print latitude/longitude in the card.
+This is the reverse of many human-readable GPS displays. showPlace() reverses a copy only to print latitude/longitude in
+the card.
 
 Bounds are:
 
-~~~js
+```js
 [west, south, east, north]
-~~~
+```
 
 MapLibre image corners are ordered top-left, top-right, bottom-right, bottom-left.
 
@@ -213,14 +237,15 @@ Do not copy Leaflet's usual latitude/longitude argument order into these MapLibr
 
 ## 10. Offline is split across several browser stores
 
-| Store | Contents | Owner |
-| --- | --- | --- |
+| Store         | Contents                                                   | Owner                            |
+| ------------- | ---------------------------------------------------------- | -------------------------------- |
 | Cache Storage | HTML, scripts, CSS, places, fonts, icons, satellite assets | Service worker and download code |
-| OPFS | Complete PMTiles archive | ArchiveSource |
-| localStorage | Small active-archive filename marker | ArchiveSource |
-| Memory | Current state, tile cache, optional whole-archive Blob | App / MapLibre / archive reader |
+| OPFS          | Complete PMTiles archive                                   | ArchiveSource                    |
+| localStorage  | Small active-archive filename marker                       | ArchiveSource                    |
+| Memory        | Current state, tile cache, optional whole-archive Blob     | App / MapLibre / archive reader  |
 
-A service worker is a separate browser-managed JavaScript context. It cannot edit the page DOM. Here it intercepts eligible same-origin file requests and serves cached responses.
+A service worker is a separate browser-managed JavaScript context. It cannot edit the page DOM. Here it intercepts
+eligible same-origin file requests and serves cached responses.
 
 ### Normal online map reads
 
@@ -246,69 +271,87 @@ The download workflow:
 7. Writes the active-map marker last.
 8. Requests persistent storage where supported and removes the temporary file.
 
-Cancellation uses AbortController. The new archive is not activated before verification. This does not provide full atomic rollback across every shell/cache/release component.
+Cancellation uses AbortController. The new archive is not activated before verification. This does not provide full
+atomic rollback across every shell/cache/release component.
 
 ### Why old UI can survive a deployment
 
-The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker once on page load or reload, without background polling or focus/connectivity checks. A replacement shell bypasses the browser HTTP cache and activates only after every required asset is cached.
+The service worker serves cached assets first. [app-updates.js](src/app-updates.js) checks for a new worker once on page
+load or reload, without background polling or focus/connectivity checks. A replacement shell bypasses the browser HTTP
+cache and activates only after every required asset is cached.
 
-A successful update automatically reloads open app tabs at their existing URLs. The worker initiates navigation without awaiting it during activation, avoiding a lifecycle deadlock and also refreshing tabs running older app code. First installation does not reload. Failed replacements keep the working offline shell; verified archives stay in OPFS. A reload resets session selections/routes. See [release updates](../../docs/runbooks/release.md#automatic-app-updates). Browser data does not need to be cleared.
+A successful update automatically reloads open app tabs at their existing URLs. The worker initiates navigation without
+awaiting it during activation, avoiding a lifecycle deadlock and also refreshing tabs running older app code. First
+installation does not reload. Failed replacements keep the working offline shell; verified archives stay in OPFS. A
+reload resets session selections/routes. See [release updates](../../docs/runbooks/release.md#automatic-app-updates).
+Browser data does not need to be cleared.
 
-The current "Exploring offline" / READY state mainly reflects the activated local vector archive. It is not proof that the device has no network, every cache is intact, or storage can never be evicted.
+The current "Exploring offline" / READY state mainly reflects the activated local vector archive. It is not proof that
+the device has no network, every cache is intact, or storage can never be evicted.
 
 HTTPS or localhost is required for the relevant offline APIs. Opening index.html directly is unsupported.
 
 ## 11. Resizing and mobile behavior
 
-ResizeObserver watches the map container. The callback cancels an earlier scheduled resize and schedules map.resize() through requestAnimationFrame().
+ResizeObserver watches the map container. The callback cancels an earlier scheduled resize and schedules map.resize()
+through requestAnimationFrame().
 
-This lets MapLibre update its canvas when the real container dimensions change, for example during rotation. It does not rebuild map sources or tiles.
+This lets MapLibre update its canvas when the real container dimensions change, for example during rotation. It does not
+rebuild map sources or tiles.
 
-On mobile, the result list is a panel controlled through a CSS class, results-open, and aria-expanded. Selecting a result hides that list and shows the details card over the map.
+On mobile, the result list is a panel controlled through a CSS class, results-open, and aria-expanded. Selecting a
+result hides that list and shows the details card over the map.
 
-When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop window made narrow does not reproduce an Android GPU or browser lifecycle.
+When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
+window made narrow does not reproduce an Android GPU or browser lifecycle.
 
 ## 12. How to make common changes
 
-| Goal | Start here | Follow-up |
-| --- | --- | --- |
-| Change button wording | index.html or app.js, depending on who creates it | Regenerate offline manifests |
-| Change sidebar/card spacing | style.css | Check desktop and mobile |
-| Change road/building colors | map-style.js | No geometry rebuild needed |
-| Change marker colors | colors in core.js | Check list icons and map |
-| Change search fields/rules | matches() in core.js | Add a meaningful search regression test |
-| Change result limit | selectNearest() in core.js | Consider list cost/usability |
-| Change initial center/zoom | Map constructor in app.js | Test cold startup |
-| Add a card field | showPlace() in app.js and place properties | Use textContent and safe links |
-| Add/edit a place | ../../data/sources/places.geojson | Review count-based tests and regenerate manifests |
-| Change building footprint | ../../data/sources/buildings.geojson | Rebuild vector tiles, then publish |
-| Expand satellite coverage | satellite.js, original tiles, preview, provenance | Keep bounds, corners and tile inventory consistent |
-| Change offline assets | tools/finalize.mjs | Regenerate both manifests |
+| Goal                        | Start here                                        | Follow-up                                          |
+| --------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| Change button wording       | index.html or app.js, depending on who creates it | Regenerate offline manifests                       |
+| Change sidebar/card spacing | style.css                                         | Check desktop and mobile                           |
+| Change road/building colors | map-style.js                                      | No geometry rebuild needed                         |
+| Change marker colors        | colors in core.js                                 | Check list icons and map                           |
+| Change search fields/rules  | matches() in core.js                              | Add a meaningful search regression test            |
+| Change result limit         | selectNearest() in core.js                        | Consider list cost/usability                       |
+| Change initial center/zoom  | Map constructor in app.js                         | Test cold startup                                  |
+| Add a card field            | showPlace() in app.js and place properties        | Use textContent and safe links                     |
+| Add/edit a place            | ../../data/sources/places.geojson                 | Review count-based tests and regenerate manifests  |
+| Change building footprint   | ../../data/sources/buildings.geojson              | Rebuild vector tiles, then publish                 |
+| Expand satellite coverage   | satellite.js, original tiles, preview, provenance | Keep bounds, corners and tile inventory consistent |
+| Change offline assets       | tools/finalize.mjs                                | Regenerate both manifests                          |
 
-A new module imported by app.js must also be added to the shell list in finalize.mjs. The current tooling does not discover JavaScript imports automatically.
+A new module imported by app.js must also be added to the shell list in finalize.mjs. The current tooling does not
+discover JavaScript imports automatically.
 
 ## 13. Local development and publication
 
-The source layout separates src/ runtime modules, public/ static assets, tools/ assembly, and tests/. The built runtime is flat inside dist/web, so the module URLs described above are unchanged.
+The source layout separates src/ runtime modules, public/ static assets, tools/ assembly, and tests/. The built runtime
+is flat inside dist/web, so the module URLs described above are unchanged.
 
 Run commands from repository root:
 
-~~~sh
+```sh
 make setup
 make dev
 make check
 make test-e2e
-~~~
+```
 
-make dev builds the app and runs the Go backend on dist/web at localhost:8080 (server mode); make dev-mock serves it statically (mock mode). Rebuild after edits; there is no hot reload. The build consumes reviewed data/artifacts, data/sources/places.geojson, and data/imagery without regenerating geography. Offline manifests exist only in dist/web.
+make dev builds the app and runs the Go backend on dist/web at localhost:8080 (server mode); make dev-mock serves it
+statically (mock mode). Rebuild after edits; there is no hot reload. The build consumes reviewed data/artifacts,
+data/sources/places.geojson, and data/imagery without regenerating geography. Offline manifests exist only in dist/web.
 
-Geometry changes require make build-data with its optional Python dependencies. UI changes need only a web build. GitHub Actions validates and publishes dist/web on main. Do not commit built output. See [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
+Geometry changes require make build-data with its optional Python dependencies. UI changes need only a web build. GitHub
+Actions validates and publishes dist/web on main. Do not commit built output. See
+[release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
 
 ## 14. Debugging with browser DevTools
 
 The app exposes window.kompasDebug for inspection:
 
-~~~js
+```js
 window.kompasDebug.placeCount
 window.kompasDebug.selected
 window.kompasDebug.satellite
@@ -316,32 +359,37 @@ window.kompasDebug.offline
 window.kompasDebug.map.getCenter()
 window.kompasDebug.map.getZoom()
 window.kompasDebug.map.getStyle().layers.map(layer => layer.id)
-~~~
+```
 
-The geographic map handle is available only after successful map construction. Debug inspection is not a replacement for testing what users see.
+The geographic map handle is available only after successful map construction. Debug inspection is not a replacement for
+testing what users see.
 
 Common symptoms:
 
-| Symptom | Check first |
-| --- | --- |
-| Old UI after deployment | Reload while online; inspect worker update/install failures |
-| Satellite button remains disabled | Map startup failed or load did not finish |
-| WebGL initialization error | Browser/device graphics support; this is before layer interaction |
-| Satellite disappears outside a rectangle | Expected sample coverage |
-| Photos blur at very high zoom | Native raster resolution |
-| New script fails only offline | Missing shell entry or stale manifests |
-| Fonts/labels missing | Glyph URL, requested character blocks and network responses |
-| Blank map after layout change | Container dimensions and map.resize() |
-| Place exists but is absent from list | Text/category filter or nearest-40 limit |
-| Download fails after changing files | Stale manifest, incomplete assets, quota or integrity mismatch |
+| Symptom                                  | Check first                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| Old UI after deployment                  | Reload while online; inspect worker update/install failures       |
+| Satellite button remains disabled        | Map startup failed or load did not finish                         |
+| WebGL initialization error               | Browser/device graphics support; this is before layer interaction |
+| Satellite disappears outside a rectangle | Expected sample coverage                                          |
+| Photos blur at very high zoom            | Native raster resolution                                          |
+| New script fails only offline            | Missing shell entry or stale manifests                            |
+| Fonts/labels missing                     | Glyph URL, requested character blocks and network responses       |
+| Blank map after layout change            | Container dimensions and map.resize()                             |
+| Place exists but is absent from list     | Text/category filter or nearest-40 limit                          |
+| Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch    |
 
-Observe the actual error before changing rendering code. A 404, stale cached script, disabled WebGL and malformed geometry need different fixes.
+Observe the actual error before changing rendering code. A 404, stale cached script, disabled WebGL and malformed
+geometry need different fixes.
 
 ## 15. What tests prove, and what they do not
 
-The repository currently has 22 Node tests covering archive decoding/style validity, search, link safety, download transactions, service-worker responses, HTTP transport fallback and satellite configuration/assets. There are also Python server tests and an optional browser script in ../tests/browser-check.mjs.
+The repository currently has 22 Node tests covering archive decoding/style validity, search, link safety, download
+transactions, service-worker responses, HTTP transport fallback and satellite configuration/assets. There are also
+Python server tests and an optional browser script in ../tests/browser-check.mjs.
 
-Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.
+Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is
+smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.
 
 For a UI change, manually check:
 
@@ -352,25 +400,46 @@ For a UI change, manually check:
 - Offline download followed by reopening without a connection.
 - An existing installation receiving a new release.
 
-The latest cloud-browser inspection could not render because that browser disables WebGL. Do not interpret it as a successful visual test of the satellite layer.
-
+The latest cloud-browser inspection could not render because that browser disables WebGL. Do not interpret it as a
+successful visual test of the satellite layer.
 
 ## Data modes
 
-At startup app.js reads `config.json` from its host. The Go server (services/backend) answers `{"api":"server"}`: the basemap comes from its TileJSON (`api/v1/layers`) and buses from `api/v1/transport/vehicles`. Static hosts (GitHub Pages, `make dev-mock`, e2e) serve the artifact's `{"api":"mock"}`: the current static data, i.e. the release archive read directly and the hosted transit relay. Add `?api=server` or `?api=mock` to the URL to switch by hand. A verified offline download is always read locally, in either mode. A missing `config.json` or an offline start means mock. A 5xx answer also means mock, with a visible notice. Other HTTP errors and invalid content stop startup with a visible error. In server mode, finishing or removing an offline download during the session switches the basemap between the API and the local archive. config.json is not in the offline shell because it describes the host.
+At startup app.js reads `config.json` from its host. The Go server (services/backend) answers `{"api":"server"}`: the
+basemap comes from its TileJSON (`api/v1/layers`) and buses from `api/v1/transport/vehicles`. Static hosts (GitHub
+Pages, `make dev-mock`, e2e) serve the artifact's `{"api":"mock"}`: the current static data, i.e. the release archive
+read directly and the hosted transit relay. Add `?api=server` or `?api=mock` to the URL to switch by hand. A verified
+offline download is always read locally, in either mode. A missing `config.json` or an offline start means mock. A 5xx
+answer also means mock, with a visible notice. Other HTTP errors and invalid content stop startup with a visible error.
+In server mode, finishing or removing an offline download during the session switches the basemap between the API and
+the local archive. config.json is not in the offline shell because it describes the host.
 
 ## Optional transport
 
-[transport.js](src/transport.js) installs static stop circles/names and live vehicle markers/route labels. Each marker is a teardrop pointing in the bus's direction of travel ([vehicle-direction.js](src/vehicle-direction.js)): solid once movement is known, outlined while estimated from the route, a plain disc when neither is available. Transport visibility controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See [transport behavior](../../docs/transport.md).
+[transport.js](src/transport.js) installs static stop circles/names and live vehicle markers/route labels. Each marker
+is a teardrop pointing in the bus's direction of travel ([vehicle-direction.js](src/vehicle-direction.js)): solid once
+movement is known, outlined while estimated from the route, a plain disc when neither is available. Transport visibility
+controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js
+uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle
+responses are never cached there. See [transport behavior](../../docs/transport.md).
 
 ## Point selection
 
-[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js) highlights source polygons with a contour and translucent fill, or lines with a stroke. Point-only places/stops highlight their existing marker; bare coordinates use a small circle. No extra pin is added. See [point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
+[point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js
+presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js)
+highlights source polygons with a contour and translucent fill, or lines with a stroke. Point-only places/stops
+highlight their existing marker; bare coordinates use a small circle. No extra pin is added. See
+[point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
 
 ## Routes
 
-[routing.js](src/routing.js) handles car/foot requests, [transit-routing.js](src/transit-routing.js) searches local bus patterns, and [route-planner.js](src/route-planner.js) owns mode controls, cancellation, line layers, and itinerary rendering. See [routing](../../docs/routing.md) before changing providers, transit assumptions, or offline behavior.
+[routing.js](src/routing.js) handles car/foot requests, [transit-routing.js](src/transit-routing.js) searches local bus
+patterns, and [route-planner.js](src/route-planner.js) owns mode controls, cancellation, line layers, and itinerary
+rendering. See [routing](../../docs/routing.md) before changing providers, transit assumptions, or offline behavior.
 
 ## Building addresses
 
-map-style.js loads the reviewed building-labels.geojson as a separate local source and renders interior house numbers from the 100 m scale. point-selection.js joins polygon IDs to the reviewed address index, so building details remain consistent even when number labels are hidden. The web build includes this source in the offline shell; the basemap archive is unchanged. See [building numbers](../../docs/building-numbers.md).
+map-style.js loads the reviewed building-labels.geojson as a separate local source and renders interior house numbers
+from the 100 m scale. point-selection.js joins polygon IDs to the reviewed address index, so building details remain
+consistent even when number labels are hidden. The web build includes this source in the offline shell; the basemap
+archive is unchanged. See [building numbers](../../docs/building-numbers.md).

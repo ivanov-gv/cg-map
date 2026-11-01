@@ -3,11 +3,15 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'services/backend/**'
+      - 'services/backend/**/*.go'
+      - 'services/backend/go.mod'
+      - 'services/backend/go.sum'
       - '.github/workflows/backend.yml'
   pull_request:
     paths-ignore:
-      - 'services/backend/**'
+      - 'services/backend/**/*.go'
+      - 'services/backend/go.mod'
+      - 'services/backend/go.sum'
       - '.github/workflows/backend.yml'
   workflow_dispatch:
 permissions:

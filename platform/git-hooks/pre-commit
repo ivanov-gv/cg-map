@@ -7,6 +7,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 node platform/agents/gen-agent-rules.mjs --check
 node platform/tools/check-repo.mjs
+npm run -s lint:md
 
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -n "$staged" ] || exit 0

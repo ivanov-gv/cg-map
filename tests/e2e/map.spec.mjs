@@ -7,7 +7,7 @@ const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places
 async function ready(page) {
   await page.goto('./');
   await expect(page).not.toHaveURL(/\/web\//);
-  await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-circles'));
+  await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-symbols'));
   await expect(page.locator('#loading')).toBeHidden();
 }
 
@@ -42,7 +42,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await expect(page.locator('#download-state')).toHaveText('READY');
   await context.setOffline(true);
   await page.reload();
-  await page.waitForFunction(() => window.kompasDebug?.offline && window.kompasDebug.map.getLayer('place-circles'));
+  await page.waitForFunction(() => window.kompasDebug?.offline && window.kompasDebug.map.getLayer('place-symbols'));
   await expect(page.locator('#loading')).toBeHidden();
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.256, 42.442], zoom: 16}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
@@ -78,7 +78,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
 test('old /web/ bookmarks open the root app and preserve query/hash', async ({page, baseURL}) => {
   await page.goto(new URL('web/?lang=sr#place', baseURL).href);
   await expect(page).toHaveURL(new URL('?lang=sr#place', baseURL).href);
-  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-circles'));
+  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-symbols'));
   await expect(page.locator('#loading')).toBeHidden();
 });
 
@@ -127,7 +127,7 @@ test.describe('server mode', () => {
     // The host's config.json alone selects server mode, as the Go server does.
     await page.route('**/config.json', route => route.fulfill({json: {api: 'server'}}));
     await page.goto('./');
-    await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-circles'));
+    await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-symbols'));
     expect(await page.evaluate(() => window.kompasDebug.dataMode)).toBe('server');
     await expect.poll(() => requests.includes('tile')).toBe(true);
     await page.getByRole('button', {name: 'Transport', exact: true}).click();
@@ -141,7 +141,7 @@ test.describe('server mode', () => {
 
 test('server mode switches the basemap to an offline download made during the session', async ({page}) => {
   await page.goto('./?api=server');
-  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-circles'));
+  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-symbols'));
   expect(await page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/\/api\/v1\/layers$/);
   await expect(page.locator('#download')).toBeEnabled();
   await page.locator('#download').click();
@@ -157,7 +157,7 @@ test('transport failure is visible and does not break the map', async ({page}) =
   await ready(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
-  expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('place-circles'))).toBe(true);
+  expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('place-symbols'))).toBe(true);
 });
 
 test('stop snapshot renders and selects independently of live bus availability', async ({page}) => {
@@ -181,6 +181,26 @@ test('stop snapshot renders and selects independently of live bus availability',
   expect(await page.evaluate(()=>window.kompasDebug.map.getFeatureState({source:'transport-stops',id:'1'}).selected)).toBe(false);
   expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
 });
+
+// Place symbols are collision-placed below addresses and road names (Discover D-05), so a place is tapped where its
+// symbol is actually drawn, zooming in until there is room for it.
+async function tapRenderedPlace(page, coordinates, id) {
+  let point=null;
+  for(const zoom of [17,18,19,20,21]) {
+    await page.evaluate(({coordinates,zoom})=>window.kompasDebug.map.jumpTo({center:coordinates,zoom}),{coordinates,zoom});
+    await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
+    await page.waitForTimeout(100);
+    point=await page.evaluate(({coordinates,id})=>{
+      const m=window.kompasDebug.map;
+      if(!m.queryRenderedFeatures({layers:['place-symbols']}).some(f=>f.id===id))return null;
+      const p=m.project(coordinates),b=m.getCanvas().getBoundingClientRect();
+      return {x:b.left+p.x,y:b.top+p.y};
+    },{coordinates,id});
+    if(point)break;
+  }
+  expect(point).not.toBeNull();
+  await page.mouse.click(point.x,point.y);
+}
 
 async function tapMapCenter(page, coordinates) {
   await page.evaluate(point => window.kompasDebug.map.jumpTo({center: point, zoom: 17}), coordinates);
@@ -217,11 +237,13 @@ test('building selection provides feature details and point actions', async ({pa
   await ready(page);
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[19.26,42.437],zoom:17}));
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['buildings']}).length)).toBeGreaterThan(0);
+  // Pick from final-zoom geometry; overzoomed parent tiles shift building edges when they are replaced.
+  await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
   const picked=await page.evaluate(()=>{
     const m=window.kompasDebug.map, b=m.getCanvas().getBoundingClientRect();
     // Find a visible building interior away from controls and place markers.
     for(let y=150;y<b.height-65;y+=8)for(let x=b.width*.5;x<b.width-65;x+=8){
-      const hits=m.queryRenderedFeatures([x,y],{layers:['buildings','place-circles','place-names']});
+      const hits=m.queryRenderedFeatures([x,y],{layers:['buildings','place-symbols']});
       if(hits.some(f=>f.layer.id==='buildings')&&!hits.some(f=>f.layer.id!=='buildings'))return {x:b.left+x,y:b.top+y,id:hits.find(f=>f.layer.id==='buildings').id};
     }
     return null;
@@ -387,7 +409,7 @@ test('point-only places highlight their existing markers and restore them on clo
   const places=JSON.parse(fs.readFileSync('data/sources/places.geojson')).features;
   for(const sourceId of ['node/13719099734','node/309892487']) {
     const index=places.findIndex(f=>f.properties.id===sourceId),place=places[index];
-    await tapMapCenter(page,place.geometry.coordinates);
+    await tapRenderedPlace(page,place.geometry.coordinates,index+1);
     await expect(page.locator('#place-name')).toHaveText(place.properties.name);
     await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.getFeatureState({source:'places',id}).selected,index+1)).toBe(true);
     expect(await page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).length)).toBe(0);
@@ -400,4 +422,77 @@ test('point-only places highlight their existing markers and restore them on clo
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(1);
   await page.locator('#close-place').click();
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
+});
+
+test.describe('Discover first view', () => {
+  test.use({permissions: ['geolocation'], geolocation: {latitude: 42.4411, longitude: 19.2627, accuracy: 18}});
+  test('granted location shows marker, accuracy and status and centers once without a click', async ({page}) => {
+    await ready(page);
+    await expect(page.locator('#position-status')).toHaveText(/You are here · ±18 m/);
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('position')._data.features.map(f => f.properties.part))).toEqual(['accuracy', 'position']);
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getCenter().distanceTo({lng: 19.2627, lat: 42.4411}))).toBeLessThan(5);
+    await expect(page.locator('#position-action')).toHaveText('Recenter');
+    // The location is never written to browser storage.
+    expect(await page.evaluate(() => JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage}))).not.toContain('42.441');
+  });
+});
+
+test('without location the status says so and the default view is labelled as a fallback', async ({page}) => {
+  await ready(page);
+  await expect(page.locator('#position-status')).toHaveText(/(blocked|Allow location|Finding).*default view: Podgorica/);
+  expect(await page.evaluate(() => window.kompasDebug.map.getSource('position')._data.features.length)).toBe(0);
+});
+
+test('first view is at street scale with key, house numbers and no Plan prompt', async ({page}) => {
+  await ready(page);
+  const mpp = await page.evaluate(() => {
+    const m = window.kompasDebug.map, c = m.getContainer();
+    return m.unproject([c.clientWidth / 2 - 50, c.clientHeight / 2]).distanceTo(m.unproject([c.clientWidth / 2 + 50, c.clientHeight / 2])) / 100;
+  });
+  expect(mpp).toBeGreaterThan(0.8); expect(mpp).toBeLessThan(1.2);
+  await expect(page.locator('#map-key-items')).toBeVisible();
+  await expect(page.locator('#map-key-items')).toContainText('type not recorded');
+  await expect(page.locator('#map-key-places img')).toHaveCount(5);
+  await expect(page.locator('.map-note')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['building-numbers']}).length)).toBeGreaterThan(0);
+  await page.locator('#map-key-toggle').click();
+  await expect(page.locator('#map-key-items')).toBeHidden();
+  await expect(page.locator('#map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('country scale draws no ordinary places or count clusters; street scale brings them back', async ({page}) => {
+  await ready(page);
+  await page.locator('#overview').click();
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getZoom())).toBeLessThan(9);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+  expect(await page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['place-symbols']}).length)).toBe(0);
+  expect(await page.evaluate(() => window.kompasDebug.map.getStyle().layers.some(l => l.id === 'clusters'))).toBe(false);
+  // District scale: only sights and essentials.
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2627, 42.4411], zoom: 13.5}));
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['place-symbols']}).length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => [...new Set(window.kompasDebug.map.queryRenderedFeatures({layers: ['place-symbols']}).map(f => f.properties.category))].every(c => ['sights', 'essentials'].includes(c)))).toBe(true);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2627, 42.4411], zoom: 16}));
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['place-symbols']}).length)).toBeGreaterThan(0);
+  // The directory is unchanged by scale suppression.
+  expect(await page.evaluate(() => window.kompasDebug.placeCount)).toBeGreaterThan(1000);
+});
+
+test('footways, steps and cycleways have their own layers', async ({page}) => {
+  await ready(page);
+  const ids = await page.evaluate(() => window.kompasDebug.map.getStyle().layers.map(l => l.id));
+  for (const id of ['footways', 'paths', 'cycleways', 'steps']) expect(ids).toContain(id);
+});
+
+test('a failed places request names the failure and keeps the map usable', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({status: 500, body: 'no'}));
+  await page.goto('./');
+  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-symbols'));
+  await expect(page.locator('#error-text')).toContainText('Places could not load');
+  await expect(page.locator('#loading')).toBeHidden();
+  // Not presented as an empty search result, before or after moving the map.
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.25, 42.44], zoom: 16}));
+  await expect(page.locator('#toggle-results')).toHaveText('Places unavailable');
+  await expect(page.locator('#results')).toContainText('Places could not load');
+  await expect(page.locator('#results')).not.toContainText('No places found');
+  expect(await page.evaluate(() => window.kompasDebug.map.getLayer('buildings') !== undefined)).toBe(true);
 });

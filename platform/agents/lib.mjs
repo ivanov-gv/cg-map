@@ -1,5 +1,4 @@
-// Shared helpers for the agent adapter generator and its tests. Standard library only: the git
-// pre-commit hook runs the generator before `make setup` has installed npm dependencies.
+// Shared standard-library helpers for the agent adapter generator and its tests.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
