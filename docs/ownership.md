@@ -14,7 +14,7 @@ These are logical ownership boundaries, not claims that these teams already exis
 
 - Web consumes data artifacts; it does not run OSM imports or depend on backend internals.
 - Data uses shared schemas rather than importing UI implementation.
-- Backend can build and test independently. Static hosting is its only current implementation; do not create placeholder microservices.
+- Backend can build and test independently. Today it hosts the static artifact, serves the map layers and live transport vehicle APIs, and answers `config.json` so the web app uses them; do not create placeholder microservices.
 - Platform runs domain-owned build/check commands and manages deployment permissions. It does not own product semantics.
 - Shared contract changes need affected producers and consumers reviewed together. Document breaking changes and migration paths.
 - Cross-component tests live in tests/. Local tests and instructions live with their component.

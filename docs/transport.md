@@ -2,17 +2,31 @@
 
 ## Product behavior
 
-The optional Transport toggle adds blue route-number markers without replacing the map. It works with street/satellite views. Updates run every 13 seconds only while enabled and visible. Switching it off cancels requests and clears positions.
+The optional Transport toggle adds blue route-number markers without replacing the map. Each marker points in the bus's direction of travel (see Direction below). It works with street/satellite views. Updates run every 13 seconds only while enabled and visible. Switching it off cancels requests and clears positions.
 
-The panel names ePodgorica as the source and displays when the feed was checked. The provider does not expose GPS timestamps or stable vehicle IDs. Do not label a marker with invented speed, direction, bus identity, or GPS age. Duplicate route/coordinate entries are merged.
+The panel names ePodgorica as the source and displays when the feed was checked. The provider does not expose GPS timestamps, heading or stable vehicle IDs. Do not label a marker with invented speed, bus identity, or GPS age. Direction is derived, never reported by the provider, and the marker shows how it was derived. Duplicate route/coordinate entries are merged.
 
 Offline mode clears positions and explains that live buses require a connection. Failed refreshes mark existing data as delayed; positions older than 60 seconds are removed. Live data is never placed in offline manifests, Cache Storage, or OPFS. Offline map/download functionality remains separate.
+
+## Direction
+
+ePodgorica reports only route and position, so direction is derived in this order:
+
+1. **Server movement.** The Go server checks the upstream about every 13–14 s from startup (at most one upstream request per cache period, shared with viewer requests) and follows buses across its checks and adds `bearing` and `heading: "movement"` once a bus has moved at least 20 m. Buses are matched to the previous check by route and nearest plausible position (at most 30 m/s plus 50 m). A bus keeps its last direction while it stands still. History resets after 60 s without checks.
+2. **Page movement.** apps/web/src/vehicle-direction.js applies the same rules to the checks this page has seen. This is how mock mode (the relay, which has no bearing) gets directions.
+3. **Route estimate.** A bus not yet seen moving points along the nearest stop-to-stop segment of its route in the bundled network snapshot (within 2 km). The patterns cover both directions of the same streets, so this is often reversed: about 4 in 10 on a live sample of 92 moving buses (2026-11-01). It is drawn as an outlined teardrop with a blue label, and the panel explains it.
+
+A bus with no movement and no route within 2 km shows a plain disc without a point. Markers rotate with the map. Solid blue teardrops are movement-based.
+
+## Hosts
+
+The web app's data mode decides who fetches the feed (see [web data modes](../apps/web/README.md#data-modes)). In server mode it polls the Go server's `api/v1/transport/vehicles`, which fetches the upstream itself. In mock mode (GitHub Pages, `make dev-mock`) it polls the hosted relay, as before.
 
 ## Integration
 
 The source UI is https://epodgorica.me/javniprevoz/mapa. Its shipped frontend requests https://adminapi.prevoz.podgorica.me/api/dispatcher/vehicles/public every 13 seconds. A direct GET from the GitHub origin receives no allowed-origin header; the ePodgorica origin receives its own allow-origin response. Pages cannot proxy that server-side.
 
-services/transit-relay implements a fixed-upstream read-only relay with bounded fetches, duplicate filtering, a brief shared cache, CORS, and explicit stale/expiry responses. apps/web/src/transport.js validates and renders the published GeoJSON contract. Source details were inspected on 2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
+services/backend (`internal/transport`) fetches the same fixed upstream with the relay's limits (8 s timeout, 512000-byte body, non-2xx and non-array rejection, 2000 rows) and serves the same contract, plus movement directions. It refuses redirects and logs refresh failures (the first, then at most one per minute with a count) and the recovery. `-live-transport=false` disables it (503, no polling). services/transit-relay implements a fixed-upstream read-only relay with bounded fetches, duplicate filtering, a brief shared cache, CORS, and explicit stale/expiry responses. apps/web/src/transport.js validates and renders the published GeoJSON contract. Source details were inspected on 2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
 
 ## Current release status
 

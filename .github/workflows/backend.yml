@@ -4,10 +4,14 @@ on:
     branches: [main]
     paths:
       - 'services/backend/**'
+      - 'packages/contracts/**'
+      - 'Makefile'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'services/backend/**'
+      - 'packages/contracts/**'
+      - 'Makefile'
       - '.github/workflows/backend.yml'
   workflow_dispatch:
 permissions:
@@ -16,9 +20,6 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: services/backend
     steps:
       - uses: actions/checkout@v7
         with:
@@ -27,6 +28,5 @@ jobs:
         with:
           go-version-file: services/backend/go.mod
           cache: false
-      - run: go vet ./...
-      - run: go test ./...
-      - run: go build -o "${RUNNER_TEMP}/kompas" ./cmd/server
+      # Same target as local checks: gofmt, vet, test, build.
+      - run: make check-go

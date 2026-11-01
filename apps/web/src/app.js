@@ -7,13 +7,25 @@ import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} 
 import {RoutePlanner} from './route-planner.js';
 import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
+import {resolveDataMode,dataEndpoints,basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection;
+let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection,dataMode,api;
 const endpoints={from:null,to:null};
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+// config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
+// artifact's {"api":"mock"}. A missing file, an offline start or a server error falls back to the
+// bundled data (a server error visibly). Other HTTP errors and invalid content stop startup.
+async function loadDataMode(){
+ let response=null,config=null;
+ try{response=await fetch('config.json',{cache:'no-store'});}catch(e){console.warn('config.json unreachable (offline start); using bundled data',e);}
+ if(response?.ok){try{config=await response.json();}catch(e){throw new Error('Invalid config.json: '+e.message,{cause:e});}}
+ else if(response&&response.status>=500){notify(`Server settings unavailable (HTTP ${response.status}). Showing preview data; live buses use the public relay.`);}
+ else if(response&&response.status!==404)throw new Error('Could not load config.json: HTTP '+response.status);
+ return resolveDataMode(location.search,config);
+}
 function renderTransportStatus({state,count,fetchedAt}){
  const checked=fetchedAt?new Date(fetchedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
  const labels={off:'Transport off',loading:'Loading live buses…',live:count?`${count} bus position${count===1?'':'s'} · checked ${checked}`:`No buses reported · checked ${checked}`,stale:`Updates delayed · last checked ${checked}`,unavailable:'Live buses temporarily unavailable · retrying',offline:'Live buses need an internet connection',paused:'Bus updates paused while map is hidden'};
@@ -69,7 +81,10 @@ function renderResults(){if(!map)return;const center=map.getCenter().toArray();c
 }
 function filterPlaces(){filtered=all.filter(f=>matches(f,$('search').value,category));if(loaded)map.getSource('places').setData(collection(filtered));if(selected&&!filtered.some(f=>f.properties.id===selected.properties.id))closePlace();renderResults();}
 function updateConnection(){const offline=!!archive?.local;$('connection').textContent=offline?'Exploring offline':navigator.onLine?'Exploring Montenegro':'Offline · download needed';}
-function updateDownload(){if(!manifest)return;const ready=!!archive?.local;$('download-title').textContent=ready?'Map saved for offline use':downloadLabel(manifest);$('download-state').textContent=ready?'READY':'';$('download').disabled=ready||!archive?.dir||!serviceWorkerRegistration;$('remove-download').hidden=!ready;if(!archive?.dir)$('storage-note').textContent='Use HTTPS or localhost with Chrome to enable offline downloads.';updateConnection();}
+// In server mode a download or removal during the session switches the basemap between the API and
+// the verified local archive, so offline use never depends on uncached API tiles.
+function refreshBasemap(){const source=map?.getSource('basemap');const url=basemapURL(api,archive.url,!!archive.local);if(source&&source.url!==url)source.setUrl(url);}
+function updateDownload(){if(!manifest)return;refreshBasemap();const ready=!!archive?.local;$('download-title').textContent=ready?'Map saved for offline use':downloadLabel(manifest);$('download-state').textContent=ready?'READY':'';$('download').disabled=ready||!archive?.dir||!serviceWorkerRegistration;$('remove-download').hidden=!ready;if(!archive?.dir)$('storage-note').textContent='Use HTTPS or localhost with Chrome to enable offline downloads.';updateConnection();}
 async function startDownload(){if(downloadAbort)return;downloadAbort=new AbortController();$('download').disabled=true;$('cancel-download').hidden=false;$('download-progress').hidden=false;$('error').hidden=true;
  try{
   await navigator.serviceWorker.ready;
@@ -84,6 +99,7 @@ async function start(){
  // This MapLibre bundle has no supported() helper. Map construction reports
  // graphics initialization errors through the existing startup catch handler.
  if('serviceWorker' in navigator&&isSecureContext){serviceWorkerRegistration=await registerAppUpdates().catch(e=>{notify('Offline setup failed: '+e.message);return null;});}
+ dataMode=await loadDataMode();api=dataEndpoints(dataMode,location.href);document.documentElement.dataset.api=dataMode;
  const responses=await Promise.all([fetch('data/manifest.json'),fetch('data/places.geojson'),fetch('data/building-labels.geojson')]);if(responses.some(r=>!r.ok))throw new Error('Could not load map metadata or places.');
  let labels;
  [manifest,{features:all},labels]=await Promise.all(responses.map(r=>r.json()));all=all.map((f,i)=>({...f,id:i+1}));byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
@@ -91,9 +107,9 @@ async function start(){
  archive=new ArchiveSource(new URL(manifest.archive.path,location.href).href,manifest);try{await archive.init();}catch(e){$('storage-note').textContent='Local storage unavailable. Online map is still usable.';}
  updateDownload();
  const protocol=new pmtiles.Protocol();protocol.add(new pmtiles.PMTiles(archive));maplibregl.addProtocol('pmtiles',protocol.tile);
- map=new maplibregl.Map({container:'map',style:mapStyle(archive.url),center:[19.26,42.437],zoom:14,minZoom:7,maxZoom:23,maxBounds:[[17.8,41.3],[21,44.1]],renderWorldCopies:false,attributionControl:{compact:true},fadeDuration:0,maxTileCacheSize:160,pixelRatio:Math.min(devicePixelRatio||1,2),refreshExpiredTiles:false});
+ map=new maplibregl.Map({container:'map',style:mapStyle(basemapURL(api,archive.url,!!archive.local)),center:[19.26,42.437],zoom:14,minZoom:7,maxZoom:23,maxBounds:[[17.8,41.3],[21,44.1]],renderWorldCopies:false,attributionControl:{compact:true},fadeDuration:0,maxTileCacheSize:160,pixelRatio:Math.min(devicePixelRatio||1,2),refreshExpiredTiles:false});
  // Exposed for the supplied browser QA script and manual performance inspection.
- window.kompasDebug={get map(){return map;},get endpoints(){return structuredClone(endpoints);},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;},get transport(){return !!transport?.enabled;}};
+ window.kompasDebug={get map(){return map;},get endpoints(){return structuredClone(endpoints);},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;},get transport(){return !!transport?.enabled;},get dataMode(){return dataMode;}};
  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'top-right');map.addControl(new maplibregl.ScaleControl({maxWidth:100}),'bottom-left');
  const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>map.resize());});observer.observe($('map'));
  map.on('load',()=>{
@@ -111,7 +127,7 @@ async function start(){
   installRoutePoints(map);
   objectSelection=new ObjectSelection(map);
   routePlanner=new RoutePlanner(map);
-  transport=new TransportFeed(map,{onStatus:renderTransportStatus});
+  transport=new TransportFeed(map,{url:api.vehicles,onStatus:renderTransportStatus});
   $('transport-toggle').disabled=false;
   loaded=true;$('loading').hidden=true;renderResults();
  });

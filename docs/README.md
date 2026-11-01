@@ -5,6 +5,7 @@ See [team ownership](ownership.md). Start with [current architecture](../ARCHITE
 | Need | Document |
 | --- | --- |
 | Setup and checks | [Development](runbooks/development.md) |
+| Language rules, agent harness, parallel sessions | [Engineering guidelines](engineering/README.md) |
 | UI implementation | [Frontend guide](../apps/web/README.md) |
 | Data contracts and rebuilding | [Data runbook](runbooks/data.md) |
 | Publishing, Pages migration, rollback | [Release runbook](runbooks/release.md) |

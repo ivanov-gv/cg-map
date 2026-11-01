@@ -9,6 +9,10 @@
 | Vendored runtime bundles require coordinated upgrades | Update package lock, bundles, notices, contract tests, and browser evidence together |
 | Existing packer metadata requests zoom 17 while generated archive ends at 16 | Align metadata during the next geometry pipeline change |
 | Satellite reuse rights remain unverified | Resolve source rights before treating imagery as a commercial dataset |
+| Two live vehicle producers (Go server and hosted transit-relay) | GitHub Pages has no server, so its mock mode still uses the relay. Retire the relay once the app is hosted with the Go server |
+| Direction tracking exists in Go and in the browser | The browser copy serves the relay (mock) mode. Remove it with the relay. Until then both trackers run the shared cases in packages/contracts/fixtures/vehicle-direction-cases.json |
+| services/transit-relay follows upstream redirects; the Go source refuses them | Add `redirect: 'error'` to relay.mjs at its next hosted update, or retire the relay |
+| Route-estimated bus directions are often reversed (about 4 in 10 on a live sample, 2026-11-01) | Patterns cover both directions of the same streets. Shown as an outlined arrow until the bus moves; better needs road-snapped route shapes with per-direction offsets |
 | Full-country/editorial backend is a proposal | Add only against concrete user/editor requirements |
 
 Track actionable work in issues or task plans; update this list when a gap is resolved.

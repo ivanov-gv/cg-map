@@ -19,14 +19,14 @@ See [team boundaries](docs/ownership.md) and [current architecture](ARCHITECTURE
 
 ## Develop
 
-Node 24 and Python 3.12:
+Node 24, Python 3.12 and Go:
 
 ```sh
 make setup
 make dev
 ```
 
-Open http://localhost:8080/. The web build assembles apps/web, the current data release, and compatibility assets into ignored dist/web. No runtime API keys or external services are required.
+Open http://localhost:8080/. The web build assembles apps/web, the current data release, and compatibility assets into ignored dist/web, and the Go backend serves it with its layers and transport APIs (server mode). `make dev-mock` serves the same artifact statically, as GitHub Pages does (mock mode). No runtime API keys are required.
 
 ```sh
 make check       # Build and validate web/data/contracts/platform

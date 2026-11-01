@@ -24,6 +24,9 @@ Application handlers share the browser main thread. Tile work managed by MapLibr
 | [style.css](public/style.css) | Desktop/mobile layout, positioning and visual states |
 | [core.js](src/core.js) | Small data functions: search, distances, category definitions |
 | [app.js](src/app.js) | Startup, state, UI handlers, results, markers, place cards |
+| [data-mode.js](src/data-mode.js) | Server or mock data: which basemap and vehicle URLs to use |
+| [vehicle-direction.js](src/vehicle-direction.js) | Direction of travel for bus markers (movement, or route estimate) |
+| [config.json](public/config.json) | Static hosts' data mode (`mock`); the Go server answers `server` instead |
 | [map-style.js](src/map-style.js) | Vector basemap sources, layers, colors and labels |
 | [satellite.js](src/satellite.js) | The bounded raster sample and its visibility switch |
 | [offline.js](src/offline.js) | Archive transport, verified downloads and local file reads |
@@ -297,7 +300,7 @@ make check
 make test-e2e
 ~~~
 
-make dev builds the app and serves dist/web on localhost:8080. Rebuild after edits; there is no hot reload. The build consumes reviewed data/artifacts, data/sources/places.geojson, and data/imagery without regenerating geography. Offline manifests exist only in dist/web.
+make dev builds the app and runs the Go backend on dist/web at localhost:8080 (server mode); make dev-mock serves it statically (mock mode). Rebuild after edits; there is no hot reload. The build consumes reviewed data/artifacts, data/sources/places.geojson, and data/imagery without regenerating geography. Offline manifests exist only in dist/web.
 
 Geometry changes require make build-data with its optional Python dependencies. UI changes need only a web build. GitHub Actions validates and publishes dist/web on main. Do not commit built output. See [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
 
@@ -352,9 +355,13 @@ For a UI change, manually check:
 The latest cloud-browser inspection could not render because that browser disables WebGL. Do not interpret it as a successful visual test of the satellite layer.
 
 
+## Data modes
+
+At startup app.js reads `config.json` from its host. The Go server (services/backend) answers `{"api":"server"}`: the basemap comes from its TileJSON (`api/v1/layers`) and buses from `api/v1/transport/vehicles`. Static hosts (GitHub Pages, `make dev-mock`, e2e) serve the artifact's `{"api":"mock"}`: the current static data, i.e. the release archive read directly and the hosted transit relay. Add `?api=server` or `?api=mock` to the URL to switch by hand. A verified offline download is always read locally, in either mode. A missing `config.json` or an offline start means mock. A 5xx answer also means mock, with a visible notice. Other HTTP errors and invalid content stop startup with a visible error. In server mode, finishing or removing an offline download during the session switches the basemap between the API and the local archive. config.json is not in the offline shell because it describes the host.
+
 ## Optional transport
 
-[transport.js](src/transport.js) installs static stop circles/names and live vehicle circles/route labels. Transport visibility controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See [transport behavior](../../docs/transport.md).
+[transport.js](src/transport.js) installs static stop circles/names and live vehicle markers/route labels. Each marker is a teardrop pointing in the bus's direction of travel ([vehicle-direction.js](src/vehicle-direction.js)): solid once movement is known, outlined while estimated from the route, a plain disc when neither is available. Transport visibility controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle responses are never cached there. See [transport behavior](../../docs/transport.md).
 
 ## Point selection
 

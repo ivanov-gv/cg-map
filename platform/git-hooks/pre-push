@@ -1,0 +1,8 @@
+#!/bin/sh
+# Full local gate before code leaves the machine. CI repeats it and adds browser acceptance.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+make --no-print-directory check
+if git diff --name-only "@{upstream}" 2>/dev/null | grep -q '^services/backend/' || ! git rev-parse "@{upstream}" >/dev/null 2>&1; then
+  if command -v go >/dev/null 2>&1; then make --no-print-directory check-go; else echo "pre-push: go not installed; CI will run backend checks" >&2; fi
+fi

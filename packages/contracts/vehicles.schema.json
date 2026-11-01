@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Public live vehicle feed v1",
-  "description": "fetchedAt is the relay check time, not a GPS timestamp. No stable vehicle identity is available.",
+  "description": "fetchedAt is the relay check time, not a GPS timestamp. No stable vehicle identity is available. The upstream reports no heading; bearing is optional and derived from movement.",
   "type": "object",
   "required": ["type", "features", "fetchedAt", "stale", "source"],
   "properties": {
@@ -20,7 +20,11 @@
             {"type": "number", "minimum": 41.3, "maximum": 44.1}
           ]}
         }},
-        "properties": {"type": "object", "required": ["route"], "properties": {"route": {"type": "string", "minLength": 1, "maxLength": 32}}}
+        "properties": {"type": "object", "required": ["route"], "dependentRequired": {"bearing": ["heading"], "heading": ["bearing"]}, "properties": {
+          "route": {"type": "string", "minLength": 1, "maxLength": 32},
+          "bearing": {"type": "number", "minimum": 0, "exclusiveMaximum": 360, "description": "Degrees clockwise from north, derived by the producer from movement between its checks. Optional: absent until the bus has moved."},
+          "heading": {"const": "movement", "description": "How bearing was derived."}
+        }}
       }
     }}
   }
