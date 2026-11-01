@@ -95,6 +95,11 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(1);
+  // Static hosts use the bundled archive and the hosted relay.
+  expect(await page.evaluate(() => [window.kompasDebug.dataMode, window.kompasDebug.map.getStyle().sources.basemap.url.startsWith('pmtiles://')])).toEqual(['mock', true]);
+  // A bus that has not moved yet points along its route; the icon carries the arrow.
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-buses']}).map(f => f.properties.heading))).toEqual(['route']);
+  expect(await page.evaluate(() => window.kompasDebug.map.hasImage('bus-arrow'))).toBe(true);
   expect(await page.evaluate(original => original === window.kompasDebug.map, map)).toBe(true);
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect(page.locator('#transport-toggle')).toHaveAttribute('aria-pressed', 'true');
@@ -103,6 +108,48 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(0);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-info')).toBeHidden();
+});
+
+test.describe('server mode', () => {
+  // The service worker forwards same-origin /api requests itself, out of reach of request routing;
+  // it never caches them, so blocking it here changes nothing the test checks.
+  test.use({serviceWorkers: 'block'});
+  test('config.json selects server mode: layers and vehicles come from the Kompas API', async ({page, baseURL}) => {
+    const requests = [];
+    await page.route('**/api/v1/layers', route => {requests.push('layers');return route.fulfill({json: {tilejson: '3.0.0', scheme: 'xyz', minzoom: 0, maxzoom: 16, bounds: [17.8, 41.3, 21, 44.1], tiles: [new URL('api/v1/layers/test-0123456789abcdef/tiles/{z}/{x}/{y}.mvt', baseURL).href], vector_layers: []}});});
+    await page.route('**/api/v1/layers/test-0123456789abcdef/tiles/**', route => {requests.push('tile');return route.fulfill({status: 204});});
+    await page.route('**/api/v1/transport/vehicles', route => {
+      requests.push('vehicles');
+      return route.fulfill({json: {type: 'FeatureCollection', fetchedAt: new Date().toISOString(), stale: false, source: 'https://epodgorica.me/javniprevoz/mapa',
+        features: [{type: 'Feature', geometry: {type: 'Point', coordinates: [19.26, 42.44]}, properties: {route: '6A', bearing: 90, heading: 'movement'}}]}});
+    });
+    await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => {requests.push('relay');return route.abort();});
+    // The host's config.json alone selects server mode, as the Go server does.
+    await page.route('**/config.json', route => route.fulfill({json: {api: 'server'}}));
+    await page.goto('./');
+    await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-circles'));
+    expect(await page.evaluate(() => window.kompasDebug.dataMode)).toBe('server');
+    await expect.poll(() => requests.includes('tile')).toBe(true);
+    await page.getByRole('button', {name: 'Transport', exact: true}).click();
+    await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
+    expect(requests).toContain('layers'); expect(requests).toContain('vehicles'); expect(requests).not.toContain('relay');
+    // The server's movement bearing is drawn as a solid arrow, rotated as reported.
+    await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 15}));
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-buses']}).map(f => [f.properties.heading, f.properties.bearing]))).toEqual([['movement', 90]]);
+  });
+});
+
+test('server mode switches the basemap to an offline download made during the session', async ({page}) => {
+  await page.goto('./?api=server');
+  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-circles'));
+  expect(await page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/\/api\/v1\/layers$/);
+  await expect(page.locator('#download')).toBeEnabled();
+  await page.locator('#download').click();
+  await page.waitForFunction(() => window.kompasDebug.offline, null, {timeout: 60000});
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/^pmtiles:\/\/.*\.pmtiles$/);
+  await page.locator('summary', {hasText: 'About this map'}).click();
+  await page.locator('#remove-download').click();
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/\/api\/v1\/layers$/);
 });
 
 test('transport failure is visible and does not break the map', async ({page}) => {

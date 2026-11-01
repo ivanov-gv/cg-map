@@ -14,11 +14,11 @@ This is a concern-based monorepo. Source boundaries follow ownership; deployment
 | Satellite | Local bounded zoom-17 WebP sample and preview |
 | Offline | Service worker/Cache Storage for shell; OPFS for verified archive |
 | Data pipeline | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely |
-| Backend | Independent Go module; optional static HTTP host only |
+| Backend | Independent Go module (stdlib only): static artifact host, map layers API (TileJSON + vector tiles from the release archive), live ePodgorica vehicles API with movement directions, web config (`config.json`) |
 | Delivery | GitHub Actions uploads/deploys dist/web to Pages |
 | Verification | ESLint, Node tests, Python unittest, Playwright; separate Go vet/test/build |
 
-There is no editorial API, database, self-hosted routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its hosted endpoint is public. Route planning uses external car/foot routing and local dated bus patterns; see [routing](docs/routing.md).
+The Go server is optional. When the app is served by it, `config.json` selects server mode and the app reads layers and vehicles from its APIs. Static hosts such as GitHub Pages serve the artifact's own `config.json`, which selects mock mode: the current static data (the release archive read directly and the hosted relay). `?api=server|mock` overrides either. See [backend](services/backend/README.md). There is no editorial API, database, self-hosted routing engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle relay; its hosted endpoint is public. Route planning uses external car/foot routing and local dated bus patterns; see [routing](docs/routing.md).
 
 ## Ownership boundaries
 
@@ -55,4 +55,4 @@ Further reading: [web guide](apps/web/README.md), [data pipeline](docs/runbooks/
 
 ## Live transport
 
-See [transport](docs/transport.md). The optional client layer polls a read-only relay for public ePodgorica positions. The relay exists because the upstream restricts browser origins. The public hosted endpoint and deployment identity are recorded with the service. Live data is separate from offline map packages.
+See [transport](docs/transport.md). The optional client layer polls public ePodgorica positions through the Go server (server mode) or the read-only hosted relay (mock mode, GitHub Pages). A server-side hop exists because the upstream restricts browser origins. Bus markers point in the direction of travel when it is known from movement, show an outlined estimate from the route until then, or a plain disc when neither is available. The public hosted endpoint and deployment identity are recorded with the service. Live data is separate from offline map packages.

@@ -10,6 +10,8 @@ make test-e2e
 make check-go
 ```
 
+On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one with `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright install chromium` (see [technical debt](technical-debt.md)).
+
 ## Test ownership
 
 | Location | Scope |

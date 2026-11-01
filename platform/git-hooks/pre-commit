@@ -1,0 +1,39 @@
+#!/bin/sh
+# Fast local backstop for agent and human commits (seconds). Installed by `make setup`.
+# Agents can skip instructions; this, pre-push and CI enforce the checks for every author.
+# Checks the working tree versions of staged files. Do not bypass with --no-verify.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+node platform/agents/gen-agent-rules.mjs --check
+node platform/tools/check-repo.mjs
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+js=$(printf '%s\n' "$staged" | grep -E '\.m?js$' || true)
+if [ -n "$js" ]; then
+  # shellcheck disable=SC2086
+  npx --no-install eslint --no-warn-ignored $js
+fi
+
+go_files=$(printf '%s\n' "$staged" | grep -E '\.go$' || true)
+if [ -n "$go_files" ] && ! command -v gofmt >/dev/null 2>&1; then
+  echo "Go files are staged but gofmt is not installed; install Go to commit them." >&2
+  exit 1
+fi
+if [ -n "$go_files" ]; then
+  # shellcheck disable=SC2086
+  unformatted=$(gofmt -l $go_files)
+  if [ -n "$unformatted" ]; then
+    echo "gofmt needed (run gofmt -w):" >&2
+    echo "$unformatted" >&2
+    exit 1
+  fi
+fi
+
+py=$(printf '%s\n' "$staged" | grep -E '\.py$' || true)
+if [ -n "$py" ]; then
+  # shellcheck disable=SC2086
+  python3 -m py_compile $py
+fi

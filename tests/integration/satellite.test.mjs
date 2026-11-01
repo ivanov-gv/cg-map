@@ -8,7 +8,7 @@ import {installSatellite,setSatelliteVisible,satelliteBounds,satelliteLayerIds} 
 
 test('satellite uses bounded local imagery below labels and toggles without replacing the map',()=>{
  globalThis.location={href:'https://ivanov-gv.github.io/cg-map/'};
- const style=mapStyle('https://ivanov-gv.github.io/cg-map/data/map.pmtiles');
+ const style=mapStyle('pmtiles://https://ivanov-gv.github.io/cg-map/data/map.pmtiles');
  const map={addSource(id,source){style.sources[id]=source;},addLayer(layer,before){const i=style.layers.findIndex(l=>l.id===before);assert.ok(i>=0);style.layers.splice(i,0,layer);},setLayoutProperty(id,key,value){style.layers.find(l=>l.id===id).layout[key]=value;}};
  installSatellite(map,location.href);
  assert.deepEqual(validateStyleMin(style).map(e=>e.message),[]);

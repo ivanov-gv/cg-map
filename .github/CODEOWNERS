@@ -9,3 +9,11 @@
 /.github/                 @ivanov-gv
 /tests/                   @ivanov-gv
 /docs/                    @ivanov-gv
+# Agent instructions change agent behavior; review them like code.
+/AGENTS.md                @ivanov-gv
+/**/AGENTS.md             @ivanov-gv
+/docs/engineering/        @ivanov-gv
+/.claude/                 @ivanov-gv
+/.codex/                  @ivanov-gv
+/platform/agents/         @ivanov-gv
+/platform/git-hooks/      @ivanov-gv

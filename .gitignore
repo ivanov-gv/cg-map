@@ -16,3 +16,11 @@ qa-output/
 .DS_Store
 playwright-report/
 test-results/
+
+# Agent harness: personal and generated state
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+AGENTS.override.md
+.codex/config.local.toml
+.idea/
