@@ -113,3 +113,10 @@ test('a fix outside coverage is reported, not drawn', async () => {
   assert.equal(tracker.state, 'outside');
   assert.equal(positionFeatures(tracker.snapshot()).features.length, 0);
 });
+
+test('retrying positioning never makes the previous fix appear current', () => {
+  const fix = {coordinates: [19.26, 42.44], accuracy: 18, timestamp: 1};
+  const features = positionFeatures({state: 'acquiring', fix}).features;
+  assert.deepEqual(features.map(feature => feature.properties.state), ['stale', 'stale']);
+  assert.deepEqual(features[1].geometry.coordinates, fix.coordinates);
+});

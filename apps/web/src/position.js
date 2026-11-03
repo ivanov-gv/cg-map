@@ -57,9 +57,10 @@ export class PositionTracker {
 
 export function positionFeatures({state, fix}) {
   if (!fix || state === 'outside') return {type: 'FeatureCollection', features: []};
+  const displayState = ['live', 'approximate', 'stale'].includes(state) ? state : 'stale';
   return {type: 'FeatureCollection', features: [
-    {type: 'Feature', geometry: accuracyCircle(fix.coordinates, fix.accuracy), properties: {part: 'accuracy', state}},
-    {type: 'Feature', geometry: {type: 'Point', coordinates: [...fix.coordinates]}, properties: {part: 'position', state}}
+    {type: 'Feature', geometry: accuracyCircle(fix.coordinates, fix.accuracy), properties: {part: 'accuracy', state: displayState}},
+    {type: 'Feature', geometry: {type: 'Point', coordinates: [...fix.coordinates]}, properties: {part: 'position', state: displayState}}
   ]};
 }
 
