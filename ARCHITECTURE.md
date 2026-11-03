@@ -57,7 +57,8 @@ repository root.
 
 ## Browser dependencies
 
-app.js orchestrates DOM/map state and imports core.js, map-style.js, satellite.js, and offline.js. offline.js imports
+app.js orchestrates application/map state. interface.js owns the overlay dock, compact mobile search, focus, and
+visible-viewport geometry. app.js also imports core.js, map-style.js, satellite.js, and offline.js. offline.js imports
 core.js for formatting; the other helpers have no local imports. app-updates.js checks for releases once per page load
 or reload; sw.js installs a complete replacement shell before activating and reloading open tabs. sw.js imports its
 generated offline manifest. Repository checks enforce these boundaries.

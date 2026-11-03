@@ -4,6 +4,13 @@ test.beforeEach(async ({page}) => {
   await page.route('https://routing.openstreetmap.de/**', route => route.fulfill({status:503,json:{code:'Unavailable'}}));
 });
 const fixture = JSON.parse(fs.readFileSync(new URL('../../../../data/tests/fixtures/podgorica-places.geojson', import.meta.url)));
+async function openMenu(page) {
+  if (await page.locator('#menu-toggle').getAttribute('aria-expanded') !== 'true') await page.locator('#menu-toggle').click();
+}
+async function closeMenu(page) {
+  if (await page.locator('#menu-toggle').getAttribute('aria-expanded') === 'true') await page.locator('#menu-toggle').click();
+  else if (await page.locator('body').getAttribute('data-view') === 'search') await page.keyboard.press('Escape');
+}
 async function ready(page) {
   await page.goto('./');
   await expect(page).not.toHaveURL(/\/web\//);
@@ -11,24 +18,29 @@ async function ready(page) {
   await expect(page.locator('#loading')).toBeHidden();
 }
 
-test('map, fixture search, selection, and satellite preserve the map instance', async ({page, isMobile}) => {
+test('map, fixture search, selection, and satellite preserve the map instance', async ({page}) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
   expect(await page.evaluate(() => window.kompasDebug.placeCount)).toBe(fixture.features.length);
-  if (isMobile) await page.locator('#toggle-results').click();
+  await openMenu(page);
   await page.locator('.result').first().click();
   await expect(page.locator('#place-card')).toBeVisible();
   await page.locator('#close-place').click();
   await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#search')).toBeFocused();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   await page.locator('#search').fill(fixture.features[0].properties.name);
   await expect.poll(() => page.locator('.result').count()).toBeGreaterThan(0);
-  await page.locator('#reset').click();
+  await page.locator('#search').fill('');
+  await expect(page.locator('.result')).toHaveCount(fixture.features.length);
   await page.evaluate(() => {window.originalMap = window.kompasDebug.map;});
+  await openMenu(page);
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
-  await page.getByRole('button', {name: 'Street map', exact: true}).click();
+  await openMenu(page);
+  await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   expect(await page.evaluate(() => window.originalMap === window.kompasDebug.map)).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -36,6 +48,7 @@ test('map, fixture search, selection, and satellite preserve the map instance', 
 test('shipped snapshot downloads and reloads offline with real archive data', async ({page, context}) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await ready(page);
+  await openMenu(page);
   await expect(page.locator('#download')).toBeEnabled();
   await page.locator('#download').click();
   await page.waitForFunction(() => window.kompasDebug.offline, null, {timeout: 60000});
@@ -46,6 +59,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await expect(page.locator('#loading')).toBeHidden();
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.256, 42.442], zoom: 16}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.254951, 42.446057], zoom: 17}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-stops']}).length)).toBeGreaterThan(0);
@@ -92,6 +106,7 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   await ready(page);
   expect(calls).toBe(0);
   const map = await page.evaluateHandle(() => window.kompasDebug.map);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(1);
@@ -101,11 +116,13 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-buses']}).map(f => f.properties.heading))).toEqual(['route']);
   expect(await page.evaluate(() => window.kompasDebug.map.hasImage('bus-arrow'))).toBe(true);
   expect(await page.evaluate(original => original === window.kompasDebug.map, map)).toBe(true);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect(page.locator('#transport-toggle')).toHaveAttribute('aria-pressed', 'true');
   await context.setOffline(true);
   await expect(page.locator('#transport-status')).toHaveText(/internet connection/);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('transport')._data.features.length)).toBe(0);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-info')).toBeHidden();
 });
@@ -130,6 +147,7 @@ test.describe('server mode', () => {
     await page.waitForFunction(() => window.kompasDebug?.map?.isStyleLoaded() && window.kompasDebug.map.getLayer('place-symbols'));
     expect(await page.evaluate(() => window.kompasDebug.dataMode)).toBe('server');
     await expect.poll(() => requests.includes('tile')).toBe(true);
+    await openMenu(page);
     await page.getByRole('button', {name: 'Transport', exact: true}).click();
     await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
     expect(requests).toContain('layers'); expect(requests).toContain('vehicles'); expect(requests).not.toContain('relay');
@@ -143,11 +161,11 @@ test('server mode switches the basemap to an offline download made during the se
   await page.goto('./?api=server');
   await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('place-symbols'));
   expect(await page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/\/api\/v1\/layers$/);
+  await openMenu(page);
   await expect(page.locator('#download')).toBeEnabled();
   await page.locator('#download').click();
   await page.waitForFunction(() => window.kompasDebug.offline, null, {timeout: 60000});
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/^pmtiles:\/\/.*\.pmtiles$/);
-  await page.locator('summary', {hasText: 'About this map'}).click();
   await page.locator('#remove-download').click();
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('basemap').url)).toMatch(/\/api\/v1\/layers$/);
 });
@@ -155,6 +173,7 @@ test('server mode switches the basemap to an offline download made during the se
 test('transport failure is visible and does not break the map', async ({page}) => {
   await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => route.fulfill({status: 503, json: {error: 'unavailable'}}));
   await ready(page);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
   expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('place-symbols'))).toBe(true);
@@ -164,8 +183,10 @@ test('stop snapshot renders and selects independently of live bus availability',
   await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => route.fulfill({status: 503, json: {error: 'unavailable'}}));
   await ready(page);
   expect(await page.evaluate(() => window.kompasDebug.map.getLayoutProperty('transport-stops', 'visibility'))).toBe('none');
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
+  await closeMenu(page);
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.254951, 42.446057], zoom: 17}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-stops']}).length)).toBeGreaterThan(0);
   const point = await page.evaluate(() => {
@@ -176,6 +197,7 @@ test('stop snapshot renders and selects independently of live bus availability',
   await expect(page.locator('#place-card')).toContainText('Ul. 13. jula (B)');
   await expect(page.locator('#place-card')).toContainText('Stop ID: 1');
   expect(await page.evaluate(()=>window.kompasDebug.map.getFeatureState({source:'transport-stops',id:'1'}).selected)).toBe(true);
+  await openMenu(page);
   await page.getByRole('button', {name: 'Transport', exact: true}).click();
   await expect(page.locator('#place-card')).toBeHidden();
   expect(await page.evaluate(()=>window.kompasDebug.map.getFeatureState({source:'transport-stops',id:'1'}).selected)).toBe(false);
@@ -185,6 +207,7 @@ test('stop snapshot renders and selects independently of live bus availability',
 // Place symbols are collision-placed below addresses and road names (Discover D-05), so a place is tapped where its
 // symbol is actually drawn, zooming in until there is room for it.
 async function tapRenderedPlace(page, coordinates, id) {
+  await closeMenu(page);
   let point=null;
   for(const zoom of [17,18,19,20,21]) {
     await page.evaluate(({coordinates,zoom})=>window.kompasDebug.map.jumpTo({center:coordinates,zoom}),{coordinates,zoom});
@@ -203,6 +226,7 @@ async function tapRenderedPlace(page, coordinates, id) {
 }
 
 async function tapMapCenter(page, coordinates) {
+  await closeMenu(page);
   await page.evaluate(point => window.kompasDebug.map.jumpTo({center: point, zoom: 17}), coordinates);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
   const point = await page.evaluate(() => {
@@ -228,6 +252,14 @@ test('map points offer From/To, preserve both endpoints, and clear them', async 
   await expect(page.locator('#place-category')).toHaveText('From point');
   await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-to')).toContainText('43.70000, 20.80000');
+  const viewport = page.viewportSize();
+  for (const width of [720, 721, 768]) {
+    await page.setViewportSize({width, height: 840});
+    const header = await page.locator('.search-bar').boundingBox();
+    const route = await page.locator('#route-endpoints').boundingBox();
+    expect(route.y).toBeGreaterThanOrEqual(header.y + header.height);
+  }
+  await page.setViewportSize(viewport);
   await page.getByRole('button',{name:'Clear points',exact:true}).click();
   await expect(page.locator('#route-endpoints')).toBeHidden();
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('route-points')._data.features.length)).toBe(0);
@@ -265,6 +297,13 @@ test('building selection provides feature details and point actions', async ({pa
 
 test.describe('isolated routing provider checks',()=>{
  test.use({serviceWorkers:'block'});
+ // These tests deliberately make offline setup unavailable. Acknowledge its recoverable notice before routing.
+ async function readyForRouting(page) {
+  await ready(page);
+  await expect(page.locator('#error-text')).toContainText('Offline setup failed:');
+  await page.getByRole('button',{name:'Dismiss notice',exact:true}).click();
+  await expect(page.locator('#error')).toBeHidden();
+ }
 test('route modes draw different street routes and a bus itinerary; clearing removes the line', async ({page}) => {
   const calls=[];
   await page.route('https://routing.openstreetmap.de/**', route => {
@@ -272,7 +311,7 @@ test('route modes draw different street routes and a bus itinerary; clearing rem
     return route.fulfill({json:{code:'Ok',routes:[{distance:walking?850:1200,duration:walking?650:180,geometry:{type:'LineString',coordinates:[[19.254951,42.446057],[19.26,42.445],[19.26345,42.443523]]},legs:[{steps:[{distance:850,name:'Test street',maneuver:{type:'depart'}}]}]}]}});
   });
   await page.route('**/data/transit-network.json', route => route.fulfill({json:{version:1,retrievedAt:'2026-10-18T19:00:00Z',stops:{a:{name:'Start stop',coordinates:[19.254951,42.446057]},b:{name:'End stop',coordinates:[19.26345,42.443523]}},patterns:[{route:'6',name:'Test bus',headsign:'End stop',stops:['a','b'],offsets:[0,600]}]}}));
-  await ready(page);
+  await readyForRouting(page);
   await tapMapCenter(page,[19.254951,42.446057]);await page.getByRole('button',{name:'From',exact:true}).click();
   await tapMapCenter(page,[19.26345,42.443523]);await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText('3 min · 1.2 km');
@@ -290,7 +329,7 @@ test('route modes draw different street routes and a bus itinerary; clearing rem
 });
 
 test('route errors and identical endpoints stay explicit without leaving old lines', async ({page}) => {
-  await ready(page);
+  await readyForRouting(page);
   await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'From',exact:true}).click();
   await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toContainText('same point');
@@ -380,16 +419,17 @@ test('same building keeps its address across zooms and with number labels hidden
 });
 
 
-test('a place inside a building highlights its footprint across zoom and satellite changes',async({page,isMobile})=>{
+test('a place inside a building highlights its footprint across zoom and satellite changes',async({page})=>{
   const label=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))).features.find(f=>{const [x,y]=f.geometry.coordinates;return x>19.251&&x<19.261&&y>42.438&&y<42.445;});
   const coordinates=label.geometry.coordinates,footprintId=label.properties.footprintIndex;
   await page.route('**/data/places.geojson',route=>route.fulfill({json:{type:'FeatureCollection',features:[{
     type:'Feature',geometry:{type:'Point',coordinates},properties:{id:'node/selection-fixture',name:'Building cafe',category:'food',kind:'cafe'}
   }]}}));
   await ready(page);
+  await openMenu(page);
   await page.getByRole('button',{name:'Satellite',exact:true}).click();
   await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:8}),coordinates);
-  if(isMobile)await page.locator('#toggle-results').click();
+  await openMenu(page);
   await page.locator('.result').first().click();
   await expect(page.locator('#place-name')).toHaveText('Building cafe');
   for(const zoom of [15,17,20]){
@@ -431,9 +471,14 @@ test.describe('Discover first view', () => {
     await expect(page.locator('#position-status')).toHaveText(/You are here · ±18 m/);
     await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getSource('position')._data.features.map(f => f.properties.part))).toEqual(['accuracy', 'position']);
     await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getCenter().distanceTo({lng: 19.2627, lat: 42.4411}))).toBeLessThan(5);
-    await expect(page.locator('#position-action')).toHaveText('Recenter');
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-label', /Recenter on your location/);
+    await expect(page.locator('#position-action')).toBeVisible();
     // The location is never written to browser storage.
     expect(await page.evaluate(() => JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage}))).not.toContain('42.441');
+    await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.25, 42.43], zoom: 16}));
+    await page.locator('#position-action').click();
+    await expect(page.locator('#place-card')).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getCenter().distanceTo({lng: 19.2627, lat: 42.4411}))).toBeLessThan(150);
   });
 });
 
@@ -443,26 +488,26 @@ test('without location the status says so and the default view is labelled as a 
   expect(await page.evaluate(() => window.kompasDebug.map.getSource('position')._data.features.length)).toBe(0);
 });
 
-test('first view is at street scale with key, house numbers and no Plan prompt', async ({page}) => {
+test('first view is at street scale with minimal controls, house numbers and no Plan prompt', async ({page}) => {
   await ready(page);
   const mpp = await page.evaluate(() => {
     const m = window.kompasDebug.map, c = m.getContainer();
     return m.unproject([c.clientWidth / 2 - 50, c.clientHeight / 2]).distanceTo(m.unproject([c.clientWidth / 2 + 50, c.clientHeight / 2])) / 100;
   });
   expect(mpp).toBeGreaterThan(0.8); expect(mpp).toBeLessThan(1.2);
-  await expect(page.locator('#map-key-items')).toBeVisible();
-  await expect(page.locator('#map-key-items')).toContainText('type not recorded');
-  await expect(page.locator('#map-key-places img')).toHaveCount(5);
-  await expect(page.locator('.map-note')).toHaveCount(0);
+  await expect(page.locator('#dock-content')).toBeHidden();
+  await expect(page.locator('#search-bubble')).toBeHidden();
+  await expect(page.locator('#menu-toggle')).toBeVisible();
+  await expect(page.locator('#search')).toBeVisible();
+  await expect(page.locator('#position-action')).toBeVisible();
+  await expect(page.locator('#map-key, #overview, #podgorica, .intro, .map-note')).toHaveCount(0);
+  await expect(page.locator('#position-status')).toHaveClass('sr-only');
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['building-numbers']}).length)).toBeGreaterThan(0);
-  await page.locator('#map-key-toggle').click();
-  await expect(page.locator('#map-key-items')).toBeHidden();
-  await expect(page.locator('#map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('country scale draws no ordinary places or count clusters; street scale brings them back', async ({page}) => {
   await ready(page);
-  await page.locator('#overview').click();
+  await page.evaluate(() => window.kompasDebug.map.fitBounds([[18.42,41.84],[20.36,43.57]], {padding:55,duration:0}));
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getZoom())).toBeLessThan(9);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
   expect(await page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['place-symbols']}).length)).toBe(0);
@@ -491,8 +536,127 @@ test('a failed places request names the failure and keeps the map usable', async
   await expect(page.locator('#loading')).toBeHidden();
   // Not presented as an empty search result, before or after moving the map.
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.25, 42.44], zoom: 16}));
-  await expect(page.locator('#toggle-results')).toHaveText('Places unavailable');
   await expect(page.locator('#results')).toContainText('Places could not load');
   await expect(page.locator('#results')).not.toContainText('No places found');
   expect(await page.evaluate(() => window.kompasDebug.map.getLayer('buildings') !== undefined)).toBe(true);
+  await openMenu(page);
+  expect(await page.evaluate(() => {
+    const notice=document.getElementById('error').getBoundingClientRect();
+    const dock=document.querySelector('.sidebar').getBoundingClientRect();
+    const x=Math.min(notice.left+4,dock.right-4);
+    return !!document.elementFromPoint(x,notice.top+4)?.closest('#error');
+  })).toBe(true);
+  await page.getByRole('button', {name: 'Dismiss notice', exact: true}).click();
+  await expect(page.locator('#error')).toBeHidden();
+  await expect(page.locator('#search')).toBeFocused();
+});
+
+test('dock expands around a stationary header and keeps layer/download options anchored', async ({page}, testInfo) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+  await ready(page);
+  const header = await page.locator('.search-bar').boundingBox();
+  const burger = await page.locator('#menu-toggle').boundingBox();
+  const search = await page.locator('#search').boundingBox();
+  const locate = await page.locator('#position-action').boundingBox();
+  const zoom = await page.getByRole('button', {name: 'Zoom in', exact: true}).boundingBox();
+  expect(locate.y + locate.height).toBeLessThanOrEqual(zoom.y);
+  await page.screenshot({path: testInfo.outputPath('opening.png')});
+  await openMenu(page);
+  expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
+  expect(await page.locator('#menu-toggle').boundingBox()).toEqual(burger);
+  expect(await page.locator('#search').boundingBox()).toEqual(search);
+  await expect(page.locator('.layer-tile')).toHaveCount(2);
+  await expect(page.locator('#download-title')).toHaveText('Download for offline use');
+  await expect(page.getByRole('heading', {name: /Map layers|Offline map/})).toHaveCount(0);
+  await expect(page.locator('#toggle-results, #reset')).toHaveCount(0);
+  const footer = await page.locator('.dock-footer').boundingBox();
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await expect(page.locator('.result')).toHaveCount(0);
+  expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await expect(page.locator('#categories').getByRole('button', {name: 'Explore all', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.result')).toHaveCount(3);
+  expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
+  await page.screenshot({path: testInfo.outputPath('dock.png')});
+  await closeMenu(page);
+  expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
+  expect(await page.locator('#menu-toggle').boundingBox()).toEqual(burger);
+  expect(await page.locator('#search').boundingBox()).toEqual(search);
+});
+
+test('search keeps phone categories fixed above scrolling results and the match visible on the map', async ({page, isMobile}, testInfo) => {
+  const places = {type: 'FeatureCollection', features: Array.from({length: 30}, (_, i) => ({
+    type: 'Feature', geometry: {type: 'Point', coordinates: [19.26 + i * .00002, 42.44]},
+    properties: {id: 'search/' + i, name: 'Mobile result ' + String(i).padStart(2, '0'), category: 'shops', kind: 'shop'}
+  }))};
+  await page.route('**/data/places.geojson', route => route.fulfill({json: places}));
+  await ready(page);
+  const header = await page.locator('.search-bar').boundingBox();
+  await page.locator('#search').fill('Mobile result');
+  await expect(page.locator('.result')).toHaveCount(30);
+  await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'dock');
+  if (isMobile) {
+    await expect(page.locator('#dock-content')).toBeHidden();
+    await expect(page.locator('.dock-footer')).toBeHidden();
+    const bubble = await page.locator('#search-bubble').boundingBox();
+    expect(bubble.height).toBeLessThanOrEqual(420);
+    expect(bubble.y + bubble.height).toBe(420);
+    const row = await page.locator('.result').first().boundingBox();
+    expect(row.height).toBeGreaterThanOrEqual(76);
+    const list = await page.locator('#results').boundingBox();
+    expect(list.height).toBeGreaterThan(250);
+  }
+  expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.isMoving())).toBe(false);
+  const categories = await page.locator('#categories').boundingBox();
+  await page.locator('#results').evaluate(element => { element.scrollTop = 250; });
+  await expect.poll(() => page.locator('#results').evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await page.locator('#categories').boundingBox()).toEqual(categories);
+  const matchVisible = async () => {
+    const point = await page.evaluate(() => {
+      const map = window.kompasDebug.map;
+      const feature = map.queryRenderedFeatures({layers: ['search-place']})[0];
+      if (!feature) return null;
+      const p = map.project(feature.geometry.coordinates);
+      return {x: p.x, y: p.y};
+    });
+    if (!point) return false;
+    if (!isMobile) return point.x > 400 && point.x < 1208;
+    const bubble = await page.locator('#search-bubble').boundingBox();
+    const height = await page.evaluate(() => window.visualViewport.height);
+    return point.y > bubble.y + bubble.height && point.y < height - 20;
+  };
+  await expect.poll(matchVisible).toBe(true);
+  await page.screenshot({path: testInfo.outputPath('search.png')});
+  if (isMobile) {
+    await page.evaluate(() => {
+      const viewport = new EventTarget();
+      Object.assign(viewport, {height: 420, offsetTop: 0});
+      Object.defineProperty(window, 'visualViewport', {configurable: true, value: viewport});
+      window.dispatchEvent(new Event('resize'));
+    });
+    await expect.poll(() => page.locator('#search-bubble').evaluate(element => element.getBoundingClientRect().height)).toBeLessThanOrEqual(210);
+    const bubble = await page.locator('#search-bubble').boundingBox();
+    expect(bubble.y + bubble.height).toBe(210);
+    await expect.poll(matchVisible).toBe(true);
+    expect(await page.locator('#categories').boundingBox()).toEqual(categories);
+    await page.screenshot({path: testInfo.outputPath('search-keyboard.png')});
+  }
+  await page.locator('#search').fill('Mobile result 07');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await expect.poll(matchVisible).toBe(true);
+  await openMenu(page);
+  await expect(page.locator('#dock-content')).toBeVisible();
+  await expect(page.locator('#search-bubble')).toBeHidden();
+  await expect(page.locator('#search')).toHaveValue('Mobile result 07');
+  await closeMenu(page);
+  await page.locator('#search').click();
+  await page.locator('.result').click();
+  await expect(page.locator('#place-name')).toHaveText('Mobile result 07');
+  await expect(page.locator('#search-bubble')).toBeHidden();
+  await expect.poll(async () => {
+    const point = await page.evaluate(coordinates => {const p=window.kompasDebug.map.project(coordinates);return [p.x,p.y];}, places.features[7].geometry.coordinates);
+    const card = await page.locator('#place-card').boundingBox();
+    return isMobile ? point[1] < card.y - 8 && point[1] > 82 : point[0] > card.x + card.width;
+  }).toBe(true);
 });

@@ -43,6 +43,23 @@ result lists free; avoid expensive application work during gestures.
 
 Application modules load directly as browser ES modules; vendor bundles are committed separately.
 
+## Laconic controls
+
+The [interface specification](../../docs/ui-ux/interface.md) defines the implemented composition. The map fills the
+viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens.
+[interface.js](src/interface.js) owns closed/dock/mobile-search states, the shared result panel, focus restoration, and
+visible-viewport geometry. It has no dependency on data producers or backend code.
+
+The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
+scroll above it. Desktop search uses that dock. Mobile search uses a bubble capped at half the visible viewport, with
+fixed categories above the independently scrolling list. A leading result uses the existing place feature in the
+`search-place` layer so collision placement cannot hide the requested icon. Camera offsets keep that result and selected
+objects outside the search bubble, keyboard area, or details card. General POI ranks are unchanged.
+
+Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
+recovery after an explicit location request. Route controls appear after endpoint selection, independently of the dock.
+Source notes, attribution, live-layer states, and offline safety remain part of the existing features.
+
 ## 3. What happens when the page opens
 
 1. The browser parses index.html and creates its DOM.
@@ -130,10 +147,11 @@ Sources hold geometry or imagery. Layers apply rendering rules to a source; chan
 
 One places source is rendered by several layers:
 
-| Layer           | Purpose                                                                                  |
-| --------------- | ---------------------------------------------------------------------------------------- |
-| place-symbols   | Category icon and name, collision-placed below road names and house numbers, scale-gated |
-| place-highlight | Invisible ring that becomes the selection highlight through feature state                |
+| Layer           | Purpose                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| place-symbols   | Category icon and name, collision-placed below road names and house numbers, scale-gated                            |
+| search-place    | The leading explicit result, protected from icon collision and omitted from the ordinary layer to avoid duplication |
+| place-highlight | Invisible ring that becomes the selection highlight through feature state                                           |
 
 `PLACE_SCALE_FILTER` in core.js hides places at country/region scale and ordinary businesses until street scale
 ([Discover D-05](../../docs/ui-ux/discover.md#d-05-points-of-interest-without-clutter)); a search or category choice
@@ -163,8 +181,8 @@ CSS does not set vector-road colors. Change map-style.js for cartography and sty
 
 ## 7. Selecting and closing a place
 
-Map clicks use queryRenderedFeatures() on the place-symbols layer. Places are not clustered; one hidden by scale or
-label collision is reached through the result list.
+Map clicks use queryRenderedFeatures() on the place-symbols and search-place layers. Places are not clustered; one
+hidden by scale or label collision is reached through the result list.
 
 - A place symbol click passes the place ID to showPlace().
 - A background click closes the card.
@@ -205,7 +223,8 @@ Clicking Satellite:
 - Shows the coverage/source note.
 - Centers on the sample at zoom 17.5 when enabling it.
 
-Clicking Street map hides the imagery; it does not reset the camera.
+Activating Satellite again hides the imagery; its short label stays Satellite and aria-pressed reports the state. It
+does not reset the camera.
 
 The sample covers roughly 900 × 900 meters, not all Podgorica. Further zoom magnifies the existing photos. MapLibre can
 draw raster imagery and vector geometry together; the photographs do not make vector buildings blurry.
@@ -299,8 +318,12 @@ through requestAnimationFrame().
 This lets MapLibre update its canvas when the real container dimensions change, for example during rotation. It does not
 rebuild map sources or tiles.
 
-On mobile, the result list is a panel controlled through a CSS class, results-open, and aria-expanded. Selecting a
-result hides that list and shows the details card over the map.
+MapInterface switches the shared result panel between the full dock and mobile search bubble. The category navigation
+stays outside the scrolling list. There is no count/reset row; clicking an active category returns to all categories
+without clearing the query. The bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events
+update the bubble cap and camera offset when a keyboard reduces the visible area. Selecting a result closes search and
+opens its existing details card, with the selected feature kept in the remaining map area. The burger/search header is
+never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
@@ -322,8 +345,8 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 | Expand satellite coverage   | satellite.js, original tiles, preview, provenance | Keep bounds, corners and tile inventory consistent |
 | Change offline assets       | tools/finalize.mjs                                | Regenerate both manifests                          |
 
-A new module imported by app.js must also be added to the shell list in finalize.mjs. The current tooling does not
-discover JavaScript imports automatically.
+A new module imported by app.js must also be added to the shell list in finalize.mjs (including interface.js). The
+current tooling does not discover JavaScript imports automatically.
 
 ## 13. Local development and publication
 
@@ -447,7 +470,7 @@ For a UI change, manually check:
 
 - Initial page load with a fresh session.
 - Search, category changes, place selection and closing.
-- Satellite → Street map, panning beyond sample coverage and zooming.
+- Satellite on/off, panning beyond sample coverage and zooming.
 - Mobile-sized layout and real-device rotation.
 - Offline download followed by reopening without a connection.
 - An existing installation receiving a new release.
