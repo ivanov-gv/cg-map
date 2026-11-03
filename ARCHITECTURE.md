@@ -29,12 +29,13 @@ relay; its hosted endpoint is public. Route planning uses external car/foot rout
 
 ## Ownership boundaries
 
-- apps/web: UI, rendering, client search, offline behavior, web assembly.
+- apps/web: UI, rendering, client search, offline behavior, web assembly, and browser acceptance.
 - services/backend: server implementation; future editorial/auth/search capabilities when required.
 - data: acquisition, source snapshots, imagery/provenance, quality, tile generation, data releases.
 - packages/contracts: stable formats shared across producers and consumers.
 - platform: hosting, CI/deployment, local infrastructure, repository enforcement.
-- tests: cross-component integration and browser acceptance. Unit tests stay with components.
+- tests: cross-component contract and artifact integration. Browser acceptance lives in apps/web; unit tests stay with
+  their components.
 
 See [ownership](docs/ownership.md) for teams, interfaces, and future split triggers.
 

@@ -5,10 +5,26 @@
   "type": "module",
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "npm --prefix ../.. run build:web && cd ../.. && node --test apps/web/tests/*.test.mjs"
+    "lint": "eslint src tools tests playwright.config.mjs",
+    "verify": "make verify",
+    "pretest": "npm run build",
+    "test": "node --test tests/*.test.mjs",
+    "test:built": "node --test tests/*.test.mjs",
+    "check:offline": "node tools/finalize.mjs --check",
+    "check:python": "python3 -m py_compile tests/e2e/serve.py",
+    "release:prepare": "npm run build",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "playwright test",
+    "test:e2e:built": "playwright test",
+    "browser:install": "playwright install",
+    "predev:mock": "npm run build",
+    "dev:mock": "python3 ../../platform/tools/serve.py --port ${PORT:-$(node ../../platform/tools/dev-port.mjs)}"
   },
   "dependencies": {
     "maplibre-gl": "5.12.0",
     "pmtiles": "4.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
   }
 }

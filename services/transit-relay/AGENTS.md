@@ -11,7 +11,7 @@ Run the Node relay tests and root make check. Hosted updates must sync canonical
 source; preserve its identity and audience. Never embed private service credentials in the web client.
 
 <!-- BEGIN GENERATED agent-guidelines: edit docs/engineering/*.md and run `make agent-rules` -->
-<!-- agent-guideline: javascript sha256:d6598b82a7af -->
+<!-- agent-guideline: javascript sha256:56d6d29c9c9d -->
 
 ## JavaScript conventions (from ../../docs/engineering/javascript.md)
 
@@ -48,7 +48,7 @@ it.
 ### Tests
 
 - Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
-  tests in tests/integration; browser journeys in tests/e2e (Playwright).
+  tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - Verify: `make verify PKG=<component>`, then `make check`.
 

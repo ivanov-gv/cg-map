@@ -39,7 +39,7 @@ for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
 const rootFiles = new Set(['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
-  'DATA_LICENSE.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs', 'playwright.config.mjs']);
+  'DATA_LICENSE.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);
 }

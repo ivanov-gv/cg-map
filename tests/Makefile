@@ -1,5 +1,4 @@
 ROOT := ..
-E2E_PORT ?= $(shell cd $(ROOT) && node platform/tools/dev-port.mjs --e2e)
 
 .PHONY: verify lint build-web integration-test e2e
 
@@ -15,4 +14,4 @@ integration-test:
 	cd $(ROOT) && node --test tests/integration/*.test.mjs
 
 e2e:
-	cd $(ROOT) && E2E_PORT=$(E2E_PORT) npm run test:e2e
+	$(MAKE) --no-print-directory -C $(ROOT)/apps/web e2e

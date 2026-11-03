@@ -3,7 +3,7 @@ import fs from 'node:fs';
 test.beforeEach(async ({page}) => {
   await page.route('https://routing.openstreetmap.de/**', route => route.fulfill({status:503,json:{code:'Unavailable'}}));
 });
-const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
+const fixture = JSON.parse(fs.readFileSync(new URL('../../../../data/tests/fixtures/podgorica-places.geojson', import.meta.url)));
 async function ready(page) {
   await page.goto('./');
   await expect(page).not.toHaveURL(/\/web\//);
@@ -54,7 +54,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await expect(page.locator('#place-category')).toHaveText('Bus stop');
   await page.getByRole('button',{name:'From',exact:true}).click();
   await expect(page.locator('#route-from')).toContainText('Ul. 13. jula (B)');
-  const busNetwork=JSON.parse(fs.readFileSync('data/sources/transit-network.json'));
+  const busNetwork=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/transit-network.json', import.meta.url)));
   const pattern=busNetwork.patterns.find(p=>p.offsets.at(-1)>0);
   await tapMapCenter(page,busNetwork.stops[pattern.stops[0]].coordinates);
   await page.getByRole('button',{name:'From',exact:true}).click();
@@ -64,7 +64,7 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   await page.getByRole('button',{name:'Public transport',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveAttribute('data-state','ready');
   await expect(page.locator('#route-status')).toContainText('+ waiting');
-  const numbered=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson')).features[0];
+  const numbered=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))).features[0];
   await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:20}),numbered.geometry.coordinates);
   await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),numbered.id)).toBe(true);
   await page.evaluate(()=>window.kompasDebug.map.setLayoutProperty('building-numbers','visibility','none'));
@@ -341,8 +341,8 @@ test('one-finger tap then drag zooms and never opens point actions', async ({pag
 });
 
 test('building house numbers start at the 100m scale and open address details', async ({page}) => {
-  const labels=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson'));
-  const places=JSON.parse(fs.readFileSync('data/sources/places.geojson'));
+  const labels=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url)));
+  const places=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url)));
   const label=labels.features.find(f=>!places.features.some(p=>Math.hypot(p.geometry.coordinates[0]-f.geometry.coordinates[0],p.geometry.coordinates[1]-f.geometry.coordinates[1])<.00005));
   expect(label).toBeTruthy();
   await ready(page);
@@ -381,7 +381,7 @@ test('same building keeps its address across zooms and with number labels hidden
 
 
 test('a place inside a building highlights its footprint across zoom and satellite changes',async({page,isMobile})=>{
-  const label=JSON.parse(fs.readFileSync('data/sources/building-labels.geojson')).features.find(f=>{const [x,y]=f.geometry.coordinates;return x>19.251&&x<19.261&&y>42.438&&y<42.445;});
+  const label=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))).features.find(f=>{const [x,y]=f.geometry.coordinates;return x>19.251&&x<19.261&&y>42.438&&y<42.445;});
   const coordinates=label.geometry.coordinates,footprintId=label.properties.footprintIndex;
   await page.route('**/data/places.geojson',route=>route.fulfill({json:{type:'FeatureCollection',features:[{
     type:'Feature',geometry:{type:'Point',coordinates},properties:{id:'node/selection-fixture',name:'Building cafe',category:'food',kind:'cafe'}
@@ -406,7 +406,7 @@ test('a place inside a building highlights its footprint across zoom and satelli
 
 test('point-only places highlight their existing markers and restore them on close',async({page})=>{
   await ready(page);
-  const places=JSON.parse(fs.readFileSync('data/sources/places.geojson')).features;
+  const places=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url))).features;
   for(const sourceId of ['node/13719099734','node/309892487']) {
     const index=places.findIndex(f=>f.properties.id===sourceId),place=places[index];
     await tapRenderedPlace(page,place.geometry.coordinates,index+1);

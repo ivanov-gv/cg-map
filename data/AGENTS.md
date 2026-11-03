@@ -13,7 +13,7 @@ reviewed archive is in artifacts/; dist/web is temporary assembly output. Data t
 implementation.
 
 <!-- BEGIN GENERATED agent-guidelines: edit docs/engineering/*.md and run `make agent-rules` -->
-<!-- agent-guideline: javascript sha256:d6598b82a7af -->
+<!-- agent-guideline: javascript sha256:56d6d29c9c9d -->
 
 ## JavaScript conventions (from ../docs/engineering/javascript.md)
 
@@ -50,16 +50,16 @@ it.
 ### Tests
 
 - Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
-  tests in tests/integration; browser journeys in tests/e2e (Playwright).
+  tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - Verify: `make verify PKG=<component>`, then `make check`.
 
-<!-- agent-guideline: python sha256:851c3ec1cfa9 -->
+<!-- agent-guideline: python sha256:d8f6352ddf72 -->
 
 ## Python conventions (from ../docs/engineering/python.md)
 
-Applies to `*.py`: data pipeline tools (data/tools), platform servers and packaging (platform/tools), and their tests.
-Python 3.12.
+Applies to `*.py`: data pipeline tools (data/tools), platform servers and packaging (platform/tools), the web
+browser-test server (apps/web/tests/e2e), and their tests. Python 3.12.
 
 ### Python code
 
@@ -86,8 +86,8 @@ Python 3.12.
 ### Tests and checks
 
 - Tests use `unittest` and live in `<component>/tests/test_*.py`.
-- Enforced: `python3 -m py_compile` on platform/tools and data/tools, and the platform unittest suite, both in
-  `make check`.
+- Enforced: `python3 -m py_compile` on platform/tools, data/tools, and apps/web/tests/e2e, plus the platform unittest
+  suite, in `make check`.
 - Verify: `make verify PKG=<component>`, then `make check`. Geometry changes also need `make build-data`.
 
 <!-- END GENERATED agent-guidelines -->

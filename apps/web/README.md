@@ -347,6 +347,58 @@ Geometry changes require make build-data with its optional Python dependencies. 
 Actions validates and publishes dist/web on main. Do not commit built output. See
 [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
 
+### Focused browser checks
+
+Follow the [web testing workflow and measured timings](AGENTS.md#testing). Start with `make verify PKG=apps/web` for
+frontend lint, boundaries, build, Node tests, and offline manifests; it does not run Playwright. During iteration,
+choose browser cases that exercise the changed behavior instead of running the entire suite after every edit.
+
+Run these commands from apps/web. The local Playwright configuration selects a per-worktree port automatically; E2E_PORT
+overrides it when needed:
+
+```sh
+# One transport scenario on mobile
+npm run test:e2e -- --project=pages-mobile --grep 'transport toggles'
+
+# Routing scenarios on desktop
+npm run test:e2e -- --project=root-desktop --grep 'route modes|route errors'
+
+# Service-worker update scenarios on both deployment projects
+npm run test:e2e -- tests/e2e/updates.spec.mjs
+
+# All mobile cases
+npm run test:e2e -- --project=pages-mobile
+
+# List the selected cases without executing them
+npm run test:e2e -- --project=pages-mobile --grep 'transport toggles' --list
+
+# Immediately after a failed run, rerun its failed cases
+npm run test:e2e -- --last-failed
+
+# The component Make target also accepts filters
+make e2e E2E_ARGS='--project=pages-mobile --grep="transport toggles"'
+```
+
+`--grep` is a regular expression over test titles; combine it with a file and `--project` to narrow the selection. Both
+projects run when `--project` is omitted. Standalone `npm test` and `npm run test:e2e` build the artifact first. For an
+already built artifact, `npm run test:built` and `npm run test:e2e:built -- <filters>` reuse it; the latter also lists
+selected tests without a rebuild when passed `--list`. These variants require a successful current build. Browser
+traces/screenshots and the last-run record are in apps/web/test-results (not the repository root).
+
+Root npm aliases forward to these workspace scripts, including browser arguments. Root Make aliases forward to the web
+Makefile; `make test-e2e` builds first and `make test-e2e-built` reuses the artifact from `make check` in CI. Root
+package.json and package-lock.json remain the shared workspace manifest and lockfile. Build, lint, offline checks,
+browser setup, browser journeys, and static preview are owned here; repository checks aggregate component commands.
+Cross-component contract/artifact tests remain in tests/integration. See the
+[ownership migration plan](../../docs/plans/web-command-ownership.md).
+
+Keep the full final acceptance run for web/UI, offline, and release behavior changes; targeted results do not establish
+that the full suite passed. Documentation-only changes do not need browser tests.
+
+The configured worker count is one. Changing `--workers` or enabling `--fully-parallel` is a performance experiment:
+benchmark elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to
+shorten the development feedback loop.
+
 ## 14. Debugging with browser DevTools
 
 The app exposes window.kompasDebug for inspection:
