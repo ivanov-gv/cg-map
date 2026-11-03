@@ -9,15 +9,15 @@ Read the matching guideline before planning, editing, or reviewing code in that 
 automatically by path, and Codex receives them from component AGENTS.md files. If one is missing from your context, read
 the file.
 
-| Path                   | What                                                          | Guidelines                                                                         |
-| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| apps/web               | Browser app: MapLibre UI, offline, build                      | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md)         |
-| data                   | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md) |
-| services/backend       | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                       |
-| services/transit-relay | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                       |
-| packages/contracts     | Shared producer/consumer formats                              | Producer and consumer review together                                              |
-| platform, .github      | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md) |
-| tests                  | Cross-component integration and browser acceptance            | [javascript](docs/engineering/javascript.md)                                       |
+| Path                   | What                                                          | Guidelines                                                                                                       |
+| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| apps/web               | Browser app: MapLibre UI, offline, build                      | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md), [python](docs/engineering/python.md) |
+| data                   | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| services/backend       | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                                                     |
+| services/transit-relay | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                                                     |
+| packages/contracts     | Shared producer/consumer formats                              | Producer and consumer review together                                                                            |
+| platform, .github      | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| tests                  | Cross-component contract and artifact integration             | [javascript](docs/engineering/javascript.md)                                                                     |
 
 How the harness loads rules and how to add a language: [docs/engineering/README.md](docs/engineering/README.md).
 
@@ -28,7 +28,6 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
 - `make check`: lint, source/release validation, docs/boundaries, agent-rule drift, web build, Node/Python tests,
   offline manifests.
-- `make test-e2e`: browser acceptance; install Chromium with `npx playwright install chromium` first.
 - `make check-go`: vet/test/build the independent services/backend Go module.
 - `make dev`: build web and run the Go backend (server mode) on a per-worktree port; needs Go.
   `DEV_FLAGS=-live-transport=false` skips upstream calls.
@@ -65,8 +64,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 2. Read component instructions and language guidelines. For work spanning sessions, write a plan from
    [the template](docs/plans/TEMPLATE.md) first.
 3. Make a bounded change. Keep runtime modules independent of pipeline/server implementation.
-4. Run `make verify PKG=<component>` while iterating, then `make check`. Run `make test-e2e` for web/offline/release
-   changes and `make check-go` for backend changes.
+4. Follow the owning component's AGENTS.md for focused tests during iteration and required final verification.
 5. Update docs in the same change as behavior or architecture changes.
 6. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.

@@ -33,6 +33,6 @@ it.
 ## Tests
 
 - Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
-  tests in tests/integration; browser journeys in tests/e2e (Playwright).
+  tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - Verify: `make verify PKG=<component>`, then `make check`.

@@ -9,8 +9,8 @@ export async function startUpdateServer(scope) {
   const types={'sw.js':'text/javascript','offline-manifest.js':'text/javascript','app-updates.js':'text/javascript','version.txt':'text/plain'};
   res.setHeader('Content-Type',types[name]??'text/html');
   res.setHeader('Cache-Control',['sw.js','offline-manifest.js'].includes(name)?'no-cache':'public, max-age=3600');
-  if(name==='sw.js')return res.end(fs.readFileSync('dist/web/sw.js'));
-  if(name==='app-updates.js')return res.end(fs.readFileSync('dist/web/app-updates.js'));
+  if(name==='sw.js')return res.end(fs.readFileSync(new URL('../../../../dist/web/sw.js', import.meta.url)));
+  if(name==='app-updates.js')return res.end(fs.readFileSync(new URL('../../../../dist/web/app-updates.js', import.meta.url)));
   if(name==='offline-manifest.js')return res.end('self.KOMPAS_OFFLINE='+JSON.stringify({shellCache:'kompas-shell-update-test-'+version,shell:['index.html','app-updates.js','version.txt']})+';');
   if(name==='version.txt'){
    if(fail){failures++;res.statusCode=503;return res.end('Incomplete release');}

@@ -22,7 +22,7 @@
       "id": "python",
       "source": "docs/engineering/python.md",
       "paths": ["**/*.py", "**/requirements*.txt"],
-      "components": ["data", "platform"]
+      "components": ["apps/web", "data", "platform"]
     },
     {
       "id": "go",

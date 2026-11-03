@@ -5,13 +5,13 @@ paths:
   - "**/requirements*.txt"
 ---
 
-<!-- GENERATED from docs/engineering/python.md sha256:851c3ec1cfa9
+<!-- GENERATED from docs/engineering/python.md sha256:d8f6352ddf72
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # Python conventions
 
-Applies to `*.py`: data pipeline tools (data/tools), platform servers and packaging (platform/tools), and their tests.
-Python 3.12.
+Applies to `*.py`: data pipeline tools (data/tools), platform servers and packaging (platform/tools), the web
+browser-test server (apps/web/tests/e2e), and their tests. Python 3.12.
 
 ## Python code
 
@@ -38,6 +38,6 @@ Python 3.12.
 ## Tests and checks
 
 - Tests use `unittest` and live in `<component>/tests/test_*.py`.
-- Enforced: `python3 -m py_compile` on platform/tools and data/tools, and the platform unittest suite, both in
-  `make check`.
+- Enforced: `python3 -m py_compile` on platform/tools, data/tools, and apps/web/tests/e2e, plus the platform unittest
+  suite, in `make check`.
 - Verify: `make verify PKG=<component>`, then `make check`. Geometry changes also need `make build-data`.

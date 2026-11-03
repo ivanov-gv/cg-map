@@ -20,7 +20,9 @@ CODEOWNER; substitute real team handles as people join.
 - Platform runs domain-owned build/check commands and manages deployment permissions. It does not own product semantics.
 - Shared contract changes need affected producers and consumers reviewed together. Document breaking changes and
   migration paths.
-- Cross-component tests live in tests/. Local tests and instructions live with their component.
+- Cross-component contract and artifact integration tests live in tests/. Browser acceptance of the built web artifact
+  lives in apps/web/tests/e2e, including offline and mocked server-mode journeys. Local tests and instructions live with
+  their component.
 
 ## When to split teams further
 

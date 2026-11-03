@@ -14,6 +14,9 @@ On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one wi
 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright install chromium` (see
 [technical debt](technical-debt.md)).
 
+Frontend iteration commands and measured check durations live with the
+[web application](../apps/web/README.md#focused-browser-checks).
+
 ## Test ownership
 
 | Location                    | Scope                                                                                          |
@@ -23,7 +26,7 @@ On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one wi
 | platform/tests              | Actual Python HTTP/range behavior, deployment compatibility                                    |
 | services/backend/cmd/server | Go host directory/range behavior                                                               |
 | tests/integration           | Real archive/MVT decoding, style/glyph coverage, imagery, shared-category agreement, transport |
-| tests/e2e                   | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload       |
+| apps/web/tests/e2e          | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload       |
 
 make check builds dist/web and runs Node/Python tests, JavaScript lint, all-source Markdown structure/format checks,
 data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. The backend workflow

@@ -23,8 +23,8 @@ make check-go
 ```
 
 make check validates lint, data sources/release, docs, boundaries, the assembled web artifact, Node/Python tests, and
-offline manifests. make test-e2e builds the app and tests the actual artifact at / and /cg-map/. Browser artifacts are
-ignored locally and uploaded on CI failure.
+offline manifests. make test-e2e builds the app and tests the actual artifact at / and /cg-map/. Browser artifacts in
+apps/web/test-results are ignored locally and uploaded on CI failure.
 
 ## Markdown checks and formatting
 

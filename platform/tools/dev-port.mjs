@@ -15,8 +15,9 @@ try {
   linked = !gitDir.endsWith('/.git'); // linked worktrees use <common>/.git/worktrees/<name>
 } catch { /* not a git checkout: use defaults */ }
 
-if (!linked) console.log(e2e ? 8095 : 8080);
+// Consumers parse stdout, including Playwright workers that enable FORCE_COLOR.
+if (!linked) process.stdout.write(`${e2e ? 8095 : 8080}\n`);
 else {
   const offset = parseInt(crypto.createHash('sha256').update(top).digest('hex').slice(0, 8), 16) % 400;
-  console.log((e2e ? 9200 : 8200) + offset * 2);
+  process.stdout.write(`${(e2e ? 9200 : 8200) + offset * 2}\n`);
 }

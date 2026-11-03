@@ -1,20 +1,37 @@
 ROOT := ../..
+PORT ?= $(shell node $(ROOT)/platform/tools/dev-port.mjs)
+E2E_ARGS ?=
 
-.PHONY: verify lint repo build build-web test offline-check
+.PHONY: verify lint repo build build-web test test-built offline-check python-check e2e e2e-built dev-mock
 
-verify: lint repo build test offline-check
+verify: lint repo build test-built offline-check python-check
 
 lint:
-	cd $(ROOT) && npx --no-install eslint apps/web/src apps/web/tools apps/web/tests
+	npm run lint
 
 repo:
 	cd $(ROOT) && node platform/tools/check-repo.mjs
 
 build build-web:
-	cd $(ROOT) && npm run build:web
+	npm run build
 
 test:
-	cd $(ROOT) && node --test apps/web/tests/*.test.mjs
+	npm test
+
+test-built:
+	npm run test:built
 
 offline-check:
-	cd $(ROOT) && node apps/web/tools/finalize.mjs --check
+	npm run check:offline
+
+python-check:
+	npm run check:python
+
+e2e:
+	npm run test:e2e -- $(E2E_ARGS)
+
+e2e-built:
+	npm run test:e2e:built -- $(E2E_ARGS)
+
+dev-mock:
+	PORT=$(PORT) npm run dev:mock

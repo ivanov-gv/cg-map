@@ -1,6 +1,6 @@
-.PHONY: setup hooks dev dev-mock check verify test test-e2e build build-web build-data pages check-go agent-rules worktree
+.PHONY: setup hooks dev dev-mock check verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
 
-# Stable per-worktree dev port; override with PORT=... (E2E_PORT is owned by tests/).
+# Stable per-worktree dev port; override with PORT=... (E2E_PORT is owned by apps/web).
 PORT ?= $(shell node platform/tools/dev-port.mjs)
 
 setup: hooks
@@ -18,8 +18,8 @@ dev: build-web
 	.build/kompas -dir dist/web -listen 127.0.0.1:$(PORT) -shutdown-delay 0 $(DEV_FLAGS)
 
 # Mock-mode preview, as on GitHub Pages: static dist/web only, no backend.
-dev-mock: build-web
-	python3 platform/tools/serve.py --port $(PORT)
+dev-mock:
+	$(MAKE) --no-print-directory -C apps/web dev-mock PORT=$(PORT)
 
 check:
 	npm run check
@@ -33,7 +33,10 @@ test: build-web
 	python3 -m unittest discover -s platform/tests -p 'test_*.py'
 
 test-e2e:
-	$(MAKE) --no-print-directory -C tests e2e
+	$(MAKE) --no-print-directory -C apps/web e2e
+
+test-e2e-built:
+	$(MAKE) --no-print-directory -C apps/web e2e-built
 
 build: build-web
 

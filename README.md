@@ -13,7 +13,7 @@ place details, a satellite sample, and explicit offline download.
 | [data](data/README.md)                                     | Source datasets, imagery, validation, tile pipeline, reviewed artifacts |
 | [packages/contracts](packages/contracts/README.md)         | Published data formats shared by producers/consumers                    |
 | [platform](platform/README.md)                             | Development hosting, release infrastructure, repository checks          |
-| [tests](tests/README.md)                                   | Cross-component integration and browser acceptance                      |
+| [tests](tests/README.md)                                   | Cross-component contract and artifact integration                       |
 | [docs](docs/README.md)                                     | Architecture, ownership, decisions, and runbooks                        |
 
 See [team boundaries](docs/ownership.md) and [current architecture](ARCHITECTURE.md). Future backend/editorial
