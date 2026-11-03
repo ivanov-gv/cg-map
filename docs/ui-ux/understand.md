@@ -184,10 +184,10 @@ Opening details MUST NOT select From/To, alter existing endpoints, calculate/ret
 start navigation. Entrances explain recorded locations without directions. Nearby-address distances are descriptive
 measurements, not itineraries. **Understanding is complete without creating a trip.**
 
-A later explicit planning action is a separate stage transition. Current From/To buttons are documented in
-[point selection](../point-selection.md); this target does not require route controls in Understand or change runtime
-behavior by itself. Existing Plan capabilities must not be removed incidentally when improving selection; changes to
-stage transitions need separate acceptance criteria.
+A later explicit planning action is a separate stage transition defined in [Plan](plan.md). Current From/To buttons are
+documented in [point selection](../point-selection.md); this target does not require route controls in Understand or
+change runtime behavior by itself. Existing Plan capabilities must not be removed incidentally when improving selection;
+changes to stage transitions must satisfy the [Plan acceptance criteria](plan.md#acceptance-and-user-success-evidence).
 
 Keep enough map visible to relate the subject to its surroundings. Move the camera only as needed to expose selected
 geometry; do not make a point click jump to its nearest address. Distinguish the subject from related buildings,

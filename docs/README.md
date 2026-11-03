@@ -7,8 +7,11 @@ See [team ownership](ownership.md). Start with [current architecture](../ARCHITE
 | ----------------------------------------------------- | -------------------------------------------------------------------------- |
 | UI/UX, user stories and success                       | [Experience documentation](ui-ux/README.md)                                |
 | User intents, maintained stories and success criteria | [Product baseline](ui-ux/user-stories.md)                                  |
+| Laconic controls, dock behavior, and design brief     | [Interface target](ui-ux/interface.md) (approved; implementation pending)  |
 | Discover: default map requirements and research       | [Discover](ui-ux/discover.md) (target; implementation gaps recorded)       |
 | Understand: one-selection object details              | [Understand](ui-ux/understand.md) (target; implementation gaps recorded)   |
+| Plan: context views, routes and readiness for Travel  | [Plan](ui-ux/plan.md) (target; implementation gaps recorded)               |
+| Travel: live position, route progress and completion  | [Travel](ui-ux/travel.md) (target; implementation gaps recorded)           |
 | Setup and checks                                      | [Development](runbooks/development.md)                                     |
 | Language rules, agent harness, parallel sessions      | [Engineering guidelines](engineering/README.md)                            |
 | UI implementation                                     | [Frontend guide](../apps/web/README.md)                                    |
