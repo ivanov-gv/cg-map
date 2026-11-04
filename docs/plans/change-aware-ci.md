@@ -269,7 +269,8 @@ Changes to `apps/web/tests/*.test.mjs` run no browser area.
 
 ## Steps
 
-Make each step its own PR. Create a worktree first: `make worktree NAME=<branch>`.
+Make each step its own PR. This plan predates the [one-PR rule](AGENTS.md); the PR for its last step deletes it. Create
+a worktree first: `make worktree NAME=<branch>`.
 
 ### 1. Speed up the current browser jobs, with no planner
 
@@ -409,6 +410,8 @@ Update these docs in the same change as the behavior they describe:
 - `apps/web/AGENTS.md`, which describes the CI browser jobs
 - `docs/engineering/README.md`, on enforcement
 - `platform/README.md` and `AGENTS.md`, for new commands and the auto-merge command
+- `.github/TESTING.md` and `platform/tools/ci-plan.mjs`, which point at this plan: move the pipeline structure and
+  reasoning they rely on to `docs/verification/testing.md` before deleting it
 
 ## Risks
 
