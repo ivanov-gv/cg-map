@@ -97,7 +97,7 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  const website=safeWebsite(p.website);if(website)link('Website ↗',website);
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
  preview=null;updatePlaceLayers();$('search').blur();
- $('place-card').hidden=false;$('place-card').scrollTop=0;ui.placeCardOpened();syncPanels();markCurrentResult();
+ $('place-card').hidden=false;ui.placeCardOpened();$('place-card').scrollTop=0;syncPanels();markCurrentResult();
  objectSelection.selectPlace(f);$('close-place').focus({preventScroll:true});
  pendingReveal={zoom:15};flushPendingReveal();
 }

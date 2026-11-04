@@ -772,17 +772,18 @@ test('phone place card peeks under results and swipes through full and closed', 
   const card = page.locator('#place-card');
   const cardSettled = async state => {
     await expect(card).toHaveAttribute('data-state', state);
-    let previous = null;
-    await expect.poll(async () => {
-      const height = (await card.boundingBox()).height;
-      const same = height === previous;
-      previous = height;
-      return same;
-    }).toBe(true);
+    await expect.poll(() => card.evaluate(element => element.getAnimations().length)).toBe(0);
   };
   await page.locator('#search').click();
   await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
-  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  // Read in the click's own task: the card must open as a peek, not shrink down from full height.
+  const opening = await page.locator('.result', {hasText: 'Nearby place 0'}).evaluate(row => {
+    row.click();
+    const element = document.getElementById('place-card');
+    return {height: element.getBoundingClientRect().height, animations: element.getAnimations().length};
+  });
+  expect(opening.animations).toBe(0);
+  expect(opening.height).toBeLessThan(100);
 
   await cardSettled('peek');
   await expect(page.locator('#search-bubble')).toBeVisible();
