@@ -245,7 +245,8 @@ Confirmed in step 2 from the build tools and the specs:
 
 - `services/transit-relay/**` selects no browser area. Specs stub the hosted relay's URL with `page.route`, and the
   suite never serves relay code.
-- No build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
+- Apart from root `AGENTS.md`, which `platform/tests/agents.test.mjs` reads and which therefore also selects `platform`,
+  no build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
   from the artifact, and `check-repo` reads Markdown only to check links, which `docs` covers.
 - `data/tools/pack.py` appears in `platform/tests` only as an example path, so `data/tools` does not select `platform`.
 
@@ -277,7 +278,7 @@ This is the largest gain and depends on nothing else.
 - Investigate the 5m40s Chromium install from run 41843418732. Found: the time goes to slow font package downloads from
   the Ubuntu mirror, about 141 kB/s in the slow cases. It recurred (168s in run 41861532706), and short apt timeouts do
   not help because data keeps trickling. `.github/actions/setup-browser` therefore caches the downloads, and limits the
-  install to 240s.
+  install to 360s. A 240s limit failed a job on a slow mirror in run 41867127404.
 - Keep the job timeout at 15 minutes: the slowest job measured is 8.3 minutes, including a slow install and a run while
   GitHub reported degraded service.
 - Slowest tests in run 41845205724, all in `poi-visibility` unless noted: `stability: small pans...` 58s desktop, 41s
