@@ -328,8 +328,8 @@ describe the target as implemented: every row still has work that depends on dat
 contain.
 
 The interface approved on 3 November is implemented in the web source: stable expanding controls, icon-only location,
-and mobile search with fixed categories over a scrolling list. An explicit leading search result uses the existing place
-feature with protected icon visibility. Existing key/banner behavior below is historical baseline evidence; see
+and mobile search with fixed categories over a scrolling list. The nearest search result uses the existing place feature
+with protected icon visibility. Existing key/banner behavior below is historical baseline evidence; see
 [the current interface](../features/interface.md) for control behavior. Data coverage and default POI importance gaps
 remain.
 

@@ -11,6 +11,25 @@ async function closeMenu(page) {
   if (await page.locator('#menu-toggle').getAttribute('aria-expanded') === 'true') await page.locator('#menu-toggle').click();
   else if (await page.locator('body').getAttribute('data-view') === 'search') await page.keyboard.press('Escape');
 }
+// Phones have no visible cross: activate the button the way a screen reader does.
+async function closeCard(page) {
+  const phone = page.viewportSize().width <= 720;
+  if (phone) await page.locator('#close-place').dispatchEvent('click');
+  else await page.locator('#close-place').click();
+}
+const camera = page => page.evaluate(() => {
+  const map = window.kompasDebug.map;
+  return {center: map.getCenter().toArray(), zoom: map.getZoom()};
+});
+async function settled(page) {
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.isMoving())).toBe(false);
+}
+async function pointOnMap(page, coordinates) {
+  return page.evaluate(lngLat => {
+    const point = window.kompasDebug.map.project(lngLat);
+    return {x: point.x, y: point.y};
+  }, coordinates);
+}
 async function ready(page) {
   await page.goto('./');
   await expect(page).not.toHaveURL(/\/web\//);
@@ -18,7 +37,7 @@ async function ready(page) {
   await expect(page.locator('#loading')).toBeHidden();
 }
 
-test('map, fixture search, selection, and satellite preserve the map instance', async ({page}) => {
+test('map, fixture search, selection, and satellite preserve the map instance', async ({page, isMobile}) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
@@ -26,10 +45,11 @@ test('map, fixture search, selection, and satellite preserve the map instance', 
   await openMenu(page);
   await page.locator('.result').first().click();
   await expect(page.locator('#place-card')).toBeVisible();
-  await page.locator('#close-place').click();
+  await closeCard(page);
   await expect(page.locator('#place-card')).toBeHidden();
-  await expect(page.locator('#search')).toBeFocused();
-  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  // Choosing a result leaves the phone dock for compact search; the desktop dock stays. Either way the row is kept.
+  await expect(page.locator('.result').first()).toBeFocused();
+  await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'dock');
   await page.locator('#search').fill(fixture.features[0].properties.name);
   await expect.poll(() => page.locator('.result').count()).toBeGreaterThan(0);
   await page.locator('#search').fill('');
@@ -291,7 +311,7 @@ test('building selection provides feature details and point actions', async ({pa
     return fill.length>0&&outline.length>0&&[...fill,...outline].every(f=>f.id===id);
   },picked.id)).toBe(true);
   expect(await page.evaluate(()=>!!window.kompasDebug.map.getLayer('selected-halo'))).toBe(false);
-  await page.locator('#close-place').click();
+  await closeCard(page);
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill','selected-buildings-outline']}).length)).toBe(0);
 });
 
@@ -351,7 +371,7 @@ test('single tap opens point actions after a delay; double tap zooms without ope
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('#place-card')).toBeVisible();
   await expect(page.locator('#point-from')).toBeVisible();
-  await page.locator('#close-place').click();
+  await closeCard(page);
   const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
   if(isMobile){await page.touchscreen.tap(p.x,p.y);await page.touchscreen.tap(p.x,p.y);}else await page.mouse.dblclick(p.x,p.y);
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
@@ -414,7 +434,7 @@ test('same building keeps its address across zooms and with number labels hidden
     await expect(page.locator('#place-category')).toHaveText('Building');
     await expect(page.locator('#place-name')).toHaveText('Building 105,107');
     await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
-    await page.locator('#close-place').click();
+    await closeCard(page);
   }
 });
 
@@ -454,13 +474,13 @@ test('point-only places highlight their existing markers and restore them on clo
     await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.getFeatureState({source:'places',id}).selected,index+1)).toBe(true);
     expect(await page.evaluate(()=>window.kompasDebug.map.queryRenderedFeatures({layers:['selected-buildings-fill']}).length)).toBe(0);
     expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
-    await page.locator('#close-place').click();
+    await closeCard(page);
     expect(await page.evaluate(id=>window.kompasDebug.map.getFeatureState({source:'places',id}).selected,index+1)).toBe(false);
   }
   await tapMapCenter(page,[20.8,43.7]);
   await expect(page.locator('#place-category')).toHaveText('Map point');
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(1);
-  await page.locator('#close-place').click();
+  await closeCard(page);
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
 });
 
@@ -584,7 +604,7 @@ test('dock expands around a stationary header and keeps layer/download options a
   expect(await page.locator('#search').boundingBox()).toEqual(search);
 });
 
-test('search keeps phone categories fixed above scrolling results and the match visible on the map', async ({page, isMobile}, testInfo) => {
+test('search keeps phone categories fixed above scrolling results and shows a chosen result beside them', async ({page, isMobile}, testInfo) => {
   const places = {type: 'FeatureCollection', features: Array.from({length: 30}, (_, i) => ({
     type: 'Feature', geometry: {type: 'Point', coordinates: [19.26 + i * .00002, 42.44]},
     properties: {id: 'search/' + i, name: 'Mobile result ' + String(i).padStart(2, '0'), category: 'shops', kind: 'shop'}
@@ -607,26 +627,11 @@ test('search keeps phone categories fixed above scrolling results and the match 
     expect(list.height).toBeGreaterThan(250);
   }
   expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
-  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.isMoving())).toBe(false);
+  await settled(page);
   const categories = await page.locator('#categories').boundingBox();
   await page.locator('#results').evaluate(element => { element.scrollTop = 250; });
   await expect.poll(() => page.locator('#results').evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   expect(await page.locator('#categories').boundingBox()).toEqual(categories);
-  const matchVisible = async () => {
-    const point = await page.evaluate(() => {
-      const map = window.kompasDebug.map;
-      const feature = map.queryRenderedFeatures({layers: ['search-place']})[0];
-      if (!feature) return null;
-      const p = map.project(feature.geometry.coordinates);
-      return {x: p.x, y: p.y};
-    });
-    if (!point) return false;
-    if (!isMobile) return point.x > 400 && point.x < 1208;
-    const bubble = await page.locator('#search-bubble').boundingBox();
-    const height = await page.evaluate(() => window.visualViewport.height);
-    return point.y > bubble.y + bubble.height && point.y < height - 20;
-  };
-  await expect.poll(matchVisible).toBe(true);
   await page.screenshot({path: testInfo.outputPath('search.png')});
   if (isMobile) {
     await page.evaluate(() => {
@@ -638,13 +643,11 @@ test('search keeps phone categories fixed above scrolling results and the match 
     await expect.poll(() => page.locator('#search-bubble').evaluate(element => element.getBoundingClientRect().height)).toBeLessThanOrEqual(210);
     const bubble = await page.locator('#search-bubble').boundingBox();
     expect(bubble.y + bubble.height).toBe(210);
-    await expect.poll(matchVisible).toBe(true);
     expect(await page.locator('#categories').boundingBox()).toEqual(categories);
     await page.screenshot({path: testInfo.outputPath('search-keyboard.png')});
   }
   await page.locator('#search').fill('Mobile result 07');
   await expect(page.locator('.result')).toHaveCount(1);
-  await expect.poll(matchVisible).toBe(true);
   await openMenu(page);
   await expect(page.locator('#dock-content')).toBeVisible();
   await expect(page.locator('#search-bubble')).toBeHidden();
@@ -653,10 +656,453 @@ test('search keeps phone categories fixed above scrolling results and the match 
   await page.locator('#search').click();
   await page.locator('.result').click();
   await expect(page.locator('#place-name')).toHaveText('Mobile result 07');
-  await expect(page.locator('#search-bubble')).toBeHidden();
+  await expect(page.locator('.result')).toBeVisible();
+  // Choosing a result dismisses the keyboard simulated above; the place is judged in the layout that leaves.
+  if (isMobile) await simulateKeyboard(page, 840);
   await expect.poll(async () => {
-    const point = await page.evaluate(coordinates => {const p=window.kompasDebug.map.project(coordinates);return [p.x,p.y];}, places.features[7].geometry.coordinates);
+    const point = await pointOnMap(page, places.features[7].geometry.coordinates);
     const card = await page.locator('#place-card').boundingBox();
-    return isMobile ? point[1] < card.y - 8 && point[1] > 82 : point[0] > card.x + card.width;
+    if (!isMobile) return point.x > card.x + card.width;
+    const bubble = await page.locator('#search-bubble').boundingBox();
+    return point.y > bubble.y + bubble.height && point.y < card.y - 8;
   }).toBe(true);
+});
+
+const nearbyPlaces = {type: 'FeatureCollection', features: Array.from({length: 6}, (_, i) => ({
+  type: 'Feature', geometry: {type: 'Point', coordinates: [19.26 + i * .004, 42.44]},
+  properties: {id: 'nearby/' + i, name: 'Nearby place ' + i, category: i % 2 ? 'food' : 'shops', kind: 'shop'}
+}))};
+
+test('opening search, typing, and choosing a category leave the map still', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.3, 42.5], zoom: 16}));
+  const before = await camera(page);
+  await page.locator('#search').click();
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await expect(page.locator('.result')).toHaveCount(3);
+  await page.locator('#search').fill('Nearby place 3');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await page.waitForTimeout(600);
+  expect(await camera(page)).toEqual(before);
+});
+
+test('choosing a result moves the map only when the result is outside the focus zone', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const target = nearbyPlaces.features[0].geometry.coordinates;
+  await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + .02, lngLat[1] + .01], zoom: 16}), target);
+  await page.locator('#search').click();
+  const row = page.locator('.result', {hasText: 'Nearby place 0'});
+  const outside = await camera(page);
+  await row.click();
+  await expect.poll(async () => (await camera(page)).center).not.toEqual(outside.center);
+  await settled(page);
+  const revealed = await camera(page);
+  expect(revealed.zoom).toBe(16);
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+  await row.click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(await camera(page)).toEqual(revealed);
+});
+
+test('a chosen result still zooms in to street level from far out', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 11}));
+  await page.locator('#search').click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect.poll(async () => (await camera(page)).zoom).toBe(15);
+});
+
+test('search bar focus has no ring, and categories and the place card have no scrollbars', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  const barBorder = () => page.locator('.search-bar').evaluate(element => getComputedStyle(element).borderColor);
+  const resting = await barBorder();
+  await page.locator('#search').focus();
+  expect(await page.locator('#search').evaluate(element => getComputedStyle(element).outlineStyle)).toBe('none');
+  expect(await barBorder()).not.toBe(resting);
+  await page.locator('.result').first().click();
+  for (const selector of ['#categories', '#place-card'])
+    expect(await page.locator(selector).evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe('none');
+});
+
+test('desktop keeps the dock and results open beside the place card', async ({page, isMobile}, testInfo) => {
+  test.skip(isMobile, 'desktop layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await page.locator('#search').click();
+  const row = page.locator('.result', {hasText: 'Nearby place 0'});
+  await row.click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  await expect(row).toHaveAttribute('aria-current', 'true');
+  await settled(page);
+  const dock = await page.locator('.sidebar').boundingBox();
+  const card = await page.locator('#place-card').boundingBox();
+  expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
+  const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
+  expect(place.x).toBeGreaterThan(card.x + card.width);
+  await page.screenshot({path: testInfo.outputPath('desktop-results-card.png')});
+  await page.locator('#close-place').click();
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  await expect(row).toBeFocused();
+});
+
+test('phone place card peeks under results and swipes through full and closed', async ({page, isMobile}, testInfo) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  const touch = await page.context().newCDPSession(page);
+  const swipe = async (deltaY, selector = '#place-card') => {
+    const start = await page.locator(selector).boundingBox();
+    const x = start.x + start.width / 2, y = start.y + 30;
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y}]});
+    for (let step = 1; step <= 5; step++)
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y: y + deltaY * step / 5}]});
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+  };
+  const card = page.locator('#place-card');
+  const cardSettled = async state => {
+    await expect(card).toHaveAttribute('data-state', state);
+    let previous = null;
+    await expect.poll(async () => {
+      const height = (await card.boundingBox()).height;
+      const same = height === previous;
+      previous = height;
+      return same;
+    }).toBe(true);
+  };
+  await page.locator('#search').click();
+  await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+
+  await cardSettled('peek');
+  await expect(page.locator('#search-bubble')).toBeVisible();
+  await expect(page.locator('#results-strip')).toBeHidden();
+  const peek = await card.boundingBox();
+  expect(peek.height).toBeLessThan(100);
+  await expect(page.locator('#place-body')).toHaveJSProperty('inert', true);
+  const clippedBody = await page.locator('#place-body').boundingBox();
+  // Allows the 1px border and sub-pixel text layout.
+  expect(clippedBody.y).toBeGreaterThanOrEqual(peek.y + peek.height - 2);
+  const closeBox = await page.locator('#close-place').boundingBox();
+  expect(closeBox.width).toBeLessThanOrEqual(1);
+  await page.screenshot({path: testInfo.outputPath('phone-peek.png')});
+
+  await swipe(-160);
+  await cardSettled('full');
+  await expect(page.locator('#search-bubble')).toBeHidden();
+  await expect(page.locator('#results-strip')).toBeVisible();
+  await expect(page.locator('#results-strip-label')).toHaveText('Shops');
+  await expect(page.locator('#point-from')).toBeVisible();
+  await settled(page);
+  const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
+  const strip = await page.locator('#results-strip').boundingBox();
+  const full = await card.boundingBox();
+  expect(place.y).toBeGreaterThan(strip.y + strip.height);
+  expect(place.y).toBeLessThan(full.y);
+  await page.screenshot({path: testInfo.outputPath('phone-full.png')});
+
+  await page.locator('#results-strip').click();
+  await cardSettled('peek');
+  await expect(page.locator('#search-bubble')).toBeVisible();
+  await page.locator('#card-handle').click();
+  await cardSettled('full');
+
+  // A short full card also swipes from its body, not only the header.
+  await swipe(120, '#place-details');
+  await cardSettled('peek');
+  await expect(page.locator('#search-bubble')).toBeVisible();
+  await swipe(60);
+  await expect(card).toBeHidden();
+  await expect(page.locator('#search-bubble')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+
+  // With no search behind it, one swipe closes the card.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await tapRenderedPlace(page, nearbyPlaces.features[0].geometry.coordinates, 1);
+  await cardSettled('full');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  // The handle has nothing to fold down to here.
+  await page.locator('#card-handle').click();
+  await expect(card).toHaveAttribute('data-state', 'full');
+  await swipe(120);
+  await expect(card).toBeHidden();
+});
+
+test('phone search stays in the dock or compact view it started from until a result is chosen', async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  const body = page.locator('body');
+  const dock = page.locator('#dock-content');
+  const bubble = page.locator('#search-bubble');
+
+  // Compact stays compact while searching.
+  await page.locator('#search').click();
+  await expect(body).toHaveAttribute('data-view', 'search');
+  await page.locator('#search').fill('Nearby');
+  await expect(body).toHaveAttribute('data-view', 'search');
+  await expect(dock).toBeHidden();
+  await page.locator('#search').fill('');
+  await page.keyboard.press('Escape');
+  await expect(body).toHaveAttribute('data-view', 'closed');
+
+  // The dock stays open through focus, typing, and categories, with results inside it.
+  await openMenu(page);
+  await page.locator('#search').click();
+  await expect(body).toHaveAttribute('data-view', 'dock');
+  await page.locator('#search').fill('Nearby');
+  await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+  await expect(body).toHaveAttribute('data-view', 'dock');
+  await expect(dock).toBeVisible();
+  await expect(bubble).toBeHidden();
+  await expect(page.locator('#dock-main .result')).toHaveCount(3);
+
+  // Only a result click moves to compact, with the same minimized card and the query and category kept.
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect(body).toHaveAttribute('data-view', 'search');
+  await expect(dock).toBeHidden();
+  await expect(bubble).toBeVisible();
+  await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
+  await expect(page.locator('#search')).toHaveValue('Nearby');
+  await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('phone dock results end above the keyboard, and its options return when it closes', async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await openMenu(page);
+  await expect(page.locator('.dock-footer')).toBeVisible();
+  await page.locator('#search').click();
+  await simulateKeyboard(page, 420);
+  await expect(page.locator('.dock-footer')).toBeHidden();
+  await expect.poll(async () => {
+    const results = await page.locator('#results').boundingBox();
+    return results.y + results.height;
+  }).toBeLessThanOrEqual(420);
+  // A panned visual viewport carries the header, so the dock content must follow it.
+  await simulateKeyboard(page, 420, 1, 40);
+  await expect.poll(async () => {
+    const header = await page.locator('.search-bar').boundingBox();
+    const categories = await page.locator('#categories').boundingBox();
+    return categories.y >= header.y + header.height;
+  }).toBe(true);
+  await simulateKeyboard(page, 840);
+  await expect(page.locator('.dock-footer')).toBeVisible();
+});
+
+const simulateKeyboard = (page, height, scale = 1, offsetTop = 0) => page.evaluate(({visibleHeight, pageScale, pageOffset}) => {
+  const viewport = new EventTarget();
+  Object.assign(viewport, {height: visibleHeight, offsetTop: pageOffset, scale: pageScale});
+  Object.defineProperty(window, 'visualViewport', {configurable: true, value: viewport});
+  window.dispatchEvent(new Event('resize'));
+}, {visibleHeight: height, pageScale: scale, pageOffset: offsetTop});
+
+test('phone keyboard: the focus zone is judged after it closes, and the map stays still while it is open', async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const place = nearbyPlaces.features[0].geometry.coordinates;
+  await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), place);
+  await page.locator('#search').click();
+  const row = page.locator('.result', {hasText: 'Nearby place 0'});
+
+  // First choice with no keyboard puts the place in the resting zone.
+  await row.click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await settled(page);
+  await page.waitForTimeout(500);
+  const resting = await camera(page);
+  await closeCard(page);
+
+  // With the keyboard up, the same place would be outside the shrunken zone; the camera must not react to that.
+  await simulateKeyboard(page, 420);
+  await row.click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await simulateKeyboard(page, 840);
+  await page.waitForTimeout(700);
+  expect(await camera(page)).toEqual(resting);
+
+  // A keyboard raised over an open card leaves the camera still, and closing it leaves the place uncovered.
+  await simulateKeyboard(page, 420);
+  await page.waitForTimeout(300);
+  expect(await camera(page)).toEqual(resting);
+  await simulateKeyboard(page, 840);
+  await page.waitForTimeout(300);
+  const point = await pointOnMap(page, place);
+  const bubble = await page.locator('#search-bubble').boundingBox();
+  const card = await page.locator('#place-card').boundingBox();
+  expect(point.y).toBeGreaterThan(bubble.y + bubble.height);
+  expect(point.y).toBeLessThan(card.y);
+});
+
+test('a small visual viewport without a phone keyboard does not hold the camera back', async ({page, isMobile}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const place = nearbyPlaces.features[0].geometry.coordinates;
+  await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + .02, lngLat[1] + .01], zoom: 16}), place);
+  await page.locator('#search').click();
+  // A pinch-zoomed phone page, or a desktop window's visual viewport: neither is a keyboard.
+  await simulateKeyboard(page, 420, isMobile ? 1.5 : 1);
+  const before = await camera(page);
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect.poll(async () => (await camera(page)).center).not.toEqual(before.center);
+});
+
+test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const lastPlace = nearbyPlaces.features[5].geometry.coordinates;
+  await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), lastPlace);
+  await page.locator('#search').click();
+  const names = page.locator('.result strong');
+  await expect(names.first()).toHaveText('Nearby place 5');
+  const order = await names.allTextContents();
+
+  // The far row is outside the zone, so the map travels to the other end of the list.
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect.poll(async () => (await camera(page)).center[0]).toBeLessThan(lastPlace[0] - .01);
+  await settled(page);
+  await page.waitForTimeout(200);
+  expect(await names.allTextContents()).toEqual(order);
+
+  await closeCard(page);
+  await page.evaluate(() => window.kompasDebug.map.panBy([1, 0], {duration: 0}));
+  await expect(names.first()).toHaveText('Nearby place 0');
+});
+
+test('search highlights the nearest match on the map without moving it', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const nearest = nearbyPlaces.features[3];
+  await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), nearest.geometry.coordinates);
+  const before = await camera(page);
+  await page.locator('#search').fill('Nearby');
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['search-place']})[0]?.properties.name)).toBe(nearest.properties.name);
+  expect(await camera(page)).toEqual(before);
+});
+
+test('choosing a route point from a result shows the route controls', async ({page, isMobile}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await page.locator('#search').click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  if (isMobile) await page.locator('#card-handle').click();
+  await page.locator('#point-from').click();
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#route-endpoints')).toBeVisible();
+  await expect(page.locator('#route-from')).toContainText('Nearby place 0');
+});
+
+test('a tapped map pin follows the focus zone like a result', async ({page, isMobile}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  const place = nearbyPlaces.features[0].geometry.coordinates;
+  const firstFeatureId = 1;
+
+  // The helper centres the map on the pin, which is inside the zone with the card open: no move.
+  await tapRenderedPlace(page, place, firstFeatureId);
+  await expect(page.locator('#place-name')).toHaveText('Nearby place 0');
+  await page.waitForTimeout(600);
+  const inZone = await camera(page);
+  expect(inZone.center[0]).toBeCloseTo(place[0], 6);
+  expect(inZone.center[1]).toBeCloseTo(place[1], 6);
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+
+  // Pushed to the right edge of the uncovered map, the same pin is outside the zone: the map moves.
+  const pushRight = isMobile ? -114 : -540;
+  await page.evaluate(x => window.kompasDebug.map.panBy([x, 0], {duration: 0}), pushRight);
+  await settled(page);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+  const before = await camera(page);
+  const pin = await pointOnMap(page, place);
+  if (isMobile) await page.touchscreen.tap(pin.x, pin.y);
+  else await page.mouse.click(pin.x, pin.y);
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect.poll(async () => (await camera(page)).center).not.toEqual(before.center);
+  await settled(page);
+  const moved = await pointOnMap(page, place);
+  expect(moved.x).toBeLessThan(pin.x);
+});
+
+test('phone category strip scrolls to the active chip and with a mouse wheel', async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await page.locator('#search').click();
+  const strip = page.locator('#categories');
+  const chip = name => strip.getByRole('button', {name, exact: true});
+  const chipInStrip = async name => {
+    const box = await chip(name).boundingBox();
+    const stripBox = await strip.boundingBox();
+    return box.x >= stripBox.x - 1 && box.x + box.width <= stripBox.x + stripBox.width + 1;
+  };
+  expect(await chipInStrip('Essentials')).toBe(false);
+  // A plain DOM click: Playwright's own click would scroll the chip into view and hide a failure.
+  await chip('Essentials').evaluate(element => element.click());
+  await expect.poll(() => chipInStrip('Essentials')).toBe(true);
+  await chip('Essentials').evaluate(element => element.click());
+  await expect(chip('Explore all')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => chipInStrip('Explore all')).toBe(true);
+
+  const scrolled = await strip.evaluate(element => {
+    const start = element.scrollLeft;
+    element.dispatchEvent(new WheelEvent('wheel', {deltaY: 60, bubbles: true, cancelable: true}));
+    return element.scrollLeft - start;
+  });
+  expect(scrolled).toBeGreaterThan(0);
+});
+
+test('one wheel gesture changes the phone card state only once', async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await page.locator('#search').click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  const card = page.locator('#place-card');
+  await expect(card).toHaveAttribute('data-state', 'peek');
+  const wheelBurst = deltaY => card.evaluate((element, delta) => {
+    for (let event = 0; event < 6; event++) element.dispatchEvent(new WheelEvent('wheel', {deltaY: delta, bubbles: true, cancelable: true}));
+  }, deltaY);
+  await wheelBurst(40);
+  await expect(card).toHaveAttribute('data-state', 'full');
+  await page.waitForTimeout(650);
+  await wheelBurst(-40);
+  await expect(card).toHaveAttribute('data-state', 'peek');
+  await page.waitForTimeout(650);
+  await wheelBurst(-40);
+  await expect(card).toBeHidden();
+});
+
+test('a narrow desktop window narrows the card and keeps the map controls reachable', async ({page, isMobile}) => {
+  test.skip(isMobile, 'desktop layout');
+  await page.setViewportSize({width: 780, height: 700});
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await page.locator('#search').click();
+  await page.locator('.result').first().click();
+  const dock = await page.locator('.sidebar').boundingBox();
+  const card = await page.locator('#place-card').boundingBox();
+  const locate = await page.locator('#position-action').boundingBox();
+  expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
+  expect(card.width).toBeLessThan(375);
+  expect(card.x + card.width).toBeLessThanOrEqual(locate.x);
 });

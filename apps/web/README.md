@@ -48,18 +48,26 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 
 The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
 viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens.
-[interface.js](src/interface.js) owns closed/dock/mobile-search states, the shared result panel, focus restoration, and
-visible-viewport geometry. It has no dependency on data producers or backend code.
+[interface.js](src/interface.js) owns closed/dock/mobile-search states, the shared result panel, phone card states and
+swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
-scroll above it. Desktop search uses that dock. Mobile search uses a bubble capped at half the visible viewport, with
-fixed categories above the independently scrolling list. A leading result uses the existing place feature in the
-`search-place` layer so collision placement cannot hide the requested icon. Camera offsets keep that result and selected
-objects outside the search bubble, keyboard area, or details card. General POI ranks are unchanged.
+scroll above it. Desktop search uses that dock. Mobile search started with the dock closed uses a bubble capped at half
+the visible viewport, with fixed categories above the independently scrolling list. The nearest result uses the existing
+place feature in the `search-place` layer so collision placement cannot hide the requested icon. Searching and choosing
+categories do not move the camera. Choosing a place moves it only when the place is outside the focus zone, the inner
+75% of the map area left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`). General POI
+ranks are unchanged.
+
+A chosen place's card opens beside the desktop dock, which stays open. On phones it opens as a header-only peek under
+the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
+closes it. Choosing a result in the phone dock switches to this compact view. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
-recovery after an explicit location request. Route controls appear after endpoint selection, independently of the dock.
-Source notes, attribution, live-layer states, and offline safety remain part of the existing features.
+recovery after an explicit location request. Route controls appear after endpoint selection; choosing From or To closes
+search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
+existing features.
 
 ## 3. What happens when the page opens
 
@@ -121,7 +129,7 @@ Suppose the user types "museum".
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
 10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result
-    buttons.
+    buttons. The camera does not move, and map moves do not reorder the list while a chosen place's card is open.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
 
@@ -151,7 +159,7 @@ One places source is rendered by several layers:
 | Layer           | Purpose                                                                                                             |
 | --------------- | ------------------------------------------------------------------------------------------------------------------- |
 | place-symbols   | Category icon and name, collision-placed below road names and house numbers, scale-gated                            |
-| search-place    | The leading explicit result, protected from icon collision and omitted from the ordinary layer to avoid duplication |
+| search-place    | The nearest explicit result, protected from icon collision and omitted from the ordinary layer to avoid duplication |
 | place-highlight | Invisible ring that becomes the selection highlight through feature state                                           |
 
 `PLACE_SCALE_FILTER` in core.js hides places at country/region scale and ordinary businesses until street scale
@@ -196,8 +204,8 @@ showPlace():
 3. Fills card text and safe links.
 4. Shows the existing card element.
 5. Selects the containing building footprint when one is known.
-6. Moves the camera to the place.
-7. Focuses the close button.
+6. Moves the camera only if the place is outside the focus zone, or zooms in if the map is below street level.
+7. Focuses the close button, which on phones is available only to screen readers.
 
 closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape
 also closes the mobile results panel.
@@ -322,9 +330,9 @@ rebuild map sources or tiles.
 MapInterface switches the shared result panel between the full dock and mobile search bubble. The category navigation
 stays outside the scrolling list. There is no count/reset row; clicking an active category returns to all categories
 without clearing the query. The bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events
-update the bubble cap and camera offset when a keyboard reduces the visible area. Selecting a result closes search and
-opens its existing details card, with the selected feature kept in the remaining map area. The burger/search header is
-never replaced or moved.
+update the bubble cap and hide the phone dock's options when a keyboard reduces the visible area; the camera stays still
+until the keyboard closes. Selecting a result keeps search open and shows its existing details card as a header-only
+peek, with the selected feature kept in the remaining map area. The burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
