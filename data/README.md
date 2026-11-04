@@ -5,7 +5,7 @@ generation, and reviewed releases.
 
 | Directory          | Purpose                                                     |
 | ------------------ | ----------------------------------------------------------- |
-| sources/           | Editable geometry, places, provenance and upstream metadata |
+| sources/           | Editable geometry, places, levels, provenance, and metadata |
 | imagery/podgorica/ | Bundled satellite sample with its own provenance            |
 | artifacts/         | Reviewed content-addressed archive and release.json         |
 | tools/             | Extraction, validation, tiling, packaging, release metadata |

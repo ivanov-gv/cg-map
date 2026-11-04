@@ -1,0 +1,14 @@
+name: Set up web tools
+description: Install the pinned Node and Python versions and the workspace dependencies.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+        package-manager-cache: false
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - run: npm ci --ignore-scripts
+      shell: bash

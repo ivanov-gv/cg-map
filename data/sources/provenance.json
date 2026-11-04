@@ -35,5 +35,10 @@
   "notes": [
     "water.geojson includes one derived ocean polygon added after the original extraction.",
     "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
-  ]
+  ],
+  "places_bytes": 480138,
+  "places_sha256": "39ddb3cdac4044e0c9a93bcc3f40977f7be5583189ab209b18720b50258ab6c2",
+  "places_facts_sha256": "62b4053d18e7d31907e288438c69d8fdcb7027f3b358dce30262977084f60562",
+  "place_visibility_policy_sha256": "58aa75c12b1902801119a9db09c144c90ab3326ceb39080a68836767722d3fcc",
+  "place_visibility_config_sha256": "ad76ecf865cbea764fd34ae7571418ad9e1a2434f2bf64e37073af8f0f3269c6"
 }

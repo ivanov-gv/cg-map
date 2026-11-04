@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fallbackLevel": 5,
+  "kinds": {
+    "supermarket": 4,
+    "mall": 4,
+    "department_store": 4,
+    "museum": 2,
+    "hospital": 2,
+    "pharmacy": 3,
+    "guest_house": 3,
+    "hostel": 3,
+    "hotel": 3,
+    "atm": 5,
+    "bank": 5,
+    "fuel": 5,
+    "post_office": 5,
+    "memorial": 5,
+    "artwork": 5,
+    "yes": 5
+  },
+  "categories": {
+    "food": 4,
+    "shops": 5,
+    "sights": 4,
+    "stay": 3,
+    "essentials": 5
+  },
+  "overrides": []
+}

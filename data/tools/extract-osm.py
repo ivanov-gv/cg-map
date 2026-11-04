@@ -1,5 +1,5 @@
 """Reproducible OSM -> lightweight demonstration layers. pip install osmium shapely"""
-import osmium, json, sys, pathlib, datetime, argparse
+import osmium, json, sys, pathlib, datetime, argparse, subprocess
 from shapely.geometry import shape, mapping, LineString, Point
 from shapely.ops import unary_union, polygonize
 BASE=pathlib.Path(__file__).resolve().parents[2]
@@ -94,3 +94,5 @@ for name,features in e.layers.items():
 meta={'generated_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source':'Geofabrik / OpenStreetMap','license':'ODbL 1.0','detail_bbox':LOCAL,'counts':{k:len(v) for k,v in e.layers.items()},'country_outline_fallback':fallback,'source_timestamp':osmium.io.Reader(args.input_pbf).header().get('osmosis_replication_timestamp'),'coverage':'Montenegro major roads and attractions; detailed buildings and directory in central Podgorica only.'}
 meta['extract_flags']={'all_details':args.all_details,'all_places':args.all_places}
 (OUT/'extract-metadata.json').write_text(json.dumps(meta,indent=2))
+# Extraction replaces places.geojson; the reviewed visibility policy lives separately and is reapplied here.
+subprocess.run(['node',str(BASE/'data/tools/apply-place-visibility.mjs')],check=True)

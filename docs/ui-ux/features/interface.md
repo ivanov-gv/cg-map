@@ -11,6 +11,10 @@ details. [Plan](../user-stories/plan.md) covers journey preparation and route re
 [Travel](../user-stories/travel.md) covers live route-following and finishing. Preserve the capabilities in
 [user stories](../user-stories/user-stories.md) while changing their presentation.
 
+[Stable POI visibility](poi-visibility.md) retains these search controls and map focus while restricting below-threshold
+display to one leading or selected result; other matching icons keep their assigned levels. This refines marker
+admission, not the dock or mobile composition.
+
 ## User outcomes served
 
 These controls exist to help people find a known place (US-02), discover nearby options (US-03), inspect and set journey
@@ -179,11 +183,11 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 | UI-A11 | On a phone, choose a result, swipe the card up and down, use the strip, and swipe it closed.                                           | Results and minimized card share the screen; the full card reduces results to the strip; swiping steps back and closes. Closing leaves results open and the camera still; other steps move it only if the place leaves the zone.                                                   |
 | UI-A12 | On desktop, choose a result and close its card.                                                                                        | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                           |
 
-Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/map.spec.mjs) checks initial chrome, unchanged
-header geometry, anchored options, fixed categories over scrolling results, query preservation, projected selection
-visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, and desktop card and
-dock coexistence. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
-keyboard, screen-reader, or phone behavior. Review physical-device usability under
+Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
+unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
+selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, and
+desktop card and dock coexistence. Keyboard geometry is simulated with a smaller visual viewport; this does not
+establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability under
 [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.

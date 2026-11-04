@@ -34,6 +34,7 @@ result lists free; avoid expensive application work during gestures.
 | [map-style.js](src/map-style.js)                    | Vector basemap sources, layers, colors and labels                                      |
 | [satellite.js](src/satellite.js)                    | The bounded raster sample and its visibility switch                                    |
 | [poi-icons.js](src/poi-icons.js)                    | Runtime-drawn place category icons for the map and its key                             |
+| [place-visibility.js](src/place-visibility.js)      | Pure level policy: markers, zoom bands, layer specs, tap hits                          |
 | [position.js](src/position.js)                      | Device location states, accuracy ring and position layers                              |
 | [offline.js](src/offline.js)                        | Archive transport, verified downloads and local file reads                             |
 | [sw.js](src/sw.js)                                  | Offline file requests, shell caches and worker lifecycle                               |
@@ -53,11 +54,10 @@ swipes, focus restoration, and visible-viewport geometry. It has no dependency o
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
 scroll above it. Desktop search uses that dock. Mobile search started with the dock closed uses a bubble capped at half
-the visible viewport, with fixed categories above the independently scrolling list. The nearest result uses the existing
-place feature in the `search-place` layer so collision placement cannot hide the requested icon. Searching and choosing
+the visible viewport, with fixed categories above the independently scrolling list. The nearest result of an explicit
+search or category uses the `search-place` layer, so it can appear below its level's zoom. Searching and choosing
 categories do not move the camera. Choosing a place moves it only when the place is outside the focus zone, the inner
-75% of the map area left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`). General POI
-ranks are unchanged.
+75% of the map area left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`).
 
 A chosen place's card opens beside the desktop dock, which stays open. On phones it opens as a header-only peek under
 the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
@@ -77,8 +77,8 @@ existing features.
 4. Module-level code creates category buttons and registers UI handlers.
 5. start() begins asynchronous initialization.
 6. It rejects file:/content: opening and checks that vendor libraries loaded.
-7. It fetches data/manifest.json and data/places.geojson.
-8. It assigns session feature IDs and builds byId, keyed by the original place ID.
+7. It fetches data/manifest.json, data/places.geojson, and data/place-visibility.json.
+8. It validates each place's level and builds byId and the marker keys from the stable place ID.
 9. It registers the service worker where supported in a secure context.
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
@@ -154,18 +154,24 @@ This distinction keeps thousands of map features out of the DOM.
 
 Sources hold geometry or imagery. Layers apply rendering rules to a source; changing a layer does not replace its data.
 
-One places source is rendered by several layers:
+[Stable POI visibility](../../docs/ui-ux/features/poi-visibility.md) decides which markers exist. The `places` source
+holds marker features built by place-visibility.js, and is only rebuilt when the filter changes:
 
-| Layer           | Purpose                                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- |
-| place-symbols   | Category icon and name, collision-placed below road names and house numbers, scale-gated                            |
-| search-place    | The nearest explicit result, protected from icon collision and omitted from the ordinary layer to avoid duplication |
-| place-highlight | Invisible ring that becomes the selection highlight through feature state                                           |
+| Layer                | Purpose                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones           |
+| place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon       |
+| search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom |
+| place-highlight      | Invisible ring that becomes the selection highlight through feature state                                   |
 
-`PLACE_SCALE_FILTER` in core.js hides places at country/region scale and ordinary businesses until street scale
-([Discover D-05](../../docs/ui-ux/user-stories/discover.md#d-05-points-of-interest-without-clutter)); a search or
-category choice lifts it. poi-icons.js draws the category icons at runtime, so no sprite file is needed. position.js
-owns device location: its state machine, accuracy ring and layers; coordinates never leave memory.
+A band is a zoom range: `4-open` starts at level 4's zoom and never ends. Layer `minzoom`/`maxzoom` are compared with
+the continuous zoom, unlike a filter's `['zoom']`, so thresholds are exact at fractional zooms and need no work during
+gestures. Closed bands such as `2-5` exist only for co-located listings of different levels, whose shared marker gains
+members at a later threshold. Marker and feature-state identity is the stable place ID, or a `shared:` key built from
+all co-located IDs. Never use array positions.
+
+poi-icons.js draws the category icons at runtime, so no sprite file is needed. position.js owns device location: its
+state machine, accuracy ring and layers; coordinates never leave memory.
 
 Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across
 tiles and zoom levels. Area selection adds no extra point marker.
@@ -190,10 +196,11 @@ CSS does not set vector-road colors. Change map-style.js for cartography and sty
 
 ## 7. Selecting and closing a place
 
-Map clicks use queryRenderedFeatures() on the place-symbols and search-place layers. Places are not clustered; one
-hidden by scale or label collision is reached through the result list.
+Map clicks use queryRenderedFeatures() on the place icon, place name, and search-place layers. Places are not clustered;
+one below its level's zoom is reached through the result list.
 
-- A place symbol click passes the place ID to showPlace().
+- A hit on one listing passes its place ID to showPlace().
+- A hit on several listings, co-located or overlapping, opens a chooser in the details card.
 - A background click closes the card.
 - A result-list button calls showPlace() directly.
 
@@ -349,7 +356,8 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 | Change result limit         | selectNearest() in core.js                        | Consider list cost/usability                       |
 | Change initial center/zoom  | Map constructor in app.js                         | Test cold startup                                  |
 | Add a card field            | showPlace() in app.js and place properties        | Use textContent and safe links                     |
-| Add/edit a place            | ../../data/sources/places.geojson                 | Review count-based tests and regenerate manifests  |
+| Add/edit a place            | ../../data/sources/places.geojson                 | Reapply levels (data runbook); review count tests  |
+| Change when a place appears | ../../data/sources/place-visibility-policy.json   | Follow the data runbook's level steps              |
 | Change building footprint   | ../../data/sources/buildings.geojson              | Rebuild vector tiles, then publish                 |
 | Expand satellite coverage   | satellite.js, original tiles, preview, provenance | Keep bounds, corners and tile inventory consistent |
 | Change offline assets       | tools/finalize.mjs                                | Regenerate both manifests                          |
@@ -427,6 +435,10 @@ Cross-component contract/artifact tests remain in tests/integration. See the
 Keep the full final acceptance run for web/UI, offline, and release behavior changes; targeted results do not establish
 that the full suite passed. Documentation-only changes do not need browser tests.
 
+Browser specs are split by area, and CI runs each area as its own job; see
+[browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
+tests/e2e/helpers.mjs.
+
 The configured worker count is one. Changing `--workers` or enabling `--fully-parallel` is a performance experiment:
 benchmark elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to
 shorten the development feedback loop.
@@ -461,6 +473,7 @@ Common symptoms:
 | Fonts/labels missing                     | Glyph URL, requested character blocks and network responses       |
 | Blank map after layout change            | Container dimensions and map.resize()                             |
 | Place exists but is absent from list     | Text/category filter or nearest-40 limit                          |
+| Place is listed but has no map icon      | Its visibilityLevel's zoom has not been reached                   |
 | Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch    |
 
 Observe the actual error before changing rendering code. A 404, stale cached script, disabled WebGL and malformed

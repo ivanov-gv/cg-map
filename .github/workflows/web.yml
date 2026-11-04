@@ -29,32 +29,75 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - run: npm ci --ignore-scripts
+      - uses: ./.github/actions/setup-web
       - run: make check
-      - run: npm run browser:install --workspace @cg-map/web -- --with-deps chromium
-      - run: make test-e2e-built
-      - name: Upload verified Pages artifact
+      - name: Share the built artifact with the browser jobs
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-artifact
+          path: dist/web
+          include-hidden-files: true
+          retention-days: 1
+      - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist/web
+  # Each area of the app has its own job and time limit. docs/verification/testing.md maps areas to the code they cover.
+  browser:
+    name: Browser tests (${{ matrix.area }})
+    needs: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - area: shell
+            specs: tests/e2e/shell.spec.mjs tests/e2e/updates.spec.mjs
+          - area: journeys
+            specs: tests/e2e/journeys.spec.mjs
+          - area: interface
+            specs: tests/e2e/interface.spec.mjs
+          - area: places
+            specs: tests/e2e/discover.spec.mjs tests/e2e/poi-visibility.spec.mjs
+    env:
+      E2E_SPECS: ${{ matrix.specs }}
+      AREA: ${{ matrix.area }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-artifact
+          path: dist/web
+      - run: npm run browser:install --workspace @cg-map/web -- --with-deps chromium
+      - run: make test-e2e-built E2E_ARGS="$E2E_SPECS"
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
-          name: browser-failure-evidence
+          name: browser-failure-evidence-${{ env.AREA }}
           path: apps/web/test-results/
           retention-days: 7
+  # One stable result for deployment and branch rules, whichever browser jobs ran.
+  browser-acceptance:
+    name: Browser acceptance
+    if: always()
+    needs: browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BROWSER_RESULT: ${{ needs.browser.result }}
+    steps:
+      - run: |
+          echo "Browser jobs: $BROWSER_RESULT" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$BROWSER_RESULT" = success
   deploy:
     name: Deploy web to GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: web
+    needs: [web, browser-acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

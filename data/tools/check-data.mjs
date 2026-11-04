@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const contract=JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/places.schema.json')));
 const categories=new Set(contract.properties.properties.properties.category.enum);
+const visibilityLevels=new Set(JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/place-visibility.json'))).levels.map(entry=>entry.level));
 
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
 function position(point, label) {
@@ -44,6 +46,7 @@ export function validateCollection(data, {places = false, label = 'GeoJSON', geo
       ids.add(p.id);
       requireValue(typeof p.name === 'string' && p.name.trim().length > 0, `${name}: missing place name`);
       requireValue(categories.has(p.category), `${name}: unknown category`);
+      requireValue(visibilityLevels.has(p.visibilityLevel), `${name}: missing or unsupported visibilityLevel`);
     }
   }
   return data.features.length;
@@ -101,6 +104,14 @@ export function validateBuildingLabels(data, buildings) {
   requireValue(count>0, 'Empty building address snapshot');
   return count;
 }
+export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance) {
+  const places = JSON.parse(placeBytes);
+  const count = validateCollection(places, {places: true, label: 'places'});
+  requireValue(count === provenance.places_count, 'Place count differs from reviewed provenance');
+  requireValue(serializePlaces(applyVisibility(places, JSON.parse(policyBytes), JSON.parse(configBytes))) === placeBytes, 'Place visibility levels differ from the reviewed policy. Run data/tools/apply-place-visibility.mjs.');
+  for (const [key, value] of Object.entries(placesProvenance(placeBytes, places, policyBytes, configBytes))) requireValue(provenance[key] === value, `Place provenance mismatch: ${key}. Review the change and update data/sources/provenance.json.`);
+  return count;
+}
 export function checkData(root = rootDirectory) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
@@ -130,8 +141,7 @@ export function checkData(root = rootDirectory) {
       `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
   }
   requireValue(provenance.places_file === 'data/sources/places.geojson', 'Unexpected places_file');
-  const count = validateCollection(JSON.parse(fs.readFileSync(path.join(root, provenance.places_file))), {places: true, label: 'places'});
-  requireValue(count === provenance.places_count, 'Place count differs from reviewed provenance');
+  const count = checkPlaceMetadata(fs.readFileSync(path.join(root, provenance.places_file), 'utf8'), fs.readFileSync(path.join(root, 'data/sources/place-visibility-policy.json'), 'utf8'), fs.readFileSync(path.join(root, 'packages/contracts/place-visibility.json'), 'utf8'), provenance);
   const release=JSON.parse(fs.readFileSync(path.join(root,'data/artifacts/release.json')));
   requireValue(/^montenegro-[a-f0-9]{16}\.pmtiles$/.test(release.archive.file), 'Unsafe archive filename');
   const archive=fs.readFileSync(path.join(root,'data/artifacts',release.archive.file));

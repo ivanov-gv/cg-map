@@ -1,4 +1,4 @@
-import {categories,colors,matches,selectNearest,safeWebsite,collection,DEFAULT_CENTER,DISCOVER_ZOOM,PLACE_SCALE_FILTER,POSITION_APPROXIMATE_M,formatAge} from './core.js';
+import {categories,colors,matches,selectNearest,safeWebsite,collection,DEFAULT_CENTER,DISCOVER_ZOOM,POSITION_APPROXIMATE_M,formatAge} from './core.js';
 import {mapStyle,installBuildingNumberScale} from './map-style.js';
 import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
 import {ArchiveSource,downloadLabel} from './offline.js';
@@ -9,7 +9,8 @@ import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
 import {resolveDataMode,dataEndpoints,basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
-import {installPlaceIcons,placeIconId} from './poi-icons.js';
+import {installPlaceIcons} from './poi-icons.js';
+import {parseVisibilityConfig,normalizePlaces,markerKeys,placeBands,buildPlaceMarkers,requestedPlaceMarker,placeLayers,listingsAtHits} from './place-visibility.js';
 import {PositionTracker,positionFeatures,installPositionLayers} from './position.js';
 import {MapInterface,isInFocusZone} from './interface.js';
 const $=id=>document.getElementById(id);
@@ -18,7 +19,8 @@ let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection,
 const endpoints={from:null,to:null};
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null,buildingAddresses=new Map();
 let placesError=null,position={state:'idle',fix:null,age:null},explored=false,ownMove=false,centeredOnFix=false;
-let ui,preview=null,locationRequested=false,pendingReveal=null;
+let ui,preview=null,locationRequested=false,pendingReveal=null,choosing=false;
+let visibility,keysById=new Map(),placeHitLayers=['search-place'],requestedKey=null;
 const MAP_BOUNDS=[[17.8,41.3],[21,44.1]];
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 // config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
@@ -58,24 +60,35 @@ function revealCoordinates(coordinates,{zoom=15,duration=450}={}){
 }
 // The camera stays still while the keyboard is up; a pending reveal waits for the layout it leaves behind.
 function flushPendingReveal(){
- if(!pendingReveal||!selectedPoint||ui.keyboardOpen())return;
+ const coordinates=pendingReveal?.coordinates??selectedPoint?.coordinates;
+ if(!pendingReveal||!coordinates||ui.keyboardOpen())return;
  const options=pendingReveal;pendingReveal=null;
- revealCoordinates(selectedPoint.coordinates,options);
+ revealCoordinates(coordinates,options);
 }
+const hasExplicitFilter=()=>!!$('search').value.trim()||category!=='all';
+// Admission is fixed by each band's zoom range. Only the selected listing, or otherwise the leading explicit result,
+// may also appear below its threshold.
 function updatePlaceLayers(){
- if(!loaded)return;
- const filter=preview?['!=',['id'],preview.id]:$('search').value.trim()||category!=='all'?null:PLACE_SCALE_FILTER;
- map.setFilter('place-symbols',filter);
- map.setFilter('search-place',['==',['id'],preview?.id??-1]);
+ if(!loaded||placesError)return;
+ objectSelection.setPreview(selected||!preview?null:keysById.get(preview.properties.id));
+ const {features,maxzoom}=requestedPlaceMarker(selected??preview,filtered,keysById,visibility);
+ const key=`${features[0]?.properties.activeIds}@${maxzoom}`;
+ if(key===requestedKey)return;
+ requestedKey=key;
+ map.getSource('requested-place').setData(collection(features));
+ map.setLayerZoomRange('search-place',0,maxzoom);
 }
 function previewResults(){
- if(!loaded||placesError||ui.view==='closed')return;
+ if(!loaded||placesError||ui.view==='closed'||!hasExplicitFilter())return;
  preview=selectNearest(filtered,map.getCenter().toArray(),1)[0]?.f??null;
  updatePlaceLayers();renderResults();
 }
+function setChoosing(active){
+ choosing=active;$('point-actions').hidden=active;
+}
 function closePlace(restoreFocus=true){
- const hadPoint=!!selectedPoint;
- selectedPoint=null;selected=null;pendingReveal=null;$('place-card').hidden=true;ui?.resetCardState();objectSelection?.clear();
+ const hadPoint=!!selectedPoint||choosing;
+ selectedPoint=null;selected=null;pendingReveal=null;setChoosing(false);$('place-card').hidden=true;ui?.resetCardState();objectSelection?.clear();updatePlaceLayers();
  markCurrentResult();
  if(restoreFocus&&returnFocus)ui?.restoreFocus(returnFocus.isConnected&&returnFocus.getClientRects().length?returnFocus:$('search'));
  else if(restoreFocus&&hadPoint)map?.getCanvas().focus({preventScroll:true});
@@ -88,7 +101,7 @@ function markCurrentResult(){
   else row.removeAttribute('aria-current');
  }
 }
-function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selected=f;selectedPoint={name:f.properties.name,coordinates:[...f.geometry.coordinates]};returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
+function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;setChoosing(false);selected=f;selectedPoint={name:f.properties.name,coordinates:[...f.geometry.coordinates]};returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
  const details=$('place-details');details.replaceChildren();
  const add=text=>{if(text)details.append(node('p',text,'detail'));};
  add(p['name:en']&&p['name:en']!==p.name?p['name:en']:'');add([p['addr:street'],p['addr:housenumber']].filter(Boolean).join(' '));add(p.kind?.replaceAll('_',' '));add(p.opening_hours?'OSM hours: '+p.opening_hours:'');add(p.phone);add(f.geometry.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', '));
@@ -98,7 +111,7 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
  preview=null;updatePlaceLayers();$('search').blur();
  $('place-card').hidden=false;ui.placeCardOpened();$('place-card').scrollTop=0;syncPanels();markCurrentResult();
- objectSelection.selectPlace(f);$('close-place').focus({preventScroll:true});
+ objectSelection.selectPlace(f,keysById.get(p.id));$('close-place').focus({preventScroll:true});
  pendingReveal={zoom:15};flushPendingReveal();
 }
 function showPoint(point,feature=null) {
@@ -113,6 +126,20 @@ function showPoint(point,feature=null) {
  objectSelection.select(feature,point.coordinates);
  focusCoordinates(point.coordinates,map.getZoom());
  $('close-place').focus({preventScroll:true});
+}
+// Several listings under one tap: same location, or nearby markers that overlap. Each stays a real listing.
+function showChooser(listings,coordinates) {
+ closePlace(false);setChoosing(true);
+ $('place-name').textContent=`${listings.length} places here`;$('place-category').textContent='Choose a listing';
+ const details=$('place-details');details.replaceChildren();
+ const list=node('div',undefined,'place-chooser');list.setAttribute('role','group');list.setAttribute('aria-label','Listings at this point');
+ for(const f of listings)list.append(listingButton(f,()=>showPlace(f.properties.id)));
+ details.append(list);
+ $('search').blur();$('place-card').hidden=false;preview=null;updatePlaceLayers();ui.placeCardOpened();
+ // The list must be usable at once, so a phone card opens full instead of as a header-only peek.
+ if(ui.view==='search')ui.setCardState('full');
+ syncPanels();pendingReveal={zoom:map.getZoom(),coordinates};flushPendingReveal();
+ list.firstElementChild.focus({preventScroll:true});
 }
 function renderEndpoints() {
  for(const role of ['from','to']) {
@@ -129,20 +156,25 @@ function setEndpoint(role) {
  // Route controls live on the map, so choosing an endpoint leaves search or the dock.
  ui.close();renderEndpoints();closePlace();
 }
+function listingButton(f,onClick,distance){
+ const p=f.properties,button=node('button',undefined,'result');button.type='button';button.dataset.id=p.id;
+ const symbol=node('span',p.category==='essentials'?'+':(p.kind??p.category)[0].toUpperCase(),'symbol');symbol.style.setProperty('--color',colors[p.category]);symbol.setAttribute('aria-hidden','true');
+ const copy=node('span',undefined,'copy');copy.append(node('strong',p.name),node('small',(p.kind??'').replaceAll('_',' ')));
+ button.append(symbol,copy);if(distance)button.append(node('span',distance,'distance'));
+ button.addEventListener('click',onClick);return button;
+}
 function renderResults(){if(!map)return;
  // A failed load is an error state, never an empty search result.
  if(placesError){$('results').replaceChildren(node('p',`Places could not load (${placesError}). Reload to try again.`,'empty'));return;}
  const center=map.getCenter().toArray();const nearest=selectNearest(filtered,center);const list=$('results');list.replaceChildren();
  if(!nearest.length){list.append(node('p','No places found. Try another search or category.','empty'));return;}
- for(const {f,d} of nearest){const p=f.properties;const button=node('button',undefined,'result');button.type='button';button.dataset.id=p.id;if((selected??preview)?.properties.id===p.id)button.setAttribute('aria-current','true');
-  const symbol=node('span',p.category==='essentials'?'+':(p.kind??p.category)[0].toUpperCase(),'symbol');symbol.style.setProperty('--color',colors[p.category]);symbol.setAttribute('aria-hidden','true');const copy=node('span',undefined,'copy');copy.append(node('strong',p.name),node('small',(p.kind??'').replaceAll('_',' ')));button.append(symbol,copy,node('span',d<1?Math.round(d*1000)+' m':d.toFixed(1)+' km','distance'));button.addEventListener('click',()=>showPlace(p.id,button));list.append(button);
- }
+ for(const {f,d} of nearest){const button=listingButton(f,()=>showPlace(f.properties.id,button),d<1?Math.round(d*1000)+' m':d.toFixed(1)+' km');if((selected??preview)?.properties.id===f.properties.id)button.setAttribute('aria-current','true');list.append(button);}
 }
-// An explicit search or category choice may surface places at any scale; the default scene keeps scale eligibility.
+// A search or category narrows the candidates; matching icons keep their thresholds.
 function filterPlaces(){
  filtered=all.filter(f=>matches(f,$('search').value,category));
- if(loaded)map.getSource('places').setData(collection(filtered));
- if(selected&&!filtered.some(f=>f.properties.id===selected.properties.id))closePlace(false);
+ if(loaded&&!placesError)map.getSource('places').setData(collection(buildPlaceMarkers(filtered,keysById)));
+ if(choosing||(selected&&!filtered.some(f=>f.properties.id===selected.properties.id)))closePlace(false);
  preview=null;updatePlaceLayers();renderResults();
  previewResults();
 }
@@ -204,9 +236,10 @@ async function start(){
  // Location, places and house numbers start immediately and never block the base map.
  tracker=new PositionTracker({bounds:MAP_BOUNDS,onChange:renderPosition});
  tracker.start().catch(e=>{console.error('Location setup failed',e);renderPosition({state:'unavailable',fix:null,age:null});});
- const placesReady=loadJSON('data/places.geojson','Places').then(data=>{
+ const placesReady=Promise.all([loadJSON('data/places.geojson','Places'),loadJSON('data/place-visibility.json','Place levels')]).then(([data,config])=>{
   if(!Array.isArray(data?.features))throw new Error('Places: missing features');
-  all=data.features.map((f,i)=>({...f,id:i+1}));byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
+  visibility=parseVisibilityConfig(config);
+  all=normalizePlaces(data.features,visibility);keysById=markerKeys(all);byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
  }).catch(e=>{console.error(e);placesError=e.message;notify(`Places could not load (${e.message}). Streets and buildings are still shown.`);renderResults();});
  const labelsReady=loadJSON('data/building-labels.geojson','House numbers').then(labels=>{buildingAddresses=buildingAddressIndex(labels);})
   .catch(e=>{console.error(e);notify(`House numbers could not load (${e.message}). Building details may lack addresses.`);});
@@ -231,14 +264,13 @@ async function start(){
   installBuildingNumberScale(map);
   installSatellite(map,location.href);
   $('satellite-toggle').disabled=false;
-  // D-05: scale eligibility before placement, no count clusters, and collision with every other label. Placed below
-  // road names and house numbers so those win collisions; sights and essentials win over ordinary businesses.
+  // PV-01/PV-02: each level is a zoom range, so eligibility is decided before any collision placement.
   installPlaceIcons(map,colors);
-  map.addSource('places',{type:'geojson',data:collection([])});
-  map.addLayer({id:'place-highlight',type:'circle',source:'places',paint:{'circle-radius':14,'circle-color':'#c43f3f','circle-opacity':0,'circle-stroke-color':'#c43f3f','circle-stroke-width':0}},'road-labels');
-  map.addLayer({id:'place-symbols',type:'symbol',source:'places',filter:PLACE_SCALE_FILTER,layout:{'icon-image':['match',['get','category'],...Object.keys(colors).flatMap(c=>[c,placeIconId(c)]),placeIconId('other')],'icon-padding':2,'symbol-sort-key':['match',['get','category'],'sights',0,'essentials',1,'stay',2,3],'text-field':['coalesce',['get','name:en'],['get','name']],'text-font':['Open Sans Semibold'],'text-size':11,'text-anchor':'top','text-offset':[0,1.1],'text-max-width':10,'text-optional':true},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}},'road-labels');
-  // One requested result uses its existing geographic anchor and category icon, even when ordinary labels collide.
-  map.addLayer({id:'search-place',type:'symbol',source:'places',filter:['==',['id'],-1],layout:{'icon-image':['match',['get','category'],...Object.keys(colors).flatMap(c=>[c,placeIconId(c)]),placeIconId('other')],'icon-allow-overlap':true,'icon-ignore-placement':true,'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':12,'text-anchor':'top','text-offset':[0,1.1],'text-optional':true},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}});
+  map.addSource('places',{type:'geojson',data:collection([]),promoteId:'markerKey'});
+  map.addSource('requested-place',{type:'geojson',data:collection([])});
+  map.addLayer({id:'place-highlight',type:'circle',source:'places',filter:['==',['get','first'],true],paint:{'circle-radius':14,'circle-color':'#c43f3f','circle-opacity':0,'circle-stroke-color':'#c43f3f','circle-stroke-width':0}},'road-labels');
+  // The one requested result uses its existing geographic anchor and category icon below its own threshold.
+  map.addLayer({id:'search-place',type:'symbol',source:'requested-place',layout:{'icon-image':['get','icon'],'icon-allow-overlap':true,'icon-ignore-placement':true,'text-field':['get','label'],'text-font':['Open Sans Semibold'],'text-size':12,'text-anchor':'top','text-offset':[0,1.1],'text-optional':true},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}});
   const cities=[['Podgorica',19.26,42.437],['Nikšić',18.944,42.774],['Cetinje',18.922,42.39],['Budva',18.84,42.286],['Kotor',18.771,42.424],['Bar',19.098,42.092],['Ulcinj',19.206,41.929],['Herceg Novi',18.537,42.454],['Žabljak',19.121,43.154],['Pljevlja',19.359,43.357],['Kolašin',19.522,42.824],['Berane',19.87,42.843]];
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
   installTransport(map);
@@ -248,7 +280,14 @@ async function start(){
   transport=new TransportFeed(map,{url:api.vehicles,onStatus:renderTransportStatus});
   $('transport-toggle').disabled=false;
   installPositionLayers(map);renderPosition(position);
-  Promise.all([placesReady,labelsReady]).then(()=>{loaded=true;$('loading').hidden=true;filterPlaces();});
+  Promise.all([placesReady,labelsReady]).then(()=>{
+   if(!placesError){
+    const {names,icons}=placeLayers(placeBands(all,visibility),visibility);
+    for(const layer of [...names,...icons])map.addLayer(layer,'road-labels');
+    placeHitLayers=['search-place',...icons.map(layer=>layer.id),...names.map(layer=>layer.id)];
+   }
+   loaded=true;$('loading').hidden=true;filterPlaces();
+  });
  });
  map.on('movestart',e=>{if(ownMove){ownMove=false;return;}if(e.originalEvent&&!explored){explored=true;renderPosition(position);}});
  // The list keeps its order while a chosen place is open, so the row just used does not jump.
@@ -262,8 +301,9 @@ async function start(){
   if(routePoints.length){const f=routePoints[0];showPoint({name:f.properties.name,coordinates:[...f.geometry.coordinates],kind:f.properties.role==='from'?'From point':'To point',details:[]},f);return;}
   const stops=map.queryRenderedFeatures(e.point,{layers:['transport-stops']});
   if(stops.length){showPoint(describePoint(stops[0],e.lngLat.toArray()),stops[0]);return;}
-  const hit=map.queryRenderedFeatures(e.point,{layers:['search-place','place-symbols']})[0];
-  if(hit){showPlace(hit.properties.id);return;}
+  const listings=listingsAtHits(map.queryRenderedFeatures(e.point,{layers:placeHitLayers}),byId);
+  if(listings.length===1){showPlace(listings[0].properties.id);return;}
+  if(listings.length>1){showChooser(listings,e.lngLat.toArray());return;}
   const roadLayers=['road-labels','steps','cycleways','paths','footways','pedestrian-streets','minor-roads','major-roads'];
   const features=map.queryRenderedFeatures(e.point,{layers:['building-numbers','buildings',...roadLayers,'land','water','rivers']});
   const feature=features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='building-numbers')??features.find(f=>roadLayers.includes(f.layer.id))??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
@@ -271,7 +311,7 @@ async function start(){
  });
  map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});
  // Name the layer that failed; a partly drawn map is not a ready map.
- const failures={basemap:'Streets, buildings and water could not load. Check your connection or save the map for offline use.','building-addresses':'House numbers could not load.','satellite-preview':'Satellite imagery could not load.','satellite-tiles':'Satellite imagery could not load.',places:'Places could not be drawn.','transport-stops':'Bus stops could not load.'};
+ const failures={basemap:'Streets, buildings and water could not load. Check your connection or save the map for offline use.','building-addresses':'House numbers could not load.','satellite-preview':'Satellite imagery could not load.','satellite-tiles':'Satellite imagery could not load.',places:'Places could not be drawn.','requested-place':'Places could not be drawn.','transport-stops':'Bus stops could not load.'};
  map.on('error',e=>{console.error('Map error',e.error);const message=failures[e.sourceId]??'Some map data could not load. Check your connection or download the map for offline use.';clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify(message),1500);});
  map.on('webglcontextlost',()=>notify('The browser paused graphics rendering. Waiting for it to recover…'));map.on('webglcontextrestored',()=>{$('error').hidden=true;map.triggerRepaint();});
  setTimeout(()=>{if(!loaded){$('loading').hidden=true;notify('Map startup is taking longer than expected. Check your connection and try again.');}},20000);
@@ -314,7 +354,7 @@ ui=new MapInterface({
   if(ui?.view==='closed'){preview=null;updatePlaceLayers();}
  },
  onViewport:()=>{
-  if(!loaded||!selectedPoint||ui.keyboardOpen())return;
+  if(!loaded||(!selectedPoint&&!pendingReveal)||ui.keyboardOpen())return;
   // A move in progress already aims for its own layout; check again where it lands.
   if(map.isMoving()){pendingReveal??={zoom:map.getZoom()};return;}
   if(pendingReveal){flushPendingReveal();return;}

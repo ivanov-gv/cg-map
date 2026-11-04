@@ -20,24 +20,25 @@ const glyphs = {
   }
 };
 
+export const SHARED_PLACE_ICON = 'place-shared';
 export function placeIconId(category) { return 'place-' + (Object.hasOwn(glyphs, category) ? category : 'other'); }
 
 // Returns a data URL per category so the map key can show the same symbols.
 export function installPlaceIcons(map, colors) {
   const urls = {};
-  for (const category of [...Object.keys(glyphs), 'other']) {
+  for (const category of [...Object.keys(glyphs), 'other', 'shared']) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = SIZE * RATIO;
     const c = canvas.getContext('2d');
     if (!c) throw new Error('Canvas 2D is unavailable; place symbols cannot be drawn.');
     c.scale(RATIO, RATIO); c.translate(SIZE / 2, SIZE / 2);
     c.beginPath(); c.arc(0, 0, SIZE / 2 - 1.5, 0, 2 * Math.PI);
-    c.fillStyle = colors[category] ?? '#5f6f7d'; c.fill();
+    c.fillStyle = category === 'shared' ? '#193f36' : colors[category] ?? '#5f6f7d'; c.fill();
     c.lineWidth = 2; c.strokeStyle = '#ffffff'; c.stroke();
     c.fillStyle = c.strokeStyle = '#ffffff'; c.lineWidth = 1.6;
     glyphs[category]?.(c);
-    if (!glyphs[category]) { c.beginPath(); c.arc(0, 0, 2.5, 0, 2 * Math.PI); c.fill(); }
-    map.addImage(placeIconId(category), c.getImageData(0, 0, canvas.width, canvas.height), {pixelRatio: RATIO});
+    if (category === 'other') { c.beginPath(); c.arc(0, 0, 2.5, 0, 2 * Math.PI); c.fill(); }
+    map.addImage(category === 'shared' ? SHARED_PLACE_ICON : placeIconId(category), c.getImageData(0, 0, canvas.width, canvas.height), {pixelRatio: RATIO});
     urls[category] = canvas.toDataURL();
   }
   return urls;

@@ -11,7 +11,7 @@ export class ObjectSelection {
   for(const layer of ['place-highlight','transport-stops']) {
    for(const [property,value] of Object.entries({'circle-color':'#c43f3f','circle-opacity':.25,'circle-stroke-color':'#c43f3f','circle-stroke-width':3})) {
     const original=map.getPaintProperty(layer,property)??1;
-    map.setPaintProperty(layer,property,['case',['boolean',['feature-state','selected'],false],value,original]);
+    map.setPaintProperty(layer,property,['case',['any',['boolean',['feature-state','selected'],false],['boolean',['feature-state','preview'],false]],value,original]);
    }
   }
   for(const sourceLayer of sources) {
@@ -20,6 +20,13 @@ export class ObjectSelection {
    map.addLayer({...base,id:`selected-${sourceLayer}-outline`,type:'line',paint:{'line-color':'#c43f3f','line-width':2.5},layout:{'line-join':'round','line-cap':'round'}},'road-labels');
   }
   map.on('idle',()=>this.resolveAnchor());
+ }
+ // The leading search match keeps the same ring, at any zoom, until a listing is chosen or the filter clears.
+ setPreview(markerKey) {
+  if(this.previewKey===markerKey)return;
+  if(this.previewKey!=null)this.map.setFeatureState({source:'places',id:this.previewKey},{preview:false});
+  this.previewKey=markerKey;
+  if(markerKey!=null)this.map.setFeatureState({source:'places',id:markerKey},{preview:true});
  }
  clearPoint() {
   if(this.pointTarget)this.map.setFeatureState(this.pointTarget,{selected:false});
@@ -47,8 +54,8 @@ export class ObjectSelection {
   if(['places','transport-stops'].includes(source)&&feature.id!==undefined){this.selectPoint(source,feature.id);return;}
   if(!feature&&coordinates)this.map.getSource('point-selection').setData({type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[...coordinates]}}]});
  }
- selectPlace(feature) {
-  this.clear();this.selectPoint('places',feature.id);this.anchor=[...feature.geometry.coordinates];this.resolveAnchor();
+ selectPlace(feature,markerKey) {
+  this.clear();this.selectPoint('places',markerKey);this.anchor=[...feature.geometry.coordinates];this.resolveAnchor();
  }
  resolveAnchor() {
   if(!this.anchor||this.map.getZoom()<13)return;

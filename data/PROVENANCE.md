@@ -8,6 +8,11 @@ The OSM extract timestamp is 2026-10-17T20:20:51Z. Current display layers have l
 geometry. There are 25,213 buildings in central Podgorica, 17,881 road features, 284 land features, and 1,491 water
 features including one derived ocean polygon. The place snapshot has 1,811 entries.
 
+`visibilityLevel` on each place is editorial product metadata from `sources/place-visibility-policy.json`, not an OSM
+fact or a measure of significance. `places_facts_sha256` in `sources/provenance.json` covers the snapshot without that
+field and still equals the hash of the pre-level snapshot. See the
+[data runbook](../docs/runbooks/data.md#place-visibility-levels).
+
 `sources/context-countries.geojson` preserves the supplied Natural Earth public-domain surrounding-country features
 independently of extraction. The OSM and Natural Earth licenses remain separate.
 
