@@ -283,7 +283,7 @@ This is the largest gain and depends on nothing else.
 - Slowest tests in run 41845205724, all in `poi-visibility` unless noted: `stability: small pans...` 58s desktop, 41s
   mobile; `every level is absent just below its threshold...` 50s and 37s; `a broad filter admits only eligible...` 32s
   and 22s; `shipped snapshot downloads and reloads offline` (`shell`) 38s and 21s. Fixed `waitForTimeout` calls total
-  about 15s across the suite, so they are not where the time goes.
+  about 13s per project, so they are not where the time goes.
 - Do not adopt `workers: 2`. Measured with `--workers=2` in run 41861615927 against `workers: 1` in run 41861532706, it
   cut `journeys` from 5.0m to 2.7m and `poi-desktop` from 5.2m to 2.9m, but `shell` and `journeys` each gained a flaky
   test and `poi-mobile` slowed from 2.5m to 3.7m. `updates.spec.mjs` itself is safe: its server takes a free port.
