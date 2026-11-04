@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {BROWSER_AREAS, FOLDERS, SHARED_WEB_SOURCES, browserMatrix, classify, formatOutputs, planChanges} from '../tools/ci-plan.mjs';
+import {BROWSER_AREAS, FOLDERS, SHARED_WEB_SOURCES, browserMatrix, classify, formatOutputs, planChanges, withFullBrowser} from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -146,6 +146,19 @@ test('an area limited to one project has a partner covering the other', () => {
       assert.ok(partners.some(({specs}) => specs.includes(`--project=${project}`)), `${area.specFiles[0]} does not run on ${project}`);
     }
   }
+});
+
+test('runs before deploying widen browser areas, but never add them to a change without any', () => {
+  assert.deepEqual(withFullBrowser(planChanges(['apps/web/src/interface.js'])).areas, ALL_AREAS);
+  assert.deepEqual(withFullBrowser(planChanges(['docs/README.md'])).areas, []);
+  assert.deepEqual(withFullBrowser(planChanges(['services/backend/go.mod'])).areas, []);
+});
+
+test('Markdown never selects code checks, wherever it lives, while Go stays independent of the web', () => {
+  for (const file of ['README.md', '.github/new.md', 'services/backend/README.md', 'services/backend/nested/new.md', 'apps/web/README.md', 'data/PROVENANCE.md', 'docs/plans/x.md']) {
+    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], everything: false}, file);
+  }
+  assert.deepEqual(planChanges(['services/backend/cmd/server/main.go']), {folders: ['backend'], areas: [], everything: false});
 });
 
 test('the browser matrix contains exactly the requested areas', () => {

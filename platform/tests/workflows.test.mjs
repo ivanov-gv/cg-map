@@ -129,7 +129,32 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
   assert.deepEqual(gate.permissions, {});
 });
 
+test('only the new pipelines run on the repository', () => {
+  const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
+  assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-pages.yml')) {
+    assert.deepEqual(Object.keys(load(file).on).sort(), ['workflow_call', 'workflow_dispatch'], `${file} must run only when called`);
+  }
+  assert.equal(load('ci-all.yml').on.pull_request?.paths, undefined, 'a required workflow must always run');
+});
+
+test('CD starts automatically only from successful pushes to main', () => {
+  const {on, jobs} = load('cd-pages.yml');
+  assert.deepEqual(on.workflow_run, {workflows: ['ci-all'], types: ['completed'], branches: ['main']});
+  assert.match(jobs.switch.if, /workflow_run\.event == 'push' && github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.equal(on.push, undefined);
+});
+
+test('browser jobs run only the planned areas, and none when there are none', () => {
+  const {jobs} = load('ci-apps-web.yml');
+  const allJobs = load('ci-all.yml').jobs;
+  assert.match(allJobs['apps-web'].with.browser_matrix, /needs\.plan\.outputs\.browser_matrix \|\| needs\.plan-test-run\.outputs\.browser_matrix/);
+  assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
+  assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
+  assert.match(allJobs.plan.env.FULL_BROWSER, /github\.event_name != 'pull_request'/);
+});
+
 test('the planner has an output on the plan job for every folder', () => {
   const {plan} = load('ci-all.yml').jobs;
-  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set(FOLDERS));
+  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix']));
 });

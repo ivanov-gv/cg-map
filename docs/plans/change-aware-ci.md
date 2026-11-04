@@ -434,10 +434,9 @@ Update these docs in the same change as the behavior they describe:
 ## Progress
 
 - Completed: this plan.
-- In progress: steps 1 to 3.
-- Step 3 items that need the workflows on `main`: test runs dispatched on GitHub, the chain from `ci-all` to `cd-pages`
-  with a test artifact, and checking what `deploy-test-run` logs.
-- Remaining: steps 4 to 6.
+- Completed: steps 1 to 3 on `main`.
+- In progress: steps 4 and 5 together, at the owner's direction: removing the old workflows and selecting browser areas.
+- Remaining: the throwaway PRs in step 5, and step 6.
 
 ## Verification
 

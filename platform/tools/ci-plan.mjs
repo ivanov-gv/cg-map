@@ -97,6 +97,11 @@ export function planChanges(files) {
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
+// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users.
+export function withFullBrowser(plan) {
+  return plan.areas.length ? {...plan, areas: ALL_AREAS} : plan;
+}
+
 export function browserMatrix(areas) {
   return {include: areas.map(area => ({area, specs: BROWSER_AREAS[area].specs}))};
 }
@@ -147,6 +152,7 @@ function main(args) {
     }
   }
 
+  if (args.includes('--full-browser')) plan = withFullBrowser(plan);
   const summary = formatSummary(plan, reason);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

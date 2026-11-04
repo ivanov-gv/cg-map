@@ -44,8 +44,9 @@ make check-go    # Independent Go module; requires Go
 
 ## Publication
 
-[Web checks and Pages](.github/workflows/web.yml) builds and tests dist/web, then deploys that artifact to GitHub Pages
-on main. Pull requests run checks without deploying. Backend checks run separately.
+[ci-all](.github/workflows/ci-all.yml) runs only the checks a change needs, one workflow per folder, and reports one
+`CI gate`. On main, [cd-pages](.github/workflows/cd-pages.yml) then deploys the verified artifact to GitHub Pages. Pull
+requests never deploy, and a Markdown-only change runs no code checks.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitHub Actions**; no branch-folder setting
 or committed deployment copy is needed.

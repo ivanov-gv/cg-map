@@ -71,7 +71,8 @@ Agents can skip instructions. These always run:
   the main checkout, then runs agent-rule drift, check-repo, and all-source Markdown lint/format checks, plus
   ESLint/gofmt/py_compile on staged code. pre-push runs `make check`, plus `make check-go` when backend files changed.
   See [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
-- CI runs `make check` (including `check:agents`) and browser acceptance. CI is the contract.
+- CI runs each affected folder's checks and browser acceptance, and `CI gate` reports the result. `make check` runs them
+  all locally, including `check:agents`. CI is the contract.
 
 ## Parallel sessions
 
