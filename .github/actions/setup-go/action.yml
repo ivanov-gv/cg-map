@@ -1,0 +1,9 @@
+name: Set up Go
+description: Install the Go version pinned by the backend module.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: services/backend/go.mod
+        cache: false

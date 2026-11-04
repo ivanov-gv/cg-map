@@ -1,0 +1,23 @@
+name: Test-run switch
+description: Decide between production and test-run jobs. Local act runs are always test runs.
+inputs:
+  test_run:
+    description: The workflow's test_run input, empty on automatic events.
+    required: false
+    default: 'false'
+outputs:
+  test_run:
+    description: true or false.
+    value: ${{ steps.switch.outputs.test_run }}
+runs:
+  using: composite
+  steps:
+    - id: switch
+      shell: bash
+      env:
+        INPUT_TEST_RUN: ${{ inputs.test_run }}
+      run: |
+        test_run=false
+        if [ "$INPUT_TEST_RUN" = true ] || [ "${ACT:-}" = true ]; then test_run=true; fi
+        echo "test_run=$test_run" >> "$GITHUB_OUTPUT"
+        echo "Test run: $test_run" | tee -a "$GITHUB_STEP_SUMMARY"

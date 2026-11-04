@@ -187,14 +187,17 @@ How it works:
 - **CI side:** `ci-apps-web` uploads `$WEB_ARTIFACT_NAME` with `$WEB_ARTIFACT_RETENTION_DAYS`, 30 days being the
   rollback window. It never uploads a Pages artifact. A green `CI gate` says nothing about deployment, and a failed
   deployment never blocks PRs.
-- **Which runs deploy:** the CI run must have concluded `success`, come from `$CI_SOURCE_EVENT` on `main` in production,
-  and hold the named artifact. Docs-only, nightly, and test runs therefore never deploy to production. Finding no
-  artifact is a normal skip and is noted in the summary.
+- **Which runs deploy:** the CI run must have concluded `success`, come from `$CI_SOURCE_EVENT`, also on `main` when
+  that event is a push, and hold the named artifact. Docs-only, nightly, and test runs therefore never deploy to
+  production. Finding no artifact is a normal skip and is noted in the summary.
 - **Copy, do not rebuild:** `prepare` downloads the artifact by run ID and re-uploads it with `upload-pages-artifact`,
   because `deploy-pages` reads only from its own run. There is no checkout, so CD cannot depend on source.
-- **Ordering:** `concurrency` uses one `pages` group without cancelling, and `deploy` skips a commit that is behind the
-  last deployed one, checked through the compare API. Otherwise a slow older run could overwrite a newer deployment.
-  Comparing with `main`'s head would be wrong, because a later docs-only merge must not stop a web deployment.
+- **Ordering:** `concurrency` uses one `cd-pages` group without cancelling, and on automatic runs `prepare` skips a run
+  when a newer `ci-all` run has succeeded with an artifact. Otherwise a slow older run could overwrite a newer
+  deployment. This replaces comparing with the last deployed commit: a Pages deployment records the head of `main` when
+  CD ran, not the artifact's commit. If the newer run's deployment fails, that failure shows in `cd-pages`, and the
+  older run stays skipped. Comparing with `main`'s head would be wrong, because a later docs-only merge must not stop a
+  web deployment.
 - **Rollback:** dispatch `cd-pages.yml` with `test_run=false` and an older `run_id`. The release runbook's revert path
   stays for anything older than 30 days. The ordering check applies only to automatic runs.
 - **Test-run mode:** `prepare-test-run` runs in full, and `deploy-test-run` only logs the expected result. The real
@@ -216,8 +219,7 @@ comments.
 | Is the `workflow_run` CI and CD split approved?                      | Yes.                                                                                                      | The map is past its testing phase.                                      |
 | Should test-run mode publish to a second repository?                 | No. `deploy-test-run` is a dummy job that logs the expected result, an exception to the same-steps rule.  | Moving from GitHub Pages to another provider: add a real test job then. |
 
-`actionlint` 1.7.12 and `gh act` 0.2.88 are installed on this machine. `docker ps` fails here, so fix Docker access
-before step 3: `act` needs it. Also confirm that this `actionlint` accepts YAML anchors.
+`actionlint` 1.7.12 and `gh act` 0.2.88 run the workflows on this machine, and `actionlint` accepts YAML anchors.
 
 ## Change rules
 
@@ -279,6 +281,10 @@ This is the largest gain and depends on nothing else.
   the Ubuntu mirror, about 141 kB/s in the slow cases. It recurred (168s in run 41861532706), and short apt timeouts do
   not help because data keeps trickling. `.github/actions/setup-browser` therefore caches the downloads, and limits the
   install to 360s. A 240s limit failed a job on a slow mirror in run 41867127404.
+- Keep the cache rather than build a CI image, as `ivanov-gv/zpcg` does. Cached setup takes 14-36s per job, and the
+  ready-made Playwright image alone is 878 MB compressed for each job to pull and unpack, so an image would remove the
+  mirror risk without being faster, and would add a workflow to build and update it. Revisit if a cache miss regularly
+  hits the slow mirror.
 - Keep the job timeout at 15 minutes: the slowest job measured is 8.3 minutes, including a slow install and a run while
   GitHub reported degraded service.
 - Slowest tests in run 41845205724, all in `poi-visibility` unless noted: `stability: small pans...` 58s desktop, 41s
@@ -317,19 +323,26 @@ This is the largest gain and depends on nothing else.
 A workflow can be dispatched only after it exists on `main`, so the new files must land before they can be tested and
 before the evidence check can apply.
 
-- Before the workflows, the owner creates the `dev` and `test-run` environments and their vars.
+- Create the `dev` and `test-run` environments and their vars. Done with the owner's approval on 2026-11-04, along with
+  the same vars on `github-pages`.
 - Add `.github/actions/test_run`, and use the job pairs and anchors from "Test-run model" in every workflow.
 - Add `ci-all.yml`, all `ci-*` folder workflows, and `cd-pages.yml`. Add a composite action for each shared setup: the
-  existing `setup-web`, plus Go setup. `ci-backend` keeps working without Node, so it reads its plan as an input.
+  existing `setup-web`, plus Go setup. `ci-backend` keeps working without Node; `ci-all` decides whether to call it, so
+  it needs no plan input.
 - `cd-pages.yml` is dispatch-only in this step, so the old workflow stays the only one deploying.
 - Add `make test-<workflow>` targets for each workflow using `ACT ?= gh act`, `--secret-file` and `--var-file` from
-  `.github/act/`, listed under `make test-all-workflows`, working with `ACT="act -n"`. Confirm that `act` handles local
-  called workflows, a matrix, and artifacts.
+  `.github/act/`, listed under `make test-all-workflows`, working with `ACT="act -n"`. Confirmed: `act` handles local
+  called workflows, a matrix, and artifacts, with limits. Its artifact server rejects `upload-artifact@v6` and
+  `upload-pages-artifact@v5`, so these workflows use `@v5` and `@v4`. Its runner image has no `gh`, so `cd-pages` calls
+  the API with `curl`. It also runs matrix jobs in parallel on the host network, where they share a port, so targets use
+  `--network bridge`.
 - `CI gate`:
   - `if: always()`, and `needs` includes `plan`, `plan-test-run`, and every folder, so a failed plan fails the gate.
   - Fails if any result is `failure` or `cancelled`. `skipped` passes.
 - Later jobs that need a possibly skipped job guard with `!cancelled()` and check that job's result.
-- On PRs set `cancel-in-progress: true`. Keep `false` on `main`.
+- On PRs set `cancel-in-progress: true`. Give each run on `main` its own concurrency group: GitHub keeps one pending run
+  per group, so a shared group could drop a web merge's run in favor of a later docs merge. `cd-pages` handles
+  deployment order.
 - A nightly `schedule` selects every folder and area.
 - `run-name` shows `test-run` and `run_all`, so the evidence check can identify a qualifying run.
 - Add `.github/TESTING.md` covering the three ways to run: locally with `act` in test-run mode, on GitHub with
@@ -343,8 +356,8 @@ before the evidence check can apply.
 
 ### 4. Cut over to the new workflows
 
-- Add the `workflow_run` trigger to `cd-pages.yml`, and remove `web.yml` and `backend.yml` in the same PR, so there is
-  never a double deployment or a gap.
+- Add the `workflow_run` trigger to `cd-pages.yml`, limited to `branches: [main]`, and remove `web.yml` and
+  `backend.yml` in the same PR, so there is never a double deployment or a gap.
 - Rewrite the tests that read the old files, keeping what they protect:
   - `platform/tests/markdown.test.mjs`: "web CI includes backend Markdown changes" becomes a planner assertion.
   - `platform/tests/makefiles.test.mjs`: the backend check must still run from `ci-backend.yml`, with no Node.
@@ -421,14 +434,23 @@ Update these docs in the same change as the behavior they describe:
 ## Progress
 
 - Completed: this plan.
-- In progress: steps 1 and 2.
-- Remaining: steps 3 to 6. The owner creates the `dev` and `test-run` environments before step 3.
+- In progress: steps 1 to 3.
+- Step 3 items that need the workflows on `main`: test runs dispatched on GitHub, the chain from `ci-all` to `cd-pages`
+  with a test artifact, and checking what `deploy-test-run` logs.
+- Remaining: steps 4 to 6.
 
 ## Verification
 
 Step 1, run 41861532706, on 2026-11-04 during degraded GitHub service: web build 29s, then `shell` 163s, `discover`
 112s, `interface` 207s, `journeys` 340s, `poi-mobile` 184s, and `poi-desktop` 500s, of which 168s was a slow install. A
 full run took about 9 minutes, down from 10-12. Without a slow install it would be about 6.5 minutes.
+
+Step 3, locally: `make test-ci-all` passed every folder, all six browser areas, and `CI gate`. `make test-cd-pages` read
+real run 41869977068, with its production artifact name and event overridden, because no test run can exist before this
+is on `main`. It copied the artifact, and `deploy-test-run` logged the source, digest, 69 files, and target.
+
+Step 3, on GitHub: run 41872158001 on PR 12 passed `CI gate`. Cached browser setup took 14-36s per job, the longest
+browser job took 307s, and the whole `plan` job took 14s, so the full-history checkout stays cheap.
 
 Record the commands, run links, and measured times here for steps 2 to 5.
 

@@ -1,0 +1,38 @@
+name: ci-docs
+# Markdown everywhere in the repository, repository checks, and agent rules.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  check-docs:
+    name: Check docs
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    steps: &check-docs-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make check-docs
+  check-docs-test-run:
+    name: (test-run) Check docs
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    steps: *check-docs-steps

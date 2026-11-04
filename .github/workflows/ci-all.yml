@@ -1,0 +1,191 @@
+name: ci-all
+# The top-level pipeline: plans what a change needs, calls each folder's workflow, and reports one CI gate.
+# Owner exception: PR checks run automatically rather than on manual approval, because auto-merge needs them.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('ci-all test_run={0} run_all={1}', inputs.test_run, inputs.run_all)
+  || format('ci-all {0}', github.event.pull_request.title || github.event.head_commit.message || github.event_name) }}
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly full run: catches planning mistakes and PRs that pass alone but break together.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+      run_all:
+        description: Run every folder and browser area
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  # Only PRs share a group. GitHub keeps one pending run per group, so a shared group on main could drop a web merge's
+  # run in favor of a later docs merge, whose diff would not select browser tests.
+  group: ci-all-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  switch:
+    name: Test-run switch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+
+  plan:
+    name: Plan
+    needs: switch
+    if: needs.switch.outputs.test_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: dev
+    outputs: &plan-outputs
+      docs: ${{ steps.plan.outputs.docs }}
+      workflows: ${{ steps.plan.outputs.workflows }}
+      platform: ${{ steps.plan.outputs.platform }}
+      contracts: ${{ steps.plan.outputs.contracts }}
+      data: ${{ steps.plan.outputs.data }}
+      backend: ${{ steps.plan.outputs.backend }}
+      transit-relay: ${{ steps.plan.outputs.transit-relay }}
+      tests: ${{ steps.plan.outputs.tests }}
+      apps-web: ${{ steps.plan.outputs.apps-web }}
+    env: &plan-env
+      PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+      RUN_ALL: ${{ github.event_name == 'schedule' || inputs.run_all == true || inputs.run_all == 'true' }}
+    steps: &plan-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Full history without file contents: enough to diff names, and cheap despite the map archive.
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - id: plan
+        run: |
+          if [ "$RUN_ALL" = true ]; then
+            node platform/tools/ci-plan.mjs --all
+          else
+            node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+          fi
+  plan-test-run:
+    name: (test-run) Plan
+    needs: switch
+    if: needs.switch.outputs.test_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    outputs: *plan-outputs
+    env: *plan-env
+    steps: *plan-steps
+
+  docs:
+    name: docs
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.docs == 'true' || needs.plan-test-run.outputs.docs == 'true') }}
+    uses: ./.github/workflows/ci-docs.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  workflows:
+    name: workflows
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.workflows == 'true' || needs.plan-test-run.outputs.workflows == 'true') }}
+    uses: ./.github/workflows/ci-workflows.yml
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  platform:
+    name: platform
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.platform == 'true' || needs.plan-test-run.outputs.platform == 'true') }}
+    uses: ./.github/workflows/ci-platform.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  contracts:
+    name: contracts
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') }}
+    uses: ./.github/workflows/ci-contracts.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  data:
+    name: data
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') }}
+    uses: ./.github/workflows/ci-data.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  backend:
+    name: backend
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.backend == 'true' || needs.plan-test-run.outputs.backend == 'true') }}
+    uses: ./.github/workflows/ci-backend.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  transit-relay:
+    name: transit-relay
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.transit-relay == 'true' || needs.plan-test-run.outputs.transit-relay == 'true') }}
+    uses: ./.github/workflows/ci-transit-relay.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  tests:
+    name: tests
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.tests == 'true' || needs.plan-test-run.outputs.tests == 'true') }}
+    uses: ./.github/workflows/ci-tests.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  apps-web:
+    name: apps-web
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.apps-web == 'true' || needs.plan-test-run.outputs.apps-web == 'true') }}
+    uses: ./.github/workflows/ci-apps-web.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+
+  # No test-run twin: a skipped job counts as passed, so a skipped gate could report a pass under the required name.
+  # It holds no permissions and only reads results. Keep this name: main's ruleset requires it.
+  gate:
+    name: CI gate
+    if: always()
+    needs: [switch, plan, plan-test-run, docs, workflows, platform, contracts, data, backend, transit-relay, tests, apps-web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    env:
+      RESULTS: ${{ toJSON(needs) }}
+      PLAN_RESULT: ${{ needs.plan.result }}
+      PLAN_TEST_RUN_RESULT: ${{ needs.plan-test-run.result }}
+    steps:
+      - name: Require every planned job to pass
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "- \(.key): \(.value.result)"' | tee -a "$GITHUB_STEP_SUMMARY"
+          failed=$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")')
+          if [ -n "$failed" ]; then
+            echo "::error::Failed or cancelled: $failed"
+            exit 1
+          fi
+          if [ "$PLAN_RESULT" != success ] && [ "$PLAN_TEST_RUN_RESULT" != success ]; then
+            echo "::error::Nothing planned this run, so nothing was checked."
+            exit 1
+          fi
+          echo "CI gate passed." | tee -a "$GITHUB_STEP_SUMMARY"

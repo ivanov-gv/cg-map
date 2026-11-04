@@ -11,6 +11,7 @@ qa-output/
 .env
 .env.*
 !.env.example
+.github/act/secret.env
 *.pem
 *.key
 .DS_Store

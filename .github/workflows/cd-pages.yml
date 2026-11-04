@@ -1,0 +1,195 @@
+name: cd-pages
+# Publishes an artifact that ci-all verified. Holds the deployment permissions CI never has, and rebuilds nothing.
+# Owner exception: Pages deploys automatically after CI on main, not only on a release, until the map is past testing.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('cd-pages test_run={0} run_id={1}', inputs.test_run, inputs.run_id)
+  || format('cd-pages run_id={0}', github.event.workflow_run.id) }}
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The ci-all run whose artifact to publish
+        type: string
+        required: true
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions: {}
+concurrency:
+  group: cd-pages
+  cancel-in-progress: false
+jobs:
+  switch:
+    name: Test-run switch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+    steps:
+      # Only the local action: CD never touches the application's source.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+
+  prepare:
+    name: Prepare artifact
+    needs: switch
+    if: needs.switch.outputs.test_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: github-pages
+    permissions: &prepare-permissions
+      actions: read
+    outputs: &prepare-outputs
+      deployable: ${{ steps.source.outputs.deployable }}
+      head_sha: ${{ steps.source.outputs.head_sha }}
+      digest: ${{ steps.source.outputs.digest }}
+      files: ${{ steps.copy.outputs.files }}
+    env: &prepare-env
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+      TRIGGER: ${{ github.event_name }}
+      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
+      CI_SOURCE_EVENT: ${{ vars.CI_SOURCE_EVENT }}
+    steps: &prepare-steps
+      - name: Check the source run
+        id: source
+        # Explicit bash adds pipefail: without it, a failed API call piped into jq looks like an empty, normal result.
+        shell: bash
+        run: |
+          # A skip is normal on automatic runs: failed CI, or a change with no web artifact. A manual run asked for this
+          # exact artifact, so it fails instead.
+          skip() {
+            echo "Not deploying run $RUN_ID: $1" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+            if [ "$TRIGGER" = workflow_dispatch ]; then echo "::error::$1"; exit 1; fi
+            echo "::notice::$1"
+            exit 0
+          }
+          # curl, not gh: act's runner image has no gh, and these steps must also run locally.
+          api() {
+            curl --fail --silent --show-error --location \
+              --header "Authorization: Bearer $GH_TOKEN" --header "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GH_REPO/$1"
+          }
+          run=$(api "actions/runs/$RUN_ID")
+          conclusion=$(echo "$run" | jq -r .conclusion)
+          event=$(echo "$run" | jq -r .event)
+          workflow=$(echo "$run" | jq -r .path)
+          head_sha=$(echo "$run" | jq -r .head_sha)
+          run_number=$(echo "$run" | jq -r .run_number)
+          head_branch=$(echo "$run" | jq -r .head_branch)
+          [ "$workflow" = .github/workflows/ci-all.yml ] || skip "it came from $workflow"
+          [ "$conclusion" = success ] || skip "it concluded $conclusion"
+          [ "$event" = "$CI_SOURCE_EVENT" ] || skip "it came from a $event event, not $CI_SOURCE_EVENT"
+          # A branch can widen its own copy of ci-all's push filter, so the filter alone does not prove this.
+          [ "$event" != push ] || [ "$head_branch" = main ] || skip "it came from a push to $head_branch, not main"
+          artifact_query=".artifacts[] | select(.name == \"$WEB_ARTIFACT_NAME\" and .expired == false)"
+          artifact=$(api "actions/runs/$RUN_ID/artifacts" | jq -c "$artifact_query")
+          [ -n "$artifact" ] || skip "it has no $WEB_ARTIFACT_NAME artifact"
+
+          # A slow older run must not overwrite a newer deployment. Comparing with main's head would be wrong: a later
+          # docs-only merge has no artifact and must not stop this one. Rollbacks choose an older run on purpose.
+          newer_runs=$(api "actions/workflows/ci-all.yml/runs?event=$CI_SOURCE_EVENT&status=success&per_page=20" \
+            | jq -r ".workflow_runs[] | select(.run_number > $run_number and (.event != \"push\" or .head_branch == \"main\")) | .id")
+          for newer in $newer_runs; do
+            newer_artifact=$(api "actions/runs/$newer/artifacts" | jq -r "$artifact_query | .name")
+            if [ -n "$newer_artifact" ]; then
+              echo "A newer verified run exists: $newer"
+              if [ "$TRIGGER" = workflow_run ]; then skip "newer run $newer has already been verified"; fi
+            fi
+          done
+
+          digest=$(echo "$artifact" | jq -r .digest)
+          {
+            echo "deployable=true"
+            echo "head_sha=$head_sha"
+            echo "digest=$digest"
+          } >> "$GITHUB_OUTPUT"
+          echo "Source: run $RUN_ID, commit $head_sha, artifact $WEB_ARTIFACT_NAME, digest $digest" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Download the verified artifact
+        if: steps.source.outputs.deployable == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.WEB_ARTIFACT_NAME }}
+          path: site
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ env.GH_TOKEN }}
+      # upload-pages-artifact leaves out hidden files, so they are not counted as published.
+      - name: Count files
+        id: copy
+        if: steps.source.outputs.deployable == 'true'
+        run: echo "files=$(find site -type f -not -name '.*' | wc -l)" >> "$GITHUB_OUTPUT"
+      # deploy-pages reads only from its own run, so the artifact is copied here rather than rebuilt.
+      # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
+      - name: Copy it into this run
+        if: steps.source.outputs.deployable == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+  prepare-test-run:
+    name: (test-run) Prepare artifact
+    needs: switch
+    if: needs.switch.outputs.test_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    permissions: *prepare-permissions
+    outputs: *prepare-outputs
+    env: *prepare-env
+    steps: *prepare-steps
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: prepare
+    if: needs.prepare.outputs.deployable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+      - name: Deploy verified artifact
+        id: deployment
+        uses: actions/deploy-pages@v5
+  # Owner exception to the same-steps rule: deploy-pages can only publish to this repository, so GitHub Pages offers no
+  # test-run destination. This logs what production would publish. Replace it with a real test job on another provider.
+  deploy-test-run:
+    name: (test-run) Log expected deployment
+    needs: prepare-test-run
+    if: needs.prepare-test-run.outputs.deployable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    environment: test-run
+    env:
+      HEAD_SHA: ${{ needs.prepare-test-run.outputs.head_sha }}
+      DIGEST: ${{ needs.prepare-test-run.outputs.digest }}
+      FILES: ${{ needs.prepare-test-run.outputs.files }}
+      RUN_ID: ${{ inputs.run_id }}
+      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
+    steps:
+      - name: Log what production would publish
+        run: |
+          {
+            echo "Test run: nothing was published. Production would publish:"
+            echo "- Artifact: $WEB_ARTIFACT_NAME, digest $DIGEST"
+            echo "- Source: run $RUN_ID, commit $HEAD_SHA"
+            echo "- Files: $FILES"
+            echo "- Target: GitHub Pages of $GITHUB_REPOSITORY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

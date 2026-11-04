@@ -1,0 +1,100 @@
+name: ci-apps-web
+# Verifies the web app and its built artifact, then runs browser tests on that artifact, one job per area.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Verify web
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    outputs: &verify-outputs
+      browser_matrix: ${{ steps.areas.outputs.browser_matrix }}
+    env: &verify-env
+      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
+      WEB_ARTIFACT_RETENTION_DAYS: ${{ vars.WEB_ARTIFACT_RETENTION_DAYS }}
+    steps: &verify-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make verify PKG=apps/web
+      - name: Select browser areas
+        id: areas
+        run: node platform/tools/ci-plan.mjs --all
+      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
+      - name: Share the built artifact with browser jobs and CD
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.WEB_ARTIFACT_NAME }}
+          path: dist/web
+          include-hidden-files: true
+          retention-days: ${{ env.WEB_ARTIFACT_RETENTION_DAYS }}
+  verify-test-run:
+    name: (test-run) Verify web
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    outputs: *verify-outputs
+    env: *verify-env
+    steps: *verify-steps
+  browser:
+    name: Browser tests (${{ matrix.area }})
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix) }}
+    env: &browser-env
+      AREA: ${{ matrix.area }}
+      E2E_SPECS: ${{ matrix.specs }}
+      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
+    steps: &browser-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.WEB_ARTIFACT_NAME }}
+          path: dist/web
+      - uses: ./.github/actions/setup-browser
+      - uses: ./.github/actions/run-check
+        with:
+          command: make test-e2e-built E2E_ARGS="$E2E_SPECS"
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: browser-failure-evidence-${{ env.AREA }}
+          path: apps/web/test-results/
+          retention-days: 7
+  browser-test-run:
+    name: (test-run) Browser tests (${{ matrix.area }})
+    needs: verify-test-run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: test-run
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix) }}
+    env: *browser-env
+    steps: *browser-steps
