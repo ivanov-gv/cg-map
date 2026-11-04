@@ -316,14 +316,17 @@ This is the largest gain and depends on nothing else.
 A workflow can be dispatched only after it exists on `main`, so the new files must land before they can be tested and
 before the evidence check can apply.
 
-- Before the workflows, the owner creates the `dev` and `test-run` environments and their vars.
+- Create the `dev` and `test-run` environments and their vars. Done with the owner's approval on 2026-11-04, along with
+  the same vars on `github-pages`.
 - Add `.github/actions/test_run`, and use the job pairs and anchors from "Test-run model" in every workflow.
 - Add `ci-all.yml`, all `ci-*` folder workflows, and `cd-pages.yml`. Add a composite action for each shared setup: the
   existing `setup-web`, plus Go setup. `ci-backend` keeps working without Node, so it reads its plan as an input.
 - `cd-pages.yml` is dispatch-only in this step, so the old workflow stays the only one deploying.
 - Add `make test-<workflow>` targets for each workflow using `ACT ?= gh act`, `--secret-file` and `--var-file` from
-  `.github/act/`, listed under `make test-all-workflows`, working with `ACT="act -n"`. Confirm that `act` handles local
-  called workflows, a matrix, and artifacts.
+  `.github/act/`, listed under `make test-all-workflows`, working with `ACT="act -n"`. Confirmed: `act` handles local
+  called workflows, a matrix, and artifacts, with two limits. Its artifact server rejects `upload-artifact@v6`, so these
+  workflows use `@v5`. It also runs matrix jobs in parallel on the host network, where they share a port, so targets use
+  `--network bridge`.
 - `CI gate`:
   - `if: always()`, and `needs` includes `plan`, `plan-test-run`, and every folder, so a failed plan fails the gate.
   - Fails if any result is `failure` or `cancelled`. `skipped` passes.
@@ -420,14 +423,16 @@ Update these docs in the same change as the behavior they describe:
 ## Progress
 
 - Completed: this plan.
-- In progress: steps 1 and 2.
-- Remaining: steps 3 to 6. The owner creates the `dev` and `test-run` environments before step 3.
+- In progress: steps 1 to 3.
+- Remaining: steps 4 to 6, which need step 3 on `main`.
 
 ## Verification
 
 Step 1, run 41861532706, on 2026-11-04 during degraded GitHub service: web build 29s, then `shell` 163s, `discover`
 112s, `interface` 207s, `journeys` 340s, `poi-mobile` 184s, and `poi-desktop` 500s, of which 168s was a slow install. A
 full run took about 9 minutes, down from 10-12. Without a slow install it would be about 6.5 minutes.
+
+Step 3, locally: `make test-ci-all` passed every folder, all six browser areas, and `CI gate`.
 
 Record the commands, run links, and measured times here for steps 2 to 5.
 
