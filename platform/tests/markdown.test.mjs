@@ -11,6 +11,11 @@ import {run as formatMarkdown} from '../tools/format-markdown.mjs';
 import {buildOutputs} from '../agents/gen-agent-rules.mjs';
 import {globToRegExp, repoRoot} from '../agents/lib.mjs';
 
+// This suite builds its own repositories; variables inherited from a git hook would point them at the real one.
+for (const name of Object.keys(process.env)) {
+  if (name.startsWith('GIT_')) delete process.env[name];
+}
+
 test('Markdown checks find new and hidden sources; fixes regenerate adapters and preserve code', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-markdown-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));

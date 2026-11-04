@@ -11,10 +11,11 @@ Ownership: platform/reliability team.
 - `agents/`: agent harness. `guidelines.json` maps docs/engineering to adapters; `gen-agent-rules.mjs` generates them.
   There are no agent hooks; the compliance reviewer comes from the personal agents plugin. See
   [engineering guidelines](../docs/engineering/README.md).
-- `git-hooks/`: pre-commit and pre-push backstops, enabled by `make setup`.
+- `git-hooks/`: pre-commit and pre-push backstops, enabled by `make setup`. Pre-commit rejects commits in the main
+  checkout (`tools/require-worktree.sh`).
 - `hosting/`: Caddy examples for standalone artifact hosting.
 - `pages/`: compatibility redirects and old-worker retirement shipped with the web artifact.
-- `tests/`: HTTP transport, deployment compatibility, agent harness, and Markdown tooling tests.
+- `tests/`: HTTP transport, deployment compatibility, agent harness, git hooks, and Markdown tooling tests.
 
 GitHub workflows and CODEOWNERS live in `.github/`, the location required by GitHub. Platform owns their execution and
 permission model. Web/data owners remain responsible for their checks and build behavior.

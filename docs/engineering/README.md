@@ -67,23 +67,25 @@ loaded does not prove it was followed.
 
 Agents can skip instructions. These always run:
 
-- `make setup` sets `core.hooksPath` to [platform/git-hooks](../../platform/git-hooks). pre-commit runs agent-rule
-  drift, check-repo, and all-source Markdown lint/format checks, plus ESLint/gofmt/py_compile on staged code. pre-push
-  runs `make check`, plus `make check-go` when backend files changed. See
-  [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
+- `make setup` sets `core.hooksPath` to [platform/git-hooks](../../platform/git-hooks). pre-commit rejects commits in
+  the main checkout, then runs agent-rule drift, check-repo, and all-source Markdown lint/format checks, plus
+  ESLint/gofmt/py_compile on staged code. pre-push runs `make check`, plus `make check-go` when backend files changed.
+  See [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
 - CI runs `make check` (including `check:agents`) and browser acceptance. CI is the contract.
 
 ## Parallel sessions
 
+- The main checkout is for reading and pulling main. Do not edit or commit there; pre-commit rejects commits. Run the
+  commands below from it to create a worktree.
 - One worktree per session: `make worktree NAME=fix-routing`, which creates `../cg-map.worktrees/fix-routing` and runs
   `make setup` there. You can also use `claude --worktree <name>` (ignored `.claude/worktrees/`). Run `make setup` in a
   new worktree before checks.
 - `make dev`, `make dev-mock` and `make test-e2e` pick ports from [dev-port.mjs](../../platform/tools/dev-port.mjs). The
   main checkout keeps 8080/8095; linked worktrees get stable ports derived from their path. dist/ and .build/ are per
   worktree.
-- Write `docs/plans/<task>.md` from the [template](../plans/TEMPLATE.md) before launching a multi-session task. Split
-  work by component so sessions touch disjoint directories.
-- Integrate one branch at a time: rebase, `make check`, merge.
+- Create a worktree and write `docs/plans/<task>.md` there from the [template](../plans/TEMPLATE.md) before launching a
+  multi-session task. Split work by component so sessions touch disjoint directories.
+- Integrate one branch at a time: rebase and resolve conflicts in the worktree, run `make check`, then merge by PR.
 
 ## Changing the rules
 
