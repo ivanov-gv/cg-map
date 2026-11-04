@@ -5,10 +5,10 @@ on GitHub. Pipeline structure and reasoning: [the CI plan](../docs/plans/change-
 
 ## Test-run mode
 
-Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The twins use the `test-run`
-environment, whose variables keep test artifacts apart from production ones. Local runs always use it, and manual runs
-default to it. `CI gate` has no twin, and `deploy-test-run` logs what production would publish, because GitHub Pages has
-no test destination.
+Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
+jobs, and the check for test runs below. The twins use the `test-run` environment, whose variables keep test artifacts
+apart from production ones. Local runs always use it, and manual runs default to it. `CI gate` has no twin, and
+`deploy-test-run` logs what production would publish, because GitHub Pages has no test destination.
 
 The `dev`, `test-run`, and `github-pages` environments each define these variables:
 
@@ -24,12 +24,13 @@ Needs Docker and `gh extension install nektos/gh-act`.
 
 ```sh
 make test-ci-docs                       # one workflow
-make test-ci-all                        # everything CI runs, one job at a time
+make test-ci-all                        # everything CI runs
 make test-cd-pages RUN_ID=<run ID>      # reads a real ci-all test run from GitHub
 make test-all-workflows ACT="gh act -n" # dry run of every target
 ```
 
-A dry run only checks that a workflow parses, so it does not count as a test.
+A dry run only checks that a workflow parses, so it does not count as a test. `make test-cd-pages` also needs
+`.github/act/secret.env`, which Git ignores: see `secret.env.example` beside it.
 
 ## On GitHub
 
@@ -40,9 +41,9 @@ gh workflow run ci-all.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run cd-pages.yml --ref <branch> -f test_run=true -f run_id=<ci-all test run ID>
 ```
 
-`ci-workflows` fails a PR that changes `.github/**` until a successful `ci-all` test run exists for its latest commit,
-and a `cd-pages` test run too when that workflow or a composite action changed. After those runs pass, re-run the failed
-check. CI cannot see local runs, so record yours in the PR template.
+`ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful `ci-all` test
+run exists for its latest commit, and a `cd-pages` test run too when that workflow or a composite action changed. After
+those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
 ## Through a real PR
 

@@ -35,6 +35,7 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
       - id: test_run
         uses: ./.github/actions/test_run
         with:

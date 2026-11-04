@@ -192,9 +192,12 @@ How it works:
   artifact is a normal skip and is noted in the summary.
 - **Copy, do not rebuild:** `prepare` downloads the artifact by run ID and re-uploads it with `upload-pages-artifact`,
   because `deploy-pages` reads only from its own run. There is no checkout, so CD cannot depend on source.
-- **Ordering:** `concurrency` uses one `pages` group without cancelling, and `deploy` skips a commit that is behind the
-  last deployed one, checked through the compare API. Otherwise a slow older run could overwrite a newer deployment.
-  Comparing with `main`'s head would be wrong, because a later docs-only merge must not stop a web deployment.
+- **Ordering:** `concurrency` uses one `pages` group without cancelling, and on automatic runs `prepare` skips a run
+  when a newer `ci-all` run has succeeded with an artifact. Otherwise a slow older run could overwrite a newer
+  deployment. This replaces comparing with the last deployed commit: a Pages deployment records the head of `main` when
+  CD ran, not the artifact's commit. If the newer run's deployment fails, that failure shows in `cd-pages`, and the
+  older run stays skipped. Comparing with `main`'s head would be wrong, because a later docs-only merge must not stop a
+  web deployment.
 - **Rollback:** dispatch `cd-pages.yml` with `test_run=false` and an older `run_id`. The release runbook's revert path
   stays for anything older than 30 days. The ordering check applies only to automatic runs.
 - **Test-run mode:** `prepare-test-run` runs in full, and `deploy-test-run` only logs the expected result. The real
@@ -321,7 +324,8 @@ before the evidence check can apply.
   the same vars on `github-pages`.
 - Add `.github/actions/test_run`, and use the job pairs and anchors from "Test-run model" in every workflow.
 - Add `ci-all.yml`, all `ci-*` folder workflows, and `cd-pages.yml`. Add a composite action for each shared setup: the
-  existing `setup-web`, plus Go setup. `ci-backend` keeps working without Node, so it reads its plan as an input.
+  existing `setup-web`, plus Go setup. `ci-backend` keeps working without Node; `ci-all` decides whether to call it, so
+  it needs no plan input.
 - `cd-pages.yml` is dispatch-only in this step, so the old workflow stays the only one deploying.
 - Add `make test-<workflow>` targets for each workflow using `ACT ?= gh act`, `--secret-file` and `--var-file` from
   `.github/act/`, listed under `make test-all-workflows`, working with `ACT="act -n"`. Confirmed: `act` handles local
@@ -425,7 +429,9 @@ Update these docs in the same change as the behavior they describe:
 
 - Completed: this plan.
 - In progress: steps 1 to 3.
-- Remaining: steps 4 to 6, which need step 3 on `main`.
+- Step 3 items that need the workflows on `main`: test runs dispatched on GitHub, the chain from `ci-all` to `cd-pages`
+  with a test artifact, and checking what `deploy-test-run` logs.
+- Remaining: steps 4 to 6.
 
 ## Verification
 

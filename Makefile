@@ -72,7 +72,7 @@ worktree:
 
 # Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
 ACT ?= gh act
-ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --artifact-server-path .build/act-artifacts --network bridge --pull=false -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -P ubuntu-latest=catthehacker/ubuntu:act-24.04
+ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -P ubuntu-latest=catthehacker/ubuntu:act-24.04
 
 test-all-workflows: test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web test-cd-pages
 
@@ -81,4 +81,5 @@ test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts te
 
 # Needs a real ci-all test run to read from: make test-cd-pages RUN_ID=<run ID>
 test-cd-pages:
-	$(ACT) workflow_dispatch -W .github/workflows/cd-pages.yml $(ACT_RUN) --input run_id=$(RUN_ID) -s GITHUB_TOKEN="$$(gh auth token)"
+	$(if $(or $(RUN_ID),$(findstring -n,$(ACT))),,$(error Set RUN_ID to a ci-all test run: make test-cd-pages RUN_ID=<run ID>))
+	$(ACT) workflow_dispatch -W .github/workflows/cd-pages.yml $(ACT_RUN) --input run_id=$(RUN_ID)

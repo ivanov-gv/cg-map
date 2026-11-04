@@ -55,9 +55,22 @@ jobs:
     steps:
       - name: Require a successful test run of this commit
         run: |
-          # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
+          # An "everything" plan also runs this job, but only workflow changes need test runs.
+          changed=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          workflow_changes=$(echo "$changed" | grep -E '^\.github/|^platform/(tools|tests)/ci-plan\.' | grep -v '\.md$' || true)
+          if [ -z "$workflow_changes" ]; then
+            echo "No workflow changes, so no test runs are needed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           has_qualifying_run() { # <workflow file> <required run-name text>
-            if ! gh api "repos/$GH_REPO/contents/.github/workflows/$1" --silent 2>/dev/null; then
+            # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
+            # Only a 404 means that: any other API failure must not pass this check.
+            if ! lookup=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --silent 2>&1); then
+              if ! echo "$lookup" | grep -q 'HTTP 404'; then
+                echo "::error::Could not look up $1: $lookup"
+                return 1
+              fi
               echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
               return 0
             fi
@@ -70,8 +83,7 @@ jobs:
             echo "::error::Run: gh workflow run ci-all.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
             missing=1
           fi
-          changed=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
-          if echo "$changed" | grep -q '^\.github/workflows/cd-pages\.yml$\|^\.github/actions/' \
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-pages\.yml$\|^\.github/actions/' \
             && ! has_qualifying_run cd-pages.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run cd-pages.yml --ref $BRANCH -f test_run=true -f run_id=<test-run ci-all run ID>, then re-run this check."
             missing=1

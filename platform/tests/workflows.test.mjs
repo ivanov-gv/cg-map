@@ -17,6 +17,18 @@ const NO_TWIN = {
   'cd-pages.yml': ['switch']
 };
 
+// Each twin is chosen by the mode directly, or by depending on a job that was.
+function assertSelectedByMode(jobs, job) {
+  const twin = `${job}-test-run`;
+  const dependsOnTwin = [jobs[job].needs].flat().some(need => need && jobs[`${need}-test-run`])
+    && [jobs[twin].needs].flat().every(need => need?.endsWith('-test-run'));
+  if (dependsOnTwin) return;
+  const conditions = [jobs[job].if, jobs[twin].if];
+  const inputChoice = /inputs\.test_run != true/.test(conditions[0]) && /inputs\.test_run == true/.test(conditions[1]);
+  const switchChoice = /test_run != 'true'/.test(conditions[0]) && /test_run == 'true'/.test(conditions[1]);
+  assert.ok(inputChoice || switchChoice, `${job} and its twin need opposite test_run conditions: ${conditions.join(' | ')}`);
+}
+
 for (const file of newWorkflowFiles) {
   test(`${file}: every job has a test-run twin with the same steps`, () => {
     const {jobs} = load(file);
@@ -28,6 +40,7 @@ for (const file of newWorkflowFiles) {
       assert.ok(twin, `${job} needs a ${job}-test-run twin`);
       assert.equal(twin.environment, 'test-run', `${job}-test-run must use the test-run environment`);
       assert.notEqual(jobs[job].environment, 'test-run', `${job} must not use the test-run environment`);
+      assertSelectedByMode(jobs, job);
       if (job === 'deploy') continue;
       assert.deepEqual(twin.steps, jobs[job].steps, `${job} and its twin must share steps`);
       if (jobs[job].env) assert.deepEqual(Object.keys(twin.env), Object.keys(jobs[job].env), `${job} and its twin must define the same env`);
@@ -74,7 +87,10 @@ test('CD checks out no application source and publishes only from production', (
   const {jobs, permissions} = load('cd-pages.yml');
   assert.deepEqual(permissions, {});
   const checkouts = Object.values(jobs).flatMap(job => job.steps ?? []).filter(step => step.uses?.startsWith('actions/checkout'));
-  for (const checkout of checkouts) assert.equal(checkout.with['sparse-checkout'], '.github/actions');
+  for (const checkout of checkouts) {
+    assert.equal(checkout.with['sparse-checkout'], '.github/actions');
+    assert.equal(checkout.with['sparse-checkout-cone-mode'], false, 'cone mode would also check out root files');
+  }
   const publishers = Object.entries(jobs).filter(([, job]) => (job.steps ?? []).some(step => step.uses?.startsWith('actions/deploy-pages')));
   assert.deepEqual(publishers.map(([name]) => name), ['deploy']);
   assert.deepEqual(jobs['deploy-test-run'].permissions, {});
