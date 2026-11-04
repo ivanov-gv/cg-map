@@ -184,8 +184,10 @@ Commands after implementation, from the repository root unless the component ins
   category has no leading result, so no icon gets a below-threshold exception. A chooser opens its phone card fully.
 - A selected listing below its threshold that shares a location with an admitted listing is represented by that
   location's marker and highlight, not a second icon. The shipped snapshot has no co-located listings.
-- Automated results, 4 November 2026: `make check` passes. The full browser run took under CI's 15-minute job limit only
-  after two changes: the threshold test hides the basemap, and the density screenshots run on request
-  (`POI_DENSITY_SCREENSHOTS=1`). Screenshots were last reviewed before that change, on the same levels.
+- The new tests pushed the single browser job past CI's 15-minute limit, so CI now runs browser tests as
+  [separate jobs by area](../verification/testing.md#browser-test-areas). The threshold test also hides the basemap, and
+  the density screenshots run on request (`POI_DENSITY_SCREENSHOTS=1`).
+- Automated results, 4 November 2026: `make check` passes. The last full local browser run, before tests moved into area
+  files, had 110 passed and 12 skipped; the move kept the same 122 test names. CI runs all areas on the final code.
 - Not run: real-device review, `make dev` visual review (screenshots came from the browser suite), and
   `data/tools/extract-osm.py` with a real PBF (syntax-checked only).

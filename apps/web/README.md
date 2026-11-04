@@ -435,6 +435,10 @@ Cross-component contract/artifact tests remain in tests/integration. See the
 Keep the full final acceptance run for web/UI, offline, and release behavior changes; targeted results do not establish
 that the full suite passed. Documentation-only changes do not need browser tests.
 
+Browser specs are split by area, and CI runs each area as its own job; see
+[browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
+tests/e2e/helpers.mjs.
+
 The configured worker count is one. Changing `--workers` or enabling `--fully-parallel` is a performance experiment:
 benchmark elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to
 shorten the development feedback loop.

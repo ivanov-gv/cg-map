@@ -15,7 +15,8 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 
 - The complete frontend CI verification job took **6m 38s**, including setup, repository checks, Chromium installation,
   browser acceptance, and artifact upload. Baseline reviewed 2026-11-03; browser tests alone took 5m 54s in CI and 5m
-  40s locally (49 passed, one expected desktop touch skip). These are observations, not time limits.
+  40s locally (49 passed, one expected desktop touch skip). These are observations, not time limits. The suite has grown
+  since; CI now runs it as [separate jobs by area](../../docs/verification/testing.md#browser-test-areas).
 - Start with `make verify PKG=apps/web` from the repository root (about 3s locally). During iteration, run only affected
   browser scenarios using project, file, and title filters; confirm the selection with `--list`. See
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web
