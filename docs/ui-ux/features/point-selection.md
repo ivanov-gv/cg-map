@@ -11,13 +11,14 @@ points removes both endpoints. Closing the card or changing map layers does not 
 endpoints selected, the [route planner](routing.md) calculates the selected mode. Reloading clears the selection.
 
 Visible endpoint markers, bus stops, and drawn directory place symbols take priority over basemap geometry. Places are
-not clustered; a place hidden by scale or label collision is reached through the directory list instead. Otherwise
-buildings, roads, parks and water expose available map attributes. Building polygons take precedence over house-number
-label hit boxes; their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label
-visibility. See [building numbers](../../map-data/building-numbers.md). Unnamed buildings show their feature type and
-coordinates; names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented
-as a directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show
-coordinates alone. No reverse geocoder is used.
+not clustered; a place below its [visibility level's](poi-visibility.md) zoom is reached through the directory list
+instead. A tap on several listings opens a chooser of those listings. Otherwise buildings, roads, parks and water expose
+available map attributes. Building polygons take precedence over house-number label hit boxes; their revision-bound tile
+IDs retrieve address metadata independently of zoom, collisions, or label visibility. See
+[building numbers](../../map-data/building-numbers.md). Unnamed buildings show their feature type and coordinates;
+names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a
+directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates
+alone. No reverse geocoder is used.
 
 The same card and actions work for directory results. Existing website/source links remain. Bus-stop details use the
 dated ePodgorica snapshot. All point selection works with the downloaded offline map; From/To are independent of live

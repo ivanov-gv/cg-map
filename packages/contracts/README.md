@@ -4,8 +4,14 @@ Published formats shared by data producers and application consumers. Changes re
 [ownership](../../docs/system-architecture/ownership.md).
 
 `places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported
-category, and WGS84 longitude/latitude point. The data validator enforces this contract and directory-wide uniqueness.
-Integration tests check that web categories agree with it.
+category, WGS84 longitude/latitude point, and a visibility level. The data validator enforces this contract and
+directory-wide uniqueness. Integration tests check that web categories agree with it.
+
+`place-visibility.json` (shape in `place-visibility.schema.json`) is the one level-to-zoom table. Level 1 appears
+earliest; levels are consecutive and zooms strictly increase, so eligibility is cumulative. The producer requires a
+valid `visibilityLevel` on every published place. A consumer may read a missing value as `legacyFallbackLevel`, but must
+reject a present invalid value rather than treat it as high priority. The web build copies this file into its offline
+shell. Neither side keeps its own copy of the thresholds.
 
 Version breaking changes deliberately. This package is a contract boundary, not a place for miscellaneous shared
 implementation helpers.

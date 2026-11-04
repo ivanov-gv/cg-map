@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
+import {parseVisibilityConfig,assertPublishedPlaces} from '../src/place-visibility.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
@@ -15,7 +16,9 @@ fs.cpSync(path.join(root, 'apps/web/public'), output, {recursive: true});
 fs.cpSync(path.join(root, 'apps/web/src'), output, {recursive: true});
 fs.mkdirSync(path.join(output, 'data'), {recursive: true});
 fs.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
+assertPublishedPlaces(JSON.parse(fs.readFileSync(path.join(root, 'data/sources/places.geojson'))).features, parseVisibilityConfig(JSON.parse(fs.readFileSync(path.join(root, 'packages/contracts/place-visibility.json')))));
 fs.copyFileSync(path.join(root, 'data/sources/places.geojson'), path.join(output, 'data/places.geojson'));
+fs.copyFileSync(path.join(root, 'packages/contracts/place-visibility.json'), path.join(output, 'data/place-visibility.json'));
 fs.copyFileSync(path.join(root, 'data/sources/building-labels.geojson'), path.join(output, 'data/building-labels.geojson'));
 fs.copyFileSync(path.join(root, 'data/sources/transit-network.json'), path.join(output, 'data/transit-network.json'));
 fs.copyFileSync(path.join(root, 'data/sources/transport-stops.geojson'), path.join(output, 'data/transport-stops.geojson'));

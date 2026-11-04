@@ -1,0 +1,12 @@
+{
+  "$schema": "./place-visibility.schema.json",
+  "version": 1,
+  "legacyFallbackLevel": 5,
+  "levels": [
+    {"level": 1, "minZoom": 12},
+    {"level": 2, "minZoom": 14},
+    {"level": 3, "minZoom": 15},
+    {"level": 4, "minZoom": 16},
+    {"level": 5, "minZoom": 17}
+  ]
+}

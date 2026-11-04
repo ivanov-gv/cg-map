@@ -16,7 +16,8 @@
         "category": "sights",
         "kind": "monument",
         "source": "OpenStreetMap",
-        "name:en": "Memorial Mausoleum to Partisans"
+        "name:en": "Memorial Mausoleum to Partisans",
+        "visibilityLevel": 4
       }
     },
     {
@@ -34,7 +35,8 @@
         "category": "shops",
         "kind": "supermarket",
         "source": "OpenStreetMap",
-        "opening_hours": "Mo-Sa 07:30-21:30"
+        "opening_hours": "Mo-Sa 07:30-21:30",
+        "visibilityLevel": 4
       }
     },
     {
@@ -55,7 +57,8 @@
         "website": "https://www.prvabankacg.com/",
         "opening_hours": "Mo-Sa 08:00-20:00; Su",
         "phone": "19891",
-        "addr:street": "Vuka Karadžića"
+        "addr:street": "Vuka Karadžića",
+        "visibilityLevel": 5
       }
     }
   ]

@@ -83,7 +83,7 @@ Retain a metric scale bar. Test equivalent ground scales across desktop/phone an
 | Country          | ≥200                      | National corridors and settlements; no individual ordinary building/address detail.                                    | Major relief and landforms; generalized elevation context.                        | Only individually ranked national landmarks/attractions and major travel gateways. **No local cafes, shops, or their aggregate count clusters.** |
 | Region           | 20–<200                   | Inter-settlement connections, regional roads, significant crossings.                                                   | Ridges, valleys, major slopes; generalized contours where readable.               | Regional landmarks and hubs, selected by importance and available space.                                                                         |
 | City / district  | 4–<20                     | Connected street structure, major pedestrian links, building masses where legible.                                     | Local landform context and meaningful slope changes.                              | District landmarks and essential anchors; ordinary businesses normally suppressed.                                                               |
-| Street — default | 0.5–<4                    | Streets, named bridges, sidewalks, paths, steps, building footprints/types, recorded house numbers and street context. | 5 m relief requirement; contours plus landform/structure cues.                    | Relevant local businesses and attractions with collision-aware icons/labels.                                                                     |
+| Street — default | 0.5–<4                    | Streets, named bridges, sidewalks, paths, steps, building footprints/types, recorded house numbers and street context. | 5 m relief requirement; contours plus landform/structure cues.                    | Relevant local businesses and attractions with fixed-level icons and names when space permits.                                                   |
 | Close detail     | <0.5                      | Refine addresses, entrances, small links, and mapped access distinctions without inventing positional precision.       | Retain small slopes, scarps, steps, and grade separation with supported accuracy. | More local detail as space permits; readability still limits density.                                                                            |
 
 Every class is available by default **at its appropriate scale**. Automatic scale selection is not a hidden layer
@@ -252,20 +252,25 @@ Businesses, landmarks, attractions, and useful facilities MUST be part of the de
 attraction is not nationally important, and a large number of cafes does not make a cafe cluster a country-level
 landmark.
 
+[Stable POI visibility](../features/poi-visibility.md) refines the icon stability policy below. Its fixed levels and
+cumulative admission supersede viewport-dependent icon thinning. The
+[implementation plan](../../plans/stable-poi-visibility.md) records the release checks.
+
 1. Give each eligible POI a documented importance class and minimum display scale. Country/region views MUST suppress
    ordinary local cafes, restaurants, shops, and their count clusters. A genuinely nationally significant site needs
    evidence for that rank, not a permissive category-wide rule.
-2. Apply scale eligibility **before** clustering, ranking, and collision placement. Clustering alone does not solve
-   scale relevance; country-level aggregates of ineligible businesses remain clutter.
+2. Apply each place's fixed level threshold **before** label collision placement. Icon admission is cumulative as zoom
+   increases and independent of viewport occupancy; country-level aggregates of ineligible businesses remain clutter.
 3. At street scale, show a representative, readable selection of local businesses and sights automatically. Use
    recognizable category symbols and names when space permits, rather than an undifferentiated carpet of circles.
 4. Establish deterministic label priorities: protect current position, movement/bridge names, meaningful terrain/level
-   cues and address context before ordinary POIs; preserve salient geographic landmarks. Resolve collisions across
-   icons, text, addresses, and roads, not only between POI names. Avoid duplicate labels for one place represented by
+   cues and address context before ordinary POI names; preserve salient geographic landmarks. Names may yield to those
+   priorities, but their collisions must not remove eligible icons. Avoid duplicate labels for one place represented by
    both a footprint and point.
-5. Symbols and text MUST NOT overlap into unreadable piles or hide essential paths. Thin low-priority POIs automatically
-   as density increases; more space on desktop may admit more detail, without changing the meaning of the ranks.
-   Visibility should be stable under small camera movements rather than flickering randomly.
+5. Symbols and text MUST NOT overlap into unreadable piles or hide essential paths. Control density through reviewed,
+   persistent level assignments rather than viewport-dependent icon suppression. Screen size does not change a place's
+   threshold. Co-located listings require a stable shared marker and access to each listing; essential map readability
+   remains a real-data release check, not something proved by stable eligibility alone.
 6. Suppression from the default scene MUST NOT delete directory data. Search may deliberately surface a requested cafe
    at broad scale; explicit search/selection is a later interaction, visually distinct from ordinary default
    cartography.

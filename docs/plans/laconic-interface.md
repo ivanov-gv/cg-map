@@ -2,6 +2,9 @@
 
 Status: complete
 
+Follow-up: [stable POI visibility levels](stable-poi-visibility.md) has its own plan. This completed plan did not
+implement per-place levels or commercial priority.
+
 ## Goal and acceptance criteria
 
 - Implement [the approved interface](../ui-ux/features/interface.md) in the real web app: unchanged burger/search

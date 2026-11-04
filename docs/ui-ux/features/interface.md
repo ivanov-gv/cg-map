@@ -11,6 +11,10 @@ details. [Plan](../user-stories/plan.md) covers journey preparation and route re
 [Travel](../user-stories/travel.md) covers live route-following and finishing. Preserve the capabilities in
 [user stories](../user-stories/user-stories.md) while changing their presentation.
 
+[Stable POI visibility](poi-visibility.md) retains these search controls and map focus while restricting below-threshold
+display to one leading or selected result; other matching icons keep their assigned levels. This refines marker
+admission, not the dock or mobile composition.
+
 ## User outcomes served
 
 These controls exist to help people find a known place (US-02), discover nearby options (US-03), inspect and set journey

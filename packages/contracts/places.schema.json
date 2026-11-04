@@ -26,7 +26,11 @@
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "name": {"type": "string", "minLength": 1},
-        "category": {"enum": ["food", "sights", "shops", "stay", "essentials"]}
+        "category": {"enum": ["food", "sights", "shops", "stay", "essentials"]},
+        "visibilityLevel": {
+          "description": "Level from place-visibility.json. The data producer requires it on every published place; consumers may read a missing value as legacyFallbackLevel but must reject an invalid one.",
+          "type": "integer", "minimum": 1, "maximum": 5
+        }
       }
     }
   }

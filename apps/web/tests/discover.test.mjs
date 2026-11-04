@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {metersPerPixel,DISCOVER_ZOOM,DEFAULT_CENTER,PLACE_SCALE_FILTER,classifyFix,accuracyCircle,distance,formatAge} from '../src/core.js';
+import {metersPerPixel,DISCOVER_ZOOM,DEFAULT_CENTER,classifyFix,accuracyCircle,distance,formatAge} from '../src/core.js';
 import {PositionTracker,positionFeatures} from '../src/position.js';
 
 const bounds = [[17.8, 41.3], [21, 44.1]];
@@ -10,30 +10,6 @@ test('default camera opens at about one ground metre per CSS pixel', () => {
   assert.ok(mpp > 0.9 && mpp < 1.1, `got ${mpp}`);
   // The old zoom 14 start was ~3.5 m/px, which hid house numbers (shown below 2 m/px).
   assert.ok(metersPerPixel(DEFAULT_CENTER[1], 14) > 3);
-});
-
-// Evaluates the shipped filter's step/match shape directly, so the test cannot drift from what the map uses.
-function evaluate(expression, zoom, category) {
-  if (!Array.isArray(expression)) return expression;
-  const [op, ...args] = expression;
-  if (op === 'step') {
-    let output = args[1];
-    for (let i = 2; i < args.length; i += 2) if (zoom >= args[i]) output = args[i + 1];
-    return evaluate(output, zoom, category);
-  }
-  if (op === 'match') { assert.deepEqual(args[0], ['get', 'category']); return args[1].includes(category) ? args[2] : args[3]; }
-  throw new Error('Unexpected filter operator ' + op);
-}
-
-test('ordinary businesses never appear at country or region scale', () => {
-  assert.deepEqual(PLACE_SCALE_FILTER.slice(0, 2), ['step', ['zoom']]);
-  for (const category of ['food', 'shops', 'stay', 'sights', 'essentials']) {
-    for (const zoom of [7, 8, 10, 12]) assert.equal(evaluate(PLACE_SCALE_FILTER, zoom, category), false, `${category}@${zoom}`);
-    assert.equal(evaluate(PLACE_SCALE_FILTER, 14, category), true);
-  }
-  assert.equal(evaluate(PLACE_SCALE_FILTER, 13, 'sights'), true);
-  assert.equal(evaluate(PLACE_SCALE_FILTER, 13, 'essentials'), true);
-  assert.equal(evaluate(PLACE_SCALE_FILTER, 13, 'food'), false);
 });
 
 test('fix classification separates live, approximate, stale and outside', () => {
