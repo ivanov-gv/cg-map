@@ -4,7 +4,7 @@ Read-only Podgorica bus positions for the optional web transport layer. This ser
 and GitHub Pages.
 
 Canonical implementation: relay.mjs. worker.mjs is a portable Fetch API entry point. Node tests run with
-`node --test services/transit-relay/relay.test.mjs` from repository root.
+`node --test services/transit-relay/tests/*.test.mjs` from repository root.
 
 ## Source and behavior
 

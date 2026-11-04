@@ -9,7 +9,7 @@ apps/web/src/vehicle-direction.js; both run packages/contracts/fixtures/vehicle-
 the live upstream.
 
 <!-- BEGIN GENERATED agent-guidelines: edit docs/engineering/*.md and run `make agent-rules` -->
-<!-- agent-guideline: go sha256:8a49225848f9 -->
+<!-- agent-guideline: go sha256:c0e2f28ae808 -->
 
 ## Go conventions (from ../../docs/engineering/go.md)
 
@@ -22,7 +22,7 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 - The server serves an explicitly selected artifact directory. It does not embed or read web source, data/sources, or
   pipeline output paths directly.
 - Do not scaffold placeholder services, APIs, or packages for future editorial work (see
-  [ownership](../../docs/ownership.md)).
+  [ownership](../../docs/system-architecture/ownership.md)).
 
 ### Code
 

@@ -5,7 +5,7 @@ ROOT := ../..
 verify: lint test
 
 lint:
-	cd $(ROOT) && npx --no-install eslint services/transit-relay/*.mjs
+	cd $(ROOT) && npx --no-install eslint services/transit-relay/*.mjs services/transit-relay/tests/*.mjs
 
 test:
-	cd $(ROOT) && node --test services/transit-relay/*.test.mjs
+	cd $(ROOT) && node --test services/transit-relay/tests/*.test.mjs

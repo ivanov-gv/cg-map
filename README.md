@@ -8,16 +8,17 @@ place details, a satellite sample, and explicit offline download.
 | Path                                                       | Responsibility                                                          |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [apps/web](apps/web/README.md)                             | Browser experience, rendering, offline UI                               |
-| [services/backend](services/backend/README.md)             | Independent Go module; currently an optional static host                |
+| [services/backend](services/backend/README.md)             | Independent Go module; optional static host and layer/transport APIs    |
 | [services/transit-relay](services/transit-relay/README.md) | Public read-only live bus relay                                         |
 | [data](data/README.md)                                     | Source datasets, imagery, validation, tile pipeline, reviewed artifacts |
 | [packages/contracts](packages/contracts/README.md)         | Published data formats shared by producers/consumers                    |
 | [platform](platform/README.md)                             | Development hosting, release infrastructure, repository checks          |
 | [tests](tests/README.md)                                   | Cross-component contract and artifact integration                       |
-| [docs](docs/README.md)                                     | Architecture, ownership, decisions, and runbooks                        |
+| [docs](docs/README.md)                                     | Topic-organized architecture, feature, data, and operating guidance     |
 
-See [team boundaries](docs/ownership.md) and [current architecture](ARCHITECTURE.md). Future backend/editorial
-capabilities are proposals, not implemented services.
+See [team boundaries](docs/system-architecture/ownership.md) and
+[current architecture](docs/system-architecture/architecture.md). Future backend/editorial capabilities are proposals,
+not implemented services.
 
 ## Develop
 
@@ -50,4 +51,4 @@ Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitH
 or committed deployment copy is needed.
 
 Application code is MIT. Datasets/fonts have separate terms; satellite redistribution rights remain unverified. See
-[DATA_LICENSE.md](DATA_LICENSE.md).
+[data licensing](docs/map-data/data-license.md).

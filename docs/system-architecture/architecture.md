@@ -22,10 +22,10 @@ repository folders.
 The Go server is optional. When the app is served by it, `config.json` selects server mode and the app reads layers and
 vehicles from its APIs. Static hosts such as GitHub Pages serve the artifact's own `config.json`, which selects mock
 mode: the current static data (the release archive read directly and the hosted relay). `?api=server|mock` overrides
-either. See [backend](services/backend/README.md). There is no editorial API, database, self-hosted routing engine,
-editorial system, or server-side search today. The optional live transport layer uses a separate read-only vehicle
-relay; its hosted endpoint is public. Route planning uses external car/foot routing and local dated bus patterns; see
-[routing](docs/routing.md).
+either. See [backend](../../services/backend/README.md). There is no editorial API, database, self-hosted routing
+engine, editorial system, or server-side search today. The optional live transport layer uses a separate read-only
+vehicle relay; its hosted endpoint is public. Route planning uses external car/foot routing and local dated bus
+patterns; see [routing behavior](../ui-ux/features/routing.md).
 
 ## Ownership boundaries
 
@@ -37,7 +37,7 @@ relay; its hosted endpoint is public. Route planning uses external car/foot rout
 - tests: cross-component contract and artifact integration. Browser acceptance lives in apps/web; unit tests stay with
   their components.
 
-See [ownership](docs/ownership.md) for teams, interfaces, and future split triggers.
+See [ownership](ownership.md) for teams, interfaces, and future split triggers.
 
 ## Build and runtime flow
 
@@ -69,16 +69,16 @@ never imports web code. The backend module builds without npm or raw datasets.
 ## Known limits
 
 Incomplete coverage, legacy geometry identity, GIS topology, imagery rights, browser eviction, phone GPU performance,
-archive retention, and larger editorial workflows remain documented in [technical debt](docs/technical-debt.md).
+archive retention, and larger editorial workflows remain documented in [technical debt](technical-debt.md).
 
-Further reading: [web guide](apps/web/README.md), [data pipeline](docs/runbooks/data.md),
-[release](docs/runbooks/release.md), [testing](docs/testing.md), and
-[detailed earlier design](docs/design/implementation-guide.md).
+Further reading: [web guide](../../apps/web/README.md), [data pipeline](../runbooks/data.md),
+[release](../runbooks/release.md), [testing](../verification/testing.md), and
+[historical implementation guide](historical-implementation-guide.md).
 
 ## Live transport
 
-See [transport](docs/transport.md). The optional client layer polls public ePodgorica positions through the Go server
-(server mode) or the read-only hosted relay (mock mode, GitHub Pages). A server-side hop exists because the upstream
-restricts browser origins. Bus markers point in the direction of travel when it is known from movement, show an outlined
-estimate from the route until then, or a plain disc when neither is available. The public hosted endpoint and deployment
-identity are recorded with the service. Live data is separate from offline map packages.
+See [transport behavior](../ui-ux/features/transport.md). The optional client layer polls public ePodgorica positions
+through the Go server (server mode) or the read-only hosted relay (mock mode, GitHub Pages). A server-side hop exists
+because the upstream restricts browser origins. Bus markers point in the direction of travel when it is known from
+movement, show an outlined estimate from the route until then, or a plain disc when neither is available. The public
+hosted endpoint and deployment identity are recorded with the service. Live data is separate from offline map packages.

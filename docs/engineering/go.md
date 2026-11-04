@@ -8,7 +8,8 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
   `make check-go` and the backend CI workflow.
 - The server serves an explicitly selected artifact directory. It does not embed or read web source, data/sources, or
   pipeline output paths directly.
-- Do not scaffold placeholder services, APIs, or packages for future editorial work (see [ownership](../ownership.md)).
+- Do not scaffold placeholder services, APIs, or packages for future editorial work (see
+  [ownership](../system-architecture/ownership.md)).
 
 ## Code
 

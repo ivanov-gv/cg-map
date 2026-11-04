@@ -20,7 +20,8 @@ content/checksum. Retain input snapshots outside the source repository when repr
 
 The added `data/tools/extract-osm.py` is an adaptation of the original small extractor. Its CLI and Python syntax have
 been checked. A fresh complete PBF extraction was not rerun during this documentation/export task. It is not a full OSM
-semantic/cartographic pipeline; see ARCHITECTURE.md before using it to expand coverage.
+semantic/cartographic pipeline; see [architecture](../docs/system-architecture/architecture.md) before using it to
+expand coverage.
 
 ## Bus stops
 
@@ -45,4 +46,4 @@ sampling limits, counts, hash, and license status are recorded.
 direct/node-derived counts. Real way IDs are recovered by exact rounded footprint matching; point addresses are joined
 only through unambiguous node membership or containment. No-number placeholders and ambiguous joins are excluded. The
 runtime label layer is separate from the unchanged geography archive; it is bundled for offline use. See
-[building numbers](../docs/building-numbers.md).
+[building numbers](../docs/map-data/building-numbers.md).

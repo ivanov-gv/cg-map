@@ -1,7 +1,7 @@
 # Shared contracts
 
 Published formats shared by data producers and application consumers. Changes require producer and consumer review; see
-[ownership](../../docs/ownership.md).
+[ownership](../../docs/system-architecture/ownership.md).
 
 `places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported
 category, and WGS84 longitude/latitude point. The data validator enforces this contract and directory-wide uniqueness.
@@ -19,7 +19,7 @@ offline rendering.
 dictionary (names and WGS84 coordinates), and forward ordered stop IDs with equally sized monotonic relative seconds per
 pattern. The producer validates referenced stops, coordinates, bounds and provenance. It contains no service calendar or
 claimed departure predictions. Consumers must label suggestions and waiting-time limits; see
-[routing](../../docs/routing.md).
+[routing](../../docs/ui-ux/features/routing.md).
 
 `vehicles.schema.json` defines the live bus feed: route and position per bus, the check time, stale flag and source. The
 upstream has no vehicle IDs, GPS times or heading. `bearing` (degrees from north) with `heading: "movement"` is

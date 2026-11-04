@@ -1,9 +1,14 @@
 # Discover: the default map experience
 
 Status: target product requirements, agreed direction on 1 November 2026, with the
-[laconic interface presentation](interface.md) revised on 3 November; **not a description of completed implementation**.
-The product journey is **Discover → Understand → Plan → Travel**. This document specifies Discover: what a person can
-learn by looking at the map before searching, selecting an object, choosing a mode, or enabling a layer.
+[laconic interface presentation](../features/interface.md) revised on 3 November; **not a description of completed
+implementation**. The product journey is **Discover → Understand → Plan → Travel**. This document specifies Discover:
+what a person can learn by looking at the map before searching, selecting an object, choosing a mode, or enabling a
+layer.
+
+This target extends the maintained outcomes in [US-01–03 and US-13](user-stories.md): orient on the map, find or browse
+places, and understand current-position state. It raises geographic completeness and first-view expectations beyond
+current implementation; see the [interface feature](../features/interface.md) for control presentation.
 
 ## Purpose and user success
 
@@ -48,10 +53,10 @@ research findings or completed performance measurements.
    failure/coverage state; a partly drawn map is not full Discover readiness.
 5. The map MUST remain the principal initial content on a phone. Controls and attribution MUST leave a contiguous area
    where the person can read nearby streets, buildings, terrain, POIs, and their position together. Follow the
-   [interface target](interface.md#ui-01-opening-view): no initially open dock, place card, route panel, map key, or
-   persistent location text banner. Make geographic encodings interpretable through recognizable symbols, redundant
-   cues, and appropriate map labels; a persistent legend must not be needed to read the scene. This presentation
-   supersedes the earlier automatically visible key requirement.
+   [interface target](../features/interface.md#ui-01-opening-view): no initially open dock, place card, route panel, map
+   key, or persistent location text banner. Make geographic encodings interpretable through recognizable symbols,
+   redundant cues, and appropriate map labels; a persistent legend must not be needed to read the scene. This
+   presentation supersedes the earlier automatically visible key requirement.
 6. All required geographic content MUST remain available after a verified offline download. Device location remains
    subject to permission and the device's ability to obtain a fix; offline map readiness does not guarantee positioning.
    Preserve the [existing offline invariants](../../AGENTS.md#invariants).
@@ -281,11 +286,11 @@ accuracy radius. Therefore literal visibility of an actual location before permi
 guaranteed. The required first-view result is either an automatically displayed usable fix **or an explicit location
 state**. This is an environmental constraint, not removal of the position requirement.
 
-Use the [icon-only location presentation](interface.md#ui-05-honest-state-with-minimal-interruption): visible
-icon/marker differences and accessible names communicate state without a persistent text banner. A usable fix recenters
-directly on activation; no introductory location panel is required. If positioning cannot succeed, show concise
-actionable recovery after the location request. Do not hide a failure or substitute a fabricated position to keep the UI
-quiet.
+Use the [icon-only location presentation](../features/interface.md#ui-05-honest-state-with-minimal-interruption):
+visible icon/marker differences and accessible names communicate state without a persistent text banner. A usable fix
+recenters directly on activation; no introductory location panel is required. If positioning cannot succeed, show
+concise actionable recovery after the location request. Do not hide a failure or substitute a fabricated position to
+keep the UI quiet.
 
 The following are **our product decisions** for that capability:
 
@@ -325,22 +330,24 @@ contain.
 The interface approved on 3 November is implemented in the web source: stable expanding controls, icon-only location,
 and mobile search with fixed categories over a scrolling list. An explicit leading search result uses the existing place
 feature with protected icon visibility. Existing key/banner behavior below is historical baseline evidence; see
-[the current interface](interface.md) for control behavior. Data coverage and default POI importance gaps remain.
+[the current interface](../features/interface.md) for control behavior. Data coverage and default POI importance gaps
+remain.
 
-| Requirement         | Current evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Work needed to meet the target                                                                                                                                                                                                                                       |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D-01 Default view   | [App startup](../../apps/web/src/app.js) opens central Podgorica at ≈1 m/CSS px (`DISCOVER_ZOOM` in [core](../../apps/web/src/core.js); the former zoom 14 was ≈3.5 m/px and hid house numbers and POI names). The base map is created before places and house numbers finish loading; each failed layer gets its own message. A small map key is visible without interaction. The From/To prompt moved out of the default view into About.                                  | Validate the implemented laconic interface on physical phones. Building types, terrain and level separation still need source data and readable encodings. Readiness instrumentation and performance baselines do not exist.                                         |
-| D-02 Movement       | [Style](../../apps/web/src/map-style.js) gives footways, pedestrian streets, paths/tracks, cycleways and steps their own colours and dash patterns, and service streets a narrower stroke. Published [roads](../../data/sources/roads.geojson) still retain only `kind` and `name`.                                                                                                                                                                                          | Recover/preserve sidewalk, bridge/`bridge:name`, tunnel, layer, oneway, access, crossing and construction semantics through the producer and contract; then draw structure, restriction and sidewalk cues. Rail/ferry context is not in the snapshot.                |
-| D-03 Buildings      | Published [footprints](../../data/sources/buildings.geojson) contain generic `kind=building`, so all footprints keep one neutral fill and the key says the type is not recorded. Published [address labels](../building-numbers.md) (1,076) show automatically at the default scale.                                                                                                                                                                                         | Source-backed use/structure classification with provenance; colour plus non-colour cue per group; richer address coverage and street association.                                                                                                                    |
-| D-04 Terrain/levels | No elevation, contour, hillshade or terrain source. The key states that terrain and bridge levels are not in this map yet, rather than letting flat cartography imply flat ground.                                                                                                                                                                                                                                                                                           | Suitable licensed ground data, structure semantics, validated height/coverage, derived local offline assets, and terrain/level cartography.                                                                                                                          |
-| D-05 POIs           | [App layers](../../apps/web/src/app.js) no longer cluster. One collision-placed symbol layer with runtime-drawn [category icons](../../apps/web/src/poi-icons.js) sits below road names and house numbers, so those win collisions. A scale filter hides every POI at country/region scale, shows sights/essentials from ≈7 m/px and other categories from ≈3.5 m/px. An explicit search or category choice lifts the scale filter.                                          | Places have no importance rank: the per-category rule is a stopgap, and all 622 `sights` are treated alike. Add producer-side ranks and minimum scales; make search results visually distinct from default cartography; run density/stability reviews at every band. |
-| D-06 Position       | [Position tracker](../../apps/web/src/position.js) starts on load (granted: no click; prompt: browser asks, with a visible retry). The status shows acquiring, live, approximate (>50 m), stale (>30 s), denied, unavailable, timeout (15 s), insecure, unsupported and outside-coverage states. A ground-scaled accuracy ring is drawn. The camera centers once unless the person has already moved it, and a Recenter action is provided. Coordinates stay in memory only. | Validate thresholds on supported devices. Coverage is the Montenegro map bounds; a "limited detail" state for areas outside central Podgorica is not distinguished yet.                                                                                              |
+| Requirement         | Current evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Work needed to meet the target                                                                                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-01 Default view   | [App startup](../../../apps/web/src/app.js) opens central Podgorica at ≈1 m/CSS px (`DISCOVER_ZOOM` in [core](../../../apps/web/src/core.js); the former zoom 14 was ≈3.5 m/px and hid house numbers and POI names). The base map is created before places and house numbers finish loading; each failed layer gets its own message. A small map key is visible without interaction. The From/To prompt moved out of the default view into About.                               | Validate the implemented laconic interface on physical phones. Building types, terrain and level separation still need source data and readable encodings. Readiness instrumentation and performance baselines do not exist.                                         |
+| D-02 Movement       | [Style](../../../apps/web/src/map-style.js) gives footways, pedestrian streets, paths/tracks, cycleways and steps their own colours and dash patterns, and service streets a narrower stroke. Published [roads](../../../data/sources/roads.geojson) still retain only `kind` and `name`.                                                                                                                                                                                       | Recover/preserve sidewalk, bridge/`bridge:name`, tunnel, layer, oneway, access, crossing and construction semantics through the producer and contract; then draw structure, restriction and sidewalk cues. Rail/ferry context is not in the snapshot.                |
+| D-03 Buildings      | Published [footprints](../../../data/sources/buildings.geojson) contain generic `kind=building`, so all footprints keep one neutral fill and the key says the type is not recorded. Published [address labels](../../map-data/building-numbers.md) (1,076) show automatically at the default scale.                                                                                                                                                                             | Source-backed use/structure classification with provenance; colour plus non-colour cue per group; richer address coverage and street association.                                                                                                                    |
+| D-04 Terrain/levels | No elevation, contour, hillshade or terrain source. The key states that terrain and bridge levels are not in this map yet, rather than letting flat cartography imply flat ground.                                                                                                                                                                                                                                                                                              | Suitable licensed ground data, structure semantics, validated height/coverage, derived local offline assets, and terrain/level cartography.                                                                                                                          |
+| D-05 POIs           | [App layers](../../../apps/web/src/app.js) no longer cluster. One collision-placed symbol layer with runtime-drawn [category icons](../../../apps/web/src/poi-icons.js) sits below road names and house numbers, so those win collisions. A scale filter hides every POI at country/region scale, shows sights/essentials from ≈7 m/px and other categories from ≈3.5 m/px. An explicit search or category choice lifts the scale filter.                                       | Places have no importance rank: the per-category rule is a stopgap, and all 622 `sights` are treated alike. Add producer-side ranks and minimum scales; make search results visually distinct from default cartography; run density/stability reviews at every band. |
+| D-06 Position       | [Position tracker](../../../apps/web/src/position.js) starts on load (granted: no click; prompt: browser asks, with a visible retry). The status shows acquiring, live, approximate (>50 m), stale (>30 s), denied, unavailable, timeout (15 s), insecure, unsupported and outside-coverage states. A ground-scaled accuracy ring is drawn. The camera centers once unless the person has already moved it, and a Recenter action is provided. Coordinates stay in memory only. | Validate thresholds on supported devices. Coverage is the Montenegro map bounds; a "limited detail" state for areas outside central Podgorica is not distinguished yet.                                                                                              |
 
 Data owns acquisition, provenance, semantic preservation and validated releases. Web owns default camera, rendering,
 geolocation and communication of uncertainty. Shared producer/consumer formats belong to
-[contracts](../../packages/contracts/README.md); acceptance belongs to [cross-component tests](../../tests/README.md).
-Follow [ownership](../ownership.md). Extending data must update producer validation and consumer tests together, with a
-deliberate release; no placeholder backend, server search, or editorial API is required by this specification.
+[contracts](../../../packages/contracts/README.md); acceptance belongs to
+[cross-component tests](../../../tests/README.md). Follow [ownership](../../system-architecture/ownership.md). Extending
+data must update producer validation and consumer tests together, with a deliberate release; no placeholder backend,
+server search, or editorial API is required by this specification.
 
 All geographic layers needed for Discover must be distributable as local runtime assets and included in the verified
 offline package, subject to licensing. Do not silently add a remote terrain dependency that breaks the core offline
@@ -375,12 +382,12 @@ scale, viewport, coverage version, location state, and visible control bounds.
 | A-12 | Ask a person to describe the untouched scene.                                                             | They can identify position/uncertainty or its unavailable state, a usable mapped corridor, a building/address/type, the direction of a 5 m+ change, a level-separated crossing, and a relevant POI where those features exist. Record mistakes and time; there is no measured user-study baseline yet. |
 
 Release evidence needs three separate verdicts: **source adequacy**, **rendering correctness**, and **user
-comprehension**. Existing tests in [the testing guide](../testing.md) cover parts of the current map, not these new
-acceptance criteria. Control composition and expansion also need the
-[interface acceptance cases](interface.md#acceptance). Add targeted producer/contract checks, deterministic browser
-fixtures and visual review when implementing, then conduct observed tasks and physical-device checks. A source property
-existing in a file, a successful tile request, or a passing screenshot comparison alone does not establish Discover
-success.
+comprehension**. Existing tests in [the testing guide](../../verification/testing.md) cover parts of the current map,
+not these new acceptance criteria. Control composition and expansion also need the
+[interface acceptance cases](../features/interface.md#acceptance). Add targeted producer/contract checks, deterministic
+browser fixtures and visual review when implementing, then conduct observed tasks and physical-device checks. A source
+property existing in a file, a successful tile request, or a passing screenshot comparison alone does not establish
+Discover success.
 
 ## Decisions before implementation
 

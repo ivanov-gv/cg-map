@@ -9,7 +9,8 @@ export const plans = Object.fromEntries(components.map(component => [
   component,
   [['make', '--no-print-directory', '-C', component, 'verify']]
 ]));
-const aliases = {'.claude': 'platform', '.codex': 'platform', '.github': 'platform', 'AGENTS.md': 'docs', 'ARCHITECTURE.md': 'docs', 'README.md': 'docs'};
+plans.docs = [['make', '--no-print-directory', '-f', 'platform/docs.mk', 'verify']];
+const aliases = {'.claude': 'platform', '.codex': 'platform', '.github': 'platform', 'AGENTS.md': 'docs', 'README.md': 'docs'};
 
 export function componentFor(target) {
   const rel = target.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');

@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';
+import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import {fileURLToPath} from 'node:url';import {assertOfflineModulesIncluded} from './offline-inventory.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..');
 const web=path.join(root,'dist/web');
 const check=process.argv.includes('--check');
@@ -11,6 +11,7 @@ if(check&&path.resolve(archive)!==path.join(web,archiveName))throw new Error('Ar
 if(!check&&path.resolve(archive)!==path.join(web,archiveName))fs.renameSync(archive,path.join(web,archiveName));
 for(const name of fs.readdirSync(path.join(web,'data')))if(!check&&name.endsWith('.pmtiles')&&'data/'+name!==archiveName)fs.unlinkSync(path.join(web,'data',name));
 const shell=['index.html','interface.js','app-updates.js','app.js','core.js','offline.js','map-style.js','satellite.js','transport.js','vehicle-direction.js','data-mode.js','point-selection.js','object-selection.js','map-taps.js','poi-icons.js','position.js','routing.js','transit-routing.js','route-planner.js','style.css','icon.svg','icon-192.png','icon-512.png','manifest.webmanifest','vendor/maplibre-gl.js','vendor/maplibre-gl.css','vendor/pmtiles.js','data/places.geojson','data/transport-stops.geojson','data/transit-network.json','data/building-labels.geojson'];
+assertOfflineModulesIncluded(fs.readdirSync(path.join(root,'apps/web/src')).filter(file=>file.endsWith('.js')),shell);
 for(const stack of fs.readdirSync(path.join(web,'fonts'))){const p=path.join(web,'fonts',stack);if(fs.statSync(p).isDirectory())for(const f of fs.readdirSync(p))if(f.endsWith('.pbf'))shell.push('fonts/'+stack+'/'+f);}
 // Satellite is deliberately small: include every sample asset in offline releases.
 function collectSatellite(dir) {

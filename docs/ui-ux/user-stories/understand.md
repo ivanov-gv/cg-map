@@ -4,6 +4,10 @@ Status: target product requirements, agreed direction on 1 November 2026; **not 
 implementation**. This stage follows [Discover](discover.md) in **Discover → Understand → Plan → Travel**. It requires a
 deliberate user intention: selecting something in the map to learn more about it.
 
+This target builds on [US-04 and US-05](user-stories.md): judge a listing and understand the selected map object.
+Current selection behavior is described in the [point-selection feature](../features/point-selection.md); target
+requirements below identify where richer details or evidence remain unimplemented.
+
 ## Purpose, stories, and success
 
 **As someone looking at the map, I want to click an object or point and inspect its available details, so I can
@@ -185,9 +189,10 @@ start navigation. Entrances explain recorded locations without directions. Nearb
 measurements, not itineraries. **Understanding is complete without creating a trip.**
 
 A later explicit planning action is a separate stage transition defined in [Plan](plan.md). Current From/To buttons are
-documented in [point selection](../point-selection.md); this target does not require route controls in Understand or
-change runtime behavior by itself. Existing Plan capabilities must not be removed incidentally when improving selection;
-changes to stage transitions must satisfy the [Plan acceptance criteria](plan.md#acceptance-and-user-success-evidence).
+documented in [point selection](../features/point-selection.md); this target does not require route controls in
+Understand or change runtime behavior by itself. Existing Plan capabilities must not be removed incidentally when
+improving selection; changes to stage transitions must satisfy the
+[Plan acceptance criteria](plan.md#acceptance-and-user-success-evidence).
 
 Keep enough map visible to relate the subject to its surroundings. Move the camera only as needed to expose selected
 geometry; do not make a point click jump to its nearest address. Distinguish the subject from related buildings,
@@ -197,25 +202,25 @@ change which subject/address is explained.
 Closing or Escape MUST clear inspection highlights/related markers, restore the Discover scene and return focus
 appropriately. Selecting another subject replaces its inspection overlays instead of accumulating unrelated pins.
 Preserve search/category and independently established planning state unless explicitly changed. Support scrolling,
-close controls, keyboard-equivalent selection and reduced motion under the [UI guidelines](../engineering/ui.md).
+close controls, keyboard-equivalent selection and reduced motion under the [UI guidelines](../../engineering/ui.md).
 
 ## Current implementation and ownership gaps
 
 This audit describes the reviewed snapshot on 1 November 2026, not the target as implemented.
 
-| Area             | Current evidence                                                                                                                                                                                                       | Target gap                                                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Direct selection | [App cards/hit testing](../../apps/web/src/app.js), [point descriptions](../../apps/web/src/point-selection.js) and [highlighting](../../apps/web/src/object-selection.js) support places, stops, geometry and points. | Full subject coverage, aggregate/overlap details, complete composition and keyboard reachability need verification/implementation.                              |
-| Buildings        | Full-footprint highlighting and some [recovered addresses](../building-numbers.md) exist; legacy footprints have generic building classification.                                                                      | No published entrance inventory or occupant relationship model; richer attributes and related detail remain data/UI work. Current selection draws no entrances. |
-| Generic points   | Coordinates and available feature attributes are shown; the [current guide](../point-selection.md) states no reverse geocoder is used.                                                                                 | Nearest-address lookup and comprehensive context are new capabilities, not existing card behavior.                                                              |
-| POIs             | Names, category/kind, available addresses, source hours expression, contacts and safe website/source links are displayed.                                                                                              | Readable hours with uncertainty and complete building/entrance context remain implementation work.                                                              |
-| Plan separation  | Current cards expose From/To; choosing both can calculate a route.                                                                                                                                                     | Inspection itself must remain free of planning side effects; stage-transition design stays separate.                                                            |
+| Area             | Current evidence                                                                                                                                                                                                                | Target gap                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direct selection | [App cards/hit testing](../../../apps/web/src/app.js), [point descriptions](../../../apps/web/src/point-selection.js) and [highlighting](../../../apps/web/src/object-selection.js) support places, stops, geometry and points. | Full subject coverage, aggregate/overlap details, complete composition and keyboard reachability need verification/implementation.                              |
+| Buildings        | Full-footprint highlighting and some [recovered addresses](../../map-data/building-numbers.md) exist; legacy footprints have generic building classification.                                                                   | No published entrance inventory or occupant relationship model; richer attributes and related detail remain data/UI work. Current selection draws no entrances. |
+| Generic points   | Coordinates and available feature attributes are shown; the [current guide](../features/point-selection.md) states no reverse geocoder is used.                                                                                 | Nearest-address lookup and comprehensive context are new capabilities, not existing card behavior.                                                              |
+| POIs             | Names, category/kind, available addresses, source hours expression, contacts and safe website/source links are displayed.                                                                                                       | Readable hours with uncertainty and complete building/entrance context remain implementation work.                                                              |
+| Plan separation  | Current cards expose From/To; choosing both can calculate a route.                                                                                                                                                              | Inspection itself must remain free of planning side effects; stage-transition design stays separate.                                                            |
 
 Data owns reviewed addresses, entrances, building/POI identity and relationship evidence. Web owns hit testing,
-details/highlights, local lookup and selection state. [Shared contracts](../../packages/contracts/README.md) own
+details/highlights, local lookup and selection state. [Shared contracts](../../../packages/contracts/README.md) own
 producer/consumer formats; new semantics need producer validation and consumer tests together. Follow
-[ownership](../ownership.md), preserving legacy identity/provenance constraints. A showable detail does not by itself
-require a backend.
+[ownership](../../system-architecture/ownership.md), preserving legacy identity/provenance constraints. A showable
+detail does not by itself require a backend.
 
 ## Acceptance and user-success evidence
 
@@ -243,5 +248,5 @@ needed to reach detail, mistaken associations, recognition of unknowns and retur
 measured.
 
 Evidence must separately establish source adequacy, correct associations/selection, usable presentation and user
-comprehension. See [testing](../testing.md) for commands/device limits; current tests prove only what they cover.
-Implementation plans must name affected U-/UA- requirements and unsatisfied data/coverage gaps.
+comprehension. See [testing](../../verification/testing.md) for commands/device limits; current tests prove only what
+they cover. Implementation plans must name affected U-/UA- requirements and unsatisfied data/coverage gaps.

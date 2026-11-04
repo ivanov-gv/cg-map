@@ -2,8 +2,13 @@
 
 Status: target product requirements, agreed direction on 3 November 2026; **not a claim of completed implementation**.
 Plan is the third stage of **Discover → Understand → Plan → Travel**. After learning enough about a place, the person
-deliberately asks how to reach it. Existing routing capabilities are documented in [routing](../routing.md); this
-document defines the intended experience and user success.
+deliberately asks how to reach it. Existing routing capabilities are documented in [routing](../features/routing.md);
+this document defines the intended experience and user success.
+
+This target builds on [US-06–08](user-stories.md): set endpoints, compare car/walking routes, and explore a bus option.
+Current capabilities and their limits remain in the [point-selection](../features/point-selection.md) and
+[routing](../features/routing.md) feature guides; the target requirements below do not claim new planning behavior is
+implemented.
 
 ## Purpose, stories, and success
 
@@ -38,10 +43,10 @@ Unlike the one-selection detail rule, Plan may need additional clicks, an expand
 asynchronous calculations and waiting. Each step MUST advance a recognizable task: choosing context, endpoints, mode, or
 an option. It must remain clear which stage/action the person is in and how to return.
 
-Control placement follows the [interface target](interface.md): stable shared header, deliberate dock expansion, minimal
-wording, accessible state, and usable map space on phones. Do not silently replace the approved dock with nested menus
-or a bottom sheet. The eventual planning composition needs its own layout acceptance within those constraints; this
-document does not prescribe a second application or a new map instance.
+Control placement follows the [interface target](../features/interface.md): stable shared header, deliberate dock
+expansion, minimal wording, accessible state, and usable map space on phones. Do not silently replace the approved dock
+with nested menus or a bottom sheet. The eventual planning composition needs its own layout acceptance within those
+constraints; this document does not prescribe a second application or a new map instance.
 
 ## P-02 Map views and travel modes are separate choices
 
@@ -196,23 +201,23 @@ saved trips nor cross-device restoration is introduced by this target.
 
 ## Current implementation, gaps, and ownership
 
-This audit describes the reviewed repository on 3 November 2026. The [routing guide](../routing.md),
-[transport guide](../transport.md), and [frontend guide](../../apps/web/README.md) remain authoritative for implemented
-behavior and provider limits; this document does not refresh data or verify live provider availability.
+This audit describes the reviewed repository on 3 November 2026. The [routing guide](../features/routing.md),
+[transport guide](../features/transport.md), and [frontend guide](../../../apps/web/README.md) remain authoritative for
+implemented behavior and provider limits; this document does not refresh data or verify live provider availability.
 
-| Area           | Current evidence                                                                                                                                               | Target gap / constraint                                                                                                                                     |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Planning state | [App endpoint state](../../apps/web/src/app.js) and [point selection](../point-selection.md) provide From/To, A/B, replacement and clearing in the current UI. | Dedicated stage/workspace composition must fit the new interface target. Do not claim a new planner layout has shipped.                                     |
-| Views          | Satellite and Transport toggle on the existing map; enabling them currently moves the camera to their coverage.                                                | Preserve meaningful route composition through view changes; future panorama, topology and intercity views are unimplemented. Satellite is a bounded sample. |
-| Car/walk       | [Road router](../../apps/web/src/routing.js) uses distinct external profiles and accepts one provider route, with validation/cancellation and session caching. | No current multi-alternative or user-preference ranking, live traffic, offline road graph or guarantee of exact endpoint access.                            |
-| Transport      | [Local transit search](../../apps/web/src/transit-routing.js) uses representative patterns with up to one transfer and approximate/refined walks.              | No current timetable, waiting prediction, earliest-arrival planner or intercity guarantee. Mode comparison must retain those limits.                        |
-| Results        | [Route planner](../../apps/web/src/route-planner.js) draws a line, time/distance and itinerary and invalidates changed work.                                   | Technical result readiness does not implement the full relevance, provisional-status and Travel handoff criteria above.                                     |
+| Area           | Current evidence                                                                                                                                                           | Target gap / constraint                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Planning state | [App endpoint state](../../../apps/web/src/app.js) and [point selection](../features/point-selection.md) provide From/To, A/B, replacement and clearing in the current UI. | Dedicated stage/workspace composition must fit the new interface target. Do not claim a new planner layout has shipped.                                     |
+| Views          | Satellite and Transport toggle on the existing map; enabling them currently moves the camera to their coverage.                                                            | Preserve meaningful route composition through view changes; future panorama, topology and intercity views are unimplemented. Satellite is a bounded sample. |
+| Car/walk       | [Road router](../../../apps/web/src/routing.js) uses distinct external profiles and accepts one provider route, with validation/cancellation and session caching.          | No current multi-alternative or user-preference ranking, live traffic, offline road graph or guarantee of exact endpoint access.                            |
+| Transport      | [Local transit search](../../../apps/web/src/transit-routing.js) uses representative patterns with up to one transfer and approximate/refined walks.                       | No current timetable, waiting prediction, earliest-arrival planner or intercity guarantee. Mode comparison must retain those limits.                        |
+| Results        | [Route planner](../../../apps/web/src/route-planner.js) draws a line, time/distance and itinerary and invalidates changed work.                                            | Technical result readiness does not implement the full relevance, provisional-status and Travel handoff criteria above.                                     |
 
 Web owns planning state, UI composition, provider consumption and legible results. Data owns reviewed patterns,
-geography, access/entrance evidence and provenance. [Contracts](../../packages/contracts/README.md) own published
+geography, access/entrance evidence and provenance. [Contracts](../../../packages/contracts/README.md) own published
 producer/consumer formats; new semantics need validation and consumer tests together. Follow
-[ownership](../ownership.md). No new backend, routing service, panorama provider or transport timetable is invented by
-documenting these needs.
+[ownership](../../system-architecture/ownership.md). No new backend, routing service, panorama provider or transport
+timetable is invented by documenting these needs.
 
 ## Acceptance and user-success evidence
 
@@ -240,6 +245,6 @@ appropriate outcome may be a provisional suggestion or an honest no-plan result;
 **a relevant path found and ready to navigate**. No user-study baseline or new performance target is asserted here.
 
 Implementation plans must name affected P-/PA- requirements, source/provider assumptions and evidence. Follow
-[testing](../testing.md) for commands and device limitations; source adequacy, route correctness, usability and user
-comprehension need separate validation. This change defines the target only and does not calculate routes or implement a
-new view.
+[testing](../../verification/testing.md) for commands and device limitations; source adequacy, route correctness,
+usability and user comprehension need separate validation. This change defines the target only and does not calculate
+routes or implement a new view.

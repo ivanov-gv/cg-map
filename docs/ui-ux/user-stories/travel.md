@@ -4,6 +4,10 @@ Status: target product requirements, agreed direction on 3 November 2026; **not 
 Travel completes **Discover → Understand → Plan → Travel**. [Plan](plan.md) chooses how to get there; Travel relates the
 person's changing GPS/device position to that chosen route while they move.
 
+This is a target user story, not a maintained capability in the [current story baseline](user-stories.md): the product
+can show current position and a calculated route, but it does not yet implement a Travel lifecycle, progress, deviation
+recovery, or arrival. Do not treat its requirements as a justification for claiming those features exist.
+
 ## Purpose, stories, and success
 
 **As someone ready to travel, I want to see my live position against the selected route and understand my progress, so I
@@ -74,10 +78,10 @@ and progress continue when fixes are usable. Make that state distinguishable and
 follow action. Do not repeatedly pull the camera back during deliberate inspection. Suspending camera follow is not the
 same as pausing Travel or disabling location.
 
-Use the [interface target](interface.md) for stable controls, accessible state and concise action-specific messages.
-Following may need a focused travel presentation, but it must retain a usable map, clear stop/return actions and a
-consistent location control. Use one map instance. Voice, vibration and continuous heading-up camera rotation require
-separate design and capability decisions; none is necessary to establish this core story.
+Use the [interface target](../features/interface.md) for stable controls, accessible state and concise action-specific
+messages. Following may need a focused travel presentation, but it must retain a usable map, clear stop/return actions
+and a consistent location control. Use one map instance. Voice, vibration and continuous heading-up camera rotation
+require separate design and capability decisions; none is necessary to establish this core story.
 
 ## T-04 Progress against the selected route
 
@@ -161,16 +165,17 @@ honest outcome, not a completed trip.
 
 Audit of the reviewed repository on 3 November 2026:
 
-| Area            | Current evidence                                                                                                                                                                                     | Work still required                                                                                                                                                                                      |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Device position | [Position tracker/layers](../../apps/web/src/position.js) provide repeated fixes, accuracy and state for Discover. [App rendering](../../apps/web/src/app.js) centers once and provides recentering. | No Travel lifecycle, ongoing follow camera, route association, progress or arrival. Existing location support is not complete navigation.                                                                |
-| Chosen route    | [Route planner](../../apps/web/src/route-planner.js) draws the calculated route and itinerary from Plan.                                                                                             | No current-position matching, active-leg tracking or off-route recovery. Car/walk lines are currently invalidated on going offline; continued session following would require deliberate implementation. |
-| Handoff and end | [Plan](plan.md) specifies readiness and a deliberate Travel transition.                                                                                                                              | Start/Stop/Finish, interruption handling, replacement adoption and matching/arrival policies are target behavior. Voice/background/automatic-rerouting features remain separately scoped.                |
+| Area            | Current evidence                                                                                                                                                                                           | Work still required                                                                                                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Device position | [Position tracker/layers](../../../apps/web/src/position.js) provide repeated fixes, accuracy and state for Discover. [App rendering](../../../apps/web/src/app.js) centers once and provides recentering. | No Travel lifecycle, ongoing follow camera, route association, progress or arrival. Existing location support is not complete navigation.                                                                |
+| Chosen route    | [Route planner](../../../apps/web/src/route-planner.js) draws the calculated route and itinerary from Plan.                                                                                                | No current-position matching, active-leg tracking or off-route recovery. Car/walk lines are currently invalidated on going offline; continued session following would require deliberate implementation. |
+| Handoff and end | [Plan](plan.md) specifies readiness and a deliberate Travel transition.                                                                                                                                    | Start/Stop/Finish, interruption handling, replacement adoption and matching/arrival policies are target behavior. Voice/background/automatic-rerouting features remain separately scoped.                |
 
 Web owns the active-session state, shared location lifecycle, matching/progress and presentation. Data owns geometry,
-leg/stop/entrance evidence and provenance; [contracts](../../packages/contracts/README.md) own published shared formats.
-Follow [ownership](../ownership.md) and validate producers/consumers together for any added semantics. No new backend,
-tracking API, navigation provider or persistent route store is assumed. This change documents the story only.
+leg/stop/entrance evidence and provenance; [contracts](../../../packages/contracts/README.md) own published shared
+formats. Follow [ownership](../../system-architecture/ownership.md) and validate producers/consumers together for any
+added semantics. No new backend, tracking API, navigation provider or persistent route store is assumed. This change
+documents the story only.
 
 ## Acceptance and user-success evidence
 
@@ -191,4 +196,4 @@ Implementation needs deterministic fix/route fixtures plus physical-device tests
 suspension and recovery. In observed tasks, measure whether people can identify their position/uncertainty, explain the
 next supported leg, detect a real deviation, regain the route, and finish or stop deliberately. Source adequacy,
 matching correctness, usability and comprehension are separate verdicts. No user-study or device-performance baseline is
-asserted; use [testing](../testing.md) for verification scope and commands.
+asserted; use [testing](../../verification/testing.md) for verification scope and commands.

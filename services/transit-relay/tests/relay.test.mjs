@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRelay, normalizeVehicles, UPSTREAM} from './relay.mjs';
+import {createRelay, normalizeVehicles, UPSTREAM} from '../relay.mjs';
 const bus = {routeName: '6A', longitude: 19.26, latitude: 42.44};
 const request = () => new Request('https://relay.test/api/vehicles');
 test('provider duplicates are removed; invalid GPS and missing routes are excluded', () => {

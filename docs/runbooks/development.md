@@ -1,7 +1,7 @@
 # Development
 
 Requirements: Node 24, Python 3.12, and Go (for `make dev` and backend checks). Component boundaries and ownership are
-in [ownership](../ownership.md).
+in [ownership](../system-architecture/ownership.md).
 
 ```sh
 make setup
@@ -65,12 +65,13 @@ make -C data verify
 make -C services/backend check
 make -C packages/contracts verify
 make -C tests verify
-make -C docs lint
-make verify PKG=docs/ownership.md
+make -f platform/docs.mk lint
+make verify PKG=docs/system-architecture/ownership.md
 ```
 
-Run `make -C docs lint` after documentation edits for a docs-scoped Markdown check. It is an explicit command, not an
-on-save hook; the repository-wide Markdown check still runs in `make check`, CI, and the installed Git hooks.
+Run `make -f platform/docs.mk lint` after documentation edits for a docs-scoped Markdown check. It is an explicit
+command, not an on-save hook; the repository-wide Markdown check still runs in `make check`, CI, and the installed Git
+hooks.
 
 Use [the plan template](../plans/TEMPLATE.md) for multi-session work. Keep acceptance criteria, progress, decisions, and
 remaining work explicit. Isolate simultaneous tasks with `make worktree NAME=<branch>`; see

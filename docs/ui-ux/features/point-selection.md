@@ -1,5 +1,10 @@
 # Point selection and route endpoints
 
+Serves [US-04](../user-stories/user-stories.md), [US-05](../user-stories/user-stories.md), and
+[US-06](../user-stories/user-stories.md): a person can judge a listing, understand the actual map object they selected,
+and deliberately use that location as a From or To endpoint. The selection, detail, highlight, and endpoint behaviors
+below support those outcomes; they do not add reverse geocoding or invented place data.
+
 Click or tap any map point to open the details card with From and To actions. Choosing an action copies its name and
 WGS84 coordinates into session state, draws A (From) / B (To), updates the endpoint summary, and closes the card. Clear
 points removes both endpoints. Closing the card or changing map layers does not remove chosen endpoints. With both
@@ -9,10 +14,10 @@ Visible endpoint markers, bus stops, and drawn directory place symbols take prio
 not clustered; a place hidden by scale or label collision is reached through the directory list instead. Otherwise
 buildings, roads, parks and water expose available map attributes. Building polygons take precedence over house-number
 label hit boxes; their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label
-visibility. See [building numbers](building-numbers.md). Unnamed buildings show their feature type and coordinates;
-names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a
-directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates
-alone. No reverse geocoder is used.
+visibility. See [building numbers](../../map-data/building-numbers.md). Unnamed buildings show their feature type and
+coordinates; names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented
+as a directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show
+coordinates alone. No reverse geocoder is used.
 
 The same card and actions work for directory results. Existing website/source links remain. Bus-stop details use the
 dated ePodgorica snapshot. All point selection works with the downloaded offline map; From/To are independent of live
