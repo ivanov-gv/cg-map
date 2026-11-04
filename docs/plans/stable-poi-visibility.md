@@ -4,8 +4,7 @@ Status: implemented; device density review and the decisions under Progress rema
 
 ## Goal and acceptance criteria
 
-Implement [stable POI visibility](../ui-ux/features/poi-visibility.md), serving US-02, US-03, and US-04. The earlier
-[laconic interface plan](laconic-interface.md) is complete; its completion does not include this work.
+Implement [stable POI visibility](../ui-ux/features/poi-visibility.md), serving US-02, US-03, and US-04.
 
 - Every directory place receives a fixed visibility level, with inclusive and cumulative zoom thresholds. Eligible icons
   no longer disappear when collision placement changes during a small pan or scroll.
