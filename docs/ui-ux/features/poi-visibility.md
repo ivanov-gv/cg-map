@@ -1,7 +1,6 @@
 # Stable POI visibility
 
-Status: implemented; awaiting density sign-off on real devices. Details and open points:
-[stable POI visibility plan](../../plans/stable-poi-visibility.md).
+Status: implemented; awaiting density sign-off on real devices. See [open points](#open-points).
 
 Serves **US-02** (find a known place), **US-03** (discover something useful nearby), and **US-04** (inspect a listing).
 Read [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter) for geographic relevance and
@@ -70,8 +69,9 @@ Search and category choices narrow the directory and map candidates; matching ic
 Exactly one requested result, the selected listing or otherwise the leading match, may appear below its threshold. It
 keeps its highlight at every zoom. The map keeps a selected listing uncovered; a leading match does not move the camera,
 so it can be covered or off-screen. Choosing another result moves this one exception. A broad query or category must not
-reveal every matching business at country scale. Prevent duplicate base/search icons for the same listing. This
-deliberately replaces the current blanket threshold bypass for explicit filters.
+reveal every matching business at country scale. Prevent duplicate base/search icons for the same listing. A selected
+listing below its threshold that shares a location with an admitted listing is represented by that location's marker and
+highlight, not a second icon. This deliberately replaces the current blanket threshold bypass for explicit filters.
 
 Clearing the explicit filter removes the preview exception. Selection remains visible until closed, even if the user
 zooms out below that place's default threshold. Zoom, pan, layer toggles, resizing, and offline reload must not change a
@@ -97,5 +97,17 @@ The application has per-place levels and an override mechanism. It has no commer
 Acceptance requires exact ID-set checks below/at/above every threshold, monotonic zoom-in and reversible zoom-out,
 small-pan invariance for features kept inside the viewport, input-order invariance, same-level behavior across screen
 sizes, independent icon/name collisions, truthful shared-location selection, and search/selection/offline regressions.
-Density and essential map readability also need screenshots of real data, not only synthetic fixtures. The
-implementation plan owns file responsibilities, commands, and the detailed test matrix.
+Density and essential map readability also need screenshots of real data, not only synthetic fixtures. Browser tests
+take them on request with `POI_DENSITY_SCREENSHOTS=1`.
+
+## Open points
+
+- Not yet run: review on real devices, visual review with `make dev`, and `data/tools/extract-osm.py` with a real PBF.
+- The default camera (zoom 15.8) is just below level 4 (zoom 16), so the first view shows no cafes or restaurants.
+- Level 1 is empty and no overrides ship; both need editorial review.
+- The shipped snapshot has no co-located listings, so real data has not exercised shared-location markers.
+- Clinics and other unlisted essentials take their category's default, level 5.
+- Long shop rows still overlap at zoom 17, for example at Bulevar knjaza Danila Petrovića 13. The chooser reaches each
+  listing.
+- House numbers draw over icons at the same position and partly cover the glyph. Icons stay below road and address
+  labels on purpose.

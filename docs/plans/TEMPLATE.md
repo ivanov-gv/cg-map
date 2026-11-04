@@ -1,6 +1,6 @@
 # Task: `<name>`
 
-Status: planned / in progress / complete / blocked
+Status: planned / in progress / blocked
 
 ## Goal and acceptance criteria
 

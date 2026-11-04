@@ -429,8 +429,7 @@ Root npm aliases forward to these workspace scripts, including browser arguments
 Makefile; `make test-e2e` builds first and `make test-e2e-built` reuses the artifact from `make check` in CI. Root
 package.json and package-lock.json remain the shared workspace manifest and lockfile. Build, lint, offline checks,
 browser setup, browser journeys, and static preview are owned here; repository checks aggregate component commands.
-Cross-component contract/artifact tests remain in tests/integration. See the
-[ownership migration plan](../../docs/plans/web-command-ownership.md).
+Cross-component contract/artifact tests remain in tests/integration.
 
 Keep the full final acceptance run for web/UI, offline, and release behavior changes; targeted results do not establish
 that the full suite passed. Documentation-only changes do not need browser tests.
