@@ -36,12 +36,14 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make build`: assemble the current web artifact without regenerating geography.
 - `make build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
 - `make agent-rules`: regenerate agent adapters after editing docs/engineering or platform/agents/guidelines.json.
-- `make worktree NAME=<branch>`: isolated checkout for a parallel session.
+- `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.
 
 ## Hard rules
 
 - Never delete, skip, or loosen a failing test, check, or provenance record to get green output. Never commit with
   `--no-verify`.
+- Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
+  `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules, or the `BEGIN GENERATED` blocks in AGENTS.md files.
   Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
