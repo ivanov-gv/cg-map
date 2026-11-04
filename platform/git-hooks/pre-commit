@@ -3,6 +3,7 @@
 # Agents can skip instructions; this, pre-push and CI enforce the checks for every author.
 # Checks the working tree versions of staged files. Do not bypass with --no-verify.
 set -eu
+sh "$(dirname "$0")/../tools/require-worktree.sh"
 cd "$(git rev-parse --show-toplevel)"
 
 node platform/agents/gen-agent-rules.mjs --check

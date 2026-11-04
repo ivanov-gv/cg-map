@@ -74,5 +74,5 @@ command, not an on-save hook; the repository-wide Markdown check still runs in `
 hooks.
 
 Use [the plan template](../plans/TEMPLATE.md) for multi-session work. Keep acceptance criteria, progress, decisions, and
-remaining work explicit. Isolate simultaneous tasks with `make worktree NAME=<branch>`; see
-[parallel sessions](../engineering/README.md#parallel-sessions).
+remaining work explicit. Commit only from a worktree, even when working alone: `make worktree NAME=<branch>`. The main
+checkout rejects commits. See [parallel sessions](../engineering/README.md#parallel-sessions).
