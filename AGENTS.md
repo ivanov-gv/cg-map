@@ -34,6 +34,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
 - `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
   for `.github/**` changes.
+- `gh pr merge --auto --squash`: merge when `CI gate` passes, once `main` requires it.
 - `make dev`: build web and run the Go backend (server mode) on a per-worktree port; needs Go.
   `DEV_FLAGS=-live-transport=false` skips upstream calls.
 - `make dev-mock`: build web and serve static dist/web (mock mode, as on GitHub Pages).

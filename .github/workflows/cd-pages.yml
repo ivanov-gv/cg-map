@@ -6,6 +6,10 @@ run-name: >-
   && format('cd-pages test_run={0} run_id={1}', inputs.test_run, inputs.run_id)
   || format('cd-pages run_id={0}', github.event.workflow_run.id) }}
 on:
+  workflow_run:
+    workflows: [ci-all]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       run_id:
@@ -17,12 +21,13 @@ on:
         type: boolean
         default: true
 permissions: {}
-concurrency:
-  group: cd-pages
-  cancel-in-progress: false
 jobs:
   switch:
     name: Test-run switch
+    # CI finishes on every event, but only a successful push to main can deploy. Stop here for the rest, so they cost nothing.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -156,6 +161,11 @@ jobs:
     if: needs.prepare.outputs.deployable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # On this job, not the workflow: every ci-all run on main starts this workflow, and GitHub keeps one pending run per
+    # group, so a docs merge must not replace a pending web deployment. A newer deployment replacing an older one is fine.
+    concurrency: &deploy-concurrency
+      group: cd-pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
@@ -175,6 +185,7 @@ jobs:
     if: needs.prepare-test-run.outputs.deployable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency: *deploy-concurrency
     permissions: {}
     environment: test-run
     env:

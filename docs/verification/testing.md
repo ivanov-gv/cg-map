@@ -30,7 +30,7 @@ Frontend iteration commands and measured check durations live with the
 | apps/web/tests/e2e           | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                        |
 
 make check builds dist/web and runs Node/Python tests, JavaScript lint, all-source Markdown structure/format checks,
-data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. The backend workflow
+data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. `make check-go`
 independently runs Go vet, tests, and build. See
 [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
 command.
@@ -48,10 +48,32 @@ reopening, eviction, and long-running memory/frame behavior.
 The detailed earlier design guide includes historical verification evidence. Current commands, ownership, and CI are
 authoritative for this layout.
 
+## What runs in CI
+
+[ci-all](../../.github/workflows/ci-all.yml) calls one workflow per folder, chosen from the diff by
+[the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
+everything.
+
+| Changed                                                     | Runs                                                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Markdown, except under `apps/web/public`                    | `docs` only: no code checks                                                                 |
+| Backend Go code                                             | `backend` only                                                                              |
+| `services/transit-relay`                                    | `transit-relay`, `tests`                                                                    |
+| `platform/pages`, `platform/tools/serve.py`                 | `platform`, `apps-web`, every browser area                                                  |
+| `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder                                                                                 |
+| `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
+| `data/sources`, `artifacts`, `imagery`                      | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
+| `packages/contracts`                                        | Those, plus `contracts` and `backend`                                                       |
+| `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
+| Root files such as `package-lock.json`, or unknown paths    | Everything                                                                                  |
+
+Check a branch with `make ci-plan BASE=origin/main`.
+
 ## Browser test areas
 
-Browser tests are split by area. CI builds once, then runs each area as its own job with its own time limit. The
-`Browser acceptance` job reports their combined result, and deployment waits for it.
+Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
+Pull requests run only the areas a change maps to. Pushes to main that build the web artifact, and the nightly run,
+always run every area, so a wrong mapping cannot reach users.
 
 | Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
 | ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -62,9 +84,8 @@ Browser tests are split by area. CI builds once, then runs each area as its own 
 | poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
 | poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
 
-All areas always run; there is no path filtering yet. app.js, core.js, and map-style.js are shared by every area, so a
-future filter must treat them, shared helpers, dependencies, and the workflow itself as running everything. A filter
-must also keep a full run on `main` before deployment, so a wrong mapping cannot reach users.
+app.js, core.js, map-style.js, style.css, index.html, shared test helpers, build tools, and anything unmapped run every
+area, because every browser test boots them.
 
 ## Monorepo verification — 2026-10-18
 

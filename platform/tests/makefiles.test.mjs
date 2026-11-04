@@ -25,9 +25,10 @@ test('component verification delegates to owner Makefiles', () => {
 
 test('backend checks stay independent of Node and npm', () => {
   const backendMakefile = fs.readFileSync(path.join(repoRoot, 'services/backend/Makefile'), 'utf8');
-  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/backend.yml'), 'utf8');
+  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci-backend.yml'), 'utf8');
   assert.doesNotMatch(backendMakefile, /\b(?:node|npm|npx)\b/);
   assert.match(workflow, /make -C services\/backend check/);
+  assert.doesNotMatch(workflow, /setup-web|setup-node/);
 });
 
 test('repo boundary rejects non-Markdown docs files and missing folder entry points', t => {

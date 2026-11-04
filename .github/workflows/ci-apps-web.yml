@@ -6,6 +6,11 @@ on:
       test_run:
         type: boolean
         required: true
+      browser_matrix:
+        description: The browser areas to run, from the planner. Empty runs them all.
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
     inputs:
       test_run:
@@ -27,6 +32,7 @@ jobs:
     env: &verify-env
       WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
       WEB_ARTIFACT_RETENTION_DAYS: ${{ vars.WEB_ARTIFACT_RETENTION_DAYS }}
+      BROWSER_MATRIX: ${{ inputs.browser_matrix }}
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -37,7 +43,12 @@ jobs:
           command: make verify PKG=apps/web
       - name: Select browser areas
         id: areas
-        run: node platform/tools/ci-plan.mjs --all
+        run: |
+          if [ -n "$BROWSER_MATRIX" ]; then
+            echo "browser_matrix=$BROWSER_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+          else
+            node platform/tools/ci-plan.mjs --all
+          fi
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - name: Share the built artifact with browser jobs and CD
         uses: actions/upload-artifact@v5
@@ -58,6 +69,8 @@ jobs:
   browser:
     name: Browser tests (${{ matrix.area }})
     needs: verify
+    # A change such as a web unit test needs the web checks but no browser area.
+    if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: dev
@@ -90,6 +103,7 @@ jobs:
   browser-test-run:
     name: (test-run) Browser tests (${{ matrix.area }})
     needs: verify-test-run
+    if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: test-run

@@ -63,8 +63,6 @@ function areasForWebFile(file) {
 
 // Returns the folders and browser areas one changed path needs.
 export function classify(file) {
-  // A platform test asserts what the root instructions say.
-  if (file === 'AGENTS.md') return {folders: ['docs', 'platform'], areas: []};
   const isMarkdown = file.endsWith('.md') && !file.startsWith('apps/web/public/');
   if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json') return {folders: ['docs'], areas: []};
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/ci-plan\./.test(file)) return {folders: ['workflows', 'platform'], areas: []};
@@ -95,6 +93,12 @@ export function planChanges(files) {
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
+}
+
+// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users. Any run
+// that selects the web builds a deployable artifact, even when the change itself maps to no browser area.
+export function withFullBrowser(plan) {
+  return plan.folders.includes('apps-web') ? {...plan, areas: ALL_AREAS} : plan;
 }
 
 export function browserMatrix(areas) {
@@ -147,6 +151,7 @@ function main(args) {
     }
   }
 
+  if (args.includes('--full-browser')) plan = withFullBrowser(plan);
   const summary = formatSummary(plan, reason);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

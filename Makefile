@@ -24,11 +24,13 @@ dev-mock:
 check:
 	npm run check
 
-# All Markdown, wherever it lives, plus the repository and agent-rule checks. Fast and needs no web build.
+# All Markdown, wherever it lives, the repository checks, and agent rules, including what root AGENTS.md must say.
+# Fast, and needs no web build.
 check-docs:
 	npm run lint:md
 	npm run check:repo
 	npm run check:agents
+	node --test platform/tests/agents.test.mjs
 
 # Which folder pipelines and browser areas a change needs: make ci-plan [BASE=origin/main]
 ci-plan:
