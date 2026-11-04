@@ -1,0 +1,38 @@
+name: ci-contracts
+# Shared formats: producer validation and consumer tests.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Verify contracts
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    steps: &verify-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make verify PKG=packages/contracts
+  verify-test-run:
+    name: (test-run) Verify contracts
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    steps: *verify-steps

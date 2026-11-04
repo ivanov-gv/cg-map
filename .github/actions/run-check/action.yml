@@ -1,0 +1,22 @@
+name: Run a check
+description: Run one command, grouping its log and reporting its result in the step summary and stdout.
+inputs:
+  command:
+    description: The command to run.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        CHECK_COMMAND: ${{ inputs.command }}
+      run: |
+        echo "::group::$CHECK_COMMAND"
+        start=$SECONDS
+        status=0
+        bash -c "$CHECK_COMMAND" || status=$?
+        echo "::endgroup::"
+        result="\`$CHECK_COMMAND\`: exit $status after $((SECONDS - start))s"
+        echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
+        if [ "$status" -ne 0 ]; then echo "::error::$CHECK_COMMAND failed with exit $status"; fi
+        exit "$status"

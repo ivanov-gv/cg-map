@@ -1,4 +1,4 @@
-.PHONY: setup hooks dev dev-mock check check-docs ci-plan verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
+.PHONY: setup hooks dev dev-mock check check-docs ci-plan test-all-workflows test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web test-cd-pages verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
 
 # Stable per-worktree dev port; override with PORT=... (E2E_PORT is owned by apps/web).
 PORT ?= $(shell node platform/tools/dev-port.mjs)
@@ -69,3 +69,16 @@ agent-rules:
 # make worktree NAME=<branch> [BASE=main]: isolated checkout for a parallel agent session.
 worktree:
 	$(MAKE) --no-print-directory -C platform worktree NAME="$(NAME)" BASE="$(BASE)"
+
+# Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
+ACT ?= gh act
+ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --artifact-server-path .build/act-artifacts --network bridge --pull=false -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -P ubuntu-latest=catthehacker/ubuntu:act-24.04
+
+test-all-workflows: test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web test-cd-pages
+
+test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web: test-%:
+	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
+
+# Needs a real ci-all test run to read from: make test-cd-pages RUN_ID=<run ID>
+test-cd-pages:
+	$(ACT) workflow_dispatch -W .github/workflows/cd-pages.yml $(ACT_RUN) --input run_id=$(RUN_ID) -s GITHUB_TOKEN="$$(gh auth token)"

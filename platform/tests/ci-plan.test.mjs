@@ -8,6 +8,10 @@ import {BROWSER_AREAS, FOLDERS, SHARED_WEB_SOURCES, browserMatrix, classify, for
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
+// Inside CI these would send the test's own plans to the real job's output and summary.
+const plannerEnv = {...process.env};
+delete plannerEnv.GITHUB_OUTPUT;
+delete plannerEnv.GITHUB_STEP_SUMMARY;
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const WEB = ['platform', 'tests', 'apps-web'];
 
@@ -85,7 +89,7 @@ test('outputs give every folder a value and a usable matrix', () => {
 
 test('command line selects everything when it has no base or the diff fails', () => {
   for (const args of [['--all'], [], ['--base', '0000000000000000000000000000000000000000'], ['--base', 'no-such-ref']]) {
-    const result = spawnSync('node', ['platform/tools/ci-plan.mjs', ...args], {cwd: repoRoot, encoding: 'utf8'});
+    const result = spawnSync('node', ['platform/tools/ci-plan.mjs', ...args], {cwd: repoRoot, encoding: 'utf8', env: plannerEnv});
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Selected everything/, `${args.join(' ')}: ${result.stdout}`);
   }
@@ -208,12 +212,12 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   fs.renameSync(path.join(repo, 'data/tools/moved.mjs'), path.join(repo, 'services/transit-relay/moved.mjs'));
   git('add', '.');
   git('commit', '-qm', 'rename');
-  const renamed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8'});
+  const renamed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(renamed, /Folders: data, transit-relay, tests/);
   fs.rmSync(path.join(repo, 'services/transit-relay/moved.mjs'));
   fs.rmSync(path.join(repo, 'tests/deleted.mjs'));
   git('add', '.');
   git('commit', '-qm', 'delete');
-  const deleted = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8'});
+  const deleted = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(deleted, /Folders: transit-relay, tests/);
 });

@@ -1,0 +1,41 @@
+name: ci-backend
+# Go-only target: usable without Node or npm.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Verify backend
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: dev
+    steps: &verify-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/backend/go.mod
+          cache: false
+      - uses: ./.github/actions/run-check
+        with:
+          command: make -C services/backend check
+  verify-test-run:
+    name: (test-run) Verify backend
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    steps: *verify-steps

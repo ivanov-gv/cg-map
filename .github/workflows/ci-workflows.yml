@@ -1,0 +1,81 @@
+name: ci-workflows
+# Lints workflows on every change to them. Running them is what proves them: see .github/TESTING.md.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  lint:
+    name: Lint workflows
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: dev
+    steps: &lint-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Lint all workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+  lint-test-run:
+    name: (test-run) Lint workflows
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    steps: *lint-steps
+  # No test-run twin: this looks for a successful test run of this commit, so inside a test run it could never pass.
+  test-run-evidence:
+    name: Workflows were test-run
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BRANCH: ${{ github.head_ref }}
+    steps:
+      - name: Require a successful test run of this commit
+        run: |
+          # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
+          has_qualifying_run() { # <workflow file> <required run-name text>
+            if ! gh api "repos/$GH_REPO/contents/.github/workflows/$1" --silent 2>/dev/null; then
+              echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
+              return 0
+            fi
+            matches=$(gh run list --workflow "$1" --event workflow_dispatch --commit "$HEAD_SHA" --status success \
+              --json displayTitle --jq "[.[] | select(.displayTitle | contains(\"$2\"))] | length")
+            [ "$matches" -gt 0 ]
+          }
+          missing=0
+          if ! has_qualifying_run ci-all.yml 'test_run=true run_all=true'; then
+            echo "::error::Run: gh workflow run ci-all.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
+            missing=1
+          fi
+          changed=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if echo "$changed" | grep -q '^\.github/workflows/cd-pages\.yml$\|^\.github/actions/' \
+            && ! has_qualifying_run cd-pages.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run cd-pages.yml --ref $BRANCH -f test_run=true -f run_id=<test-run ci-all run ID>, then re-run this check."
+            missing=1
+          fi
+          result="Test-run evidence for $HEAD_SHA: $([ "$missing" -eq 0 ] && echo found || echo missing)"
+          echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "$missing"

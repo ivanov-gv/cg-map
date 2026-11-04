@@ -30,6 +30,10 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make check`: lint, source/release validation, docs/boundaries, agent-rule drift, web build, Node/Python tests,
   offline manifests.
 - `make check-go`: vet/test/build the independent services/backend Go module.
+- `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
+- `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
+- `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
+  for `.github/**` changes.
 - `make dev`: build web and run the Go backend (server mode) on a per-worktree port; needs Go.
   `DEV_FLAGS=-live-transport=false` skips upstream calls.
 - `make dev-mock`: build web and serve static dist/web (mock mode, as on GitHub Pages).
