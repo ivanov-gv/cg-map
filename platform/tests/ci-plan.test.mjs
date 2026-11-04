@@ -18,7 +18,7 @@ const WEB = ['platform', 'tests', 'apps-web'];
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs'], []],
   ['Markdown inside a component', ['apps/web/README.md', 'services/backend/README.md'], ['docs'], []],
-  ['root instructions, which a platform test reads', ['AGENTS.md'], ['docs', 'platform'], []],
+  ['root instructions, whose assertions run with the docs', ['AGENTS.md'], ['docs'], []],
   ['generated agent rules', ['.claude/rules/go.md'], ['docs'], []],
   ['Markdown configuration', ['.markdownlint.jsonc'], ['docs'], []],
   ['Go code', ['services/backend/cmd/server/main.go'], ['backend'], []],
@@ -148,14 +148,15 @@ test('an area limited to one project has a partner covering the other', () => {
   }
 });
 
-test('runs before deploying widen browser areas, but never add them to a change without any', () => {
+test('runs before deploying test every browser area whenever they build the web artifact', () => {
   assert.deepEqual(withFullBrowser(planChanges(['apps/web/src/interface.js'])).areas, ALL_AREAS);
+  assert.deepEqual(withFullBrowser(planChanges(['apps/web/tests/core.test.mjs'])).areas, ALL_AREAS, 'this change builds an artifact too');
   assert.deepEqual(withFullBrowser(planChanges(['docs/README.md'])).areas, []);
   assert.deepEqual(withFullBrowser(planChanges(['services/backend/go.mod'])).areas, []);
 });
 
 test('Markdown never selects code checks, wherever it lives, while Go stays independent of the web', () => {
-  for (const file of ['README.md', '.github/new.md', 'services/backend/README.md', 'services/backend/nested/new.md', 'apps/web/README.md', 'data/PROVENANCE.md', 'docs/plans/x.md']) {
+  for (const file of ['README.md', 'AGENTS.md', '.github/new.md', 'services/backend/README.md', 'services/backend/nested/new.md', 'apps/web/README.md', 'data/PROVENANCE.md', 'docs/plans/x.md']) {
     assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], everything: false}, file);
   }
   assert.deepEqual(planChanges(['services/backend/cmd/server/main.go']), {folders: ['backend'], areas: [], everything: false});
@@ -234,4 +235,13 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   git('commit', '-qm', 'delete');
   const deleted = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(deleted, /Folders: transit-relay, tests/);
+
+  fs.mkdirSync(path.join(repo, 'apps/web/src'), {recursive: true});
+  fs.writeFileSync(path.join(repo, 'apps/web/src/interface.js'), 'export const ui = true;\n');
+  git('add', '.');
+  git('commit', '-qm', 'web');
+  const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
+  assert.match(narrowed, /Browser areas: interface\n/);
+  const full = execFileSync('node', [planner, '--base', 'HEAD~1', '--full-browser'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
+  assert.match(full, new RegExp(`Browser areas: ${ALL_AREAS.join(', ')}\\n`));
 });

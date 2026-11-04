@@ -8,9 +8,10 @@ selects the folders a change affects. Changes that do not affect the web do not 
 
 [ci-apps-web](../../.github/workflows/ci-apps-web.yml) installs pinned workspace dependencies, verifies the web
 component, builds dist/web, uploads it as `web-artifact`, and tests that artifact in Chromium. On main every browser
-area runs. When ci-all succeeds on a push to main, [cd-pages](../../.github/workflows/cd-pages.yml) downloads that
-artifact without checking out the application, and publishes it with deploy-pages and the github-pages environment.
-Pages/OIDC write permissions exist only in cd-pages; pull requests cannot deploy.
+area runs whenever the web artifact is built. When ci-all succeeds on a push to main,
+[cd-pages](../../.github/workflows/cd-pages.yml) downloads that artifact without checking out the application, and
+publishes it with deploy-pages and the github-pages environment. Pages/OIDC write permissions exist only in cd-pages;
+pull requests cannot deploy.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. The app is directly at the project root. Compatibility files redirect
 old /web/ links and retire the earlier nested worker without clearing verified downloads.

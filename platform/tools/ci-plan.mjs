@@ -63,8 +63,6 @@ function areasForWebFile(file) {
 
 // Returns the folders and browser areas one changed path needs.
 export function classify(file) {
-  // A platform test asserts what the root instructions say.
-  if (file === 'AGENTS.md') return {folders: ['docs', 'platform'], areas: []};
   const isMarkdown = file.endsWith('.md') && !file.startsWith('apps/web/public/');
   if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json') return {folders: ['docs'], areas: []};
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/ci-plan\./.test(file)) return {folders: ['workflows', 'platform'], areas: []};
@@ -97,9 +95,10 @@ export function planChanges(files) {
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
-// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users.
+// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users. Any run
+// that selects the web builds a deployable artifact, even when the change itself maps to no browser area.
 export function withFullBrowser(plan) {
-  return plan.areas.length ? {...plan, areas: ALL_AREAS} : plan;
+  return plan.folders.includes('apps-web') ? {...plan, areas: ALL_AREAS} : plan;
 }
 
 export function browserMatrix(areas) {

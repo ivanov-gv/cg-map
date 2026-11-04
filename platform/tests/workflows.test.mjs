@@ -135,7 +135,13 @@ test('only the new pipelines run on the repository', () => {
   for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-pages.yml')) {
     assert.deepEqual(Object.keys(load(file).on).sort(), ['workflow_call', 'workflow_dispatch'], `${file} must run only when called`);
   }
-  assert.equal(load('ci-all.yml').on.pull_request?.paths, undefined, 'a required workflow must always run');
+  assert.equal(load('ci-all.yml').on.pull_request, null, 'a filter on a required workflow would leave its check pending forever');
+});
+
+test('only deployable runs compete for the deployment queue', () => {
+  const {concurrency, jobs} = load('cd-pages.yml');
+  assert.equal(concurrency, undefined, 'at workflow level, a docs merge could replace a pending web deployment');
+  for (const job of ['deploy', 'deploy-test-run']) assert.deepEqual(jobs[job].concurrency, {group: 'cd-pages', 'cancel-in-progress': false});
 });
 
 test('CD starts automatically only from successful pushes to main', () => {
@@ -152,6 +158,9 @@ test('browser jobs run only the planned areas, and none when there are none', ()
   assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
   assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
   assert.match(allJobs.plan.env.FULL_BROWSER, /github\.event_name != 'pull_request'/);
+  const planScript = allJobs.plan.steps.find(step => step.id === 'plan').run;
+  assert.match(planScript, /"\$FULL_BROWSER" = true.*full_browser=--full-browser/);
+  assert.match(planScript, /--base "\$PLAN_BASE" \$full_browser/);
 });
 
 test('the planner has an output on the plan job for every folder', () => {

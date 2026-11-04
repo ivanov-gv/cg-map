@@ -21,9 +21,6 @@ on:
         type: boolean
         default: true
 permissions: {}
-concurrency:
-  group: cd-pages
-  cancel-in-progress: false
 jobs:
   switch:
     name: Test-run switch
@@ -164,6 +161,11 @@ jobs:
     if: needs.prepare.outputs.deployable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # On this job, not the workflow: every ci-all run on main starts this workflow, and GitHub keeps one pending run per
+    # group, so a docs merge must not replace a pending web deployment. A newer deployment replacing an older one is fine.
+    concurrency: &deploy-concurrency
+      group: cd-pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
@@ -183,6 +185,7 @@ jobs:
     if: needs.prepare-test-run.outputs.deployable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency: *deploy-concurrency
     permissions: {}
     environment: test-run
     env:

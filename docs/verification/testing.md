@@ -54,25 +54,26 @@ authoritative for this layout.
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
 everything.
 
-| Changed                                                  | Runs                                                                                        |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Markdown, except under `apps/web/public`                 | `docs` only: no code checks                                                                 |
-| Backend Go code                                          | `backend` only                                                                              |
-| `services/transit-relay`                                 | `transit-relay`, `tests`                                                                    |
-| `tests`, `data/tools`, `data/tests`, `platform`          | That folder                                                                                 |
-| `apps/web`                                               | `apps-web`, `tests`, `platform`, and the browser areas below                                |
-| `data/sources`, `artifacts`, `imagery`                   | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
-| `packages/contracts`                                     | Those, plus `contracts` and `backend`                                                       |
-| `.github`, the planner                                   | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
-| Root files such as `package-lock.json`, or unknown paths | Everything                                                                                  |
+| Changed                                                     | Runs                                                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Markdown, except under `apps/web/public`                    | `docs` only: no code checks                                                                 |
+| Backend Go code                                             | `backend` only                                                                              |
+| `services/transit-relay`                                    | `transit-relay`, `tests`                                                                    |
+| `platform/pages`, `platform/tools/serve.py`                 | `platform`, `apps-web`, every browser area                                                  |
+| `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder                                                                                 |
+| `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
+| `data/sources`, `artifacts`, `imagery`                      | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
+| `packages/contracts`                                        | Those, plus `contracts` and `backend`                                                       |
+| `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
+| Root files such as `package-lock.json`, or unknown paths    | Everything                                                                                  |
 
 Check a branch with `make ci-plan BASE=origin/main`.
 
 ## Browser test areas
 
 Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
-Pull requests run only the areas a change maps to. Pushes to main and the nightly run always run every area, so a wrong
-mapping cannot reach users.
+Pull requests run only the areas a change maps to. Pushes to main that build the web artifact, and the nightly run,
+always run every area, so a wrong mapping cannot reach users.
 
 | Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
 | ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |

@@ -192,12 +192,12 @@ How it works:
   production. Finding no artifact is a normal skip and is noted in the summary.
 - **Copy, do not rebuild:** `prepare` downloads the artifact by run ID and re-uploads it with `upload-pages-artifact`,
   because `deploy-pages` reads only from its own run. There is no checkout, so CD cannot depend on source.
-- **Ordering:** `concurrency` uses one `cd-pages` group without cancelling, and on automatic runs `prepare` skips a run
-  when a newer `ci-all` run has succeeded with an artifact. Otherwise a slow older run could overwrite a newer
-  deployment. This replaces comparing with the last deployed commit: a Pages deployment records the head of `main` when
-  CD ran, not the artifact's commit. If the newer run's deployment fails, that failure shows in `cd-pages`, and the
-  older run stays skipped. Comparing with `main`'s head would be wrong, because a later docs-only merge must not stop a
-  web deployment.
+- **Ordering:** the `deploy` jobs share one `cd-pages` concurrency group without cancelling, and on automatic runs
+  `prepare` skips a run when a newer `ci-all` run has succeeded with an artifact. Otherwise a slow older run could
+  overwrite a newer deployment. This replaces comparing with the last deployed commit: a Pages deployment records the
+  head of `main` when CD ran, not the artifact's commit. If the newer run's deployment fails, that failure shows in
+  `cd-pages`, and the older run stays skipped. Comparing with `main`'s head would be wrong, because a later docs-only
+  merge must not stop a web deployment.
 - **Rollback:** dispatch `cd-pages.yml` with `test_run=false` and an older `run_id`. The release runbook's revert path
   stays for anything older than 30 days. The ordering check applies only to automatic runs.
 - **Test-run mode:** `prepare-test-run` runs in full, and `deploy-test-run` only logs the expected result. The real
@@ -247,9 +247,9 @@ Confirmed in step 2 from the build tools and the specs:
 
 - `services/transit-relay/**` selects no browser area. Specs stub the hosted relay's URL with `page.route`, and the
   suite never serves relay code.
-- Apart from root `AGENTS.md`, which `platform/tests/agents.test.mjs` reads and which therefore also selects `platform`,
-  no build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
-  from the artifact, and `check-repo` reads Markdown only to check links, which `docs` covers.
+- Only `platform/tests/agents.test.mjs` reads Markdown outside `apps/web/public`, asserting what root `AGENTS.md` says.
+  `make check-docs` runs it, so Markdown never selects a code pipeline. `build.mjs` filters `data/imagery` Markdown from
+  the artifact, and `check-repo` reads Markdown only to check links, which `docs` covers.
 - `data/tools/pack.py` appears in `platform/tests` only as an example path, so `data/tools` does not select `platform`.
 
 ### Browser areas
@@ -451,7 +451,14 @@ is on `main`. It copied the artifact, and `deploy-test-run` logged the source, d
 Step 3, on GitHub: run 41872158001 on PR 12 passed `CI gate`. Cached browser setup took 14-36s per job, the longest
 browser job took 307s, and the whole `plan` job took 14s, so the full-history checkout stays cheap.
 
-Record the commands, run links, and measured times here for steps 2 to 5.
+Step 3, chain on GitHub: `ci-all` test run 41876904359 on `main` passed and uploaded `web-artifact-test-run`. `cd-pages`
+test run 41880240535 read it, and `deploy-test-run` logged its digest, commit `e410130`, 69 files, and the target.
+
+Steps 4 and 5, PR 14: the first run took about 1m10s and selected `docs`, `workflows`, and `platform`, with no web or
+browser job. `CI gate` failed, correctly, because `Workflows were test-run` found no test runs yet, the first real proof
+that the gate fails.
+
+Record the commands, run links, and measured times here for the remaining throwaway PRs.
 
 ## Handoff
 
