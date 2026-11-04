@@ -102,7 +102,7 @@ jobs:
           # A slow older run must not overwrite a newer deployment. Comparing with main's head would be wrong: a later
           # docs-only merge has no artifact and must not stop this one. Rollbacks choose an older run on purpose.
           newer_runs=$(api "actions/workflows/ci-all.yml/runs?event=$CI_SOURCE_EVENT&status=success&per_page=20" \
-            | jq -r ".workflow_runs[] | select(.run_number > $run_number) | .id")
+            | jq -r ".workflow_runs[] | select(.run_number > $run_number and (.event != \"push\" or .head_branch == \"main\")) | .id")
           for newer in $newer_runs; do
             newer_artifact=$(api "actions/runs/$newer/artifacts" | jq -r "$artifact_query | .name")
             if [ -n "$newer_artifact" ]; then

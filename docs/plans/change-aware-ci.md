@@ -192,7 +192,7 @@ How it works:
   production. Finding no artifact is a normal skip and is noted in the summary.
 - **Copy, do not rebuild:** `prepare` downloads the artifact by run ID and re-uploads it with `upload-pages-artifact`,
   because `deploy-pages` reads only from its own run. There is no checkout, so CD cannot depend on source.
-- **Ordering:** `concurrency` uses one `pages` group without cancelling, and on automatic runs `prepare` skips a run
+- **Ordering:** `concurrency` uses one `cd-pages` group without cancelling, and on automatic runs `prepare` skips a run
   when a newer `ci-all` run has succeeded with an artifact. Otherwise a slow older run could overwrite a newer
   deployment. This replaces comparing with the last deployed commit: a Pages deployment records the head of `main` when
   CD ran, not the artifact's commit. If the newer run's deployment fails, that failure shows in `cd-pages`, and the
