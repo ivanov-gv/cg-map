@@ -65,6 +65,8 @@ jobs:
     steps: &prepare-steps
       - name: Check the source run
         id: source
+        # Explicit bash adds pipefail: without it, a failed API call piped into jq looks like an empty, normal result.
+        shell: bash
         run: |
           # A skip is normal on automatic runs: failed CI, or a change with no web artifact. A manual run asked for this
           # exact artifact, so it fails instead.
@@ -87,9 +89,12 @@ jobs:
           workflow=$(echo "$run" | jq -r .path)
           head_sha=$(echo "$run" | jq -r .head_sha)
           run_number=$(echo "$run" | jq -r .run_number)
+          head_branch=$(echo "$run" | jq -r .head_branch)
           [ "$workflow" = .github/workflows/ci-all.yml ] || skip "it came from $workflow"
           [ "$conclusion" = success ] || skip "it concluded $conclusion"
           [ "$event" = "$CI_SOURCE_EVENT" ] || skip "it came from a $event event, not $CI_SOURCE_EVENT"
+          # A branch can widen its own copy of ci-all's push filter, so the filter alone does not prove this.
+          [ "$event" != push ] || [ "$head_branch" = main ] || skip "it came from a push to $head_branch, not main"
           artifact_query=".artifacts[] | select(.name == \"$WEB_ARTIFACT_NAME\" and .expired == false)"
           artifact=$(api "actions/runs/$RUN_ID/artifacts" | jq -c "$artifact_query")
           [ -n "$artifact" ] || skip "it has no $WEB_ARTIFACT_NAME artifact"
@@ -121,10 +126,11 @@ jobs:
           path: site
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ env.GH_TOKEN }}
+      # upload-pages-artifact leaves out hidden files, so they are not counted as published.
       - name: Count files
         id: copy
         if: steps.source.outputs.deployable == 'true'
-        run: echo "files=$(find site -type f | wc -l)" >> "$GITHUB_OUTPUT"
+        run: echo "files=$(find site -type f -not -name '.*' | wc -l)" >> "$GITHUB_OUTPUT"
       # deploy-pages reads only from its own run, so the artifact is copied here rather than rebuilt.
       # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
       - name: Copy it into this run

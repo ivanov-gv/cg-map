@@ -25,7 +25,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ci-all-${{ github.ref }}
+  # Only PRs share a group. GitHub keeps one pending run per group, so a shared group on main could drop a web merge's
+  # run in favor of a later docs merge, whose diff would not select browser tests.
+  group: ci-all-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   switch:

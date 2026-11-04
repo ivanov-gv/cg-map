@@ -74,7 +74,8 @@ worktree:
 ACT ?= gh act
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -P ubuntu-latest=catthehacker/ubuntu:act-24.04
 
-test-all-workflows: test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web test-cd-pages
+# test-cd-pages comes first, so a missing RUN_ID stops the run straight away.
+test-all-workflows: test-cd-pages test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web
 
 test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web: test-%:
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)

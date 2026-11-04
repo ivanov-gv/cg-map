@@ -97,6 +97,23 @@ test('CD checks out no application source and publishes only from production', (
   assert.equal(jobs['deploy-test-run'].steps.some(step => step.uses), false, 'the test-run deploy only logs');
 });
 
+test('CD steps that pipe API calls fail when a call fails', () => {
+  const {prepare} = load('cd-pages.yml').jobs;
+  const piping = prepare.steps.filter(step => step.run?.includes('| jq'));
+  assert.ok(piping.length > 0);
+  for (const step of piping) assert.equal(step.shell, 'bash', `${step.name} needs explicit bash for pipefail`);
+});
+
+test('CD refuses a pushed artifact that did not come from main', () => {
+  const {prepare} = load('cd-pages.yml').jobs;
+  const source = prepare.steps.find(step => step.id === 'source').run;
+  assert.match(source, /\[ "\$event" != push \] \|\| \[ "\$head_branch" = main \] \|\| skip/);
+});
+
+test('runs on main never share a concurrency group', () => {
+  assert.match(load('ci-all.yml').concurrency.group, /github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id/);
+});
+
 test('ci-all calls every folder workflow, and the gate needs all of them', () => {
   const {jobs} = load('ci-all.yml');
   for (const folder of FOLDERS) {
