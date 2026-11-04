@@ -1,18 +1,26 @@
 name: Set up browser
-description: Install Chromium and its system packages, failing fast when a package mirror stalls.
+description: Install Chromium and its system packages, reusing downloads because the package mirror is often slow.
 runs:
   using: composite
   steps:
-    # A stalled mirror once held this install for 5m40s. Short apt timeouts retry instead of waiting the default 120s.
-    - name: Fail fast on stalled package downloads
+    # Slow font downloads held this step for 168s and 5m40s in two jobs, against about 20s normally.
+    - name: Restore browser and package downloads
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/ci-apt-archives
+        key: browser-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+    - name: Keep package downloads where the cache can read them
       shell: bash
       run: |
-        printf 'Acquire::http::Timeout "15";\nAcquire::https::Timeout "15";\nAcquire::Retries "5";\n' \
-          | sudo tee /etc/apt/apt.conf.d/99-ci-timeouts
+        archives="$HOME/.cache/ci-apt-archives"
+        mkdir -p "$archives/partial"
+        printf 'Dir::Cache::Archives "%s";\nBinary::apt-get::APT::Keep-Downloaded-Packages "true";\nAcquire::http::Timeout "15";\nAcquire::https::Timeout "15";\nAcquire::Retries "5";\n' "$archives" \
+          | sudo tee /etc/apt/apt.conf.d/99-ci-browser
     - name: Install Chromium
       shell: bash
       run: |
         start=$SECONDS
         timeout 240 npm run browser:install --workspace @cg-map/web -- --with-deps chromium
-        summary="Installed Chromium in $((SECONDS - start))s"
-        echo "$summary" | tee -a "$GITHUB_STEP_SUMMARY"
+        echo "Installed Chromium in $((SECONDS - start))s" | tee -a "$GITHUB_STEP_SUMMARY"
