@@ -1,4 +1,4 @@
-.PHONY: setup hooks dev dev-mock check verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
+.PHONY: setup hooks dev dev-mock check check-docs ci-plan verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
 
 # Stable per-worktree dev port; override with PORT=... (E2E_PORT is owned by apps/web).
 PORT ?= $(shell node platform/tools/dev-port.mjs)
@@ -23,6 +23,16 @@ dev-mock:
 
 check:
 	npm run check
+
+# All Markdown, wherever it lives, plus the repository and agent-rule checks. Fast and needs no web build.
+check-docs:
+	npm run lint:md
+	npm run check:repo
+	npm run check:agents
+
+# Which folder pipelines and browser areas a change needs: make ci-plan [BASE=origin/main]
+ci-plan:
+	node platform/tools/ci-plan.mjs --base $(or $(BASE),origin/main)
 
 # make verify PKG=<component or path>; without PKG runs make check and check-go.
 verify:
