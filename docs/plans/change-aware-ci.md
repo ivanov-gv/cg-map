@@ -241,13 +241,14 @@ The planner adds together every row that matches.
 | Root files: `package.json`, `package-lock.json`, `.node-version`, `Makefile`, `eslint.config.mjs` | Everything                                                                         |
 | Any path the rules do not match                                                                   | Everything                                                                         |
 
-To confirm in step 2 against `apps/web/tools/build.mjs`, `apps/web/tools/finalize.mjs`, and what the browser suite
-serves:
+Confirmed in step 2 from the build tools and the specs:
 
-- Whether `services/transit-relay/**` can affect browser tests. `apps/web/src/data-mode.js` and three specs refer to the
-  relay; the current understanding is that responses are deterministic stubs.
-- Whether any Markdown outside `apps/web/public` reaches a build or data check, such as `data/PROVENANCE.md`.
-- Whether `data/imagery` Markdown stays excluded: `build.mjs` filters it from the artifact today.
+- `services/transit-relay/**` selects no browser area. Specs stub the hosted relay's URL with `page.route`, and the
+  suite never serves relay code.
+- Apart from root `AGENTS.md`, which `platform/tests/agents.test.mjs` reads and which therefore also selects `platform`,
+  no build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
+  from the artifact, and `check-repo` reads Markdown only to check links, which `docs` covers.
+- `data/tools/pack.py` appears in `platform/tests` only as an example path, so `data/tools` does not select `platform`.
 
 ### Browser areas
 
@@ -307,7 +308,9 @@ This is the largest gain and depends on nothing else.
   - Every spec must belong to an area in the matrix, and the matrix must cover both projects.
 - Add a parity check that the folder checks together cover everything in `make check`. Today only linting
   `eslint.config.mjs` is missing, so add it to `platform`'s lint.
-- Replay the commit history through the planner, and record the result here.
+- Replay the commit history through the planner, and record the result here. Result on 30 commits: 5 docs-only, 1 with
+  no browser tests, 1 narrowed to some areas, 12 with every area, and 11 selecting everything, mostly through root
+  files.
 
 ### 3. Add the new workflows beside the old ones
 
@@ -418,8 +421,8 @@ Update these docs in the same change as the behavior they describe:
 ## Progress
 
 - Completed: this plan.
-- In progress: step 1.
-- Remaining: steps 2 to 6. The owner creates the `dev` and `test-run` environments before step 3.
+- In progress: steps 1 and 2.
+- Remaining: steps 3 to 6. The owner creates the `dev` and `test-run` environments before step 3.
 
 ## Verification
 
