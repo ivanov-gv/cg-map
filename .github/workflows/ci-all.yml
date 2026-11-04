@@ -4,7 +4,7 @@ name: ci-all
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
   && format('ci-all test_run={0} run_all={1}', inputs.test_run, inputs.run_all)
-  || format('ci-all {0}', github.event.pull_request.title || github.event.head_commit.message || github.event_name) }}
+  || format('ci-all {0}', github.event.pull_request.title || github.sha) }}
 on:
   pull_request:
   push:
@@ -62,9 +62,12 @@ jobs:
       transit-relay: ${{ steps.plan.outputs.transit-relay }}
       tests: ${{ steps.plan.outputs.tests }}
       apps-web: ${{ steps.plan.outputs.apps-web }}
+      browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
       RUN_ALL: ${{ github.event_name == 'schedule' || inputs.run_all == true || inputs.run_all == 'true' }}
+      # Only PRs narrow browser tests by area: anything that can deploy runs them all.
+      FULL_BROWSER: ${{ github.event_name != 'pull_request' }}
     steps: &plan-steps
       - uses: actions/checkout@v7
         with:
@@ -81,7 +84,9 @@ jobs:
           if [ "$RUN_ALL" = true ]; then
             node platform/tools/ci-plan.mjs --all
           else
-            node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+            full_browser=""
+            if [ "$FULL_BROWSER" = true ]; then full_browser=--full-browser; fi
+            node platform/tools/ci-plan.mjs --base "$PLAN_BASE" $full_browser
           fi
   plan-test-run:
     name: (test-run) Plan
@@ -161,6 +166,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-web.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
 
   # No test-run twin: a skipped job counts as passed, so a skipped gate could report a pass under the required name.
   # It holds no permissions and only reads results. Keep this name: main's ruleset requires it.

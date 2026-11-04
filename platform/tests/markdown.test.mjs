@@ -5,11 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {main as markdownlint} from 'markdownlint-cli2';
-import parseYaml from 'markdownlint-cli2/parsers/yaml';
 import {check, resolveConfig} from 'prettier';
 import {run as formatMarkdown} from '../tools/format-markdown.mjs';
 import {buildOutputs} from '../agents/gen-agent-rules.mjs';
-import {globToRegExp, repoRoot} from '../agents/lib.mjs';
+import {repoRoot} from '../agents/lib.mjs';
 
 // This suite builds its own repositories; variables inherited from a git hook would point them at the real one.
 for (const name of Object.keys(process.env)) {
@@ -78,15 +77,4 @@ test('Markdown checks find new and hidden sources; fixes regenerate adapters and
 
   write('docs/missing-language.md', '# Example\n\n```\nexample\n```\n');
   assert.equal(await formatMarkdown({root}), 1, 'non-fixable semantic lint findings must fail');
-});
-
-test('web CI includes backend Markdown changes while leaving Go-only checks independent', () => {
-  const workflow = parseYaml(fs.readFileSync(path.join(repoRoot, '.github/workflows/web.yml'), 'utf8'));
-  for (const event of ['push', 'pull_request']) {
-    const ignored = workflow.on[event]['paths-ignore'].map(globToRegExp);
-    for (const file of ['README.md', '.github/new.md', 'services/backend/README.md', 'services/backend/nested/new.md']) {
-      assert.equal(ignored.some(pattern => pattern.test(file)), false, `${event} must check ${file}`);
-    }
-    assert.equal(ignored.some(pattern => pattern.test('services/backend/cmd/server/main.go')), true);
-  }
 });

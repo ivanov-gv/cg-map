@@ -25,8 +25,8 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   behavior change, covering both deployment projects. Install Chromium first with `npm run browser:install -- chromium`
   from apps/web if needed.
 - Standalone browser commands build first. Use `make test-e2e-built` only after a successful web build (as CI does after
-  `make check`); the built-artifact variant never refreshes the artifact. Browser output stays in test-results/ inside
-  this component. Root npm/Make commands forward to the local implementations.
+  building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in test-results/
+  inside this component. Root npm/Make commands forward to the local implementations.
 - Repeat passing suites only after relevant edits, failures, or an unresolved concern; do not rerun unchanged passing
   suites per turn. Documentation-only changes need Markdown, link/boundary, and agent-rule checks, not browser
   acceptance.
