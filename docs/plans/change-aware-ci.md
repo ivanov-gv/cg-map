@@ -245,7 +245,8 @@ Confirmed in step 2 from the build tools and the specs:
 
 - `services/transit-relay/**` selects no browser area. Specs stub the hosted relay's URL with `page.route`, and the
   suite never serves relay code.
-- No build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
+- Apart from root `AGENTS.md`, which `platform/tests/agents.test.mjs` reads and which therefore also selects `platform`,
+  no build, data, or test tool reads Markdown outside `apps/web/public`. `build.mjs` filters `data/imagery` Markdown
   from the artifact, and `check-repo` reads Markdown only to check links, which `docs` covers.
 - `data/tools/pack.py` appears in `platform/tests` only as an example path, so `data/tools` does not select `platform`.
 

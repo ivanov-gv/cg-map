@@ -14,6 +14,7 @@ const WEB = ['platform', 'tests', 'apps-web'];
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs'], []],
   ['Markdown inside a component', ['apps/web/README.md', 'services/backend/README.md'], ['docs'], []],
+  ['root instructions, which a platform test reads', ['AGENTS.md'], ['docs', 'platform'], []],
   ['generated agent rules', ['.claude/rules/go.md'], ['docs'], []],
   ['Markdown configuration', ['.markdownlint.jsonc'], ['docs'], []],
   ['Go code', ['services/backend/cmd/server/main.go'], ['backend'], []],
