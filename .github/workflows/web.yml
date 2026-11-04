@@ -59,8 +59,13 @@ jobs:
             specs: tests/e2e/journeys.spec.mjs
           - area: interface
             specs: tests/e2e/interface.spec.mjs
-          - area: places
-            specs: tests/e2e/discover.spec.mjs tests/e2e/poi-visibility.spec.mjs
+          - area: discover
+            specs: tests/e2e/discover.spec.mjs
+          # POI visibility is the slowest spec, so each browser project gets its own job.
+          - area: poi-desktop
+            specs: tests/e2e/poi-visibility.spec.mjs --project=root-desktop
+          - area: poi-mobile
+            specs: tests/e2e/poi-visibility.spec.mjs --project=pages-mobile
     env:
       E2E_SPECS: ${{ matrix.specs }}
       AREA: ${{ matrix.area }}
@@ -73,7 +78,7 @@ jobs:
         with:
           name: web-artifact
           path: dist/web
-      - run: npm run browser:install --workspace @cg-map/web -- --with-deps chromium
+      - uses: ./.github/actions/setup-browser
       - run: make test-e2e-built E2E_ARGS="$E2E_SPECS"
       - uses: actions/upload-artifact@v6
         if: failure()

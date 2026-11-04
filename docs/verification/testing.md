@@ -53,12 +53,14 @@ authoritative for this layout.
 Browser tests are split by area. CI builds once, then runs each area as its own job with its own time limit. The
 `Browser acceptance` job reports their combined result, and deployment waits for it.
 
-| Area      | Specs in apps/web/tests/e2e                | Covers                                                  | Code it depends on most                                                         |
-| --------- | ------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| shell     | shell.spec.mjs, updates.spec.mjs           | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts         |
-| journeys  | journeys.spec.mjs                          | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit   |
-| interface | interface.spec.mjs                         | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                             |
-| places    | discover.spec.mjs, poi-visibility.spec.mjs | First view, scale, POI levels, chooser                  | place-visibility.js, poi-icons.js, position.js, data/sources/places*, contracts |
+| Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
+| ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| shell       | shell.spec.mjs, updates.spec.mjs              | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
+| journeys    | journeys.spec.mjs                             | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
+| interface   | interface.spec.mjs                            | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
+| discover    | discover.spec.mjs                             | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
+| poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
+| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
 
 All areas always run; there is no path filtering yet. app.js, core.js, and map-style.js are shared by every area, so a
 future filter must treat them, shared helpers, dependencies, and the workflow itself as running everything. A filter
