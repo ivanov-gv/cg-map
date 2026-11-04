@@ -253,8 +253,7 @@ attraction is not nationally important, and a large number of cafes does not mak
 landmark.
 
 [Stable POI visibility](../features/poi-visibility.md) refines the icon stability policy below. Its fixed levels and
-cumulative admission supersede viewport-dependent icon thinning. The
-[implementation plan](../../plans/stable-poi-visibility.md) records the release checks.
+cumulative admission supersede viewport-dependent icon thinning.
 
 1. Give each eligible POI a documented importance class and minimum display scale. Country/region views MUST suppress
    ordinary local cafes, restaurants, shops, and their count clusters. A genuinely nationally significant site needs
