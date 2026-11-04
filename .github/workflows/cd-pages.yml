@@ -75,7 +75,13 @@ jobs:
             echo "::notice::$1"
             exit 0
           }
-          run=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID")
+          # curl, not gh: act's runner image has no gh, and these steps must also run locally.
+          api() {
+            curl --fail --silent --show-error --location \
+              --header "Authorization: Bearer $GH_TOKEN" --header "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GH_REPO/$1"
+          }
+          run=$(api "actions/runs/$RUN_ID")
           conclusion=$(echo "$run" | jq -r .conclusion)
           event=$(echo "$run" | jq -r .event)
           workflow=$(echo "$run" | jq -r .path)
@@ -85,15 +91,15 @@ jobs:
           [ "$conclusion" = success ] || skip "it concluded $conclusion"
           [ "$event" = "$CI_SOURCE_EVENT" ] || skip "it came from a $event event, not $CI_SOURCE_EVENT"
           artifact_query=".artifacts[] | select(.name == \"$WEB_ARTIFACT_NAME\" and .expired == false)"
-          artifact=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq "$artifact_query")
+          artifact=$(api "actions/runs/$RUN_ID/artifacts" | jq -c "$artifact_query")
           [ -n "$artifact" ] || skip "it has no $WEB_ARTIFACT_NAME artifact"
 
           # A slow older run must not overwrite a newer deployment. Comparing with main's head would be wrong: a later
           # docs-only merge has no artifact and must not stop this one. Rollbacks choose an older run on purpose.
-          newer_runs=$(gh api "repos/$GH_REPO/actions/workflows/ci-all.yml/runs?event=$CI_SOURCE_EVENT&status=success&per_page=20" \
-            --jq ".workflow_runs[] | select(.run_number > $run_number) | .id")
+          newer_runs=$(api "actions/workflows/ci-all.yml/runs?event=$CI_SOURCE_EVENT&status=success&per_page=20" \
+            | jq -r ".workflow_runs[] | select(.run_number > $run_number) | .id")
           for newer in $newer_runs; do
-            newer_artifact=$(gh api "repos/$GH_REPO/actions/runs/$newer/artifacts" --jq "$artifact_query | .name")
+            newer_artifact=$(api "actions/runs/$newer/artifacts" | jq -r "$artifact_query | .name")
             if [ -n "$newer_artifact" ]; then
               echo "A newer verified run exists: $newer"
               if [ "$TRIGGER" = workflow_run ]; then skip "newer run $newer has already been verified"; fi
@@ -120,9 +126,10 @@ jobs:
         if: steps.source.outputs.deployable == 'true'
         run: echo "files=$(find site -type f | wc -l)" >> "$GITHUB_OUTPUT"
       # deploy-pages reads only from its own run, so the artifact is copied here rather than rebuilt.
+      # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
       - name: Copy it into this run
         if: steps.source.outputs.deployable == 'true'
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@v4
         with:
           path: site
   prepare-test-run:
