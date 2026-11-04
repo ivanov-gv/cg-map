@@ -43,6 +43,12 @@ node data/tools/apply-place-visibility.mjs --update-provenance
 npm run check:data
 ```
 
+Then review density on real data. From apps/web, this saves screenshots at every threshold to test-results/:
+
+```sh
+POI_DENSITY_SCREENSHOTS=1 npm run test:e2e -- --grep 'density review'
+```
+
 The command only writes `visibilityLevel`. `places_facts_sha256` in provenance hashes the snapshot without that field,
 so a level change cannot hide a coordinate or attribute change. With `--update-provenance`, the command refuses changed
 facts unless you also pass `--accept-new-facts` after reviewing them. Without that flag it leaves provenance alone, and

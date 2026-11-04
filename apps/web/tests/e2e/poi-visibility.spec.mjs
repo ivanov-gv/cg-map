@@ -60,6 +60,12 @@ async function openMenu(page) {
 test('every level is absent just below its threshold, present at it, and reversible', async ({page}) => {
   const data = ladder();
   await open(page, data);
+  // Icon admission must not depend on the basemap (other tests keep it, with real label collisions). Without it, these
+  // 30 camera steps across wide scales do not spend CI's time limit drawing streets in software WebGL.
+  await page.evaluate(() => {
+    const m = window.kompasDebug.map;
+    for (const {id} of m.getStyle().layers) if (!/^place-|^search-place$/.test(id)) m.setLayoutProperty(id, 'visibility', 'none');
+  });
   const zooms = Object.values(THRESHOLDS).flatMap(t => [t - 0.01, t, t + 0.01]);
   const up = [];
   for (const zoom of zooms) {
@@ -392,7 +398,9 @@ test('level metadata is an offline shell asset and offline reload keeps the same
   await expectIcons(page, online);
 });
 
+// A manual review aid, not an acceptance check: POI_DENSITY_SCREENSHOTS=1 npm run test:e2e -- --grep 'density review'
 test('real data at every threshold, for visual density review', async ({page}, testInfo) => {
+  test.skip(!process.env.POI_DENSITY_SCREENSHOTS, 'Run on request after changing levels');
   const places = JSON.parse(fs.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url))).features;
   await open(page, null);
   const scenes = {podgorica: [19.2627, 42.4411], 'dense-west': [19.24, 42.44], coast: [18.84, 42.286]};
