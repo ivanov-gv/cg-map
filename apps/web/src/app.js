@@ -11,14 +11,14 @@ import {resolveDataMode,dataEndpoints,basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
 import {installPlaceIcons,placeIconId} from './poi-icons.js';
 import {PositionTracker,positionFeatures,installPositionLayers} from './position.js';
-import {MapInterface} from './interface.js';
+import {MapInterface,isInFocusZone} from './interface.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
 let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection,dataMode,api;
 const endpoints={from:null,to:null};
 let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null,buildingAddresses=new Map();
 let placesError=null,position={state:'idle',fix:null,age:null},explored=false,ownMove=false,centeredOnFix=false;
-let ui,preview=null,locationRequested=false;
+let ui,preview=null,locationRequested=false,pendingReveal=null;
 const MAP_BOUNDS=[[17.8,41.3],[21,44.1]];
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 // config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
@@ -48,6 +48,20 @@ function focusCoordinates(coordinates,zoom=15,duration=450){
  explored=true;
  map.easeTo({center:coordinates,zoom:Math.max(map.getZoom(),zoom),offset:ui.mapOffset(),duration:reduced?0:duration});
 }
+// Keep a chosen place visible with as little camera movement as possible: pan only when it leaves the focus zone.
+function revealCoordinates(coordinates,{zoom=15,duration=450}={}){
+ if(!map)return;
+ explored=true;
+ const needsZoom=map.getZoom()<zoom;
+ if(!needsZoom&&isInFocusZone(map.project(coordinates),ui.mapArea()))return;
+ map.easeTo({center:coordinates,zoom:Math.max(map.getZoom(),zoom),offset:ui.mapOffset(),duration:reduced?0:duration});
+}
+// The camera stays still while the keyboard is up; a pending reveal waits for the layout it leaves behind.
+function flushPendingReveal(){
+ if(!pendingReveal||!selectedPoint||ui.keyboardOpen())return;
+ const options=pendingReveal;pendingReveal=null;
+ revealCoordinates(selectedPoint.coordinates,options);
+}
 function updatePlaceLayers(){
  if(!loaded)return;
  const filter=preview?['!=',['id'],preview.id]:$('search').value.trim()||category!=='all'?null:PLACE_SCALE_FILTER;
@@ -58,15 +72,21 @@ function previewResults(){
  if(!loaded||placesError||ui.view==='closed')return;
  preview=selectNearest(filtered,map.getCenter().toArray(),1)[0]?.f??null;
  updatePlaceLayers();renderResults();
- if(preview)focusCoordinates(preview.geometry.coordinates);
 }
 function closePlace(restoreFocus=true){
  const hadPoint=!!selectedPoint;
- selectedPoint=null;selected=null;$('place-card').hidden=true;objectSelection?.clear();
- for(const e of document.querySelectorAll('.result[aria-current]'))e.removeAttribute('aria-current');
+ selectedPoint=null;selected=null;pendingReveal=null;$('place-card').hidden=true;ui?.resetCardState();objectSelection?.clear();
+ markCurrentResult();
  if(restoreFocus&&returnFocus)ui?.restoreFocus(returnFocus.isConnected&&returnFocus.getClientRects().length?returnFocus:$('search'));
  else if(restoreFocus&&hadPoint)map?.getCanvas().focus({preventScroll:true});
  returnFocus=null;syncPanels();
+}
+function markCurrentResult(){
+ const currentId=String((selected??preview)?.properties.id);
+ for(const row of $('results').querySelectorAll('.result')){
+  if(row.dataset.id===currentId){row.setAttribute('aria-current','true');row.scrollIntoView({block:'nearest'});}
+  else row.removeAttribute('aria-current');
+ }
 }
 function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selected=f;selectedPoint={name:f.properties.name,coordinates:[...f.geometry.coordinates]};returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
  const details=$('place-details');details.replaceChildren();
@@ -76,9 +96,10 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;selecte
  function link(text,url){const a=node('a',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';details.append(a);}
  const website=safeWebsite(p.website);if(website)link('Website ↗',website);
  if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
- preview=null;updatePlaceLayers();ui.close();$('search').blur();
- $('place-card').hidden=false;syncPanels();
- objectSelection.selectPlace(f);focusCoordinates(f.geometry.coordinates);$('close-place').focus({preventScroll:true});
+ preview=null;updatePlaceLayers();$('search').blur();
+ $('place-card').hidden=false;ui.placeCardOpened();$('place-card').scrollTop=0;syncPanels();markCurrentResult();
+ objectSelection.selectPlace(f);$('close-place').focus({preventScroll:true});
+ pendingReveal={zoom:15};flushPendingReveal();
 }
 function showPoint(point,feature=null) {
  closePlace(false);selectedPoint=point;
@@ -88,7 +109,7 @@ function showPoint(point,feature=null) {
   if(text)details.append(node('p',text,'detail'));
  }
  $('place-card').hidden=false;
- preview=null;updatePlaceLayers();ui.close();syncPanels();
+ preview=null;updatePlaceLayers();ui.close();ui.placeCardOpened();syncPanels();
  objectSelection.select(feature,point.coordinates);
  focusCoordinates(point.coordinates,map.getZoom());
  $('close-place').focus({preventScroll:true});
@@ -105,7 +126,8 @@ function renderEndpoints() {
 function setEndpoint(role) {
  if(!selectedPoint)return;
  endpoints[role]={name:selectedPoint.name,coordinates:[...selectedPoint.coordinates]};
- renderEndpoints();closePlace();
+ // Route controls live on the map, so choosing an endpoint leaves search or the dock.
+ ui.close();renderEndpoints();closePlace();
 }
 function renderResults(){if(!map)return;
  // A failed load is an error state, never an empty search result.
@@ -229,7 +251,11 @@ async function start(){
   Promise.all([placesReady,labelsReady]).then(()=>{loaded=true;$('loading').hidden=true;filterPlaces();});
  });
  map.on('movestart',e=>{if(ownMove){ownMove=false;return;}if(e.originalEvent&&!explored){explored=true;renderPosition(position);}});
- map.on('moveend',renderResults);
+ // The list keeps its order while a chosen place is open, so the row just used does not jump.
+ map.on('moveend',()=>{
+  if(!selected)renderResults();
+  flushPendingReveal();
+ });
  installMapTaps(map,e=>{
   if(!loaded)return;
   const routePoints=map.queryRenderedFeatures(e.point,{layers:['route-point-circles']});
@@ -250,7 +276,7 @@ async function start(){
  map.on('webglcontextlost',()=>notify('The browser paused graphics rendering. Waiting for it to recover…'));map.on('webglcontextrestored',()=>{$('error').hidden=true;map.triggerRepaint();});
  setTimeout(()=>{if(!loaded){$('loading').hidden=true;notify('Map startup is taking longer than expected. Check your connection and try again.');}},20000);
 }
-for(const [key,label] of Object.entries(categories)){const b=node('button',label);b.type='button';b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.addEventListener('click',()=>{category=category===key?'all':key;for(const other of $('categories').children)other.setAttribute('aria-pressed',String(other.dataset.category===category));filterPlaces();});$('categories').append(b);}
+for(const [key,label] of Object.entries(categories)){const b=node('button',label);b.type='button';b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.addEventListener('click',()=>{category=category===key?'all':key;for(const other of $('categories').children){const active=other.dataset.category===category;other.setAttribute('aria-pressed',String(active));if(active)other.scrollIntoView({block:'nearest',inline:'nearest'});}filterPlaces();});$('categories').append(b);}
 $('search').addEventListener('input',()=>{ui.openSearch();clearTimeout(searchTimer);searchTimer=setTimeout(filterPlaces,120);});
 $('point-from').addEventListener('click',()=>setEndpoint('from'));
 $('point-to').addEventListener('click',()=>setEndpoint('to'));
@@ -288,9 +314,13 @@ ui=new MapInterface({
   if(ui?.view==='closed'){preview=null;updatePlaceLayers();}
  },
  onViewport:()=>{
-  if(!loaded)return;
-  const coordinates=selectedPoint?.coordinates??(ui?.view==='search'?preview?.geometry.coordinates:null);
-  if(coordinates)focusCoordinates(coordinates,map.getZoom(),0);
- }
+  if(!loaded||!selectedPoint||ui.keyboardOpen())return;
+  // A move in progress already aims for its own layout; check again where it lands.
+  if(map.isMoving()){pendingReveal??={zoom:map.getZoom()};return;}
+  if(pendingReveal){flushPendingReveal();return;}
+  revealCoordinates(selectedPoint.coordinates,{zoom:map.getZoom(),duration:0});
+ },
+ onCardSwipedAway:()=>closePlace(),
+ resultsLabel:()=>{const query=$('search').value.trim();return query?`“${query}”`:category==='all'?'Results':categories[category];}
 });
 start().catch(e=>{console.error(e);$('loading').hidden=true;notify(e.message||'Map startup failed.');});
