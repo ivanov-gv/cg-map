@@ -1,6 +1,7 @@
 # Web application
 
-Read [README.md](README.md), [architecture](../../ARCHITECTURE.md), and [contracts](../../packages/contracts/README.md).
+Read [README.md](README.md), [architecture](../../docs/system-architecture/architecture.md), and
+[contracts](../../packages/contracts/README.md).
 
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons/fonts/vendored bundles.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
@@ -73,7 +74,7 @@ it.
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - Verify: `make verify PKG=<component>`, then `make check`.
 
-<!-- agent-guideline: ui sha256:3cba5ec942c3 -->
+<!-- agent-guideline: ui sha256:dcc424bdb003 -->
 
 ## UI conventions (from ../../docs/engineering/ui.md)
 
@@ -102,7 +103,8 @@ and offline invariants are in [apps/web/AGENTS.md](AGENTS.md); language rules ar
   state with `aria-pressed`; icon-only controls need an accessible name.
 - Loading, empty, stale, offline, and error states are part of the feature. Every async action needs a visible state for
   each.
-- Show attribution and source notes required by [DATA_LICENSE.md](../../DATA_LICENSE.md) wherever the data is displayed.
+- Show attribution and source notes required by [data licensing](../../docs/map-data/data-license.md) wherever the data
+  is displayed.
 
 ### Verification
 

@@ -23,8 +23,8 @@ test('guideline path scopes select only the matching language guideline', () => 
 });
 
 test('generated links resolve from their new location', () => {
-  assert.equal(rewriteLinks('[o](../ownership.md)', 'docs/engineering/go.md', 'services/backend/AGENTS.md'), '[o](../../docs/ownership.md)');
-  assert.equal(rewriteLinks('[o](../ownership.md#x) [w](https://x.y)', 'docs/engineering/go.md', null), '[o](docs/ownership.md#x) [w](https://x.y)');
+  assert.equal(rewriteLinks('[o](../system-architecture/ownership.md)', 'docs/engineering/go.md', 'services/backend/AGENTS.md'), '[o](../../docs/system-architecture/ownership.md)');
+  assert.equal(rewriteLinks('[o](../system-architecture/ownership.md#x) [w](https://x.y)', 'docs/engineering/go.md', null), '[o](docs/system-architecture/ownership.md#x) [w](https://x.y)');
 });
 
 test('committed agent adapters match canonical docs and budgets', async () => {

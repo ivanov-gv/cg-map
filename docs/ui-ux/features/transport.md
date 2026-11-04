@@ -1,5 +1,10 @@
 # Live Podgorica transport
 
+Serves [US-05](../user-stories/user-stories.md), [US-06](../user-stories/user-stories.md), and
+[US-09](../user-stories/user-stories.md): let a person inspect a stop, optionally see reported bus activity, and use a
+stop as a deliberate journey endpoint without implying live arrival predictions. The separate offline behavior preserves
+the stop capability while being honest that live positions require a connection.
+
 ## Product behavior
 
 The optional Transport toggle adds blue route-number markers without replacing the map. Each marker points in the bus's
@@ -36,9 +41,9 @@ blue teardrops are movement-based.
 
 ## Hosts
 
-The web app's data mode decides who fetches the feed (see [web data modes](../apps/web/README.md#data-modes)). In server
-mode it polls the Go server's `api/v1/transport/vehicles`, which fetches the upstream itself. In mock mode (GitHub
-Pages, `make dev-mock`) it polls the hosted relay, as before.
+The web app's data mode decides who fetches the feed (see [web data modes](../../../apps/web/README.md#data-modes)). In
+server mode it polls the Go server's `api/v1/transport/vehicles`, which fetches the upstream itself. In mock mode
+(GitHub Pages, `make dev-mock`) it polls the hosted relay, as before.
 
 ## Integration
 
@@ -65,8 +70,8 @@ that is separate from live relay verification.
 The GitHub Pages client calls the public hosted endpoint. Deployment runs through the web Actions workflow after merge
 to main.
 
-Hosting identity and source version are in [deployment.json](../services/transit-relay/deployment.json). The service
-implementation and update procedure are in [its README](../services/transit-relay/README.md).
+Hosting identity and source version are in [deployment.json](../../../services/transit-relay/deployment.json). The
+service implementation and update procedure are in [its README](../../../services/transit-relay/README.md).
 
 ## Bus stops
 

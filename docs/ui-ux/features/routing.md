@@ -1,5 +1,11 @@
 # Route planning
 
+Serves [US-06](../user-stories/user-stories.md), [US-07](../user-stories/user-stories.md), and
+[US-08](../user-stories/user-stories.md): preserve deliberate endpoints while helping a person compare available car,
+walking, or bus options. Offline bus suggestions and failure boundaries also support
+[US-11](../user-stories/user-stories.md) and [US-12](../user-stories/user-stories.md). These are estimates and dated
+patterns, not live timetables or navigation.
+
 Pick From and To on the map or a place card. Once both are selected, choose Car, Public transport, or Walk. The selected
 route is drawn on the existing map with distance/time and expandable route details. Changing either endpoint or mode
 cancels/invalidates previous work immediately; Clear points also removes the line. Route errors do not affect the
@@ -48,7 +54,7 @@ Run `python data/tools/import-transit.py` from the repository root for a deliber
 reuses individual request results for at most one hour to permit resuming an interrupted import; remove
 .build/transit-import to force every request to refresh. Published network/provenance files belong to data/sources and
 are copied unchanged into dist/web and the offline shell. The geography archive is unchanged. See
-[contracts](../packages/contracts/README.md) and [source provenance](../data/PROVENANCE.md).
+[contracts](../../../packages/contracts/README.md) and [source provenance](../../../data/PROVENANCE.md).
 
 routing.js owns validated car/foot requests and request spacing; transit-routing.js owns the pure bounded bus search;
 route-planner.js owns mode state, cancellation, map line layers and itinerary DOM. app.js passes copied endpoints to

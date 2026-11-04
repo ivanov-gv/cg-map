@@ -1,5 +1,5 @@
 # Bootstrap maintainer. Replace handles with real GitHub teams as they are formed.
-# Logical ownership and required cross-team review: docs/ownership.md.
+# Logical ownership and required cross-team review: docs/system-architecture/ownership.md.
 *                         @ivanov-gv
 /apps/web/                @ivanov-gv
 /services/backend/        @ivanov-gv

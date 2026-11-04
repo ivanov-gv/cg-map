@@ -1,7 +1,8 @@
 # cg-map frontend: implementation walkthrough
 
 A code-level walkthrough of the deployed application: module responsibilities, state transitions, rendering, storage and
-publication. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for broader design decisions and alternatives.
+publication. See [architecture](../../docs/system-architecture/architecture.md) for broader system decisions and
+alternatives.
 
 ## 1. Runtime boundaries
 
@@ -45,7 +46,7 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 
 ## Laconic controls
 
-The [interface specification](../../docs/ui-ux/interface.md) defines the implemented composition. The map fills the
+The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
 viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens.
 [interface.js](src/interface.js) owns closed/dock/mobile-search states, the shared result panel, focus restoration, and
 visible-viewport geometry. It has no dependency on data producers or backend code.
@@ -154,9 +155,9 @@ One places source is rendered by several layers:
 | place-highlight | Invisible ring that becomes the selection highlight through feature state                                           |
 
 `PLACE_SCALE_FILTER` in core.js hides places at country/region scale and ordinary businesses until street scale
-([Discover D-05](../../docs/ui-ux/discover.md#d-05-points-of-interest-without-clutter)); a search or category choice
-lifts it. poi-icons.js draws the category icons at runtime, so no sprite file is needed. position.js owns device
-location: its state machine, accuracy ring and layers; coordinates never leave memory.
+([Discover D-05](../../docs/ui-ux/user-stories/discover.md#d-05-points-of-interest-without-clutter)); a search or
+category choice lifts it. poi-icons.js draws the category icons at runtime, so no sprite file is needed. position.js
+owns device location: its state machine, accuracy ring and layers; coordinates never leave memory.
 
 Selection fill/outline layers filter the original basemap source layer by feature ID, preserving full polygons across
 tiles and zoom levels. Area selection adds no extra point marker.
@@ -496,7 +497,7 @@ is a teardrop pointing in the bus's direction of travel ([vehicle-direction.js](
 movement is known, outlined while estimated from the route, a plain disc when neither is available. Transport visibility
 controls both, while only vehicle positions are cleared during offline/hidden/error states. Stop selection in app.js
 uses text nodes in a MapLibre popup. The build copies the reviewed stop snapshot into the offline shell; live vehicle
-responses are never cached there. See [transport behavior](../../docs/transport.md).
+responses are never cached there. See [transport behavior](../../docs/ui-ux/features/transport.md).
 
 ## Point selection
 
@@ -504,17 +505,19 @@ responses are never cached there. See [transport behavior](../../docs/transport.
 presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js)
 highlights source polygons with a contour and translucent fill, or lines with a stroke. Point-only places/stops
 highlight their existing marker; bare coordinates use a small circle. No extra pin is added. See
-[point selection](../../docs/point-selection.md) for hit priority, available metadata, and offline behavior.
+[point selection](../../docs/ui-ux/features/point-selection.md) for hit priority, available metadata, and offline
+behavior.
 
 ## Routes
 
 [routing.js](src/routing.js) handles car/foot requests, [transit-routing.js](src/transit-routing.js) searches local bus
 patterns, and [route-planner.js](src/route-planner.js) owns mode controls, cancellation, line layers, and itinerary
-rendering. See [routing](../../docs/routing.md) before changing providers, transit assumptions, or offline behavior.
+rendering. See [routing](../../docs/ui-ux/features/routing.md) before changing providers, transit assumptions, or
+offline behavior.
 
 ## Building addresses
 
 map-style.js loads the reviewed building-labels.geojson as a separate local source and renders interior house numbers
 from the 100 m scale. point-selection.js joins polygon IDs to the reviewed address index, so building details remain
 consistent even when number labels are hidden. The web build includes this source in the offline shell; the basemap
-archive is unchanged. See [building numbers](../../docs/building-numbers.md).
+archive is unchanged. See [building numbers](../../docs/map-data/building-numbers.md).

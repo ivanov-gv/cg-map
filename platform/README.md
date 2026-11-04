@@ -4,7 +4,6 @@ Ownership: platform/reliability team.
 
 - `tools/serve.py`: local range-capable web server; serves dist/web.
 - `tools/check-repo.mjs`: repository documentation, layout, and boundary checks.
-- `tools/package.py`: optional source export utility.
 - `tools/verify.mjs`: `make verify PKG=<path>` dispatch to the owning component's checks.
 - `tools/format-markdown.mjs`: fix authored Markdown with markdownlint/Prettier and regenerate agent adapters; see
   [Markdown checks](../docs/runbooks/development.md#markdown-checks-and-formatting).

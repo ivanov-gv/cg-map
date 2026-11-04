@@ -5,7 +5,7 @@ paths:
   - "apps/web/src/**"
 ---
 
-<!-- GENERATED from docs/engineering/ui.md sha256:3cba5ec942c3
+<!-- GENERATED from docs/engineering/ui.md sha256:dcc424bdb003
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # UI conventions
@@ -35,7 +35,8 @@ and offline invariants are in [apps/web/AGENTS.md](apps/web/AGENTS.md); language
   state with `aria-pressed`; icon-only controls need an accessible name.
 - Loading, empty, stale, offline, and error states are part of the feature. Every async action needs a visible state for
   each.
-- Show attribution and source notes required by [DATA_LICENSE.md](DATA_LICENSE.md) wherever the data is displayed.
+- Show attribution and source notes required by [data licensing](docs/map-data/data-license.md) wherever the data is
+  displayed.
 
 ## Verification
 

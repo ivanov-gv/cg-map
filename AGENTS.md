@@ -1,7 +1,8 @@
 # Working on cg-map
 
-Start with [ARCHITECTURE.md](ARCHITECTURE.md), [ownership](docs/ownership.md), and the relevant component's AGENTS.md.
-This is a read-only map PoC; do not invent backend APIs or editorial services that do not exist.
+Start with [architecture](docs/system-architecture/architecture.md), [ownership](docs/system-architecture/ownership.md),
+and the relevant component's AGENTS.md. This is a read-only map PoC; do not invent backend APIs or editorial services
+that do not exist.
 
 ## Repo map and language rules
 

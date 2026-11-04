@@ -1,7 +1,7 @@
 # Transit backend
 
-Read README.md and docs/transport.md from the repository root. The upstream feed is public but CORS-restricted to
-ePodgorica; the public map needs a separately hosted relay.
+Read README.md and [transport](../../docs/ui-ux/features/transport.md) from the repository root. The upstream feed is
+public but CORS-restricted to ePodgorica; the public map needs a separately hosted relay.
 
 Keep the upstream fixed, the API read-only, and refreshes bounded/cached. Never pass through caller-supplied URLs,
 credentials, or headers. Do not invent vehicle identity or GPS age. Preserve stale/expiry behavior and coordinate

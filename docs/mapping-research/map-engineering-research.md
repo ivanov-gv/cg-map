@@ -282,8 +282,8 @@ absolute performance claims.
 
 Current environment: browser QA is unavailable under the provided website workflow. Archive decoding, map-style
 validation, search behavior, offline transaction simulations, asset checks, and range parsing can be exercised. Physical
-Android behavior and actual visual smoothness remain unverified; see TESTING.md for the exact run record and outstanding
-checks.
+Android behavior and actual visual smoothness remain unverified; see [testing](../verification/testing.md) for current
+commands and outstanding checks.
 
 ## Open decisions to resolve with evidence
 

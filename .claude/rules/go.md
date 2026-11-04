@@ -7,7 +7,7 @@ paths:
   - "**/go.work"
 ---
 
-<!-- GENERATED from docs/engineering/go.md sha256:8a49225848f9
+<!-- GENERATED from docs/engineering/go.md sha256:c0e2f28ae808
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # Go conventions
@@ -21,7 +21,7 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 - The server serves an explicitly selected artifact directory. It does not embed or read web source, data/sources, or
   pipeline output paths directly.
 - Do not scaffold placeholder services, APIs, or packages for future editorial work (see
-  [ownership](docs/ownership.md)).
+  [ownership](docs/system-architecture/ownership.md)).
 
 ## Code
 

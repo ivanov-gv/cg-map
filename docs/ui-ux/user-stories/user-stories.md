@@ -4,9 +4,9 @@ Product baseline extracted from the current UI on 1 November 2026. Use this when
 outcomes below, while allowing the controls and layout to improve. This is an implementation-derived baseline, not
 validated user research. New target requirements are documented separately from implemented behavior.
 
-The [laconic interface](interface.md), implemented in the web source on 3 November 2026, changes control placement and
-wording while preserving these outcomes. Physical-device usability checks remain; geographic data requirements remain
-separate targets.
+The [laconic interface](../features/interface.md), implemented in the web source on 3 November 2026, changes control
+placement and wording while preserving these outcomes. Physical-device usability checks remain; geographic data
+requirements remain separate targets.
 
 ## Product purpose
 
@@ -14,8 +14,8 @@ Help someone exploring Montenegro find and understand a place, choose a useful n
 when connectivity disappears. Success means the person can act on the information **and understands its limits**.
 
 The strongest current coverage is central Podgorica. Country-level exploration is supported with less detail elsewhere.
-The product is a read-only map and directory with route planning; its [current architecture](../../ARCHITECTURE.md)
-defines the implemented scope.
+The product is a read-only map and directory with route planning; its
+[current architecture](../../system-architecture/architecture.md) defines the implemented scope.
 
 ## Product journey
 
@@ -66,10 +66,10 @@ outcome. They do not impose a priority ranking or freeze today's wording, colors
 | US-12 | **Recover and retain control.** As someone relying on the map, I want failures and updates to preserve usable work and make recovery understandable.                        | Startup/map failures are visible; route failure does not break browsing. Failed/cancelled archive replacements preserve the previous verified download. Incomplete app updates keep the working shell. I can remove a saved archive intentionally.                   | Successful app updates may reload open tabs and reset session routes/selections. Archive safety does not guarantee atomic replacement of every cache asset, permanent browser retention, or preservation after intentional removal.       |
 | US-13 | **See where I am.** As someone opening the map, I want my position and its uncertainty shown automatically so I can relate the map to my surroundings.                      | With permission, a marker and accuracy ring appear without a click and the map centers once; Recenter returns to it. Without a fix, the status names the reason (blocked, unavailable, timed out, outside the map) and labels the default view as central Podgorica. | Accuracy is the browser's reported radius; over 50 m is shown as approximate and fixes older than 30 s as not updating. The position is never stored, sent, or used for routing.                                                          |
 
-Detailed behavior remains authoritative in [point selection](../point-selection.md), [routing](../routing.md),
-[transport](../transport.md), the [frontend guide](../../apps/web/README.md), and
-[app updates](../runbooks/release.md#automatic-app-updates). Source and licensing requirements remain in
-[DATA_LICENSE.md](../../DATA_LICENSE.md).
+Detailed behavior remains authoritative in [point selection](../features/point-selection.md),
+[routing](../features/routing.md), [transport](../features/transport.md), the
+[frontend guide](../../../apps/web/README.md), and [app updates](../../runbooks/release.md#automatic-app-updates).
+Source and licensing requirements remain in [data licensing](../../map-data/data-license.md).
 
 ## Success across a complete journey
 
@@ -94,8 +94,8 @@ stories and expose regressions between features.
 
 Run the same critical journeys on a phone and desktop. The preservation requirements include accessible names and toggle
 states, visible keyboard focus, `/` to focus search, Escape/close behavior, usable scrolling, and touch gestures. These
-are requirements to check, not a claim of full accessibility compliance. See [UI guidelines](../engineering/ui.md) and
-[testing limitations](../testing.md).
+are requirements to check, not a claim of full accessibility compliance. See [UI guidelines](../../engineering/ui.md)
+and [testing limitations](../../verification/testing.md).
 
 ## What success would mean in user research
 
@@ -144,18 +144,20 @@ current provider availability, data accuracy, or real-device performance.
 
 Use these existing checks as evidence, while retaining human task evaluation:
 
-| Stories         | Existing verification sources                                                                                                                                                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| US-01–06, US-10 | [Map browser journeys](../../apps/web/tests/e2e/map.spec.mjs): search/selection/layers, endpoints, gestures, building addresses, and persistent object highlighting. [Search helpers](../../apps/web/tests/core.test.mjs) cover folding and nearest/category behavior. |
-| US-07–08        | [Routing unit checks](../../apps/web/tests/routing.test.mjs) and isolated routing-provider browser journeys cover mode differences, bus itineraries, cancellation/errors, and clearing. Provider fixtures do not prove real-world travel accuracy.                     |
-| US-09           | [Transport unit checks](../../apps/web/tests/transport.test.mjs), [direction cases](../../apps/web/tests/vehicle-direction.test.mjs), and browser journeys cover toggles, stale/expiry behavior, stops, failure, and offline behavior.                                 |
-| US-13           | [Discover unit checks](../../apps/web/tests/discover.test.mjs) cover location states, thresholds and the accuracy ring; browser journeys emulate granted and blocked location. Emulation does not prove real device fixes.                                             |
-| US-11–12        | [Offline transactions](../../apps/web/tests/offline.test.mjs), [worker lifecycle](../../apps/web/tests/service-worker.test.mjs), [update journeys](../../apps/web/tests/e2e/updates.spec.mjs), and real-archive offline browser acceptance.                            |
+| Stories         | Existing verification sources                                                                                                                                                                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| US-01–06, US-10 | [Map browser journeys](../../../apps/web/tests/e2e/map.spec.mjs): search/selection/layers, endpoints, gestures, building addresses, and persistent object highlighting. [Search helpers](../../../apps/web/tests/core.test.mjs) cover folding and nearest/category behavior. |
+| US-07–08        | [Routing unit checks](../../../apps/web/tests/routing.test.mjs) and isolated routing-provider browser journeys cover mode differences, bus itineraries, cancellation/errors, and clearing. Provider fixtures do not prove real-world travel accuracy.                        |
+| US-09           | [Transport unit checks](../../../apps/web/tests/transport.test.mjs), [direction cases](../../../apps/web/tests/vehicle-direction.test.mjs), and browser journeys cover toggles, stale/expiry behavior, stops, failure, and offline behavior.                                 |
+| US-13           | [Discover unit checks](../../../apps/web/tests/discover.test.mjs) cover location states, thresholds and the accuracy ring; browser journeys emulate granted and blocked location. Emulation does not prove real device fixes.                                                |
+| US-11–12        | [Offline transactions](../../../apps/web/tests/offline.test.mjs), [worker lifecycle](../../../apps/web/tests/service-worker.test.mjs), [update journeys](../../../apps/web/tests/e2e/updates.spec.mjs), and real-archive offline browser acceptance.                         |
 
 Automated coverage is partial: for example, browser search uses fixtures and does not establish discoverability,
 comprehension, full keyboard/screen-reader usability, or physical-phone behavior. Follow
-[the testing guide](../testing.md) for commands and device checks; do not interpret a green suite as user research.
+[the testing guide](../../verification/testing.md) for commands and device checks; do not interpret a green suite as
+user research.
 
 For subsequent changes, name the affected story IDs, describe the user-visible improvement, preserve the relevant
 success scenarios and failure states, and update this baseline when the product promise changes. Keep implementation
-detail in its owning document and review cross-component work against [ownership](../ownership.md).
+detail in its owning document and review cross-component work against
+[ownership](../../system-architecture/ownership.md).

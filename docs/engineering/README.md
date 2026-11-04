@@ -5,12 +5,12 @@ harness has four layers. Each fact has one canonical home; agent-specific files 
 are no agent hooks: they fired only for some tools (an agent editing through the shell bypassed them) and Codex required
 trusting them per machine. Checks run where they cannot be bypassed: Make targets, git hooks and CI.
 
-| Kind                                                  | Canonical home                                     | How agents get it                                         | Backstop                             |
-| ----------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------- | ------------------------------------ |
-| Knowledge: architecture, domain, component boundaries | ARCHITECTURE.md, docs/, component README/AGENTS.md | Routed from [AGENTS.md](../../AGENTS.md)                  | check-repo link check                |
-| Mandatory language rules                              | docs/engineering/&lt;language&gt;.md               | Generated adapters (below)                                | ESLint, gofmt/vet, py_compile, tests |
-| Procedures                                            | Make targets and platform scripts                  | Listed in AGENTS.md                                       | Same commands in CI                  |
-| Compliance                                            | The guidelines above                               | A read-only review agent at the end of every task (below) | git hooks, CI                        |
+| Kind                                                  | Canonical home                                                       | How agents get it                                         | Backstop                             |
+| ----------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------ |
+| Knowledge: architecture, domain, component boundaries | docs/system-architecture/, topic folders, component README/AGENTS.md | Routed from [AGENTS.md](../../AGENTS.md)                  | check-repo link check                |
+| Mandatory language rules                              | docs/engineering/&lt;language&gt;.md                                 | Generated adapters (below)                                | ESLint, gofmt/vet, py_compile, tests |
+| Procedures                                            | Make targets and platform scripts                                    | Listed in AGENTS.md                                       | Same commands in CI                  |
+| Compliance                                            | The guidelines above                                                 | A read-only review agent at the end of every task (below) | git hooks, CI                        |
 
 Language guidelines: [JavaScript](javascript.md), [UI](ui.md), [Python](python.md), [Go](go.md). Mapping from guideline
 to paths and components: [platform/agents/guidelines.json](../../platform/agents/guidelines.json).

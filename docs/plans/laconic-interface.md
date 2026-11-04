@@ -4,8 +4,9 @@ Status: complete
 
 ## Goal and acceptance criteria
 
-- Implement [the approved interface](../ui-ux/interface.md) in the real web app: unchanged burger/search geometry,
-  closed initial dock, bottom-anchored optional-layer tiles/download, icon-only location, and no redundant chrome.
+- Implement [the approved interface](../ui-ux/features/interface.md) in the real web app: unchanged burger/search
+  geometry, closed initial dock, bottom-anchored optional-layer tiles/download, icon-only location, and no redundant
+  chrome.
 - Mobile search fills the space below the header down to the visible viewport's midpoint. Categories stay fixed above
   independently scrolling results, with readable 76px rows and 16px names. Omit the count/nearest-first/Reset row;
   tapping the active category again removes that filter without clearing the query. The leading/selected result remains

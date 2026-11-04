@@ -1,34 +1,18 @@
-# Engineering documentation
+# Documentation
 
-See [team ownership](ownership.md). Start with [current architecture](../ARCHITECTURE.md) and
-[agent instructions](../AGENTS.md).
+This is the human entry point to project documentation. Each folder covers one concern and has its own `README.md` and
+`AGENTS.md`; the [documentation rules](AGENTS.md) define the layout. Choose the topic that matches your question:
 
-| Need                                                  | Document                                                                      |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
-| UI/UX, user stories and success                       | [Experience documentation](ui-ux/README.md)                                   |
-| User intents, maintained stories and success criteria | [Product baseline](ui-ux/user-stories.md)                                     |
-| Laconic controls, dock behavior, and design brief     | [Interface](ui-ux/interface.md) (implemented controls; device checks pending) |
-| Discover: default map requirements and research       | [Discover](ui-ux/discover.md) (target; implementation gaps recorded)          |
-| Understand: one-selection object details              | [Understand](ui-ux/understand.md) (target; implementation gaps recorded)      |
-| Plan: context views, routes and readiness for Travel  | [Plan](ui-ux/plan.md) (target; implementation gaps recorded)                  |
-| Travel: live position, route progress and completion  | [Travel](ui-ux/travel.md) (target; implementation gaps recorded)              |
-| Setup and checks                                      | [Development](runbooks/development.md)                                        |
-| Language rules, agent harness, parallel sessions      | [Engineering guidelines](engineering/README.md)                               |
-| UI implementation                                     | [Frontend guide](../apps/web/README.md)                                       |
-| Data contracts and rebuilding                         | [Data runbook](runbooks/data.md)                                              |
-| Publishing, Pages migration, rollback                 | [Release runbook](runbooks/release.md)                                        |
-| Live bus feed and release gate                        | [Transport](transport.md)                                                     |
-| Test commands, evidence, device checks                | [Testing](testing.md)                                                         |
-| Why source/output/docs are separate                   | [ADR 0003](decisions/0003-concern-monorepo-and-actions-pages.md) (current)    |
-| Multi-session task state                              | [Plan template](plans/TEMPLATE.md)                                            |
-| Known gaps                                            | [Technical debt](technical-debt.md)                                           |
-| Detailed design and future options                    | [Implementation guide](design/implementation-guide.md)                        |
+- [System architecture](system-architecture/README.md): implemented system boundaries, ownership, known gaps, and
+  historical architecture exploration. This is not the UI/UX design area.
+- [Map data](map-data/README.md): dataset terms, building-number labels, and data refresh context.
+- [UI/UX](ui-ux/README.md): the path from user stories and journey requirements to justified interface and map features.
+- [Verification](verification/README.md): test commands, evidence, and device-check limitations.
+- [Engineering](engineering/README.md): language conventions and agent-instruction mechanisms.
+- [Runbooks](runbooks/README.md): operational procedures for development, data, and release.
+- [Decisions](decisions/README.md): architecture decision records, including superseded historical choices.
+- [Plans](plans/README.md): task plans and the reusable plan template.
+- [Mapping research](mapping-research/README.md): exploratory research, not maintained implementation guidance.
 
-Update documentation in the same change as affected behavior. Current architecture and runbooks take precedence over
-historical verification notes. Keep each fact in one authoritative location; link instead of duplicating.
-
-- [Point selection](point-selection.md): feature details and From/To endpoint state.
-
-- [Routing](routing.md): car/foot services, bus suggestions, data refresh, and limitations.
-
-- [Building numbers](building-numbers.md): source recovery, label placement, and refresh.
+Update docs in the same change as affected behavior. Keep each fact in one authoritative location and link to it instead
+of duplicating it. Current architecture and runbooks take precedence over historical proposals and verification notes.

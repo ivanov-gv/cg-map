@@ -5,10 +5,25 @@ composition; the application uses real directory data, device positioning, optio
 downloads. This does not claim deployment or completion of Discover’s missing geographic data. Browser acceptance and
 physical-device evidence are recorded separately below.
 
-This document owns control layout, wording, and expansion behavior. [Discover](discover.md) owns the geographic scene
-and honest location semantics; [Understand](understand.md) owns selected-object details. [Plan](plan.md) covers journey
-preparation and route readiness; [Travel](travel.md) covers live route-following and finishing. Preserve the
-capabilities in [user stories](user-stories.md) while changing their presentation.
+This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
+geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
+details. [Plan](../user-stories/plan.md) covers journey preparation and route readiness;
+[Travel](../user-stories/travel.md) covers live route-following and finishing. Preserve the capabilities in
+[user stories](../user-stories/user-stories.md) while changing their presentation.
+
+## User outcomes served
+
+These controls exist to help people find a known place (US-02), discover nearby options (US-03), inspect and set journey
+endpoints without losing them (US-04–06), compare the bounded imagery sample (US-10), prepare for offline use and
+recover from failure (US-11–12), and understand current-position state (US-13). The requirements below constrain how
+those tasks are presented; they are not extra goals detached from the story baseline.
+
+| Interface area                  | Story basis     | User purpose                                                                                             |
+| ------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| Opening view and location       | US-01, US-13    | Orient on the map and understand whether the displayed position is usable.                               |
+| Search, results, dock           | US-02–04        | Find and inspect a relevant listing without losing context.                                              |
+| Layer and download controls     | US-06, US-09–12 | Keep journey state while inspecting a layer, checking transport, or preparing/recovering offline access. |
+| Honest states and accessibility | US-11–13        | Understand limits and recover without misleading status or inaccessible controls.                        |
 
 ## Intention
 
@@ -109,7 +124,7 @@ connection,” a tutorial paragraph, or a Help/Map key block to fill unused dock
 The location control uses a small icon with non-color state differences and an accessible name/state. It must
 distinguish acquisition, a usable fix, approximate/stale data, and unavailable positioning without a persistent text
 banner. The position marker and uncertainty remain truthful under
-[Discover D-06](discover.md#d-06-current-position-and-honest-uncertainty).
+[Discover D-06](../user-stories/discover.md#d-06-current-position-and-honest-uncertainty).
 
 With a usable fix, activating location recenters immediately; it does not first open a “Your location” explanation or
 details panel. Without a usable fix, request/retry positioning where possible, or give concise actionable recovery after
@@ -118,7 +133,7 @@ the request fails. Never move to a fabricated position or call the fallback came
 Minimal wording does not remove required attribution, sourced facts in object details, permission handling, coverage
 limits, or action-specific failures. Keep those explanations attached to the relevant feature/action. Do not replace
 readable labels with unexplained pictograms or rely on color, hover, or a tooltip alone for essential state. Follow the
-[UI accessibility guidelines](../engineering/ui.md) for names, focus, touch targets, and reduced motion.
+[UI accessibility guidelines](../../engineering/ui.md) for names, focus, touch targets, and reduced motion.
 
 ## Acceptance
 
@@ -134,13 +149,13 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 | UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                     | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                         |
 | UI-A09 | On a phone, focus search, type, select different results, and open/dismiss the keyboard; then use the burger. | Search leaves the full dock closed, the bubble is at most half the visible viewport, and the selected/leading marker stays uncovered. Burger opens the full dock with query/category retained. |
 
-Automated coverage in [the web browser suite](../../apps/web/tests/e2e/map.spec.mjs) checks initial chrome, unchanged
+Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/map.spec.mjs) checks initial chrome, unchanged
 header geometry, anchored options, fixed categories over scrolling results, query preservation, and projected search/
 selection visibility. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
-keyboard, screen-reader, or phone behavior. Review physical-device usability under [the testing guide](../testing.md).
-Keep scale/POI stability checks in [Discover D-05](discover.md#d-05-points-of-interest-without-clutter); the
-illustrative draft's cumulative icons do not prove a production placement solution. Paid visibility is outside this UI
-decision.
+keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief
 

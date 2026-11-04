@@ -5,12 +5,29 @@ import assert from 'node:assert/strict';
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 }
-const docsTree = walk('docs');
-const docTooling = new Set(['docs/Makefile']);
-for (const file of docsTree) {
-  assert.ok(file.endsWith('.md') || docTooling.has(file), `docs/ must contain Markdown and approved tooling only: ${file}`);
+function walkDirectories(dir) {
+  return fs.readdirSync(dir, {withFileTypes: true}).filter(e => e.isDirectory()).flatMap(e => {
+    const child = path.join(dir, e.name);
+    return [child, ...walkDirectories(child)];
+  });
 }
-const docs = ['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
+const docsTree = walk('docs');
+for (const file of docsTree) {
+  assert.ok(file.endsWith('.md'), `docs/ must contain Markdown only: ${file}`);
+}
+for (const name of ['README.md', 'AGENTS.md']) {
+  assert.ok(fs.existsSync(path.join('docs', name)), `docs/ must contain ${name}`);
+}
+const docsRoot = fs.readdirSync('docs', {withFileTypes: true});
+for (const entry of docsRoot) {
+  assert.ok(entry.isDirectory() || ['README.md', 'AGENTS.md'].includes(entry.name), `docs/ root only allows README.md, AGENTS.md, and topic folders: ${entry.name}`);
+}
+for (const dir of ['docs', ...walkDirectories('docs')]) {
+  for (const name of ['README.md', 'AGENTS.md']) {
+    assert.ok(fs.existsSync(path.join(dir, name)), `${dir}/ must contain ${name}`);
+  }
+}
+const docs = ['README.md', 'AGENTS.md',
   ...['apps/web', 'services/backend', 'services/transit-relay', 'data', 'platform', 'packages/contracts'].flatMap(dir => ['README.md', 'AGENTS.md'].map(name => `${dir}/${name}`)),
   ...docsTree.filter(file => file.endsWith('.md'))];
 for (const file of docs) {
@@ -39,8 +56,7 @@ for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
-const rootFiles = new Set(['README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'TESTING.md',
-  'DATA_LICENSE.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
+const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);
 }

@@ -1,11 +1,11 @@
 # Kompas: architecture, implementation, operations, and growth
 
 > Historical PoC implementation and design exploration. Current layout, build commands, ownership, and deployment are
-> documented in [architecture](../../ARCHITECTURE.md) and [runbooks](../README.md).
+> documented in [architecture](architecture.md) and [runbooks](../runbooks/README.md).
 >
-> Detailed design and historical verification notes. Start with [current architecture](../../ARCHITECTURE.md),
-> [testing](../testing.md), and [release procedure](../runbooks/release.md) for maintained operational guidance. Future
-> proposals below are not implemented features.
+> Detailed design and historical verification notes. Start with [current architecture](architecture.md),
+> [testing](../verification/testing.md), and [release procedure](../runbooks/release.md) for maintained operational
+> guidance. Future proposals below are not implemented features.
 
 **A read-only Montenegro map and directory, with a path toward a local 2GIS competitor.**
 
@@ -948,7 +948,8 @@ no dependency on its account, project identity, or deployment tooling. Self-host
 ### Executed checks
 
 At the handoff baseline, 20 Node and five Python tests passed. The satellite release adds two Node tests, bringing the
-current Node total to 22; its GitHub CI passed. See [TESTING.md](../../TESTING.md) for the detailed record.
+current Node total to 22; its GitHub CI passed. See [testing](../verification/testing.md) for current commands and
+coverage.
 
 - Archive header/type/hash and decoding of actual city/coast/overview MVT geometry.
 - Map style validation against the official style schema.
@@ -1359,7 +1360,7 @@ include for a convenient PoC; move larger/frequently changing binaries into vers
 growing Git history indefinitely.
 
 Application code is MIT; map data and fonts retain separate licenses/notices. A GitHub MIT badge must not be interpreted
-as relicensing all geographic data. Review [DATA_LICENSE.md](../../DATA_LICENSE.md).
+as relicensing all geographic data. Review [data licensing](../map-data/data-license.md).
 
 For a minimal first run, use `python3 platform/tools/serve.py`. For a deeper handoff, run the checks, read the source
 map above, then try one place-only change and one geometry change on a branch. That will exercise the essential

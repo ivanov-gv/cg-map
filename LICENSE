@@ -21,4 +21,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 This license covers original application code only. OpenStreetMap-derived
-GeoJSON and Leaflet are covered by the licenses described in DATA_LICENSE.md.
+GeoJSON and Leaflet are covered by the licenses described in docs/data-license.md.

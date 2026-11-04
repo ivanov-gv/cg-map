@@ -12,26 +12,27 @@ make check-go
 
 On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one with
 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright install chromium` (see
-[technical debt](technical-debt.md)).
+[technical debt](../system-architecture/technical-debt.md)).
 
 Frontend iteration commands and measured check durations live with the
-[web application](../apps/web/README.md#focused-browser-checks).
+[web application](../../apps/web/README.md#focused-browser-checks).
 
 ## Test ownership
 
-| Location                    | Scope                                                                                          |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| apps/web/tests              | Pure search helpers, offline transactions, worker lifecycle, shipped vendor contracts          |
-| data/tests                  | Place/geometry contracts and approved small fixture                                            |
-| platform/tests              | Actual Python HTTP/range behavior, deployment compatibility                                    |
-| services/backend/cmd/server | Go host directory/range behavior                                                               |
-| tests/integration           | Real archive/MVT decoding, style/glyph coverage, imagery, shared-category agreement, transport |
-| apps/web/tests/e2e          | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload       |
+| Location                     | Scope                                                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| apps/web/tests               | Pure helpers, satellite behavior, offline transactions and module inventory, worker lifecycle, vendor contracts |
+| data/tests                   | Place/geometry contracts and approved small fixture                                                             |
+| platform/tests               | Actual Python HTTP/range behavior, deployment compatibility                                                     |
+| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                |
+| services/backend/cmd/server  | Go host directory/range behavior                                                                                |
+| tests/integration            | Real archive/MVT decoding, imagery asset hashes, shared-category agreement, transport                           |
+| apps/web/tests/e2e           | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                        |
 
 make check builds dist/web and runs Node/Python tests, JavaScript lint, all-source Markdown structure/format checks,
 data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. The backend workflow
 independently runs Go vet, tests, and build. See
-[Markdown checks and formatting](runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
+[Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
 command.
 
 Playwright runs against the actual deployable artifact. It tests / and /cg-map/, fixture-backed search/selection,
