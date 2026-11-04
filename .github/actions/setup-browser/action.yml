@@ -22,5 +22,16 @@ runs:
       shell: bash
       run: |
         start=$SECONDS
-        timeout 240 npm run browser:install --workspace @cg-map/web -- --with-deps chromium
-        echo "Installed Chromium in $((SECONDS - start))s" | tee -a "$GITHUB_STEP_SUMMARY"
+        status=0
+        timeout 360 npm run browser:install --workspace @cg-map/web -- --with-deps chromium || status=$?
+        result="Chromium install: exit $status after $((SECONDS - start))s"
+        echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
+        if [ "$status" -eq 124 ]; then echo "::error::Chromium install exceeded its 360s limit"; fi
+        exit "$status"
+    # apt leaves root-owned, unreadable entries here, and the cache cannot be saved with them in place.
+    - name: Make package downloads readable by the cache
+      shell: bash
+      run: |
+        archives="$HOME/.cache/ci-apt-archives"
+        sudo rm -rf "$archives/partial" "$archives/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$archives"
