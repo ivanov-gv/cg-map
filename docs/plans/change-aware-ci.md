@@ -274,14 +274,19 @@ This is the largest gain and depends on nothing else.
 
 - In `web.yml`, split `places` into `discover`, `poi-desktop`, and `poi-mobile`, passing `--project` through `E2E_ARGS`.
   No test changes.
-- Investigate the 5m40s Chromium install from run 41843418732. Found: the time went to stalled font package downloads
-  from the Ubuntu mirror, with gaps of up to 111s under apt's default 120s timeout. `.github/actions/setup-browser` now
-  sets 15s apt timeouts with retries and a 240s limit on the install. Cache only if the slowness recurs. Set the job
-  timeouts from measured times plus a margin.
-- List the slowest tests with `--reporter=json` and record them here. Fix real waste separately, such as fixed
-  `waitForTimeout` calls. Do not loosen an assertion.
-- Measure `workers: 2` on CI. Adopt it only if a few repeat runs show no new flakiness. Check that
-  `tests/e2e/updates.spec.mjs` and its server are safe to run in parallel.
+- Investigate the 5m40s Chromium install from run 41843418732. Found: the time goes to slow font package downloads from
+  the Ubuntu mirror, about 141 kB/s in the slow cases. It recurred (168s in run 41861532706), and short apt timeouts do
+  not help because data keeps trickling. `.github/actions/setup-browser` therefore caches the downloads, and limits the
+  install to 240s.
+- Keep the job timeout at 15 minutes: the slowest job measured is 8.3 minutes, including a slow install and a run while
+  GitHub reported degraded service.
+- Slowest tests in run 41845205724, all in `poi-visibility` unless noted: `stability: small pans...` 58s desktop, 41s
+  mobile; `every level is absent just below its threshold...` 50s and 37s; `a broad filter admits only eligible...` 32s
+  and 22s; `shipped snapshot downloads and reloads offline` (`shell`) 38s and 21s. Fixed `waitForTimeout` calls total
+  about 15s across the suite, so they are not where the time goes.
+- Do not adopt `workers: 2`. Measured with `--workers=2` in run 41861615927 against `workers: 1` in run 41861532706, it
+  cut `journeys` from 5.0m to 2.7m and `poi-desktop` from 5.2m to 2.9m, but `shell` and `journeys` each gained a flaky
+  test and `poi-mobile` slowed from 2.5m to 3.7m. `updates.spec.mjs` itself is safe: its server takes a free port.
 - Update the area table in `docs/verification/testing.md`.
 
 ### 2. Add the planner, with no CI change
@@ -418,7 +423,11 @@ Update these docs in the same change as the behavior they describe:
 
 ## Verification
 
-Not started. Record the commands, run links, and measured times here for steps 1 to 5.
+Step 1, run 41861532706, on 2026-11-04 during degraded GitHub service: web build 29s, then `shell` 163s, `discover`
+112s, `interface` 207s, `journeys` 340s, `poi-mobile` 184s, and `poi-desktop` 500s, of which 168s was a slow install. A
+full run took about 9 minutes, down from 10-12. Without a slow install it would be about 6.5 minutes.
+
+Record the commands, run links, and measured times here for steps 2 to 5.
 
 ## Handoff
 
