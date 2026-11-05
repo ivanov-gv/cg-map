@@ -7,8 +7,7 @@ that do not exist.
 ## Repo map and language rules
 
 Read the matching guideline before planning, editing, or reviewing code in that language. Claude Code loads them
-automatically by path, and Codex receives them from component AGENTS.md files. If one is missing from your context, read
-the file.
+automatically by path; other agents must open the linked file.
 
 | Path                   | What                                                          | Guidelines                                                                                                       |
 | ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -25,11 +24,11 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Commands from repository root (never invent others)
 
 - `make setup`: install pinned npm dependencies (Node 24) and enable git hooks.
-- `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate agent adapters.
+- `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
 - `make check`: lint, source/release validation, docs/boundaries, agent-rule drift, web build, Node/Python tests,
   offline manifests.
-- `make check-go`: vet/test/build the independent services/backend Go module.
+- `make check-go`: format-check/vet/lint/test/build the independent services/backend Go module.
 - `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
 - `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
@@ -40,7 +39,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make dev-mock`: build web and serve static dist/web (mock mode, as on GitHub Pages).
 - `make build`: assemble the current web artifact without regenerating geography.
 - `make build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
-- `make agent-rules`: regenerate agent adapters after editing docs/engineering or platform/agents/guidelines.json.
+- `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
 - `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.
 
 ## Hard rules
@@ -49,9 +48,11 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   `--no-verify`.
 - Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
-- Never hand-edit generated output: dist/web, .build, .claude/rules, or the `BEGIN GENERATED` blocks in AGENTS.md files.
-  Edit the source and regenerate.
+- Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
+- Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
+  on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
+  and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
 - No application copies, binaries, or temporary assets in repository root.

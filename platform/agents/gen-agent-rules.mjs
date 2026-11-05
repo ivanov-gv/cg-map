@@ -1,10 +1,8 @@
 #!/usr/bin/env node
-// Generate agent adapters from docs/engineering/*.md (mapping: platform/agents/guidelines.json).
-//   node platform/agents/gen-agent-rules.mjs          write adapters
+// Generate path-scoped Claude Code rules from docs/engineering/*.md (mapping: platform/agents/guidelines.json).
+//   node platform/agents/gen-agent-rules.mjs          write rules
 //   node platform/agents/gen-agent-rules.mjs --check  fail on drift or budget violations (CI)
-// Outputs:
-//   .claude/rules/<id>.md       Claude Code path-scoped rules (`paths` frontmatter)
-//   <component>/AGENTS.md       generated block for Codex, which loads AGENTS.md from root to its startup cwd
+// Output: .claude/rules/<id>.md, with `paths` frontmatter. Other agents read the guidelines through the root AGENTS.md.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -12,18 +10,15 @@ import {pathToFileURL} from 'node:url';
 import {format, resolveConfig} from 'prettier';
 import {repoRoot, loadConfig, readGuideline, stripTitle, rewriteLinks} from './lib.mjs';
 
-const BEGIN = '<!-- BEGIN GENERATED agent-guidelines: edit docs/engineering/*.md and run `make agent-rules` -->';
-const END = '<!-- END GENERATED agent-guidelines -->';
 const RULES_DIR = '.claude/rules';
 
 export async function buildOutputs(root = repoRoot) {
   const config = loadConfig(root);
   const outputs = new Map();
   const problems = [];
-  const byComponent = new Map();
 
   for (const g of config.guidelines) {
-    const {text, hash} = readGuideline(g, root);
+    const text = readGuideline(g, root);
     if (Buffer.byteLength(text) > config.limits.guidelineMaxBytes) {
       problems.push(`${g.source}: ${Buffer.byteLength(text)} bytes exceeds ${config.limits.guidelineMaxBytes}; move explanations to linked docs or convert rules to checks.`);
     }
@@ -34,37 +29,15 @@ export async function buildOutputs(root = repoRoot) {
       'paths:',
       ...g.paths.map(p => `  - "${p}"`),
       '---',
-      `<!-- GENERATED from ${g.source} sha256:${hash}`,
+      `<!-- GENERATED from ${g.source}`,
       'by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->',
       '',
       `# ${title}`,
       '',
-      rewriteLinks(rest, g.source, null).trimEnd(),
+      rewriteLinks(rest, g.source).trimEnd(),
       ''
     ].join('\n');
     outputs.set(`${RULES_DIR}/${g.id}.md`, rule);
-    for (const component of g.components) {
-      if (!byComponent.has(component)) byComponent.set(component, []);
-      byComponent.get(component).push({g, title, rest, hash});
-    }
-  }
-
-  for (const [component, items] of byComponent) {
-    const file = `${component}/AGENTS.md`;
-    const abs = path.join(root, file);
-    if (!fs.existsSync(abs)) { problems.push(`${file}: missing; guidelines.json routes ${items.map(i => i.g.id).join(', ')} here.`); continue; }
-    const current = fs.readFileSync(abs, 'utf8');
-    const block = [BEGIN, ...items.flatMap(({g, title, rest, hash}) => [
-      `<!-- agent-guideline: ${g.id} sha256:${hash} -->`,
-      `## ${title} (from ${path.posix.relative(component, g.source)})`,
-      '',
-      rewriteLinks(rest, g.source, file).replace(/^## /gm, '### ').trimEnd(),
-      ''
-    ]), END].join('\n');
-    const start = current.indexOf(BEGIN);
-    const end = current.indexOf(END);
-    const handWritten = start >= 0 && end > start ? current.slice(0, start).trimEnd() + current.slice(end + END.length).replace(/^\s*\n/, '\n') : current.trimEnd();
-    outputs.set(file, `${handWritten.trimEnd()}\n\n${block}\n`);
   }
 
   // Format as part of generation so sources and generated Markdown share the same style.
@@ -74,19 +47,9 @@ export async function buildOutputs(root = repoRoot) {
     outputs.set(file, await format(text, {...options, filepath}));
   }
 
-  // Codex concatenates AGENTS.md from the project root to the startup cwd under one byte budget.
   const rootAgents = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
   const rootLines = rootAgents.trimEnd().split('\n').length;
   if (rootLines > config.limits.rootAgentsMaxLines) problems.push(`AGENTS.md: ${rootLines} lines exceeds ${config.limits.rootAgentsMaxLines}; move detail into linked docs.`);
-  for (const [file, text] of outputs) {
-    if (!file.endsWith('/AGENTS.md')) continue;
-    let chain = Buffer.byteLength(rootAgents) + Buffer.byteLength(text);
-    for (let dir = path.posix.dirname(path.posix.dirname(file)); dir !== '.'; dir = path.posix.dirname(dir)) {
-      const parent = path.join(root, dir, 'AGENTS.md');
-      if (fs.existsSync(parent)) chain += fs.statSync(parent).size;
-    }
-    if (chain > config.limits.codexChainMaxBytes) problems.push(`${file}: AGENTS.md chain is ${chain} bytes, over Codex's ${config.limits.codexChainMaxBytes}-byte project_doc_max_bytes; later files would be truncated.`);
-  }
   return {outputs, problems};
 }
 
@@ -118,7 +81,7 @@ export async function run({check = false, root = repoRoot} = {}) {
     console.error(problems.map(p => `agent-rules: ${p}`).join('\n'));
     return 1;
   }
-  console.log(check ? `Agent adapters match ${outputs.size} generated files; budgets OK.` : 'Agent adapters up to date.');
+  console.log(check ? `Agent rules match ${outputs.size} generated files; budgets OK.` : 'Agent rules up to date.');
   return 0;
 }
 

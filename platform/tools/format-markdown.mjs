@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fix authored Markdown, then regenerate adapters instead of editing generated text.
+// Fix authored Markdown, then regenerate agent rules instead of editing generated text.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -17,7 +17,7 @@ export async function run({root = repoRoot} = {}) {
   const files = [...new Set(listed.split('\0').filter(file => file && fs.existsSync(path.join(root, file))))].sort();
   const authored = files.filter(file => !generated.has(file));
 
-  // cli2's --no-globs keeps the root's all-file glob from fixing generated adapters.
+  // cli2's --no-globs keeps the root's all-file glob from fixing generated rules.
   const literalPaths = authored.map(file => ':' + file);
   const fixed = await markdownlint({directory: root, argv: ['--no-globs', '--fix', ...literalPaths], logMessage: console.log, logError: console.error});
   for (const file of authored) {

@@ -5,7 +5,7 @@ paths:
   - "**/requirements*.txt"
 ---
 
-<!-- GENERATED from docs/engineering/python.md sha256:d8f6352ddf72
+<!-- GENERATED from docs/engineering/python.md
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # Python conventions

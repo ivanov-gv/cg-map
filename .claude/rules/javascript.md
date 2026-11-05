@@ -6,7 +6,7 @@ paths:
   - "**/package.json"
 ---
 
-<!-- GENERATED from docs/engineering/javascript.md sha256:56d6d29c9c9d
+<!-- GENERATED from docs/engineering/javascript.md
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # JavaScript conventions
@@ -27,8 +27,7 @@ it.
 
 ## Code
 
-- Two-space indent, single quotes, semicolons, LF (.editorconfig). Match the density of the surrounding file; do not
-  reformat code you are not changing.
+- Two-space indent, single quotes, semicolons, LF (.editorconfig). Do not reformat code you are not changing.
 - Prefix intentionally unused parameters with `_`. Enforced: ESLint `no-unused-vars`.
 - Fail visibly. Network, storage, and archive failures must reach a user-visible state or a thrown error with context;
   never swallow errors silently.

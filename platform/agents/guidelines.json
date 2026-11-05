@@ -1,34 +1,34 @@
 {
-  "$comment": "Single mapping from canonical guideline docs to agent adapters: `paths` become .claude/rules frontmatter, `components` get the generated AGENTS.md block. Edit here, then run `make agent-rules`. See docs/engineering/README.md.",
+  "$comment": "Maps canonical guideline docs to path-scoped Claude Code rules (.claude/rules). Edit here, then run `make agent-rules`. See docs/engineering/README.md.",
   "limits": {
     "rootAgentsMaxLines": 100,
-    "guidelineMaxBytes": 8192,
-    "codexChainMaxBytes": 32768
+    "guidelineMaxBytes": 8192
   },
   "guidelines": [
     {
+      "id": "readability",
+      "source": "docs/engineering/readability.md",
+      "paths": ["**/*.go", "**/*.js", "**/*.mjs", "**/*.py", "**/*.sh", "**/*.css", "**/*.html", "**/*.proto", "**/Makefile", "**/*.mk", "platform/git-hooks/**", ".github/**/*.yml"]
+    },
+    {
       "id": "javascript",
       "source": "docs/engineering/javascript.md",
-      "paths": ["**/*.js", "**/*.mjs", "**/package.json"],
-      "components": ["apps/web", "data", "platform", "services/transit-relay"]
+      "paths": ["**/*.js", "**/*.mjs", "**/package.json"]
     },
     {
       "id": "ui",
       "source": "docs/engineering/ui.md",
-      "paths": ["apps/web/public/**", "apps/web/src/**"],
-      "components": ["apps/web"]
+      "paths": ["apps/web/public/**", "apps/web/src/**"]
     },
     {
       "id": "python",
       "source": "docs/engineering/python.md",
-      "paths": ["**/*.py", "**/requirements*.txt"],
-      "components": ["apps/web", "data", "platform"]
+      "paths": ["**/*.py", "**/requirements*.txt"]
     },
     {
       "id": "go",
       "source": "docs/engineering/go.md",
-      "paths": ["**/*.go", "**/go.mod", "**/go.sum", "**/go.work"],
-      "components": ["services/backend"]
+      "paths": ["**/*.go", "**/go.mod", "**/go.sum", "**/go.work"]
     }
   ]
 }

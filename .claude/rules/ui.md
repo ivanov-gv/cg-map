@@ -5,7 +5,7 @@ paths:
   - "apps/web/src/**"
 ---
 
-<!-- GENERATED from docs/engineering/ui.md sha256:dcc424bdb003
+<!-- GENERATED from docs/engineering/ui.md
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # UI conventions

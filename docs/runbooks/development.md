@@ -40,7 +40,7 @@ npm run format:md
 `lint:md` checks structure with markdownlint and formatting with Prettier: aligned tables, ordered numbering, consistent
 fences, whitespace, and blank lines. Prose is hard-wrapped at 120 columns, matching the Markdown margin in
 `.editorconfig`. Table rows, code blocks, and indivisible URLs may exceed that width so their structure stays intact.
-`format:md` fixes authored sources and regenerates agent adapters; it never formats generated adapters directly. Fix any
+`format:md` fixes authored sources and regenerates agent rules; it never formats generated rules directly. Fix any
 remaining semantic lint findings manually.
 
 Markdown checks run automatically in `npm run lint`, `make check`, `make verify PKG=docs`, `make verify PKG=platform`,

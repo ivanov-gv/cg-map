@@ -7,7 +7,7 @@ paths:
   - "**/go.work"
 ---
 
-<!-- GENERATED from docs/engineering/go.md sha256:c0e2f28ae808
+<!-- GENERATED from docs/engineering/go.md
 by platform/agents/gen-agent-rules.mjs. Do not edit; run `make agent-rules`. -->
 
 # Go conventions
@@ -26,8 +26,11 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 ## Code
 
 - Format with `gofmt`. Enforced: the git pre-commit hook and `make check-go` (`gofmt -l`).
-- `go vet ./...` must pass. Enforced: `make check-go`.
+- `go vet ./...` and golangci-lint must pass. Enforced: `make check-go`.
 - Prefer the standard library. Add a module dependency only with a stated reason, and commit `go.sum` with it.
+- Hold a mutex only inside a small method that locks, defers the unlock on the next line, and never waits on the
+  network, a channel, or another lock, so a panic cannot leave it held and no path can miss an unlock. Reviewed, not
+  enforced by a check.
 - Return errors with context (`fmt.Errorf("open %s: %w", path, err)`); do not call `log.Fatal` outside `main`.
 - HTTP handlers set explicit `Content-Type` and caching headers that match the static hosting rules in
   [platform/hosting](platform/hosting).

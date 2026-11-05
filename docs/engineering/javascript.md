@@ -16,8 +16,7 @@ it.
 
 ## Code
 
-- Two-space indent, single quotes, semicolons, LF (.editorconfig). Match the density of the surrounding file; do not
-  reformat code you are not changing.
+- Two-space indent, single quotes, semicolons, LF (.editorconfig). Do not reformat code you are not changing.
 - Prefix intentionally unused parameters with `_`. Enforced: ESLint `no-unused-vars`.
 - Fail visibly. Network, storage, and archive failures must reach a user-visible state or a thrown error with context;
   never swallow errors silently.
