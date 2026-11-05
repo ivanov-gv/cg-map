@@ -1,17 +1,12 @@
-// Shared standard-library helpers for the agent adapter generator and its tests.
+// Shared standard-library helpers for the agent rule generator and its tests.
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 export function loadConfig(root = repoRoot) {
   return JSON.parse(fs.readFileSync(path.join(root, 'platform/agents/guidelines.json'), 'utf8'));
-}
-
-export function sha(text) {
-  return crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
 }
 
 // Minimal glob support for the patterns used in guidelines.json: `**/`, `**`, `*`, `?`.
@@ -39,18 +34,16 @@ export function stripTitle(body) {
   return {title, rest: lines.join('\n').replace(/^\n+/, '')};
 }
 
-// Rewrite relative markdown links so they still resolve from `toFile` (or become repo-relative when toFile is null).
-export function rewriteLinks(body, fromFile, toFile) {
+// Rewrite relative markdown links in a file's body so they become repo-relative.
+export function rewriteLinks(body, fromFile) {
   return body.replace(/\]\(([^)]+)\)/g, (whole, target) => {
     if (/^[a-z]+:/i.test(target) || target.startsWith('#')) return whole;
     const [file, anchor] = target.split('#');
     const abs = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), file));
-    const rel = toFile ? path.posix.relative(path.posix.dirname(toFile), abs) || '.' : abs;
-    return `](${rel}${anchor ? `#${anchor}` : ''})`;
+    return `](${abs}${anchor ? `#${anchor}` : ''})`;
   });
 }
 
 export function readGuideline(guideline, root = repoRoot) {
-  const text = fs.readFileSync(path.join(root, guideline.source), 'utf8');
-  return {text, hash: sha(text)};
+  return fs.readFileSync(path.join(root, guideline.source), 'utf8');
 }

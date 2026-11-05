@@ -27,11 +27,12 @@ pattern. The producer validates referenced stops, coordinates, bounds and proven
 claimed departure predictions. Consumers must label suggestions and waiting-time limits; see
 [routing](../../docs/ui-ux/features/routing.md).
 
-`vehicles.schema.json` defines the live bus feed: route and position per bus, the check time, stale flag and source. The
-upstream has no vehicle IDs, GPS times or heading. `bearing` (degrees from north) with `heading: "movement"` is
-optional: the Go server adds it once a bus has moved between its checks; services/transit-relay does not. Consumers
-validate both fields together and must not present a missing bearing as known. fixtures/vehicle-direction-cases.json
-defines the movement rules; the Go producer and the browser tracker both test against it.
+`vehicles.schema.json` defines the live vehicle feed: route and position per vehicle, the check time, stale flag and
+source. The upstream has no vehicle IDs, GPS times or heading. `bearing` (degrees from north) with `heading: "movement"`
+is optional: the Go server adds it once a vehicle has moved between its checks; services/transit-relay does not.
+Consumers validate both fields together and must not present a missing bearing as known.
+fixtures/vehicle-direction-cases.json defines the movement rules; the Go producer and the browser tracker both test
+against it.
 
 `building-labels.schema.json` defines a house-number label anchored inside a reviewed building polygon. Actual OSM way
 IDs identify footprints; footprintIndex is a revision-bound array reference tied to the buildings SHA-256, never a
@@ -40,3 +41,10 @@ acceptance verifies ID and location correspondence for every numbered footprint.
 revision-bound index rather than visible label hits. Address source IDs are retained. The producer validates containment
 (excluding holes), uniqueness, nonblank numbers, no-number placeholders, and source/provenance integrity. Labels do not
 imply complete address coverage.
+
+`proto/cgmap/transport/v1/transport.proto` defines the read-only ConnectRPC transport service and version-1 vehicle
+messages. It adds a typed RPC interface without changing `vehicles.schema.json`. Direction message presence separates
+unknown headings from a known northbound bearing of zero; check time is not GPS time and there is no stable vehicle ID.
+The backend generates and commits its bindings; generated-client tests cover producer mapping, protobuf/JSON roundtrips,
+stale/error semantics and compatibility with the shared GeoJSON snapshot. The browser continues using GeoJSON until an
+explicit UI migration. See [backend generation and API usage](../../services/backend/README.md#protobuf-transport-api).

@@ -29,7 +29,7 @@ result lists free; avoid expensive application work during gestures.
 | [core.js](src/core.js)                              | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                | Startup, state, UI handlers, results, markers, place cards                             |
 | [data-mode.js](src/data-mode.js)                    | Server or mock data: which basemap and vehicle URLs to use                             |
-| [vehicle-direction.js](src/vehicle-direction.js)    | Direction of travel for bus markers (movement, or route estimate)                      |
+| [vehicle-direction.js](src/vehicle-direction.js)    | Direction of travel for vehicle markers (movement, or route estimate)                  |
 | [config.json](public/config.json)                   | Static hosts' data mode (`mock`); the Go server answers `server` instead               |
 | [map-style.js](src/map-style.js)                    | Vector basemap sources, layers, colors and labels                                      |
 | [satellite.js](src/satellite.js)                    | The bounded raster sample and its visibility switch                                    |

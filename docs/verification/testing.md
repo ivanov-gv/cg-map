@@ -31,7 +31,7 @@ Frontend iteration commands and measured check durations live with the
 
 make check builds dist/web and runs Node/Python tests, JavaScript lint, all-source Markdown structure/format checks,
 data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. `make check-go`
-independently runs Go vet, tests, and build. See
+independently runs Go vet, golangci-lint, tests, and build. See
 [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
 command.
 

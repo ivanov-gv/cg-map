@@ -25,10 +25,10 @@ OPFS. Offline map/download functionality remains separate.
 ePodgorica reports only route and position, so direction is derived in this order:
 
 1. **Server movement.** The Go server checks the upstream about every 13–14 s from startup (at most one upstream request
-   per cache period, shared with viewer requests) and follows buses across its checks and adds `bearing` and
-   `heading: "movement"` once a bus has moved at least 20 m. Buses are matched to the previous check by route and
-   nearest plausible position (at most 30 m/s plus 50 m). A bus keeps its last direction while it stands still. History
-   resets after 60 s without checks.
+   per cache period, shared with viewer requests, including during an outage) and follows vehicles across its checks and
+   adds `bearing` and `heading: "movement"` once a vehicle has moved at least 20 m. Vehicles are matched to the previous
+   check by route and nearest plausible position (at most 30 m/s plus 50 m). A vehicle keeps its last direction while it
+   stands still. History resets after 60 s without checks.
 2. **Page movement.** apps/web/src/vehicle-direction.js applies the same rules to the checks this page has seen. This is
    how mock mode (the relay, which has no bearing) gets directions.
 3. **Route estimate.** A bus not yet seen moving points along the nearest stop-to-stop segment of its route in the
@@ -52,13 +52,13 @@ The source UI is <https://epodgorica.me/javniprevoz/mapa>. Its shipped frontend 
 origin receives no allowed-origin header; the ePodgorica origin receives its own allow-origin response. Pages cannot
 proxy that server-side.
 
-services/backend (`internal/transport`) fetches the same fixed upstream with the relay's limits (8 s timeout,
-512000-byte body, non-2xx and non-array rejection, 2000 rows) and serves the same contract, plus movement directions. It
-refuses redirects and logs refresh failures (the first, then at most one per minute with a count) and the recovery.
-`-live-transport=false` disables it (503, no polling). services/transit-relay implements a fixed-upstream read-only
-relay with bounded fetches, duplicate filtering, a brief shared cache, CORS, and explicit stale/expiry responses.
-apps/web/src/transport.js validates and renders the published GeoJSON contract. Source details were inspected on
-2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
+services/backend (`internal/client/epodgorica`, `internal/service/vehicles`) fetches the same fixed upstream with the
+relay's limits (8 s timeout, 512000-byte body, non-2xx and non-array rejection, 2000 rows) and serves the same contract,
+plus movement directions. It refuses redirects and logs refresh failures (the first, then at most one per minute with a
+count) and the recovery. `-live-transport=false` disables it (503, no polling). services/transit-relay implements a
+fixed-upstream read-only relay with bounded fetches, duplicate filtering, a brief shared cache, CORS, and explicit
+stale/expiry responses. apps/web/src/transport.js validates and renders the published GeoJSON contract. Source details
+were inspected on 2026-10-18. No login, cookies, access tokens, or private vehicle endpoints are used upstream.
 
 ## Current release status
 

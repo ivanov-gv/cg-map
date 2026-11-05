@@ -1,0 +1,39 @@
+# Enforces the mechanical part of docs/engineering/readability.md. Fix findings; when one is a false
+# positive, suppress that line with `//nolint:<linter> // <reason>`. Do not add exclusions here.
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - errorlint
+    - funlen # functions over 60 lines
+    - gocognit # functions that are hard to follow
+    - govet
+    - ineffassign
+    - mnd # unnamed numbers, outside tests
+    - nestif # deeply nested if statements
+    - nolintlint # every suppression names its linter and gives a reason
+    - revive # exported names need comments
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - varnamelen # names under 3 characters used beyond a few lines
+  settings:
+    funlen:
+      lines: 60
+      statements: -1
+    gocognit:
+      min-complexity: 25
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    varnamelen:
+      min-name-length: 3
+      check-receiver: false
+      # the short names docs/engineering/readability.md allows
+      ignore-names: [ctx, err, w, r, t, z, x, y]
+formatters:
+  enable:
+    - gofmt

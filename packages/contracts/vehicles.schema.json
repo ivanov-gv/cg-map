@@ -22,7 +22,7 @@
         }},
         "properties": {"type": "object", "required": ["route"], "dependentRequired": {"bearing": ["heading"], "heading": ["bearing"]}, "properties": {
           "route": {"type": "string", "minLength": 1, "maxLength": 32},
-          "bearing": {"type": "number", "minimum": 0, "exclusiveMaximum": 360, "description": "Degrees clockwise from north, derived by the producer from movement between its checks. Optional: absent until the bus has moved."},
+          "bearing": {"type": "number", "minimum": 0, "exclusiveMaximum": 360, "description": "Degrees clockwise from north, derived by the producer from movement between its checks. Optional: absent until the vehicle has moved."},
           "heading": {"const": "movement", "description": "How bearing was derived."}
         }}
       }

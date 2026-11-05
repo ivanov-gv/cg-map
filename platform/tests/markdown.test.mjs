@@ -15,7 +15,7 @@ for (const name of Object.keys(process.env)) {
   if (name.startsWith('GIT_')) delete process.env[name];
 }
 
-test('Markdown checks find new and hidden sources; fixes regenerate adapters and preserve code', async t => {
+test('Markdown checks find new and hidden sources; fixes regenerate rules and preserve code', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-markdown-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const write = (file, text) => {
@@ -31,8 +31,8 @@ test('Markdown checks find new and hidden sources; fixes regenerate adapters and
   write('AGENTS.md', '# Project\n\nRoot instructions.\n');
   write('apps/web/AGENTS.md', '# Component\n\nAuthored instructions.\n');
   write('platform/agents/guidelines.json', JSON.stringify({
-    limits: {rootAgentsMaxLines: 100, guidelineMaxBytes: 8192, codexChainMaxBytes: 32768},
-    guidelines: [{id: 'example', source: 'docs/engineering/example.md', paths: ['**/*.js'], components: ['apps/web']}]
+    limits: {rootAgentsMaxLines: 100, guidelineMaxBytes: 8192},
+    guidelines: [{id: 'example', source: 'docs/engineering/example.md', paths: ['**/*.js']}]
   }));
   const code = '```js\nconst value=  1;\n```';
   const prose = 'This paragraph describes a useful map with clear roads, building addresses, terrain and places. '.repeat(8).trim();
@@ -63,7 +63,7 @@ test('Markdown checks find new and hidden sources; fixes regenerate adapters and
     assert.ok(!text.includes(prose), 'generated prose must be wrapped too');
     assert.ok(text.replace(/\s+/g, ' ').includes(prose), 'regeneration preserves prose content');
   }
-  const checkedFiles = [...sourceFiles, 'AGENTS.md', 'docs/engineering/example.md', ...outputs.keys()];
+  const checkedFiles = [...sourceFiles, 'AGENTS.md', 'apps/web/AGENTS.md', 'docs/engineering/example.md', ...outputs.keys()];
   const before = new Map();
   for (const file of checkedFiles) {
     const filepath = path.join(root, file);
