@@ -12,13 +12,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/ivanov-gv/cg-map/services/backend/internal/pmtiles"
-	"github.com/ivanov-gv/cg-map/services/backend/internal/pmtiles/pmtilestest"
-	"github.com/ivanov-gv/cg-map/services/backend/internal/transport"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	transportv1 "github.com/ivanov-gv/cg-map/services/backend/gen/cgmap/transport/v1"
+	"github.com/ivanov-gv/cg-map/services/backend/gen/cgmap/transport/v1/transportv1connect"
+
+	"github.com/ivanov-gv/cg-map/services/backend/internal/client/pmtiles"
+	"github.com/ivanov-gv/cg-map/services/backend/internal/client/pmtiles/pmtilestest"
+	"github.com/ivanov-gv/cg-map/services/backend/internal/server/transport"
+	"github.com/ivanov-gv/cg-map/services/backend/internal/server/web"
+	"github.com/ivanov-gv/cg-map/services/backend/internal/service/vehicles"
 )
 
 // writeArtifact creates a web artifact directory with index.html and one synthetic MVT archive in data/
@@ -58,21 +66,24 @@ func TestAssetDirectoryAndRange(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/map.pmtiles", nil)
 	request.Header.Set("Range", "bytes=0-6")
 	response := httptest.NewRecorder()
-	staticHandler(directory).ServeHTTP(response, request)
+	web.NewStaticHandler(directory).ServeHTTP(response, request)
 	if response.Code != http.StatusPartialContent || response.Body.String() != "PMTiles" {
 		t.Fatalf("range response: %d %q", response.Code, response.Body.String())
 	}
 	if response.Header().Get("Content-Type") != "application/vnd.pmtiles" {
 		t.Fatal("incorrect archive MIME type")
 	}
+	if got := response.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("archive Cache-Control = %q", got)
+	}
 }
 
 func TestRoutes(t *testing.T) {
-	_app, err := newApp(writeArtifact(t), "", "", transport.Unavailable{})
+	_app, err := newApp(writeArtifact(t), "", "", vehicles.Unavailable{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer _app.Close()
+	defer func() { _ = _app.Close() }()
 
 	tests := []struct {
 		name         string
@@ -111,17 +122,100 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
+// startupSource holds the first upstream response until explicitly released. It ignores the
+// feed timeout, so a slow test cannot start another source call before cleanup releases this one.
+type startupSource struct {
+	entered chan struct{}
+	release chan struct{}
+	exited  chan struct{}
+	once    sync.Once
+}
+
+func (s *startupSource) Vehicles(context.Context) ([]vehicles.UpstreamVehicle, error) {
+	s.once.Do(func() { close(s.entered) })
+	<-s.release
+	close(s.exited)
+	return nil, context.Canceled
+}
+
+func TestServingDuringTransportObservation(t *testing.T) { //nolint:funlen // linear scenario; splitting it would hide the order of events
+	source := &startupSource{entered: make(chan struct{}), release: make(chan struct{}), exited: make(chan struct{})}
+	_app, err := newApp(writeArtifact(t), "", "", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = _app.Close() }()
+	ctx, cancel := context.WithCancel(context.Background())
+	observerStopped := _app.observer.Start(ctx)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-observerStopped:
+		case <-time.After(5 * time.Second):
+			t.Error("transport observer did not stop")
+		}
+		close(source.release)
+		select {
+		case <-source.exited:
+		case <-time.After(5 * time.Second):
+			t.Error("upstream fixture did not exit")
+		}
+	})
+	select {
+	case <-source.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("transport observation did not start")
+	}
+	server := httptest.NewServer(_app.handler)
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = time.Second
+	for _, test := range []struct {
+		path   string
+		status int
+	}{{"/", 200}, {"/config.json", 200}, {"/api/v1/layers", 200}, {"/healthz", 200}, {"/readyz", 503}, {transport.VehiclesPath, 503}} {
+		t.Run(test.path, func(t *testing.T) {
+			response, err := client.Get(server.URL + test.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = response.Body.Close() }()
+			if response.StatusCode != test.status {
+				t.Fatalf("status = %d, want %d", response.StatusCode, test.status)
+			}
+			if test.status == 503 && response.Header.Get("Cache-Control") != "no-store" {
+				t.Fatal("startup unavailability must not be cached")
+			}
+		})
+	}
+	rpcClient := transportv1connect.NewTransportServiceClient(connect.NewClient(connecthttp.NewTransport(client, server.URL)))
+	rpcCtx, callInfo := connect.NewClientContext(context.Background())
+	if _, err := rpcClient.ListVehicles(rpcCtx, &transportv1.ListVehiclesRequest{}); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("RPC error during observation = %v, want unavailable", err)
+	}
+	if callInfo.ResponseHeader().Get("Cache-Control") != "no-store" {
+		t.Fatal("RPC during observation must not be cached")
+	}
+	// Shutdown takes precedence over the startup state for readiness diagnostics.
+	_app.isShuttingDown.Store(true)
+	response := httptest.NewRecorder()
+	_app.handler.ServeHTTP(response, httptest.NewRequest("GET", "/readyz", nil))
+	if response.Code != 503 || response.Body.String() != "shutting down\n" {
+		t.Fatalf("shutdown readiness = %d %q", response.Code, response.Body.String())
+	}
+}
+
 func TestWebConfigOverridesArtifactFile(t *testing.T) {
 	directory := writeArtifact(t)
 	err := os.WriteFile(filepath.Join(directory, "config.json"), []byte(`{"api":"mock"}`), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_app, err := newApp(directory, "", "", transport.Unavailable{})
+	_app, err := newApp(directory, "", "", vehicles.Unavailable{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer _app.Close()
+	defer func() { _ = _app.Close() }()
 
 	response := httptest.NewRecorder()
 	_app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/config.json", nil))
@@ -135,11 +229,11 @@ func TestWebConfigOverridesArtifactFile(t *testing.T) {
 }
 
 func TestTileJSONNamesArchiveLayers(t *testing.T) {
-	_app, err := newApp(writeArtifact(t), "", "", transport.Unavailable{})
+	_app, err := newApp(writeArtifact(t), "", "", vehicles.Unavailable{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer _app.Close()
+	defer func() { _ = _app.Close() }()
 
 	response := httptest.NewRecorder()
 	_app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://example.test/api/v1/layers", nil))
@@ -162,20 +256,19 @@ func TestTileJSONNamesArchiveLayers(t *testing.T) {
 }
 
 // TestGracefulShutdown runs the real serve loop: after cancellation /readyz must report 503 while the
-// listener still accepts, an in-flight request must complete, and run must return only after it has.
-func TestGracefulShutdown(t *testing.T) {
-	var ready atomic.Bool
-	ready.Store(true)
+// listener still accepts, an in-flight request must complete, and serveUntilShutdown must return only after it has.
+func TestGracefulShutdown(t *testing.T) { //nolint:funlen // linear scenario; splitting it would hide the order of events
+	var isShuttingDown atomic.Bool
 	release := make(chan struct{})
 	slowStarted := make(chan struct{})
-	mux := http.NewServeMux()
-	mux.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
+	routes := http.NewServeMux()
+	routes.HandleFunc("/slow", func(w http.ResponseWriter, _ *http.Request) {
 		close(slowStarted)
 		<-release
-		fmt.Fprint(w, "complete")
+		_, _ = fmt.Fprint(w, "complete")
 	})
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if !ready.Load() {
+	routes.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if isShuttingDown.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	})
@@ -184,22 +277,22 @@ func TestGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "http://" + listener.Addr().String()
+	baseURL := "http://" + listener.Addr().String()
 	ctx, cancel := context.WithCancel(context.Background())
-	runErr := make(chan error, 1)
+	serveResult := make(chan error, 1)
 	go func() {
-		runErr <- run(ctx, &http.Server{Handler: mux}, listener, &ready, 300*time.Millisecond, 5*time.Second)
+		serveResult <- serveUntilShutdown(ctx, &http.Server{Handler: routes}, listener, &isShuttingDown, 300*time.Millisecond, 5*time.Second)
 	}()
 
 	// hold a request in flight
 	slowBody := make(chan string, 1)
 	go func() {
-		response, err := http.Get(base + "/slow")
+		response, err := http.Get(baseURL + "/slow")
 		if err != nil {
 			slowBody <- "error: " + err.Error()
 			return
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		body, _ := io.ReadAll(response.Body)
 		slowBody <- string(body)
 	}()
@@ -210,28 +303,28 @@ func TestGracefulShutdown(t *testing.T) {
 	deadline := time.Now().Add(250 * time.Millisecond)
 	sawNotReady := false
 	for time.Now().Before(deadline) && !sawNotReady {
-		response, err := http.Get(base + "/readyz")
+		response, err := http.Get(baseURL + "/readyz")
 		if err == nil {
 			sawNotReady = response.StatusCode == http.StatusServiceUnavailable
-			response.Body.Close()
+			_ = response.Body.Close()
 		}
 	}
 	if !sawNotReady {
 		t.Fatal("/readyz never reported 503 during the drain delay")
 	}
 
-	// run must wait for the in-flight request
+	// serveUntilShutdown must wait for the in-flight request
 	select {
-	case err := <-runErr:
-		t.Fatalf("run returned before the in-flight request finished: %v", err)
+	case err := <-serveResult:
+		t.Fatalf("serveUntilShutdown returned before the in-flight request finished: %v", err)
 	case <-time.After(500 * time.Millisecond):
 	}
 	close(release)
 	if body := <-slowBody; body != "complete" {
 		t.Fatalf("in-flight request body = %q, want %q", body, "complete")
 	}
-	if err := <-runErr; err != nil {
-		t.Fatalf("run: %v", err)
+	if err := <-serveResult; err != nil {
+		t.Fatalf("serveUntilShutdown: %v", err)
 	}
 }
 
@@ -247,14 +340,14 @@ func TestFindArchive(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir := t.TempDir()
+			directory := t.TempDir()
 			for _, file := range test.files {
-				err := os.WriteFile(filepath.Join(dir, file), nil, 0o600)
+				err := os.WriteFile(filepath.Join(directory, file), nil, 0o600)
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
-			found, err := findArchive(dir)
+			found, err := findArchive(directory)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("err = %v, want %v", err, test.wantErr)
 			}
@@ -266,11 +359,11 @@ func TestFindArchive(t *testing.T) {
 }
 
 func TestPublicURLOverridesHost(t *testing.T) {
-	_app, err := newApp(writeArtifact(t), "", "https://maps.example.com/cg", transport.Unavailable{})
+	_app, err := newApp(writeArtifact(t), "", "https://maps.example.com/cg", vehicles.Unavailable{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer _app.Close()
+	defer func() { _ = _app.Close() }()
 
 	response := httptest.NewRecorder()
 	_app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://attacker.test/api/v1/layers", nil))
@@ -280,8 +373,63 @@ func TestPublicURLOverridesHost(t *testing.T) {
 }
 
 func TestNewAppFailsWithoutArchive(t *testing.T) {
-	_, err := newApp(t.TempDir(), "", "", transport.Unavailable{})
+	_, err := newApp(t.TempDir(), "", "", vehicles.Unavailable{})
 	if !errors.Is(err, errNoArchive) {
 		t.Fatalf("err = %v, want errNoArchive", err)
+	}
+}
+
+// rpcSource supplies one normalized position to both API formats.
+type rpcSource struct{ calls atomic.Int32 }
+
+func (s *rpcSource) Vehicles(context.Context) ([]vehicles.UpstreamVehicle, error) {
+	s.calls.Add(1)
+	return []vehicles.UpstreamVehicle{{Route: "6A", Longitude: 19.26, Latitude: 42.44}}, nil
+}
+
+func TestTransportRPCSharesGeoJSONSnapshot(t *testing.T) {
+	source := &rpcSource{}
+	_app, err := newApp(writeArtifact(t), "", "", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = _app.Close() }()
+	server := httptest.NewServer(_app.handler)
+	defer server.Close()
+	client := transportv1connect.NewTransportServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL)))
+	rpcResponse, err := client.ListVehicles(context.Background(), &transportv1.ListVehiclesRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Client().Get(server.URL + transport.VehiclesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	var geoJSON transport.FeatureCollection
+	if err := json.NewDecoder(response.Body).Decode(&geoJSON); err != nil {
+		t.Fatal(err)
+	}
+	if len(rpcResponse.Vehicles) != 1 || len(geoJSON.Features) != 1 {
+		t.Fatalf("RPC=%v, GeoJSON=%v", rpcResponse, geoJSON)
+	}
+	rpcVehicle := rpcResponse.Vehicles[0]
+	geoJSONVehicle := geoJSON.Features[0]
+	fetchedAt, err := time.Parse(time.RFC3339Nano, *geoJSON.FetchedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	isSameVehicle := rpcVehicle.Route == geoJSONVehicle.Properties.Route &&
+		rpcVehicle.Longitude == geoJSONVehicle.Geometry.Coordinates[0] &&
+		rpcVehicle.Latitude == geoJSONVehicle.Geometry.Coordinates[1] &&
+		rpcVehicle.Direction == nil
+	isSameSnapshot := rpcResponse.SourceUrl == geoJSON.Source &&
+		rpcResponse.Stale == geoJSON.Stale &&
+		rpcResponse.FetchedAt.AsTime().Equal(fetchedAt)
+	if !isSameVehicle || !isSameSnapshot {
+		t.Fatalf("different snapshots: RPC=%v, GeoJSON=%v", rpcResponse, geoJSON)
+	}
+	if source.calls.Load() != 1 {
+		t.Fatalf("source called %d times, want shared cache", source.calls.Load())
 	}
 }

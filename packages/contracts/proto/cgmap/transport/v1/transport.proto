@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package cgmap.transport.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ivanov-gv/cg-map/services/backend/gen/cgmap/transport/v1;transportv1";
+
+// TransportService exposes the shared read-only live vehicle snapshot.
+service TransportService {
+  // ListVehicles never invents vehicle IDs, GPS timestamps or unknown directions.
+  rpc ListVehicles(ListVehiclesRequest) returns (ListVehiclesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message ListVehiclesRequest {}
+
+message ListVehiclesResponse {
+  repeated Vehicle vehicles = 1;
+  // Server check time, not a GPS timestamp. Unavailable feeds return an RPC error.
+  google.protobuf.Timestamp fetched_at = 2;
+  bool stale = 3;
+  string source_url = 4;
+}
+
+message Vehicle {
+  string route = 1;
+  double longitude = 2;
+  double latitude = 3;
+  // Absent until movement is known. A present bearing of zero means north.
+  Direction direction = 4;
+}
+
+message Direction {
+  // Degrees clockwise from north, in [0, 360).
+  double bearing_degrees = 1;
+  HeadingSource source = 2;
+}
+
+enum HeadingSource {
+  HEADING_SOURCE_UNSPECIFIED = 0;
+  HEADING_SOURCE_MOVEMENT = 1;
+}

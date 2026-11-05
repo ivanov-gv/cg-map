@@ -1,13 +1,13 @@
 {
-  "description": "Movement-direction cases defining how the optional vehicles.schema.json bearing is derived from movement; shared by services/backend/internal/transport/direction_test.go and apps/web/tests/vehicle-direction.test.mjs, so the Go and browser trackers stay identical. Each check is [milliseconds since start, [[route, longitude, latitude], ...]]; want is the bearing per bus after the last check, null without one. 0.001 degrees of latitude is about 111 m; of longitude about 82 m at Podgorica.",
+  "description": "Movement-direction cases defining how the optional vehicles.schema.json bearing is derived from movement; shared by services/backend/internal/service/vehicles/direction_test.go and apps/web/tests/vehicle-direction.test.mjs, so the Go and browser trackers stay identical. Each check is [milliseconds since start, [[route, longitude, latitude], ...]]; want is the bearing per vehicle after the last check, null without one. 0.001 degrees of latitude is about 111 m; of longitude about 82 m at Podgorica.",
   "cases": [
     {"name": "first sighting has no direction", "checks": [[0, [["6", 19.26, 42.44]]]], "want": [null]},
     {"name": "movement east", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.261, 42.44]]]], "want": [90]},
     {"name": "standing still keeps the last direction", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.26, 42.441]]], [26000, [["6", 19.26005, 42.441]]]], "want": [0]},
-    {"name": "small steps add up from the reference point", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.26, 42.4399]]], [26000, [["6", 19.26, 42.4398]]]], "want": [180]},
+    {"name": "small steps add up from the movement anchor", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.26, 42.4399]]], [26000, [["6", 19.26, 42.4398]]]], "want": [180]},
     {"name": "a repeated check keeps directions", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.261, 42.44]]], [13000, [["6", 19.261, 42.44]]]], "want": [90]},
     {"name": "matched by route and nearest position, not order", "checks": [[0, [["6", 19.26, 42.44], ["6", 19.27, 42.44], ["7", 19.265, 42.44]]], [13000, [["6", 19.27, 42.439], ["6", 19.26, 42.441], ["7", 19.264, 42.44]]]], "want": [180, 0, 270]},
-    {"name": "an implausible jump is a different bus", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.26, 42.458]]]], "want": [null]},
+    {"name": "an implausible jump is a different vehicle", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.26, 42.458]]]], "want": [null]},
     {"name": "a long gap forgets history", "checks": [[0, [["6", 19.26, 42.44]]], [61000, [["6", 19.26, 42.441]]]], "want": [null]},
     {"name": "a check from the past forgets history", "checks": [[13000, [["6", 19.26, 42.44]]], [0, [["6", 19.26, 42.441]]]], "want": [null]},
     {"name": "north-west wraps below 360", "checks": [[0, [["6", 19.26, 42.44]]], [13000, [["6", 19.2599, 42.441]]]], "want": [355.8]}
