@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, checkPlaceMetadata} from '../tools/check-data.mjs';
+import {entranceBearing} from '../tools/building-entrances.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 test('reviewed Podgorica places satisfy the directory contract', () => {
@@ -171,4 +172,60 @@ test('the apply command checks, writes, and refuses changed facts without touchi
   assert.equal(read(PROVENANCE), reviewed);
   applyCommand(['--update-provenance', '--accept-new-facts'], root);
   assert.notEqual(JSON.parse(read(PROVENANCE)).places_facts_sha256, JSON.parse(reviewed).places_facts_sha256);
+});
+
+
+test('entrance metadata validates source identity, coordinates, numbering and building association', () => {
+  const fixture = JSON.parse(
+    fs.readFileSync('packages/contracts/fixtures/building-entrances.json'),
+  );
+  assert.equal(validateBuildingLabels(fixture.labels, fixture.buildings), 1);
+  const noBuildingNumber = structuredClone(fixture.labels);
+  delete noBuildingNumber.features[0].properties.building_number;
+  assert.equal(validateBuildingLabels(noBuildingNumber, fixture.buildings), 1);
+  for (const mutate of [
+    (properties) => { properties.entrances[0].bearing = 180; },
+    (properties) => { delete properties.entrances[0].bearing; },
+    (properties) => {
+      properties.entrances[0].coordinates = [19, 42];
+    },
+    (properties) => {
+      properties.entrances[0].coordinates = [19.26, 95];
+    },
+    (properties) => {
+      properties.entrances[0].number = 'bb';
+    },
+    (properties) => {
+      properties.entrances[0].ref = ' ';
+    },
+    (properties) => {
+      properties.entrances.push(properties.entrances[0]);
+    },
+    (properties) => {
+      properties.entrances[0].id = 'node/999';
+    },
+    (properties) => {
+      properties.entrances = {};
+    },
+    (properties) => {
+      properties.building_number = 'bb';
+    },
+  ]) {
+    const bad = structuredClone(fixture.labels);
+    mutate(bad.features[0].properties);
+    assert.throws(() => validateBuildingLabels(bad, fixture.buildings));
+  }
+  const unnumbered = structuredClone(noBuildingNumber);
+  for (const entrance of unnumbered.features[0].properties.entrances)
+    delete entrance.number;
+  assert.equal(validateBuildingLabels(unnumbered, fixture.buildings), 1);
+});
+
+
+test('interior entrance points are rejected even when their wall bearing is correct', () => {
+  const fixture = JSON.parse(fs.readFileSync('packages/contracts/fixtures/building-entrances.json'));
+  const entrance = fixture.labels.features[0].properties.entrances[0];
+  entrance.coordinates = [19.2605, 42.4405];
+  entrance.bearing = entranceBearing(entrance.coordinates, fixture.buildings.features[0].geometry);
+  assert.throws(() => validateBuildingLabels(fixture.labels, fixture.buildings), /Entrance must lie on a building wall/);
 });

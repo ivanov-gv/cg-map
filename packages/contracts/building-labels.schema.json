@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Interior building address label feature",
+  "title": "Building address and located entrances",
   "type": "object",
   "required": [
     "type",
@@ -42,7 +42,6 @@
         "kind",
         "osm_id",
         "footprintIndex",
-        "addr:housenumber",
         "address_sources"
       ],
       "properties": {
@@ -72,8 +71,103 @@
             "type": "string",
             "pattern": "^(way|node)/[0-9]+$"
           }
+        },
+        "building_number": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "lamela": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "entrances": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "coordinates",
+              "bearing"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^node/[0-9]+$"
+              },
+              "coordinates": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  }
+                ],
+                "items": false
+              },
+              "number": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "lamela": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "street": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "bearing": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 360,
+                "description": "Clockwise degrees from north, perpendicular to the nearest wall and pointing into the building."
+              }
+            },
+            "additionalProperties": false
+          }
         }
-      }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "addr:housenumber"
+          ]
+        },
+        {
+          "required": [
+            "building_number"
+          ]
+        },
+        {
+          "required": [
+            "entrances"
+          ],
+          "properties": {
+            "entrances": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
     }
   }
 }

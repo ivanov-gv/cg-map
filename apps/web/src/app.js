@@ -3,7 +3,7 @@ import {mapStyle,installBuildingNumberScale} from './map-style.js';
 import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
-import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';
+import {describePoint,buildingAddressIndex,buildingMapFeatures,entranceFeatures,installEntranceLayers,selectBuildingEntrances,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
 import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
@@ -114,17 +114,49 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;setChoo
  objectSelection.selectPlace(f,keysById.get(p.id));$('close-place').focus({preventScroll:true});
  pendingReveal={zoom:15};flushPendingReveal();
 }
+// Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
+function frameBuildingEntrances(entrances, coordinates) {
+ const positions=[coordinates,...entrances.map(entrance=>entrance.coordinates)];
+ const area=ui.mapArea();
+ const horizontalMarginPixels=Math.min(64,(area.right-area.left)/4);
+ const verticalMarginPixels=32;
+ const canvas=map.getCanvas();
+ const bounds=new maplibregl.LngLatBounds();
+ for(const position of positions) bounds.extend(position);
+ const padding={
+  left:area.left+horizontalMarginPixels,
+  right:canvas.clientWidth-area.right+horizontalMarginPixels,
+  top:area.top+verticalMarginPixels,
+  bottom:canvas.clientHeight-area.bottom+verticalMarginPixels
+ };
+ map.fitBounds(bounds,{padding,maxZoom:map.getZoom(),duration:reduced?0:450,retainPadding:false});
+}
+
+// Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
 function showPoint(point,feature=null) {
- closePlace(false);selectedPoint=point;
- $('place-name').textContent=point.name;$('place-category').textContent=point.kind;
- const details=$('place-details');details.replaceChildren();
- for(const text of [...point.details,point.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', ')]) {
-  if(text)details.append(node('p',text,'detail'));
+ closePlace(false);
+ selectedPoint=point;
+ $('place-name').textContent=point.name;
+ $('place-category').textContent=point.kind;
+ const details=$('place-details');
+ details.replaceChildren();
+ const coordinatesLine=point.coordinates.slice().reverse().map(coordinate=>coordinate.toFixed(5)).join(', ');
+ for(const text of [...point.details,coordinatesLine]) {
+  if(text) details.append(node('p',text,'detail'));
  }
  $('place-card').hidden=false;
- preview=null;updatePlaceLayers();ui.close();ui.placeCardOpened();syncPanels();
+ preview=null;
+ updatePlaceLayers();
+ ui.close();
+ ui.placeCardOpened();
+ syncPanels();
  objectSelection.select(feature,point.coordinates);
- focusCoordinates(point.coordinates,map.getZoom());
+ const footprintIndex=feature?.layer?.id==='buildings'?feature.id:feature?.properties?.footprintIndex;
+ const entrances=point.kind==='Building'?buildingAddresses.get(footprintIndex)?.entrances:[];
+ if(entrances?.length){
+  selectedPoint={...point,entrances};
+  frameBuildingEntrances(entrances,point.coordinates);
+ }else focusCoordinates(point.coordinates,map.getZoom());
  $('close-place').focus({preventScroll:true});
 }
 // Several listings under one tap: same location, or nearby markers that overlap. Each stays a real listing.
@@ -241,7 +273,10 @@ async function start(){
   visibility=parseVisibilityConfig(config);
   all=normalizePlaces(data.features,visibility);keysById=markerKeys(all);byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
  }).catch(e=>{console.error(e);placesError=e.message;notify(`Places could not load (${e.message}). Streets and buildings are still shown.`);renderResults();});
- const labelsReady=loadJSON('data/building-labels.geojson','House numbers').then(labels=>{buildingAddresses=buildingAddressIndex(labels);})
+ const labelsReady=loadJSON('data/building-labels.geojson','House numbers').then(labels=>{
+  buildingAddresses=buildingAddressIndex(labels);
+  return labels;
+ })
   .catch(e=>{console.error(e);notify(`House numbers could not load (${e.message}). Building details may lack addresses.`);});
  // This MapLibre bundle has no supported() helper. Map construction reports
  // graphics initialization errors through the existing startup catch handler.
@@ -275,12 +310,17 @@ async function start(){
   map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
   installTransport(map);
   installRoutePoints(map);
-  objectSelection=new ObjectSelection(map);
+  installEntranceLayers(map);
+  objectSelection=new ObjectSelection(map,footprintIndex=>selectBuildingEntrances(map,footprintIndex));
   routePlanner=new RoutePlanner(map);
   transport=new TransportFeed(map,{url:api.vehicles,onStatus:renderTransportStatus});
   $('transport-toggle').disabled=false;
   installPositionLayers(map);renderPosition(position);
-  Promise.all([placesReady,labelsReady]).then(()=>{
+  Promise.all([placesReady,labelsReady]).then(([,labels])=>{
+   if(labels){
+    map.getSource('building-addresses').setData(buildingMapFeatures(labels));
+    map.getSource('building-entrances').setData(entranceFeatures(labels));
+   }
    if(!placesError){
     const {names,icons}=placeLayers(placeBands(all,visibility),visibility);
     for(const layer of [...names,...icons])map.addLayer(layer,'road-labels');
@@ -295,23 +335,56 @@ async function start(){
   if(!selected)renderResults();
   flushPendingReveal();
  });
- installMapTaps(map,e=>{
-  if(!loaded)return;
-  const routePoints=map.queryRenderedFeatures(e.point,{layers:['route-point-circles']});
-  if(routePoints.length){const f=routePoints[0];showPoint({name:f.properties.name,coordinates:[...f.geometry.coordinates],kind:f.properties.role==='from'?'From point':'To point',details:[]},f);return;}
-  const stops=map.queryRenderedFeatures(e.point,{layers:['transport-stops']});
-  if(stops.length){showPoint(describePoint(stops[0],e.lngLat.toArray()),stops[0]);return;}
-  const listings=listingsAtHits(map.queryRenderedFeatures(e.point,{layers:placeHitLayers}),byId);
-  if(listings.length===1){showPlace(listings[0].properties.id);return;}
-  if(listings.length>1){showChooser(listings,e.lngLat.toArray());return;}
+ // Existing explicit point markers win over underlying polygons; entrance hits retain their source identity.
+ installMapTaps(map,event=>{
+  if(!loaded) return;
+  const coordinates=event.lngLat.toArray();
+  const routePoints=map.queryRenderedFeatures(event.point,{layers:['route-point-circles']});
+  if(routePoints.length){
+   const feature=routePoints[0];
+   const point={
+    name:feature.properties.name,
+    coordinates:[...feature.geometry.coordinates],
+    kind:feature.properties.role==='from'?'From point':'To point',
+    details:[]
+   };
+   showPoint(point,feature);
+   return;
+  }
+  const entrances=map.queryRenderedFeatures(event.point,{layers:['entrance-points','entrance-selection-numbers','entrance-numbers','entrance-selection-arrows']});
+  if(entrances.length){
+   const entrance=entrances[0];
+   showPoint(describePoint(entrance,coordinates,buildingAddresses),entrance);
+   return;
+  }
+  const stops=map.queryRenderedFeatures(event.point,{layers:['transport-stops']});
+  if(stops.length){
+   const stop=stops[0];
+   showPoint(describePoint(stop,coordinates),stop);
+   return;
+  }
+  const listings=listingsAtHits(map.queryRenderedFeatures(event.point,{layers:placeHitLayers}),byId);
+  if(listings.length===1){
+   showPlace(listings[0].properties.id);
+   return;
+  }
+  if(listings.length>1){
+   showChooser(listings,coordinates);
+   return;
+  }
   const roadLayers=['road-labels','steps','cycleways','paths','footways','pedestrian-streets','minor-roads','major-roads'];
-  const features=map.queryRenderedFeatures(e.point,{layers:['building-numbers','buildings',...roadLayers,'land','water','rivers']});
-  const feature=features.find(f=>f.layer.id==='buildings')??features.find(f=>f.layer.id==='building-numbers')??features.find(f=>roadLayers.includes(f.layer.id))??features.find(f=>f.layer.id==='land'&&f.properties.kind==='park')??features.find(f=>f.layer.id==='water'||f.layer.id==='rivers');
-  showPoint(describePoint(feature,e.lngLat.toArray(),buildingAddresses),feature);
+  const features=map.queryRenderedFeatures(event.point,{layers:['building-numbers','buildings',...roadLayers,'land','water','rivers']});
+  const building=features.find(feature=>feature.layer.id==='buildings');
+  const buildingLabel=features.find(feature=>feature.layer.id==='building-numbers');
+  const road=features.find(feature=>roadLayers.includes(feature.layer.id));
+  const park=features.find(feature=>feature.layer.id==='land'&&feature.properties.kind==='park');
+  const water=features.find(feature=>['water','rivers'].includes(feature.layer.id));
+  const feature=building??buildingLabel??road??park??water;
+  showPoint(describePoint(feature,coordinates,buildingAddresses),feature);
  });
  map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});
  // Name the layer that failed; a partly drawn map is not a ready map.
- const failures={basemap:'Streets, buildings and water could not load. Check your connection or save the map for offline use.','building-addresses':'House numbers could not load.','satellite-preview':'Satellite imagery could not load.','satellite-tiles':'Satellite imagery could not load.',places:'Places could not be drawn.','requested-place':'Places could not be drawn.','transport-stops':'Bus stops could not load.'};
+ const failures={basemap:'Streets, buildings and water could not load. Check your connection or save the map for offline use.','building-addresses':'House numbers could not load.','building-entrances':'Building entrances could not load.','satellite-preview':'Satellite imagery could not load.','satellite-tiles':'Satellite imagery could not load.',places:'Places could not be drawn.','requested-place':'Places could not be drawn.','transport-stops':'Bus stops could not load.'};
  map.on('error',e=>{console.error('Map error',e.error);const message=failures[e.sourceId]??'Some map data could not load. Check your connection or download the map for offline use.';clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify(message),1500);});
  map.on('webglcontextlost',()=>notify('The browser paused graphics rendering. Waiting for it to recover…'));map.on('webglcontextrestored',()=>{$('error').hidden=true;map.triggerRepaint();});
  setTimeout(()=>{if(!loaded){$('loading').hidden=true;notify('Map startup is taking longer than expected. Check your connection and try again.');}},20000);
@@ -353,11 +426,23 @@ ui=new MapInterface({
   if(ui&&ui.view!=='closed'&&!explored){explored=true;renderPosition(position);}
   if(ui?.view==='closed'){preview=null;updatePlaceLayers();}
  },
+ // Recompute selection framing only after keyboard and camera changes have settled.
  onViewport:()=>{
-  if(!loaded||(!selectedPoint&&!pendingReveal)||ui.keyboardOpen())return;
-  // A move in progress already aims for its own layout; check again where it lands.
-  if(map.isMoving()){pendingReveal??={zoom:map.getZoom()};return;}
-  if(pendingReveal){flushPendingReveal();return;}
+  const hasSelection=selectedPoint||pendingReveal;
+  if(!loaded||!hasSelection||ui.keyboardOpen()) return;
+  // Building bounds already account for the card; an intermediate zoom would undo their fit.
+  if(selectedPoint?.entrances?.length){
+   if(!map.isMoving()) frameBuildingEntrances(selectedPoint.entrances,selectedPoint.coordinates);
+   return;
+  }
+  if(map.isMoving()){
+   pendingReveal??={zoom:map.getZoom()};
+   return;
+  }
+  if(pendingReveal){
+   flushPendingReveal();
+   return;
+  }
   revealCoordinates(selectedPoint.coordinates,{zoom:map.getZoom(),duration:0});
  },
  onCardSwipedAway:()=>closePlace(),

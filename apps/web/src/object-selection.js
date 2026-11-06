@@ -4,8 +4,11 @@ const empty=['==',['id'],-1];
 // Filter the original vector features instead of copying one clipped tile's
 // geometry. This keeps all parts and holes selected across tile/zoom changes.
 export class ObjectSelection {
- constructor(map) {
-  this.map=map;this.anchor=null;this.pointTarget=null;
+ constructor(map,onBuilding=()=>{}) {
+  this.map=map;
+  this.onBuilding=onBuilding;
+  this.anchor=null;
+  this.pointTarget=null;
   map.addSource('point-selection',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
   map.addLayer({id:'point-selection-indicator',type:'circle',source:'point-selection',paint:{'circle-radius':8,'circle-color':'#c43f3f','circle-opacity':.25,'circle-stroke-color':'#c43f3f','circle-stroke-width':2.5}});
   for(const layer of ['place-highlight','transport-stops']) {
@@ -38,21 +41,34 @@ export class ObjectSelection {
   this.pointTarget={source,id};this.map.setFeatureState(this.pointTarget,{selected:true});
  }
  setTarget(target) {
+  this.onBuilding(target?.sourceLayer==='buildings'?target.id:null);
   for(const sourceLayer of sources) {
    const filter=target?.sourceLayer===sourceLayer?['==',['id'],target.id]:empty;
    this.map.setFilter(`selected-${sourceLayer}-fill`,['all',filter,['==',['geometry-type'],'Polygon']]);
    this.map.setFilter(`selected-${sourceLayer}-outline`,filter);
   }
  }
+ // Label and entrance hits refer back to the original footprint instead of selecting a point copy.
  select(feature,coordinates) {
   this.clear();
-  const label=feature?.layer?.id==='building-numbers';
-  const sourceLayer=label?'buildings':feature?.sourceLayer??feature?.layer?.['source-layer'];
-  const id=label?feature.properties.footprintIndex:feature?.id;
-  if(sources.includes(sourceLayer)&&Number.isInteger(id)){this.setTarget({sourceLayer,id});return;}
+  const buildingLayers=['building-numbers','entrance-points','entrance-numbers','entrance-selection-numbers','entrance-selection-arrows'];
+  const isBuildingLabel=buildingLayers.includes(feature?.layer?.id);
+  const sourceLayer=isBuildingLabel?'buildings':feature?.sourceLayer??feature?.layer?.['source-layer'];
+  const identifier=isBuildingLabel?feature.properties.footprintIndex:feature?.id;
+  if(sources.includes(sourceLayer)&&Number.isInteger(identifier)){
+   this.setTarget({sourceLayer,id:identifier});
+   return;
+  }
   const source=feature?.source??feature?.layer?.source;
-  if(['places','transport-stops'].includes(source)&&feature.id!==undefined){this.selectPoint(source,feature.id);return;}
-  if(!feature&&coordinates)this.map.getSource('point-selection').setData({type:'FeatureCollection',features:[{type:'Feature',properties:{},geometry:{type:'Point',coordinates:[...coordinates]}}]});
+  if(['places','transport-stops'].includes(source)&&feature.id!==undefined){
+   this.selectPoint(source,feature.id);
+   return;
+  }
+  if(!feature&&coordinates){
+   this.map.getSource('point-selection').setData({type:'FeatureCollection',features:[{
+    type:'Feature',properties:{},geometry:{type:'Point',coordinates:[...coordinates]}
+   }]});
+  }
  }
  selectPlace(feature,markerKey) {
   this.clear();this.selectPoint('places',markerKey);this.anchor=[...feature.geometry.coordinates];this.resolveAnchor();

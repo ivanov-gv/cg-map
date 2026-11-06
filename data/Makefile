@@ -1,8 +1,8 @@
 ROOT := ..
 
-.PHONY: verify lint check build-data test python-check
+.PHONY: verify lint check build-data test python-test python-check
 
-verify: lint check test python-check
+verify: lint check test python-test python-check
 
 lint:
 	cd $(ROOT) && npx --no-install eslint data/tools data/tests
@@ -18,3 +18,6 @@ test:
 
 python-check:
 	cd $(ROOT) && python3 -m py_compile data/tools/*.py
+
+python-test:
+	cd $(ROOT) && python3 -m unittest discover -s data/tests -p 'test_*.py'
