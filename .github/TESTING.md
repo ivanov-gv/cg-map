@@ -42,10 +42,11 @@ the host network, so targets use `--network bridge`. Every target needs `.github
 because installing dependencies reads GitHub Packages: see `secret.env.example` beside it.
 
 Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
-repository inside the container, and `ci-docs` and `ci-platform` fail. Run workflows one at a time on a machine short of
-disk or CPU: `ci-apps-web` alone can use several gigabytes. Under `make test-ci-all`, parallel jobs can make `act` fail
-with `context deadline exceeded` while it removes containers, which ends the run before the browser jobs and the gate
-and can leave containers running. That is a local limit, so check `docker ps` afterwards.
+repository inside the container, and `ci-docs` and `ci-platform` fail. Set the clone's `origin` to the GitHub URL,
+because `act` takes the repository name from it. Run workflows one at a time on a machine short of disk or CPU:
+`ci-apps-web` alone can use several gigabytes. Under `make test-ci-all`, parallel jobs can make `act` fail with
+`context deadline exceeded` while it removes containers, which ends the run before the browser jobs and the gate and can
+leave containers running. That is a local limit, so check `docker ps` afterwards.
 
 ## On GitHub
 

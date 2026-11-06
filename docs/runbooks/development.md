@@ -28,6 +28,18 @@ make check runs each project's own `verify`. make test-e2e runs each browser pro
 its artifact and tests it at / and /cg-map/. Browser artifacts in each project's test-results are ignored locally and
 uploaded on CI failure.
 
+## Faster browser tests
+
+Browser tests run one at a time with software rendering by default, because that is what CI does. On a machine with
+threads and a GPU to spare, this is about four times faster, with the same tests:
+
+```sh
+E2E_WORKERS=6 E2E_ANGLE=gl-egl make -C apps/web e2e
+```
+
+`E2E_ANGLE` also takes `vulkan`. Keep the default if the GPU is unavailable. A pass this way does not replace the run CI
+does.
+
 ## Markdown checks and formatting
 
 All repository `.md` files, including new/untracked documents, dot directories, and component instructions, use the root

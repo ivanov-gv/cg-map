@@ -13,12 +13,18 @@ const port = Number(
     }).trim()
 );
 
+// One at a time and software rendering unless asked otherwise, because that is what CI runs. For a faster local run, see
+// docs/runbooks/development.md: E2E_WORKERS=6 E2E_ANGLE=vulkan.
+const workers = Number(process.env.E2E_WORKERS ?? 1);
+const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
+
 // The same artifact must work at the origin root and under a project prefix.
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 90000,
   expect: {timeout: 15000},
-  workers: 1,
+  workers,
+  fullyParallel: workers > 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   outputDir: 'test-results',
@@ -26,7 +32,9 @@ export default defineConfig({
     browserName: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    launchOptions: {args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']}
+    launchOptions: {
+      args: ['--use-gl=angle', `--use-angle=${angleBackend}`, '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+    }
   },
   projects: [
     {name: 'root-desktop', use: {baseURL: `http://127.0.0.1:${port}/`, viewport: {width: 1280, height: 800}}},
