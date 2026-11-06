@@ -33,3 +33,10 @@ limit; other jobs keep one.
 
 Parallel load causes test timeouts at 15 seconds, and 90 seconds in the slowest web test, when many browser jobs share
 one machine under `act`. Six workers on one host did not. Measure after each step.
+
+## Open problem: editor update takeover
+
+After Update, the browser sometimes keeps a waiting worker from activating, even with repeated requests, until every
+window closes. It is more likely with several windows and under load. The editor says what to do and nothing is lost,
+and the three-window test in `offline.spec.mjs` accepts this outcome and records which one occurred. The cause is not
+diagnosed: the next step is finding what keeps the active worker busy, then making that test strict again.
