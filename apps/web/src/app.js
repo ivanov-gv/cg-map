@@ -25,7 +25,7 @@ import {
   requestedPlaceMarker,
   placeLayers,
   listingsAtHits
-} from '../../../packages/map-core/src/index.js';
+} from '@ivanov-gv/map-core';
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';

@@ -1,6 +1,7 @@
 # Map core
 
-Local ES-module runtime used by the public map, source editor viewer and concept demo. Import its public
+ES-module runtime published as `@ivanov-gv/map-core` to GitHub Packages. The public map and source editor pin a release;
+the concept demo uses this folder, so it always shows unreleased work. Import the package's public
 [src/index.js](src/index.js) entry; inject MapLibre, archive transport, a container and the artifact's asset base URL.
 
 It owns common cartography, category symbols and visibility policy, satellite imagery, map lifecycle, projection and

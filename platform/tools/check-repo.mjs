@@ -44,7 +44,7 @@ const imports = {
   'app-updates.js': [],
   'object-selection.js': [],
   'app.js': [
-    '../../../packages/map-core/src/index.js',
+    '@ivanov-gv/map-core',
     './object-selection.js',
     './app-updates.js',
     './core.js',
@@ -100,7 +100,7 @@ for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) 
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
     for (const match of text.matchAll(moduleDependencyPattern)) {
       const dependency = match[1];
-      const isCoreEntry = dependency === '../../../packages/map-core/src/index.js';
+      const isCoreEntry = dependency === '@ivanov-gv/map-core';
       const isSibling = /^\.\/[^/]+\.js$/.test(dependency);
       const allowedByComponent = {
         'apps/core-demo': isCoreEntry,

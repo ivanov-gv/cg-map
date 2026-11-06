@@ -10,5 +10,8 @@ runs:
     - uses: actions/setup-python@v6
       with:
         python-version: '3.12'
+    # GitHub Packages asks for a token even to install a public package.
     - run: npm ci --ignore-scripts
       shell: bash
+      env:
+        NODE_AUTH_TOKEN: ${{ github.token }}

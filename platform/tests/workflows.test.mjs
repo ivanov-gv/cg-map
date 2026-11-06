@@ -12,9 +12,10 @@ const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'ut
 
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-all.yml': ['switch', 'gate', ...FOLDERS],
+  'ci-all.yml': ['approval', 'switch', 'gate', 'dev-pages', ...FOLDERS],
   'ci-workflows.yml': ['test-run-evidence'],
-  'cd-pages.yml': ['switch']
+  'cd-map-core.yml': ['switch'],
+  'ci-dev-pages.yml': ['deploy']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -70,11 +71,16 @@ for (const file of newWorkflowFiles) {
   });
 }
 
+// Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
+const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-all.yml': ['dev-pages']};
+
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
+      if (DEV_PAGES_JOBS[file]?.includes(name)) continue;
       const environment = job.environment;
-      if (environment) assert.ok(['dev', 'test-run'].includes(environment), `${file} ${name} uses ${environment}`);
+      const allowedEnvironments = ['dev', 'test-run', 'ci-approval'];
+      if (environment) assert.ok(allowedEnvironments.includes(environment), `${file} ${name} uses ${environment}`);
       for (const permission of ['pages', 'id-token']) {
         assert.equal(job.permissions?.[permission], undefined, `${file} ${name} must not request ${permission}`);
       }
@@ -83,31 +89,64 @@ test('CI workflows never touch production', () => {
   }
 });
 
-test('CD checks out no application source and publishes only from production', () => {
-  const {jobs, permissions} = load('cd-pages.yml');
+test('CD checks out no application source, and only a release or a manual run can start it', () => {
+  const {jobs, permissions, on} = load('cd-map-core.yml');
   assert.deepEqual(permissions, {});
+  assert.deepEqual(Object.keys(on).sort(), ['release', 'workflow_dispatch']);
+  assert.deepEqual(on.release.types, ['published']);
   const checkouts = Object.values(jobs).flatMap(job => job.steps ?? []).filter(step => step.uses?.startsWith('actions/checkout'));
+  assert.ok(checkouts.length > 0);
   for (const checkout of checkouts) {
     assert.equal(checkout.with['sparse-checkout'], '.github/actions');
     assert.equal(checkout.with['sparse-checkout-cone-mode'], false, 'cone mode would also check out root files');
   }
-  const publishers = Object.entries(jobs).filter(([, job]) => (job.steps ?? []).some(step => step.uses?.startsWith('actions/deploy-pages')));
-  assert.deepEqual(publishers.map(([name]) => name), ['deploy']);
-  assert.deepEqual(jobs['deploy-test-run'].permissions, {});
-  assert.equal(jobs['deploy-test-run'].steps.some(step => step.uses), false, 'the test-run deploy only logs');
+  assert.match(jobs.switch.if, /startsWith\(github\.event\.release\.tag_name, 'map-core\/v'\)/);
+  assert.equal(jobs.publish.environment, 'package-release');
+  assert.equal(jobs['publish-test-run'].environment, 'test-run');
+  assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
 });
 
-test('CD steps that pipe API calls fail when a call fails', () => {
-  const {prepare} = load('cd-pages.yml').jobs;
-  const piping = prepare.steps.filter(step => step.run?.includes('| jq'));
-  assert.ok(piping.length > 0);
-  for (const step of piping) assert.equal(step.shell, 'bash', `${step.name} needs explicit bash for pipefail`);
+test('only the dev Pages deploy holds Pages permissions, and a test run cannot reach it', () => {
+  const {jobs} = load('ci-dev-pages.yml');
+  assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
+  assert.match(jobs.deploy.if, /inputs\.test_run != true/);
+  for (const job of ['assemble', 'assemble-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
+  assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
 });
 
-test('CD refuses a pushed artifact that did not come from main', () => {
-  const {prepare} = load('cd-pages.yml').jobs;
-  const source = prepare.steps.find(step => step.id === 'source').run;
-  assert.match(source, /\[ "\$event" != push \] \|\| \[ "\$head_branch" = main \] \|\| skip/);
+test('a deploy always takes every app, because it replaces the whole site', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.assemble.steps);
+  assert.match(stepsText, /for app in web editor core-demo/);
+  assert.match(stepsText, /:main/);
+  const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
+  assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
+});
+
+test('a pull request runs nothing until it is approved', () => {
+  const {jobs} = load('ci-all.yml');
+  assert.equal(jobs.approval.environment, 'ci-approval');
+  assert.match(jobs.approval.if, /pull_request/);
+  assert.deepEqual([jobs.switch.needs].flat(), ['approval']);
+  const reachesApproval = name => {
+    if (name === 'approval') return true;
+    return [jobs[name].needs ?? []].flat().some(reachesApproval);
+  };
+  for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
+});
+
+test('images and dev packages come only from pushes to main or test runs, never from a pull request', () => {
+  const {jobs} = load('ci-all.yml');
+  const publishing = {
+    'map-core': 'publish_package',
+    'apps-web': 'publish_image',
+    'apps-editor': 'publish_image',
+    'apps-core-demo': 'publish_image'
+  };
+  for (const [name, input] of Object.entries(publishing)) {
+    assert.equal(jobs[name].with[input], "${{ github.event_name == 'push' || needs.switch.outputs.test_run == 'true' }}");
+  }
+  assert.match(jobs['dev-pages'].if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
+  assert.match(jobs['dev-pages'].if, /needs\.gate\.result == 'success'/);
 });
 
 test('runs on main never share a concurrency group', () => {
@@ -125,30 +164,18 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
   const {gate} = jobs;
   assert.equal(gate.name, 'CI gate', 'the ruleset requires this exact name');
   assert.equal(gate.if, 'always()');
-  assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => job !== 'gate')));
+  const jobsAfterGate = ['gate', 'dev-pages'];
+  assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
   assert.deepEqual(gate.permissions, {});
 });
 
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-pages.yml')) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-map-core.yml')) {
     assert.deepEqual(Object.keys(load(file).on).sort(), ['workflow_call', 'workflow_dispatch'], `${file} must run only when called`);
   }
   assert.equal(load('ci-all.yml').on.pull_request, null, 'a filter on a required workflow would leave its check pending forever');
-});
-
-test('only deployable runs compete for the deployment queue', () => {
-  const {concurrency, jobs} = load('cd-pages.yml');
-  assert.equal(concurrency, undefined, 'at workflow level, a docs merge could replace a pending web deployment');
-  for (const job of ['deploy', 'deploy-test-run']) assert.deepEqual(jobs[job].concurrency, {group: 'cd-pages', 'cancel-in-progress': false});
-});
-
-test('CD starts automatically only from successful pushes to main', () => {
-  const {on, jobs} = load('cd-pages.yml');
-  assert.deepEqual(on.workflow_run, {workflows: ['ci-all'], types: ['completed'], branches: ['main']});
-  assert.match(jobs.switch.if, /workflow_run\.event == 'push' && github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.equal(on.push, undefined);
 });
 
 test('browser jobs run only the planned areas, and none when there are none', () => {

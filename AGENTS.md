@@ -30,7 +30,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Repository-wide commands, from the root (never invent others)
 
-- `make setup`: install pinned npm dependencies (Node 24) and enable git hooks.
+- `make setup`: install pinned npm dependencies (Node 24; `gh` needs `read:packages`) and enable git hooks.
 - `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
 - `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
@@ -38,7 +38,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
 - `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
   for `.github/**` changes.
-- `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires.
+- `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
 - `make test-e2e`: browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
 - `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.

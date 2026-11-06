@@ -2,13 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {
-  copyMapCore,
-  copyRuntimeAssets,
-  readVerifiedRelease,
-  relocateCoreImports
-} from '../../../packages/map-core/tools/assemble.mjs';
-import {parseVisibilityConfig,assertPublishedPlaces} from '../../../packages/map-core/src/place-visibility.js';
+import {copyMapCore, copyRuntimeAssets, relocateCoreImports} from '@ivanov-gv/map-core/tools/assemble.mjs';
+import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/src/place-visibility.js';
+import {readVerifiedRelease} from '../../../data/tools/app-data.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
@@ -32,10 +28,6 @@ fs.copyFileSync(path.join(root, 'data/sources/building-labels.geojson'), path.jo
 fs.copyFileSync(path.join(root, 'data/sources/transit-network.json'), path.join(output, 'data/transit-network.json'));
 fs.copyFileSync(path.join(root, 'data/sources/transport-stops.geojson'), path.join(output, 'data/transport-stops.geojson'));
 fs.cpSync(path.join(root, 'data/imagery/podgorica'), path.join(output, 'data/satellite'), {recursive: true, filter: source => !source.endsWith('.md')});
-// Keep old /web/ bookmarks working after moving the deployed app back to /.
-fs.mkdirSync(path.join(output, 'web'));
-fs.copyFileSync(path.join(root, 'platform/pages/legacy-entry.html'), path.join(output, 'web/index.html'));
-fs.copyFileSync(path.join(root, 'platform/pages/legacy-sw.js'), path.join(output, 'web/sw.js'));
 fs.writeFileSync(path.join(output, '.nojekyll'), '');
 execFileSync(process.execPath, [path.join(root, 'apps/web/tools/finalize.mjs')], {cwd: root, stdio: 'inherit'});
 console.log('Built deployable web artifact: dist/web/');

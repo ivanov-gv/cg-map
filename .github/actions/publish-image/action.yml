@@ -1,0 +1,30 @@
+name: Publish app image
+description: Build one app's image from its built artifact, and push it tagged by commit and as main.
+inputs:
+  app:
+    description: The folder under apps/.
+    required: true
+  repository:
+    description: Where to push, without the app name. A test run resolves this to a temporary registry.
+    required: true
+  token:
+    description: Token for ghcr.io. Other registries need none.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        APP: ${{ inputs.app }}
+        IMAGE_REPOSITORY: ${{ inputs.repository }}
+        REGISTRY_TOKEN: ${{ inputs.token }}
+        COMMIT_SHA: ${{ github.sha }}
+      run: |
+        image="$IMAGE_REPOSITORY/$APP"
+        case "$IMAGE_REPOSITORY" in
+          ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
+        esac
+        docker build --file "apps/$APP/Dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" .
+        docker push "$image:$COMMIT_SHA"
+        docker push "$image:main"
+        echo "Published $image at $COMMIT_SHA and main" | tee -a "$GITHUB_STEP_SUMMARY"

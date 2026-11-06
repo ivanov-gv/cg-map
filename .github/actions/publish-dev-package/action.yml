@@ -1,0 +1,29 @@
+name: Publish dev package
+description: Publish a package folder as 0.0.0-dev.<commit> under the dev tag, for a later release to promote.
+inputs:
+  directory:
+    description: The package folder.
+    required: true
+  flags:
+    description: Extra npm publish flags. A test run resolves this to --dry-run.
+    required: false
+    default: ''
+  token:
+    description: Token for GitHub Packages.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PACKAGE_DIRECTORY: ${{ inputs.directory }}
+        PUBLISH_FLAGS: ${{ inputs.flags }}
+        NODE_AUTH_TOKEN: ${{ inputs.token }}
+        COMMIT_SHA: ${{ github.sha }}
+      run: |
+        cd "$PACKAGE_DIRECTORY"
+        version="0.0.0-dev.$COMMIT_SHA"
+        npm pkg set version="$version"
+        # shellcheck disable=SC2086 # PUBLISH_FLAGS is empty or one flag.
+        npm publish --ignore-scripts --tag dev $PUBLISH_FLAGS
+        echo "Published $PACKAGE_DIRECTORY as $version $PUBLISH_FLAGS" | tee -a "$GITHUB_STEP_SUMMARY"

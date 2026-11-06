@@ -112,6 +112,8 @@ export function classify(file) {
   }
   // The web browser tests search and select against this fixture.
   if (file.startsWith('data/tests/fixtures/')) return {folders: ['data', ...WEB_DEPENDENTS], areas: ALL_AREAS};
+  // What every map application copies into its artifact.
+  if (file === 'data/tools/app-data.mjs') return {folders: ['data', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
   if (/^data\/(tools|tests)\//.test(file)) return {folders: ['data'], areas: []};
   if (/^data\/(sources|artifacts|imagery)\//.test(file))
     return {folders: ['data', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
@@ -119,7 +121,8 @@ export function classify(file) {
 
   if (file.startsWith('packages/contracts/'))
     return {folders: ['contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
-  if (file.startsWith('packages/map-core/')) return {folders: MAP_CONTRACT_DEPENDENTS, areas: ALL_AREAS};
+  // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
+  if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'tests', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
   if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
@@ -129,7 +132,6 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
-  if (file.startsWith('platform/pages/')) return {folders: ['platform', 'apps-web'], areas: ALL_AREAS};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
   return EVERYTHING;

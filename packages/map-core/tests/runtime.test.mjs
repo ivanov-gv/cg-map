@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMap, whenMapReady, mapStyle, hitTest, offsetCoordinate, createGeoJSONOverlay} from '../src/index.js';
+import {relocateCoreImports} from '../tools/assemble.mjs';
 
 // A small eventful engine keeps lifecycle tests isolated from GPU, network and the DOM.
 class TestMap {
@@ -197,4 +198,19 @@ test('overlay selection is independent and teardown removes every owned layer/so
   overlay.destroy();
   assert.equal(map.layers.size, 0);
   assert.equal(map.sources.size, 0);
+});
+
+test('imports of this package are rewritten to the copy inside an artifact, and nothing else is', () => {
+  const source = [
+    "import {createMap} from '@ivanov-gv/map-core';",
+    "import {mapStyle} from '@ivanov-gv/map-core/src/map-style.js';",
+    "import {other} from '@ivanov-gv/map-core-extras';",
+    "import {local} from './local.js';"
+  ].join('\n');
+  assert.deepEqual(relocateCoreImports(source).split('\n'), [
+    "import {createMap} from './map-core/index.js';",
+    "import {mapStyle} from './map-core/map-style.js';",
+    "import {other} from '@ivanov-gv/map-core-extras';",
+    "import {local} from './local.js';"
+  ]);
 });

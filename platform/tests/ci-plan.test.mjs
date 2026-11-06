@@ -51,14 +51,14 @@ const cases = [
   [
     'shared map runtime',
     ['packages/map-core/src/poi-icons.js'],
-    ['platform', 'tests', 'map-core', 'apps-web', 'apps-editor', 'apps-core-demo'],
-    ALL_AREAS
+    ['platform', 'tests', 'map-core', 'apps-core-demo'],
+    []
   ],
   [
     'shared map build helpers',
     ['packages/map-core/tools/assemble.mjs'],
-    ['platform', 'tests', 'map-core', 'apps-web', 'apps-editor', 'apps-core-demo'],
-    ALL_AREAS
+    ['platform', 'tests', 'map-core', 'apps-core-demo'],
+    []
   ],
   ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
@@ -96,7 +96,6 @@ const cases = [
   ['new unmapped web source', ['apps/web/src/brand-new.js'], WEB, ALL_AREAS],
   ['web unit test', ['apps/web/tests/core.test.mjs'], WEB, []],
   ['Markdown in the public web folder', ['apps/web/public/notes.md'], WEB, ALL_AREAS],
-  ['pages compatibility entry', ['platform/pages/legacy-sw.js'], ['platform', 'apps-web'], ALL_AREAS],
   ['platform tooling', ['platform/tools/check-repo.mjs'], ['platform'], []],
   ['workflow', ['.github/workflows/web.yml'], ['workflows', 'platform'], []],
   ['composite action', ['.github/actions/setup-web/action.yml'], ['workflows', 'platform'], []],

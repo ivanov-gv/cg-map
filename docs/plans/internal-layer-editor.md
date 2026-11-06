@@ -1,7 +1,7 @@
 # Task: Internal layer editor
 
 Status: in progress. Slices 1-6 are implemented with the gaps listed under Completed and remaining. Slice 7 is the
-offline-first install, without hosting or authentication.
+offline-first install, served from Pages and optionally over the LAN, without authentication.
 
 ## Goal and acceptance criteria
 
@@ -163,8 +163,8 @@ Makefile, tests/e2e and CI pipeline, and no internal artifact is added to the Pa
 ### Editing and export boundary
 
 Start with local files and export; publishing remains a reviewed data operation. The editor is an offline-first app
-installed from a local HTTPS server on the owner's devices, so it has no host to protect. No auth service or placeholder
-write endpoints are part of this plan.
+installed from Pages or a local HTTPS server. Its data is already public, so it has nothing to protect at a host. No
+auth service or placeholder write endpoints are part of this plan.
 
 Propose a versioned changeset contract with base dataset SHA-256 values, per-layer operations, stable/source identity
 where available, an expected before-feature fingerprint, and full before/after GeoJSON. Preserve unknown properties and
@@ -238,8 +238,7 @@ consistency needs an explicit data-owned workflow, without combining their file 
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
-  - Slice 7: decided against hosting: the owner installs the app from a local HTTPS server. Larger datasets have not
-    been measured.
+  - Slice 7: larger datasets have not been measured.
 - Not implemented: refresh or rebase of corrections. Indices are bound to one snapshot, so a re-extract still replaces
   local edits, and an existing changeset stops at import. This needs the identity registry described above.
 - Design choices to review: one active source file at a time; one Roads & paths switch with subtype tools; local

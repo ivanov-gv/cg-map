@@ -1,0 +1,31 @@
+name: Promote package
+description: Publish the dev package CI built for a commit under a release version, changing nothing but the version.
+inputs:
+  package:
+    description: The package name.
+    required: true
+  version:
+    description: The release version.
+    required: true
+  commit:
+    description: The commit of the release, whose dev package is promoted.
+    required: true
+  flags:
+    description: Extra npm publish flags. A test run resolves this to --dry-run.
+    required: false
+    default: ''
+  token:
+    description: Token for GitHub Packages.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PACKAGE_NAME: ${{ inputs.package }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        PUBLISH_FLAGS: ${{ inputs.flags }}
+        NODE_AUTH_TOKEN: ${{ inputs.token }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/promote.sh"

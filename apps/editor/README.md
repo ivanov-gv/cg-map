@@ -5,8 +5,8 @@ edits stay in the browser until exported as a changeset for the data-owned impor
 [draft](prototypes/editor.html) remains as the reference for the original tool design.
 
 Run `make -C apps/editor dev` and open the printed local URL. The standalone artifact is `dist/editor`; it is never
-included in `dist/web` or deployed by the Pages pipeline. Hosting and authentication are not built. Do not deploy the
-internal artifact without choosing host access controls.
+included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest
+place to install it from. It has no access control, and its data is already public.
 
 The build assembles all eight reviewed source GeoJSON files through data-owned tooling. The editor verifies version,
 filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes bind revision-local indices; they
@@ -67,8 +67,11 @@ stay available there.
 
 ## Install on your devices
 
-The editor is an offline-first app for your own devices, with no hosting and no accounts. The server is needed only to
-install or update it: every file, including the map and all sources, is then stored on the device.
+The editor is an offline-first app with no accounts. The server is needed only to install or update it: every file,
+including the map and all sources, is then stored on the device. Pages has trusted HTTPS, so opening
+[/editor/](https://ivanov-gv.github.io/cg-map/editor/) and using Install in Chrome needs no setup.
+
+To run it from your own machine instead:
 
 ```sh
 make -C apps/editor lan

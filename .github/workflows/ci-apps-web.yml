@@ -6,6 +6,10 @@ on:
       test_run:
         type: boolean
         required: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
       browser_matrix:
         description: The browser areas to run, from the planner. Empty runs them all.
         type: string
@@ -17,8 +21,13 @@ on:
         description: Test run
         type: boolean
         default: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
 permissions:
   contents: read
+  packages: read
 jobs:
   verify:
     name: Verify web
@@ -50,7 +59,7 @@ jobs:
             node platform/tools/ci-plan.mjs --all
           fi
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
-      - name: Share the built artifact with browser jobs and CD
+      - name: Share the built artifact with the browser and image jobs
         uses: actions/upload-artifact@v5
         with:
           name: ${{ env.WEB_ARTIFACT_NAME }}
@@ -112,3 +121,40 @@ jobs:
       matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix) }}
     env: *browser-env
     steps: *browser-steps
+  # After the browser jobs, so that only a build that passed them can reach the dev environment.
+  image:
+    name: Publish web image
+    needs: [verify, browser]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.browser.result != 'failure' && (inputs.publish_image == true || inputs.publish_image == 'true') && inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    permissions: &image-permissions
+      contents: read
+      packages: write
+    env: &image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
+    steps: &image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.WEB_ARTIFACT_NAME }}
+          path: dist/web
+      - uses: ./.github/actions/publish-image
+        with:
+          app: web
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  image-test-run:
+    name: (test-run) Publish web image
+    needs: [verify-test-run, browser-test-run]
+    if: ${{ !cancelled() && needs.verify-test-run.result == 'success' && needs.browser-test-run.result != 'failure' && (inputs.publish_image == true || inputs.publish_image == 'true') && (inputs.test_run == true || inputs.test_run == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    permissions: *image-permissions
+    env: *image-env
+    steps: *image-steps

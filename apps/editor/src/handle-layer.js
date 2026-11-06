@@ -1,4 +1,4 @@
-import {hitTest} from '../../../packages/map-core/src/index.js';
+import {hitTest} from '@ivanov-gv/map-core';
 import {vertexHandles} from './geometry-editing.js';
 
 const sourceName = 'editor-handles';

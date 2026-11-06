@@ -45,15 +45,15 @@ make check-go    # Independent Go module; requires Go
 ```
 
 `make -C apps/web build` builds the web artifact. Preview shared concepts with `make -C apps/core-demo dev`, or inspect
-the source layers with `make -C apps/editor dev`; the public Pages deployment still contains only dist/web.
-`make -C data build-data` deliberately regenerates geography and requires
-[optional Python dependencies](docs/runbooks/data.md). Do not rebuild geography for UI changes.
+the source layers with `make -C apps/editor dev`. `make -C data build-data` deliberately regenerates geography and
+requires [optional Python dependencies](docs/runbooks/data.md). Do not rebuild geography for UI changes.
 
 ## Publication
 
 [ci-all](.github/workflows/ci-all.yml) runs only the checks a change needs, one workflow per folder, and reports one
-`CI gate`. On main, [cd-pages](.github/workflows/cd-pages.yml) then deploys the verified artifact to GitHub Pages. Pull
-requests never deploy, and a Markdown-only change runs no code checks.
+`CI gate`. On main, [ci-dev-pages](.github/workflows/ci-dev-pages.yml) then deploys every app to GitHub Pages, the dev
+environment: see [release](docs/runbooks/release.md). Pull requests never deploy, and a Markdown-only change runs no
+code checks.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitHub Actions**; no branch-folder setting
 or committed deployment copy is needed.

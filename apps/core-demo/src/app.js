@@ -11,7 +11,7 @@ import {
   satelliteBounds,
   setSatelliteVisible,
   whenMapReady
-} from '../../../packages/map-core/src/index.js';
+} from '@ivanov-gv/map-core';
 
 const elementById = id => document.getElementById(id);
 let map;

@@ -9,7 +9,7 @@ import {
   satelliteBounds,
   setSatelliteVisible,
   whenMapReady
-} from '../../../packages/map-core/src/index.js';
+} from '@ivanov-gv/map-core';
 import {createActiveFileCommands} from './active-file-commands.js';
 import {
   clearSetAsideDrafts,

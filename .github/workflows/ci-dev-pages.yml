@@ -1,0 +1,87 @@
+name: ci-dev-pages
+# Pages is the dev environment: every merge to main shows main there. A deploy replaces the whole site, so this always takes
+# the main image of every app. CI only: there are no tags or releases, and images are never rebuilt here.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  assemble:
+    name: Assemble dev site
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: dev
+    permissions: &assemble-permissions
+      contents: read
+      packages: read
+    env: &assemble-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      REGISTRY_TOKEN: ${{ github.token }}
+    steps: &assemble-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Extract each app from its main image
+        run: |
+          case "$IMAGE_REPOSITORY" in
+            ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
+          esac
+          mkdir site
+          cp platform/pages/index.html site/index.html
+          for app in web editor core-demo; do
+            image="$IMAGE_REPOSITORY/$app:main"
+            if ! docker pull --quiet "$image"; then
+              echo "::error::No image $image. Merge a change to apps/$app, or run ci-apps-$app, to create it."
+              exit 1
+            fi
+            container="$(docker create "$image")"
+            docker cp "$container:/app/dist/$app" "site/$app"
+            docker rm "$container" > /dev/null
+            echo "$app: $(docker inspect --format '{{.Id}}' "$image")" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          find site -type f | wc -l | xargs echo "Files in the site:" | tee -a "$GITHUB_STEP_SUMMARY"
+      # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+  assemble-test-run:
+    name: (test-run) Assemble dev site
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: test-run
+    permissions: *assemble-permissions
+    env: *assemble-env
+    steps: *assemble-steps
+  # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination. A test run
+  # stops at the assembled site above.
+  deploy:
+    name: Deploy dev site
+    needs: assemble
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: dev-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/configure-pages@v6
+      - id: deployment
+        uses: actions/deploy-pages@v5

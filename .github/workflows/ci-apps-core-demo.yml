@@ -6,14 +6,23 @@ on:
       test_run:
         type: boolean
         required: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
 permissions:
   contents: read
+  packages: read
 jobs:
   verify:
     name: Verify core demo
@@ -22,6 +31,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: dev
+    env: &verify-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    permissions: &verify-permissions
+      contents: read
+      packages: write
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -34,6 +48,13 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make -C apps/core-demo e2e-built
+      # Last, so that only a build that passed its checks can reach the dev environment.
+      - uses: ./.github/actions/publish-image
+        if: ${{ inputs.publish_image == true || inputs.publish_image == 'true' }}
+        with:
+          app: core-demo
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - uses: actions/upload-artifact@v5
         if: failure()
@@ -47,4 +68,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: test-run
+    env: *verify-env
+    permissions: *verify-permissions
     steps: *verify-steps

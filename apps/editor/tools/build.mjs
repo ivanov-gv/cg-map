@@ -3,10 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {writeEditorBundle} from '../../../data/tools/editor-bundle.mjs';
-import {assembleStaticApplication, readVerifiedRelease} from '../../../packages/map-core/tools/assemble.mjs';
+import {assembleStaticApplication} from '@ivanov-gv/map-core/tools/assemble.mjs';
+import {copyMapData, readVerifiedRelease} from '../../../data/tools/app-data.mjs';
 import {writeOfflineManifest} from './offline-manifest.mjs';
 
-const outputDirectory = assembleStaticApplication(fileURLToPath(new URL('..', import.meta.url)));
+const outputDirectory = fileURLToPath(new URL('../../../dist/editor/', import.meta.url));
+assembleStaticApplication(fileURLToPath(new URL('..', import.meta.url)), outputDirectory);
+copyMapData(outputDirectory);
 const sourceDirectory = fileURLToPath(new URL('../../../data/sources/', import.meta.url));
 await writeEditorBundle(sourceDirectory, path.join(outputDirectory, 'sources'));
 // The editing rules are a shared contract: the importer reads the same file.
