@@ -23,6 +23,6 @@
     "@playwright/test": "1.56.1"
   },
   "dependencies": {
-    "@ivanov-gv/map-core": "0.1.0"
+    "@ivanov-gv/map-core": "0.1.1"
   }
 }

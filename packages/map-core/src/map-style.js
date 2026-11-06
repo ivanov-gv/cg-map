@@ -186,7 +186,8 @@ export function mapStyle(basemapURL, assetBaseURL) {
         minzoom: 13,
         layout: {
           visibility: 'none',
-          'text-field': ['get', 'addr:housenumber'],
+          // An application can supply a separate display number; otherwise this is the source's own house number.
+          'text-field': ['coalesce', ['get', 'display_number'], ['get', 'addr:housenumber']],
           'text-font': ['Open Sans Semibold'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 15, 11, 21, 14],
           'text-anchor': 'center',

@@ -28,7 +28,7 @@ import {
 } from '@ivanov-gv/map-core';
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
-import {describePoint,buildingAddressIndex,endpointFeatures,installRoutePoints} from './point-selection.js';
+import {describePoint,buildingAddressIndex,buildingMapFeatures,entranceFeatures,installEntranceLayers,selectBuildingEntrances,endpointFeatures,installRoutePoints} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
 import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
@@ -140,17 +140,49 @@ function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;setChoo
  objectSelection.selectPlace(f,keysById.get(p.id));$('close-place').focus({preventScroll:true});
  pendingReveal={zoom:15};flushPendingReveal();
 }
+// Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
+function frameBuildingEntrances(entrances, coordinates) {
+ const positions=[coordinates,...entrances.map(entrance=>entrance.coordinates)];
+ const area=ui.mapArea();
+ const horizontalMarginPixels=Math.min(64,(area.right-area.left)/4);
+ const verticalMarginPixels=32;
+ const canvas=map.getCanvas();
+ const bounds=new maplibregl.LngLatBounds();
+ for(const position of positions) bounds.extend(position);
+ const padding={
+  left:area.left+horizontalMarginPixels,
+  right:canvas.clientWidth-area.right+horizontalMarginPixels,
+  top:area.top+verticalMarginPixels,
+  bottom:canvas.clientHeight-area.bottom+verticalMarginPixels
+ };
+ map.fitBounds(bounds,{padding,maxZoom:map.getZoom(),duration:reduced?0:450,retainPadding:false});
+}
+
+// Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
 function showPoint(point,feature=null) {
- closePlace(false);selectedPoint=point;
- $('place-name').textContent=point.name;$('place-category').textContent=point.kind;
- const details=$('place-details');details.replaceChildren();
- for(const text of [...point.details,point.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', ')]) {
-  if(text)details.append(node('p',text,'detail'));
+ closePlace(false);
+ selectedPoint=point;
+ $('place-name').textContent=point.name;
+ $('place-category').textContent=point.kind;
+ const details=$('place-details');
+ details.replaceChildren();
+ const coordinatesLine=point.coordinates.slice().reverse().map(coordinate=>coordinate.toFixed(5)).join(', ');
+ for(const text of [...point.details,coordinatesLine]) {
+  if(text) details.append(node('p',text,'detail'));
  }
  $('place-card').hidden=false;
- preview=null;updatePlaceLayers();ui.close();ui.placeCardOpened();syncPanels();
+ preview=null;
+ updatePlaceLayers();
+ ui.close();
+ ui.placeCardOpened();
+ syncPanels();
  objectSelection.select(feature,point.coordinates);
- focusCoordinates(point.coordinates,map.getZoom());
+ const footprintIndex=feature?.layer?.id==='buildings'?feature.id:feature?.properties?.footprintIndex;
+ const entrances=point.kind==='Building'?buildingAddresses.get(footprintIndex)?.entrances:[];
+ if(entrances?.length){
+  selectedPoint={...point,entrances};
+  frameBuildingEntrances(entrances,point.coordinates);
+ }else focusCoordinates(point.coordinates,map.getZoom());
  $('close-place').focus({preventScroll:true});
 }
 // Several listings under one tap: same location, or nearby markers that overlap. Each stays a real listing.
@@ -332,6 +364,7 @@ function loadDirectoryData() {
   const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
     .then(labels => {
       buildingAddresses = buildingAddressIndex(labels);
+      return labels;
     })
     .catch(error => {
       console.error(error);
@@ -513,7 +546,8 @@ function installPublicLayers(placesReady, labelsReady) {
   installCityNames();
   installTransport(map);
   installRoutePoints(map);
-  objectSelection = new ObjectSelection(map);
+  installEntranceLayers(map);
+  objectSelection = new ObjectSelection(map, footprintIndex => selectBuildingEntrances(map, footprintIndex));
   routePlanner = new RoutePlanner(map);
   transport = new TransportFeed(map, {
     url: api.vehicles,
@@ -522,7 +556,11 @@ function installPublicLayers(placesReady, labelsReady) {
   $('transport-toggle').disabled = false;
   installPositionLayers(map);
   renderPosition(position);
-  Promise.all([placesReady, labelsReady]).then(() => {
+  Promise.all([placesReady, labelsReady]).then(([, labels]) => {
+    if (labels) {
+      map.getSource('building-addresses').setData(buildingMapFeatures(labels));
+      map.getSource('building-entrances').setData(entranceFeatures(labels));
+    }
     if (!placesError) {
       const {names, icons} = placeLayers(placeBands(all, visibility), visibility);
       for (const layer of [...names, ...icons]) map.addLayer(layer, 'road-labels');
@@ -550,6 +588,13 @@ function selectTappedMarker(event) {
       },
       feature
     );
+    return true;
+  }
+  const entrances = map.queryRenderedFeatures(event.point, {
+    layers: ['entrance-points', 'entrance-selection-numbers', 'entrance-numbers', 'entrance-selection-arrows']
+  });
+  if (entrances.length) {
+    showPoint(describePoint(entrances[0], event.lngLat.toArray(), buildingAddresses), entrances[0]);
     return true;
   }
   const stops = map.queryRenderedFeatures(event.point, {
@@ -625,6 +670,7 @@ function registerMapFailures() {
   const failures = {
     basemap: 'Streets, buildings and water could not load. Check your connection or save the map for offline use.',
     'building-addresses': 'House numbers could not load.',
+    'building-entrances': 'Building entrances could not load.',
     'satellite-preview': 'Satellite imagery could not load.',
     'satellite-tiles': 'Satellite imagery could not load.',
     places: 'Places could not be drawn.',
@@ -694,11 +740,23 @@ ui=new MapInterface({
   if(ui&&ui.view!=='closed'&&!explored){explored=true;renderPosition(position);}
   if(ui?.view==='closed'){preview=null;updatePlaceLayers();}
  },
+ // Recompute selection framing only after keyboard and camera changes have settled.
  onViewport:()=>{
-  if(!loaded||(!selectedPoint&&!pendingReveal)||ui.keyboardOpen())return;
-  // A move in progress already aims for its own layout; check again where it lands.
-  if(map.isMoving()){pendingReveal??={zoom:map.getZoom()};return;}
-  if(pendingReveal){flushPendingReveal();return;}
+  const hasSelection=selectedPoint||pendingReveal;
+  if(!loaded||!hasSelection||ui.keyboardOpen()) return;
+  // Building bounds already account for the card; an intermediate zoom would undo their fit.
+  if(selectedPoint?.entrances?.length){
+   if(!map.isMoving()) frameBuildingEntrances(selectedPoint.entrances,selectedPoint.coordinates);
+   return;
+  }
+  if(map.isMoving()){
+   pendingReveal??={zoom:map.getZoom()};
+   return;
+  }
+  if(pendingReveal){
+   flushPendingReveal();
+   return;
+  }
   revealCoordinates(selectedPoint.coordinates,{zoom:map.getZoom(),duration:0});
  },
  onCardSwipedAway:()=>closePlace(),
