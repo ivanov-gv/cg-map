@@ -24,7 +24,7 @@ dev: build
 
 # Serves the installable editor to this LAN over HTTPS. See README.md, "Install on your devices".
 lan: build
-	python3 $(ROOT)/platform/tools/lan_certificate.py --output-directory $(LAN_TLS) --port $(LAN_PORT)
+	python3 $(ROOT)/platform/tools/lan_certificate.py --output-directory $(LAN_TLS) --install-port $(LAN_PORT)
 	python3 $(ROOT)/platform/tools/serve.py --host 0.0.0.0 --port $(LAN_PORT) --app editor --tls-directory $(LAN_TLS)
 
 # Builds this app first, then runs its browser tests.

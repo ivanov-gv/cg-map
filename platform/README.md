@@ -3,7 +3,11 @@
 Ownership: platform/reliability team.
 
 - `tools/serve.py`: local range-capable web server; defaults to dist/web; `--app` serves another project's artifact and
-  `--path-prefix` also serves it under a URL prefix.
+  `--path-prefix` also serves it under a URL prefix; `--tls-directory` serves HTTPS with the files below.
+- `tools/lan_certificate.py`: issues an HTTPS certificate from a private authority in `~/.config/lan-ca`, for anything
+  on your LAN: `python3 platform/tools/lan_certificate.py --output-directory <dir> --host nas.lan --host 192.168.1.5`.
+  It refuses names the authority cannot cover. See
+  [installing the editor](../apps/editor/README.md#install-on-your-devices).
 - `tools/check-repo.mjs`: repository documentation, layout, and boundary checks.
 - `tools/verify.mjs`: `make verify PKG=<path>` dispatch to the owning component's checks.
 - `tools/format-markdown.mjs`: fix authored Markdown with markdownlint/Prettier and regenerate agent rules; see

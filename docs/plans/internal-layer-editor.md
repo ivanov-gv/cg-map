@@ -264,11 +264,11 @@ State of slice 1 on 2026-11-06, after the review, the cleanup and the split into
 ### Editing slices
 
 `make check`, `make check-docs` and `make check-go` passed on the final code on 2026-11-06. `make -C apps/editor e2e`:
-108 passed and 2 skipped (the touch tests run only in the phone project), 9 minutes. Workflows through `act`: see
-Handoff. Two deliberately broken behaviours, touch-cancel restore and the mode-switch guard, failed their tests, which
-were then restored. An earlier `act` run of `ci-all` was invalid for packages/map-core, because a faulty script had
-emptied two of its test files and `node --test` passes an empty file; they were rebuilt from `HEAD` plus their recorded
-edits, and a review compared every assertion with `HEAD`.
+122 passed and 2 skipped (the touch tests run only in the phone project). Workflows through `act`: see Handoff. Two
+deliberately broken behaviours, touch-cancel restore and the mode-switch guard, failed their tests, which were then
+restored. An earlier `act` run of `ci-all` was invalid for packages/map-core, because a faulty script had emptied two of
+its test files and `node --test` passes an empty file; they were rebuilt from `HEAD` plus their recorded edits, and a
+review compared every assertion with `HEAD`.
 
 ## Handoff
 

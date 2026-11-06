@@ -83,26 +83,47 @@ if you click through the warning. So each device trusts a private certificate au
 
 1. The first run creates it in `~/.config/lan-ca` (`LAN_CA_DIR` overrides that) and prints its fingerprint. It stays
    outside the repository so that other services on your LAN can use it too. Never share or commit `ca.key`.
-2. On the laptop, import `ca.crt` in Chrome under Settings, Privacy and security, Security, Manage certificates. A
-   browser on the machine running the server can also use `http://localhost`.
-3. On an Android phone, open `/lan-ca.crt` on the printed URL, accept the warning that one time, then install it under
-   Settings as a CA certificate. Compare the fingerprint before trusting it: until then, that download is unverified.
+2. On the laptop, import `ca.crt` as a trusted authority in Chrome, under Settings, Privacy and security, Security,
+   Manage certificates. Or use `make -C apps/editor dev` on the machine itself: `localhost` needs no certificate, but it
+   is a different address, so it has its own install and drafts.
+3. On an Android phone, open `/lan-ca.crt` on the printed URL and accept the warning that one time. Install the
+   downloaded file under Settings as a CA certificate, then compare the fingerprint under trusted credentials, and
+   remove it if it differs: until then, that download is unverified.
 4. Open the printed URL and use Install in Chrome.
 
-The authority can vouch only for private addresses and for `localhost`, `.local`, `.lan`, `.home.arpa` and `.internal`,
-so a leaked key cannot impersonate a public website. Trusting it still gives its key holder power over those names, so
-keep it private. Anyone on your LAN can read what this server serves while it runs: the reviewed sources and map,
-nothing else. It accepts no writes.
+These device steps have not been tried on a real phone yet.
+
+The authority's name constraints cover only private addresses (including `fc00::/7` and `100.64.0.0/10`) and
+`localhost`, `.local`, `.lan`, `.home`, `.home.arpa`, `.internal` and `.localdomain`. OpenSSL enforces them, as the
+tests show, even against a certificate signed with the authority's own key. Other clients may not check them on an
+authority you installed yourself, so treat `ca.key` as able to impersonate any site on a device that trusts it, and keep
+it private and backed up. It is not encrypted, so that servers can start unattended. The list cannot change later
+without trusting a new authority on every device.
+
+Anyone on your LAN can read what this server serves while it runs: the reviewed sources and map, nothing else. It
+accepts no writes.
 
 ### Offline and updates
 
-The status under the title says when the copy is saved. Every file is checked against the release manifest before it is
-stored. A failed or tampered download changes nothing and is reported, and the current version keeps working. The map
-archive is stored apart, named by its content, so an update with the same map does not download it again.
+The status under the title says when the copy is saved, and warns if the browser may clear it when storage runs low.
+Every file is checked against the release manifest before it is stored. A failed or tampered download is reported and
+the current version keeps working. The map archive is stored apart, named by its content, so an update with the same map
+does not download it again. An update that changes the map needs room for both archives for a moment.
 
-With the server reachable, opening the editor finds a new build and offers Update and reload. It never reloads by
-itself, and it waits while an edit is open. If a new build changes a source file you have pending changes in, your draft
-is set aside for download rather than applied.
+With the server reachable, opening the editor finds a new build and offers Update and reload. It waits while an edit is
+open or while applied edits could not be saved. Updating reloads every other editor window too, except one with unsaved
+work, which says so and keeps running. A browser also activates a waiting version by itself once every window of the app
+is closed, so reopening it can bring the new version without a click. Rarely, after a newer build arrives while an older
+update is taking over, the browser holds the update until then, and the editor says to close its windows. No applied
+edit is lost either way.
+
+A draft resumes only on the same source files. If a new build changes any file you have pending changes in, the whole
+draft is set aside for download, as raw draft data rather than a changeset, so export a changeset before updating.
+Applying your own changeset and rebuilding always does this. Use one editor window at a time: windows share one saved
+draft, and the last one to save wins.
+
+`make -C apps/editor dev` installs the worker as well, so after a rebuild its origin keeps the previous build until you
+click Update and reload.
 
 Each device keeps its own drafts. To move work between devices or apply it, export a changeset on that device, then
 import it on another or apply it on the machine with the repository.

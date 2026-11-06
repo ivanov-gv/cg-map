@@ -20,28 +20,47 @@ async function verifiedResponse({path, sha256}) {
   return response;
 }
 
+// Reads everything back by name. Another worker's activation could have deleted a cache this one still holds open, and
+// writing to that orphan would otherwise report success.
+async function requireStoredRelease() {
+  for (const file of files) {
+    if (!(await caches.match(scopedURL(file.path), {cacheName: shellCacheName}))) {
+      throw new Error(`${file.path} is missing after saving`);
+    }
+  }
+  if (!(await caches.match(scopedURL(archive.path), {cacheName: archiveCacheName}))) {
+    throw new Error('The map archive is missing after saving');
+  }
+}
+
 async function storeRelease() {
   const shellCache = await caches.open(shellCacheName);
   for (const file of files) await shellCache.put(scopedURL(file.path), await verifiedResponse(file));
   const archiveCache = await caches.open(archiveCacheName);
   const hasArchive = await archiveCache.match(scopedURL(archive.path));
   if (!hasArchive) await archiveCache.put(scopedURL(archive.path), await verifiedResponse(archive));
+  await requireStoredRelease();
 }
 
+// Returning to an earlier build gives the same cache name as the release in use, so a failed install must remove only a
+// cache it created itself.
 async function storeReleaseOrCleanUp() {
+  const isExistingRelease = await caches.has(shellCacheName);
   try {
     await storeRelease();
   } catch (error) {
-    await caches.delete(shellCacheName);
+    if (!isExistingRelease) await caches.delete(shellCacheName);
     throw error;
   }
 }
 
+// A newer release may be installing or waiting, and its caches look obsolete from here. Its own activation cleans up.
 async function removeOtherReleases() {
+  await self.clients.claim();
+  if (self.registration.installing || self.registration.waiting) return;
   const cacheNames = await caches.keys();
   const isObsolete = name => name.startsWith(cachePrefix) && name !== shellCacheName && name !== archiveCacheName;
   await Promise.all(cacheNames.filter(isObsolete).map(name => caches.delete(name)));
-  await self.clients.claim();
 }
 
 async function offlineResponse(request, url) {
@@ -59,7 +78,8 @@ self.addEventListener('install', event => event.waitUntil(storeReleaseOrCleanUp(
 self.addEventListener('activate', event => event.waitUntil(removeOtherReleases()));
 // A new release waits until the editor asks for it, because taking over could reload the page during an edit.
 self.addEventListener('message', event => {
-  if (event.data?.type === 'activate-update') self.skipWaiting();
+  // waitUntil, because the browser may otherwise stop this idle worker before the request reaches it.
+  if (event.data?.type === 'activate-update') event.waitUntil(self.skipWaiting());
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);

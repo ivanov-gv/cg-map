@@ -77,6 +77,7 @@ let commands;
 let isDraftSavingBlocked = false;
 let wasEditOpen = false;
 let isDraftProblemShown = false;
+let isDraftSaveFailing = false;
 
 // Errors stay on screen even when part of the map rendered successfully.
 function showError(error) {
@@ -196,14 +197,20 @@ function showLoadingStatus() {
   if (isModeLoading) elementById('status').textContent = `Loading ${activeFile}…`;
 }
 
+function hasOnlyInMemoryChanges() {
+  const isDraftUnsaved = isDraftSaveFailing || isDraftSavingBlocked;
+  return isDraftUnsaved && session.changedFiles().length > 0;
+}
+
 // History or a new feature would replace an open edit, so they wait, as export, import and discarding do.
 function renderCommandAvailability() {
   const isIdleInMode = activeFile && !editing.hasUnappliedEdit;
   elementById('undo').disabled = !isIdleInMode || !session.canUndo(activeFile);
   elementById('redo').disabled = !isIdleInMode || !session.canRedo(activeFile);
   elementById('add-feature').disabled = !isIdleInMode;
-  // Updating reloads the page, which would lose an edit that has not been applied yet.
-  elementById('update-app').disabled = editing.hasUnappliedEdit;
+  // Updating reloads the page, which would lose an edit not applied yet, or applied edits that could not be saved.
+  elementById('update-app').disabled = editing.hasUnappliedEdit || hasOnlyInMemoryChanges();
+  elementById('update-hint').hidden = session.changedFiles().length === 0;
   review.render();
 }
 
@@ -224,8 +231,10 @@ function persistDraft() {
   if (isDraftSavingBlocked) return;
   try {
     saveDraft(localStorage, session.exportDraft());
+    isDraftSaveFailing = false;
     clearDraftProblem();
   } catch (error) {
+    isDraftSaveFailing = true;
     showDraftProblem(`Draft not saved: ${error.message}. Export your changes before leaving.`);
   }
 }
@@ -364,6 +373,7 @@ function discardSetAsideDrafts() {
   isDraftSavingBlocked = false;
   offerSetAsideDrafts();
   persistDraft();
+  renderCommandAvailability();
 }
 
 // A broken or blocked saved draft must not stop the editor from opening. If it could not be moved aside, autosave
@@ -437,7 +447,7 @@ function toggleSatellite() {
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.
 async function start() {
-  startOfflineCopy();
+  startOfflineCopy(() => !editing?.hasUnappliedEdit && !(session && hasOnlyInMemoryChanges()));
   const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
     loadSourceBundle(new URL('sources/', location.href)),
     loadJSON('data/map.json'),

@@ -75,6 +75,12 @@ class TlsHandler(Handler):
             return str(self.authority_certificate)
         return super().translate_path(path)
 
+    def end_headers(self):
+        # As a plain download, a phone keeps the file for its settings instead of opening a system installer that refuses it.
+        if self.path.split('?')[0] == self.AUTHORITY_PATH:
+            self.send_header('Content-Disposition', 'attachment; filename="lan-ca.crt"')
+        super().end_headers()
+
 
 class QuietTlsServer(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
@@ -100,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument('--path-prefix', help='also serve the artifact under this prefix, such as /cg-map/')
     parser.add_argument('--tls-directory', type=Path, help='serve HTTPS with the files from lan_certificate.py')
     options = parser.parse_args()
+    if options.tls_directory and options.path_prefix:
+        parser.error('--tls-directory does not support --path-prefix')
     artifact_directory = Path(__file__).resolve().parents[2] / 'dist' / options.app
     scheme = 'https' if options.tls_directory else 'http'
     print(f'Serving dist/{options.app}: {scheme}://{options.host}:{options.port}/', flush=True)

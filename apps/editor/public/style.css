@@ -178,6 +178,9 @@ select {
 .button-row button {
   flex: 1 1 auto;
 }
+#update-app[hidden] + #update-hint {
+  display: none;
+}
 #update-app,
 #add-feature,
 #export-changeset,
