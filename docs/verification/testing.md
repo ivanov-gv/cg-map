@@ -19,20 +19,20 @@ Frontend iteration commands and measured check durations live with the
 
 ## Test ownership
 
-| Location                     | Scope                                                                                                                                                 |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| packages/map-core/tests      | Asset URLs, lifecycle and teardown, projection, hit testing, overlay selection, satellite, POI visibility                                             |
-| apps/editor/tests            | Editing rules, session and history, gestures, changesets, drafts, source bundle integrity, overlay hit resolution, unknown property preservation      |
-| apps/core-demo/tests         | The concept app imports only the public map-core entry                                                                                                |
-| apps/web/tests               | Pure helpers, offline transactions and module inventory, worker lifecycle, vendor contracts                                                           |
-| data/tests                   | Place/geometry contracts and approved small fixture                                                                                                   |
-| platform/tests               | Actual Python HTTP/range behavior, deployment compatibility                                                                                           |
-| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                                                      |
-| services/backend/cmd/server  | Go host directory/range behavior                                                                                                                      |
-| tests/integration            | Real archive/MVT decoding, imagery hashes, shared categories, transport, editor changesets through the real importer, editor source bundle round trip |
-| apps/web/tests/e2e           | Built web artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                                                          |
-| apps/editor/tests/e2e        | Built source editor: every edit through the real map, including touch; the sketch, desktop/mobile, origin/project-prefix URLs                         |
-| apps/core-demo/tests/e2e     | Built concept app and each map-core capability, desktop/mobile, origin/project-prefix URLs                                                            |
+| Location                     | Scope                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| packages/map-core/tests      | Asset URLs, lifecycle and teardown, projection, hit testing, overlay selection, satellite, POI visibility                                                  |
+| apps/editor/tests            | Editing rules, session and history, gestures, changesets, drafts, source bundle integrity, overlay hit resolution, unknown property preservation           |
+| apps/core-demo/tests         | The concept app imports only the public map-core entry                                                                                                     |
+| apps/web/tests               | Pure helpers, offline transactions and module inventory, worker lifecycle, vendor contracts                                                                |
+| data/tests                   | Place/geometry contracts and approved small fixture                                                                                                        |
+| platform/tests               | Actual Python HTTP/range behavior, LAN certificates and TLS, deployment compatibility                                                                      |
+| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                                                           |
+| services/backend/cmd/server  | Go host directory/range behavior                                                                                                                           |
+| tests/integration            | Real archive/MVT decoding, imagery hashes, shared categories, transport, editor changesets through the real importer, editor source bundle round trip      |
+| apps/web/tests/e2e           | Built web artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                                                               |
+| apps/editor/tests/e2e        | Built source editor: every edit through the real map, including touch; offline install and updates; the sketch, desktop/mobile, origin/project-prefix URLs |
+| apps/core-demo/tests/e2e     | Built concept app and each map-core capability, desktop/mobile, origin/project-prefix URLs                                                                 |
 
 make check runs `verify` in every project, which together build dist/web, dist/core-demo and dist/editor and run
 Node/Python tests, JavaScript lint, all-source Markdown structure/format checks, data/provenance/release checks,
@@ -67,6 +67,7 @@ everything.
 | `services/transit-relay`                                    | `transit-relay`                                                                             |
 | `platform/pages`                                            | `platform`, `apps-web`, every browser area                                                  |
 | `platform/tools/serve.py`, `dev-port.mjs`                   | `platform`, every map application, every browser area                                       |
+| `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
 | `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
 | `apps/editor`                                               | `apps-editor`, `tests`                                                                      |

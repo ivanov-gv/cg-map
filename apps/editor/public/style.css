@@ -178,6 +178,7 @@ select {
 .button-row button {
   flex: 1 1 auto;
 }
+#update-app,
 #add-feature,
 #export-changeset,
 #discard-changes,
@@ -190,6 +191,7 @@ select {
 .dock p {
   overflow-wrap: anywhere;
 }
+#offline-status.problem,
 #edit-problem,
 #review-problems {
   color: #a72c25;

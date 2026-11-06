@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Kompas · layer editor</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#193f36" />
     <link rel="stylesheet" href="vendor/maplibre-gl.css" />
     <link rel="stylesheet" href="style.css" />
     <script src="vendor/maplibre-gl.js" defer></script>
@@ -19,6 +21,8 @@
       <p class="notice">
         Edits stay in this browser until you export them. Nothing here writes to the reviewed sources.
       </p>
+      <p id="offline-status" class="hint" role="status"></p>
+      <button id="update-app" hidden>Update and reload</button>
       <h2>Layers</h2>
       <div class="layer-table">
         <table>

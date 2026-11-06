@@ -24,6 +24,8 @@ export default defineConfig({
   outputDir: 'test-results',
   use: {
     browserName: 'chromium',
+    // Blocked here so that each test does not store the whole artifact first. The offline suite allows them.
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     launchOptions: {args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']}

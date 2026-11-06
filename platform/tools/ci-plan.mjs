@@ -127,6 +127,8 @@ export function classify(file) {
 
   if (file === 'platform/tools/serve.py' || file === 'platform/tools/dev-port.mjs')
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
+  // Only the editor's LAN install uses it.
+  if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
   if (file.startsWith('platform/pages/')) return {folders: ['platform', 'apps-web'], areas: ALL_AREAS};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 

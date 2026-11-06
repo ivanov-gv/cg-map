@@ -12,7 +12,7 @@ The build assembles all eight reviewed source GeoJSON files through data-owned t
 filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes bind revision-local indices; they
 are not invented upstream IDs. Selecting a feature reads full source geometry/properties, never simplified tiles.
 Unknown properties, provenance and any source feature ID are displayed unchanged. Source files are never written.
-Hashing needs a secure context, so a deployed editor must use HTTPS.
+Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
 The dock has a layers table and exactly one switch per source file. Footprints and labels are independent; roads and
 paths share roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding
@@ -65,6 +65,48 @@ stay available there.
 - Editing water rewrites that whole file through JSON serialization, which normalizes a coordinate written as `41.0` in
   the ocean feature. Expect that one extra line of difference on the first water edit.
 
+## Install on your devices
+
+The editor is an offline-first app for your own devices, with no hosting and no accounts. The server is needed only to
+install or update it: every file, including the map and all sources, is then stored on the device.
+
+```sh
+make -C apps/editor lan
+```
+
+This builds the editor and serves it on port 8443 to your LAN over HTTPS. Keep that port: the browser ties an installed
+app to its address, so another address or port is a separate install with separate drafts. A fixed LAN address, reserved
+on your router, avoids that. Set another port with `LAN_PORT=`.
+
+Chrome allows service workers and install only on a secure origin, and refuses them over an untrusted certificate even
+if you click through the warning. So each device trusts a private certificate authority once:
+
+1. The first run creates it in `~/.config/lan-ca` (`LAN_CA_DIR` overrides that) and prints its fingerprint. It stays
+   outside the repository so that other services on your LAN can use it too. Never share or commit `ca.key`.
+2. On the laptop, import `ca.crt` in Chrome under Settings, Privacy and security, Security, Manage certificates. A
+   browser on the machine running the server can also use `http://localhost`.
+3. On an Android phone, open `/lan-ca.crt` on the printed URL, accept the warning that one time, then install it under
+   Settings as a CA certificate. Compare the fingerprint before trusting it: until then, that download is unverified.
+4. Open the printed URL and use Install in Chrome.
+
+The authority can vouch only for private addresses and for `localhost`, `.local`, `.lan`, `.home.arpa` and `.internal`,
+so a leaked key cannot impersonate a public website. Trusting it still gives its key holder power over those names, so
+keep it private. Anyone on your LAN can read what this server serves while it runs: the reviewed sources and map,
+nothing else. It accepts no writes.
+
+### Offline and updates
+
+The status under the title says when the copy is saved. Every file is checked against the release manifest before it is
+stored. A failed or tampered download changes nothing and is reported, and the current version keeps working. The map
+archive is stored apart, named by its content, so an update with the same map does not download it again.
+
+With the server reachable, opening the editor finds a new build and offers Update and reload. It never reloads by
+itself, and it waits while an edit is open. If a new build changes a source file you have pending changes in, your draft
+is set aside for download rather than applied.
+
+Each device keeps its own drafts. To move work between devices or apply it, export a changeset on that device, then
+import it on another or apply it on the machine with the repository.
+
 ## From export to reviewed sources
 
 Export downloads a changeset with base hashes, fingerprints and full before/after features; each changed file can also
@@ -74,7 +116,7 @@ on any mismatch. Apply it with `make -C data apply-changeset CHANGESET=<absolute
 
 Run `make verify PKG=apps/editor` and `make -C apps/editor e2e`; tests/e2e covers both URL prefixes. Use `make check`
 after runtime changes. Sources and their provenance stay with data; the bundle contract lives in packages/contracts.
-This app has no editorial API or service worker.
+This app has no editorial API.
 
-The default preview uses a separate deterministic port/origin from the public app, preserving its existing service
-worker and offline caches. A deployed editor also needs its own origin or a path outside the public worker scope.
+The default preview uses a separate deterministic port/origin from the public app, preserving that app's service worker
+and offline caches. The editor's own worker keeps its caches under an `editor-` prefix and never touches another app's.

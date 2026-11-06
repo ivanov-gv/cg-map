@@ -1,7 +1,7 @@
 # Task: Internal layer editor
 
-Status: in progress. Slices 1-6 are implemented with the gaps listed under Completed and remaining; hosting waits on a
-decision, so this plan stays open.
+Status: in progress. Slices 1-6 are implemented with the gaps listed under Completed and remaining. Slice 7 is the
+offline-first install, without hosting or authentication.
 
 ## Goal and acceptance criteria
 
@@ -162,9 +162,9 @@ Makefile, tests/e2e and CI pipeline, and no internal artifact is added to the Pa
 
 ### Editing and export boundary
 
-Start with local files and export; publishing remains a reviewed data operation. A separately hosted internal app needs
-access control at its host when deployed. Merely naming a URL internal does not provide authentication. No auth service
-or placeholder write endpoints are part of this plan.
+Start with local files and export; publishing remains a reviewed data operation. The editor is an offline-first app
+installed from a local HTTPS server on the owner's devices, so it has no host to protect. No auth service or placeholder
+write endpoints are part of this plan.
 
 Propose a versioned changeset contract with base dataset SHA-256 values, per-layer operations, stable/source identity
 where available, an expected before-feature fingerprint, and full before/after GeoJSON. Preserve unknown properties and
@@ -238,8 +238,8 @@ consistency needs an explicit data-owned workflow, without combining their file 
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
-  - Slice 7: authenticated internal hosting needs a decision on where it runs and who controls access, and larger
-    datasets have not been measured.
+  - Slice 7: decided against hosting: the owner installs the app from a local HTTPS server. Larger datasets have not
+    been measured.
 - Not implemented: refresh or rebase of corrections. Indices are bound to one snapshot, so a re-extract still replaces
   local edits, and an existing changeset stops at import. This needs the identity registry described above.
 - Design choices to review: one active source file at a time; one Roads & paths switch with subtype tools; local
@@ -264,7 +264,7 @@ State of slice 1 on 2026-11-06, after the review, the cleanup and the split into
 ### Editing slices
 
 `make check`, `make check-docs` and `make check-go` passed on the final code on 2026-11-06. `make -C apps/editor e2e`:
-96 passed and 2 skipped (the touch tests run only in the phone project), 7.6 minutes. Workflows through `act`: see
+108 passed and 2 skipped (the touch tests run only in the phone project), 9 minutes. Workflows through `act`: see
 Handoff. Two deliberately broken behaviours, touch-cancel restore and the mode-switch guard, failed their tests, which
 were then restored. An earlier `act` run of `ci-all` was invalid for packages/map-core, because a faulty script had
 emptied two of its test files and `node --test` passes an empty file; they were rebuilt from `HEAD` plus their recorded

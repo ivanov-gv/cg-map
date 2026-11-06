@@ -122,7 +122,7 @@ test('each application owns its build and run targets, and the root Makefile has
 test('project Makefiles reach other projects only through listed contracts', () => {
   const allowedReaches = {
     'apps/web': ['platform/tools/dev-port.mjs', 'services/backend'],
-    'apps/editor': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
+    'apps/editor': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py', 'platform/tools/lan_certificate.py'],
     'apps/core-demo': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
     'services/backend': ['packages/contracts/proto'],
     platform: ['apps/web'],

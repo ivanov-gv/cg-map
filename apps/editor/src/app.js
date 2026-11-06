@@ -23,6 +23,7 @@ import {downloadJSON, elementById} from './dom.js';
 import {EditSession} from './edit-session.js';
 import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
+import {startOfflineCopy} from './offline-install.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
@@ -201,6 +202,8 @@ function renderCommandAvailability() {
   elementById('undo').disabled = !isIdleInMode || !session.canUndo(activeFile);
   elementById('redo').disabled = !isIdleInMode || !session.canRedo(activeFile);
   elementById('add-feature').disabled = !isIdleInMode;
+  // Updating reloads the page, which would lose an edit that has not been applied yet.
+  elementById('update-app').disabled = editing.hasUnappliedEdit;
   review.render();
 }
 
@@ -434,6 +437,7 @@ function toggleSatellite() {
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.
 async function start() {
+  startOfflineCopy();
   const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
     loadSourceBundle(new URL('sources/', location.href)),
     loadJSON('data/map.json'),

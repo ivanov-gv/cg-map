@@ -2,7 +2,7 @@
 from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
 from pathlib import Path
 from functools import partial
-import argparse,os,re
+import argparse,os,re,ssl,sys
 
 def parse_range(value,size):
     match=re.fullmatch(r'bytes=(\d*)-(\d*)',value or '')
@@ -59,17 +59,57 @@ class PrefixedHandler(Handler):
         pass
 
 
+class TlsHandler(Handler):
+    """Also offers the public certificate of the authority, so a phone can fetch it from the server it will trust."""
+
+    AUTHORITY_PATH = '/lan-ca.crt'
+    extensions_map = {**Handler.extensions_map, '.crt': 'application/x-x509-ca-cert'}
+
+    def __init__(self, *args, authority_certificate, **kwargs):
+        # The base constructor handles the request, so this must be set first.
+        self.authority_certificate = authority_certificate
+        super().__init__(*args, **kwargs)
+
+    def translate_path(self, path):
+        if path.split('?')[0] == self.AUTHORITY_PATH:
+            return str(self.authority_certificate)
+        return super().translate_path(path)
+
+
+class QuietTlsServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        # A browser that does not trust the authority yet closes the connection. That is expected, not a server fault.
+        if not isinstance(sys.exc_info()[1], (ssl.SSLError, ConnectionError)):
+            super().handle_error(request, client_address)
+
+
+def create_tls_server(address, handler, certificate_path, key_path):
+    server = QuietTlsServer(address, handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certificate_path, key_path)
+    # The handshake runs in each request's own thread, so one stalled client cannot block the accept loop.
+    server.socket = context.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
+    return server
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--app', choices=['web', 'core-demo', 'editor'], default='web')
     parser.add_argument('--path-prefix', help='also serve the artifact under this prefix, such as /cg-map/')
+    parser.add_argument('--tls-directory', type=Path, help='serve HTTPS with the files from lan_certificate.py')
     options = parser.parse_args()
     artifact_directory = Path(__file__).resolve().parents[2] / 'dist' / options.app
-    print(f'Serving dist/{options.app}: http://{options.host}:{options.port}/', flush=True)
+    scheme = 'https' if options.tls_directory else 'http'
+    print(f'Serving dist/{options.app}: {scheme}://{options.host}:{options.port}/', flush=True)
     handler = partial(Handler, directory=str(artifact_directory))
     if options.path_prefix:
         handler = partial(PrefixedHandler, directory=str(artifact_directory), path_prefix=options.path_prefix)
-    server = ThreadingHTTPServer((options.host, options.port), handler)
+    if options.tls_directory:
+        tls = options.tls_directory
+        handler = partial(TlsHandler, directory=str(artifact_directory), authority_certificate=tls / 'ca.crt')
+        server = create_tls_server((options.host, options.port), handler, tls / 'server.crt', tls / 'server.key')
+    else:
+        server = ThreadingHTTPServer((options.host, options.port), handler)
     server.serve_forever()
