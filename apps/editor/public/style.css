@@ -1,0 +1,253 @@
+:root {
+  --green: #193f36;
+  /* Darker than the public app's muted tone: these small labels sit on white and must stay readable. */
+  --muted: #6a796c;
+  --line: #e3e6dc;
+  color: #183d35;
+  background: #fbfcf7;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr) 280px;
+  margin: 0;
+  height: 100dvh;
+}
+.dock,
+.inspector {
+  padding: 18px;
+  overflow: auto;
+  background: #fffffb;
+}
+.dock {
+  border-right: 1px solid var(--line);
+}
+.inspector {
+  border-left: 1px solid var(--line);
+}
+h1,
+h2,
+p {
+  margin: 0 0 12px;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 14px;
+  margin-top: 18px;
+}
+header p,
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.notice {
+  padding: 10px;
+  background: #fff7e6;
+  border: 1px solid #e7d5ac;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.layer-table {
+  overflow: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+}
+th,
+td {
+  text-align: left;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+tr[aria-current='true'] {
+  background: #eaf1e5;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+button {
+  min-height: 42px;
+  padding: 10px;
+  background: white;
+  color: var(--green);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+button[aria-pressed='true'] {
+  background: var(--green);
+  color: white;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+button small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+}
+#browse,
+#satellite {
+  width: 100%;
+  margin: 8px 0;
+}
+:focus-visible {
+  outline: 3px solid #c77c32;
+  outline-offset: 2px;
+}
+main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+#map {
+  position: absolute;
+  inset: 0;
+}
+.map-status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  pointer-events: none;
+}
+.map-status p {
+  padding: 10px 14px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 8px;
+  background: #fffffff2;
+  font-size: 12px;
+}
+#error {
+  color: #a72c25;
+}
+dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+dd {
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+input,
+select {
+  display: block;
+  margin-top: 4px;
+  padding: 8px;
+  width: 100%;
+  min-height: 38px;
+  color: var(--green);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.button-row button {
+  flex: 1 1 auto;
+}
+#add-feature,
+#export-changeset,
+#discard-changes,
+#delete-feature {
+  margin-bottom: 10px;
+  width: 100%;
+}
+/* A source hash or long name has no break points, and would otherwise widen the whole page on a phone. */
+.inspector p,
+.dock p {
+  overflow-wrap: anywhere;
+}
+#edit-problem,
+#review-problems {
+  color: #a72c25;
+  font-size: 12px;
+}
+#review-problems:empty {
+  display: none;
+}
+#review-files ul,
+#review-problems {
+  margin: 0 0 10px;
+  padding-left: 16px;
+}
+#review-files h3,
+#review-files summary {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#review-files h3 {
+  margin: 8px 0 4px;
+}
+#review-files pre {
+  max-height: 180px;
+  margin: 0 0 8px;
+  overflow: auto;
+  font-size: 11px;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  body {
+    display: block;
+    height: auto;
+  }
+  .dock,
+  .inspector {
+    padding: 12px;
+    overflow: visible;
+  }
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .tiles button {
+    padding: 7px;
+    font-size: 12px;
+  }
+  .tiles small {
+    display: none;
+  }
+  .layer-table {
+    max-height: 120px;
+  }
+  .notice {
+    margin-bottom: 8px;
+  }
+  main {
+    height: 55dvh;
+    min-height: 360px;
+  }
+}

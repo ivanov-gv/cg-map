@@ -8,11 +8,11 @@ mock mode; see [web data modes](../../apps/web/README.md#data-modes).
 
 ## Run
 
-`make dev` at the repository root builds the web artifact and runs this server on it (`DEV_FLAGS` passes extra flags).
-Directly:
+`make -C apps/web dev` builds the web artifact and runs this server on it through `make run` here (`DEV_FLAGS` passes
+extra flags, `ARTIFACT` and `PORT` choose what and where to serve). Directly:
 
 Requires Go 1.26 or newer (the module pins the development toolchain). From this directory, after building the web
-artifact at the repository root (`make build`):
+artifact at the repository root (`make -C apps/web build`):
 
 ```sh
 go run ./cmd/server -dir ../../dist/web                # archive: the single *.pmtiles in <dir>/data; open http://127.0.0.1:8080/

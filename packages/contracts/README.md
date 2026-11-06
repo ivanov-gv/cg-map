@@ -48,3 +48,20 @@ unknown headings from a known northbound bearing of zero; check time is not GPS 
 The backend generates and commits its bindings; generated-client tests cover producer mapping, protobuf/JSON roundtrips,
 stale/error semantics and compatibility with the shared GeoJSON snapshot. The browser continues using GeoJSON until an
 explicit UI migration. See [backend generation and API usage](../../services/backend/README.md#protobuf-transport-api).
+
+`make verify PKG=packages/contracts` checks these files only. When a contract changes, CI also runs each producer's and
+consumer's own pipeline.
+
+`editor-bundle.schema.json` defines the version-1 source viewer bundle: one filename, byte size, feature count and
+SHA-256 per source GeoJSON file. Data-owned assembly preserves bytes; the editor verifies the entire bundle before
+enabling modes. Feature indices are tied to that hash and are not stable upstream identities. This contract does not
+define editing or changesets; the formats below do. The bundle is built into dist/editor only.
+
+`editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
+types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and
+the source value of a new place. Anything unlisted is locked, which is what preserves unknown fields, attribution and
+identity. `editor-changeset.schema.json` defines the export: base hash per changed file, and per operation a
+revision-bound reference, a fingerprint and full before/after features. `fixtures/editor-geometry-cases.json` and
+`fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
+against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
+`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied.

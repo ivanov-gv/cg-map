@@ -93,7 +93,7 @@ jobs:
       - uses: ./.github/actions/setup-browser
       - uses: ./.github/actions/run-check
         with:
-          command: make test-e2e-built E2E_ARGS="$E2E_SPECS"
+          command: make -C apps/web e2e-built E2E_ARGS="$E2E_SPECS"
       - uses: actions/upload-artifact@v5
         if: failure()
         with:

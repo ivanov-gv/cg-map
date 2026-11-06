@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Applied editor corrections",
+  "description": "What local reviewers changed, separately from imported upstream facts. References are revision-bound: they name a feature only within the snapshot identified by beforeFingerprint.",
+  "type": "object",
+  "required": ["version", "corrections"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "corrections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "changeset",
+          "appliedAt",
+          "author",
+          "reason",
+          "filename",
+          "operation",
+          "reference",
+          "beforeFingerprint",
+          "afterFingerprint",
+          "before",
+          "after"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "changeset": {
+            "type": "string",
+            "minLength": 1
+          },
+          "appliedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "filename": {
+            "type": "string",
+            "pattern": "^[a-z][a-z-]*\\.geojson$"
+          },
+          "operation": {
+            "enum": ["add", "modify", "delete"]
+          },
+          "reference": {
+            "type": "object"
+          },
+          "beforeFingerprint": {
+            "type": ["string", "null"],
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "afterFingerprint": {
+            "type": ["string", "null"],
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "before": {
+            "type": ["object", "null"]
+          },
+          "after": {
+            "type": ["object", "null"]
+          }
+        }
+      }
+    }
+  }
+}

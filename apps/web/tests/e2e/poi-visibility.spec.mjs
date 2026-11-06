@@ -385,7 +385,7 @@ test('level metadata is an offline shell asset and offline reload keeps the same
   await page.locator('#download').click();
   await page.waitForFunction(() => window.kompasDebug.offline, null, {timeout: 60000});
   const manifest = await page.evaluate(() => fetch('data/manifest.json').then(r => r.json()));
-  expect(manifest.shell).toEqual(expect.arrayContaining(['data/place-visibility.json', 'place-visibility.js', 'data/places.geojson']));
+  expect(manifest.shell).toEqual(expect.arrayContaining(['data/place-visibility.json', 'map-core/place-visibility.js', 'data/places.geojson']));
   await page.locator('#menu-toggle').click();
   await camera(page, {center: [19.2627, 42.4411], zoom: 17});
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);

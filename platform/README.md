@@ -2,7 +2,8 @@
 
 Ownership: platform/reliability team.
 
-- `tools/serve.py`: local range-capable web server; serves dist/web.
+- `tools/serve.py`: local range-capable web server; defaults to dist/web; `--app` serves another project's artifact and
+  `--path-prefix` also serves it under a URL prefix.
 - `tools/check-repo.mjs`: repository documentation, layout, and boundary checks.
 - `tools/verify.mjs`: `make verify PKG=<path>` dispatch to the owning component's checks.
 - `tools/format-markdown.mjs`: fix authored Markdown with markdownlint/Prettier and regenerate agent rules; see

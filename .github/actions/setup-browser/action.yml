@@ -23,7 +23,7 @@ runs:
       run: |
         start=$SECONDS
         status=0
-        timeout 360 npm run browser:install --workspace @cg-map/web -- --with-deps chromium || status=$?
+        timeout 360 npx --no-install playwright install --with-deps chromium || status=$?
         result="Chromium install: exit $status after $((SECONDS - start))s"
         echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
         if [ "$status" -eq 124 ]; then echo "::error::Chromium install exceeded its 360s limit"; fi

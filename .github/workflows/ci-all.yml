@@ -61,7 +61,10 @@ jobs:
       backend: ${{ steps.plan.outputs.backend }}
       transit-relay: ${{ steps.plan.outputs.transit-relay }}
       tests: ${{ steps.plan.outputs.tests }}
+      map-core: ${{ steps.plan.outputs.map-core }}
       apps-web: ${{ steps.plan.outputs.apps-web }}
+      apps-editor: ${{ steps.plan.outputs.apps-editor }}
+      apps-core-demo: ${{ steps.plan.outputs.apps-core-demo }}
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
@@ -159,6 +162,13 @@ jobs:
     uses: ./.github/workflows/ci-tests.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  map-core:
+    name: map-core
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') }}
+    uses: ./.github/workflows/ci-map-core.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
   apps-web:
     name: apps-web
     needs: [switch, plan, plan-test-run]
@@ -167,13 +177,27 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
+  apps-editor:
+    name: apps-editor
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.apps-editor == 'true' || needs.plan-test-run.outputs.apps-editor == 'true') }}
+    uses: ./.github/workflows/ci-apps-editor.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  apps-core-demo:
+    name: apps-core-demo
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.outputs.apps-core-demo == 'true' || needs.plan-test-run.outputs.apps-core-demo == 'true') }}
+    uses: ./.github/workflows/ci-apps-core-demo.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
 
   # No test-run twin: a skipped job counts as passed, so a skipped gate could report a pass under the required name.
   # It holds no permissions and only reads results. Keep this name: main's ruleset requires it.
   gate:
     name: CI gate
     if: always()
-    needs: [switch, plan, plan-test-run, docs, workflows, platform, contracts, data, backend, transit-relay, tests, apps-web]
+    needs: [switch, plan, plan-test-run, docs, workflows, platform, contracts, data, backend, transit-relay, tests, map-core, apps-web, apps-editor, apps-core-demo]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

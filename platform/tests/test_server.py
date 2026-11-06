@@ -1,7 +1,7 @@
 import sys,unittest,io,json
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'platform/tools'))
-from serve import parse_range,Handler
+from serve import parse_range,Handler,PrefixedHandler
 class Ranges(unittest.TestCase):
     def test_ranges(self):
         for value,want in [('bytes=0-99',(0,99)),('bytes=900-',(900,999)),('bytes=-30',(970,999)),('bytes=950-2000',(950,999))]:
@@ -35,4 +35,19 @@ class HTTPBytes(unittest.TestCase):
         self.assertIn(b'Content-Type: text/javascript',head);self.assertEqual(body,b'')
         head,body=self.response('/fonts/Open%20Sans%20Semibold/0-255.pbf')
         self.assertIn(b'200 OK',head);self.assertTrue(len(body)>1000)
+class PrefixedRequests(unittest.TestCase):
+    def status_line(self, path):
+        artifact_directory = Path(__file__).resolve().parents[2] / 'dist/web'
+        connection = FakeSocket(f'HEAD {path} HTTP/1.0\r\n\r\n'.encode())
+        PrefixedHandler(connection, ('127.0.0.1', 1), None, directory=str(artifact_directory), path_prefix='/cg-map/')
+        return bytes(connection.output).split(b'\r\n')[0]
+
+    def test_same_file_at_root_and_prefix(self):
+        for path in ['/index.html', '/cg-map/index.html']:
+            self.assertIn(b' 200 ', self.status_line(path))
+
+    def test_missing_file_under_prefix(self):
+        self.assertIn(b' 404 ', self.status_line('/cg-map/missing.html'))
+
+
 if __name__=='__main__':unittest.main()

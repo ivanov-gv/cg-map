@@ -8,6 +8,12 @@ The OSM extract timestamp is 2026-10-17T20:20:51Z. Current display layers have l
 geometry. There are 25,213 buildings in central Podgorica, 17,881 road features, 284 land features, and 1,491 water
 features including one derived ocean polygon. The place snapshot has 1,811 entries.
 
+`sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
+`packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full
+before and after values. It is what tells a local correction from an imported upstream fact: an edited feature keeps its
+upstream attribution, so read the ledger to see what changed locally. Its references are bound to one snapshot and do
+not survive a re-extract, which replaces the source files.
+
 `visibilityLevel` on each place is editorial product metadata from `sources/place-visibility-policy.json`, not an OSM
 fact or a measure of significance. `places_facts_sha256` in `sources/provenance.json` covers the snapshot without that
 field and still equals the hash of the pre-level snapshot. See the

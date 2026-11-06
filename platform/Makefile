@@ -16,8 +16,9 @@ repo:
 agents-check:
 	cd $(ROOT) && npm run -s check:agents
 
+# The hosting tests run against the built web artifact, a listed contract.
 build-web:
-	cd $(ROOT) && npm run -s build:web
+	$(MAKE) --no-print-directory -C $(ROOT)/apps/web build
 
 test:
 	cd $(ROOT) && node --test platform/tests/*.test.mjs

@@ -1,7 +1,7 @@
 # UI conventions
 
-Applies to apps/web/public (HTML, CSS, manifest, icons) and the DOM-facing modules in apps/web/src. Component boundaries
-and offline invariants are in [apps/web/AGENTS.md](../../apps/web/AGENTS.md); language rules are in
+Applies to browser apps under apps/web, apps/editor and apps/core-demo, plus DOM-facing map-core modules. Component
+boundaries and offline invariants are in [apps/web/AGENTS.md](../../apps/web/AGENTS.md); language rules are in
 [javascript.md](javascript.md).
 
 ## Layout and hosting
@@ -30,5 +30,6 @@ and offline invariants are in [apps/web/AGENTS.md](../../apps/web/AGENTS.md); la
 
 ## Verification
 
-- `make test-e2e` for any user-visible change. Add a Playwright assertion for new interactions.
-- Do a manual check through `make dev` for visual changes and report what was checked; e2e does not judge appearance.
+- `make -C <app> e2e` for any user-visible change. Add a Playwright assertion for new interactions.
+- Do a manual check through `make -C apps/web dev` for visual changes and report what was checked; e2e does not judge
+  appearance.

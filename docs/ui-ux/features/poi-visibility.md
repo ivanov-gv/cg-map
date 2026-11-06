@@ -102,7 +102,8 @@ take them on request with `POI_DENSITY_SCREENSHOTS=1`.
 
 ## Open points
 
-- Not yet run: review on real devices, visual review with `make dev`, and `data/tools/extract-osm.py` with a real PBF.
+- Not yet run: review on real devices, visual review with `make -C apps/web dev`, and `data/tools/extract-osm.py` with a
+  real PBF.
 - The default camera (zoom 15.8) is just below level 4 (zoom 16), so the first view shows no cafes or restaurants.
 - Level 1 is empty and no overrides ship; both need editorial review.
 - The shipped snapshot has no co-located listings, so real data has not exercised shared-location markers.

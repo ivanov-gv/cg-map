@@ -43,7 +43,7 @@ blue teardrops are movement-based.
 
 The web app's data mode decides who fetches the feed (see [web data modes](../../../apps/web/README.md#data-modes)). In
 server mode it polls the Go server's `api/v1/transport/vehicles`, which fetches the upstream itself. In mock mode
-(GitHub Pages, `make dev-mock`) it polls the hosted relay, as before.
+(GitHub Pages, `make -C apps/web dev-mock`) it polls the hosted relay, as before.
 
 ## Integration
 

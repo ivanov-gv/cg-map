@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Editing rules per source file",
+  "type": "object",
+  "required": ["version", "localPlaceSource", "layers"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "localPlaceSource": {
+      "description": "The source property of a place created in the editor.",
+      "type": "string",
+      "minLength": 1
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["operations", "geometries", "properties"],
+        "additionalProperties": false,
+        "properties": {
+          "operations": {"type": "array", "items": {"enum": ["add", "modify", "delete"]}},
+          "geometries": {"type": "array", "items": {"enum": ["Point", "LineString", "Polygon"]}},
+          "editableKinds": {"type": "array", "items": {"type": "string"}},
+          "inspectOnlyReason": {"type": "string"},
+          "readOnlyReason": {"type": "string"},
+          "properties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "required": {"type": "boolean"},
+                "maxLength": {"type": "integer", "minimum": 1},
+                "enum": {"type": "array", "items": {"type": "string"}},
+                "isLevel": {"type": "boolean"},
+                "landmarkLevel": {
+                  "description": "A level only places in landmarkCategory may have.",
+                  "type": "integer"
+                },
+                "landmarkCategory": {"type": "string"},
+                "ignoredCharactersPattern": {
+                  "description": "Removed, with case folding, before comparing a value with forbiddenValues.",
+                  "type": "string"
+                },
+                "forbiddenValues": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,16 +1,12 @@
 ROOT := ../..
 
-.PHONY: verify check producer-check build-web consumer-test
+.PHONY: verify lint test
 
-verify: check
+# Checks these files only. The planner runs each producer's and consumer's own pipeline when a contract changes.
+verify: lint test
 
-check: producer-check build-web consumer-test
+lint:
+	cd $(ROOT) && npx --no-install eslint packages/contracts/tests
 
-producer-check:
-	cd $(ROOT) && npm run -s check:data
-
-build-web:
-	cd $(ROOT) && npm run -s build:web
-
-consumer-test:
-	cd $(ROOT) && node --test tests/integration/contracts.test.mjs data/tests/*.test.mjs
+test:
+	node --test tests/*.test.mjs

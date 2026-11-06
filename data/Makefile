@@ -1,6 +1,6 @@
 ROOT := ..
 
-.PHONY: verify lint check build-data test python-check
+.PHONY: verify lint check build-data apply-changeset test python-check
 
 verify: lint check test python-check
 
@@ -8,10 +8,15 @@ lint:
 	cd $(ROOT) && npx --no-install eslint data/tools data/tests
 
 check:
-	cd $(ROOT) && npm run -s check:data
+	npm run -s check
 
 build-data:
-	cd $(ROOT) && npm run build:data
+	npm run build
+
+# Applies a reviewed editor export to data/sources: make -C data apply-changeset CHANGESET=<absolute path>. Never commits.
+apply-changeset:
+	$(if $(CHANGESET),,$(error Set CHANGESET to the absolute path of a changeset file))
+	cd $(ROOT) && node data/tools/apply-changeset.mjs $(abspath $(CHANGESET))
 
 test:
 	cd $(ROOT) && node --test data/tests/*.test.mjs

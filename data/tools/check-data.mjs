@@ -88,12 +88,22 @@ function insideRing(point, ring) {
   }
   return inside;
 }
+// A placeholder such as "b.b." means the address has no number. The list is shared with the editor through the contract.
+const editingRules = JSON.parse(fs.readFileSync(path.join(rootDirectory, 'packages/contracts/editor-layers.json')));
+const houseNumberRule = editingRules.layers['building-labels.geojson'].properties['addr:housenumber'];
+function isPlaceholderHouseNumber(number) {
+  const ignoredCharacters = new RegExp(houseNumberRule.ignoredCharactersPattern, 'g');
+  const normalized = number.toLowerCase().replace(ignoredCharacters, '');
+  return houseNumberRule.forbiddenValues.includes(normalized);
+}
 export function validateBuildingLabels(data, buildings) {
   const count=validateCollection(data,{label:'building labels',geometryTypes:['Point'],requireKind:true});
   const ids=new Set(),footprints=new Set();
   for(const f of data.features) {
     const p=f.properties,index=p.footprintIndex,number=p['addr:housenumber'];
-    requireValue(p.kind==='building' && typeof number==='string' && number.trim().length>0 && number.length<=128 && !['','bb','бб','bezbroja','безброја','na','?'].includes(number.toLowerCase().replace(/[\s./_-]/g,'')), 'Missing building house number');
+    const hasHouseNumberText = typeof number === 'string' && number.trim().length > 0 && number.length <= 128;
+    const hasUsableHouseNumber = hasHouseNumberText && !isPlaceholderHouseNumber(number);
+    requireValue(p.kind === 'building' && hasUsableHouseNumber, 'Missing building house number');
     requireValue(typeof f.id==='string' && /^way\/\d+$/.test(f.id) && p.osm_id===f.id && !ids.has(f.id), 'Invalid or duplicate building source ID');
     requireValue(Number.isInteger(index) && index>=0 && index<buildings.features.length && !footprints.has(index), 'Invalid or duplicate footprint reference');
     requireValue(Array.isArray(p.address_sources) && p.address_sources.length>0 && p.address_sources.every(id=>/^(way|node)\/\d+$/.test(id)), 'Building address source missing');

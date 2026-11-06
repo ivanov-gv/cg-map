@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Map core · concepts</title>
+    <link rel="stylesheet" href="vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="vendor/maplibre-gl.js" defer></script>
+    <script src="vendor/pmtiles.js" defer></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Map core</h1>
+      <p>One map. Small controls for each shared capability.</p>
+      <p id="status" role="status">Loading local map…</p>
+      <p id="error" role="alert" hidden></p>
+    </header>
+    <main>
+      <div id="map" aria-label="Core concept map"></div>
+      <section class="concepts" aria-label="Core concepts">
+        <article>
+          <h2>Camera &amp; lifecycle</h2>
+          <button id="reset" disabled>Reset camera</button>
+          <button id="recreate" disabled>Recreate map</button>
+          <output id="camera">Starting</output>
+        </article>
+        <article>
+          <h2>Satellite</h2>
+          <button id="satellite" aria-pressed="false" disabled>Satellite sample</button>
+          <p>Shared local imagery; map stays alive.</p>
+        </article>
+        <article>
+          <h2>POI visibility</h2>
+          <button id="overview" disabled>Overview · zoom 12</button>
+          <button id="street" disabled>Street · zoom 16</button>
+          <output id="pois">Loading POIs</output>
+        </article>
+        <article>
+          <h2>Projection</h2>
+          <button id="shift" disabled>Shift overlay 20 px</button>
+          <output id="coordinate">No overlay</output>
+        </article>
+        <article>
+          <h2>GeoJSON overlay</h2>
+          <button id="replace" disabled>Replace point with polygon</button>
+          <button id="overlay-toggle" aria-pressed="true" disabled>Show overlay</button>
+          <output id="geometry">Point</output>
+        </article>
+        <article>
+          <h2>Hit testing &amp; selection</h2>
+          <p>Click the green overlay to highlight it.</p>
+          <button id="clear-selection" disabled>Clear selection</button>
+          <output id="selection">Nothing selected</output>
+        </article>
+      </section>
+    </main>
+    <footer>
+      Local runtime assets. © OpenStreetMap contributors · ODbL · Natural Earth. Satellite: eMapa Ortofoto 2025. This
+      app imports only map-core.
+    </footer>
+  </body>
+</html>

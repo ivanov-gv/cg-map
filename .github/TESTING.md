@@ -38,6 +38,12 @@ with `curl`. Its matrix jobs run in parallel and would share a port on the host 
 `--network bridge`. `make test-cd-pages` also needs `.github/act/secret.env`, which Git ignores: see
 `secret.env.example` beside it.
 
+Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
+repository inside the container, and `ci-docs` and `ci-platform` fail. Run workflows one at a time on a machine short of
+disk or CPU: `ci-apps-web` alone can use several gigabytes. Under `make test-ci-all`, parallel jobs can make `act` fail
+with `context deadline exceeded` while it removes containers, which ends the run before the browser jobs and the gate
+and can leave containers running. That is a local limit, so check `docker ps` afterwards.
+
 ## On GitHub
 
 A workflow can be dispatched only once it exists on `main`. After that, dispatching runs your branch's version:

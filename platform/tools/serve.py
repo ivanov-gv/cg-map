@@ -42,8 +42,34 @@ class Handler(SimpleHTTPRequestHandler):
             if not chunk:break
             outputfile.write(chunk);remaining-=len(chunk)
 
-if __name__=='__main__':
-    args=argparse.ArgumentParser();args.add_argument('--host',default='127.0.0.1');args.add_argument('--port',type=int,default=8080);opts=args.parse_args()
-    root=Path(__file__).resolve().parents[2]/'dist/web'
-    print(f'Kompas: http://{opts.host}:{opts.port}/',flush=True)
-    ThreadingHTTPServer((opts.host,opts.port),partial(Handler,directory=str(root))).serve_forever()
+class PrefixedHandler(Handler):
+    """Also serves the artifact under one URL prefix, as a project page host does. Browser tests use it, so it is quiet."""
+
+    def __init__(self, *args, path_prefix, **kwargs):
+        # The base constructor handles the request, so the prefix must be set first.
+        self.path_prefix = path_prefix
+        super().__init__(*args, **kwargs)
+
+    def translate_path(self, path):
+        if path.startswith(self.path_prefix):
+            path = '/' + path[len(self.path_prefix):]
+        return super().translate_path(path)
+
+    def log_message(self, *_args):
+        pass
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default='127.0.0.1')
+    parser.add_argument('--port', type=int, default=8080)
+    parser.add_argument('--app', choices=['web', 'core-demo', 'editor'], default='web')
+    parser.add_argument('--path-prefix', help='also serve the artifact under this prefix, such as /cg-map/')
+    options = parser.parse_args()
+    artifact_directory = Path(__file__).resolve().parents[2] / 'dist' / options.app
+    print(f'Serving dist/{options.app}: http://{options.host}:{options.port}/', flush=True)
+    handler = partial(Handler, directory=str(artifact_directory))
+    if options.path_prefix:
+        handler = partial(PrefixedHandler, directory=str(artifact_directory), path_prefix=options.path_prefix)
+    server = ThreadingHTTPServer((options.host, options.port), handler)
+    server.serve_forever()

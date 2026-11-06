@@ -5,7 +5,20 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
-export const FOLDERS = ['docs', 'workflows', 'platform', 'contracts', 'data', 'backend', 'transit-relay', 'tests', 'apps-web'];
+export const FOLDERS = [
+  'docs',
+  'workflows',
+  'platform',
+  'contracts',
+  'data',
+  'backend',
+  'transit-relay',
+  'tests',
+  'map-core',
+  'apps-web',
+  'apps-editor',
+  'apps-core-demo'
+];
 
 // Each web source file is listed once, so a new file falls through to every area until someone maps it.
 export const BROWSER_AREAS = {
@@ -17,7 +30,16 @@ export const BROWSER_AREAS = {
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',
     specFiles: ['journeys.spec.mjs'],
-    sources: ['routing.js', 'transit-routing.js', 'route-planner.js', 'transport.js', 'vehicle-direction.js', 'point-selection.js', 'object-selection.js', 'map-taps.js', 'satellite.js']
+    sources: [
+      'routing.js',
+      'transit-routing.js',
+      'route-planner.js',
+      'transport.js',
+      'vehicle-direction.js',
+      'point-selection.js',
+      'object-selection.js',
+      'map-taps.js'
+    ]
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
@@ -32,21 +54,24 @@ export const BROWSER_AREAS = {
   'poi-desktop': {
     specs: 'tests/e2e/poi-visibility.spec.mjs --project=root-desktop',
     specFiles: ['poi-visibility.spec.mjs'],
-    sources: ['place-visibility.js', 'poi-icons.js']
+    sources: []
   },
   'poi-mobile': {
     specs: 'tests/e2e/poi-visibility.spec.mjs --project=pages-mobile',
     specFiles: ['poi-visibility.spec.mjs'],
-    sources: ['place-visibility.js', 'poi-icons.js']
+    sources: []
   }
 };
 
 // Every browser test boots these, so a change to one can break any area.
-export const SHARED_WEB_SOURCES = ['app.js', 'core.js', 'map-style.js'];
+export const SHARED_WEB_SOURCES = ['app.js', 'core.js'];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS};
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
+// Every map application consumes the map-core runtime and the reviewed data release: these are their concrete contracts.
+const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
+const MAP_CONTRACT_DEPENDENTS = ['map-core', ...MAP_APPLICATIONS, 'tests', 'platform'];
 
 function areasForWebFile(file) {
   const name = file.split('/').pop();
@@ -63,24 +88,46 @@ function areasForWebFile(file) {
 
 // Returns the folders and browser areas one changed path needs.
 export function classify(file) {
-  const isMarkdown = file.endsWith('.md') && !file.startsWith('apps/web/public/');
-  if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json') return {folders: ['docs'], areas: []};
-  if (file.startsWith('.github/') || /^platform\/(tools|tests)\/ci-plan\./.test(file)) return {folders: ['workflows', 'platform'], areas: []};
+  const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
+  const isMarkdown = file.endsWith('.md') && !isPublishedFile;
+  if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json')
+    return {folders: ['docs'], areas: []};
+  if (file.startsWith('.github/') || /^platform\/(tools|tests)\/ci-plan\./.test(file))
+    return {folders: ['workflows', 'platform'], areas: []};
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
   if (/^services\/backend\/(.*\.go|go\.mod|go\.sum)$/.test(file)) return {folders: ['backend'], areas: []};
   if (file.startsWith('services/backend/')) return {folders: ['backend', 'platform'], areas: []};
-  if (file.startsWith('services/transit-relay/')) return {folders: ['transit-relay', 'tests', ...(file.endsWith('Makefile') ? ['platform'] : [])], areas: []};
-  if (file.startsWith('tests/')) return {folders: ['tests', ...(file.endsWith('Makefile') ? ['platform'] : [])], areas: []};
+  if (file.startsWith('services/transit-relay/'))
+    return {folders: ['transit-relay', ...(file.endsWith('Makefile') ? ['platform'] : [])], areas: []};
+  if (file.startsWith('tests/'))
+    return {folders: ['tests', ...(file.endsWith('Makefile') ? ['platform'] : [])], areas: []};
 
+  if (file === 'data/tools/editor-bundle.mjs') return {folders: ['data', 'apps-editor', 'tests'], areas: []};
+  // tests/integration proves that whatever the editor exports, this importer accepts.
+  if (
+    ['apply-changeset.mjs', 'check-data.mjs', 'apply-place-visibility.mjs'].some(tool => file === `data/tools/${tool}`)
+  ) {
+    return {folders: ['data', 'tests'], areas: []};
+  }
+  // The web browser tests search and select against this fixture.
+  if (file.startsWith('data/tests/fixtures/')) return {folders: ['data', ...WEB_DEPENDENTS], areas: ALL_AREAS};
   if (/^data\/(tools|tests)\//.test(file)) return {folders: ['data'], areas: []};
-  if (/^data\/(sources|artifacts|imagery)\//.test(file)) return {folders: ['data', ...WEB_DEPENDENTS], areas: ALL_AREAS};
+  if (/^data\/(sources|artifacts|imagery)\//.test(file))
+    return {folders: ['data', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
   if (file === 'data/Makefile' || file === 'data/package.json') return {folders: ['data', 'platform'], areas: []};
 
-  if (file.startsWith('packages/contracts/')) return {folders: ['contracts', 'data', 'backend', ...WEB_DEPENDENTS], areas: ALL_AREAS};
+  if (file.startsWith('packages/contracts/'))
+    return {folders: ['contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
+  if (file.startsWith('packages/map-core/')) return {folders: MAP_CONTRACT_DEPENDENTS, areas: ALL_AREAS};
+  const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
+  if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
+  if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS, areas: areasForWebFile(file)};
 
-  if (file.startsWith('platform/pages/') || file === 'platform/tools/serve.py') return {folders: ['platform', 'apps-web'], areas: ALL_AREAS};
+  if (file === 'platform/tools/serve.py' || file === 'platform/tools/dev-port.mjs')
+    return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
+  if (file.startsWith('platform/pages/')) return {folders: ['platform', 'apps-web'], areas: ALL_AREAS};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
   return EVERYTHING;
@@ -127,7 +174,7 @@ function changedFiles(base, head) {
 function main(args) {
   const option = name => {
     const index = args.indexOf(name);
-    return index < 0 ? '' : args[index + 1] ?? '';
+    return index < 0 ? '' : (args[index + 1] ?? '');
   };
   const base = option('--base');
   const head = option('--head') || 'HEAD';

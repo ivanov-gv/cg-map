@@ -2,6 +2,9 @@
 # Logical ownership and required cross-team review: docs/system-architecture/ownership.md.
 *                         @ivanov-gv
 /apps/web/                @ivanov-gv
+/apps/editor/             @ivanov-gv
+/apps/core-demo/          @ivanov-gv
+/packages/map-core/       @ivanov-gv
 /services/backend/        @ivanov-gv
 /data/                    @ivanov-gv
 /packages/contracts/      @ivanov-gv

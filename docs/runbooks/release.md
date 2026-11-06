@@ -20,7 +20,7 @@ old /web/ links and retire the earlier nested worker without clearing verified d
 
 ```sh
 make check
-make test-e2e
+make -C apps/web e2e
 git diff --check
 git status --short
 ```
@@ -29,8 +29,8 @@ Commit source, reviewed data-release changes, contracts, tests, and relevant doc
 to main that affects the web builds and deploys a new artifact automatically; there is no root/docs deployment copy to
 refresh.
 
-For another host, run make build and serve dist/web. Caddy examples are in platform/hosting. The Go host can serve that
-directory with its -dir option; it is independent of Pages.
+For another host, run make -C apps/web build and serve dist/web. Caddy examples are in platform/hosting. The Go host can
+serve that directory with its -dir option; it is independent of Pages.
 
 ## Verify and recover
 

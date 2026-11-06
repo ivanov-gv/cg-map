@@ -11,7 +11,7 @@ import (
 )
 
 // ConfigPath overrides the artifact's static config.json, which tells static hosts (GitHub Pages,
-// make dev-mock) to read the archive and the hosted relay directly. Here the app uses this server's APIs.
+// make -C apps/web dev-mock) to read the archive and the hosted relay directly. Here the app uses this server's APIs.
 const ConfigPath = "/config.json"
 
 // setUncachedHeaders marks a generated response that clients and proxies must not store.

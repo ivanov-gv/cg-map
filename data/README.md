@@ -11,7 +11,7 @@ generation, and reviewed releases.
 | tools/             | Extraction, validation, tiling, packaging, release metadata |
 | tests/             | Data contract tests and a small Podgorica fixture           |
 
-From repository root: `npm run check:data`. Full rebuild: `make build-data` after installing
+From repository root: `make -C data check`. Full rebuild: `make -C data build-data` after installing
 [optional Python dependencies](../docs/runbooks/data.md).
 
 From this workspace: `npm run check`, `npm run build`, `npm test`. The full build is deliberately expensive.

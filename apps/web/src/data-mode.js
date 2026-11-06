@@ -1,6 +1,6 @@
 // Where map layers and live vehicles come from.
 // server: the Kompas Go server's APIs (services/backend), which serves config.json {"api":"server"}.
-// mock: the current static data, for hosts without the server (GitHub Pages, make dev): the release
+// mock: the current static data, for hosts without the server (GitHub Pages, make -C apps/web dev-mock): the release
 //       archive read directly and the hosted transit relay. The artifact ships config.json {"api":"mock"}.
 // A ?api=server or ?api=mock query parameter overrides the host's choice.
 export const RELAY_URL = 'https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles';

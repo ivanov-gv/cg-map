@@ -40,4 +40,4 @@ browser-test server (apps/web/tests/e2e), and their tests. Python 3.12.
 - Tests use `unittest` and live in `<component>/tests/test_*.py`.
 - Enforced: `python3 -m py_compile` on platform/tools, data/tools, and apps/web/tests/e2e, plus the platform unittest
   suite, in `make check`.
-- Verify: `make verify PKG=<component>`, then `make check`. Geometry changes also need `make build-data`.
+- Verify: `make verify PKG=<component>`, then `make check`. Geometry changes also need `make -C data build-data`.
