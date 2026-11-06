@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Decides which folder pipelines and browser areas a change needs. Anything it cannot classify runs everything.
-// Local use: make ci-plan BASE=origin/main. CI use and the rules' reasoning: docs/plans/change-aware-ci.md.
+// Local use: make ci-plan BASE=origin/main. CI use: .github/TESTING.md.
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';

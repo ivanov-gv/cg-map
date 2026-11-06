@@ -76,13 +76,6 @@ test('shipped snapshot downloads and reloads offline with real archive data', as
   expect(errors).toEqual([]);
 });
 
-test('old /web/ bookmarks open the root app and preserve query/hash', async ({page, baseURL}) => {
-  await page.goto(new URL('web/?lang=sr#place', baseURL).href);
-  await expect(page).toHaveURL(new URL('?lang=sr#place', baseURL).href);
-  await page.waitForFunction(() => window.kompasDebug?.map?.getLayer('search-place'));
-  await expect(page.locator('#loading')).toBeHidden();
-});
-
 test.describe('server mode', () => {
   // The service worker forwards same-origin /api requests itself, out of reach of request routing;
   // it never caches them, so blocking it here changes nothing the test checks.

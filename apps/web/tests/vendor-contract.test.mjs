@@ -6,7 +6,7 @@ import vm from 'node:vm';
 // Execute the actual browser bundles, rather than trusting package typings or mocks.
 const context={console,setTimeout,clearTimeout,TextEncoder,TextDecoder,performance};
 for (const file of ['maplibre-gl.js', 'pmtiles.js']) {
-  const bundleURL = new URL(`../../../packages/map-core/assets/vendor/${file}`, import.meta.url);
+  const bundleURL = new URL(import.meta.resolve(`@ivanov-gv/map-core/assets/vendor/${file}`));
   vm.runInNewContext(fs.readFileSync(bundleURL, 'utf8'), context, {filename: file});
 }
 test('every vendor entry point used by the application exists in the shipped bundles',()=>{

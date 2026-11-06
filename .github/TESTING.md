@@ -1,7 +1,8 @@
 # Testing workflows
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
-on GitHub. Pipeline structure and reasoning: [the CI plan](../docs/plans/change-aware-ci.md).
+on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md) and
+[release](../docs/runbooks/release.md).
 
 ## Test-run mode
 
