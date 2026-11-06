@@ -8,7 +8,10 @@ export function mapStyle(basemapURL){
  const street=['all',['!',major],['!',nonStreet]];
  const line=(id,color,width,filter,minzoom=0,dash)=>({id,type:'line',source,'source-layer':'roads',minzoom,...(filter?{filter}:{}),layout:{'line-cap':dash?'butt':'round','line-join':'round'},paint:{'line-color':color,'line-width':width,...(dash?{'line-dasharray':dash}:{})}});
  const scaled=(z14,z17,z20)=>['interpolate',['exponential',1.5],['zoom'],13,z14*.6,14,z14,17,z17,20,z20];
- return {version:8,glyphs:new URL('fonts/',location.href).href+'{fontstack}/{range}.pbf',sources:{'building-addresses':{type:'geojson',data:new URL('data/building-labels.geojson',location.href).href},basemap:{type:'vector',url:basemapURL,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · ODbL · Natural Earth'}},layers:[
+ // Addresses are supplied only after the browser has validated the reviewed label asset.
+ const buildingAddresses={type:'geojson',data:{type:'FeatureCollection',features:[]}};
+ const buildingNumberLabel=['coalesce',['get','display_number'],['get','addr:housenumber']];
+ return {version:8,glyphs:new URL('fonts/',location.href).href+'{fontstack}/{range}.pbf',sources:{'building-addresses':buildingAddresses,basemap:{type:'vector',url:basemapURL,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · ODbL · Natural Earth'}},layers:[
   {id:'background',type:'background',paint:{'background-color':'#f2f1e7'}},
   {id:'land',type:'fill',source,'source-layer':'land',paint:{'fill-color':['match',['get','kind'],'park','#dce6c9','#efeee2']}},
   {id:'water',type:'fill',source,'source-layer':'water',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':'#c3dce0'}},
@@ -25,7 +28,7 @@ export function mapStyle(basemapURL){
   line('steps','#6b4a32',scaled(2.4,4.5,10),kinds(['steps']),13,[0.4,0.35]),
   line('major-roads','#e4c98e',['interpolate',['exponential',1.5],['zoom'],7,0.5,12,1.3,16,6,20,48],major),
   {id:'road-labels',type:'symbol',source,'source-layer':'roads',minzoom:13,filter:['all',['has','name'],['!=',['get','name'],'']],layout:{'symbol-placement':'line','symbol-spacing':350,'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],13,10,17,13]},paint:{'text-color':'#7b7b69','text-halo-color':'#f8f8ee','text-halo-width':1.5}},
-  {id:'building-numbers',type:'symbol',source:'building-addresses',minzoom:13,layout:{'visibility':'none','text-field':['get','addr:housenumber'],'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],15,11,21,14],'text-anchor':'center','text-max-width':6,'text-padding':2},paint:{'text-color':'#514d44','text-halo-color':'#fffef8','text-halo-width':1}}
+  {id:'building-numbers',type:'symbol',source:'building-addresses',minzoom:13,layout:{'visibility':'none','text-field':buildingNumberLabel,'text-font':['Open Sans Semibold'],'text-size':['interpolate',['linear'],['zoom'],15,11,21,14],'text-anchor':'center','text-max-width':6,'text-padding':2},paint:{'text-color':'#514d44','text-halo-color':'#fffef8','text-halo-width':1}}
  ]};
 }
 

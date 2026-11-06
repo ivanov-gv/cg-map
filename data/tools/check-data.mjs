@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {entranceBearing} from './building-entrances.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const contract=JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/places.schema.json')));
@@ -88,20 +89,93 @@ function insideRing(point, ring) {
   }
   return inside;
 }
-export function validateBuildingLabels(data, buildings) {
-  const count=validateCollection(data,{label:'building labels',geometryTypes:['Point'],requireKind:true});
-  const ids=new Set(),footprints=new Set();
-  for(const f of data.features) {
-    const p=f.properties,index=p.footprintIndex,number=p['addr:housenumber'];
-    requireValue(p.kind==='building' && typeof number==='string' && number.trim().length>0 && number.length<=128 && !['','bb','бб','bezbroja','безброја','na','?'].includes(number.toLowerCase().replace(/[\s./_-]/g,'')), 'Missing building house number');
-    requireValue(typeof f.id==='string' && /^way\/\d+$/.test(f.id) && p.osm_id===f.id && !ids.has(f.id), 'Invalid or duplicate building source ID');
-    requireValue(Number.isInteger(index) && index>=0 && index<buildings.features.length && !footprints.has(index), 'Invalid or duplicate footprint reference');
-    requireValue(Array.isArray(p.address_sources) && p.address_sources.length>0 && p.address_sources.every(id=>/^(way|node)\/\d+$/.test(id)), 'Building address source missing');
-    const g=buildings.features[index].geometry,point=f.geometry.coordinates;
-    requireValue(g.type==='Polygon' && point.length===2 && insideRing(point,g.coordinates[0]) && !g.coordinates.slice(1).some(r=>insideRing(point,r)), 'Building label outside its polygon');
-    ids.add(f.id);footprints.add(index);
+// Footprints are rounded to six decimals; boundary doors may differ by that precision.
+function onRing(point, ring) {
+  const coordinateToleranceDegrees = 0.000001;
+  return ring.slice(1).some((end, segmentIndex) => {
+    const start = ring[segmentIndex];
+    const longitudeDelta = end[0] - start[0];
+    const latitudeDelta = end[1] - start[1];
+    const squaredLength = longitudeDelta * longitudeDelta + latitudeDelta * latitudeDelta;
+    const projection = squaredLength ? ((point[0] - start[0]) * longitudeDelta + (point[1] - start[1]) * latitudeDelta) / squaredLength : 0;
+    const fraction = Math.max(0, Math.min(1, projection));
+    const distanceDegrees = Math.hypot(point[0] - start[0] - fraction * longitudeDelta, point[1] - start[1] - fraction * latitudeDelta);
+    return distanceDegrees <= coordinateToleranceDegrees;
+  });
+}
+
+// Address placeholders record missing numbers, never a literal identifier.
+function noNumber(value) {
+  return ['', 'bb', 'бб', 'bezbroja', 'безброја', 'na', '?'].includes(value.toLowerCase().replace(/[\s./_-]/g, ''));
+}
+
+function addressText(value) {
+  const maximumTextLength = 128;
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= maximumTextLength;
+}
+
+// Only unambiguous, sourced entrance points on a footprint wall may be published.
+function validateEntrances(properties, polygon, sourceIDs) {
+  if (properties.entrances === undefined) return;
+  const maximumEntrances = 100;
+  requireValue(Array.isArray(properties.entrances) && properties.entrances.length <= maximumEntrances, 'Invalid building entrances');
+  for (const entrance of properties.entrances) {
+    const hasUniqueIdentity = entrance && typeof entrance.id === 'string' && /^node\/\d+$/.test(entrance.id) && !sourceIDs.has(entrance.id);
+    requireValue(hasUniqueIdentity, 'Invalid or duplicate entrance ID');
+    sourceIDs.add(entrance.id);
+    requireValue(properties.address_sources.includes(entrance.id), 'Entrance source missing from address_sources');
+    position(entrance.coordinates, 'entrance');
+    requireValue(entrance.coordinates.length === 2, 'Invalid entrance coordinates');
+    const hasBearing = Number.isFinite(entrance.bearing) && entrance.bearing >= 0 && entrance.bearing < 360;
+    requireValue(hasBearing, 'Invalid entrance bearing');
+    const expectedBearing = entranceBearing(entrance.coordinates, polygon);
+    const bearingDifference = Math.abs((entrance.bearing - expectedBearing + 540) % 360 - 180);
+    const bearingToleranceDegrees = 0.1;
+    requireValue(bearingDifference <= bearingToleranceDegrees, 'Entrance bearing must point inward perpendicular to its nearest wall');
+    for (const field of ['number', 'ref', 'lamela', 'street']) {
+      const value = entrance[field];
+      if (value === undefined) continue;
+      requireValue(addressText(value) && (field !== 'number' || !noNumber(value)), `Invalid entrance ${field}`);
+    }
+    const isBoundary = polygon.coordinates.some(ring => onRing(entrance.coordinates, ring));
+    requireValue(isBoundary, 'Entrance must lie on a building wall');
   }
-  requireValue(count>0, 'Empty building address snapshot');
+}
+
+// Labels retain reviewed source identities and interior anchors; entrance points must be on a wall.
+export function validateBuildingLabels(data, buildings) {
+  const count = validateCollection(data, {label: 'building labels', geometryTypes: ['Point'], requireKind: true});
+  const sourceIDs = new Set();
+  const footprints = new Set();
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    const footprintIndex = properties.footprintIndex;
+    const hasNumber = properties['addr:housenumber'] !== undefined || properties.building_number !== undefined;
+    const hasEntrances = Array.isArray(properties.entrances) && properties.entrances.length > 0;
+    requireValue(properties.kind === 'building' && (hasNumber || hasEntrances), 'Missing building address or entrances');
+    for (const field of ['addr:housenumber', 'building_number', 'lamela', 'addr:street']) {
+      const value = properties[field];
+      if (value === undefined) continue;
+      const isNumber = ['addr:housenumber', 'building_number'].includes(field);
+      requireValue(addressText(value) && (!isNumber || !noNumber(value)), `Invalid building ${field}`);
+    }
+    const hasUniqueSource = typeof feature.id === 'string' && /^way\/\d+$/.test(feature.id) && properties.osm_id === feature.id && !sourceIDs.has(feature.id);
+    requireValue(hasUniqueSource, 'Invalid or duplicate building source ID');
+    const hasUniqueFootprint = Number.isInteger(footprintIndex) && footprintIndex >= 0 && footprintIndex < buildings.features.length && !footprints.has(footprintIndex);
+    requireValue(hasUniqueFootprint, 'Invalid or duplicate footprint reference');
+    const addressSources = properties.address_sources;
+    const hasSources = Array.isArray(addressSources) && addressSources.length > 0 && addressSources.every(identifier => /^(way|node)\/\d+$/.test(identifier));
+    requireValue(hasSources, 'Building address source missing');
+    const polygon = buildings.features[footprintIndex].geometry;
+    const anchor = feature.geometry.coordinates;
+    const isInterior = polygon.type === 'Polygon' && anchor.length === 2 && insideRing(anchor, polygon.coordinates[0]);
+    const isCourtyard = polygon.coordinates.slice(1).some(ring => insideRing(anchor, ring));
+    requireValue(isInterior && !isCourtyard, 'Building label outside its polygon');
+    validateEntrances(properties, polygon, sourceIDs);
+    sourceIDs.add(feature.id);
+    footprints.add(footprintIndex);
+  }
+  requireValue(count > 0, 'Empty building address snapshot');
   return count;
 }
 export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance) {

@@ -10,11 +10,11 @@ WGS84 coordinates into session state, draws A (From) / B (To), updates the endpo
 points removes both endpoints. Closing the card or changing map layers does not remove chosen endpoints. With both
 endpoints selected, the [route planner](routing.md) calculates the selected mode. Reloading clears the selection.
 
-Visible endpoint markers, bus stops, and drawn directory place symbols take priority over basemap geometry. Places are
-not clustered; a place below its [visibility level's](poi-visibility.md) zoom is reached through the directory list
-instead. A tap on several listings opens a chooser of those listings. Otherwise buildings, roads, parks and water expose
-available map attributes. Building polygons take precedence over house-number label hit boxes; their revision-bound tile
-IDs retrieve address metadata independently of zoom, collisions, or label visibility. See
+Visible endpoint markers, entrance markers, bus stops, and drawn directory place symbols take priority over basemap
+geometry. Places are not clustered; a place below its [visibility level's](poi-visibility.md) zoom is reached through
+the directory list instead. A tap on several listings opens a chooser of those listings. Otherwise buildings, roads,
+parks and water expose available map attributes. Building polygons take precedence over house-number label hit boxes;
+their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label visibility. See
 [building numbers](../../map-data/building-numbers.md). Unnamed buildings show their feature type and coordinates;
 names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a
 directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates
@@ -26,9 +26,9 @@ bus availability. Coordinates come from the selected point for places/stops and 
 polygons/lines.
 
 point-selection.js owns pure point descriptions, endpoint GeoJSON, and endpoint layer installation. app.js owns session
-state, hit testing, and DOM updates. Existing basemap data and contracts are unchanged. Browser coverage exercises
-generic coordinates, real building interiors, stops, directory selection, endpoint replacement/clearing, and offline
-interaction.
+state, hit testing, and DOM updates. The basemap archive is unchanged; entrance metadata extends the shared
+building-label contract. Browser coverage exercises generic coordinates, real building interiors, stops, directory
+selection, endpoint replacement/clearing, and offline interaction.
 
 ## Tap and zoom gestures
 
@@ -49,5 +49,7 @@ Selecting a directory place inside a rendered building highlights that building 
 or the camera is moving to a search result, this lookup finishes when the map becomes idle. When a place has no building
 footprint, its existing circle gets a red contour and translucent red fill. Bus stops use the same marker highlight. The
 normal marker style returns when selection closes or changes. Bare coordinates use a small red selection circle. No
-additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles. No entrances
-or arrows are drawn. Selection uses the bundled archive and works offline.
+additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles. Buildings
+with reviewed entrance metadata show arrows at their entrance positions and individual entrance labels. Selecting an
+entrance uses its exact recorded coordinates for From/To. See
+[building and entrance addresses](../../map-data/building-numbers.md). Selection uses local data and works offline.

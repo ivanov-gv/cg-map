@@ -48,3 +48,20 @@ unknown headings from a known northbound bearing of zero; check time is not GPS 
 The backend generates and commits its bindings; generated-client tests cover producer mapping, protobuf/JSON roundtrips,
 stale/error semantics and compatibility with the shared GeoJSON snapshot. The browser continues using GeoJSON until an
 explicit UI migration. See [backend generation and API usage](../../services/backend/README.md#protobuf-transport-api).
+
+Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
+retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and
+`street`. Node IDs must be unique across buildings, appear in `address_sources`, and lie on the referenced footprint
+boundary. Optional text is nonblank and at most 128 characters; no-number placeholders are rejected as numbers. There
+are at most 100 entrances per building. A label needs a legacy house number, a separate building number, or a nonempty
+entrance array. Legacy labels remain compatible; when entrances are supplied, consumers use `building_number` for a
+separate building number and never promote the legacy aggregate into one. The shared
+[fixture](fixtures/building-entrances.json) exercises producer and consumer together. See
+[address display and source marking](../../docs/map-data/building-numbers.md).
+
+Entrance `bearing` is clockwise degrees from north in `[0, 360)`. It is the inward normal of the nearest footprint wall
+in the Mercator plane, including courtyard edges; ring winding does not change its meaning. The producer computes it and
+validation rejects a direction more than 0.1 degrees from that normal. Consumers rotate the local arrow by
+`bearing - 180` because its unrotated icon points south, align it with the map, and keep the arrow tip at the entrance.
+The shared [orientation cases](fixtures/entrance-orientation-cases.json) are checked by the Python producer and Node
+validator; browser tests verify the rotation binding and map/pitch alignment.

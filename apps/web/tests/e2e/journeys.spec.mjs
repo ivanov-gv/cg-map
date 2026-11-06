@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import fs from 'node:fs';
+import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
 import {closeCard, closeMenu, openMenu, ready, stubRouting, tapMapCenter, tapRenderedPlace} from './helpers.mjs';
 
 test.beforeEach(({page}) => stubRouting(page));
@@ -293,4 +294,242 @@ test('point-only places highlight their existing markers and restore them on clo
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(1);
   await closeCard(page);
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('point-selection')._data.features.length)).toBe(0);
+});
+
+
+test.describe('building entrances', () => {
+  for (const variant of [
+    { numbers: ['27'], building: null, label: '27' },
+    { numbers: ['32', '27'], building: null, label: '27-32' },
+    { numbers: ['32', '27'], building: '1', label: 'Zgrada 1, 27-32' },
+  ]) {
+    test(`entrance addresses and selection arrows: ${variant.label}`, async ({
+      page,
+      context,
+    }) => {
+      // Real archive geometry, synthetic address facts; no invented published source data.
+      const labels = JSON.parse(
+        fs.readFileSync(
+          new URL(
+            '../../../../data/sources/building-labels.geojson',
+            import.meta.url,
+          ),
+        ),
+      );
+      const buildings = JSON.parse(
+        fs.readFileSync(
+          new URL(
+            '../../../../data/sources/buildings.geojson',
+            import.meta.url,
+          ),
+        ),
+      );
+      const label = labels.features[0];
+      const properties = label.properties;
+      const ring =
+        buildings.features[properties.footprintIndex].geometry.coordinates[0];
+      delete properties['addr:housenumber'];
+      properties['addr:street'] = 'Ulica Slobode';
+      if (variant.building) properties.building_number = variant.building;
+      // Opposite boundary vertices keep the synthetic doors distinct in the real footprint.
+      const entranceVertexIndexes = [0, 17];
+      properties.entrances = variant.numbers.map((number, index) => ({
+        id: `node/${index + 1}`,
+        number,
+        ref: index === 0 ? 'M' : 'N',
+        lamela: 'P',
+        coordinates: ring[entranceVertexIndexes[index]],
+        bearing: entranceBearing(ring[entranceVertexIndexes[index]], {type: 'Polygon', coordinates: [ring]}),
+      }));
+      await page.route('**/data/building-labels.geojson', (route) =>
+        route.fulfill({
+          json: { type: 'FeatureCollection', features: [label] },
+        }),
+      );
+      await page.route('**/data/places.geojson', (route) =>
+        route.fulfill({ json: { type: 'FeatureCollection', features: [] } }),
+      );
+      await ready(page);
+      await page.evaluate(
+        (coordinates) =>
+          window.kompasDebug.map.jumpTo({ center: coordinates, zoom: 17 }),
+        label.geometry.coordinates,
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            window.kompasDebug.map
+              .queryRenderedFeatures({ layers: ['building-numbers'] })
+              .map((feature) => feature.properties.display_number),
+          ),
+        )
+        .toContain(variant.label);
+      expect(
+        await page.evaluate(
+          () =>
+            window.kompasDebug.map.queryRenderedFeatures({
+              layers: ['entrance-numbers'],
+            }).length,
+        ),
+      ).toBe(0);
+      await page.evaluate(
+        (coordinates) =>
+          window.kompasDebug.map.jumpTo({ center: coordinates, zoom: 19 }),
+        label.geometry.coordinates,
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.kompasDebug.map.queryRenderedFeatures({
+                layers: ['entrance-points'],
+              }).length,
+          ),
+        )
+        .toBe(variant.numbers.length);
+      // Project after each camera change so the tap exercises the visible entrance marker.
+      const tap = async (coordinates) => {
+        const point = await page.evaluate((coordinates) => {
+          const map = window.kompasDebug.map;
+          const point = map.project(coordinates);
+          const bounds = map.getCanvas().getBoundingClientRect();
+          return {
+            x: bounds.left + point.x,
+            y: bounds.top + point.y,
+          };
+        }, coordinates);
+        await page.mouse.click(point.x, point.y);
+      };
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.kompasDebug.map.areTilesLoaded()),
+        )
+        .toBe(true);
+      await context.setOffline(true);
+      await tap(label.geometry.coordinates);
+      await expect(page.locator('#place-name')).toHaveText(
+        'Building ' + variant.label,
+      );
+      const address =
+        'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
+      await expect(page.locator('#place-details')).toContainText(address);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.kompasDebug.map.queryRenderedFeatures({
+                layers: ['entrance-selection-arrows'],
+              }).length,
+          ),
+        )
+        .toBe(variant.numbers.length);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.kompasDebug.map.queryRenderedFeatures({
+                layers: ['entrance-selection-numbers'],
+              }).length,
+          ),
+        )
+        .toBe(variant.numbers.length);
+      await expect
+        .poll(() => page.evaluate(() => window.kompasDebug.map.isMoving()))
+        .toBe(false);
+      const positions = await page.evaluate((entrances) => {
+        const map = window.kompasDebug.map;
+        return entrances.map((entrance) => {
+          const point = map.project(entrance.coordinates);
+          return { x: point.x, y: point.y };
+        });
+      }, properties.entrances);
+      const header = await page.locator('.search-bar').boundingBox();
+      const card = await page.locator('#place-card').boundingBox();
+      for (const position of positions) {
+        expect(position.y).toBeGreaterThan(header.y + header.height + 20);
+        if (page.viewportSize().width <= 720)
+          expect(position.y).toBeLessThan(card.y - 20);
+        else expect(position.x).toBeGreaterThan(card.x + card.width + 20);
+      }
+      if (process.env.ENTRANCE_SCREENSHOTS)
+        await page.screenshot({
+          path: `test-results/entrances-${variant.label.replaceAll(' ', '-')}-${page.viewportSize().width}.png`,
+        });
+      const arrowLayout = await page.evaluate(() => {
+        const map = window.kompasDebug.map;
+        return {
+          rotation: map.getLayoutProperty('entrance-selection-arrows', 'icon-rotate'),
+          alignment: map.getLayoutProperty('entrance-selection-arrows', 'icon-rotation-alignment'),
+          pitch: map.getLayoutProperty('entrance-selection-arrows', 'icon-pitch-alignment')
+        };
+      });
+      expect(arrowLayout).toEqual({rotation: ['-', ['get', 'bearing'], 180], alignment: 'map', pitch: 'map'});
+      const bearings = await page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['entrance-selection-arrows']}).map(feature => feature.properties.bearing).sort((first, second) => first - second));
+      expect(bearings).toEqual(properties.entrances.map(entrance => entrance.bearing).sort((first, second) => first - second));
+      await closeCard(page);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.kompasDebug.map.queryRenderedFeatures({
+                layers: ['entrance-selection-arrows'],
+              }).length,
+          ),
+        )
+        .toBe(0);
+      await page.evaluate(
+        (coordinates) =>
+          window.kompasDebug.map.jumpTo({ center: coordinates, zoom: 19 }),
+        properties.entrances[0].coordinates,
+      );
+      await expect
+        .poll(() => page.evaluate(() => window.kompasDebug.map.isMoving()))
+        .toBe(false);
+      await tap(properties.entrances[0].coordinates);
+      await expect(page.locator('#place-category')).toHaveText('Entrance');
+      await expect(page.locator('#place-name')).toHaveText(
+        variant.numbers[0] + ', Ulaz M, Lamela P',
+      );
+      if (page.viewportSize().width <= 720)
+        await page.locator('#card-handle').click();
+      await page.locator('#point-to').click();
+      expect(
+        (await page.evaluate(() => window.kompasDebug.endpoints)).to
+          .coordinates,
+      ).toEqual(properties.entrances[0].coordinates);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              window.kompasDebug.map.queryRenderedFeatures({
+                layers: ['entrance-selection-arrows'],
+              }).length,
+          ),
+        )
+        .toBe(0);
+    });
+  }
+
+  test('invalid entrance data shows a visible address-load error', async ({
+    page,
+  }) => {
+    const labels = JSON.parse(
+      fs.readFileSync(
+        new URL(
+          '../../../../data/sources/building-labels.geojson',
+          import.meta.url,
+        ),
+      ),
+    );
+    labels.features[0].properties.entrances = [
+      { id: 'node/1', coordinates: [200, 42] },
+    ];
+    await page.route('**/data/building-labels.geojson', (route) =>
+      route.fulfill({ json: labels }),
+    );
+    await ready(page);
+    await expect(page.locator('#error-text')).toContainText(
+      'House numbers could not load (Invalid entrance coordinates)',
+    );
+  });
 });
