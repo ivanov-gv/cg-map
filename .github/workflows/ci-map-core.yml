@@ -30,11 +30,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     environment: dev
-    env: &verify-env
-      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
-    permissions: &verify-permissions
-      contents: read
-      packages: write
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -43,18 +38,45 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=packages/map-core
-      - uses: ./.github/actions/publish-dev-package
-        if: ${{ inputs.publish_package == true || inputs.publish_package == 'true' }}
-        with:
-          directory: packages/map-core
-          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
-          token: ${{ github.token }}
   verify-test-run:
     name: (test-run) Verify map-core
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     environment: test-run
-    env: *verify-env
-    permissions: *verify-permissions
     steps: *verify-steps
+  # Its own job: only this one can write packages, and only main can run it for real, because a release promotes what it
+  # publishes.
+  publish:
+    name: Publish dev package
+    needs: verify
+    if: ${{ (inputs.publish_package == true || inputs.publish_package == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &publish-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+    steps: &publish-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/publish-dev-package
+        with:
+          directory: packages/map-core
+          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
+          token: ${{ github.token }}
+  publish-test-run:
+    name: (test-run) Publish dev package
+    needs: verify-test-run
+    if: ${{ inputs.publish_package == true || inputs.publish_package == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *publish-env
+    steps: *publish-steps

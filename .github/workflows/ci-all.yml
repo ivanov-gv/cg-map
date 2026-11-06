@@ -61,7 +61,8 @@ jobs:
   plan:
     name: Plan
     needs: switch
-    if: needs.switch.outputs.test_run != 'true'
+    # A status function, because a skipped approval further up would otherwise skip this on every run but a PR.
+    if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: dev
@@ -107,7 +108,7 @@ jobs:
   plan-test-run:
     name: (test-run) Plan
     needs: switch
-    if: needs.switch.outputs.test_run == 'true'
+    if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: test-run

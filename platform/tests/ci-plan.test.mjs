@@ -51,13 +51,13 @@ const cases = [
   [
     'shared map runtime',
     ['packages/map-core/src/poi-icons.js'],
-    ['platform', 'tests', 'map-core', 'apps-core-demo'],
+    ['platform', 'map-core', 'apps-core-demo'],
     []
   ],
   [
     'shared map build helpers',
     ['packages/map-core/tools/assemble.mjs'],
-    ['platform', 'tests', 'map-core', 'apps-core-demo'],
+    ['platform', 'map-core', 'apps-core-demo'],
     []
   ],
   ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],

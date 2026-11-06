@@ -122,7 +122,7 @@ export function classify(file) {
   if (file.startsWith('packages/contracts/'))
     return {folders: ['contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
-  if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'tests', 'platform'], areas: []};
+  if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
   if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};

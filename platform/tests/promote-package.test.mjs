@@ -12,10 +12,14 @@ const commit = 'a'.repeat(40);
 const sourceVersion = `0.0.0-dev.${commit}`;
 
 function writeTarball(directory, {version = sourceVersion, extraFile} = {}) {
+  const dependencies = {'some-library': '1.0.0'};
   const packageDirectory = path.join(directory, 'tarball/package');
   fs.mkdirSync(path.join(packageDirectory, 'src'), {recursive: true});
   fs.writeFileSync(path.join(packageDirectory, 'src/index.js'), 'export const value = 1;\n');
-  fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({name: '@scope/core', version}));
+  fs.writeFileSync(
+    path.join(packageDirectory, 'package.json'),
+    JSON.stringify({name: '@scope/core', version, dependencies})
+  );
   if (extraFile) fs.writeFileSync(path.join(packageDirectory, extraFile), 'extra');
   execFileSync('tar', ['-czf', path.join(directory, 'core.tgz'), '-C', path.join(directory, 'tarball'), 'package']);
 }
@@ -88,6 +92,16 @@ test('a test run reaches npm with its dry-run flag, through the same steps', tes
   const {status, publishCalls} = promote(testContext, {version: '1.2.0', flags: '--dry-run'});
   assert.equal(status, 0);
   assert.match(publishCalls, /--dry-run/);
+});
+
+test('promoting also refuses a change to a nested value, such as a dependency', testContext => {
+  const {status, stdout, publishCalls} = promote(testContext, {
+    version: '1.2.0',
+    npmOptions: {tamperWith: "p.dependencies['some-library']='9.9.9';"}
+  });
+  assert.notEqual(status, 0);
+  assert.match(stdout, /more of package\.json than its version/);
+  assert.equal(publishCalls, '');
 });
 
 test('a commit CI never built cannot be released', testContext => {

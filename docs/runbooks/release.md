@@ -22,8 +22,9 @@ Every merge to main updates it, with no tags or releases:
 2. [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) extracts the `main` image of all three apps into one site
    and deploys it. A deploy replaces the whole site, so it always takes all three.
 
-To put back an older build of an app, retag its image from the commit you want as `main`, then run `ci-dev-pages`.
-Images are never deleted. A failed deploy does not affect `CI gate`, so check it after merging.
+To put back an older build of an app, retag its image from the commit you want as `main`, then run
+`gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
+affect `CI gate`, so check it after merging.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 
@@ -41,8 +42,8 @@ gh api repos/ivanov-gv/cg-map/actions/runs/<run ID>/pending_deployments \
 
 ## Releasing map-core
 
-A version is a tag and a release, in that order. Release only a commit that CI already built on main, because CD takes
-the dev package CI published for that commit and changes nothing but its version.
+A version is a tag and a release, in that order. Release only a commit on main whose CI run selected map-core: CD takes
+the dev package CI published for that commit, changes nothing but its version, and refuses a commit that is not on main.
 
 ```sh
 git tag map-core/v0.2.0 <commit on main>
@@ -59,7 +60,8 @@ with a new one.
 
 ## Upgrading an app to a new core
 
-web and editor each pin an exact version, and upgrade in their own change, tested by their own pipeline:
+web and editor each pin an exact version, and upgrade in their own change. That changes package-lock.json, so its PR
+runs every pipeline:
 
 ```sh
 npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
@@ -88,3 +90,9 @@ described in [its README](../../apps/editor/README.md#offline-and-updates).
 
 Any image above serves its app on port 8080. Caddy examples are in platform/hosting. The Go host can serve dist/web with
 its -dir option; it is independent of Pages.
+
+## Devices that used the old site
+
+The web app used to live at the root, and a browser that visited it keeps that worker, which can answer for every path
+under `/cg-map/`. If `/editor/` or `/web/` shows an old page on such a device, clear the site's data. That also removes
+editor drafts on this origin, so export them first.

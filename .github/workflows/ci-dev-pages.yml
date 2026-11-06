@@ -25,9 +25,12 @@ jobs:
     permissions: &assemble-permissions
       contents: read
       packages: read
+    outputs: &assemble-outputs
+      is_newest: ${{ steps.newest.outputs.is_newest }}
     env: &assemble-env
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
       REGISTRY_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps: &assemble-steps
       - uses: actions/checkout@v7
         with:
@@ -51,6 +54,16 @@ jobs:
             echo "$app: $(docker inspect --format '{{.Id}}' "$image")" | tee -a "$GITHUB_STEP_SUMMARY"
           done
           find site -type f | wc -l | xargs echo "Files in the site:" | tee -a "$GITHUB_STEP_SUMMARY"
+      # main's runs do not queue behind each other, so a slow older run could otherwise replace a newer site.
+      - id: newest
+        name: Check this is still main's newest commit
+        shell: bash
+        run: |
+          main_head=$(curl --fail --silent --show-error --location --header "Authorization: Bearer $REGISTRY_TOKEN" \
+            --header "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPO/commits/main" | jq -r .sha)
+          is_newest=$([ "$main_head" = "$GITHUB_SHA" ] && echo true || echo false)
+          echo "is_newest=$is_newest" >> "$GITHUB_OUTPUT"
+          echo "main is at $main_head, this run is $GITHUB_SHA: deploying is $is_newest" | tee -a "$GITHUB_STEP_SUMMARY"
       # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -62,6 +75,7 @@ jobs:
     timeout-minutes: 8
     environment: test-run
     permissions: *assemble-permissions
+    outputs: *assemble-outputs
     env: *assemble-env
     steps: *assemble-steps
   # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination. A test run
@@ -69,7 +83,7 @@ jobs:
   deploy:
     name: Deploy dev site
     needs: assemble
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && needs.assemble.outputs.is_newest == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:

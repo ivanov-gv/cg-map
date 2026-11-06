@@ -31,11 +31,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: dev
-    env: &verify-env
-      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
-    permissions: &verify-permissions
-      contents: read
-      packages: write
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -48,13 +43,14 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make -C apps/editor e2e-built
-      # Last, so that only a build that passed its checks can reach the dev environment.
-      - uses: ./.github/actions/publish-image
-        if: ${{ inputs.publish_image == true || inputs.publish_image == 'true' }}
+      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
+      - name: Share the built artifact with the image job
+        uses: actions/upload-artifact@v5
         with:
-          app: editor
-          repository: ${{ env.IMAGE_REPOSITORY }}
-          token: ${{ github.token }}
+          name: editor-artifact
+          path: dist/editor
+          include-hidden-files: true
+          retention-days: 1
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - uses: actions/upload-artifact@v5
         if: failure()
@@ -68,6 +64,42 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: test-run
-    env: *verify-env
-    permissions: *verify-permissions
     steps: *verify-steps
+  # Its own job: only this one can write packages, and only main can run it for real.
+  image:
+    name: Publish editor image
+    needs: verify
+    if: ${{ (inputs.publish_image == true || inputs.publish_image == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    steps: &image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: editor-artifact
+          path: dist/editor
+      - uses: ./.github/actions/publish-image
+        with:
+          app: editor
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  image-test-run:
+    name: (test-run) Publish editor image
+    needs: verify-test-run
+    if: ${{ inputs.publish_image == true || inputs.publish_image == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *image-env
+    steps: *image-steps

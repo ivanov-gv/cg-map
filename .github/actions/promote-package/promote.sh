@@ -30,7 +30,7 @@ if ! diff --recursive --exclude=package.json --exclude=.npmrc original/package p
   echo "::error::Promoting would change more than package.json."
   exit 1
 fi
-version_free() { node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1]));delete p.version;console.log(JSON.stringify(p,Object.keys(p).sort()))" "$1"; }
+version_free() { node -e "const {version, ...rest}=JSON.parse(require('fs').readFileSync(process.argv[1]));console.log(JSON.stringify(rest))" "$1"; }
 if [ "$(version_free original/package/package.json)" != "$(version_free promoted/package/package.json)" ]; then
   echo "::error::Promoting would change more of package.json than its version."
   exit 1

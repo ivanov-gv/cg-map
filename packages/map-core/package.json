@@ -30,6 +30,7 @@
     "src",
     "assets",
     "tools",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ]
 }

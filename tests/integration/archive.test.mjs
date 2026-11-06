@@ -3,7 +3,7 @@ import {PMTiles,TileType} from 'pmtiles';
 import {VectorTile} from '@mapbox/vector-tile';
 import Pbf from 'pbf';
 import {validateStyleMin} from '@maplibre/maplibre-gl-style-spec';
-import {mapStyle} from '../../packages/map-core/src/map-style.js';
+import {mapStyle} from '../../dist/web/map-core/map-style.js';
 const web=path.resolve('dist/web'),manifest=JSON.parse(fs.readFileSync(path.join(web,'data/manifest.json'))),bytes=fs.readFileSync(path.join(web,manifest.archive.path));
 const source={getKey:()=>manifest.archive.path,getBytes:async(offset,length)=>({data:bytes.buffer.slice(bytes.byteOffset+offset,bytes.byteOffset+Math.min(offset+length,bytes.length))})};
 const archive=new PMTiles(source);const xy=(lon,lat,z)=>[Math.floor((lon+180)/360*2**z),Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*2**z)];
