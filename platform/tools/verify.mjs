@@ -4,7 +4,7 @@
 import {spawnSync} from 'node:child_process';
 import {existsSync} from 'node:fs';
 
-const components = ['apps/web', 'data', 'packages/contracts', 'services/backend', 'services/transit-relay', 'platform', 'tests', 'docs'];
+const components = ['packages/map-core', 'apps/core-demo', 'apps/editor', 'apps/web', 'data', 'packages/contracts', 'services/backend', 'services/transit-relay', 'platform', 'tests', 'docs'];
 export const plans = Object.fromEntries(components.map(component => [
   component,
   [['make', '--no-print-directory', '-C', component, 'verify']]

@@ -1,6 +1,31 @@
-import {categories,colors,matches,selectNearest,safeWebsite,collection,DEFAULT_CENTER,DISCOVER_ZOOM,POSITION_APPROXIMATE_M,formatAge} from './core.js';
-import {mapStyle,installBuildingNumberScale} from './map-style.js';
-import {installSatellite,setSatelliteVisible,satelliteBounds} from './satellite.js';
+import {
+  categories,
+  matches,
+  selectNearest,
+  safeWebsite,
+  collection,
+  DEFAULT_CENTER,
+  DISCOVER_ZOOM,
+  POSITION_APPROXIMATE_M,
+  formatAge
+} from './core.js';
+import {
+  createMap,
+  registerArchiveProtocol,
+  mapBounds,
+  setSatelliteVisible,
+  satelliteBounds,
+  placeColors,
+  installPlaceIcons,
+  parseVisibilityConfig,
+  normalizePlaces,
+  markerKeys,
+  placeBands,
+  buildPlaceMarkers,
+  requestedPlaceMarker,
+  placeLayers,
+  listingsAtHits
+} from '@ivanov-gv/map-core';
 import {ArchiveSource,downloadLabel} from './offline.js';
 import {installTransport,TransportFeed} from './transport.js';
 import {describePoint,buildingAddressIndex,buildingMapFeatures,entranceFeatures,installEntranceLayers,selectBuildingEntrances,endpointFeatures,installRoutePoints} from './point-selection.js';
@@ -9,19 +34,20 @@ import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
 import {resolveDataMode,dataEndpoints,basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
-import {installPlaceIcons} from './poi-icons.js';
-import {parseVisibilityConfig,normalizePlaces,markerKeys,placeBands,buildPlaceMarkers,requestedPlaceMarker,placeLayers,listingsAtHits} from './place-visibility.js';
 import {PositionTracker,positionFeatures,installPositionLayers} from './position.js';
 import {MapInterface,isInFocusZone} from './interface.js';
 const $=id=>document.getElementById(id);
 let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
 let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection,dataMode,api;
 const endpoints={from:null,to:null};
-let loaded=false,errorTimer,searchTimer,frame=0,serviceWorkerRegistration=null,buildingAddresses=new Map();
+let loaded = false;
+let errorTimer;
+let searchTimer;
+let serviceWorkerRegistration = null;
+let buildingAddresses = new Map();
 let placesError=null,position={state:'idle',fix:null,age:null},explored=false,ownMove=false,centeredOnFix=false;
 let ui,preview=null,locationRequested=false,pendingReveal=null,choosing=false;
 let visibility,keysById=new Map(),placeHitLayers=['search-place'],requestedKey=null;
-const MAP_BOUNDS=[[17.8,41.3],[21,44.1]];
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 // config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
 // artifact's {"api":"mock"}. A missing file, an offline start or a server error falls back to the
@@ -188,12 +214,24 @@ function setEndpoint(role) {
  // Route controls live on the map, so choosing an endpoint leaves search or the dock.
  ui.close();renderEndpoints();closePlace();
 }
-function listingButton(f,onClick,distance){
- const p=f.properties,button=node('button',undefined,'result');button.type='button';button.dataset.id=p.id;
- const symbol=node('span',p.category==='essentials'?'+':(p.kind??p.category)[0].toUpperCase(),'symbol');symbol.style.setProperty('--color',colors[p.category]);symbol.setAttribute('aria-hidden','true');
- const copy=node('span',undefined,'copy');copy.append(node('strong',p.name),node('small',(p.kind??'').replaceAll('_',' ')));
- button.append(symbol,copy);if(distance)button.append(node('span',distance,'distance'));
- button.addEventListener('click',onClick);return button;
+function listingButton(place, onClick, distance) {
+  const properties = place.properties,
+    button = node('button', undefined, 'result');
+  button.type = 'button';
+  button.dataset.id = properties.id;
+  const symbol = node(
+    'span',
+    properties.category === 'essentials' ? '+' : (properties.kind ?? properties.category)[0].toUpperCase(),
+    'symbol'
+  );
+  symbol.style.setProperty('--color', placeColors[properties.category]);
+  symbol.setAttribute('aria-hidden', 'true');
+  const copy = node('span', undefined, 'copy');
+  copy.append(node('strong', properties.name), node('small', (properties.kind ?? '').replaceAll('_', ' ')));
+  button.append(symbol, copy);
+  if (distance) button.append(node('span', distance, 'distance'));
+  button.addEventListener('click', onClick);
+  return button;
 }
 function renderResults(){if(!map)return;
  // A failed load is an error state, never an empty search result.
@@ -262,133 +300,409 @@ function positionAction(){
  if(['denied','outside','insecure','unsupported'].includes(position.state)){renderPosition(position);return;}
  tracker?.retry();
 }
-async function start(){
- if(location.protocol==='file:'||location.protocol==='content:'){notify('Open Kompas through the supplied local server or an HTTPS address. A downloaded HTML file cannot install the offline app.');$('loading').hidden=true;return;}
- if(!globalThis.maplibregl||!globalThis.pmtiles){notify('The bundled map libraries did not load. Check the application files.');return;}
- // Location, places and house numbers start immediately and never block the base map.
- tracker=new PositionTracker({bounds:MAP_BOUNDS,onChange:renderPosition});
- tracker.start().catch(e=>{console.error('Location setup failed',e);renderPosition({state:'unavailable',fix:null,age:null});});
- const placesReady=Promise.all([loadJSON('data/places.geojson','Places'),loadJSON('data/place-visibility.json','Place levels')]).then(([data,config])=>{
-  if(!Array.isArray(data?.features))throw new Error('Places: missing features');
-  visibility=parseVisibilityConfig(config);
-  all=normalizePlaces(data.features,visibility);keysById=markerKeys(all);byId=new Map(all.map(f=>[String(f.properties.id),f]));filtered=all;
- }).catch(e=>{console.error(e);placesError=e.message;notify(`Places could not load (${e.message}). Streets and buildings are still shown.`);renderResults();});
- const labelsReady=loadJSON('data/building-labels.geojson','House numbers').then(labels=>{
-  buildingAddresses=buildingAddressIndex(labels);
-  return labels;
- })
-  .catch(e=>{console.error(e);notify(`House numbers could not load (${e.message}). Building details may lack addresses.`);});
- // This MapLibre bundle has no supported() helper. Map construction reports
- // graphics initialization errors through the existing startup catch handler.
- if('serviceWorker' in navigator&&isSecureContext){serviceWorkerRegistration=await registerAppUpdates().catch(e=>{notify('Offline setup failed: '+e.message);return null;});}
- dataMode=await loadDataMode();api=dataEndpoints(dataMode,location.href);document.documentElement.dataset.api=dataMode;
- manifest=await loadJSON('data/manifest.json','Map metadata');
- archive=new ArchiveSource(new URL(manifest.archive.path,location.href).href,manifest);try{await archive.init();}catch(e){storageNote('Local storage unavailable. Online map is still usable.');}
- updateDownload();
- const protocol=new pmtiles.Protocol();protocol.add(new pmtiles.PMTiles(archive));maplibregl.addProtocol('pmtiles',protocol.tile);
- map=new maplibregl.Map({container:'map',style:mapStyle(basemapURL(api,archive.url,!!archive.local)),center:DEFAULT_CENTER,zoom:DISCOVER_ZOOM,minZoom:7,maxZoom:23,maxBounds:MAP_BOUNDS,renderWorldCopies:false,attributionControl:{compact:true},fadeDuration:0,maxTileCacheSize:160,pixelRatio:Math.min(devicePixelRatio||1,2),refreshExpiredTiles:false});
- // Exposed for the supplied browser QA script and manual performance inspection.
- window.kompasDebug={get map(){return map;},get endpoints(){return structuredClone(endpoints);},get offline(){return !!archive.local;},get selected(){return selected?.properties.id??null;},get placeCount(){return all.length;},get satellite(){return satelliteVisible;},get transport(){return !!transport?.enabled;},get dataMode(){return dataMode;},get position(){return position.state;},get explored(){return explored;}};
- map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');map.addControl(new maplibregl.ScaleControl({maxWidth:100}),'bottom-left');
- map.addControl({
-  onAdd(){const control=$('position-badge');control.classList.add('maplibregl-ctrl','maplibregl-ctrl-group');return control;},
-  onRemove(){$('position-badge')?.remove();}
- },'bottom-right');
- const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>map.resize());});observer.observe($('map'));
- map.on('load',()=>{
-  installBuildingNumberScale(map);
-  installSatellite(map,location.href);
-  $('satellite-toggle').disabled=false;
+// Public startup owns location, offline transport and workflow state; core owns the map lifecycle.
+async function start() {
+  if (location.protocol === 'file:' || location.protocol === 'content:') {
+    notify(
+      'Open Kompas through the supplied local server or an HTTPS address. A downloaded HTML file cannot install the offline app.'
+    );
+    $('loading').hidden = true;
+    return;
+  }
+  if (!globalThis.maplibregl || !globalThis.pmtiles) {
+    notify('The bundled map libraries did not load. Check the application files.');
+    return;
+  }
+  // Location, places and house numbers start immediately and never block the base map.
+  tracker = new PositionTracker({bounds: mapBounds, onChange: renderPosition});
+  tracker.start().catch(error => {
+    console.error('Location setup failed', error);
+    renderPosition({state: 'unavailable', fix: null, age: null});
+  });
+  const {placesReady, labelsReady} = loadDirectoryData();
+  await initializeMapTransport();
+  registerArchiveProtocol(maplibregl, pmtiles, archive);
+  // This MapLibre bundle has no supported() helper. Map construction reports
+  // graphics initialization errors through the existing startup catch handler.
+  map = createMap({
+    engine: maplibregl,
+    container: 'map',
+    basemapURL: basemapURL(api, archive.url, !!archive.local),
+    assetBaseURL: location.href,
+    options: {
+      center: DEFAULT_CENTER,
+      zoom: DISCOVER_ZOOM
+    }
+  });
+  installPublicMapDebug();
+  installPositionBadge();
+  map.on('load', () => installPublicLayers(placesReady, labelsReady));
+  registerPublicMapEvents();
+  warnAboutSlowStartup();
+}
+
+// These independent requests never block streets/buildings and each reports its own failure.
+function loadDirectoryData() {
+  const placesReady = Promise.all([
+    loadJSON('data/places.geojson', 'Places'),
+    loadJSON('data/place-visibility.json', 'Place levels')
+  ])
+    .then(([data, config]) => {
+      if (!Array.isArray(data?.features)) throw new Error('Places: missing features');
+      visibility = parseVisibilityConfig(config);
+      all = normalizePlaces(data.features, visibility);
+      keysById = markerKeys(all);
+      byId = new Map(all.map(feature => [String(feature.properties.id), feature]));
+      filtered = all;
+    })
+    .catch(error => {
+      console.error(error);
+      placesError = error.message;
+      notify(`Places could not load (${error.message}). Streets and buildings are still shown.`);
+      renderResults();
+    });
+  const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
+    .then(labels => {
+      buildingAddresses = buildingAddressIndex(labels);
+      return labels;
+    })
+    .catch(error => {
+      console.error(error);
+      notify(`House numbers could not load (${error.message}). Building details may lack addresses.`);
+    });
+  return {placesReady, labelsReady};
+}
+
+// Storage and server/mock selection remain public-app adapters, not shared map policy.
+async function initializeMapTransport() {
+  if ('serviceWorker' in navigator && isSecureContext) {
+    serviceWorkerRegistration = await registerAppUpdates().catch(error => {
+      notify('Offline setup failed: ' + error.message);
+      return null;
+    });
+  }
+  dataMode = await loadDataMode();
+  api = dataEndpoints(dataMode, location.href);
+  document.documentElement.dataset.api = dataMode;
+  manifest = await loadJSON('data/manifest.json', 'Map metadata');
+  archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
+  try {
+    await archive.init();
+  } catch {
+    storageNote('Local storage unavailable. Online map is still usable.');
+  }
+  updateDownload();
+}
+
+// Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
+function installPublicMapDebug() {
+  window.kompasDebug = {
+    get map() {
+      return map;
+    },
+    get endpoints() {
+      return structuredClone(endpoints);
+    },
+    get offline() {
+      return !!archive.local;
+    },
+    get selected() {
+      return selected?.properties.id ?? null;
+    },
+    get placeCount() {
+      return all.length;
+    },
+    get satellite() {
+      return satelliteVisible;
+    },
+    get transport() {
+      return !!transport?.enabled;
+    },
+    get dataMode() {
+      return dataMode;
+    },
+    get position() {
+      return position.state;
+    },
+    get explored() {
+      return explored;
+    }
+  };
+}
+
+function installPositionBadge() {
+  map.addControl(
+    {
+      onAdd() {
+        const control = $('position-badge');
+        control.classList.add('maplibregl-ctrl', 'maplibregl-ctrl-group');
+        return control;
+      },
+      onRemove() {
+        $('position-badge')?.remove();
+      }
+    },
+    'bottom-right'
+  );
+}
+
+// Preserve public layer ordering and the selected-result exception; core supplies reusable rendering.
+function installPublicPlaceLayers() {
   // PV-01/PV-02: each level is a zoom range, so eligibility is decided before any collision placement.
-  installPlaceIcons(map,colors);
-  map.addSource('places',{type:'geojson',data:collection([]),promoteId:'markerKey'});
-  map.addSource('requested-place',{type:'geojson',data:collection([])});
-  map.addLayer({id:'place-highlight',type:'circle',source:'places',filter:['==',['get','first'],true],paint:{'circle-radius':14,'circle-color':'#c43f3f','circle-opacity':0,'circle-stroke-color':'#c43f3f','circle-stroke-width':0}},'road-labels');
+  installPlaceIcons(map, placeColors);
+  map.addSource('places', {
+    type: 'geojson',
+    data: collection([]),
+    promoteId: 'markerKey'
+  });
+  map.addSource('requested-place', {type: 'geojson', data: collection([])});
+  map.addLayer(
+    {
+      id: 'place-highlight',
+      type: 'circle',
+      source: 'places',
+      filter: ['==', ['get', 'first'], true],
+      paint: {
+        'circle-radius': 14,
+        'circle-color': '#c43f3f',
+        'circle-opacity': 0,
+        'circle-stroke-color': '#c43f3f',
+        'circle-stroke-width': 0
+      }
+    },
+    'road-labels'
+  );
   // The one requested result uses its existing geographic anchor and category icon below its own threshold.
-  map.addLayer({id:'search-place',type:'symbol',source:'requested-place',layout:{'icon-image':['get','icon'],'icon-allow-overlap':true,'icon-ignore-placement':true,'text-field':['get','label'],'text-font':['Open Sans Semibold'],'text-size':12,'text-anchor':'top','text-offset':[0,1.1],'text-optional':true},paint:{'text-color':'#304c3e','text-halo-color':'#fffff9','text-halo-width':2}});
-  const cities=[['Podgorica',19.26,42.437],['Nikšić',18.944,42.774],['Cetinje',18.922,42.39],['Budva',18.84,42.286],['Kotor',18.771,42.424],['Bar',19.098,42.092],['Ulcinj',19.206,41.929],['Herceg Novi',18.537,42.454],['Žabljak',19.121,43.154],['Pljevlja',19.359,43.357],['Kolašin',19.522,42.824],['Berane',19.87,42.843]];
-  map.addSource('cities',{type:'geojson',data:collection(cities.map(([name,x,y])=>({type:'Feature',geometry:{type:'Point',coordinates:[x,y]},properties:{name}})))});map.addLayer({id:'city-names',type:'symbol',source:'cities',maxzoom:13,layout:{'text-field':['get','name'],'text-font':['Open Sans Semibold'],'text-size':13},paint:{'text-color':'#3c5945','text-halo-color':'#fafaf0','text-halo-width':2}});
+  map.addLayer({
+    id: 'search-place',
+    type: 'symbol',
+    source: 'requested-place',
+    layout: {
+      'icon-image': ['get', 'icon'],
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Semibold'],
+      'text-size': 12,
+      'text-anchor': 'top',
+      'text-offset': [0, 1.1],
+      'text-optional': true
+    },
+    paint: {
+      'text-color': '#304c3e',
+      'text-halo-color': '#fffff9',
+      'text-halo-width': 2
+    }
+  });
+}
+
+function installCityNames() {
+  const cities = [
+    ['Podgorica', 19.26, 42.437],
+    ['Nikšić', 18.944, 42.774],
+    ['Cetinje', 18.922, 42.39],
+    ['Budva', 18.84, 42.286],
+    ['Kotor', 18.771, 42.424],
+    ['Bar', 19.098, 42.092],
+    ['Ulcinj', 19.206, 41.929],
+    ['Herceg Novi', 18.537, 42.454],
+    ['Žabljak', 19.121, 43.154],
+    ['Pljevlja', 19.359, 43.357],
+    ['Kolašin', 19.522, 42.824],
+    ['Berane', 19.87, 42.843]
+  ];
+  map.addSource('cities', {
+    type: 'geojson',
+    data: collection(
+      cities.map(([name, longitude, latitude]) => ({
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [longitude, latitude]},
+        properties: {name}
+      }))
+    )
+  });
+  map.addLayer({
+    id: 'city-names',
+    type: 'symbol',
+    source: 'cities',
+    maxzoom: 13,
+    layout: {
+      'text-field': ['get', 'name'],
+      'text-font': ['Open Sans Semibold'],
+      'text-size': 13
+    },
+    paint: {
+      'text-color': '#3c5945',
+      'text-halo-color': '#fafaf0',
+      'text-halo-width': 2
+    }
+  });
+}
+
+// App workflows attach to the shared map after its common sources/layers have loaded.
+function installPublicLayers(placesReady, labelsReady) {
+  $('satellite-toggle').disabled = false;
+  installPublicPlaceLayers();
+  installCityNames();
   installTransport(map);
   installRoutePoints(map);
   installEntranceLayers(map);
-  objectSelection=new ObjectSelection(map,footprintIndex=>selectBuildingEntrances(map,footprintIndex));
-  routePlanner=new RoutePlanner(map);
-  transport=new TransportFeed(map,{url:api.vehicles,onStatus:renderTransportStatus});
-  $('transport-toggle').disabled=false;
-  installPositionLayers(map);renderPosition(position);
-  Promise.all([placesReady,labelsReady]).then(([,labels])=>{
-   if(labels){
-    map.getSource('building-addresses').setData(buildingMapFeatures(labels));
-    map.getSource('building-entrances').setData(entranceFeatures(labels));
-   }
-   if(!placesError){
-    const {names,icons}=placeLayers(placeBands(all,visibility),visibility);
-    for(const layer of [...names,...icons])map.addLayer(layer,'road-labels');
-    placeHitLayers=['search-place',...icons.map(layer=>layer.id),...names.map(layer=>layer.id)];
-   }
-   loaded=true;$('loading').hidden=true;filterPlaces();
+  objectSelection = new ObjectSelection(map, footprintIndex => selectBuildingEntrances(map, footprintIndex));
+  routePlanner = new RoutePlanner(map);
+  transport = new TransportFeed(map, {
+    url: api.vehicles,
+    onStatus: renderTransportStatus
   });
- });
- map.on('movestart',e=>{if(ownMove){ownMove=false;return;}if(e.originalEvent&&!explored){explored=true;renderPosition(position);}});
- // The list keeps its order while a chosen place is open, so the row just used does not jump.
- map.on('moveend',()=>{
-  if(!selected)renderResults();
-  flushPendingReveal();
- });
- // Existing explicit point markers win over underlying polygons; entrance hits retain their source identity.
- installMapTaps(map,event=>{
-  if(!loaded) return;
-  const coordinates=event.lngLat.toArray();
-  const routePoints=map.queryRenderedFeatures(event.point,{layers:['route-point-circles']});
-  if(routePoints.length){
-   const feature=routePoints[0];
-   const point={
-    name:feature.properties.name,
-    coordinates:[...feature.geometry.coordinates],
-    kind:feature.properties.role==='from'?'From point':'To point',
-    details:[]
-   };
-   showPoint(point,feature);
-   return;
-  }
-  const entrances=map.queryRenderedFeatures(event.point,{layers:['entrance-points','entrance-selection-numbers','entrance-numbers','entrance-selection-arrows']});
-  if(entrances.length){
-   const entrance=entrances[0];
-   showPoint(describePoint(entrance,coordinates,buildingAddresses),entrance);
-   return;
-  }
-  const stops=map.queryRenderedFeatures(event.point,{layers:['transport-stops']});
-  if(stops.length){
-   const stop=stops[0];
-   showPoint(describePoint(stop,coordinates),stop);
-   return;
-  }
-  const listings=listingsAtHits(map.queryRenderedFeatures(event.point,{layers:placeHitLayers}),byId);
-  if(listings.length===1){
-   showPlace(listings[0].properties.id);
-   return;
-  }
-  if(listings.length>1){
-   showChooser(listings,coordinates);
-   return;
-  }
-  const roadLayers=['road-labels','steps','cycleways','paths','footways','pedestrian-streets','minor-roads','major-roads'];
-  const features=map.queryRenderedFeatures(event.point,{layers:['building-numbers','buildings',...roadLayers,'land','water','rivers']});
-  const building=features.find(feature=>feature.layer.id==='buildings');
-  const buildingLabel=features.find(feature=>feature.layer.id==='building-numbers');
-  const road=features.find(feature=>roadLayers.includes(feature.layer.id));
-  const park=features.find(feature=>feature.layer.id==='land'&&feature.properties.kind==='park');
-  const water=features.find(feature=>['water','rivers'].includes(feature.layer.id));
-  const feature=building??buildingLabel??road??park??water;
-  showPoint(describePoint(feature,coordinates,buildingAddresses),feature);
- });
- map.on('mousemove',()=>{if(loaded)map.getCanvas().style.cursor='crosshair';});
- // Name the layer that failed; a partly drawn map is not a ready map.
- const failures={basemap:'Streets, buildings and water could not load. Check your connection or save the map for offline use.','building-addresses':'House numbers could not load.','building-entrances':'Building entrances could not load.','satellite-preview':'Satellite imagery could not load.','satellite-tiles':'Satellite imagery could not load.',places:'Places could not be drawn.','requested-place':'Places could not be drawn.','transport-stops':'Bus stops could not load.'};
- map.on('error',e=>{console.error('Map error',e.error);const message=failures[e.sourceId]??'Some map data could not load. Check your connection or download the map for offline use.';clearTimeout(errorTimer);errorTimer=setTimeout(()=>notify(message),1500);});
- map.on('webglcontextlost',()=>notify('The browser paused graphics rendering. Waiting for it to recover…'));map.on('webglcontextrestored',()=>{$('error').hidden=true;map.triggerRepaint();});
- setTimeout(()=>{if(!loaded){$('loading').hidden=true;notify('Map startup is taking longer than expected. Check your connection and try again.');}},20000);
+  $('transport-toggle').disabled = false;
+  installPositionLayers(map);
+  renderPosition(position);
+  Promise.all([placesReady, labelsReady]).then(([, labels]) => {
+    if (labels) {
+      map.getSource('building-addresses').setData(buildingMapFeatures(labels));
+      map.getSource('building-entrances').setData(entranceFeatures(labels));
+    }
+    if (!placesError) {
+      const {names, icons} = placeLayers(placeBands(all, visibility), visibility);
+      for (const layer of [...names, ...icons]) map.addLayer(layer, 'road-labels');
+      placeHitLayers = ['search-place', ...icons.map(layer => layer.id), ...names.map(layer => layer.id)];
+    }
+    loaded = true;
+    $('loading').hidden = true;
+    filterPlaces();
+  });
 }
+
+// Route endpoints, stops and listings win over generic geographic objects. Returns whether one was selected.
+function selectTappedMarker(event) {
+  const routePoints = map.queryRenderedFeatures(event.point, {
+    layers: ['route-point-circles']
+  });
+  if (routePoints.length) {
+    const feature = routePoints[0];
+    showPoint(
+      {
+        name: feature.properties.name,
+        coordinates: [...feature.geometry.coordinates],
+        kind: feature.properties.role === 'from' ? 'From point' : 'To point',
+        details: []
+      },
+      feature
+    );
+    return true;
+  }
+  const entrances = map.queryRenderedFeatures(event.point, {
+    layers: ['entrance-points', 'entrance-selection-numbers', 'entrance-numbers', 'entrance-selection-arrows']
+  });
+  if (entrances.length) {
+    showPoint(describePoint(entrances[0], event.lngLat.toArray(), buildingAddresses), entrances[0]);
+    return true;
+  }
+  const stops = map.queryRenderedFeatures(event.point, {
+    layers: ['transport-stops']
+  });
+  if (stops.length) {
+    showPoint(describePoint(stops[0], event.lngLat.toArray()), stops[0]);
+    return true;
+  }
+  const listings = listingsAtHits(map.queryRenderedFeatures(event.point, {layers: placeHitLayers}), byId);
+  if (listings.length === 1) {
+    showPlace(listings[0].properties.id);
+    return true;
+  }
+  if (listings.length > 1) {
+    showChooser(listings, event.lngLat.toArray());
+    return true;
+  }
+  return false;
+}
+
+// Listings win over geography; among geographic objects the most specific one under the tap wins.
+function selectTappedFeature(event) {
+  if (!loaded) return;
+  if (selectTappedMarker(event)) return;
+  const roadLayers = [
+    'road-labels',
+    'steps',
+    'cycleways',
+    'paths',
+    'footways',
+    'pedestrian-streets',
+    'minor-roads',
+    'major-roads'
+  ];
+  const features = map.queryRenderedFeatures(event.point, {
+    layers: ['building-numbers', 'buildings', ...roadLayers, 'land', 'water', 'rivers']
+  });
+  const selectedFeature =
+    features.find(feature => feature.layer.id === 'buildings') ??
+    features.find(feature => feature.layer.id === 'building-numbers') ??
+    features.find(feature => roadLayers.includes(feature.layer.id)) ??
+    features.find(feature => feature.layer.id === 'land' && feature.properties.kind === 'park') ??
+    features.find(feature => feature.layer.id === 'water' || feature.layer.id === 'rivers');
+  showPoint(describePoint(selectedFeature, event.lngLat.toArray(), buildingAddresses), selectedFeature);
+}
+
+function registerPublicMapEvents() {
+  map.on('movestart', event => {
+    if (ownMove) {
+      ownMove = false;
+      return;
+    }
+    if (event.originalEvent && !explored) {
+      explored = true;
+      renderPosition(position);
+    }
+  });
+  // The list keeps its order while a chosen place is open, so the row just used does not jump.
+  map.on('moveend', () => {
+    if (!selected) renderResults();
+    flushPendingReveal();
+  });
+  installMapTaps(map, selectTappedFeature);
+  map.on('mousemove', () => {
+    if (loaded) map.getCanvas().style.cursor = 'crosshair';
+  });
+  registerMapFailures();
+}
+
+// A partly drawn map is not ready: errors name the affected data source.
+function registerMapFailures() {
+  const failures = {
+    basemap: 'Streets, buildings and water could not load. Check your connection or save the map for offline use.',
+    'building-addresses': 'House numbers could not load.',
+    'building-entrances': 'Building entrances could not load.',
+    'satellite-preview': 'Satellite imagery could not load.',
+    'satellite-tiles': 'Satellite imagery could not load.',
+    places: 'Places could not be drawn.',
+    'requested-place': 'Places could not be drawn.',
+    'transport-stops': 'Bus stops could not load.'
+  };
+  // Tile bursts report many errors; wait for the last one so only one message appears.
+  const mapErrorDelayMilliseconds = 1500;
+  map.on('error', event => {
+    console.error('Map error', event.error);
+    const message =
+      failures[event.sourceId] ??
+      'Some map data could not load. Check your connection or download the map for offline use.';
+    clearTimeout(errorTimer);
+    errorTimer = setTimeout(() => notify(message), mapErrorDelayMilliseconds);
+  });
+  map.on('webglcontextlost', () => notify('The browser paused graphics rendering. Waiting for it to recover…'));
+  map.on('webglcontextrestored', () => {
+    $('error').hidden = true;
+    map.triggerRepaint();
+  });
+}
+
+function warnAboutSlowStartup() {
+  const startupTimeoutMilliseconds = 20000;
+  setTimeout(() => {
+    if (loaded) return;
+    $('loading').hidden = true;
+    notify('Map startup is taking longer than expected. Check your connection and try again.');
+  }, startupTimeoutMilliseconds);
+}
+
 for(const [key,label] of Object.entries(categories)){const b=node('button',label);b.type='button';b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.addEventListener('click',()=>{category=category===key?'all':key;for(const other of $('categories').children){const active=other.dataset.category===category;other.setAttribute('aria-pressed',String(active));if(active)other.scrollIntoView({block:'nearest',inline:'nearest'});}filterPlaces();});$('categories').append(b);}
 $('search').addEventListener('input',()=>{ui.openSearch();clearTimeout(searchTimer);searchTimer=setTimeout(filterPlaces,120);});
 $('point-from').addEventListener('click',()=>setEndpoint('from'));

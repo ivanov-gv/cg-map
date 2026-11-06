@@ -18,7 +18,7 @@
     {
       "id": "ui",
       "source": "docs/engineering/ui.md",
-      "paths": ["apps/web/public/**", "apps/web/src/**"]
+      "paths": ["apps/web/public/**", "apps/web/src/**", "apps/core-demo/public/**", "apps/core-demo/src/**", "apps/editor/public/**", "apps/editor/src/**", "packages/map-core/src/**"]
     },
     {
       "id": "python",

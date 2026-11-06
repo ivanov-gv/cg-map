@@ -83,9 +83,9 @@ jobs:
             echo "::error::Run: gh workflow run ci-all.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
             missing=1
           fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-pages\.yml$\|^\.github/actions/' \
-            && ! has_qualifying_run cd-pages.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-pages.yml --ref $BRANCH -f test_run=true -f run_id=<test-run ci-all run ID>, then re-run this check."
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-core\.yml$\|^\.github/actions/' \
+            && ! has_qualifying_run cd-map-core.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
             missing=1
           fi
           result="Test-run evidence for $HEAD_SHA: $([ "$missing" -eq 0 ] && echo found || echo missing)"

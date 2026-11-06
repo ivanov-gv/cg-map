@@ -1,0 +1,114 @@
+name: cd-map-core
+# Publishes a map-core release: a tag, then a GitHub Release for it such as map-core/v0.2.0. Holds the only permission to
+# publish a release version, touches no application source, and rebuilds nothing.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('cd-map-core test_run={0} {1}', inputs.test_run, inputs.version)
+  || format('cd-map-core {0}', github.event.release.tag_name) }}
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to publish, such as 0.2.0
+        type: string
+        required: true
+      commit:
+        description: The full commit SHA CI built on main
+        type: string
+        required: true
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions: {}
+jobs:
+  switch:
+    name: Test-run switch
+    # Every part of this repository shares the release event, and this workflow answers only to its own tags.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'map-core/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      # Only the local actions: CD never touches the application's source.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+      - id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+          EVENT_COMMIT: ${{ github.sha }}
+          TAG_PREFIX: map-core/v
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # Explicit bash adds pipefail, so a failed API call is not mistaken for an answer.
+        shell: bash
+        run: |
+          version="${INPUT_VERSION:-${RELEASE_TAG#"$TAG_PREFIX"}}"
+          commit="${INPUT_COMMIT:-$EVENT_COMMIT}"
+          # curl, not gh: act's runner image has no gh, and this must also run locally.
+          relation=$(curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer $GH_TOKEN" --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GH_REPO/compare/main...$commit" | jq -r .status)
+          if [ "$relation" != behind ] && [ "$relation" != identical ]; then
+            echo "::error::$commit is not on main ($relation). Release only a commit that CI built on main."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Promoting map-core $version from $commit" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish release version
+    needs: switch
+    if: needs.switch.outputs.test_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: package-release
+    permissions:
+      contents: read
+      packages: write
+    env: &publish-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+      RELEASE_VERSION: ${{ needs.switch.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.switch.outputs.commit }}
+    steps: &publish-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/promote-package
+        with:
+          package: '@ivanov-gv/map-core'
+          version: ${{ env.RELEASE_VERSION }}
+          commit: ${{ env.RELEASE_COMMIT }}
+          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
+          token: ${{ github.token }}
+  publish-test-run:
+    name: (test-run) Publish release version
+    needs: switch
+    if: needs.switch.outputs.test_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *publish-env
+    steps: *publish-steps

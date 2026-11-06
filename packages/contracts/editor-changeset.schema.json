@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reviewable editor changeset",
+  "description": "A feature fingerprint is the lowercase SHA-256 of JSON.stringify(feature), keeping the key order of the pinned source.",
+  "type": "object",
+  "required": ["version", "id", "createdAt", "author", "reason", "bases", "operations"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "id": {"type": "string", "minLength": 1},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "author": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "bases": {
+      "description": "SHA-256 of each changed source file. An import stops if any differs.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["filename", "operation", "reference", "beforeFingerprint", "before", "after"],
+        "additionalProperties": false,
+        "properties": {
+          "filename": {"type": "string", "pattern": "^[a-z][a-z-]*\\.geojson$"},
+          "operation": {"enum": ["add", "modify", "delete"]},
+          "reference": {
+            "description": "A revision-bound index for existing features, never an upstream identity; a local ID for new ones.",
+            "type": "object",
+            "additionalProperties": false,
+            "oneOf": [{"required": ["featureIndex"]}, {"required": ["localId"]}],
+            "properties": {
+              "featureIndex": {"type": "integer", "minimum": 0},
+              "localId": {"type": "string", "pattern": "^local:"}
+            }
+          },
+          "beforeFingerprint": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+          "before": {"type": ["object", "null"]},
+          "after": {"type": ["object", "null"]}
+        }
+      }
+    }
+  }
+}

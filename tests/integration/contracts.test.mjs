@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {categories} from '../../apps/web/src/core.js';
-import {parseVisibilityConfig, normalizePlaces, assertPublishedPlaces} from '../../apps/web/src/place-visibility.js';
+import {parseVisibilityConfig, normalizePlaces, assertPublishedPlaces} from '../../dist/web/map-core/place-visibility.js';
 
 test('web categories agree with the published place contract', () => {
   const contract = JSON.parse(fs.readFileSync('packages/contracts/places.schema.json'));

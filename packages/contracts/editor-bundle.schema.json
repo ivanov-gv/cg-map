@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pinned editor source bundle",
+  "type": "object",
+  "required": ["version", "layers"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "layers": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["filename", "sha256", "bytes", "featureCount"],
+        "properties": {
+          "filename": {
+            "enum": [
+              "building-labels.geojson",
+              "buildings.geojson",
+              "context-countries.geojson",
+              "land.geojson",
+              "places.geojson",
+              "roads.geojson",
+              "transport-stops.geojson",
+              "water.geojson"
+            ]
+          },
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "bytes": {"type": "integer", "minimum": 1},
+          "featureCount": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

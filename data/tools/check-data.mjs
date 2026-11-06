@@ -104,9 +104,13 @@ function onRing(point, ring) {
   });
 }
 
-// Address placeholders record missing numbers, never a literal identifier.
+// A placeholder such as "b.b." records a missing number, never a literal identifier. The list is shared with the editor
+// through the contract.
+const editingRules = JSON.parse(fs.readFileSync(path.join(rootDirectory, 'packages/contracts/editor-layers.json')));
+const houseNumberRule = editingRules.layers['building-labels.geojson'].properties['addr:housenumber'];
 function noNumber(value) {
-  return ['', 'bb', 'бб', 'bezbroja', 'безброја', 'na', '?'].includes(value.toLowerCase().replace(/[\s./_-]/g, ''));
+  const ignoredCharacters = new RegExp(houseNumberRule.ignoredCharactersPattern, 'g');
+  return houseNumberRule.forbiddenValues.includes(value.toLowerCase().replace(ignoredCharacters, ''));
 }
 
 function addressText(value) {

@@ -1,65 +1,98 @@
-# Web release and rollback
+# Dev environment and releases
 
-## GitHub Pages through Actions
+Decision: [ADR 0005](../decisions/0005-packages-releases-and-dev-pages.md). In short, merging shows work on the dev
+environment, and only a release creates a version.
 
-Pages source is GitHub Actions. CI and deployment are separate workflows, joined only by an artifact.
-[ci-all](../../.github/workflows/ci-all.yml) runs on pull requests, on main, nightly, and by manual dispatch, and
-selects the folders a change affects. Changes that do not affect the web do not redeploy it.
+## Dev environment
 
-[ci-apps-web](../../.github/workflows/ci-apps-web.yml) installs pinned workspace dependencies, verifies the web
-component, builds dist/web, uploads it as `web-artifact`, and tests that artifact in Chromium. On main every browser
-area runs whenever the web artifact is built. When ci-all succeeds on a push to main,
-[cd-pages](../../.github/workflows/cd-pages.yml) downloads that artifact without checking out the application, and
-publishes it with deploy-pages and the github-pages environment. Pages/OIDC write permissions exist only in cd-pages;
-pull requests cannot deploy.
+GitHub Pages is the dev environment, and there are no pre or prod environments yet:
+<https://ivanov-gv.github.io/cg-map/>
 
-Public URL: <https://ivanov-gv.github.io/cg-map/>. The app is directly at the project root. Compatibility files redirect
-old /web/ links and retire the earlier nested worker without clearing verified downloads.
+| Path          | Shows                                               |
+| ------------- | --------------------------------------------------- |
+| `/`           | A page to choose from                               |
+| `/web/`       | The public map                                      |
+| `/editor/`    | The layer editor, installable from here             |
+| `/core-demo/` | Unreleased map-core: this is core's dev environment |
 
-## Local release validation
+Every merge to main updates it, with no tags or releases:
+
+1. [ci-all](../../.github/workflows/ci-all.yml) checks what the change affects. An app it selected, once its checks
+   pass, is built into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`.
+2. [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) extracts the `main` image of all three apps into one site
+   and deploys it. A deploy replaces the whole site, so it always takes all three.
+
+To put back an older build of an app, retag its image from the commit you want as `main`, then run
+`gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
+affect `CI gate`, so check it after merging.
+
+To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
+
+## Pull requests
+
+A PR run waits on the `ci-approval` environment before anything runs, using no minutes while it waits. A new push
+replaces the waiting run. Approve it in the run's page on GitHub, or:
 
 ```sh
-make check
-make test-e2e
-git diff --check
-git status --short
+gh api repos/ivanov-gv/cg-map/actions/runs/<run ID>/pending_deployments \
+  -f state=approved -f comment=Ready -F "environment_ids[]=$(gh api repos/ivanov-gv/cg-map/environments/ci-approval --jq .id)"
 ```
 
-Commit source, reviewed data-release changes, contracts, tests, and relevant docs. Never commit dist/ or .build/. A push
-to main that affects the web builds and deploys a new artifact automatically; there is no root/docs deployment copy to
-refresh.
+`CI gate` is required, so auto-merge waits for it.
 
-For another host, run make build and serve dist/web. Caddy examples are in platform/hosting. The Go host can serve that
-directory with its -dir option; it is independent of Pages.
+## Releasing map-core
 
-## Verify and recover
+A version is a tag and a release, in that order. Release only a commit on main whose CI run selected map-core: CD takes
+the dev package CI published for that commit, changes nothing but its version, and refuses a commit that is not on main.
 
-Confirm ci-all and cd-pages succeeded. A failed cd-pages does not affect `CI gate` or show on the pull request, so check
-it after merging. Open the project root, exercise search/selection/satellite, and verify HTTPS offline use on a target
-phone. CI does not establish phone performance or long-term storage retention.
+```sh
+git tag map-core/v0.2.0 <commit on main>
+git push origin map-core/v0.2.0
+gh release create map-core/v0.2.0 --verify-tag --generate-notes
+```
 
-To roll back within 30 days, publish an earlier verified artifact, choosing the ci-all run of a push to main:
-`gh workflow run cd-pages.yml -f test_run=false -f run_id=<run ID>`. Otherwise, or to keep the fix in history, revert
-the offending source/data release commit on main; Actions rebuilds and redeploys it. For a workflow problem, restore the
-last known-good workflow first. Larger future deployments must retain old content-addressed archives for cached clients;
-local source rollback alone is not an archive retention service.
+The release starts [cd-map-core](../../.github/workflows/cd-map-core.yml). A push of the tag alone starts nothing. Use a
+prerelease for a release candidate: `map-core/v0.2.0-rc.1` with `--prerelease` publishes under `next`, so a plain
+install can never get it. A final version publishes under `latest`. A published version cannot be changed: fix forward
+with a new one.
 
-Official workflow guidance:
-[GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+`0.1.0` is the one exception: it was published by hand once, because releases need core to exist before apps can pin it.
 
-## Automatic app updates
+## Upgrading an app to a new core
 
-The app checks its service-worker registration once when the page loads or reloads. It schedules no background polling
-and does not check on tab focus or connectivity changes. Worker scripts and their imported release manifest bypass the
-HTTP cache. Installation fetches the entire replacement shell with cache reload requests before calling skipWaiting. A
-failed installation keeps the current worker and offline shell.
+web and editor each pin an exact version, and upgrade in their own change. That changes package-lock.json, so its PR
+runs every pipeline:
+
+```sh
+npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
+```
+
+To try a release candidate, do the same with its version in a branch. A bad core merge cannot reach these apps: going
+back means pinning the older version.
+
+## Offline app updates
+
+The web app checks its service-worker registration once when the page loads or reloads. It schedules no background
+polling and does not check on tab focus or connectivity changes. Worker scripts and their imported release manifest
+bypass the HTTP cache. Installation fetches the entire replacement shell with cache reload requests before calling
+skipWaiting. A failed installation keeps the current worker and offline shell.
 
 On activation, the worker claims its clients and starts navigation of open app tabs to their existing URLs, including
 query and fragment. Navigation is deliberately not awaited inside activation: its fetch must wait for activation to
-finish. This also refreshes tabs running older app code without an update listener. First installation does not reload
-the page. Successful updates remove obsolete shell caches, preserving the verified map archive in OPFS. Automatic reload
-resets in-memory selections and route endpoints.
+finish. First installation does not reload the page. Successful updates remove obsolete shell caches, preserving the
+verified map archive in OPFS. Automatic reload resets in-memory selections and route endpoints.
 
 Browser acceptance exercises a real two-release HTTP host with long-lived HTTP caching, multiple tabs, unchanged worker
-code with a changed imported manifest, an incomplete update, and offline reopening. Clearing browser data is not part of
-the release process.
+code with a changed imported manifest, an incomplete update, and offline reopening. The editor's own updates are
+described in [its README](../../apps/editor/README.md#offline-and-updates).
+
+## Another host
+
+Any image above serves its app on port 8080. Caddy examples are in platform/hosting. The Go host can serve dist/web with
+its -dir option; it is independent of Pages.
+
+## Devices that used the old site
+
+The web app used to live at the root, and a browser that visited it keeps that worker, which can answer for every path
+under `/cg-map/`. If `/editor/` or `/web/` shows an old page on such a device, clear the site's data. That also removes
+editor drafts on this origin, so export them first.

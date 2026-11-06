@@ -3,13 +3,14 @@
 Read [README.md](README.md), [architecture](../../docs/system-architecture/architecture.md), and
 [contracts](../../packages/contracts/README.md).
 
-- src/ owns runtime JavaScript; public/ owns HTML/CSS/icons/fonts/vendored bundles.
+- src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
 - tests/ owns component tests and tests/e2e browser acceptance; playwright.config.mjs owns browser projects and ports.
 - Data inputs belong to data/, not this component. Consume its release and shared contracts.
 - Keep core.js free of DOM/browser state. Preserve one map instance and local runtime assets.
 - Keep archive/range responses outside shell caching and preserve verified downloads on failed replacements.
 - Use relative paths so the built app works at / and /cg-map/.
+- Shared rendering lives in packages/map-core; keep its modules and assets in the offline inventory.
 
 ## Testing
 
@@ -21,12 +22,12 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   browser scenarios using project, file, and title filters; confirm the selection with `--list`. See
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web
   tests. Run `make verify` or `npm run verify` from apps/web for the same component checks.
-- Run `make check` (about 13s locally) and full `make test-e2e` once after the final web/UI, offline, or release
-  behavior change, covering both deployment projects. Install Chromium first with `npm run browser:install -- chromium`
-  from apps/web if needed.
-- Standalone browser commands build first. Use `make test-e2e-built` only after a successful web build (as CI does after
-  building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in test-results/
-  inside this component. Root npm/Make commands forward to the local implementations.
+- Run `make check` and full `make -C apps/web e2e` once after the final web/UI, offline, or release behavior change,
+  covering both deployment projects. Install Chromium first with `npm run browser:install -- chromium` from apps/web if
+  needed.
+- Standalone browser commands build first. Use `make -C apps/web e2e-built` only after a successful web build (as CI
+  does after building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in
+  test-results/ inside this component.
 - Repeat passing suites only after relevant edits, failures, or an unresolved concern; do not rerun unchanged passing
   suites per turn. Documentation-only changes need Markdown, link/boundary, and agent-rule checks, not browser
   acceptance.

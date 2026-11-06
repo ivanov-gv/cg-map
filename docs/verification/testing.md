@@ -19,27 +19,33 @@ Frontend iteration commands and measured check durations live with the
 
 ## Test ownership
 
-| Location                     | Scope                                                                                                           |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| apps/web/tests               | Pure helpers, satellite behavior, offline transactions and module inventory, worker lifecycle, vendor contracts |
-| data/tests                   | Place/geometry contracts and approved small fixture                                                             |
-| platform/tests               | Actual Python HTTP/range behavior, deployment compatibility                                                     |
-| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                |
-| services/backend/cmd/server  | Go host directory/range behavior                                                                                |
-| tests/integration            | Real archive/MVT decoding, imagery asset hashes, shared-category agreement, transport                           |
-| apps/web/tests/e2e           | Built artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                        |
+| Location                     | Scope                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| packages/map-core/tests      | Asset URLs, lifecycle and teardown, projection, hit testing, overlay selection, satellite, POI visibility                                                  |
+| apps/editor/tests            | Editing rules, session and history, gestures, changesets, drafts, source bundle integrity, overlay hit resolution, unknown property preservation           |
+| apps/core-demo/tests         | The concept app imports only the public map-core entry                                                                                                     |
+| apps/web/tests               | Pure helpers, offline transactions and module inventory, worker lifecycle, vendor contracts                                                                |
+| data/tests                   | Place/geometry contracts and approved small fixture                                                                                                        |
+| platform/tests               | Actual Python HTTP/range behavior, LAN certificates and TLS, deployment compatibility                                                                      |
+| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                                                           |
+| services/backend/cmd/server  | Go host directory/range behavior                                                                                                                           |
+| tests/integration            | Real archive/MVT decoding, imagery hashes, shared categories, transport, editor changesets through the real importer, editor source bundle round trip      |
+| apps/web/tests/e2e           | Built web artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                                                               |
+| apps/editor/tests/e2e        | Built source editor: every edit through the real map, including touch; offline install and updates; the sketch, desktop/mobile, origin/project-prefix URLs |
+| apps/core-demo/tests/e2e     | Built concept app and each map-core capability, desktop/mobile, origin/project-prefix URLs                                                                 |
 
-make check builds dist/web and runs Node/Python tests, JavaScript lint, all-source Markdown structure/format checks,
-data/provenance/release checks, docs/layout/dependency checks, and generated manifest verification. `make check-go`
-independently runs Go vet, golangci-lint, tests, and build. See
+make check runs `verify` in every project, which together build dist/web, dist/core-demo and dist/editor and run
+Node/Python tests, JavaScript lint, all-source Markdown structure/format checks, data/provenance/release checks,
+docs/layout/dependency checks, and generated manifest verification. `make check-go` independently runs Go vet,
+golangci-lint, tests, and build. See
 [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
 command.
 
-Playwright runs against the actual deployable artifact. It tests / and /cg-map/, fixture-backed search/selection,
-satellite switching with one map instance, and downloading/reloading the reviewed archive offline. Discover checks cover
-the street-scale first view and key, granted/denied location states, country-scale POI suppression, and named layer
-failures; geolocation is emulated, so physical-device fixes remain a manual check. Compatibility tests preserve old
-/web/ entry behavior. On failure, traces/screenshots are uploaded by CI.
+Each browser project runs Playwright against its own built artifact. For the deployable web artifact, it tests / and
+/cg-map/, fixture-backed search/selection, satellite switching with one map instance, and downloading/reloading the
+reviewed archive offline. Discover checks cover the street-scale first view and key, granted/denied location states,
+country-scale POI suppression, and named layer failures; geolocation is emulated, so physical-device fixes remain a
+manual check. Compatibility tests preserve old /web/ entry behavior. On failure, traces/screenshots are uploaded by CI.
 
 These checks do not prove GIS topology, real-world listing freshness, phone GPU performance, or persistent storage
 retention. Test the target phone for gestures, rotation/folding, interrupted/full-storage downloads, airplane-mode
@@ -50,20 +56,28 @@ authoritative for this layout.
 
 ## What runs in CI
 
-[ci-all](../../.github/workflows/ci-all.yml) calls one workflow per folder, chosen from the diff by
+[ci-all](../../.github/workflows/ci-all.yml) calls one workflow per project, chosen from the diff by
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
 everything.
 
 | Changed                                                     | Runs                                                                                        |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Markdown, except under `apps/web/public`                    | `docs` only: no code checks                                                                 |
+| Markdown, except under `apps/*/public`                      | `docs` only: no code checks                                                                 |
 | Backend Go code                                             | `backend` only                                                                              |
-| `services/transit-relay`                                    | `transit-relay`, `tests`                                                                    |
-| `platform/pages`, `platform/tools/serve.py`                 | `platform`, `apps-web`, every browser area                                                  |
-| `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder                                                                                 |
+| `services/transit-relay`                                    | `transit-relay`                                                                             |
+| `platform/pages`                                            | `platform`, `apps-web`, every browser area                                                  |
+| `platform/tools/serve.py`, `dev-port.mjs`                   | `platform`, every map application, every browser area                                       |
+| `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
+| `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
 | `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
-| `data/sources`, `artifacts`, `imagery`                      | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
-| `packages/contracts`                                        | Those, plus `contracts` and `backend`                                                       |
+| `apps/editor`                                               | `apps-editor`, `tests`                                                                      |
+| `apps/core-demo`                                            | `apps-core-demo`                                                                            |
+| `packages/map-core`                                         | `map-core`, every map application, `tests`, `platform`, every browser area                  |
+| `data/tools/editor-bundle.mjs`                              | `data`, `apps-editor`, `tests`                                                              |
+| `data/tools` changeset importer, data check, level policy   | `data`, `tests`                                                                             |
+| `data/tests/fixtures`                                       | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
+| `data/sources`, `artifacts`, `imagery`                      | `data`, every map application, `tests`, `platform`, every browser area                      |
+| `packages/contracts`                                        | Those, plus `map-core`, `contracts` and `backend`                                           |
 | `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
 | Root files such as `package-lock.json`, or unknown paths    | Everything                                                                                  |
 
@@ -81,11 +95,11 @@ always run every area, so a wrong mapping cannot reach users.
 | journeys    | journeys.spec.mjs                             | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
 | interface   | interface.spec.mjs                            | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
 | discover    | discover.spec.mjs                             | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
-| poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
-| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | place-visibility.js, poi-icons.js, data/sources/places*, contracts            |
+| poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
+| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 
-app.js, core.js, map-style.js, style.css, index.html, shared test helpers, build tools, and anything unmapped run every
-area, because every browser test boots them.
+app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
+every area, because every browser test boots them.
 
 ## Monorepo verification — 2026-10-18
 

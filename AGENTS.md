@@ -4,43 +4,51 @@ Start with [architecture](docs/system-architecture/architecture.md), [ownership]
 and the relevant component's AGENTS.md. This is a read-only map PoC; do not invent backend APIs or editorial services
 that do not exist.
 
+## Monorepo of independent projects
+
+Each project below is mostly independent: it owns its Makefile, build, run, lint, tests, instructions and CI pipeline.
+Projects connect only through the [concrete contracts](docs/system-architecture/architecture.md#independent-projects).
+The root Makefile never runs a project's build or run targets, and no project runs another project's checks. Add a
+project the way that section describes.
+
 ## Repo map and language rules
 
 Read the matching guideline before planning, editing, or reviewing code in that language. Claude Code loads them
 automatically by path; other agents must open the linked file.
 
-| Path                   | What                                                          | Guidelines                                                                                                       |
-| ---------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| apps/web               | Browser app: MapLibre UI, offline, build                      | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md), [python](docs/engineering/python.md) |
-| data                   | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
-| services/backend       | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                                                     |
-| services/transit-relay | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                                                     |
-| packages/contracts     | Shared producer/consumer formats                              | Producer and consumer review together                                                                            |
-| platform, .github      | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
-| tests                  | Cross-component contract and artifact integration             | [javascript](docs/engineering/javascript.md)                                                                     |
+| Path                                                     | What                                                          | Guidelines                                                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| apps/web, apps/editor, apps/core-demo, packages/map-core | Separate browser apps and their shared map runtime            | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md), [python](docs/engineering/python.md) |
+| data                                                     | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| services/backend                                         | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                                                     |
+| services/transit-relay                                   | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                                                     |
+| packages/contracts                                       | Shared producer/consumer formats                              | Producer and consumer review together                                                                            |
+| platform, .github                                        | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| tests                                                    | Cross-component contract and artifact integration             | [javascript](docs/engineering/javascript.md)                                                                     |
 
 How the harness loads rules and how to add a language: [docs/engineering/README.md](docs/engineering/README.md).
 
-## Commands from repository root (never invent others)
+## Repository-wide commands, from the root (never invent others)
 
-- `make setup`: install pinned npm dependencies (Node 24) and enable git hooks.
+- `make setup`: install pinned npm dependencies (Node 24; `gh` needs `read:packages`) and enable git hooks.
 - `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
-- `make check`: lint, source/release validation, docs/boundaries, agent-rule drift, web build, Node/Python tests,
-  offline manifests.
-- `make check-go`: format-check/vet/lint/test/build the independent services/backend Go module.
+- `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
 - `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
 - `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
   for `.github/**` changes.
-- `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires.
-- `make dev`: build web and run the Go backend (server mode) on a per-worktree port; needs Go.
-  `DEV_FLAGS=-live-transport=false` skips upstream calls.
-- `make dev-mock`: build web and serve static dist/web (mock mode, as on GitHub Pages).
-- `make build`: assemble the current web artifact without regenerating geography.
-- `make build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
+- `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
+- `make test-e2e`: browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
 - `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.
+
+## Project commands, from each project's own Makefile
+
+- `make -C apps/<name> build|dev|e2e`: assemble, preview or browser-test that app; `E2E_ARGS=...` filters tests.
+- `make -C apps/web dev` needs Go and runs server mode; `DEV_FLAGS=-live-transport=false` skips upstream calls.
+  `make -C apps/web dev-mock` serves static dist/web, as on GitHub Pages.
+- `make -C data build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
 
 ## Hard rules
 
@@ -59,8 +67,9 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Ownership and generated output
 
-- apps/web owns browser code, public assets, and web build/tests. services/backend owns the Go module and future
-  backend/editorial implementation.
+- apps/web owns public browser code, assets, and web build/tests. packages/map-core owns shared map runtime; apps/editor
+  and apps/core-demo own their internal viewers. services/backend owns the Go module and future backend/editorial
+  implementation.
 - data owns editable sources, imagery, validated releases, and pipeline tools/tests. data/artifacts holds the reviewed
   snapshot so a clean checkout builds without a geography import.
 - platform owns development/release infrastructure and the agent harness; GitHub-specific configuration lives in

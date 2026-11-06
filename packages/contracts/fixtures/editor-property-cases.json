@@ -1,0 +1,213 @@
+{
+  "description": "Property cases both the editor and the data importer must agree on. previous is the source value of the feature, when it has one.",
+  "cases": [
+    {
+      "name": "complete place",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "kind": "cafe",
+        "name": "Cafe",
+        "visibilityLevel": 3
+      },
+      "isValid": true
+    },
+    {
+      "name": "blank name",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "kind": "cafe",
+        "name": "  ",
+        "visibilityLevel": 3
+      },
+      "isValid": false
+    },
+    {
+      "name": "missing kind",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "name": "Cafe",
+        "visibilityLevel": 3
+      },
+      "isValid": false
+    },
+    {
+      "name": "unknown category",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "nightlife",
+        "kind": "cafe",
+        "name": "Cafe",
+        "visibilityLevel": 3
+      },
+      "isValid": false
+    },
+    {
+      "name": "unsupported level",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "kind": "cafe",
+        "name": "Cafe",
+        "visibilityLevel": 99
+      },
+      "isValid": false
+    },
+    {
+      "name": "level 1 outside the landmark category",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "kind": "cafe",
+        "name": "Cafe",
+        "visibilityLevel": 1
+      },
+      "isValid": false
+    },
+    {
+      "name": "level 1 for a landmark",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "sights",
+        "kind": "cafe",
+        "name": "Cafe",
+        "visibilityLevel": 1
+      },
+      "isValid": true
+    },
+    {
+      "name": "real house number",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "12a"
+      },
+      "isValid": true
+    },
+    {
+      "name": "placeholder house number bb",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "bb"
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number BB",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "BB"
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number b.b.",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "b.b."
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number n/a",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "n/a"
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number -",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "-"
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number ?",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "?"
+      },
+      "isValid": false
+    },
+    {
+      "name": "placeholder house number бб",
+      "filename": "building-labels.geojson",
+      "properties": {
+        "addr:housenumber": "бб"
+      },
+      "isValid": false
+    },
+    {
+      "name": "new blank road name",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "footway",
+        "name": ""
+      },
+      "previous": {
+        "kind": "footway",
+        "name": "Old"
+      },
+      "isValid": false
+    },
+    {
+      "name": "unchanged blank source name",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "tertiary",
+        "name": ""
+      },
+      "previous": {
+        "kind": "tertiary",
+        "name": ""
+      },
+      "isValid": true
+    },
+    {
+      "name": "added road without a kind",
+      "filename": "roads.geojson",
+      "properties": {
+        "name": "Path"
+      },
+      "isValid": false
+    },
+    {
+      "name": "reviewed landmark renamed",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "sights",
+        "kind": "museum",
+        "name": "New name",
+        "visibilityLevel": 1
+      },
+      "previous": {
+        "category": "sights",
+        "kind": "museum",
+        "name": "Museum",
+        "visibilityLevel": 1
+      },
+      "isValid": true
+    },
+    {
+      "name": "reviewed landmark moved out of its category",
+      "filename": "places.geojson",
+      "properties": {
+        "category": "food",
+        "kind": "museum",
+        "name": "Museum",
+        "visibilityLevel": 1
+      },
+      "previous": {
+        "category": "sights",
+        "kind": "museum",
+        "name": "Museum",
+        "visibilityLevel": 1
+      },
+      "isValid": false
+    }
+  ]
+}

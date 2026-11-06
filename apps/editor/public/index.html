@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kompas · layer editor</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#193f36" />
+    <link rel="stylesheet" href="vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="vendor/maplibre-gl.js" defer></script>
+    <script src="vendor/pmtiles.js" defer></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <aside class="dock">
+      <header>
+        <h1>Kompas</h1>
+        <p>Layer editor</p>
+      </header>
+      <p class="notice">
+        Edits stay in this browser until you export them. Nothing here writes to the reviewed sources.
+      </p>
+      <p id="offline-status" class="hint" role="status"></p>
+      <button id="update-app" hidden>Update and reload</button>
+      <p id="update-hint" class="hint" hidden>
+        Export your pending changes before updating: if the update changes one of those source files, your draft is set
+        aside instead of resumed.
+      </p>
+      <h2>Layers</h2>
+      <div class="layer-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Source file</th>
+              <th>Features</th>
+            </tr>
+          </thead>
+          <tbody id="layers"></tbody>
+        </table>
+      </div>
+      <h2>Choose what to edit</h2>
+      <div id="modes" class="tiles"></div>
+      <button id="browse" disabled>Browse · all files locked</button>
+      <p class="hint">
+        One GeoJSON file per mode. Every edit and undo changes only the active file. Importing a reviewed changeset is
+        the one exception, because it names its own files.
+      </p>
+      <button id="add-feature" hidden></button>
+      <div class="button-row">
+        <button id="undo" disabled>Undo</button>
+        <button id="redo" disabled>Redo</button>
+      </div>
+      <button id="satellite" aria-pressed="false" disabled>Satellite sample</button>
+      <p class="hint">
+        © OpenStreetMap contributors · ODbL · Natural Earth. Stops: ePodgorica. Satellite: eMapa Ortofoto 2025.
+      </p>
+      <h2>Review and export</h2>
+      <p id="draft-conflict" class="notice" role="alert" hidden></p>
+      <div id="draft-conflict-actions" class="button-row" hidden>
+        <button id="draft-download">Download old draft</button>
+        <button id="draft-discard">Discard old draft</button>
+      </div>
+      <p id="review-empty" class="hint">No pending changes. The map outside a mode shows the reviewed release.</p>
+      <div id="review-files"></div>
+      <ul id="review-problems" role="alert"></ul>
+      <label>Author <input id="changeset-author" autocomplete="name" /></label>
+      <label>Reason <input id="changeset-reason" /></label>
+      <button id="export-changeset" disabled>Export changeset</button>
+      <label class="file-button"
+        >Import changeset <input id="import-changeset" type="file" accept=".json,application/json"
+      /></label>
+      <button id="discard-changes" disabled>Discard all changes</button>
+      <p id="review-message" role="status" hidden></p>
+    </aside>
+    <main>
+      <div id="map" aria-label="Source layer map"></div>
+      <div class="map-status">
+        <p id="status" role="status">Loading verified sources…</p>
+        <p id="error" role="alert" hidden></p>
+      </div>
+    </main>
+    <aside class="inspector">
+      <h2 id="selection-title">Select an object</h2>
+      <p id="selection-source">Choose a file mode, then select its geometry on the map.</p>
+      <p id="source-id"></p>
+      <dl id="properties"></dl>
+      <p id="identity" class="hint"></p>
+      <p id="lock-reason" class="notice" hidden></p>
+      <div id="editor" hidden>
+        <h2>Edit</h2>
+        <form id="property-form"></form>
+        <div class="button-row">
+          <button id="tool-move" hidden>Move point</button>
+          <button id="tool-vertices" hidden>Edit points</button>
+          <button id="vertex-insert" hidden>Insert point</button>
+          <button id="vertex-remove" hidden>Remove point</button>
+        </div>
+        <p id="tool-hint" class="hint"></p>
+        <p id="edit-problem" role="alert" hidden></p>
+        <div class="button-row">
+          <button id="apply-edit">Apply</button>
+          <button id="cancel-edit">Cancel</button>
+        </div>
+        <button id="delete-feature" hidden>Delete feature</button>
+      </div>
+    </aside>
+  </body>
+</html>

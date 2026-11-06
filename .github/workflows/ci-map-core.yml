@@ -1,0 +1,82 @@
+name: ci-map-core
+# The shared map runtime, its assets and its build helpers.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+      publish_package:
+        description: Publish the dev package after the checks pass, for a release to promote.
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+      publish_package:
+        description: Publish the dev package after the checks pass, for a release to promote.
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  packages: read
+jobs:
+  verify:
+    name: Verify map-core
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    steps: &verify-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make verify PKG=packages/map-core
+  verify-test-run:
+    name: (test-run) Verify map-core
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    steps: *verify-steps
+  # Its own job: only this one can write packages, and only main can run it for real, because a release promotes what it
+  # publishes.
+  publish:
+    name: Publish dev package
+    needs: verify
+    if: ${{ (inputs.publish_package == true || inputs.publish_package == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &publish-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+    steps: &publish-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/publish-dev-package
+        with:
+          directory: packages/map-core
+          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
+          token: ${{ github.token }}
+  publish-test-run:
+    name: (test-run) Publish dev package
+    needs: verify-test-run
+    if: ${{ inputs.publish_package == true || inputs.publish_package == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *publish-env
+    steps: *publish-steps

@@ -3,21 +3,37 @@
 // The main checkout keeps the documented defaults; linked worktrees get a port derived from their path.
 //   node platform/tools/dev-port.mjs        dev server port (default 8080)
 //   node platform/tools/dev-port.mjs --e2e  Playwright server port (default 8095)
+//   node platform/tools/dev-port.mjs --app core-demo|editor  That app's separate origin; combines with --e2e
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 
-const e2e = process.argv.includes('--e2e');
-let top = '';
-let linked = false;
-try {
-  const [toplevel, gitDir] = execFileSync('git', ['rev-parse', '--show-toplevel', '--absolute-git-dir'], {encoding: 'utf8'}).trim().split('\n');
-  top = toplevel;
-  linked = !gitDir.endsWith('/.git'); // linked worktrees use <common>/.git/worktrees/<name>
-} catch { /* not a git checkout: use defaults */ }
-
-// Consumers parse stdout, including Playwright workers that enable FORCE_COLOR.
-if (!linked) process.stdout.write(`${e2e ? 8095 : 8080}\n`);
-else {
-  const offset = parseInt(crypto.createHash('sha256').update(top).digest('hex').slice(0, 8), 16) % 400;
-  process.stdout.write(`${(e2e ? 9200 : 8200) + offset * 2}\n`);
+const isBrowserTest = process.argv.includes('--e2e');
+const applicationArgumentIndex = process.argv.indexOf('--app');
+const application = applicationArgumentIndex === -1 ? 'web' : process.argv[applicationArgumentIndex + 1];
+// Separate origins protect internal previews from the public root service worker without deleting caches.
+const applicationPortOffsets = {web: 0, 'core-demo': 20000, editor: 30000};
+if (!Object.hasOwn(applicationPortOffsets, application)) {
+  throw new Error('Choose --app web|core-demo|editor.');
 }
+let worktreePath = '';
+let isLinkedWorktree = false;
+try {
+  const [toplevel, gitDirectory] = execFileSync('git', ['rev-parse', '--show-toplevel', '--absolute-git-dir'], {
+    encoding: 'utf8'
+  }).trim().split('\n');
+  worktreePath = toplevel;
+  // Linked worktrees use <common>/.git/worktrees/<name>.
+  isLinkedWorktree = !gitDirectory.endsWith('/.git');
+} catch {
+  // Outside a git checkout, retain documented default ports.
+}
+
+let port = isBrowserTest ? 8095 : 8080;
+if (isLinkedWorktree) {
+  const worktreeDigest = crypto.createHash('sha256').update(worktreePath).digest('hex');
+  const worktreeOffset = parseInt(worktreeDigest.slice(0, 8), 16) % 400;
+  const basePort = isBrowserTest ? 9200 : 8200;
+  port = basePort + worktreeOffset * 2;
+}
+// Consumers parse stdout, including Playwright workers that enable FORCE_COLOR.
+process.stdout.write(`${port + applicationPortOffsets[application]}\n`);

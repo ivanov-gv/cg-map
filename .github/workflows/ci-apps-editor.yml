@@ -1,0 +1,110 @@
+name: ci-apps-editor
+# The source viewer: its checks, artifact and browser tests.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+      publish_image:
+        description: Build and push this app's image after its checks pass.
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  packages: read
+jobs:
+  verify:
+    name: Verify editor
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
+    runs-on: ubuntu-24.04
+    # Two workers took this suite from about 15 minutes towards half that, on GitHub's small runners. See
+    # docs/plans/faster-browser-tests.md before raising this limit: splitting the suite is the lasting fix.
+    timeout-minutes: 20
+    environment: dev
+    env: &verify-env
+      E2E_WORKERS: 2
+    steps: &verify-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make verify PKG=apps/editor
+      - uses: ./.github/actions/setup-browser
+      - uses: ./.github/actions/run-check
+        with:
+          command: make -C apps/editor e2e-built
+      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
+      - name: Share the built artifact with the image job
+        uses: actions/upload-artifact@v5
+        with:
+          name: editor-artifact
+          path: dist/editor
+          include-hidden-files: true
+          retention-days: 1
+      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: browser-failure-evidence-apps-editor
+          path: apps/editor/test-results/
+          retention-days: 7
+  verify-test-run:
+    name: (test-run) Verify editor
+    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: test-run
+    env: *verify-env
+    steps: *verify-steps
+  # Its own job: only this one can write packages, and only main can run it for real.
+  image:
+    name: Publish editor image
+    needs: verify
+    if: ${{ (inputs.publish_image == true || inputs.publish_image == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    steps: &image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: editor-artifact
+          path: dist/editor
+      - uses: ./.github/actions/publish-image
+        with:
+          app: editor
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  image-test-run:
+    name: (test-run) Publish editor image
+    needs: verify-test-run
+    if: ${{ inputs.publish_image == true || inputs.publish_image == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *image-env
+    steps: *image-steps

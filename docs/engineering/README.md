@@ -85,9 +85,10 @@ mechanical rules in services/backend, through golangci-lint; everything else res
 - One worktree per session: `make worktree NAME=fix-routing`, which creates `../cg-map.worktrees/fix-routing` and runs
   `make setup` there. You can also use `claude --worktree <name>` (ignored `.claude/worktrees/`). Run `make setup` in a
   new worktree before checks.
-- `make dev`, `make dev-mock` and `make test-e2e` pick ports from [dev-port.mjs](../../platform/tools/dev-port.mjs). The
-  main checkout keeps 8080/8095; linked worktrees get stable ports derived from their path. dist/ and .build/ are per
-  worktree.
+- `make -C apps/web dev`, `make -C apps/web dev-mock` and `make test-e2e` pick ports from
+  [dev-port.mjs](../../platform/tools/dev-port.mjs). The main checkout keeps 8080/8095; linked worktrees get stable
+  ports derived from their path. `make -C apps/editor dev` and `make -C apps/core-demo dev` add fixed offsets to the dev
+  port, so they get separate origins from the public service worker. dist/ and .build/ are per worktree.
 - Create a worktree and write `docs/plans/<task>.md` there from the [template](../plans/TEMPLATE.md) before launching a
   multi-session task. Split work by component so sessions touch disjoint directories.
 - Integrate one branch at a time: rebase and resolve conflicts in the worktree, run `make check`, then merge by PR.

@@ -7,8 +7,9 @@ it.
 ## Modules and runtime
 
 - ES modules only (`"type": "module"`). Node tooling targets Node 24 and imports built-ins with the `node:` prefix.
-- apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension.
-  MapLibre and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
+- apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension,
+  and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
+  and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
 - A new web module needs its allowed imports declared in platform/tools/check-repo.mjs; dynamic `import()` in web
   runtime is rejected. Enforced: `npm run check:repo`.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
@@ -27,7 +28,8 @@ it.
 
 - Pin exact versions in package.json; install with `npm ci --ignore-scripts`. Do not add a dependency for something a
   few lines of standard library code can do.
-- Browser runtime libraries and fonts are copied into the built artifact by apps/web/tools; never load them from a CDN.
+- Browser runtime libraries and fonts are committed in packages/map-core/assets and copied into each built artifact by
+  its build tool; never load them from a CDN.
 
 ## Tests
 

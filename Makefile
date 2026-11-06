@@ -1,28 +1,24 @@
-.PHONY: setup hooks dev dev-mock check check-docs ci-plan test-all-workflows test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web test-cd-pages verify test test-e2e test-e2e-built build build-web build-data pages check-go agent-rules worktree
+.PHONY: setup hooks check check-docs ci-plan test-all-workflows test-cd-map-core test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-cd-map-core verify test-e2e check-go agent-rules worktree
 
-# Stable per-worktree dev port; override with PORT=... (E2E_PORT is owned by apps/web).
-PORT ?= $(shell node platform/tools/dev-port.mjs)
+# Repository-wide tasks only. Every project builds, runs, lints and tests itself through its own Makefile; this file
+# may call a project's check targets but never its build or run targets. See docs/system-architecture/architecture.md.
+# services/backend stays out of PROJECTS: it needs Go, so make check-go checks it separately.
+PROJECTS := packages/map-core apps/web apps/editor apps/core-demo data packages/contracts services/transit-relay platform tests
+BROWSER_PROJECTS := apps/web apps/editor apps/core-demo
 
+# GitHub Packages asks for a token even to install a public package. gh needs the read:packages scope.
 setup: hooks
-	npm ci --ignore-scripts
+	NODE_AUTH_TOKEN="$$(gh auth token)" npm ci --ignore-scripts
 
 # Point git at the repository hooks (pre-commit: fast checks; pre-push: make check).
 hooks:
 	git config core.hooksPath platform/git-hooks
 
-# Server-mode preview: the Go backend serves dist/web plus the layers and transport APIs.
-# Extra server flags: make dev DEV_FLAGS=-live-transport=false
-dev: build-web
-	mkdir -p .build
-	$(MAKE) --no-print-directory -C services/backend build
-	.build/kompas -dir dist/web -listen 127.0.0.1:$(PORT) -shutdown-delay 0 $(DEV_FLAGS)
-
-# Mock-mode preview, as on GitHub Pages: static dist/web only, no backend.
-dev-mock:
-	$(MAKE) --no-print-directory -C apps/web dev-mock PORT=$(PORT)
-
 check:
-	npm run check
+	@for project in $(PROJECTS); do \
+		echo "> $$project"; \
+		$(MAKE) --no-print-directory -C $$project verify || exit 1; \
+	done
 
 # All Markdown, wherever it lives, the repository checks, and agent rules, including what root AGENTS.md must say.
 # Fast, and needs no web build.
@@ -40,26 +36,12 @@ ci-plan:
 verify:
 	node platform/tools/verify.mjs $(PKG)
 
-test: build-web
-	npm test
-	python3 -m unittest discover -s platform/tests -p 'test_*.py'
-
+# Each project owns its browser tests and builds what they need. For filters, run make -C <project> e2e E2E_ARGS=...
 test-e2e:
-	$(MAKE) --no-print-directory -C apps/web e2e
-
-test-e2e-built:
-	$(MAKE) --no-print-directory -C apps/web e2e-built
-
-build: build-web
-
-build-web:
-	$(MAKE) --no-print-directory -C apps/web build
-
-# Expensive geography regeneration; requires data/tools/requirements.txt.
-build-data:
-	$(MAKE) --no-print-directory -C data build-data
-
-pages: build-web
+	@for project in $(BROWSER_PROJECTS); do \
+		echo "> $$project"; \
+		$(MAKE) --no-print-directory -C $$project e2e || exit 1; \
+	done
 
 check-go:
 	$(MAKE) --no-print-directory -C services/backend check
@@ -76,13 +58,13 @@ worktree:
 ACT ?= gh act
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false -P ubuntu-24.04=catthehacker/ubuntu:act-24.04 -P ubuntu-latest=catthehacker/ubuntu:act-24.04
 
-# test-cd-pages comes first, so a missing RUN_ID stops the run straight away.
-test-all-workflows: test-cd-pages test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web
+# test-cd-map-core comes first, so a missing VERSION stops the run straight away.
+test-all-workflows: test-cd-map-core test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo
 
-test-ci-all test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-apps-web: test-%:
+test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo: test-%:
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
 
-# Needs a real ci-all test run to read from: make test-cd-pages RUN_ID=<run ID>
-test-cd-pages:
-	$(if $(or $(RUN_ID),$(findstring -n,$(ACT))),,$(error Set RUN_ID to a ci-all test run: make test-cd-pages RUN_ID=<run ID>))
-	$(ACT) workflow_dispatch -W .github/workflows/cd-pages.yml $(ACT_RUN) --input run_id=$(RUN_ID)
+# Needs a dev package CI published from main: make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA>
+test-cd-map-core:
+	$(if $(or $(VERSION),$(findstring -n,$(ACT))),,$(error Set VERSION and COMMIT: make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA>))
+	$(ACT) workflow_dispatch -W .github/workflows/cd-map-core.yml $(ACT_RUN) --input version=$(VERSION) --input commit=$(COMMIT)

@@ -6,7 +6,7 @@ import {spawnSync} from 'node:child_process';
 import {componentFor, plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
-const components = ['apps/web', 'data', 'packages/contracts', 'services/backend', 'services/transit-relay', 'platform', 'tests'];
+const components = ['packages/map-core', 'apps/core-demo', 'apps/editor', 'apps/web', 'data', 'packages/contracts', 'services/backend', 'services/transit-relay', 'platform', 'tests'];
 
 test('component verification delegates to owner Makefiles', () => {
   for (const component of components) {
@@ -27,6 +27,7 @@ test('backend checks stay independent of Node and npm', () => {
   const backendMakefile = fs.readFileSync(path.join(repoRoot, 'services/backend/Makefile'), 'utf8');
   const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci-backend.yml'), 'utf8');
   assert.doesNotMatch(backendMakefile, /\b(?:node|npm|npx)\b/);
+  assert.match(backendMakefile, /^export GOLANGCI_LINT_CACHE \?= .*\/\.build\//m, 'each worktree needs its own lint cache');
   assert.match(workflow, /make -C services\/backend check/);
   assert.doesNotMatch(workflow, /setup-web|setup-node/);
 });
@@ -90,4 +91,47 @@ test('docs lint rejects malformed docs and ignores Markdown outside docs', t => 
   fs.rmSync(inScope);
   const excluded = spawnSync('make', ['--no-print-directory', '-f', 'platform/docs.mk', 'lint'], {cwd: repoRoot, encoding: 'utf8'});
   assert.equal(excluded.status, 0, `${excluded.stdout ?? ''}${excluded.stderr ?? ''}`);
+});
+
+test('repo boundary rejects forbidden imports whose list spans several lines', t => {
+  const probe = path.join(repoRoot, 'apps/editor/src', `__boundary-probe-${process.pid}.js`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  fs.writeFileSync(probe, "import {\n  categories\n} from '../../web/src/core.js';\n");
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /forbidden dependency \.\.\/\.\.\/web\/src\/core\.js/);
+});
+
+test('each application owns its build and run targets, and the root Makefile has neither', () => {
+  const rootMakefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
+  const rootTargets = [...rootMakefile.matchAll(/^([a-z][\w-]*)\s*:(?!=)/gm)].map(match => match[1]);
+  for (const applicationTarget of ['build', 'build-web', 'build-data', 'dev', 'dev-mock', 'dev-editor', 'dev-core-demo', 'pages']) {
+    assert.ok(!rootTargets.includes(applicationTarget), `root Makefile must not define ${applicationTarget}`);
+  }
+  assert.doesNotMatch(rootMakefile, /-C \S+ (?:build|dev)\b|npm run -?s? ?build|serve\.py/);
+  const rootScripts = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'))).scripts;
+  assert.deepEqual(Object.keys(rootScripts).sort(), ['check:agents', 'check:repo', 'format:md', 'lint:md', 'setup']);
+  for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+    const makefile = fs.readFileSync(path.join(repoRoot, application, 'Makefile'), 'utf8');
+    for (const target of ['build', 'dev', 'lint', 'test', 'verify', 'e2e', 'e2e-built']) {
+      assert.match(makefile, new RegExp(`^${target}:`, 'm'), `${application} needs a ${target} target`);
+    }
+  }
+});
+
+test('project Makefiles reach other projects only through listed contracts', () => {
+  const allowedReaches = {
+    'apps/web': ['platform/tools/dev-port.mjs', 'services/backend'],
+    'apps/editor': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py', 'platform/tools/lan_certificate.py'],
+    'apps/core-demo': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
+    'services/backend': ['packages/contracts/proto'],
+    platform: ['apps/web'],
+    tests: ['apps/web']
+  };
+  for (const component of components) {
+    const makefile = fs.readFileSync(path.join(repoRoot, component, 'Makefile'), 'utf8');
+    const reaches = [...makefile.matchAll(/\$\(ROOT\)\/((?:apps|packages|services|platform|data|tests)[^\s;)]*)/g)].map(match => match[1]);
+    const unlisted = reaches.filter(reach => !reach.startsWith(component) && !(allowedReaches[component] ?? []).includes(reach));
+    assert.deepEqual(unlisted, [], `${component}/Makefile reaches another project without a listed contract`);
+  }
 });

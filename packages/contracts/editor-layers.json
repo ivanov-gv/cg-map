@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "localPlaceSource": "Local correction",
+  "layers": {
+    "places.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "category": {"required": true, "enum": ["food", "sights", "shops", "stay", "essentials"]},
+        "kind": {"required": true, "maxLength": 64},
+        "visibilityLevel": {"required": true, "isLevel": true, "landmarkLevel": 1, "landmarkCategory": "sights"},
+        "addr:street": {"maxLength": 120},
+        "addr:housenumber": {"maxLength": 128},
+        "phone": {"maxLength": 64},
+        "website": {"maxLength": 512},
+        "opening_hours": {"maxLength": 256}
+      }
+    },
+    "buildings.geojson": {
+      "operations": ["modify"],
+      "geometries": ["Polygon"],
+      "properties": {}
+    },
+    "building-labels.geojson": {
+      "operations": ["modify"],
+      "geometries": ["Point"],
+      "properties": {
+        "addr:housenumber": {
+          "required": true,
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "addr:street": {"maxLength": 120}
+      }
+    },
+    "roads.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["LineString"],
+      "properties": {
+        "name": {"maxLength": 120},
+        "kind": {
+          "required": true,
+          "enum": [
+            "motorway",
+            "motorway_link",
+            "trunk",
+            "trunk_link",
+            "primary",
+            "primary_link",
+            "secondary",
+            "secondary_link",
+            "tertiary",
+            "unclassified",
+            "residential",
+            "service",
+            "pedestrian",
+            "footway",
+            "path",
+            "track",
+            "cycleway",
+            "steps"
+          ]
+        }
+      }
+    },
+    "land.geojson": {
+      "operations": ["modify"],
+      "geometries": ["Polygon"],
+      "editableKinds": ["park"],
+      "inspectOnlyReason": "Country shapes in this file mirror their source context and need a data-owned refresh.",
+      "properties": {"name": {"maxLength": 120}}
+    },
+    "water.geojson": {
+      "operations": ["modify"],
+      "geometries": ["Polygon", "LineString"],
+      "editableKinds": ["water", "river"],
+      "inspectOnlyReason": "The ocean polygon is derived by the data pipeline.",
+      "properties": {"name": {"maxLength": 120}}
+    },
+    "context-countries.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Natural Earth context preserved from its source. Change it through a data-owned refresh.",
+      "properties": {}
+    },
+    "transport-stops.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Dated ePodgorica data, duplicated in transit-network.json. Change it through the transit import.",
+      "properties": {}
+    }
+  }
+}

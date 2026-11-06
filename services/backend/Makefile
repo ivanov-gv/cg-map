@@ -1,8 +1,13 @@
 ROOT := ../..
+ARTIFACT ?= $(ROOT)/dist/web
+PORT ?= 8080
+# golangci-lint keys its cache by file content and stores absolute paths, so a cache shared between worktrees replays
+# findings from whichever worktree linted identical files first, even one that no longer exists.
+export GOLANGCI_LINT_CACHE ?= $(abspath $(ROOT)/.build/golangci-lint-cache)
 # Pinned here, not in go.mod, so the linter's dependencies stay out of the server module.
 GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 
-.PHONY: verify check format-check vet lint test build generate generate-check
+.PHONY: verify check format-check vet lint test build run generate generate-check
 
 verify: check
 
@@ -23,6 +28,10 @@ test:
 build:
 	mkdir -p $(ROOT)/.build
 	go build -o $(ROOT)/.build/kompas ./cmd/server
+
+# Hosts a built web artifact with the layers and transport APIs. Extra server flags: make run DEV_FLAGS=...
+run: build
+	$(ROOT)/.build/kompas -dir $(ARTIFACT) -listen 127.0.0.1:$(PORT) -shutdown-delay 0 $(DEV_FLAGS)
 
 # Buf 1.75.0 compiles the shared schema; generator versions come from go.mod.
 generate:

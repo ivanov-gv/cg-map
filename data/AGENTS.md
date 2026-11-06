@@ -8,6 +8,6 @@ provenance hashes/counts. Contract validation is structural, not a GIS topology 
 Do not invent stable IDs for legacy geometry. OSM extraction replaces snapshots rather than merging local corrections.
 Do not refresh data as an incidental step in another task.
 
-Geometry changes require make build-data; places-only changes require provenance/count review and a web build. The
-reviewed archive is in artifacts/; dist/web is temporary assembly output. Data tools must not import web/backend
+Geometry changes require make -C data build-data; places-only changes require provenance/count review and a web build.
+The reviewed archive is in artifacts/; dist/web is temporary assembly output. Data tools must not import web/backend
 implementation.

@@ -1,0 +1,20 @@
+{
+  "name": "@cg-map/editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src tools tests playwright.config.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node tools/build.mjs",
+    "pretest:e2e": "npm run build",
+    "test:e2e": "playwright test",
+    "test:e2e:built": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  },
+  "dependencies": {
+    "@ivanov-gv/map-core": "0.1.0"
+  }
+}
