@@ -21,12 +21,19 @@ runs:
     - name: Install Chromium
       shell: bash
       run: |
+        # A normal install takes about 20s. A stalled mirror download rarely recovers on its own, but usually does on a
+        # new connection, so several short attempts beat one long wait.
+        attempt_limit_seconds=120
+        max_attempts=3
         start=$SECONDS
-        status=0
-        timeout 360 npx --no-install playwright install --with-deps chromium || status=$?
-        result="Chromium install: exit $status after $((SECONDS - start))s"
-        echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
-        if [ "$status" -eq 124 ]; then echo "::error::Chromium install exceeded its 360s limit"; fi
+        for attempt in $(seq 1 "$max_attempts"); do
+          status=0
+          timeout "$attempt_limit_seconds" npx --no-install playwright install --with-deps chromium || status=$?
+          echo "Chromium install attempt $attempt: exit $status after $((SECONDS - start))s" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$status" -eq 0 ] && exit 0
+          echo "::warning::Chromium install attempt $attempt of $max_attempts failed with exit $status"
+        done
+        echo "::error::Chromium install failed after $max_attempts attempts"
         exit "$status"
     # apt leaves root-owned, unreadable entries here, and the cache cannot be saved with them in place.
     - name: Make package downloads readable by the cache

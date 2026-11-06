@@ -12,7 +12,8 @@ the tests that have found real bugs: offline, updates, and editor exports throug
 All three suites, one worker with software rendering: about 25.5 minutes, and half of that repeats tests on the phone
 layout. With `E2E_WORKERS=6 E2E_ANGLE=gl-egl`: 6.7 minutes on a 16-thread machine with an integrated AMD GPU, with no
 failures or retries. On the viewer tests, the GPU alone saves about 15%, and workers do most of the rest. GitHub's
-standard runners have no GPU and few CPUs, so CI keeps one worker for now.
+standard runners have no GPU and few CPUs. The editor job uses 2 workers, because one worker reached its 15-minute
+limit; other jobs keep one.
 
 ## Remaining, in order
 
@@ -25,7 +26,8 @@ standard runners have no GPU and few CPUs, so CI keeps one worker for now.
    thresholds, which a unit test plus one browser check can cover. Many `editing` tests can shrink the same way.
 4. Replace the fixed waits in web's tests with waits on actual state.
 5. Delete the sketch prototype and its 30 tests, now that the real editor exists.
-6. Try more than one worker in CI, watching for the load-related timeouts seen under `act`.
+6. Try more than one worker for web in CI, as the editor job now does, watching for the load-related timeouts seen under
+   `act`.
 
 ## Handoff
 
