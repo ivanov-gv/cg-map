@@ -105,7 +105,8 @@ test('CI workflows never touch production', () => {
 
 const CD_TAGS = {'cd-map-core.yml': 'map-core/v', 'cd-browser-image.yml': 'browser-image/v'};
 
-for (const [file, tagPrefix] of Object.entries(CD_TAGS)) test(`${file}: CD checks out no application source, and only a release or a manual run can start it`, () => {
+for (const [file, tagPrefix] of Object.entries(CD_TAGS))
+  test(`${file}: CD checks out no application source, and only a release or a manual run can start it`, () => {
   const {jobs, permissions, on} = load(file);
   assert.deepEqual(permissions, {});
   assert.deepEqual(Object.keys(on).sort(), ['release', 'workflow_dispatch']);
@@ -357,13 +358,16 @@ test('a PR runs the phone layout only for tagged tests, and the nightly run runs
   }
 });
 
-test('a test that only runs on the phone layout is tagged, or a PR would run it nowhere', () => {
+// Reads the source, so a dependency hidden in a helper or a describe-level skip gets past it. The nightly run catches those.
+test('a test that depends on the phone layout is tagged, or a PR would not run it there', () => {
   const specDirectories = ['apps/web/tests/e2e', 'apps/editor/tests/e2e'];
   for (const directory of specDirectories) {
     for (const file of fs.readdirSync(path.join(repoRoot, directory)).filter(name => name.endsWith('.spec.mjs'))) {
       const text = fs.readFileSync(path.join(repoRoot, directory, file), 'utf8');
       for (const body of text.split(/^(?=\s*test\()/m).slice(1)) {
-        if (!/test\.skip\(\s*!(isMobile|hasTouch)/.test(body)) continue;
+        const isDesktopOnly = /test\.skip\(\s*isMobile/.test(body);
+        const dependsOnPhone = /\b(isMobile|hasTouch)\b|touchscreen|viewportSize\(\)\.width/.test(body);
+        if (isDesktopOnly || !dependsOnPhone) continue;
         assert.match(body, /tag: '@phone'/, `${file}: ${body.slice(0, 80)}`);
       }
     }

@@ -303,7 +303,7 @@ test.describe('building entrances', () => {
     { numbers: ['32', '27'], building: null, label: '27-32' },
     { numbers: ['32', '27'], building: '1', label: 'Zgrada 1, 27-32' },
   ]) {
-    test(`entrance addresses and selection arrows: ${variant.label}`, async ({
+    test(`entrance addresses and selection arrows: ${variant.label}`, {tag: '@phone'}, async ({
       page,
       context,
     }) => {

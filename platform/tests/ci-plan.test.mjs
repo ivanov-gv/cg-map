@@ -61,6 +61,8 @@ const cases = [
     []
   ],
   ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
+  ['source viewer browser test', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['platform', 'tests', 'apps-editor'], []],
+  ['source viewer browser config', ['apps/editor/playwright.config.mjs'], ['platform', 'tests', 'apps-editor'], []],
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
   ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
   ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],

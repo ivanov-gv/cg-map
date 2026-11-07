@@ -30,12 +30,16 @@ runs:
         docker pull --quiet "$image:$RELEASE_COMMIT"
         # The version says what is inside, because the repository's pin is checked against its Playwright version.
         playwright_version=$(docker inspect --format '{{ index .Config.Labels "playwright.version" }}' "$image:$RELEASE_COMMIT")
-        if [[ "$RELEASE_VERSION" != "$playwright_version"-r* ]]; then
+        if [[ ! "$RELEASE_VERSION" =~ ^"$playwright_version"-r[0-9]+$ ]]; then
           echo "::error::Version $RELEASE_VERSION must be $playwright_version-r<number>, for the Playwright in this image."
           exit 1
         fi
-        if docker manifest inspect "$image:$RELEASE_VERSION" > /dev/null 2>&1; then
+        # Only a clear "not there" may continue: any other failure could overwrite a version that exists.
+        if lookup=$(docker manifest inspect "$image:$RELEASE_VERSION" 2>&1); then
           echo "::error::$image:$RELEASE_VERSION already exists, and a release version never changes."
+          exit 1
+        elif ! echo "$lookup" | grep -qiE 'no such manifest|manifest unknown|not found'; then
+          echo "::error::Could not tell whether $image:$RELEASE_VERSION exists: $lookup"
           exit 1
         fi
         docker tag "$image:$RELEASE_COMMIT" "$image:$RELEASE_VERSION"

@@ -32,7 +32,7 @@ reviewable changeset.
 - Reuse public cartography, local assets, visibility rules and map interaction primitives. Preserve public map behavior,
   deployment prefixes and offline invariants. No editorial API or database exists today.
 - A reload must not silently lose production work: save a draft locally, show save failures, and offer recovery/export.
-  The HTML sketch keeps changes in memory only.
+  The HTML sketch, since deleted, kept changes in memory only.
 
 Affected owners: web experience (both apps and shared rendering), map data (editable sources, import/validation), shared
 stewardship (changeset format), platform (builds, boundaries and verification). Backend is unaffected in the first
@@ -40,7 +40,7 @@ stages.
 
 ## Decisions
 
-Everything below is a proposal unless explicitly described as current. The HTML sketch is a disposable interface draft,
+Everything below is a proposal unless explicitly described as current. The HTML sketch was a disposable interface draft,
 not the new production app or a working source-data editor.
 
 ### Current layer inventory
@@ -184,7 +184,7 @@ building metadata/identity contract. Do not fabricate `address_sources` for loca
 correction model and validate the join. Footprint geometry changes must validate label containment and joins across
 files. They may not silently alter building-labels.geojson. If the final working datasets are inconsistent,
 export/import must report the affected files and require explicit corrections in their own modes before applying the
-reviewed batch atomically. The sketch enforces only per-file ownership and simple footprint checks; the production
+reviewed batch atomically. The sketch enforced only per-file ownership and simple footprint checks; the production
 editor and importer implement the label join.
 
 A data-owned importer validates changeset version, base hashes, allowed layer/property types, finite WGS84 coordinates,

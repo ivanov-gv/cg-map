@@ -32,7 +32,7 @@ jobs:
   verify:
     name: Verify web
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
-    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
+    # The same system as the browser image.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: dev

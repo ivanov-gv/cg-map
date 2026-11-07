@@ -1,9 +1,10 @@
 # Testing workflows
 
 **No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
-passed under `act`, inside the same job time limits as GitHub. After a fix, rerun what `make ci-plan` selects for it. A
-run on GitHub does not replace this. If a local run cannot pass, fix the local setup. Do not report it as a limit and
-merge anyway. Any other PR needs its owning project's checks, and browser tests where it changes a browser project.
+passed under `act`, inside the same job time limits as GitHub. After a fix, rerun the workflow you changed and what
+`make ci-plan` selects. A run on GitHub does not replace this. If a local run cannot pass, fix the local setup. Do not
+report it as a limit and merge anyway. Any other PR needs its owning project's checks, and browser tests where it
+changes a browser project.
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
@@ -32,21 +33,28 @@ The `dev` and `test-run` environments define these variables:
 | `WEB_ARTIFACT_RETENTION_DAYS` | `30`                       | `1`                       |
 | `PACKAGE_PUBLISH_FLAGS`       | unset                      | `--dry-run`               |
 
+`package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
+
 A test run really pushes images, to a temporary public registry, and really runs npm publish, as a dry run.
 
 ## Locally with act
 
 Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
-[the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so any machine runs
-the same tools as CI, inside the same job limits. `ACT_JOBS` sets how many jobs run at once.
+[the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs run
+the same tools on any machine as on GitHub, inside the same job limits. A machine with a GPU renders on it, and GitHub's
+runners use software rendering. `ACT_JOBS` sets how many jobs run at once.
 
 ```sh
 make test-ci-docs                       # one workflow
 make test-ci-all                        # everything CI runs
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
-make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA> # needs an image from make test-ci-publish
+make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
 make test-all-workflows ACT="gh act -n" # dry run of every target
 ```
+
+`test-cd-browser-image` promotes an image from the test registry, tagged with a commit on `main`, so push one first with
+`docker tag <image> ttl.sh/ivanov-gv-cg-map/browser-ci:<SHA>`, then `docker push`. Use a new revision on each try,
+because a version never changes there either.
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
@@ -59,9 +67,9 @@ because installing dependencies reads GitHub Packages: see `secret.env.example` 
 Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
 repository inside the container, and `ci-docs` and `ci-platform` fail. Set the clone's `origin` to the GitHub URL,
 because `act` takes the repository name from it. Run workflows one at a time on a machine short of disk or CPU:
-`ci-apps-web` alone can use several gigabytes. Under `make test-ci-all`, parallel jobs can make `act` fail with
-`context deadline exceeded` while it removes containers, which ends the run before the browser jobs and the gate and can
-leave containers running. That is a local limit, so check `docker ps` afterwards.
+`ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with `context deadline exceeded` while `act`
+removes containers, the run stopped before its browser jobs and gate, so it does not count: check `docker ps`, then run
+it again with a lower `ACT_JOBS`.
 
 ## On GitHub
 
@@ -70,12 +78,14 @@ A workflow can be dispatched only once it exists on `main`. After that, dispatch
 ```sh
 gh workflow run ci-all.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
+gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
 `ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful `ci-all` test
-run exists for its latest commit, and a `cd-map-core` test run too when that workflow or a composite action changed. A
-workflow not yet on `main` cannot be dispatched, so it is exempt. After those runs pass, re-run the failed check. CI
-cannot see local runs, so record yours in the PR template.
+run exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed, and a
+`cd-browser-image` one when that workflow or its actions changed. A workflow not yet on `main` cannot be dispatched, so
+it is exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR
+template.
 
 ## Through a real PR
 

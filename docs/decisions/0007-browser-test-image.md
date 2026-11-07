@@ -24,9 +24,9 @@ left local jobs unable to finish inside the 7-minute job limit, and nothing merg
 
 ## Consequences
 
-- `1.56.1-r1` was published by hand, from the PR that first uses it, because the pipeline that publishes it could not
-  run before that merge. It has no tag or release. Later versions go through the pipeline.
+- `1.56.1-r1` was published by hand with the owner's permission, from the PR that first uses it, because the pipeline
+  that publishes it could not run before that merge. It has no tag or release. Later versions go through the pipeline.
 - Upgrading Playwright takes three steps: change and release the image, then bump the repository and the pin together.
 - The image is large, and every browser job on GitHub pulls it, so a normal job may gain no time there. It removes
   downloads from package mirrors during a run.
-- Node in browser jobs comes from the image, not `.node-version`, so the two must move together.
+- Node in browser jobs comes from the image, not `.node-version`, so the two must move together. No check compares them.

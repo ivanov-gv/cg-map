@@ -127,6 +127,9 @@ export function classify(file) {
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
   if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
+  // platform checks that a phone-only browser test is tagged.
+  if (file.startsWith('apps/editor/tests/e2e/') || file === 'apps/editor/playwright.config.mjs')
+    return {folders: ['apps-editor', 'tests', 'platform'], areas: []};
   if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS, areas: areasForWebFile(file)};

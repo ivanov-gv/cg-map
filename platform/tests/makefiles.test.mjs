@@ -136,7 +136,7 @@ test('project Makefiles reach other projects only through listed contracts', () 
   }
 });
 
-test('every local workflow run uses the published image, with the same limits as GitHub', () => {
+test('every local workflow run uses the published image', () => {
   const makefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
   assert.match(makefile, /-P ubuntu-24\.04=\$\(ACT_IMAGE\) -P ubuntu-latest=\$\(ACT_IMAGE\)/);
   assert.match(makefile, /^test-ci-all .*: test-%: act-image$/m);

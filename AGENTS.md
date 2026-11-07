@@ -46,7 +46,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Project commands, from each project's own Makefile
 
 - `make -C apps/<name> build|dev|e2e`: assemble, preview or browser-test that app; `E2E_ARGS=...` filters tests.
-- `make -C apps/web dev` needs Go; `DEV_FLAGS=-live-transport=false` skips upstream. `dev-mock` serves static dist/web.
+- `make -C apps/web dev`: server mode, needs Go; `DEV_FLAGS=-live-transport=false` skips upstream. `dev-mock`: as Pages.
 - `make -C data build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
 
 ## Hard rules

@@ -527,3 +527,9 @@ test('a narrow desktop window narrows the card and keeps the map controls reacha
   expect(card.width).toBeLessThan(375);
   expect(card.x + card.width).toBeLessThanOrEqual(locate.x);
 });
+
+test('the layout never scrolls sideways', {tag: '@phone'}, async ({page}) => {
+  await ready(page);
+  const sidewaysScroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(sidewaysScroll).toBeLessThanOrEqual(0);
+});
