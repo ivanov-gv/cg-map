@@ -345,3 +345,27 @@ test('browser jobs and local runs pin one image, whose version matches the repos
   assert.equal(pins.size, 1, `every pin must match: ${[...pins].join(', ')}`);
   assert.match([...pins][0], expected);
 });
+
+test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
+  const {jobs} = load('ci-all.yml');
+  for (const app of ['apps-web', 'apps-editor']) {
+    assert.equal(jobs[app].with.phone_tests, "${{ github.event_name == 'schedule' && 'all' || 'tagged' }}");
+    const {browser} = load(`ci-${app}.yml`).jobs;
+    assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
+    const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');
+    assert.match(config, /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
+  }
+});
+
+test('a test that only runs on the phone layout is tagged, or a PR would run it nowhere', () => {
+  const specDirectories = ['apps/web/tests/e2e', 'apps/editor/tests/e2e'];
+  for (const directory of specDirectories) {
+    for (const file of fs.readdirSync(path.join(repoRoot, directory)).filter(name => name.endsWith('.spec.mjs'))) {
+      const text = fs.readFileSync(path.join(repoRoot, directory, file), 'utf8');
+      for (const body of text.split(/^(?=\s*test\()/m).slice(1)) {
+        if (!/test\.skip\(\s*!(isMobile|hasTouch)/.test(body)) continue;
+        assert.match(body, /tag: '@phone'/, `${file}: ${body.slice(0, 80)}`);
+      }
+    }
+  }
+});

@@ -6,6 +6,10 @@ on:
       test_run:
         type: boolean
         required: true
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
+        type: string
+        default: tagged
       browser_matrix:
         description: The browser areas to run, from the planner. Empty runs them all.
         type: string
@@ -17,6 +21,10 @@ on:
         description: Test run
         type: boolean
         default: true
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
+        type: string
+        default: tagged
 permissions:
   contents: read
   packages: read
@@ -82,6 +90,7 @@ jobs:
     env: &browser-env
       # Each job has its own 4 CPUs, and one worker left the slowest area at the job time limit.
       E2E_WORKERS: 2
+      E2E_PHONE: ${{ inputs.phone_tests }}
       AREA: ${{ matrix.area }}
       E2E_SPECS: ${{ matrix.specs }}
       WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}

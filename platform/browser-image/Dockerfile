@@ -15,7 +15,8 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
-# act's jobs build and push images through the host's Docker.
+# Local jobs build and push images through the host's Docker. gcc is for Go's race tests, and the Mesa packages let a
+# local job render on the host's GPU.
 COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 # A fixed path, because a job's container gets its own HOME.
@@ -23,7 +24,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV NODE_PATH=/usr/local/lib/node_modules
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
-       ca-certificates curl git jq make python3 sudo tar unzip xz-utils zstd \
+       ca-certificates curl gcc git jq libc6-dev libegl1 libegl-mesa0 libgl1-mesa-dri make python3 sudo tar unzip xz-utils zstd \
     && npm install --global "playwright@${PLAYWRIGHT_VERSION}" \
     && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* /root/.npm \

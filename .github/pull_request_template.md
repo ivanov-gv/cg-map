@@ -16,7 +16,7 @@ The record this PR adds to [the decisions log](../docs/decisions/AGENTS.md), or 
 ## Workflow changes
 
 **No merge until local tests pass** ([the rule](TESTING.md)). For changes to `.github/**`, the `make test-*` commands
-run locally on the final commit and their results, plus links to the test runs on GitHub. Otherwise delete this section.
+run locally and their results, plus links to the test runs on GitHub. Otherwise delete this section.
 
 ## Data and release impact
 

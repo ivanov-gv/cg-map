@@ -6,12 +6,20 @@ on:
       test_run:
         type: boolean
         required: true
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
+        type: string
+        default: tagged
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
+        type: string
+        default: tagged
 permissions:
   contents: read
   packages: read
@@ -68,11 +76,12 @@ jobs:
             specs: tests/e2e/offline.spec.mjs --project=root-desktop
           - area: offline-mobile
             specs: tests/e2e/offline.spec.mjs --project=pages-mobile
-          - area: viewer-and-sketch
-            specs: tests/e2e/viewer.spec.mjs tests/e2e/sketch.spec.mjs
+          - area: viewer
+            specs: tests/e2e/viewer.spec.mjs
     env: &browser-env
       # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
+      E2E_PHONE: ${{ inputs.phone_tests }}
       AREA: ${{ matrix.area }}
       E2E_SPECS: ${{ matrix.specs }}
     steps: &browser-steps

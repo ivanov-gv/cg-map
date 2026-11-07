@@ -198,6 +198,7 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
+      phone_tests: ${{ github.event_name == 'schedule' && 'all' || 'tagged' }}
   apps-editor:
     name: apps-editor
     needs: [switch, plan, plan-test-run]
@@ -205,6 +206,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      phone_tests: ${{ github.event_name == 'schedule' && 'all' || 'tagged' }}
   apps-core-demo:
     name: apps-core-demo
     needs: [switch, plan, plan-test-run]

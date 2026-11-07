@@ -122,7 +122,7 @@ test.describe('source editing', () => {
     return {savedPath, changeset: JSON.parse(fs.readFileSync(savedPath))};
   };
 
-  test('POI details round trip through export, and import resumes them on a clean session', async ({
+  test('POI details round trip through export, and import resumes them on a clean session', {tag: '@phone'}, async ({
     page
   }, testInfo) => {
     await openEditor(page);
@@ -330,7 +330,7 @@ test.describe('source editing', () => {
     await expect(page.locator('#undo')).toBeDisabled();
   });
 
-  test('a second finger interrupts a swipe and restores the preview', async ({page, hasTouch}) => {
+  test('a second finger interrupts a swipe and restores the preview', {tag: '@phone'}, async ({page, hasTouch}) => {
     test.skip(!hasTouch, 'Touch input exists only in the phone project.');
     await openEditor(page);
     const {feature} = await selectPlace(page);
@@ -537,7 +537,7 @@ test.describe('source editing', () => {
     expect(scriptErrors).toEqual([]);
   });
 
-  test('a touch swipe moves relatively, and an interrupted one restores its start', async ({
+  test('a touch swipe moves relatively, and an interrupted one restores its start', {tag: '@phone'}, async ({
     page,
     hasTouch
   }, testInfo) => {
@@ -739,7 +739,7 @@ test.describe('source editing', () => {
     expect(ring.slice(1, -1)).toEqual(outerRing.slice(1, -1));
   });
 
-  test('an open edit never widens the page, which would misplace every touch on a phone', async ({page}) => {
+  test('an open edit never widens the page, which would misplace every touch on a phone', {tag: '@phone'}, async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
     const overflowPixels = await page.evaluate(

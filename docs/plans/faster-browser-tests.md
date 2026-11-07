@@ -19,14 +19,10 @@ jobs.
 
 ## Remaining, in order
 
-1. Run the phone layout only where it matters: touch, stacked layout, overflow, install and the URL prefix, plus one
-   whole journey per app. This saves about 8 to 9 minutes of test time. It changes what is covered, so it needs its own
-   review.
-2. Select the editor's browser jobs by what changed, as web's are. They run in parallel but always all run.
-3. Move logic out of browser tests. Two `poi-visibility` tests take 40 to 50 seconds each to step through zoom
+1. Select the editor's browser jobs by what changed, as web's are. They run in parallel but always all run.
+2. Move logic out of browser tests. Two `poi-visibility` tests take 40 to 50 seconds each to step through zoom
    thresholds, which a unit test plus one browser check can cover. Many `editing` tests can shrink the same way.
-4. Replace the fixed waits in web's tests with waits on actual state.
-5. Delete the sketch prototype and its 30 tests, now that the real editor exists.
+3. Replace the fixed waits in web's tests with waits on actual state.
 
 ## Handoff
 

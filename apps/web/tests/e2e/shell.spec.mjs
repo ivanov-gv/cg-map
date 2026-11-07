@@ -4,7 +4,7 @@ import {closeCard, fixture, openMenu, ready, stubRouting, tapMapCenter} from './
 
 test.beforeEach(({page}) => stubRouting(page));
 
-test('map, fixture search, selection, and satellite preserve the map instance', async ({page, isMobile}) => {
+test('map, fixture search, selection, and satellite preserve the map instance', {tag: '@phone'}, async ({page, isMobile}) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
@@ -32,7 +32,7 @@ test('map, fixture search, selection, and satellite preserve the map instance', 
   expect(errors).toEqual([]);
 });
 
-test('shipped snapshot downloads and reloads offline with real archive data', async ({page, context}) => {
+test('shipped snapshot downloads and reloads offline with real archive data', {tag: '@phone'}, async ({page, context}) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await ready(page);
   await openMenu(page);
@@ -80,7 +80,7 @@ test.describe('server mode', () => {
   // The service worker forwards same-origin /api requests itself, out of reach of request routing;
   // it never caches them, so blocking it here changes nothing the test checks.
   test.use({serviceWorkers: 'block'});
-  test('config.json selects server mode: layers and vehicles come from the Kompas API', async ({page, baseURL}) => {
+  test('config.json selects server mode: layers and vehicles come from the Kompas API', {tag: '@phone'}, async ({page, baseURL}) => {
     const requests = [];
     await page.route('**/api/v1/layers', route => {requests.push('layers');return route.fulfill({json: {tilejson: '3.0.0', scheme: 'xyz', minzoom: 0, maxzoom: 16, bounds: [17.8, 41.3, 21, 44.1], tiles: [new URL('api/v1/layers/test-0123456789abcdef/tiles/{z}/{x}/{y}.mvt', baseURL).href], vector_layers: []}});});
     await page.route('**/api/v1/layers/test-0123456789abcdef/tiles/**', route => {requests.push('tile');return route.fulfill({status: 204});});

@@ -17,6 +17,8 @@ guesswork, and nothing said which PRs should leave a record of what they decided
   dev environment. The nightly run checks everything on main.
 - **No merge until local tests pass.** A change to `.github/**` passes under `act` first, inside the job limits. A run
   on GitHub does not replace this.
+- **A PR runs the phone layout only where it matters.** Tests tagged `@phone` run on it: phone-only behavior, the URL
+  prefix, and one whole journey per app. The nightly run runs every test on both layouts.
 - **A job aims for 5 minutes and stops at 7.** `timeout-minutes` enforces 7 on every job, and a test enforces that. A
   job over 5 minutes gets a warning, and is split rather than given more time.
 - **Work goes task, plan, PR, decisions log.** A plan stays until its work is finished, however many PRs that takes. A
@@ -25,6 +27,7 @@ guesswork, and nothing said which PRs should leave a record of what they decided
 
 ## Consequences
 
+- A phone-only bug in an untagged test reaches main, and appears in the nightly run up to a day later.
 - Browser tests on a PR cover only the areas it maps to, so a wrong mapping can reach the dev environment and stay there
   until the nightly run, up to a day later. There are no users on it yet. Before there are, this needs revisiting.
 - Publishing rebuilds from main instead of reusing the artifact a PR tested, because squash merging gives main a new

@@ -30,8 +30,8 @@ uploaded on CI failure.
 
 ## Faster browser tests
 
-Browser tests run one at a time with software rendering by default, because that is what CI does. On a machine with
-threads and a GPU to spare, this is about four times faster, with the same tests:
+Browser tests run one at a time with software rendering by default. On a machine with threads and a GPU to spare, this
+is about four times faster, with the same tests:
 
 ```sh
 E2E_WORKERS=6 E2E_ANGLE=gl-egl make -C apps/web e2e

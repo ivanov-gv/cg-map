@@ -84,6 +84,19 @@ everything.
 
 Check a branch with `make ci-plan BASE=origin/main`.
 
+## Phone layout tests
+
+A PR runs on the phone layout only the tests tagged `@phone`. The nightly run and a plain `make e2e` run them all, so a
+phone-only bug that a tag misses appears at most a day later. The desktop layout always runs everything. List what a PR
+runs with `E2E_PHONE=tagged npx playwright test --list --project=pages-mobile`.
+
+Tag a test `@phone` when it:
+
+- only runs on the phone layout: a check fails if such a test has no tag, because a PR would then run it nowhere;
+- behaves differently there, branching on `isMobile`, `hasTouch` or touch input;
+- needs the `/cg-map/` prefix, which only the phone project uses;
+- is the one whole journey for its app, or its one check of layout overflow.
+
 ## Browser test areas
 
 Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.

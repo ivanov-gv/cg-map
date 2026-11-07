@@ -285,7 +285,5 @@ Known open items:
 - Formatting of new code is not enforced: .prettierrc.json covers Markdown only.
 - Dense committed code outside this change remains in apps/web/src/app.js, apps/web/tools/finalize.mjs and older tests.
 
-Open [the HTML draft](../../apps/editor/prototypes/editor.html) directly in a browser; no build/server/dependencies are
-needed. [Draft notes](../../apps/editor/prototypes/README.md) describe controls and limits. Pending implementation work
-above remains proposed; delete this plan when its implementing PR is complete and move enduring decisions to their
-owning docs.
+The HTML sketch was deleted once the real editor existed; git history keeps it. Pending implementation work above
+remains proposed. Delete this plan when its last gap is closed, and move enduring decisions to their owning docs.

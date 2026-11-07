@@ -17,6 +17,9 @@ const port = Number(
 const workers = Number(process.env.E2E_WORKERS ?? 1);
 const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
 
+// A PR runs on the phone layout only what depends on it, and the nightly run runs everything: docs/verification/testing.md.
+const phoneTests = process.env.E2E_PHONE === 'tagged' ? {grep: /@phone/} : {};
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 90000,
@@ -39,6 +42,7 @@ export default defineConfig({
     {name: 'root-desktop', use: {baseURL: `http://127.0.0.1:${port}/`, viewport: {width: 1280, height: 800}}},
     {
       name: 'pages-mobile',
+      ...phoneTests,
       use: {
         baseURL: `http://127.0.0.1:${port}/cg-map/`,
         viewport: {width: 412, height: 840},
