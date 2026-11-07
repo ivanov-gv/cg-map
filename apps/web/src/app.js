@@ -1,35 +1,33 @@
+import {createElement, elementById} from './dom.js';
+import {renderPlaceResults} from './place-details.js';
+import {PlaceSelection} from './place-selection.js';
+import {installCityNames, installPublicPlaceLayers} from './public-map-layers.js';
+import {selectTappedFeature} from './map-selection.js';
+import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
+import {transportStatusText} from './status-messages.js';
 import {
   categories,
-  matches,
-  selectNearest,
-  safeWebsite,
-  collection,
+  matchesPlaceSearch,
+  selectNearestPlaces,
+  featureCollection,
   DEFAULT_CENTER,
-  DISCOVER_ZOOM,
-  POSITION_APPROXIMATE_M,
-  formatAge
+  DISCOVER_ZOOM
 } from './core.js';
 import {
   createMap,
   registerArchiveProtocol,
-  mapBounds,
   setSatelliteVisible,
   satelliteBounds,
-  placeColors,
-  installPlaceIcons,
   parseVisibilityConfig,
   normalizePlaces,
   markerKeys,
   placeBands,
   buildPlaceMarkers,
-  requestedPlaceMarker,
-  placeLayers,
-  listingsAtHits
+  placeLayers
 } from '@ivanov-gv/map-core';
-import {ArchiveSource, downloadLabel} from './offline.js';
+import {ArchiveSource} from './offline.js';
 import {installTransport, TransportFeed} from './transport.js';
 import {
-  describePoint,
   buildingAddressIndex,
   buildingMapFeatures,
   entranceFeatures,
@@ -43,47 +41,78 @@ import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
 import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
-import {PositionTracker, positionFeatures, installPositionLayers} from './position.js';
-import {MapInterface, isInFocusZone} from './interface.js';
-const elementById = id => document.getElementById(id);
-let map;
-let allPlaces = [];
-let filteredPlaces = [];
-let placesById = new Map();
-let category = 'all';
-let selectedPlace = null;
-let archive;
-let manifest;
-let downloadAbort;
-let returnFocus;
-let satelliteVisible = false;
-let transport;
-let selectedPoint;
-let routePlanner;
-let objectSelection;
-let dataMode;
-let dataSources;
-const endpoints = {from: null, to: null};
-let loaded = false;
-let errorTimer;
-let searchTimer;
-let serviceWorkerRegistration = null;
-let buildingAddresses = new Map();
-let placesError = null;
-let position = {state: 'idle', fix: null, age: null};
-let explored = false;
-let ownMove = false;
-let centeredOnFix = false;
-let mapInterface;
-let previewPlace = null;
-let locationRequested = false;
-let pendingReveal = null;
-let choosing = false;
-let visibilityConfig;
-let markerKeysByPlaceId = new Map();
-let placeHitLayers = ['search-place'];
-let requestedMarkerKey = null;
+import {installPositionLayers} from './position.js';
+import {LocationControls} from './location-controls.js';
+import {MapInterface} from './interface.js';
+
+// One map and the controllers installed on it.
+const mapState = {
+  map: null,
+  isMapReady: false,
+  hasExploredMap: false,
+  shouldIgnoreNextMove: false,
+  isSatelliteVisible: false,
+  interface: null,
+  objectSelection: null,
+  routePlanner: null,
+  transportFeed: null,
+  errorTimer: null
+};
+
+// Loaded directory data and the active search, independent of the current selection.
+const directoryState = {
+  allPlaces: [],
+  filteredPlaces: [],
+  placesById: new Map(),
+  activeCategory: 'all',
+  buildingAddresses: new Map(),
+  loadingError: null,
+  visibilityConfig: null,
+  markerKeysByPlaceId: new Map(),
+  placeHitLayers: ['search-place'],
+  searchTimer: null
+};
+
+// Host and offline adapters are created during startup and shared with their UI controller.
+const startupState = {
+  archive: null,
+  dataMode: null,
+  dataSources: null,
+  serviceWorkerRegistration: null,
+  offlineControls: null
+};
+
+const routeEndpoints = {from: null, to: null};
+
 const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const placeSelection = new PlaceSelection({
+  map: () => mapState.map,
+  interface: () => mapState.interface,
+  directory: () => directoryState,
+  objectSelection: () => mapState.objectSelection,
+  isMapReady: () => mapState.isMapReady,
+  onExploreMap: () => {
+    mapState.hasExploredMap = true;
+  },
+  onSelectionChanged: syncPanels,
+  onResultsChanged: renderSearchResults,
+  prefersReducedMotion
+});
+
+const locationControls = new LocationControls({
+  map: () => mapState.map,
+  interface: () => mapState.interface,
+  hasExploredMap: () => mapState.hasExploredMap,
+  onAutomaticCameraMove: () => {
+    mapState.shouldIgnoreNextMove = true;
+  },
+  closeSelection: () => placeSelection.close(false),
+  focusCoordinates: (coordinates, zoom, durationMilliseconds) =>
+    placeSelection.focusCoordinates(coordinates, zoom, durationMilliseconds),
+  notify,
+  prefersReducedMotion
+});
 // config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
 // artifact's {"api":"mock"}. A missing file, an offline start or a server error falls back to the
 // bundled data (a server error visibly). Other HTTP errors and invalid content stop startup.
@@ -109,274 +138,22 @@ async function loadDataMode() {
     throw new Error('Could not load config.json: HTTP ' + response.status);
   return resolveDataMode(location.search, config);
 }
-function renderTransportStatus({state, count, fetchedAt}) {
-  const checked = fetchedAt
-    ? new Date(fetchedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})
-    : '';
-  const labels = {
-    off: 'Transport off',
-    loading: 'Loading live buses…',
-    live: count
-      ? `${count} bus position${count === 1 ? '' : 's'} · checked ${checked}`
-      : `No buses reported · checked ${checked}`,
-    stale: `Updates delayed · last checked ${checked}`,
-    unavailable: 'Live buses temporarily unavailable · retrying',
-    offline: 'Live buses need an internet connection',
-    paused: 'Bus updates paused while map is hidden'
-  };
-  elementById('transport-status').textContent = labels[state] ?? labels.unavailable;
-  elementById('transport-status').dataset.state = state;
-}
+
 function notify(message) {
   elementById('error-text').textContent = message;
   elementById('error').hidden = false;
 }
-function createElement(tag, text, className) {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
-}
+
 function syncPanels() {
   elementById('route-endpoints').hidden =
-    (!endpoints.from && !endpoints.to) ||
-    mapInterface?.view !== 'closed' ||
+    (!routeEndpoints.from && !routeEndpoints.to) ||
+    mapState.interface?.view !== 'closed' ||
     !elementById('place-card').hidden;
 }
-function focusCoordinates(coordinates, zoom = 15, duration = 450) {
-  if (!map) return;
-  explored = true;
-  map.easeTo({
-    center: coordinates,
-    zoom: Math.max(map.getZoom(), zoom),
-    offset: mapInterface.mapOffset(),
-    duration: prefersReducedMotion ? 0 : duration
-  });
-}
-// Keep a chosen place visible with as little camera movement as possible: pan only when it leaves the focus zone.
-function revealCoordinates(coordinates, {zoom = 15, duration = 450} = {}) {
-  if (!map) return;
-  explored = true;
-  const needsZoom = map.getZoom() < zoom;
-  if (!needsZoom && isInFocusZone(map.project(coordinates), mapInterface.mapArea())) return;
-  map.easeTo({
-    center: coordinates,
-    zoom: Math.max(map.getZoom(), zoom),
-    offset: mapInterface.mapOffset(),
-    duration: prefersReducedMotion ? 0 : duration
-  });
-}
-// The camera stays still while the keyboard is up; a pending reveal waits for the layout it leaves behind.
-function flushPendingReveal() {
-  const coordinates = pendingReveal?.coordinates ?? selectedPoint?.coordinates;
-  if (!pendingReveal || !coordinates || mapInterface.keyboardOpen()) return;
-  const options = pendingReveal;
-  pendingReveal = null;
-  revealCoordinates(coordinates, options);
-}
-const hasExplicitFilter = () => !!elementById('search').value.trim() || category !== 'all';
-// Admission is fixed by each band's zoom range. Only the selected listing, or otherwise the leading explicit result,
-// may also appear below its threshold.
-function updatePlaceLayers() {
-  if (!loaded || placesError) return;
-  objectSelection.setPreview(
-    selectedPlace || !previewPlace ? null : markerKeysByPlaceId.get(previewPlace.properties.id)
-  );
-  const {features, maxzoom} = requestedPlaceMarker(
-    selectedPlace ?? previewPlace,
-    filteredPlaces,
-    markerKeysByPlaceId,
-    visibilityConfig
-  );
-  const key = `${features[0]?.properties.activeIds}@${maxzoom}`;
-  if (key === requestedMarkerKey) return;
-  requestedMarkerKey = key;
-  map.getSource('requested-place').setData(collection(features));
-  map.setLayerZoomRange('search-place', 0, maxzoom);
-}
-function previewResults() {
-  if (!loaded || placesError || mapInterface.view === 'closed' || !hasExplicitFilter()) return;
-  previewPlace = selectNearest(filteredPlaces, map.getCenter().toArray(), 1)[0]?.feature ?? null;
-  updatePlaceLayers();
-  renderResults();
-}
-function setChoosing(active) {
-  choosing = active;
-  elementById('point-actions').hidden = active;
-}
-function closePlace(restoreFocus = true) {
-  const hadPoint = !!selectedPoint || choosing;
-  selectedPoint = null;
-  selectedPlace = null;
-  pendingReveal = null;
-  setChoosing(false);
-  elementById('place-card').hidden = true;
-  mapInterface?.resetCardState();
-  objectSelection?.clear();
-  updatePlaceLayers();
-  markCurrentResult();
-  if (restoreFocus && returnFocus)
-    mapInterface?.restoreFocus(
-      returnFocus.isConnected && returnFocus.getClientRects().length ? returnFocus : elementById('search')
-    );
-  else if (restoreFocus && hadPoint) map?.getCanvas().focus({preventScroll: true});
-  returnFocus = null;
-  syncPanels();
-}
-function markCurrentResult() {
-  const currentId = String((selectedPlace ?? previewPlace)?.properties.id);
-  for (const row of elementById('results').querySelectorAll('.result')) {
-    if (row.dataset.id === currentId) {
-      row.setAttribute('aria-current', 'true');
-      row.scrollIntoView({block: 'nearest'});
-    } else row.removeAttribute('aria-current');
-  }
-}
-// Requires a ready map and initialized selection layers; opens a known listing and defers camera
-// framing until the keyboard is closed, preserving the originating control for focus restoration.
-function showPlace(id, trigger) {
-  const feature = placesById.get(String(id));
-  if (!feature) return;
-  setChoosing(false);
-  selectedPlace = feature;
-  selectedPoint = {name: feature.properties.name, coordinates: [...feature.geometry.coordinates]};
-  returnFocus = trigger ?? null;
-  const properties = feature.properties;
-  elementById('place-name').textContent = properties.name;
-  elementById('place-category').textContent = categories[properties.category] ?? properties.category;
-  renderPlaceDetails(feature);
-  previewPlace = null;
-  updatePlaceLayers();
-  elementById('search').blur();
-  elementById('place-card').hidden = false;
-  mapInterface.placeCardOpened();
-  elementById('place-card').scrollTop = 0;
-  syncPanels();
-  markCurrentResult();
-  objectSelection.selectPlace(feature, markerKeysByPlaceId.get(properties.id));
-  elementById('close-place').focus({preventScroll: true});
-  pendingReveal = {zoom: 15};
-  flushPendingReveal();
-}
-// Details and external links use only recorded source fields and safe HTTP URLs.
-function renderPlaceDetails(feature) {
-  const properties = feature.properties;
-  const details = elementById('place-details');
-  details.replaceChildren();
-  const add = text => {
-    if (text) details.append(createElement('p', text, 'detail'));
-  };
-  add(properties['name:en'] && properties['name:en'] !== properties.name ? properties['name:en'] : '');
-  add([properties['addr:street'], properties['addr:housenumber']].filter(Boolean).join(' '));
-  add(properties.kind?.replaceAll('_', ' '));
-  add(properties.opening_hours ? 'OSM hours: ' + properties.opening_hours : '');
-  add(properties.phone);
-  add(
-    feature.geometry.coordinates
-      .slice()
-      .reverse()
-      .map(coordinate => coordinate.toFixed(5))
-      .join(', ')
-  );
-  details.append(
-    createElement('p', 'OpenStreetMap listing. Details may be incomplete or out of date.', 'source-note')
-  );
-  function link(text, url) {
-    const linkElement = createElement('a', text);
-    linkElement.href = url;
-    linkElement.target = '_blank';
-    linkElement.rel = 'noopener noreferrer';
-    details.append(linkElement);
-  }
-  const website = safeWebsite(properties.website);
-  if (website) link('Website ↗', website);
-  if (/^(node|way)\/\d+$/.test(properties.id))
-    link('View source ↗', 'https://www.openstreetmap.org/' + properties.id);
-}
 
-// Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
-function frameBuildingEntrances(entrances, coordinates) {
-  const positions = [coordinates, ...entrances.map(entrance => entrance.coordinates)];
-  const area = mapInterface.mapArea();
-  const horizontalMarginPixels = Math.min(64, (area.right - area.left) / 4);
-  const verticalMarginPixels = 32;
-  const canvas = map.getCanvas();
-  const bounds = new maplibregl.LngLatBounds();
-  for (const position of positions) bounds.extend(position);
-  const padding = {
-    left: area.left + horizontalMarginPixels,
-    right: canvas.clientWidth - area.right + horizontalMarginPixels,
-    top: area.top + verticalMarginPixels,
-    bottom: canvas.clientHeight - area.bottom + verticalMarginPixels
-  };
-  map.fitBounds(bounds, {
-    padding,
-    maxZoom: map.getZoom(),
-    duration: prefersReducedMotion ? 0 : 450,
-    retainPadding: false
-  });
-}
-
-// Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
-function showPoint(point, feature = null) {
-  closePlace(false);
-  selectedPoint = point;
-  elementById('place-name').textContent = point.name;
-  elementById('place-category').textContent = point.kind;
-  const details = elementById('place-details');
-  details.replaceChildren();
-  const coordinatesLine = point.coordinates
-    .slice()
-    .reverse()
-    .map(coordinate => coordinate.toFixed(5))
-    .join(', ');
-  for (const text of [...point.details, coordinatesLine]) {
-    if (text) details.append(createElement('p', text, 'detail'));
-  }
-  elementById('place-card').hidden = false;
-  previewPlace = null;
-  updatePlaceLayers();
-  mapInterface.close();
-  mapInterface.placeCardOpened();
-  syncPanels();
-  objectSelection.select(feature, point.coordinates);
-  const footprintIndex =
-    feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
-  const entrances = point.kind === 'Building' ? buildingAddresses.get(footprintIndex)?.entrances : [];
-  if (entrances?.length) {
-    selectedPoint = {...point, entrances};
-    frameBuildingEntrances(entrances, point.coordinates);
-  } else focusCoordinates(point.coordinates, map.getZoom());
-  elementById('close-place').focus({preventScroll: true});
-}
-// Several listings under one tap: same location, or nearby markers that overlap. Each stays a real listing.
-function showChooser(listings, coordinates) {
-  closePlace(false);
-  setChoosing(true);
-  elementById('place-name').textContent = `${listings.length} places here`;
-  elementById('place-category').textContent = 'Choose a listing';
-  const details = elementById('place-details');
-  details.replaceChildren();
-  const list = createElement('div', undefined, 'place-chooser');
-  list.setAttribute('role', 'group');
-  list.setAttribute('aria-label', 'Listings at this point');
-  for (const feature of listings) list.append(listingButton(feature, () => showPlace(feature.properties.id)));
-  details.append(list);
-  elementById('search').blur();
-  elementById('place-card').hidden = false;
-  previewPlace = null;
-  updatePlaceLayers();
-  mapInterface.placeCardOpened();
-  // The list must be usable at once, so a phone card opens full instead of as a header-only peek.
-  if (mapInterface.view === 'search') mapInterface.setCardState('full');
-  syncPanels();
-  pendingReveal = {zoom: map.getZoom(), coordinates};
-  flushPendingReveal();
-  list.firstElementChild.focus({preventScroll: true});
-}
-function renderEndpoints() {
+function renderRouteEndpoints() {
   for (const role of ['from', 'to']) {
-    const point = endpoints[role];
+    const point = routeEndpoints[role];
     elementById('route-' + role).textContent = point
       ? `${point.name} · ${point.coordinates
           .slice()
@@ -386,244 +163,64 @@ function renderEndpoints() {
       : 'Not selected';
   }
   syncPanels();
-  map.getSource('route-points').setData(endpointFeatures(endpoints));
-  routePlanner?.setEndpoints(endpoints);
+  mapState.map.getSource('route-points').setData(endpointFeatures(routeEndpoints));
+  mapState.routePlanner?.setEndpoints(routeEndpoints);
 }
-function setEndpoint(role) {
-  if (!selectedPoint) return;
-  endpoints[role] = {name: selectedPoint.name, coordinates: [...selectedPoint.coordinates]};
+function setRouteEndpoint(role) {
+  if (!placeSelection.point) return;
+  routeEndpoints[role] = {
+    name: placeSelection.point.name,
+    coordinates: [...placeSelection.point.coordinates]
+  };
   // Route controls live on the map, so choosing an endpoint leaves search or the dock.
-  mapInterface.close();
-  renderEndpoints();
-  closePlace();
-}
-function listingButton(place, onClick, distance) {
-  const properties = place.properties;
-  const button = createElement('button', undefined, 'result');
-  button.type = 'button';
-  button.dataset.id = properties.id;
-  const symbol = createElement(
-    'span',
-    properties.category === 'essentials' ? '+' : (properties.kind ?? properties.category)[0].toUpperCase(),
-    'symbol'
-  );
-  symbol.style.setProperty('--color', placeColors[properties.category]);
-  symbol.setAttribute('aria-hidden', 'true');
-  const copy = createElement('span', undefined, 'copy');
-  copy.append(
-    createElement('strong', properties.name),
-    createElement('small', (properties.kind ?? '').replaceAll('_', ' '))
-  );
-  button.append(symbol, copy);
-  if (distance) button.append(createElement('span', distance, 'distance'));
-  button.addEventListener('click', onClick);
-  return button;
-}
-// A camera move may finish after closing a card. Preserve the result row that received focus.
-function renderResults() {
-  const list = elementById('results');
-  const focusedRow = list.contains(document.activeElement) ? document.activeElement : null;
-  buildResults();
-  if (!focusedRow?.dataset.id) return;
-  const replacementRow = [...list.children].find(row => row.dataset.id === focusedRow.dataset.id);
-  replacementRow?.focus({preventScroll: true});
+  mapState.interface.close();
+  renderRouteEndpoints();
+  placeSelection.close();
 }
 
-function buildResults() {
-  if (!map) return;
-  // A failed load is an error state, never an empty search result.
-  if (placesError) {
-    elementById('results').replaceChildren(
-      createElement('p', `Places could not load (${placesError}). Reload to try again.`, 'empty')
-    );
-    return;
-  }
-  const center = map.getCenter().toArray();
-  const nearest = selectNearest(filteredPlaces, center);
-  const list = elementById('results');
-  list.replaceChildren();
-  if (!nearest.length) {
-    list.append(createElement('p', 'No places found. Try another search or category.', 'empty'));
-    return;
-  }
-  for (const {feature, distanceKilometres} of nearest) {
-    const button = listingButton(
-      feature,
-      () => showPlace(feature.properties.id, button),
-      distanceKilometres < 1
-        ? Math.round(distanceKilometres * 1000) + ' m'
-        : distanceKilometres.toFixed(1) + ' km'
-    );
-    if ((selectedPlace ?? previewPlace)?.properties.id === feature.properties.id)
-      button.setAttribute('aria-current', 'true');
-    list.append(button);
-  }
+// Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
+function renderSearchResults() {
+  if (!mapState.map) return;
+  const center = mapState.map.getCenter().toArray();
+  const nearestPlaces = selectNearestPlaces(directoryState.filteredPlaces, center);
+  const currentPlace = placeSelection.selectedPlace ?? placeSelection.previewPlace;
+  renderPlaceResults({
+    nearestPlaces,
+    currentPlace,
+    loadingError: directoryState.loadingError,
+    onChoose: placeSelection.showPlace
+  });
 }
+
 // A search or category narrows the candidates; matching icons keep their thresholds.
-function filterPlaces() {
-  filteredPlaces = allPlaces.filter(feature => matches(feature, elementById('search').value, category));
-  if (loaded && !placesError)
-    map.getSource('places').setData(collection(buildPlaceMarkers(filteredPlaces, markerKeysByPlaceId)));
-  if (
-    choosing ||
-    (selectedPlace && !filteredPlaces.some(feature => feature.properties.id === selectedPlace.properties.id))
-  )
-    closePlace(false);
-  previewPlace = null;
-  updatePlaceLayers();
-  renderResults();
-  previewResults();
+function applyPlaceSearch() {
+  directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
+    matchesPlaceSearch(feature, elementById('search').value, directoryState.activeCategory)
+  );
+  if (mapState.isMapReady && !directoryState.loadingError)
+    mapState.map
+      .getSource('places')
+      .setData(
+        featureCollection(
+          buildPlaceMarkers(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
+        )
+      );
+  placeSelection.onFilterChanged();
+  renderSearchResults();
+  placeSelection.previewResults();
 }
-// Connection state only; it carries no location meaning. Online with no saved map needs no badge.
-function updateConnection() {
-  const saved = !!archive?.local;
-  const text = !navigator.onLine
-    ? saved
-      ? 'Offline · saved map'
-      : 'Offline · download needed'
-    : saved
-      ? 'Saved map in use'
-      : '';
-  elementById('connection').textContent = text;
-  elementById('connection').hidden = !text;
-}
-// In server mode a download or removal during the session switches the basemap between the API and
-// the verified local archive, so offline use never depends on uncached API tiles.
-function refreshBasemap() {
-  const source = map?.getSource('basemap');
-  const url = basemapURL(dataSources, archive.url, !!archive.local);
-  if (source && source.url !== url) source.setUrl(url);
-}
-function storageNote(message) {
-  elementById('storage-note').textContent = message;
-  elementById('storage-note').hidden = !message;
-}
-function updateDownload() {
-  if (!manifest) return;
-  refreshBasemap();
-  const ready = !!archive?.local;
-  elementById('download-title').textContent = ready
-    ? 'Map saved for offline use'
-    : 'Download for offline use';
-  elementById('download').title = downloadLabel(manifest);
-  elementById('download-state').textContent = ready ? 'READY' : '';
-  elementById('download').disabled = ready || !archive?.directory || !serviceWorkerRegistration;
-  elementById('remove-download').hidden = !ready;
-  if (!archive?.directory)
-    storageNote('Use HTTPS or localhost with a browser supporting local file storage to enable downloads.');
-  updateConnection();
-}
-async function startDownload() {
-  if (downloadAbort) return;
-  downloadAbort = new AbortController();
-  elementById('download').disabled = true;
-  elementById('cancel-download').hidden = false;
-  elementById('download-progress').hidden = false;
-  elementById('error').hidden = true;
-  try {
-    await navigator.serviceWorker.ready;
-    const result = await archive.download(downloadAbort.signal, (done, total) => {
-      elementById('download-progress').value = (done / total) * 100;
-      elementById('download-title').textContent =
-        `Saving map… ${Math.min(100, Math.round((done / total) * 100))}%`;
-    });
-    storageNote(
-      result.persisted
-        ? 'Saved on this device. Ready for offline use.'
-        : 'Saved. Your browser may remove downloads when storage is low.'
-    );
-  } catch (error) {
-    if (error.name !== 'AbortError') notify(error.message);
-    else storageNote('Download cancelled. Existing downloads remain available.');
-  } finally {
-    downloadAbort = null;
-    elementById('cancel-download').hidden = true;
-    elementById('download-progress').hidden = true;
-    updateDownload();
-  }
-}
-async function loadJSON(path, what) {
+
+async function loadJSON(path, resourceLabel) {
   const response = await fetch(path);
-  if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`${resourceLabel}: HTTP ${response.status}`);
   try {
     return await response.json();
   } catch (error) {
-    throw new Error(`${what}: invalid JSON`, {cause: error});
+    throw new Error(`${resourceLabel}: invalid JSON`, {cause: error});
   }
 }
 // D-06: the status always names the location condition; without a fix the default camera is a fallback view.
-let tracker;
-function renderPosition(snapshot) {
-  position = snapshot;
-  const {state, fix, age} = snapshot;
-  const fallback = explored || (fix && state !== 'outside') ? '' : ' · default view: Podgorica';
-  const accuracy = fix ? `±${Math.round(fix.accuracy)} m` : '';
-  const texts = {
-    idle: 'Checking location…',
-    insecure: 'Location needs a secure (HTTPS) page',
-    unsupported: 'This browser cannot share location',
-    prompt: 'Allow location to see where you are',
-    acquiring: 'Finding your location…',
-    live: `You are here · ${accuracy}`,
-    approximate: `Approximate location · ${accuracy} (over ${POSITION_APPROXIMATE_M} m)`,
-    stale: `Location not updating · last fix ${formatAge(age ?? 0)} ago`,
-    denied: 'Location blocked in browser settings',
-    unavailable: 'Location unavailable · check device settings',
-    timeout: 'No location fix within 15 s',
-    outside: 'You are outside the map (Montenegro)'
-  };
-  elementById('position-status').textContent =
-    (texts[state] ?? texts.unavailable) + (['live', 'approximate', 'stale'].includes(state) ? '' : fallback);
-  elementById('position-badge').dataset.state = state;
-  const action = ['live', 'approximate'].includes(state) ? 'Recenter on your location' : 'Locate me';
-  elementById('position-action').setAttribute(
-    'aria-label',
-    action + '. ' + elementById('position-status').textContent
-  );
-  elementById('position-action').title = elementById('position-status').textContent;
-  elementById('position-indicator').textContent =
-    {idle: '…', prompt: '?', acquiring: '…', approximate: '≈', stale: '◷', live: ''}[state] ?? '!';
-  if (
-    locationRequested &&
-    ['denied', 'unavailable', 'timeout', 'outside', 'insecure', 'unsupported'].includes(state)
-  ) {
-    notify(texts[state]);
-    locationRequested = false;
-  }
-  if (locationRequested && state === 'stale' && tracker?.error) {
-    notify('Location is not updating. Check device location settings and try again.');
-    locationRequested = false;
-  }
-  if (!map?.getSource('position')) return;
-  map.getSource('position').setData(positionFeatures(snapshot));
-  // Center once on the first usable fix, never after the person has started exploring.
-  if (['live', 'approximate'].includes(state) && ((!centeredOnFix && !explored) || locationRequested)) {
-    const offset = locationRequested ? mapInterface.mapOffset() : [0, 0];
-    centeredOnFix = true;
-    locationRequested = false;
-    ownMove = true;
-    map.easeTo({
-      center: fix.coordinates,
-      zoom: Math.max(map.getZoom(), DISCOVER_ZOOM),
-      offset,
-      duration: prefersReducedMotion ? 0 : 600
-    });
-  }
-}
-function positionAction() {
-  mapInterface.close();
-  closePlace(false);
-  if (position.fix && ['live', 'approximate'].includes(position.state)) {
-    focusCoordinates(position.fix.coordinates, DISCOVER_ZOOM, 500);
-    return;
-  }
-  locationRequested = true;
-  if (['denied', 'outside', 'insecure', 'unsupported'].includes(position.state)) {
-    renderPosition(position);
-    return;
-  }
-  tracker?.retry();
-}
+
 // Public startup owns location, offline transport and workflow state; core owns the map lifecycle.
 async function start() {
   if (location.protocol === 'file:' || location.protocol === 'content:') {
@@ -638,20 +235,16 @@ async function start() {
     return;
   }
   // Location, places and house numbers start immediately and never block the base map.
-  tracker = new PositionTracker({bounds: mapBounds, onChange: renderPosition});
-  tracker.start().catch(error => {
-    console.error('Location setup failed', error);
-    renderPosition({state: 'unavailable', fix: null, age: null});
-  });
+  locationControls.start();
   const {placesReady, labelsReady} = loadDirectoryData();
   await initializeMapTransport();
-  registerArchiveProtocol(maplibregl, pmtiles, archive);
+  registerArchiveProtocol(maplibregl, pmtiles, startupState.archive);
   // This MapLibre bundle has no supported() helper. Map construction reports
   // graphics initialization errors through the existing startup catch handler.
-  map = createMap({
+  mapState.map = createMap({
     engine: maplibregl,
     container: 'map',
-    basemapURL: basemapURL(dataSources, archive.url, !!archive.local),
+    basemapURL: basemapURL(startupState.dataSources, startupState.archive.url, !!startupState.archive.local),
     assetBaseURL: location.href,
     options: {
       center: DEFAULT_CENTER,
@@ -660,7 +253,7 @@ async function start() {
   });
   installPublicMapDebug();
   installPositionBadge();
-  map.on('load', () => installPublicLayers(placesReady, labelsReady));
+  mapState.map.on('load', () => installPublicLayers(placesReady, labelsReady));
   registerPublicMapEvents();
   warnAboutSlowStartup();
 }
@@ -673,21 +266,23 @@ function loadDirectoryData() {
   ])
     .then(([data, config]) => {
       if (!Array.isArray(data?.features)) throw new Error('Places: missing features');
-      visibilityConfig = parseVisibilityConfig(config);
-      allPlaces = normalizePlaces(data.features, visibilityConfig);
-      markerKeysByPlaceId = markerKeys(allPlaces);
-      placesById = new Map(allPlaces.map(feature => [String(feature.properties.id), feature]));
-      filteredPlaces = allPlaces;
+      directoryState.visibilityConfig = parseVisibilityConfig(config);
+      directoryState.allPlaces = normalizePlaces(data.features, directoryState.visibilityConfig);
+      directoryState.markerKeysByPlaceId = markerKeys(directoryState.allPlaces);
+      directoryState.placesById = new Map(
+        directoryState.allPlaces.map(feature => [String(feature.properties.id), feature])
+      );
+      directoryState.filteredPlaces = directoryState.allPlaces;
     })
     .catch(error => {
       console.error(error);
-      placesError = error.message;
+      directoryState.loadingError = error.message;
       notify(`Places could not load (${error.message}). Streets and buildings are still shown.`);
-      renderResults();
+      renderSearchResults();
     });
   const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
     .then(labels => {
-      buildingAddresses = buildingAddressIndex(labels);
+      directoryState.buildingAddresses = buildingAddressIndex(labels);
       return labels;
     })
     .catch(error => {
@@ -700,62 +295,68 @@ function loadDirectoryData() {
 // Storage and server/mock selection remain public-app adapters, not shared map policy.
 async function initializeMapTransport() {
   if ('serviceWorker' in navigator && isSecureContext) {
-    serviceWorkerRegistration = await registerAppUpdates().catch(error => {
+    startupState.serviceWorkerRegistration = await registerAppUpdates().catch(error => {
       notify('Offline setup failed: ' + error.message);
       return null;
     });
   }
-  dataMode = await loadDataMode();
-  dataSources = dataEndpoints(dataMode, location.href);
-  document.documentElement.dataset.api = dataMode;
-  manifest = await loadJSON('data/manifest.json', 'Map metadata');
-  archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
-  try {
-    await archive.init();
-  } catch {
-    storageNote('Local storage unavailable. Online map is still usable.');
-  }
-  updateDownload();
+  startupState.dataMode = await loadDataMode();
+  startupState.dataSources = dataEndpoints(startupState.dataMode, location.href);
+  document.documentElement.dataset.api = startupState.dataMode;
+  const manifest = await loadJSON('data/manifest.json', 'Map metadata');
+  startupState.archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
+  startupState.offlineControls = new OfflineControls({
+    archive: startupState.archive,
+    manifest,
+    dataSources: startupState.dataSources,
+    hasServiceWorker: Boolean(startupState.serviceWorkerRegistration),
+    map: () => mapState.map,
+    notify,
+    clearNotice: () => {
+      elementById('error').hidden = true;
+    }
+  });
+  await startupState.offlineControls.initialize();
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
 function installPublicMapDebug() {
   window.kompasDebug = {
     get map() {
-      return map;
+      return mapState.map;
     },
     get endpoints() {
-      return structuredClone(endpoints);
+      return structuredClone(routeEndpoints);
     },
     get offline() {
-      return !!archive.local;
+      return !!startupState.archive.local;
     },
     get selected() {
-      return selectedPlace?.properties.id ?? null;
+      return placeSelection.selectedPlace?.properties.id ?? null;
     },
     get placeCount() {
-      return allPlaces.length;
+      return directoryState.allPlaces.length;
     },
     get satellite() {
-      return satelliteVisible;
+      return mapState.isSatelliteVisible;
     },
     get transport() {
-      return !!transport?.enabled;
+      return !!mapState.transportFeed?.isEnabled;
     },
     get dataMode() {
-      return dataMode;
+      return startupState.dataMode;
     },
     get position() {
-      return position.state;
+      return locationControls.state;
     },
     get explored() {
-      return explored;
+      return mapState.hasExploredMap;
     }
   };
 }
 
 function installPositionBadge() {
-  map.addControl(
+  mapState.map.addControl(
     {
       onAdd() {
         const control = elementById('position-badge');
@@ -770,224 +371,80 @@ function installPositionBadge() {
   );
 }
 
-// Preserve public layer ordering and the selected-result exception; core supplies reusable rendering.
-function installPublicPlaceLayers() {
-  // PV-01/PV-02: each level is a zoom range, so eligibility is decided before any collision placement.
-  installPlaceIcons(map, placeColors);
-  map.addSource('places', {
-    type: 'geojson',
-    data: collection([]),
-    promoteId: 'markerKey'
-  });
-  map.addSource('requested-place', {type: 'geojson', data: collection([])});
-  map.addLayer(
-    {
-      id: 'place-highlight',
-      type: 'circle',
-      source: 'places',
-      filter: ['==', ['get', 'first'], true],
-      paint: {
-        'circle-radius': 14,
-        'circle-color': '#c43f3f',
-        'circle-opacity': 0,
-        'circle-stroke-color': '#c43f3f',
-        'circle-stroke-width': 0
-      }
-    },
-    'road-labels'
-  );
-  // The one requested result uses its existing geographic anchor and category icon below its own threshold.
-  map.addLayer({
-    id: 'search-place',
-    type: 'symbol',
-    source: 'requested-place',
-    layout: {
-      'icon-image': ['get', 'icon'],
-      'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
-      'text-field': ['get', 'label'],
-      'text-font': ['Open Sans Semibold'],
-      'text-size': 12,
-      'text-anchor': 'top',
-      'text-offset': [0, 1.1],
-      'text-optional': true
-    },
-    paint: {
-      'text-color': '#304c3e',
-      'text-halo-color': '#fffff9',
-      'text-halo-width': 2
-    }
-  });
-}
-
-function installCityNames() {
-  const cities = [
-    ['Podgorica', 19.26, 42.437],
-    ['Nikšić', 18.944, 42.774],
-    ['Cetinje', 18.922, 42.39],
-    ['Budva', 18.84, 42.286],
-    ['Kotor', 18.771, 42.424],
-    ['Bar', 19.098, 42.092],
-    ['Ulcinj', 19.206, 41.929],
-    ['Herceg Novi', 18.537, 42.454],
-    ['Žabljak', 19.121, 43.154],
-    ['Pljevlja', 19.359, 43.357],
-    ['Kolašin', 19.522, 42.824],
-    ['Berane', 19.87, 42.843]
-  ];
-  map.addSource('cities', {
-    type: 'geojson',
-    data: collection(
-      cities.map(([name, longitude, latitude]) => ({
-        type: 'Feature',
-        geometry: {type: 'Point', coordinates: [longitude, latitude]},
-        properties: {name}
-      }))
-    )
-  });
-  map.addLayer({
-    id: 'city-names',
-    type: 'symbol',
-    source: 'cities',
-    maxzoom: 13,
-    layout: {
-      'text-field': ['get', 'name'],
-      'text-font': ['Open Sans Semibold'],
-      'text-size': 13
-    },
-    paint: {
-      'text-color': '#3c5945',
-      'text-halo-color': '#fafaf0',
-      'text-halo-width': 2
-    }
-  });
-}
-
 // App workflows attach to the shared map after its common sources/layers have loaded.
 function installPublicLayers(placesReady, labelsReady) {
   elementById('satellite-toggle').disabled = false;
-  installPublicPlaceLayers();
-  installCityNames();
-  installTransport(map);
-  installRoutePoints(map);
-  installEntranceLayers(map);
-  objectSelection = new ObjectSelection(map, footprintIndex => selectBuildingEntrances(map, footprintIndex));
-  routePlanner = new RoutePlanner(map);
-  transport = new TransportFeed(map, {
-    url: dataSources.vehicles,
-    onStatus: renderTransportStatus
+  installPublicPlaceLayers(mapState.map);
+  installCityNames(mapState.map);
+  installTransport(mapState.map);
+  installRoutePoints(mapState.map);
+  installEntranceLayers(mapState.map);
+  mapState.objectSelection = new ObjectSelection(mapState.map, footprintIndex =>
+    selectBuildingEntrances(mapState.map, footprintIndex)
+  );
+  mapState.routePlanner = new RoutePlanner(mapState.map);
+  mapState.transportFeed = new TransportFeed(mapState.map, {
+    url: startupState.dataSources.vehicles,
+    onStatus: snapshot => {
+      elementById('transport-status').textContent = transportStatusText(snapshot);
+      elementById('transport-status').dataset.state = snapshot.state;
+    }
   });
   elementById('transport-toggle').disabled = false;
-  installPositionLayers(map);
-  renderPosition(position);
+  installPositionLayers(mapState.map);
+  locationControls.refresh();
   Promise.all([placesReady, labelsReady]).then(([, labels]) => {
     if (labels) {
-      map.getSource('building-addresses').setData(buildingMapFeatures(labels));
-      map.getSource('building-entrances').setData(entranceFeatures(labels));
+      mapState.map.getSource('building-addresses').setData(buildingMapFeatures(labels));
+      mapState.map.getSource('building-entrances').setData(entranceFeatures(labels));
     }
-    if (!placesError) {
-      const {names, icons} = placeLayers(placeBands(allPlaces, visibilityConfig), visibilityConfig);
-      for (const layer of [...names, ...icons]) map.addLayer(layer, 'road-labels');
-      placeHitLayers = ['search-place', ...icons.map(layer => layer.id), ...names.map(layer => layer.id)];
+    if (!directoryState.loadingError) {
+      const {names, icons} = placeLayers(
+        placeBands(directoryState.allPlaces, directoryState.visibilityConfig),
+        directoryState.visibilityConfig
+      );
+      for (const layer of [...names, ...icons]) mapState.map.addLayer(layer, 'road-labels');
+      directoryState.placeHitLayers = [
+        'search-place',
+        ...icons.map(layer => layer.id),
+        ...names.map(layer => layer.id)
+      ];
     }
-    loaded = true;
+    mapState.isMapReady = true;
     elementById('loading').hidden = true;
-    filterPlaces();
+    applyPlaceSearch();
   });
-}
-
-// Route endpoints, stops and listings win over generic geographic objects. Returns whether one was selected.
-function selectTappedMarker(event) {
-  const routePoints = map.queryRenderedFeatures(event.point, {
-    layers: ['route-point-circles']
-  });
-  if (routePoints.length) {
-    const feature = routePoints[0];
-    showPoint(
-      {
-        name: feature.properties.name,
-        coordinates: [...feature.geometry.coordinates],
-        kind: feature.properties.role === 'from' ? 'From point' : 'To point',
-        details: []
-      },
-      feature
-    );
-    return true;
-  }
-  const entrances = map.queryRenderedFeatures(event.point, {
-    layers: ['entrance-points', 'entrance-selection-numbers', 'entrance-numbers', 'entrance-selection-arrows']
-  });
-  if (entrances.length) {
-    showPoint(describePoint(entrances[0], event.lngLat.toArray(), buildingAddresses), entrances[0]);
-    return true;
-  }
-  const stops = map.queryRenderedFeatures(event.point, {
-    layers: ['transport-stops']
-  });
-  if (stops.length) {
-    showPoint(describePoint(stops[0], event.lngLat.toArray()), stops[0]);
-    return true;
-  }
-  const listings = listingsAtHits(
-    map.queryRenderedFeatures(event.point, {layers: placeHitLayers}),
-    placesById
-  );
-  if (listings.length === 1) {
-    showPlace(listings[0].properties.id);
-    return true;
-  }
-  if (listings.length > 1) {
-    showChooser(listings, event.lngLat.toArray());
-    return true;
-  }
-  return false;
-}
-
-// Listings win over geography; among geographic objects the most specific one under the tap wins.
-function selectTappedFeature(event) {
-  if (!loaded) return;
-  if (selectTappedMarker(event)) return;
-  const roadLayers = [
-    'road-labels',
-    'steps',
-    'cycleways',
-    'paths',
-    'footways',
-    'pedestrian-streets',
-    'minor-roads',
-    'major-roads'
-  ];
-  const features = map.queryRenderedFeatures(event.point, {
-    layers: ['building-numbers', 'buildings', ...roadLayers, 'land', 'water', 'rivers']
-  });
-  const selectedFeature =
-    features.find(feature => feature.layer.id === 'buildings') ??
-    features.find(feature => feature.layer.id === 'building-numbers') ??
-    features.find(feature => roadLayers.includes(feature.layer.id)) ??
-    features.find(feature => feature.layer.id === 'land' && feature.properties.kind === 'park') ??
-    features.find(feature => feature.layer.id === 'water' || feature.layer.id === 'rivers');
-  showPoint(describePoint(selectedFeature, event.lngLat.toArray(), buildingAddresses), selectedFeature);
 }
 
 function registerPublicMapEvents() {
-  map.on('movestart', event => {
-    if (ownMove) {
-      ownMove = false;
+  mapState.map.on('movestart', event => {
+    if (mapState.shouldIgnoreNextMove) {
+      mapState.shouldIgnoreNextMove = false;
       return;
     }
-    if (event.originalEvent && !explored) {
-      explored = true;
-      renderPosition(position);
+    if (event.originalEvent && !mapState.hasExploredMap) {
+      mapState.hasExploredMap = true;
+      locationControls.refresh();
     }
   });
   // The list keeps its order while a chosen place is open, so the row just used does not jump.
-  map.on('moveend', () => {
-    if (!selectedPlace) renderResults();
-    flushPendingReveal();
+  mapState.map.on('moveend', () => {
+    if (!placeSelection.selectedPlace) renderSearchResults();
+    placeSelection.flushPendingReveal();
   });
-  installMapTaps(map, selectTappedFeature);
-  map.on('mousemove', () => {
-    if (loaded) map.getCanvas().style.cursor = 'crosshair';
+  installMapTaps(mapState.map, event =>
+    selectTappedFeature(mapState.map, event, {
+      isMapReady: mapState.isMapReady,
+      placeHitLayers: directoryState.placeHitLayers,
+      placesById: directoryState.placesById,
+      buildingAddresses: directoryState.buildingAddresses,
+      showPlace: placeSelection.showPlace,
+      showPoint: placeSelection.showPoint,
+      showChooser: placeSelection.showChooser
+    })
+  );
+  mapState.map.on('mousemove', () => {
+    if (mapState.isMapReady) mapState.map.getCanvas().style.cursor = 'crosshair';
   });
   registerMapFailures();
 }
@@ -1007,27 +464,27 @@ function registerMapFailures() {
   };
   // Tile bursts report many errors; wait for the last one so only one message appears.
   const mapErrorDelayMilliseconds = 1500;
-  map.on('error', event => {
+  mapState.map.on('error', event => {
     console.error('Map error', event.error);
     const message =
       failures[event.sourceId] ??
       'Some map data could not load. Check your connection or download the map for offline use.';
-    clearTimeout(errorTimer);
-    errorTimer = setTimeout(() => notify(message), mapErrorDelayMilliseconds);
+    clearTimeout(mapState.errorTimer);
+    mapState.errorTimer = setTimeout(() => notify(message), mapErrorDelayMilliseconds);
   });
-  map.on('webglcontextlost', () =>
+  mapState.map.on('webglcontextlost', () =>
     notify('The browser paused graphics rendering. Waiting for it to recover…')
   );
-  map.on('webglcontextrestored', () => {
+  mapState.map.on('webglcontextrestored', () => {
     elementById('error').hidden = true;
-    map.triggerRepaint();
+    mapState.map.triggerRepaint();
   });
 }
 
 function warnAboutSlowStartup() {
   const startupTimeoutMilliseconds = 20000;
   setTimeout(() => {
-    if (loaded) return;
+    if (mapState.isMapReady) return;
     elementById('loading').hidden = true;
     notify('Map startup is taking longer than expected. Check your connection and try again.');
   }, startupTimeoutMilliseconds);
@@ -1039,15 +496,15 @@ function registerCategoryControls() {
     const button = createElement('button', label);
     button.type = 'button';
     button.dataset.category = key;
-    button.setAttribute('aria-pressed', String(key === category));
+    button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      category = category === key ? 'all' : key;
+      directoryState.activeCategory = directoryState.activeCategory === key ? 'all' : key;
       for (const other of elementById('categories').children) {
-        const active = other.dataset.category === category;
-        other.setAttribute('aria-pressed', String(active));
-        if (active) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
+        const isActiveCategory = other.dataset.category === directoryState.activeCategory;
+        other.setAttribute('aria-pressed', String(isActiveCategory));
+        if (isActiveCategory) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
       }
-      filterPlaces();
+      applyPlaceSearch();
     });
     elementById('categories').append(button);
   }
@@ -1056,22 +513,22 @@ function registerCategoryControls() {
 // Search and selection controls operate on the existing map and details card.
 function registerSelectionControls() {
   elementById('search').addEventListener('input', () => {
-    mapInterface.openSearch();
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(filterPlaces, 120);
+    mapState.interface.openSearch();
+    clearTimeout(directoryState.searchTimer);
+    directoryState.searchTimer = setTimeout(applyPlaceSearch, 120);
   });
-  elementById('point-from').addEventListener('click', () => setEndpoint('from'));
-  elementById('point-to').addEventListener('click', () => setEndpoint('to'));
+  elementById('point-from').addEventListener('click', () => setRouteEndpoint('from'));
+  elementById('point-to').addEventListener('click', () => setRouteEndpoint('to'));
   elementById('clear-route-points').addEventListener('click', () => {
-    endpoints.from = null;
-    endpoints.to = null;
-    renderEndpoints();
+    routeEndpoints.from = null;
+    routeEndpoints.to = null;
+    renderRouteEndpoints();
   });
-  elementById('close-place').addEventListener('click', () => closePlace());
+  elementById('close-place').addEventListener('click', () => placeSelection.close());
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
-      if (!elementById('place-card').hidden) closePlace();
-      else mapInterface.close(true);
+      if (!elementById('place-card').hidden) placeSelection.close();
+      else mapState.interface.close(true);
     }
     if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
@@ -1083,16 +540,16 @@ function registerSelectionControls() {
 // Optional layers keep their own availability and connection states.
 function registerLayerControls() {
   elementById('satellite-toggle').addEventListener('click', () => {
-    if (!loaded) return;
-    satelliteVisible = !satelliteVisible;
-    setSatelliteVisible(map, satelliteVisible);
-    elementById('satellite-toggle').setAttribute('aria-pressed', String(satelliteVisible));
-    elementById('satellite-note').hidden = !satelliteVisible;
-    if (satelliteVisible) {
-      closePlace(false);
-      explored = true;
+    if (!mapState.isMapReady) return;
+    mapState.isSatelliteVisible = !mapState.isSatelliteVisible;
+    setSatelliteVisible(mapState.map, mapState.isSatelliteVisible);
+    elementById('satellite-toggle').setAttribute('aria-pressed', String(mapState.isSatelliteVisible));
+    elementById('satellite-note').hidden = !mapState.isSatelliteVisible;
+    if (mapState.isSatelliteVisible) {
+      placeSelection.close(false);
+      mapState.hasExploredMap = true;
       const [west, south, east, north] = satelliteBounds;
-      map.easeTo({
+      mapState.map.easeTo({
         center: [(west + east) / 2, (south + north) / 2],
         zoom: 17.5,
         duration: prefersReducedMotion ? 0 : 600
@@ -1100,94 +557,70 @@ function registerLayerControls() {
     }
   });
   elementById('transport-toggle').addEventListener('click', () => {
-    if (!transport) return;
-    const enabled = !transport.enabled;
-    if (!enabled && selectedPoint?.kind === 'Bus stop') closePlace(false);
-    elementById('transport-toggle').setAttribute('aria-pressed', String(enabled));
-    elementById('transport-info').hidden = !enabled;
-    transport.setEnabled(enabled);
-    if (enabled) {
-      closePlace(false);
-      explored = true;
-      map.easeTo({center: [19.26, 42.44], zoom: 12, duration: prefersReducedMotion ? 0 : 450});
-      if (!navigator.onLine) transport.pause('offline');
+    if (!mapState.transportFeed) return;
+    const isEnabled = !mapState.transportFeed.isEnabled;
+    if (!isEnabled && placeSelection.point?.kind === 'Bus stop') placeSelection.close(false);
+    elementById('transport-toggle').setAttribute('aria-pressed', String(isEnabled));
+    elementById('transport-info').hidden = !isEnabled;
+    mapState.transportFeed.setEnabled(isEnabled);
+    if (isEnabled) {
+      placeSelection.close(false);
+      mapState.hasExploredMap = true;
+      mapState.map.easeTo({center: [19.26, 42.44], zoom: 12, duration: prefersReducedMotion ? 0 : 450});
+      if (!navigator.onLine) mapState.transportFeed.pause('offline');
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (!transport?.enabled) return;
-    if (document.hidden) transport.pause('paused');
-    else if (navigator.onLine) transport.refresh();
+    if (!mapState.transportFeed?.isEnabled) return;
+    if (document.hidden) mapState.transportFeed.pause('paused');
+    else if (navigator.onLine) mapState.transportFeed.refresh();
   });
-  addEventListener('offline', () => transport?.pause('offline'));
+  addEventListener('offline', () => mapState.transportFeed?.pause('offline'));
   addEventListener('online', () => {
-    if (transport?.enabled && !document.hidden) transport.refresh();
+    if (mapState.transportFeed?.isEnabled && !document.hidden) mapState.transportFeed.refresh();
   });
 }
 
 // Downloads and location actions report failures in the common visible error panel.
 function registerDeviceControls() {
-  elementById('download').addEventListener('click', startDownload);
-  elementById('cancel-download').addEventListener('click', () => downloadAbort?.abort());
-  elementById('remove-download').addEventListener('click', async () => {
-    try {
-      await archive.remove();
-      storageNote('');
-      updateDownload();
-    } catch (error) {
-      notify('Could not remove offline map: ' + error.message);
-    }
-  });
   elementById('retry').addEventListener('click', () => location.reload());
   elementById('dismiss-error').addEventListener('click', () => {
     elementById('error').hidden = true;
-    mapInterface.restoreFocus(elementById('search'));
+    mapState.interface.restoreFocus(elementById('search'));
   });
-  elementById('position-action').addEventListener('click', positionAction);
-  addEventListener('online', updateConnection);
-  addEventListener('offline', updateConnection);
+  elementById('position-action').addEventListener('click', () => locationControls.requestPosition());
+  for (const eventType of ['online', 'offline']) {
+    addEventListener(eventType, () => renderConnectionBadge(Boolean(startupState.archive?.local)));
+  }
 }
 
 // Interface callbacks run after construction and always use the current selection.
 function initializeInterface() {
-  mapInterface = new MapInterface({
+  mapState.interface = new MapInterface({
     onSearch: () => {
-      closePlace(false);
-      filterPlaces();
+      placeSelection.close(false);
+      applyPlaceSearch();
     },
     onChange: () => {
       syncPanels();
-      if (mapInterface && mapInterface.view !== 'closed' && !explored) {
-        explored = true;
-        renderPosition(position);
+      if (mapState.interface && mapState.interface.view !== 'closed' && !mapState.hasExploredMap) {
+        mapState.hasExploredMap = true;
+        locationControls.refresh();
       }
-      if (mapInterface?.view === 'closed') {
-        previewPlace = null;
-        updatePlaceLayers();
+      if (mapState.interface?.view === 'closed') {
+        placeSelection.clearPreview();
       }
     },
     // Recompute selection framing only after keyboard and camera changes have settled.
-    onViewport: () => {
-      const hasSelection = selectedPoint || pendingReveal;
-      if (!loaded || !hasSelection || mapInterface.keyboardOpen()) return;
-      // Building bounds already account for the card; an intermediate zoom would undo their fit.
-      if (selectedPoint?.entrances?.length) {
-        if (!map.isMoving()) frameBuildingEntrances(selectedPoint.entrances, selectedPoint.coordinates);
-        return;
-      }
-      if (map.isMoving()) {
-        pendingReveal ??= {zoom: map.getZoom()};
-        return;
-      }
-      if (pendingReveal) {
-        flushPendingReveal();
-        return;
-      }
-      revealCoordinates(selectedPoint.coordinates, {zoom: map.getZoom(), duration: 0});
-    },
-    onCardSwipedAway: () => closePlace(),
+    onViewport: () => placeSelection.viewportChanged(),
+    onCardSwipedAway: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      return query ? `“${query}”` : category === 'all' ? 'Results' : categories[category];
+      return query
+        ? `“${query}”`
+        : directoryState.activeCategory === 'all'
+          ? 'Results'
+          : categories[directoryState.activeCategory];
     }
   });
 }

@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import fs from 'node:fs';
+import fileSystem from 'node:fs';
 
 // Every test edits through the real map and inspector, and asserts on what an export would contain.
 test.describe('source editing', () => {
@@ -119,7 +119,7 @@ test.describe('source editing', () => {
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);
-    return {savedPath, changeset: JSON.parse(fs.readFileSync(savedPath))};
+    return {savedPath, changeset: JSON.parse(fileSystem.readFileSync(savedPath))};
   };
 
   test('POI details round trip through export, and import resumes them on a clean session', {tag: '@phone'}, async ({
@@ -170,7 +170,7 @@ test.describe('source editing', () => {
         {filename: placesFile, operation: 'modify', reference: {featureIndex: 0}, before: feature, after: feature}
       ]
     };
-    fs.writeFileSync(refusedPath, JSON.stringify(changeset));
+    fileSystem.writeFileSync(refusedPath, JSON.stringify(changeset));
     await page.locator('#import-changeset').setInputFiles(refusedPath);
     await expect(page.locator('#review-message')).toContainText('differs from this snapshot');
     await expect(page.locator('#review-empty')).toBeVisible();

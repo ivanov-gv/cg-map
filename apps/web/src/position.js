@@ -1,6 +1,11 @@
-import {classifyFix, accuracyCircle, POSITION_FRESH_MS, POSITION_TIMEOUT_MS} from './core.js';
+import {
+  classifyFix,
+  accuracyCircle,
+  POSITION_FRESH_MILLISECONDS,
+  POSITION_TIMEOUT_MILLISECONDS
+} from './core.js';
 
-// Current position for Discover (docs/ui-ux/discover.md D-06). Coordinates stay in this object only: they are never
+// Current position for Discover (docs/ui-ux/user-stories/discover.md D-06). Coordinates stay in this object only: they are never
 // stored, cached, logged or sent anywhere by the app. The browser/OS location provider may use its own services.
 export class PositionTracker {
   constructor({
@@ -22,7 +27,8 @@ export class PositionTracker {
   async start() {
     if (!this.secure) return this.set('insecure');
     if (!this.geolocation) return this.set('unsupported');
-    this.every(() => this.evaluate(), 5000);
+    const reevaluationIntervalMilliseconds = 5000;
+    this.every(() => this.evaluate(), reevaluationIntervalMilliseconds);
     try {
       const status = await this.permissions?.query({name: 'geolocation'});
       if (status) {
@@ -49,7 +55,11 @@ export class PositionTracker {
     this.watchId = this.geolocation.watchPosition(
       position => this.update(position),
       error => this.fail(error),
-      {enableHighAccuracy: true, timeout: POSITION_TIMEOUT_MS, maximumAge: POSITION_FRESH_MS}
+      {
+        enableHighAccuracy: true,
+        timeout: POSITION_TIMEOUT_MILLISECONDS,
+        maximumAge: POSITION_FRESH_MILLISECONDS
+      }
     );
   }
   stop() {

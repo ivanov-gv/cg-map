@@ -1,4 +1,4 @@
-import {distance} from './core.js';
+import {distanceKilometres} from './core.js';
 
 // These are search heuristics, not a timetable or live departure predictions.
 const walkingMetresPerKilometre = 1300;
@@ -11,7 +11,7 @@ const maximumBoardings = 2;
 
 // Straight links are deliberately marked approximate until the road router can replace them.
 function walkingLeg(from, to, name) {
-  const distanceMetres = distance(from, to) * walkingMetresPerKilometre;
+  const distanceMetres = distanceKilometres(from, to) * walkingMetresPerKilometre;
   return {
     kind: 'walk',
     coordinates: [from, to],
@@ -25,11 +25,11 @@ function walkingLeg(from, to, name) {
 // Seed only the nearest reachable stops to keep the two boarding rounds bounded.
 function accessLabels(stops, from) {
   const accessibleStops = stops
-    .map(([id, stop]) => ({id, leg: walkingLeg(from, stop.coordinates, `Walk to ${stop.name}`)}))
+    .map(([stopId, stop]) => ({id: stopId, leg: walkingLeg(from, stop.coordinates, `Walk to ${stop.name}`)}))
     .filter(({leg}) => leg.distance <= maximumAccessWalkMetres)
     .sort((first, second) => first.leg.distance - second.leg.distance)
     .slice(0, maximumAccessStops);
-  return new Map(accessibleStops.map(({id, leg}) => [id, {cost: leg.duration, legs: [leg]}]));
+  return new Map(accessibleStops.map(({id: stopId, leg}) => [stopId, {cost: leg.duration, legs: [leg]}]));
 }
 
 // The bus polyline joins recorded stops; it is not a road-snapped route shape.
@@ -37,7 +37,7 @@ function busLeg(network, pattern, boardingIndex, exitIndex, duration) {
   const stopIds = pattern.stops.slice(boardingIndex, exitIndex + 1);
   const coordinates = stopIds.map(stopId => network.stops[stopId].coordinates);
   const distanceMetres = coordinates.slice(1).reduce((total, point, index) => {
-    return total + distance(coordinates[index], point) * 1000;
+    return total + distanceKilometres(coordinates[index], point) * 1000;
   }, 0);
   return {
     kind: 'bus',

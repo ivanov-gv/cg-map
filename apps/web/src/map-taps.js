@@ -3,29 +3,30 @@ export function installMapTaps(
   map,
   select,
   {
-    delay = 500,
-    now = Date.now,
+    delay: delayMilliseconds = 500,
+    now: readNowMilliseconds = Date.now,
     schedule = (...argumentsList) => setTimeout(...argumentsList),
-    cancel = id => clearTimeout(id)
+    cancel = timerId => clearTimeout(timerId)
   } = {}
 ) {
   let timer;
-  let blockedUntil = 0;
+  let blockedUntilMilliseconds = 0;
   const clear = () => {
     if (timer !== undefined) cancel(timer);
     timer = undefined;
   };
   const gesture = () => {
     clear();
-    blockedUntil = now() + delay;
+    blockedUntilMilliseconds = readNowMilliseconds() + delayMilliseconds;
   };
   const click = event => {
     clear();
-    if (event.originalEvent?.detail > 1 || now() < blockedUntil || map.isMoving()) return;
+    if (event.originalEvent?.detail > 1 || readNowMilliseconds() < blockedUntilMilliseconds || map.isMoving())
+      return;
     timer = schedule(() => {
       timer = undefined;
-      if (now() >= blockedUntil && !map.isMoving()) select(event);
-    }, delay);
+      if (readNowMilliseconds() >= blockedUntilMilliseconds && !map.isMoving()) select(event);
+    }, delayMilliseconds);
   };
   const handlers = {
     click,

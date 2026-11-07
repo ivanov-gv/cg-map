@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
+import fileSystem from 'node:fs';
+import operatingSystem from 'node:os';
 import path from 'node:path';
 import {byteRangeResponse, parseByteRange} from '../src/offline-cache.js';
 import {offlineManifest, writeOfflineManifest} from '../tools/offline-manifest.mjs';
@@ -9,12 +9,12 @@ import {offlineManifest, writeOfflineManifest} from '../tools/offline-manifest.m
 const archivePath = 'data/map.pmtiles';
 
 function artifactDirectory(testContext) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-editor-offline-'));
-  testContext.after(() => fs.rmSync(directory, {recursive: true, force: true}));
-  fs.mkdirSync(path.join(directory, 'data'));
-  fs.writeFileSync(path.join(directory, 'index.html'), 'page');
-  fs.writeFileSync(path.join(directory, 'sw.js'), 'worker');
-  fs.writeFileSync(path.join(directory, archivePath), 'tiles');
+  const directory = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), 'cg-map-editor-offline-'));
+  testContext.after(() => fileSystem.rmSync(directory, {recursive: true, force: true}));
+  fileSystem.mkdirSync(path.join(directory, 'data'));
+  fileSystem.writeFileSync(path.join(directory, 'index.html'), 'page');
+  fileSystem.writeFileSync(path.join(directory, 'sw.js'), 'worker');
+  fileSystem.writeFileSync(path.join(directory, archivePath), 'tiles');
   return directory;
 }
 
@@ -60,7 +60,7 @@ test('any changed file makes a new release, and building twice makes the same on
   const directory = artifactDirectory(testContext);
   const first = offlineManifest(directory, archivePath).release;
   assert.equal(offlineManifest(directory, archivePath).release, first);
-  fs.writeFileSync(path.join(directory, 'index.html'), 'changed page');
+  fileSystem.writeFileSync(path.join(directory, 'index.html'), 'changed page');
   assert.notEqual(offlineManifest(directory, archivePath).release, first);
 });
 
@@ -68,10 +68,10 @@ test('the worker carries the release, because browsers detect an update from its
   const directory = artifactDirectory(testContext);
   const release = writeOfflineManifest(directory, archivePath);
   assert.match(
-    fs.readFileSync(path.join(directory, 'sw.js'), 'utf8'),
+    fileSystem.readFileSync(path.join(directory, 'sw.js'), 'utf8'),
     new RegExp(`^// Release ${release}\\.\\nworker`)
   );
-  const moduleText = fs.readFileSync(path.join(directory, 'offline-manifest.js'), 'utf8');
+  const moduleText = fileSystem.readFileSync(path.join(directory, 'offline-manifest.js'), 'utf8');
   assert.match(moduleText, new RegExp(`export const release = "${release}";`));
   assert.ok(!moduleText.includes('"sw.js"'));
 });

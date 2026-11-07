@@ -15,7 +15,11 @@ export function roadURL(mode, from, to) {
   if (!['car', 'walk'].includes(mode) || !validPoint(from) || !validPoint(to))
     throw new Error('Invalid route request');
   const profile = mode === 'car' ? 'car' : 'foot';
-  return `https://routing.openstreetmap.de/routed-${profile}/route/v1/driving/${from.join(',')};${to.join(',')}?overview=full&geometries=geojson&steps=true&radiuses=${mode === 'car' ? '1000;1000' : '300;300'}`;
+  const coordinates = `${from.join(',')};${to.join(',')}`;
+  const endpoint = `https://routing.openstreetmap.de/routed-${profile}/route/v1/driving/${coordinates}`;
+  const snappingRadiiMetres = mode === 'car' ? '1000;1000' : '300;300';
+  const query = `overview=full&geometries=geojson&steps=true&radiuses=${snappingRadiiMetres}`;
+  return `${endpoint}?${query}`;
 }
 // Reject unusable provider geometry before it can reach the route renderer.
 export function parseRoadRoute(value, mode) {

@@ -15,7 +15,7 @@ function plannerEnvironment(testContext, {router, fetchImpl} = {}) {
       else delete globalThis[name];
     }
   });
-  const buttons = ['car', 'walk', 'transit'].map(mode => ({
+  const buttons = ['car', 'walk', 'transit'].map((mode) => ({
     dataset: {mode},
     attributes: new Map(),
     addEventListener(_type, listener) {
@@ -26,7 +26,7 @@ function plannerEnvironment(testContext, {router, fetchImpl} = {}) {
     }
   }));
   const elements = new Map();
-  const elementById = id => {
+  const elementById = (id) => {
     if (!elements.has(id)) {
       elements.set(id, {
         dataset: {},
@@ -46,7 +46,7 @@ function plannerEnvironment(testContext, {router, fetchImpl} = {}) {
   const map = {
     addSource() {},
     addLayer() {},
-    getSource: () => ({setData: data => publishedRoutes.push(data)})
+    getSource: () => ({setData: (data) => publishedRoutes.push(data)})
   };
   const planner = new RoutePlanner(map, {router, fetchImpl});
   return {planner, buttons, elementById, publishedRoutes};
@@ -55,7 +55,7 @@ function plannerEnvironment(testContext, {router, fetchImpl} = {}) {
 const from = {coordinates: [19.2, 42.44]};
 const to = {coordinates: [19.24, 42.44]};
 
-test('choosing a mode presses only that mode and recalculates once', testContext => {
+test('choosing a mode presses only that mode and recalculates once', (testContext) => {
   const {planner, buttons} = plannerEnvironment(testContext);
   let calculations = 0;
   planner.calculate = () => {
@@ -64,36 +64,36 @@ test('choosing a mode presses only that mode and recalculates once', testContext
   buttons[1].click();
   assert.equal(planner.mode, 'walk');
   assert.deepEqual(
-    buttons.map(button => button.attributes.get('aria-pressed')),
+    buttons.map((button) => button.attributes.get('aria-pressed')),
     ['false', 'true', 'false']
   );
   assert.equal(calculations, 1);
 });
 
-test('clearing endpoints while transit data loads prevents the late route from rendering', async testContext => {
+test('clearing endpoints while transit data loads prevents the late route from rendering', async (testContext) => {
   let respond;
   const fetchImpl = () =>
-    new Promise(resolve => {
+    new Promise((resolve) => {
       respond = resolve;
     });
   const {planner, elementById, publishedRoutes} = plannerEnvironment(testContext, {fetchImpl});
   planner.mode = 'transit';
   planner.endpoints = {from, to};
-  let rendered = false;
+  let wasRendered = false;
   planner.render = () => {
-    rendered = true;
+    wasRendered = true;
   };
   const pending = planner.calculate();
   planner.setEndpoints({});
   respond(Response.json({stops: {}, patterns: []}));
   await pending;
-  assert.equal(rendered, false);
+  assert.equal(wasRendered, false);
   assert.equal(planner.network, undefined);
   assert.equal(elementById('route-status').dataset.state, 'idle');
   assert.equal(publishedRoutes.at(-1).features.length, 0);
 });
 
-test('an unavailable foot router keeps the approximate walking link', async testContext => {
+test('an unavailable foot router keeps the approximate walking link', async (testContext) => {
   const router = {
     route: async () => {
       throw new Error('Provider unavailable');
@@ -111,7 +111,7 @@ test('an unavailable foot router keeps the approximate walking link', async test
   assert.equal(result.legs[0], leg);
 });
 
-test('a cancelled walking refinement propagates cancellation instead of using a stale result', async testContext => {
+test('a cancelled walking refinement propagates cancellation instead of using a stale result', async (testContext) => {
   const controller = new AbortController();
   const router = {
     route: async () => {

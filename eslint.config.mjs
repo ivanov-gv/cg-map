@@ -9,5 +9,5 @@ export default [
   {files: nodeFiles, languageOptions: {globals: {...globals.node, ...globals.browser}}},
   {files: ['**/*.js', '**/*.mjs'], rules: {'no-unused-vars': ['error', {argsIgnorePattern: '^_', caughtErrors: 'none'}], 'no-constant-binary-expression': 'error'}},
   {files: ['apps/web/src/*.js'], rules: {'no-restricted-imports': ['error', {patterns: [{group: ['node:*', '**/data/tools/**', '**/services/**', '**/platform/**', '**/tests/**'], message: 'Web runtime must consume contracts and published assets, not server or pipeline code.'}]}]}},
-  {files: ['apps/web/src/core.js', 'apps/web/src/vehicle-direction.js', 'apps/web/src/data-mode.js'], rules: {'no-restricted-globals': ['error', 'window', 'document', 'navigator', 'location', 'fetch', 'localStorage', 'sessionStorage', 'caches', 'indexedDB']}}
+  {files: ['apps/web/src/core.js', 'apps/web/src/status-messages.js', 'apps/web/src/vehicle-direction.js', 'apps/web/src/data-mode.js'], rules: {'no-restricted-globals': ['error', 'window', 'document', 'navigator', 'location', 'fetch', 'localStorage', 'sessionStorage', 'caches', 'indexedDB']}}
 ];

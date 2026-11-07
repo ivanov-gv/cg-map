@@ -38,9 +38,9 @@ test('source decoding binds bytes, digest, feature count and collection type', a
   );
 });
 
-test('source decoding explains that hashing needs a secure context', async t => {
+test('source decoding explains that hashing needs a secure context', async testContext => {
   const secureCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
-  t.after(() => Object.defineProperty(globalThis, 'crypto', secureCrypto));
+  testContext.after(() => Object.defineProperty(globalThis, 'crypto', secureCrypto));
   Object.defineProperty(globalThis, 'crypto', {value: {}, configurable: true});
   await assert.rejects(decodeSource(bytes, metadata('places.geojson')), /needs HTTPS or localhost/);
 });

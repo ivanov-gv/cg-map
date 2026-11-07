@@ -47,7 +47,7 @@ const cyrillicTransliteration = {
   э: 'e'
 };
 // Normalizes Latin and Cyrillic search text without changing the source listing.
-export const fold = text =>
+export const normalizeSearchText = text =>
   String(text ?? '')
     .toLowerCase()
     .normalize('NFD')
@@ -56,7 +56,7 @@ export const fold = text =>
     .replace(/[а-яјљњћџ]/g, character => cyrillicTransliteration[character] ?? character)
     .trim();
 // Search combines category eligibility with the listing's searchable text.
-export function matches(feature, query, category) {
+export function matchesPlaceSearch(feature, query, category) {
   const properties = feature.properties;
   const matchesCategory = category === 'all' || properties.category === category;
   const searchableText = [
@@ -65,11 +65,11 @@ export function matches(feature, query, category) {
     properties.kind,
     properties['addr:street']
   ].join(' ');
-  return matchesCategory && fold(searchableText).includes(fold(query));
+  return matchesCategory && normalizeSearchText(searchableText).includes(normalizeSearchText(query));
 }
 
 // Approximate ground distance in kilometres, suitable for ordering nearby results.
-export function distance(first, second) {
+export function distanceKilometres(first, second) {
   const radiansPerDegree = Math.PI / 180;
   const meanLatitudeRadians = ((first[1] + second[1]) / 2) * radiansPerDegree;
   const longitudeDifference = (first[0] - second[0]) * Math.cos(meanLatitudeRadians);
@@ -88,41 +88,46 @@ export function safeWebsite(value) {
   }
 }
 // Sorts a copy by distance; source feature order stays intact.
-export function selectNearest(features, center, limit = 40) {
+export function selectNearestPlaces(features, center, limit = 40) {
   return features
-    .map(feature => ({feature, distanceKilometres: distance(center, feature.geometry.coordinates)}))
+    .map(feature => ({feature, distanceKilometres: distanceKilometres(center, feature.geometry.coordinates)}))
     .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
     .slice(0, limit);
 }
-export const collection = features => ({type: 'FeatureCollection', features});
-export const formatBytes = bytes => `${(bytes / 1048576).toFixed(1)} MB`;
+export const featureCollection = features => ({type: 'FeatureCollection', features});
+// Preserve the existing label while using its historical MiB-sized conversion.
+const bytesPerMebibyte = 1048576;
+export const formatBytes = bytes => `${(bytes / bytesPerMebibyte).toFixed(1)} MB`;
 // Discover scale policy (docs/ui-ux/user-stories/discover.md). Scale is ground metres per CSS pixel; MapLibre uses 512px tiles.
-const EARTH_CIRCUMFERENCE = 40075016.686;
-export const metersPerPixel = (latitude, zoom) =>
-  (EARTH_CIRCUMFERENCE * Math.cos((latitude * Math.PI) / 180)) / (512 * 2 ** zoom);
-export const zoomForMetersPerPixel = (latitude, metresPerPixel) =>
-  Math.log2((EARTH_CIRCUMFERENCE * Math.cos((latitude * Math.PI) / 180)) / (512 * metresPerPixel));
+const earthCircumferenceMetres = 40075016.686;
+const mapTileSizePixels = 512;
+export const metresPerPixel = (latitude, zoom) =>
+  (earthCircumferenceMetres * Math.cos((latitude * Math.PI) / 180)) / (mapTileSizePixels * 2 ** zoom);
+export const zoomForMetresPerPixel = (latitude, metresPerPixel) =>
+  Math.log2(
+    (earthCircumferenceMetres * Math.cos((latitude * Math.PI) / 180)) / (mapTileSizePixels * metresPerPixel)
+  );
 export const DEFAULT_CENTER = [19.26, 42.437];
 // About 1 ground metre per CSS pixel over central Podgorica.
-export const DISCOVER_ZOOM = Math.round(zoomForMetersPerPixel(DEFAULT_CENTER[1], 1) * 10) / 10;
+export const DISCOVER_ZOOM = Math.round(zoomForMetresPerPixel(DEFAULT_CENTER[1], 1) * 10) / 10;
 // Location display states (D-06). Thresholds are the proposed initial tuning, not validated release values.
-export const POSITION_FRESH_MS = 30000;
-export const POSITION_TIMEOUT_MS = 15000;
-export const POSITION_APPROXIMATE_M = 50;
+export const POSITION_FRESH_MILLISECONDS = 30000;
+export const POSITION_TIMEOUT_MILLISECONDS = 15000;
+export const POSITION_APPROXIMATE_METRES = 50;
 // Bounds and coordinates are WGS84 longitude/latitude, including the edges.
 export function inBounds([longitude, latitude], [[west, south], [east, north]]) {
   return longitude >= west && longitude <= east && latitude >= south && latitude <= north;
 }
 // An outside fix wins over age and accuracy; it must never recenter the local map.
-export function classifyFix(fix, now, bounds) {
+export function classifyFix(fix, nowMilliseconds, bounds) {
   if (!inBounds(fix.coordinates, bounds)) return 'outside';
-  if (now - fix.timestamp > POSITION_FRESH_MS) return 'stale';
-  return fix.accuracy > POSITION_APPROXIMATE_M ? 'approximate' : 'live';
+  if (nowMilliseconds - fix.timestamp > POSITION_FRESH_MILLISECONDS) return 'stale';
+  return fix.accuracy > POSITION_APPROXIMATE_METRES ? 'approximate' : 'live';
 }
 // Ground-scaled accuracy ring as a polygon; an equirectangular offset is accurate enough at these radii.
-export function accuracyCircle([longitude, latitude], radius, steps = 48) {
+export function accuracyCircle([longitude, latitude], radiusMetres, steps = 48) {
   const metresPerDegree = 111320;
-  const latitudeRadiusDegrees = radius / metresPerDegree;
+  const latitudeRadiusDegrees = radiusMetres / metresPerDegree;
   const longitudeRadiusDegrees = latitudeRadiusDegrees / Math.cos((latitude * Math.PI) / 180);
   const ring = [];
   for (let index = 0; index <= steps; index++) {
@@ -134,7 +139,7 @@ export function accuracyCircle([longitude, latitude], radius, steps = 48) {
   }
   return {type: 'Polygon', coordinates: [ring]};
 }
-export function formatAge(milliseconds) {
+export function formatPositionAge(milliseconds) {
   const seconds = Math.max(0, Math.round(milliseconds / 1000));
   const secondsBeforeMinuteDisplay = 90;
   return seconds < secondsBeforeMinuteDisplay ? `${seconds} s` : `${Math.round(seconds / 60)} min`;

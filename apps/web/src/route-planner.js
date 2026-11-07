@@ -1,15 +1,15 @@
 import {RoadRouter} from './routing.js';
 import {planTransit} from './transit-routing.js';
-import {distance} from './core.js';
+import {distanceKilometres} from './core.js';
 const minimumWalkingLegMetres = 10;
 const coincidentEndpointKilometres = 0.005;
 
-const elementById = id => document.getElementById(id);
+const elementById = (elementId) => document.getElementById(elementId);
 const emptyCollection = () => ({type: 'FeatureCollection', features: []});
-const formatMinutes = seconds => `${Math.max(1, Math.round(seconds / 60))} min`;
-const formatDistance = metres =>
+const formatMinutes = (seconds) => `${Math.max(1, Math.round(seconds / 60))} min`;
+const formatDistance = (metres) =>
   metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`;
-const stepElement = text => {
+const stepElement = (text) => {
   const listItem = document.createElement('li');
   listItem.textContent = text;
   return listItem;
@@ -24,7 +24,7 @@ function routeNote(result) {
     return 'Walking route follows mapped footpaths and accessible streets. Route may start or end on a nearby path.';
   }
   const snapshotDate = new Date(result.retrievedAt).toLocaleDateString('en-GB');
-  const hasApproximateWalk = result.legs.some(leg => {
+  const hasApproximateWalk = result.legs.some((leg) => {
     return leg.kind === 'walk' && leg.approximate && leg.distance > minimumWalkingLegMetres;
   });
   const walkingExplanation = hasApproximateWalk
@@ -115,16 +115,17 @@ export class RoutePlanner {
   setEndpoints(endpoints) {
     this.endpoints = structuredClone(endpoints);
     this.invalidate();
-    const ready = !!endpoints.from && !!endpoints.to;
-    for (const button of elementById('route-modes').querySelectorAll('button')) button.disabled = !ready;
-    if (ready) this.calculate();
+    const hasBothEndpoints = !!endpoints.from && !!endpoints.to;
+    for (const button of elementById('route-modes').querySelectorAll('button'))
+      button.disabled = !hasBothEndpoints;
+    if (hasBothEndpoints) this.calculate();
   }
   // Calculate only complete, distinct endpoints, then render the current generation.
   async calculate() {
     this.invalidate();
     const {from, to} = this.endpoints;
     if (!from || !to) return;
-    if (distance(from.coordinates, to.coordinates) < coincidentEndpointKilometres) {
+    if (distanceKilometres(from.coordinates, to.coordinates) < coincidentEndpointKilometres) {
       elementById('route-status').textContent =
         'From and To are at the same point. Choose another destination.';
       return;
@@ -191,13 +192,13 @@ export class RoutePlanner {
 
   // Call only for the current request with complete endpoints; replace the itinerary and frame its geometry.
   render(result) {
-    const transit = result.mode === 'transit';
+    const isTransitRoute = result.mode === 'transit';
     elementById('route-status').textContent =
-      `${transit ? '~' : ''}${formatMinutes(result.duration)}${transit ? ' + waiting' : ''} · ${formatDistance(result.distance)}`;
+      `${isTransitRoute ? '~' : ''}${formatMinutes(result.duration)}${isTransitRoute ? ' + waiting' : ''} · ${formatDistance(result.distance)}`;
     elementById('route-status').dataset.state = 'ready';
     elementById('route-note').textContent = routeNote(result);
     elementById('route-steps').replaceChildren();
-    if (transit)
+    if (isTransitRoute)
       for (const leg of result.legs) {
         if (leg.kind === 'bus')
           elementById('route-steps').append(
@@ -221,8 +222,8 @@ export class RoutePlanner {
   // Each leg carries its approximation flag so rendering never implies a road-snapped bus path.
   renderGeometry(result) {
     const features = result.legs
-      .filter(leg => leg.coordinates.length >= 2)
-      .map(leg => ({
+      .filter((leg) => leg.coordinates.length >= 2)
+      .map((leg) => ({
         type: 'Feature',
         geometry: {type: 'LineString', coordinates: leg.coordinates},
         properties: {kind: leg.kind, approximate: leg.approximate}
@@ -233,7 +234,7 @@ export class RoutePlanner {
   // Include selected endpoints even when the provider snapped its path to a nearby street.
   frameRoute(result) {
     const points = [
-      ...result.legs.flatMap(leg => leg.coordinates),
+      ...result.legs.flatMap((leg) => leg.coordinates),
       this.endpoints.from.coordinates,
       this.endpoints.to.coordinates
     ];

@@ -35,6 +35,10 @@ const road = () => ({
 test('walk uses the separate foot profile; invalid coordinates and service routes are rejected', () => {
   assert.match(roadURL('walk', [19, 42], [20, 43]), /routed-foot/);
   assert.match(roadURL('car', [19, 42], [20, 43]), /routed-car/);
+  const walkingURL = new URL(roadURL('walk', [19, 42], [20, 43]));
+  const drivingURL = new URL(roadURL('car', [19, 42], [20, 43]));
+  assert.equal(walkingURL.searchParams.get('radiuses'), '300;300');
+  assert.equal(drivingURL.searchParams.get('radiuses'), '1000;1000');
   assert.throws(() => roadURL('walk', [NaN, 42], [20, 43]));
   assert.throws(() => parseRoadRoute({code: 'NoRoute'}, 'car'));
   const bad = road();
@@ -70,7 +74,8 @@ test('transit supports direct buses and one transfer without fabricating waiting
 });
 
 test('a provider response arriving after cancellation cannot enter the route cache', async () => {
-  let respond, started;
+  let respond;
+  let started;
   const waiting = new Promise(resolve => {
     started = resolve;
   });

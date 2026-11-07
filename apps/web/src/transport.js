@@ -10,20 +10,20 @@ const coverageBounds = {west: 17.8, east: 21, south: 41.3, north: 44.1};
 const empty = () => ({type: 'FeatureCollection', features: []});
 
 // Validate relay coordinates, freshness and optional movement metadata before they reach the map.
-export function validTransportFeed(value, now = Date.now()) {
+export function validTransportFeed(feedSnapshot, nowMilliseconds = Date.now()) {
   const hasValidCollection =
-    value?.type === 'FeatureCollection' &&
-    Array.isArray(value.features) &&
-    value.features.length <= maximumFeedFeatures;
+    feedSnapshot?.type === 'FeatureCollection' &&
+    Array.isArray(feedSnapshot.features) &&
+    feedSnapshot.features.length <= maximumFeedFeatures;
   if (!hasValidCollection) throw new Error('Invalid transport response');
-  const checkedAtMilliseconds = Date.parse(value.fetchedAt);
+  const checkedAtMilliseconds = Date.parse(feedSnapshot.fetchedAt);
   const hasFreshCheck =
     Number.isFinite(checkedAtMilliseconds) &&
-    checkedAtMilliseconds <= now + futureCheckToleranceMilliseconds &&
-    now - checkedAtMilliseconds <= maximumFeedAgeMilliseconds;
+    checkedAtMilliseconds <= nowMilliseconds + futureCheckToleranceMilliseconds &&
+    nowMilliseconds - checkedAtMilliseconds <= maximumFeedAgeMilliseconds;
   if (!hasFreshCheck) throw new Error('Transport feed has expired');
-  for (const feature of value.features) validateVehicle(feature);
-  return value;
+  for (const feature of feedSnapshot.features) validateVehicle(feature);
+  return feedSnapshot;
 }
 
 // Unknown bearings stay unknown: a present bearing must carry the movement heading tag too.
@@ -125,29 +125,35 @@ export function installTransport(map) {
 // becomes a teardrop whose point (north before rotation) shows the direction of travel. An estimate
 // is drawn as a white teardrop with a blue outline instead of solid blue.
 function busIcon({arrow, estimate = false}) {
-  const radius = 26;
-  const tip = 2 * radius;
-  const stroke = 4;
-  const center = tip + stroke;
+  const radiusPixels = 26;
+  const tipPixels = 2 * radiusPixels;
+  const strokePixels = 4;
+  const centerPixels = tipPixels + strokePixels;
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 2 * center;
+  canvas.width = canvas.height = 2 * centerPixels;
   const context = canvas.getContext('2d');
   const shape = () => {
     context.beginPath();
     if (!arrow) {
-      context.arc(center, center, radius, 0, Math.PI * 2);
+      context.arc(centerPixels, centerPixels, radiusPixels, 0, Math.PI * 2);
       return;
     }
-    // Tangents from the point to the disc meet it 60 degrees either side of north when tip = 2 * radius.
-    const spread = Math.acos(radius / tip);
-    const up = -Math.PI / 2;
-    context.moveTo(center, center - tip);
-    context.arc(center, center, radius, up + spread, up - spread + Math.PI * 2);
+    // Tangents from the point to the disc meet it 60 degrees either side of north when tipPixels = 2 * radiusPixels.
+    const spreadRadians = Math.acos(radiusPixels / tipPixels);
+    const northAngleRadians = -Math.PI / 2;
+    context.moveTo(centerPixels, centerPixels - tipPixels);
+    context.arc(
+      centerPixels,
+      centerPixels,
+      radiusPixels,
+      northAngleRadians + spreadRadians,
+      northAngleRadians - spreadRadians + Math.PI * 2
+    );
     context.closePath();
   };
   context.lineJoin = 'round';
   shape();
-  context.lineWidth = 2 * stroke;
+  context.lineWidth = 2 * strokePixels;
   context.strokeStyle = estimate ? '#195c9e' : '#ffffff';
   context.stroke();
   shape();
@@ -163,15 +169,15 @@ export class TransportFeed {
       url = RELAY_URL,
       networkURL = 'data/transit-network.json',
       directions = new DirectionTracker(),
-      fetchImpl = (...args) => fetch(...args),
+      fetchImpl = (...argumentsList) => fetch(...argumentsList),
       onStatus = () => {},
       now = Date.now,
-      schedule = (...args) => setTimeout(...args),
-      cancel = timer => clearTimeout(timer)
+      schedule = (...argumentsList) => setTimeout(...argumentsList),
+      cancel = (timer) => clearTimeout(timer)
     } = {}
   ) {
     Object.assign(this, {map, url, networkURL, directions, fetchImpl, onStatus, now, schedule, cancel});
-    this.enabled = false;
+    this.isEnabled = false;
     this.generation = 0;
     this.snapshot = null;
     this.network = null;
@@ -180,11 +186,11 @@ export class TransportFeed {
   // direction comes from movement only; the failure is reported, the feed keeps working.
   loadNetwork() {
     this.network ??= this.fetchImpl(this.networkURL)
-      .then(async response => {
+      .then(async (response) => {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         this.directions.setNetwork(await response.json());
       })
-      .catch(error => {
+      .catch((error) => {
         console.error('Bus route shapes unavailable; directions use movement only', error);
         this.network = null;
       });
@@ -194,21 +200,21 @@ export class TransportFeed {
     if (this.timer !== undefined) this.cancel(this.timer);
     this.timer = undefined;
   }
-  visible(value) {
-    for (const id of ['transport-stops', 'transport-stop-names', 'transport-buses', 'transport-routes'])
-      this.map.setLayoutProperty(id, 'visibility', value ? 'visible' : 'none');
+  visible(isVisible) {
+    for (const layerId of ['transport-stops', 'transport-stop-names', 'transport-buses', 'transport-routes'])
+      this.map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');
   }
-  setEnabled(enabled) {
-    this.enabled = enabled;
+  setEnabled(isEnabled) {
+    this.isEnabled = isEnabled;
     this.generation++;
     this.clearTimer();
     this.controller?.abort();
     this.snapshot = null;
     this.directions.reset();
     this.map.getSource('transport').setData(empty());
-    this.visible(enabled);
-    this.onStatus({state: enabled ? 'loading' : 'off', count: 0});
-    if (enabled) return this.refresh();
+    this.visible(isEnabled);
+    this.onStatus({state: isEnabled ? 'loading' : 'off', count: 0});
+    if (isEnabled) return this.refresh();
   }
   pause(reason = 'offline') {
     this.generation++;
@@ -217,10 +223,10 @@ export class TransportFeed {
     this.snapshot = null;
     this.directions.reset();
     this.map.getSource('transport').setData(empty());
-    if (this.enabled) this.onStatus({state: reason, count: 0});
+    if (this.isEnabled) this.onStatus({state: reason, count: 0});
   }
   async refresh() {
-    if (!this.enabled) return;
+    if (!this.isEnabled) return;
     this.clearTimer();
     this.controller?.abort();
     const generation = ++this.generation;
@@ -234,7 +240,7 @@ export class TransportFeed {
       ]);
       if (!response.ok) throw new Error('Bus feed unavailable');
       const data = validTransportFeed(await response.json(), this.now());
-      if (!this.enabled || generation !== this.generation) return;
+      if (!this.isEnabled || generation !== this.generation) return;
       this.snapshot = data;
       this.map.getSource('transport').setData({
         type: 'FeatureCollection',
@@ -246,7 +252,7 @@ export class TransportFeed {
         fetchedAt: data.fetchedAt
       });
     } catch {
-      if (!this.enabled || generation !== this.generation) return;
+      if (!this.isEnabled || generation !== this.generation) return;
       const stillUsable =
         this.snapshot && this.now() - Date.parse(this.snapshot.fetchedAt) <= maximumFeedAgeMilliseconds;
       if (!stillUsable) {
@@ -260,7 +266,7 @@ export class TransportFeed {
       });
     } finally {
       this.cancel(timeout);
-      if (this.enabled && generation === this.generation)
+      if (this.isEnabled && generation === this.generation)
         this.timer = this.schedule(() => this.refresh(), TRANSPORT_INTERVAL_MILLISECONDS);
     }
   }

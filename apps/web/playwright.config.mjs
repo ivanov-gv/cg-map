@@ -35,7 +35,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     launchOptions: {
-      args: ['--use-gl=angle', `--use-angle=${angleBackend}`, '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+      args: [
+        '--use-gl=angle',
+        `--use-angle=${angleBackend}`,
+        '--enable-unsafe-swiftshader',
+        '--ignore-gpu-blocklist'
+      ]
     }
   },
   projects: [

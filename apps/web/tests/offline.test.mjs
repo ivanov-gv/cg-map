@@ -5,8 +5,8 @@ import {ArchiveSource} from '../src/offline.js';
 const payload = new TextEncoder().encode('a complete verified vector archive');
 const hash = crypto.createHash('sha256').update(payload).digest('hex');
 function setup({badHash = false, failFinalRead = false} = {}) {
-  const files = new Map([['map-old.pmtiles', new Blob(['old map'])]]),
-    storage = new Map([['kompas-active-map', 'map-old.pmtiles']]);
+  const files = new Map([['map-old.pmtiles', new Blob(['old map'])]]);
+  const storage = new Map([['kompas-active-map', 'map-old.pmtiles']]);
   let remoteReads = 0;
   const directory = {
     async getFileHandle(name, {create = false} = {}) {
