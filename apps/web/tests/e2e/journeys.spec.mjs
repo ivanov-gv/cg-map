@@ -120,10 +120,10 @@ test('building selection provides feature details and point actions', async ({pa
     const canvas=map.getCanvas().getBoundingClientRect();
     // Find a visible building interior away from controls and place markers.
     const placeLayers=map.getStyle().layers.map(layer=>layer.id).filter(id=>/^place-(icons|names)-/.test(id));
+    const isBuilding=feature=>feature.layer.id==='buildings';
     for(let y=150;y<canvas.height-65;y+=8){
       for(let x=canvas.width*.5;x<canvas.width-65;x+=8){
         const hits=map.queryRenderedFeatures([x,y],{layers:['buildings',...placeLayers]});
-        const isBuilding=feature=>feature.layer.id==='buildings';
         const building=hits.find(isBuilding);
         const isOnlyBuilding=building&&hits.every(isBuilding);
         if(isOnlyBuilding)return {x:canvas.left+x,y:canvas.top+y,id:building.id};

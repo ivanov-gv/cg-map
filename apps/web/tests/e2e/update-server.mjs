@@ -23,8 +23,11 @@ export async function startUpdateServer(scope) {
   let isIncomplete = false;
   let failures = 0;
   const offlineManifest = () => {
-    const shell = {shellCache: `kompas-shell-update-test-${version}`, shell: ['index.html', 'app-updates.js', 'version.txt']};
-    return `self.KOMPAS_OFFLINE=${JSON.stringify(shell)};`;
+    const workerManifest = {
+      shellCache: `kompas-shell-update-test-${version}`,
+      shell: ['index.html', 'app-updates.js', 'version.txt']
+    };
+    return `self.KOMPAS_OFFLINE=${JSON.stringify(workerManifest)};`;
   };
   const server = http.createServer((request, response) => {
     const name = new URL(request.url, 'http://localhost').pathname.slice(scope.length);
