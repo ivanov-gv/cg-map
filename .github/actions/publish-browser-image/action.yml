@@ -1,0 +1,25 @@
+name: Publish browser image
+description: Build the browser test image, prove Chromium starts in it, and push it tagged by commit.
+inputs:
+  repository:
+    description: Where to push. A test run resolves this to a temporary registry.
+    required: true
+  token:
+    description: Token for ghcr.io. Other registries need none.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        IMAGE_REPOSITORY: ${{ inputs.repository }}
+        REGISTRY_TOKEN: ${{ inputs.token }}
+        COMMIT_SHA: ${{ github.sha }}
+      run: |
+        image="$IMAGE_REPOSITORY/browser-ci:$COMMIT_SHA"
+        case "$IMAGE_REPOSITORY" in
+          ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
+        esac
+        make -C platform browser-image IMAGE="$image"
+        docker push "$image"
+        echo "Published $image" | tee -a "$GITHUB_STEP_SUMMARY"

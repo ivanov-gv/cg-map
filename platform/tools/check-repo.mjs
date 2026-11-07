@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import {findLogProblems, readLog} from './decision-log.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -112,4 +113,5 @@ for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) 
     }
   }
 }
-console.log('Documentation links, component layout, and dependency boundaries passed.');
+assert.deepEqual(findLogProblems(readLog('docs/decisions')), [], 'The decisions log is out of sequence');
+console.log('Documentation links, decisions log, component layout, and dependency boundaries passed.');

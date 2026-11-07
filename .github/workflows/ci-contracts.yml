@@ -20,7 +20,7 @@ jobs:
     name: Verify contracts
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: dev
     steps: &verify-steps
       - uses: actions/checkout@v7
@@ -34,6 +34,6 @@ jobs:
     name: (test-run) Verify contracts
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: test-run
     steps: *verify-steps

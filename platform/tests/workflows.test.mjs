@@ -12,10 +12,12 @@ const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'ut
 
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-all.yml': ['approval', 'switch', 'gate', 'dev-pages', ...FOLDERS],
+  'ci-all.yml': ['approval', 'switch', 'gate', 'publish', 'dev-pages', 'job-times', ...FOLDERS],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
-  'ci-dev-pages.yml': ['deploy']
+  'cd-browser-image.yml': ['switch'],
+  'ci-dev-pages.yml': ['deploy'],
+  'ci-publish.yml': ['select']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -102,8 +104,11 @@ test('CI workflows never touch production', () => {
   }
 });
 
-test('CD checks out no application source, and only a release or a manual run can start it', () => {
-  const {jobs, permissions, on} = load('cd-map-core.yml');
+const CD_TAGS = {'cd-map-core.yml': 'map-core/v', 'cd-browser-image.yml': 'browser-image/v'};
+
+for (const [file, tagPrefix] of Object.entries(CD_TAGS))
+  test(`${file}: CD checks out no application source, and only a release or a manual run can start it`, () => {
+  const {jobs, permissions, on} = load(file);
   assert.deepEqual(permissions, {});
   assert.deepEqual(Object.keys(on).sort(), ['release', 'workflow_dispatch']);
   assert.deepEqual(on.release.types, ['published']);
@@ -115,7 +120,7 @@ test('CD checks out no application source, and only a release or a manual run ca
     assert.equal(checkout.with['sparse-checkout'], '.github/actions');
     assert.equal(checkout.with['sparse-checkout-cone-mode'], false, 'cone mode would also check out root files');
   }
-  assert.match(jobs.switch.if, /startsWith\(github\.event\.release\.tag_name, 'map-core\/v'\)/);
+  assert.ok(jobs.switch.if.includes(`startsWith(github.event.release.tag_name, '${tagPrefix}')`));
   assert.equal(jobs.publish.environment, 'package-release');
   assert.equal(jobs['publish-test-run'].environment, 'test-run');
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
@@ -163,20 +168,68 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
   }
 });
 
-test('only a dedicated job writes packages, and only from main unless it is a test run', () => {
-  for (const file of ['ci-map-core.yml', 'ci-apps-editor.yml', 'ci-apps-core-demo.yml', 'ci-apps-web.yml']) {
-    const {jobs} = load(file);
-    const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
-    assert.equal(writers.length, 1, `${file} must have one job that writes packages`);
-    const [[writerName, writer]] = writers;
-    assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${file} ${writerName} could publish from a branch`);
-    assert.equal(jobs[`${writerName}-test-run`].permissions.packages, 'read');
+test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
+  const {jobs} = load('ci-publish.yml');
+  const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
+  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package']);
+  for (const [name, writer] of writers) {
+    assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
+    assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
+  }
+  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && !['ci-publish.yml', 'ci-all.yml'].includes(file));
+  for (const file of others) {
+    for (const [name, job] of Object.entries(load(file).jobs)) {
+      assert.notEqual(job.permissions?.packages, 'write', `${file} ${name} must leave publishing to ci-publish`);
+    }
+  }
+});
+
+// The aim is 5 minutes, which the job-times job in ci-all warns about. 7 is the limit: see ADR 0006.
+const JOB_TIME_LIMIT_MINUTES = 7;
+
+test('every job that runs has a time limit of at most 7 minutes', () => {
+  for (const file of newWorkflowFiles) {
+    for (const [name, job] of Object.entries(load(file).jobs)) {
+      if (job.uses) continue;
+      assert.ok(job['timeout-minutes'], `${file} ${name} needs timeout-minutes`);
+      assert.ok(job['timeout-minutes'] <= JOB_TIME_LIMIT_MINUTES, `${file} ${name} may run over the limit`);
+    }
+  }
+});
+
+test('job times are checked after everything else, and can only warn', () => {
+  const job = load('ci-all.yml').jobs['job-times'];
+  assert.equal(job.if, 'always()');
+  assert.deepEqual(new Set(job.needs), new Set(['gate', 'publish', 'dev-pages']));
+  assert.deepEqual(job.permissions, {actions: 'read'});
+  assert.doesNotMatch(job.steps[0].run, /exit 1|::error::/);
+});
+
+test('the editor browser jobs cover every spec in both projects', () => {
+  const {matrix} = load('ci-apps-editor.yml').jobs.browser.strategy;
+  const specFiles = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
+  const runs = (spec, project, entry) =>
+    entry.specs.includes(spec) && (entry.specs.includes(`--project=${project}`) || !entry.specs.includes('--project='));
+  for (const spec of specFiles) {
+    for (const project of ['root-desktop', 'pages-mobile']) {
+      const entries = matrix.include.filter(entry => runs(spec, project, entry));
+      assert.ok(entries.length > 0, `${spec} does not run on ${project}`);
+      const shards = entries.map(entry => entry.specs.match(/--shard=(\d+)\/(\d+)/));
+      if (shards.every(shard => !shard)) continue;
+      assert.ok(shards.every(Boolean), `${spec} on ${project} mixes a whole run with shards`);
+      const everyShard = Array.from({length: Number(shards[0][2])}, (_, index) => String(index + 1));
+      assert.deepEqual(shards.map(shard => shard[1]).toSorted(), everyShard, `${spec} on ${project} misses a shard`);
+    }
   }
 });
 
 test('CD refuses a commit that is not on main', () => {
-  const stepsText = JSON.stringify(load('cd-map-core.yml').jobs.switch.steps);
-  assert.match(stepsText, /compare\/main\.\.\./);
+  for (const file of Object.keys(CD_TAGS)) {
+    const step = load(file).jobs.switch.steps.find(({id}) => id === 'release');
+    assert.equal(step.uses, './.github/actions/resolve-release', `${file} could release any commit`);
+  }
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/resolve-release/action.yml'), 'utf8');
+  assert.match(action, /compare\/main\.\.\./);
 });
 
 test('a pull request runs nothing until it is approved', () => {
@@ -193,20 +246,19 @@ test('a pull request runs nothing until it is approved', () => {
 
 test('images and dev packages come only from pushes to main or test runs, never from a pull request', () => {
   const {jobs} = load('ci-all.yml');
-  const publishing = {
-    'map-core': 'publish_package',
-    'apps-web': 'publish_image',
-    'apps-editor': 'publish_image',
-    'apps-core-demo': 'publish_image'
-  };
-  for (const [name, input] of Object.entries(publishing)) {
-    assert.equal(
-      jobs[name].with[input],
-      "${{ github.event_name == 'push' || needs.switch.outputs.test_run == 'true' }}"
-    );
-  }
+  assert.equal(jobs.publish.uses, './.github/workflows/ci-publish.yml');
+  assert.match(jobs.publish.if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
+  assert.match(jobs.publish.if, /needs\.gate\.result == 'success'/);
   assert.match(jobs['dev-pages'].if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
   assert.match(jobs['dev-pages'].if, /needs\.gate\.result == 'success'/);
+  assert.match(jobs['dev-pages'].if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'skipped'/);
+});
+
+test('a push to main runs no checks, while PRs and the nightly run do', () => {
+  const {jobs, on} = load('ci-all.yml');
+  for (const folder of FOLDERS) assert.match(jobs[folder].if, /github\.event_name != 'push'/, `${folder} runs on main`);
+  assert.ok(on.schedule.length > 0, 'without the nightly run, nothing checks main itself');
+  assert.match(jobs.plan.env.RUN_ALL, /github\.event_name == 'schedule'/, 'the nightly run must check everything');
 });
 
 test('runs on main never share a concurrency group', () => {
@@ -232,7 +284,7 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
   const {gate} = jobs;
   assert.equal(gate.name, 'CI gate', 'the ruleset requires this exact name');
   assert.equal(gate.if, 'always()');
-  const jobsAfterGate = ['gate', 'dev-pages'];
+  const jobsAfterGate = ['gate', 'publish', 'dev-pages', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
   assert.deepEqual(gate.permissions, {});
 });
@@ -240,7 +292,7 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-map-core.yml')) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -263,13 +315,66 @@ test('browser jobs run only the planned areas, and none when there are none', ()
   );
   assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
   assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
-  assert.match(allJobs.plan.env.FULL_BROWSER, /github\.event_name != 'pull_request'/);
-  const planScript = allJobs.plan.steps.find(step => step.id === 'plan').run;
-  assert.match(planScript, /"\$FULL_BROWSER" = true.*full_browser=--full-browser/);
-  assert.match(planScript, /--base "\$PLAN_BASE" \$full_browser/);
 });
 
 test('the planner has an output on the plan job for every folder', () => {
   const {plan} = load('ci-all.yml').jobs;
-  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix']));
+  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'image_matrix']));
+});
+
+test('a release version of the browser image must say which Playwright is inside, and never changes', () => {
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/promote-browser-image/action.yml'), 'utf8');
+  assert.match(action, /playwright\.version/);
+  assert.match(action, /already exists/);
+  const {jobs} = load('cd-browser-image.yml');
+  assert.equal(jobs.publish.environment, 'package-release');
+  assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
+});
+
+test('browser jobs and local runs pin one image, whose version matches the repository\'s Playwright', () => {
+  const readRoot = file => fs.readFileSync(path.join(repoRoot, file), 'utf8');
+  const {version: playwright} = JSON.parse(readRoot('package-lock.json')).packages['node_modules/playwright'];
+  const expected = new RegExp(`^ghcr\\.io/ivanov-gv/cg-map/browser-ci:${playwright.replaceAll('.', '\\.')}-r\\d+$`);
+  const pins = new Set([readRoot('Makefile').match(/^ACT_IMAGE := (.+)$/m)[1]]);
+  const browserJobs = {
+    'ci-apps-web.yml': ['browser', 'browser-test-run'],
+    'ci-apps-editor.yml': ['browser', 'browser-test-run'],
+    'ci-apps-core-demo.yml': ['verify', 'verify-test-run']
+  };
+  for (const [file, names] of Object.entries(browserJobs)) {
+    for (const name of names) {
+      const {container} = load(file).jobs[name];
+      pins.add(container.image);
+      assert.equal(container.credentials?.password, '${{ github.token }}', `${file} ${name} could not pull a private image`);
+    }
+  }
+  assert.equal(pins.size, 1, `every pin must match: ${[...pins].join(', ')}`);
+  assert.match([...pins][0], expected);
+});
+
+test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
+  const {jobs} = load('ci-all.yml');
+  for (const app of ['apps-web', 'apps-editor']) {
+    assert.equal(jobs[app].with.phone_tests, "${{ github.event_name == 'schedule' && 'all' || 'tagged' }}");
+    const {browser} = load(`ci-${app}.yml`).jobs;
+    assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
+    const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');
+    assert.match(config, /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
+  }
+});
+
+// Reads the source, so a dependency hidden in a helper or a describe-level skip gets past it. The nightly run catches those.
+test('a test that depends on the phone layout is tagged, or a PR would not run it there', () => {
+  const specDirectories = ['apps/web/tests/e2e', 'apps/editor/tests/e2e'];
+  for (const directory of specDirectories) {
+    for (const file of fs.readdirSync(path.join(repoRoot, directory)).filter(name => name.endsWith('.spec.mjs'))) {
+      const text = fs.readFileSync(path.join(repoRoot, directory, file), 'utf8');
+      for (const body of text.split(/^(?=\s*test\()/m).slice(1)) {
+        const isDesktopOnly = /test\.skip\(\s*isMobile/.test(body);
+        const dependsOnPhone = /\b(isMobile|hasTouch)\b|touchscreen|viewportSize\(\)\.width/.test(body);
+        if (isDesktopOnly || !dependsOnPhone) continue;
+        assert.match(body, /tag: '@phone'/, `${file}: ${body.slice(0, 80)}`);
+      }
+    }
+  }
 });

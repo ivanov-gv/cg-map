@@ -10,7 +10,7 @@ This is the human entry point to project documentation. Each folder covers one c
 - [Verification](verification/README.md): test commands, evidence, and device-check limitations.
 - [Engineering](engineering/README.md): language conventions and agent-instruction mechanisms.
 - [Runbooks](runbooks/README.md): operational procedures for development, data, and release.
-- [Decisions](decisions/README.md): architecture decision records, including superseded historical choices.
+- [Decisions](decisions/README.md): the log of important decisions, including superseded historical choices.
 - [Plans](plans/README.md): task plans and the reusable plan template.
 - [Mapping research](mapping-research/README.md): exploratory research, not maintained implementation guidance.
 

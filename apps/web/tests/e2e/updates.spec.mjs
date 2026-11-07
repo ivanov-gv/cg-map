@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {startUpdateServer} from './update-server.mjs';
 
-test('page reload checks for a release without background polling and preserves offline use',async({page,context,baseURL})=>{
+test('page reload checks for a release without background polling and preserves offline use',{tag: '@phone'}, async({page,context,baseURL})=>{
  const scope=new URL(baseURL).pathname;
  const host=await startUpdateServer(scope);
  try{

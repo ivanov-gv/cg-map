@@ -51,9 +51,10 @@ requires [optional Python dependencies](docs/runbooks/data.md). Do not rebuild g
 ## Publication
 
 [ci-all](.github/workflows/ci-all.yml) runs only the checks a change needs, one workflow per folder, and reports one
-`CI gate`. On main, [ci-dev-pages](.github/workflows/ci-dev-pages.yml) then deploys every app to GitHub Pages, the dev
-environment: see [release](docs/runbooks/release.md). Pull requests never deploy, and a Markdown-only change runs no
-code checks.
+`CI gate`. A merge to main runs no checks: [ci-publish](.github/workflows/ci-publish.yml) builds what it changed, and
+[ci-dev-pages](.github/workflows/ci-dev-pages.yml) deploys every app to GitHub Pages, the dev environment: see
+[release](docs/runbooks/release.md). Pull requests never deploy, a nightly run checks everything, and a Markdown-only
+change runs no code checks.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitHub Actions**; no branch-folder setting
 or committed deployment copy is needed.

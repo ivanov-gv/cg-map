@@ -20,7 +20,7 @@ jobs:
     name: Assemble dev site
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: dev
     permissions: &assemble-permissions
       contents: read
@@ -45,7 +45,7 @@ jobs:
           for app in web editor core-demo; do
             image="$IMAGE_REPOSITORY/$app:main"
             if ! docker pull --quiet "$image"; then
-              echo "::error::No image $image. Merge a change to apps/$app, or run ci-apps-$app, to create it."
+              echo "::error::No image $image. Merge a change to apps/$app, or run ci-publish, to create it."
               exit 1
             fi
             container="$(docker create "$image")"
@@ -72,7 +72,7 @@ jobs:
     name: (test-run) Assemble dev site
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: test-run
     permissions: *assemble-permissions
     outputs: *assemble-outputs

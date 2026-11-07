@@ -138,7 +138,7 @@ test.describe('isolated routing provider checks',()=>{
   await page.getByRole('button',{name:'Dismiss notice',exact:true}).click();
   await expect(page.locator('#error')).toBeHidden();
  }
-test('route modes draw different street routes and a bus itinerary; clearing removes the line', async ({page}) => {
+test('route modes draw different street routes and a bus itinerary; clearing removes the line', {tag: '@phone'}, async ({page}) => {
   const calls=[];
   await page.route('https://routing.openstreetmap.de/**', route => {
     const walking=route.request().url().includes('routed-foot');calls.push(walking?'walk':'car');
@@ -175,7 +175,7 @@ test('route errors and identical endpoints stay explicit without leaving old lin
 
 });
 
-test('single tap opens point actions after a delay; double tap zooms without opening them', async ({page,isMobile}) => {
+test('single tap opens point actions after a delay; double tap zooms without opening them', {tag: '@phone'}, async ({page,isMobile}) => {
   await ready(page);
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
   // Programmatic camera movement also cancels pending point actions.
@@ -193,7 +193,7 @@ test('single tap opens point actions after a delay; double tap zooms without ope
   await expect(page.locator('#place-card')).toBeHidden();
 });
 
-test('one-finger tap then drag zooms and never opens point actions', async ({page,context,isMobile}) => {
+test('one-finger tap then drag zooms and never opens point actions', {tag: '@phone'}, async ({page,context,isMobile}) => {
   test.skip(!isMobile,'Native mobile touch gesture');
   await ready(page);
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
@@ -303,7 +303,7 @@ test.describe('building entrances', () => {
     { numbers: ['32', '27'], building: null, label: '27-32' },
     { numbers: ['32', '27'], building: '1', label: 'Zgrada 1, 27-32' },
   ]) {
-    test(`entrance addresses and selection arrows: ${variant.label}`, async ({
+    test(`entrance addresses and selection arrows: ${variant.label}`, {tag: '@phone'}, async ({
       page,
       context,
     }) => {

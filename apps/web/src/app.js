@@ -233,7 +233,17 @@ function listingButton(place, onClick, distance) {
   button.addEventListener('click', onClick);
   return button;
 }
-function renderResults(){if(!map)return;
+// Rebuilding must not take keyboard focus off a row: a camera move can end just after its place card closes.
+function renderResults() {
+  const list = $('results');
+  const focusedRow = list.contains(document.activeElement) ? document.activeElement : null;
+  buildResults();
+  if (focusedRow?.dataset.id) {
+    const sameRow = [...list.children].find(row => row.dataset.id === focusedRow.dataset.id);
+    sameRow?.focus({preventScroll: true});
+  }
+}
+function buildResults(){if(!map)return;
  // A failed load is an error state, never an empty search result.
  if(placesError){$('results').replaceChildren(node('p',`Places could not load (${placesError}). Reload to try again.`,'empty'));return;}
  const center=map.getCenter().toArray();const nearest=selectNearest(filtered,center);const list=$('results');list.replaceChildren();

@@ -386,7 +386,7 @@ reviewed data/artifacts, data/sources/places.geojson, and data/imagery without r
 exist only in dist/web.
 
 Geometry changes require make -C data build-data with its optional Python dependencies. UI changes need only a web
-build. GitHub Actions validates and publishes dist/web on main. Do not commit built output. See
+build. GitHub Actions validates dist/web on a PR and publishes it from main. Do not commit built output. See
 [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
 
 ### Focused browser checks
@@ -440,9 +440,9 @@ Browser specs are split by area, and CI runs each area as its own job; see
 [browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
 tests/e2e/helpers.mjs.
 
-The configured worker count is one. Changing `--workers` or enabling `--fully-parallel` is a performance experiment:
-benchmark elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to
-shorten the development feedback loop.
+The default worker count is one, and CI uses two. Raising `E2E_WORKERS` further is a performance experiment: benchmark
+elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to shorten
+the development feedback loop.
 
 ## 14. Debugging with browser DevTools
 

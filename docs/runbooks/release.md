@@ -17,14 +17,17 @@ GitHub Pages is the dev environment, and there are no pre or prod environments y
 
 Every merge to main updates it, with no tags or releases:
 
-1. [ci-all](../../.github/workflows/ci-all.yml) checks what the change affects. An app it selected, once its checks
-   pass, is built into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`.
+1. [ci-all](../../.github/workflows/ci-all.yml) runs no tests, because the PR run already tested this content. It calls
+   [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects into an image in GHCR,
+   tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. The nightly run tests main.
 2. [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) extracts the `main` image of all three apps into one site
    and deploys it. A deploy replaces the whole site, so it always takes all three.
 
 To put back an older build of an app, retag its image from the commit you want as `main`, then run
 `gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
-affect `CI gate`, so check it after merging.
+affect `CI gate`, so check it after merging. To republish after a failed merge run, use "Re-run failed jobs" on that
+run: a manual ci-publish would replace `main` for every app it lists, and a dev package version can be published only
+once.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 
@@ -57,6 +60,23 @@ install can never get it. A final version publishes under `latest`. A published 
 with a new one.
 
 `0.1.0` is the one exception: it was published by hand once, because releases need core to exist before apps can pin it.
+
+## Releasing the browser image
+
+[platform/browser-image](../../platform/browser-image/Dockerfile) holds the tools for browser jobs and local runs:
+[the decision](../decisions/0007-browser-test-image.md). A merge that changes it publishes
+`ghcr.io/ivanov-gv/cg-map/browser-ci:<commit>`. To release it, use the Playwright version it contains, then the next
+revision:
+
+```sh
+git tag browser-image/v1.56.1-r2 <commit on main>
+git push origin browser-image/v1.56.1-r2
+gh release create browser-image/v1.56.1-r2 --verify-tag --title "browser-image 1.56.1-r2" --notes "<what changed>"
+```
+
+The release starts [cd-browser-image](../../.github/workflows/cd-browser-image.yml), which refuses a version that does
+not match the image's Playwright, or one that already exists. To start using it, change the pin in the Makefile and the
+browser jobs in one PR.
 
 ## Upgrading an app to a new core
 

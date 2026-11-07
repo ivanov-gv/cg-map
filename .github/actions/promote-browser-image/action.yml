@@ -1,0 +1,47 @@
+name: Promote browser image
+description: Give the image CI built for a commit its release version, rebuilding nothing.
+inputs:
+  repository:
+    description: The registry path. A test run resolves this to a temporary registry.
+    required: true
+  version:
+    description: The release version, such as 1.56.1-r2.
+    required: true
+  commit:
+    description: The commit of the release, whose image is promoted.
+    required: true
+  token:
+    description: Token for ghcr.io. Other registries need none.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        IMAGE_REPOSITORY: ${{ inputs.repository }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        REGISTRY_TOKEN: ${{ inputs.token }}
+      run: |
+        image="$IMAGE_REPOSITORY/browser-ci"
+        case "$IMAGE_REPOSITORY" in
+          ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
+        esac
+        docker pull --quiet "$image:$RELEASE_COMMIT"
+        # The version says what is inside, because the repository's pin is checked against its Playwright version.
+        playwright_version=$(docker inspect --format '{{ index .Config.Labels "playwright.version" }}' "$image:$RELEASE_COMMIT")
+        if [[ ! "$RELEASE_VERSION" =~ ^"$playwright_version"-r[0-9]+$ ]]; then
+          echo "::error::Version $RELEASE_VERSION must be $playwright_version-r<number>, for the Playwright in this image."
+          exit 1
+        fi
+        # Only a clear "not there" may continue: any other failure could overwrite a version that exists.
+        if lookup=$(docker manifest inspect "$image:$RELEASE_VERSION" 2>&1); then
+          echo "::error::$image:$RELEASE_VERSION already exists, and a release version never changes."
+          exit 1
+        elif ! echo "$lookup" | grep -qiE 'no such manifest|manifest unknown|not found'; then
+          echo "::error::Could not tell whether $image:$RELEASE_VERSION exists: $lookup"
+          exit 1
+        fi
+        docker tag "$image:$RELEASE_COMMIT" "$image:$RELEASE_VERSION"
+        docker push "$image:$RELEASE_VERSION"
+        echo "Promoted $image:$RELEASE_COMMIT to $RELEASE_VERSION" | tee -a "$GITHUB_STEP_SUMMARY"

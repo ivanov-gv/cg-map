@@ -61,7 +61,7 @@ test.describe('source viewer', () => {
       )
       .toBeGreaterThan(0);
 
-  test('real source viewer has one mode per file and selects full source metadata independently', async ({page}) => {
+  test('real source viewer has one mode per file and selects full source metadata independently', {tag: '@phone'}, async ({page}) => {
     const scriptErrors = [];
     page.on('pageerror', error => scriptErrors.push(error.message));
     await page.goto('./');

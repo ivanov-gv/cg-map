@@ -177,7 +177,7 @@ test('an icon on a house number keeps both the icon and the address label', asyn
   await expect.poll(() => page.evaluate(id => window.kompasDebug.map.queryRenderedFeatures({layers: ['building-numbers']}).some(f => f.properties.osm_id === id), label.id)).toBe(true);
 });
 
-test('co-located listings share one stable marker and a keyboard chooser with real identities', async ({page}) => {
+test('co-located listings share one stable marker and a keyboard chooser with real identities', {tag: '@phone'}, async ({page}) => {
   const c = [0.0003, 0.0003];
   const data = collection([place('z-shop', 5, ...c), place('a-museum', 2, ...c, {category: 'sights', kind: 'museum'}), place('m-cafe', 4, ...c, {category: 'food', kind: 'cafe'}), place('apart', 3, -0.0005, -0.0005)]);
   const coordinates = data.features[0].geometry.coordinates;
@@ -225,7 +225,7 @@ test('overlapping nearby markers open a chooser instead of picking the first ren
   await expect(page.locator('#place-details')).toContainText(data.features[1].geometry.coordinates[1].toFixed(5));
 });
 
-test('a chooser opened with search open is usable at once and keeps the search', async ({page, isMobile}) => {
+test('a chooser opened with search open is usable at once and keeps the search', {tag: '@phone'}, async ({page, isMobile}) => {
   const data = collection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
   const coordinates = data.features[0].geometry.coordinates;
   await open(page, data, coordinates);
@@ -256,7 +256,7 @@ test('typing closes an open chooser, whose listings may no longer match', async 
   await expect(page.locator('#results .result')).toHaveCount(1);
 });
 
-test('the camera holds still for a chooser while the phone keyboard is open', async ({page, isMobile}) => {
+test('the camera holds still for a chooser while the phone keyboard is open', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone keyboard');
   const data = collection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
   const coordinates = data.features[0].geometry.coordinates;

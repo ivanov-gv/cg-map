@@ -24,3 +24,8 @@ Ownership: platform/reliability team.
 
 GitHub workflows and CODEOWNERS live in `.github/`, the location required by GitHub. Platform owns their execution and
 permission model. Web/data owners remain responsible for their checks and build behavior.
+
+## Browser image
+
+[browser-image](browser-image/Dockerfile) is what browser jobs and local workflow runs execute on, released on its own:
+[the decision](../docs/decisions/0007-browser-test-image.md) and [how to release it](../docs/runbooks/release.md).
