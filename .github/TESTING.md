@@ -41,7 +41,7 @@ A test run really pushes images, to a temporary public registry, and really runs
 Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
 [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs run
 the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
-rendering. `ACT_JOBS` sets how many jobs run at once.
+rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 
 ```sh
 make test-ci-docs                       # one workflow

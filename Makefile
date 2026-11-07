@@ -58,10 +58,11 @@ worktree:
 ACT ?= gh act
 # Pinned, as in the workflows: every machine runs local jobs on the same image CI uses.
 ACT_IMAGE := ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
-# Browser jobs render on the GPU where there is one. Software rendering uses every CPU it can get: four browser jobs at
-# once timed out tests on a 16-thread machine, so without a GPU only two run at a time.
+# Browser jobs render on the GPU where there is one. Too many at once time out tests: four did, with or without a GPU.
 ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--container-options "--device /dev/dri" --env E2E_ANGLE=gl-egl)
-ACT_JOBS ?= $(if $(ACT_GPU),4,2)
+ACT_JOBS ?= 2
+# The limit applies to each called workflow, and ci-all calls many at once.
+test-ci-all: ACT_JOBS = 1
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
