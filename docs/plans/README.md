@@ -8,5 +8,3 @@ that takes, and the PR that finishes it deletes it. Git history keeps deleted pl
   1 to 6 and the offline install are merged, with listed gaps.
 - [Faster browser tests](faster-browser-tests.md): CI jobs are split to fit their limit; the remaining steps towards a
   5-minute full suite locally.
-
-- [Apps readability review](apps-readability-review.md): review findings, refactoring and remaining verification.
