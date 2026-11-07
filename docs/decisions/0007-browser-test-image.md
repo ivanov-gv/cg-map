@@ -7,8 +7,8 @@ Accepted.
 ## Context
 
 Every browser test job installed Chromium and its system packages. On GitHub that normally takes 14 to 25 seconds, but
-slow mirrors have held it for up to 5 minutes 40 seconds. Under `act` it took 2.5 to 4 minutes on a bare image, which
-left local jobs unable to finish inside the 7-minute job limit, and nothing merges until local tests pass.
+slow mirrors have held it for up to 5 minutes 40 seconds. Under `act` it took 2.5 to 4 minutes per job on a bare image,
+and nothing merges until local tests pass.
 
 ## Decision
 

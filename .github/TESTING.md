@@ -1,10 +1,9 @@
 # Testing workflows
 
 **No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
-passed under `act`, inside the same job time limits as GitHub. After a fix, rerun the workflow you changed and what
-`make ci-plan` selects. A run on GitHub does not replace this. If a local run cannot pass, fix the local setup. Do not
-report it as a limit and merge anyway. Any other PR needs its owning project's checks, and browser tests where it
-changes a browser project.
+passed under `act`. After a fix, rerun the workflow you changed and what `make ci-plan` selects. A run on GitHub does
+not replace this. If a local run cannot pass, fix the local setup. Do not report it as a limit and merge anyway. Any
+other PR needs its owning project's checks, and browser tests where it changes a browser project.
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
@@ -41,8 +40,8 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
 [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs run
-the same tools on any machine as on GitHub, inside the same job limits. A machine with a GPU renders on it, and GitHub's
-runners use software rendering. `ACT_JOBS` sets how many jobs run at once.
+the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
+rendering. `ACT_JOBS` sets how many jobs run at once.
 
 ```sh
 make test-ci-docs                       # one workflow
@@ -59,10 +58,11 @@ because a version never changes there either.
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
 
-`act` has limits that shape these workflows. Its artifact server rejects `upload-artifact@v6` and
-`upload-pages-artifact@v5`, so they stay at `@v5` and `@v4`. Its matrix jobs run in parallel and would share a port on
-the host network, so targets use `--network bridge`. Every target needs `.github/act/secret.env`, which Git ignores,
-because installing dependencies reads GitHub Packages: see `secret.env.example` beside it.
+`act` has limits that shape these workflows. It ignores `timeout-minutes`, so only a run on GitHub proves a job's time.
+Its artifact server rejects `upload-artifact@v6` and `upload-pages-artifact@v5`, so they stay at `@v5` and `@v4`. Its
+matrix jobs run in parallel and would share a port on the host network, so targets use `--network bridge`. Every target
+needs `.github/act/secret.env`, which Git ignores, because installing dependencies reads GitHub Packages: see
+`secret.env.example` beside it.
 
 Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
 repository inside the container, and `ci-docs` and `ci-platform` fail. Set the clone's `origin` to the GitHub URL,

@@ -15,8 +15,8 @@ guesswork, and nothing said which PRs should leave a record of what they decided
 
 - **Tests run before merge, and nightly.** A push to main runs no checks: it only publishes what changed and updates the
   dev environment. The nightly run checks everything on main.
-- **No merge until local tests pass.** A change to `.github/**` passes under `act` first, inside the job limits. A run
-  on GitHub does not replace this.
+- **No merge until local tests pass.** A change to `.github/**` passes under `act` first. A run on GitHub does not
+  replace this.
 - **A PR runs the phone layout only where it matters.** Tests tagged `@phone` run on it: phone-only behavior, the URL
   prefix, and one whole journey per app. The nightly run runs every test on both layouts.
 - **A job aims for 5 minutes and stops at 7.** `timeout-minutes` enforces 7 on every job, and a test enforces that. A
