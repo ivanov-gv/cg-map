@@ -41,8 +41,8 @@ permissions:
   contents: read
   packages: read
 jobs:
-  # No test-run twin: it only passes on its input. A matrix must read a job's output, because under a called workflow act
-  # cannot read inputs in a matrix, as ci-apps-web's browser jobs show too.
+  # No test-run twin: it only passes on its input. act gives a called workflow this JSON input empty, as ci-apps-web's verify
+  # job also handles. GitHub always passes it, so only a local run takes every image.
   select:
     name: Select images
     runs-on: ubuntu-latest
@@ -52,9 +52,10 @@ jobs:
       image_matrix: ${{ steps.images.outputs.image_matrix }}
     env:
       IMAGE_MATRIX: ${{ inputs.image_matrix }}
+      EVERY_IMAGE: '{"include":[{"app":"web"},{"app":"editor"},{"app":"core-demo"}]}'
     steps:
       - id: images
-        run: echo "image_matrix=$IMAGE_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+        run: echo "image_matrix=${IMAGE_MATRIX:-$EVERY_IMAGE}" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
   # Only the jobs here can write packages, and only main can run them for real.
   image:
     name: Publish ${{ matrix.app }} image
