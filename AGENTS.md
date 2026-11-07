@@ -1,8 +1,8 @@
 # Working on cg-map
 
 Start with [architecture](docs/system-architecture/architecture.md), [ownership](docs/system-architecture/ownership.md),
-and the relevant component's AGENTS.md. This is a read-only map PoC; do not invent backend APIs or editorial services
-that do not exist.
+and the AGENTS.md of every path you touch, linked below (docs: [docs/AGENTS.md](docs/AGENTS.md)); open them yourself, as
+not every agent loads nested files. This is a read-only map PoC; do not invent backend APIs or editorial services.
 
 ## Monorepo of independent projects
 
@@ -16,15 +16,15 @@ project the way that section describes.
 Read the matching guideline before planning, editing, or reviewing code in that language. Claude Code loads them
 automatically by path; other agents must open the linked file.
 
-| Path                                                     | What                                                          | Guidelines                                                                                                       |
-| -------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| apps/web, apps/editor, apps/core-demo, packages/map-core | Separate browser apps and their shared map runtime            | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md), [python](docs/engineering/python.md) |
-| data                                                     | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
-| services/backend                                         | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                                                     |
-| services/transit-relay                                   | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                                                     |
-| packages/contracts                                       | Shared producer/consumer formats                              | Producer and consumer review together                                                                            |
-| platform, .github                                        | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
-| tests                                                    | Cross-component contract and artifact integration             | [javascript](docs/engineering/javascript.md)                                                                     |
+| Path                                                                                                                                                               | What                                                          | Guidelines                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [apps/web](apps/web/AGENTS.md), [apps/editor](apps/editor/AGENTS.md), [apps/core-demo](apps/core-demo/AGENTS.md), [packages/map-core](packages/map-core/AGENTS.md) | Separate browser apps and their shared map runtime            | [javascript](docs/engineering/javascript.md), [ui](docs/engineering/ui.md), [python](docs/engineering/python.md) |
+| [data](data/AGENTS.md)                                                                                                                                             | Sources, imagery, releases, pipeline tools                    | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| [services/backend](services/backend/AGENTS.md)                                                                                                                     | Independent Go server: static host, layers and transport APIs | [go](docs/engineering/go.md)                                                                                     |
+| [services/transit-relay](services/transit-relay/AGENTS.md)                                                                                                         | Read-only live bus relay (Node)                               | [javascript](docs/engineering/javascript.md)                                                                     |
+| [packages/contracts](packages/contracts/AGENTS.md)                                                                                                                 | Shared producer/consumer formats                              | Producer and consumer review together                                                                            |
+| [platform](platform/AGENTS.md), [.github](.github/TESTING.md)                                                                                                      | Dev/release tooling, agent harness, CI                        | [javascript](docs/engineering/javascript.md), [python](docs/engineering/python.md)                               |
+| [tests](tests/AGENTS.md)                                                                                                                                           | Cross-component contract and artifact integration             | [javascript](docs/engineering/javascript.md)                                                                     |
 
 How the harness loads rules and how to add a language: [docs/engineering/README.md](docs/engineering/README.md).
 
@@ -86,7 +86,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.
 6. Report executed checks, review findings left open, and limitations.
-7. In the PR, add a [decision record](docs/decisions/AGENTS.md), or state that it made no important decision.
+7. Write the PR from [the template](.github/pull_request_template.md), including its Decisions section.
 
 ## Invariants
 

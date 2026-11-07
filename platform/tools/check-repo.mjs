@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {findLogProblems, readLog} from './decision-log.mjs';
+import {unreachableInstructions} from './instruction-reach.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -130,4 +132,11 @@ for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) 
   }
 }
 assert.deepEqual(findLogProblems(readLog('docs/decisions')), [], 'The decisions log is out of sequence');
-console.log('Documentation links, decisions log, component layout, and dependency boundaries passed.');
+// Every instruction file must be reachable from the root AGENTS.md, so agents that do not load nested files still find it.
+const instructionFiles = [
+  ...execFileSync('git', ['ls-files', 'AGENTS.md', '**/AGENTS.md'], {encoding: 'utf8'}).split('\n').filter(Boolean),
+  '.github/pull_request_template.md',
+  '.github/TESTING.md'
+];
+assert.deepEqual(unreachableInstructions('.', instructionFiles), [], 'Link these instruction files from the root AGENTS.md or a file it links');
+console.log('Documentation links, instruction reach, decisions log, component layout, and dependency boundaries passed.');
