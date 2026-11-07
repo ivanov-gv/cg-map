@@ -63,8 +63,18 @@ export const BROWSER_AREAS = {
   }
 };
 
-// Every browser test boots these, so a change to one can break any area.
-export const SHARED_WEB_SOURCES = ['app.js', 'core.js'];
+// Every browser test boots these, so a change to one can break any area. The modules after core.js hold parts of
+// app.js's startup and workflows.
+export const SHARED_WEB_SOURCES = [
+  'app.js',
+  'core.js',
+  'dom.js',
+  'offline-panel.js',
+  'place-card.js',
+  'public-layers.js',
+  'status-text.js',
+  'tap-targets.js'
+];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS};

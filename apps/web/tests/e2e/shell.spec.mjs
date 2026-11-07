@@ -82,14 +82,32 @@ test.describe('server mode', () => {
   test.use({serviceWorkers: 'block'});
   test('config.json selects server mode: layers and vehicles come from the Kompas API', async ({page, baseURL}) => {
     const requests = [];
-    await page.route('**/api/v1/layers', route => {requests.push('layers');return route.fulfill({json: {tilejson: '3.0.0', scheme: 'xyz', minzoom: 0, maxzoom: 16, bounds: [17.8, 41.3, 21, 44.1], tiles: [new URL('api/v1/layers/test-0123456789abcdef/tiles/{z}/{x}/{y}.mvt', baseURL).href], vector_layers: []}});});
-    await page.route('**/api/v1/layers/test-0123456789abcdef/tiles/**', route => {requests.push('tile');return route.fulfill({status: 204});});
+    const tileJSON = {
+      tilejson: '3.0.0',
+      scheme: 'xyz',
+      minzoom: 0,
+      maxzoom: 16,
+      bounds: [17.8, 41.3, 21, 44.1],
+      tiles: [new URL('api/v1/layers/test-0123456789abcdef/tiles/{z}/{x}/{y}.mvt', baseURL).href],
+      vector_layers: []
+    };
+    await page.route('**/api/v1/layers', route => {
+      requests.push('layers');
+      return route.fulfill({json: tileJSON});
+    });
+    await page.route('**/api/v1/layers/test-0123456789abcdef/tiles/**', route => {
+      requests.push('tile');
+      return route.fulfill({status: 204});
+    });
     await page.route('**/api/v1/transport/vehicles', route => {
       requests.push('vehicles');
       return route.fulfill({json: {type: 'FeatureCollection', fetchedAt: new Date().toISOString(), stale: false, source: 'https://epodgorica.me/javniprevoz/mapa',
         features: [{type: 'Feature', geometry: {type: 'Point', coordinates: [19.26, 42.44]}, properties: {route: '6A', bearing: 90, heading: 'movement'}}]}});
     });
-    await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => {requests.push('relay');return route.abort();});
+    await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route => {
+      requests.push('relay');
+      return route.abort();
+    });
     // The host's config.json alone selects server mode, as the Go server does.
     await page.route('**/config.json', route => route.fulfill({json: {api: 'server'}}));
     await page.goto('./');
@@ -99,7 +117,9 @@ test.describe('server mode', () => {
     await openMenu(page);
     await page.getByRole('button', {name: 'Transport', exact: true}).click();
     await expect(page.locator('#transport-status')).toHaveText(/1 bus position · checked/);
-    expect(requests).toContain('layers'); expect(requests).toContain('vehicles'); expect(requests).not.toContain('relay');
+    expect(requests).toContain('layers');
+    expect(requests).toContain('vehicles');
+    expect(requests).not.toContain('relay');
     // The server's movement bearing is drawn as a solid arrow, rotated as reported.
     await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 15}));
     await expect.poll(() => page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['transport-buses']}).map(f => [f.properties.heading, f.properties.bearing]))).toEqual([['movement', 90]]);

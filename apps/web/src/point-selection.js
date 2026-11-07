@@ -345,98 +345,105 @@ function pointKind(layer, properties) {
   return properties.bridge && properties.bridge !== 'no' ? 'Bridge' : 'Road';
 }
 
-// Point descriptions use published attributes and retain original entrance coordinates rather than tile quantization.
-export function describePoint(
-  feature,
-  coordinates,
-  buildingAddresses = new Map(),
-) {
-  const original = feature?.properties ?? {};
-  const layer = feature?.layer?.id;
-  const isEntrance = ENTRANCE_LAYERS.includes(layer);
-  const isBuildingLabel = layer === 'building-numbers';
-  const footprintIndex =
-    layer === 'buildings' ? feature.id : original.footprintIndex;
-  const address =
-    layer === 'buildings' || isBuildingLabel || isEntrance
-      ? buildingAddresses.get(footprintIndex)
-      : null;
-  const properties = isEntrance ? (address ?? {}) : { ...original, ...address };
-  const kind = pointKind(layer, properties);
+// The card title: an entrance's own label, a recorded name, a building's number, or the kind of object.
+function pointName({kind, properties, entrance}) {
+  if (entrance) return entranceLabel(entrance);
+  const hasName = typeof properties.name === 'string' && properties.name.trim().length > 0;
+  if (hasName) return properties.name;
   const number = buildingNumber(properties);
-  const entrance = isEntrance
-    ? (address?.entrances.find((entrance) => entrance.id === original.id) ??
-      original)
-    : null;
-  const hasName =
-    typeof properties.name === 'string' && properties.name.trim().length > 0;
-  const name = isEntrance
-    ? entranceLabel(entrance)
-    : hasName
-      ? properties.name
-      : kind === 'Building' && number
-        ? `Building ${number}`
-        : kind;
-  const pointCoordinates = isEntrance
-    ? entrance.coordinates
-    : kind === 'Bus stop'
-      ? feature.geometry.coordinates
-      : coordinates;
-  if (kind === 'Bus stop')
-    return {
-      coordinates: [...pointCoordinates],
-      name,
-      kind,
-      details: [
-        `Stop ID: ${properties.stopId}`,
-        'Source: ePodgorica · snapshot 18 October 2026',
-      ],
-    };
+  return kind === 'Building' && number ? `Building ${number}` : kind;
+}
+
+// An entrance names its own street; a building lists every entrance after its address.
+function geographicDetails({kind, properties, entrance}) {
   const addressLine = entrance
     ? buildingAddress({
         ...properties,
         'addr:street': entrance.street ?? properties['addr:street'],
-        entrances: [entrance],
+        entrances: [entrance]
       })
     : buildingAddress(properties);
-  const entranceDetails =
+  const entranceLines =
     kind === 'Building'
-      ? (properties.entrances ?? []).map(
-          (entrance) => `Entrance: ${entranceLabel(entrance)}`,
-        )
+      ? (properties.entrances ?? []).map(buildingEntrance => `Entrance: ${entranceLabel(buildingEntrance)}`)
       : [];
+  return [
+    properties.kind ? `Type: ${properties.kind.replaceAll('_', ' ')}` : '',
+    addressLine,
+    ...entranceLines,
+    'Source: OpenStreetMap · available map attributes only'
+  ];
+}
+
+// Returns {name, kind, details, coordinates} for the card. feature is a rendered feature, or undefined for a bare map
+// point at coordinates. Point descriptions use published attributes and retain original entrance coordinates rather
+// than tile quantization.
+export function describePoint(feature, coordinates, buildingAddresses = new Map()) {
+  const original = feature?.properties ?? {};
+  const layer = feature?.layer?.id;
+  const isEntrance = ENTRANCE_LAYERS.includes(layer);
+  const isBuildingFeature = layer === 'buildings' || layer === 'building-numbers' || isEntrance;
+  const footprintIndex = layer === 'buildings' ? feature.id : original.footprintIndex;
+  const address = isBuildingFeature ? buildingAddresses.get(footprintIndex) : null;
+  // An entrance describes its building's address, not its own copy of it.
+  const properties = isEntrance ? (address ?? {}) : {...original, ...address};
+  const kind = pointKind(layer, properties);
+  const recordedEntrance = isEntrance ? address?.entrances.find(candidate => candidate.id === original.id) : null;
+  const entrance = isEntrance ? (recordedEntrance ?? original) : null;
+  const name = pointName({kind, properties, entrance});
+  if (kind === 'Bus stop') {
+    return {
+      coordinates: [...feature.geometry.coordinates],
+      name,
+      kind,
+      details: [`Stop ID: ${properties.stopId}`, 'Source: ePodgorica · snapshot 18 October 2026']
+    };
+  }
+  const pointCoordinates = entrance ? entrance.coordinates : coordinates;
   return {
     coordinates: [...pointCoordinates],
     name,
     kind,
-    details: layer
-      ? [
-          properties.kind
-            ? `Type: ${properties.kind.replaceAll('_', ' ')}`
-            : '',
-          addressLine,
-          ...entranceDetails,
-          'Source: OpenStreetMap · available map attributes only',
-        ]
-      : [],
+    details: layer ? geographicDetails({kind, properties, entrance}) : []
   };
 }
 
+// The From and To markers, lettered A and B.
 export function endpointFeatures(endpoints) {
-  return {type: 'FeatureCollection', features: ['from', 'to'].filter(role => endpoints[role]).map(role => ({
-    type: 'Feature', geometry: {type: 'Point', coordinates: [...endpoints[role].coordinates]},
-    properties: {role, label: role === 'from' ? 'A' : 'B', name: endpoints[role].name}
-  }))};
+  const features = ['from', 'to']
+    .filter(role => endpoints[role])
+    .map(role => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [...endpoints[role].coordinates]},
+      properties: {role, label: role === 'from' ? 'A' : 'B', name: endpoints[role].name}
+    }));
+  return {type: 'FeatureCollection', features};
 }
 
 export function installRoutePoints(map) {
   map.addSource('route-points', {type: 'geojson', data: endpointFeatures({})});
-  map.addLayer({id: 'route-point-circles', type: 'circle', source: 'route-points', paint: {
-    'circle-radius': 15, 'circle-color': ['match', ['get', 'role'], 'from', '#193f36', '#a34c35'],
-    'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3
-  }});
-  map.addLayer({id: 'route-point-labels', type: 'symbol', source: 'route-points', layout: {
-    'text-field': ['get', 'label'], 'text-font': ['Open Sans Semibold'], 'text-size': 12,
-    'text-allow-overlap': true, 'text-ignore-placement': true
-  }, paint: {'text-color': '#ffffff'}});
+  map.addLayer({
+    id: 'route-point-circles',
+    type: 'circle',
+    source: 'route-points',
+    paint: {
+      'circle-radius': 15,
+      'circle-color': ['match', ['get', 'role'], 'from', '#193f36', '#a34c35'],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 3
+    }
+  });
+  map.addLayer({
+    id: 'route-point-labels',
+    type: 'symbol',
+    source: 'route-points',
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Semibold'],
+      'text-size': 12,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true
+    },
+    paint: {'text-color': '#ffffff'}
+  });
 }

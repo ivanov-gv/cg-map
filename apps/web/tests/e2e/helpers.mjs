@@ -35,6 +35,22 @@ export async function pointOnMap(page, coordinates) {
     return {x: point.x, y: point.y};
   }, coordinates);
 }
+// Where coordinates are drawn, in page pixels, for mouse and touch input.
+export async function screenPoint(page, coordinates) {
+  return page.evaluate(lngLat => {
+    const map = window.kompasDebug.map;
+    const point = map.project(lngLat);
+    const canvas = map.getCanvas().getBoundingClientRect();
+    return {x: canvas.left + point.x, y: canvas.top + point.y};
+  }, coordinates);
+}
+// The middle of the map canvas, in page pixels.
+export async function mapCenterOnScreen(page) {
+  return page.evaluate(() => {
+    const canvas = window.kompasDebug.map.getCanvas().getBoundingClientRect();
+    return {x: canvas.left + canvas.width / 2, y: canvas.top + canvas.height / 2};
+  });
+}
 export async function ready(page) {
   await page.goto('./');
   await expect(page).not.toHaveURL(/\/web\//);
@@ -65,11 +81,9 @@ export async function tapMapCenter(page, coordinates) {
   await closeMenu(page);
   await page.evaluate(point => window.kompasDebug.map.jumpTo({center: point, zoom: 17}), coordinates);
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
-  const point = await page.evaluate(() => {
-    const m=window.kompasDebug.map, p=m.project(m.getCenter()), b=m.getCanvas().getBoundingClientRect();
-    return {x:b.left+p.x,y:b.top+p.y};
-  });
-  await page.mouse.click(point.x,point.y);
+  const center = await page.evaluate(() => window.kompasDebug.map.getCenter().toArray());
+  const point = await screenPoint(page, center);
+  await page.mouse.click(point.x, point.y);
 }
 export const nearbyPlaces = {type: 'FeatureCollection', features: Array.from({length: 6}, (_, i) => ({
   type: 'Feature', geometry: {type: 'Point', coordinates: [19.26 + i * .004, 42.44]},

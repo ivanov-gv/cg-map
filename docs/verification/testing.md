@@ -98,8 +98,9 @@ always run every area, so a wrong mapping cannot reach users.
 | poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 | poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 
-app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
-every area, because every browser test boots them.
+app.js, core.js, the modules app.js delegates to (SHARED_WEB_SOURCES in platform/tools/ci-plan.mjs), packages/map-core,
+style.css, index.html, shared test helpers, build tools, and anything unmapped run every area, because every browser
+test boots them.
 
 ## Monorepo verification — 2026-10-18
 

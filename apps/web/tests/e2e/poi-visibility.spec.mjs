@@ -114,7 +114,11 @@ test('small pans, zoom steps, bearing, round trips, reloads, and input order kee
     const layers = m.getStyle().layers.map(l => l.id).filter(id => id.startsWith('place-icons-'));
     const sample = () => seen.push([m.getZoom(), [...new Set(m.queryRenderedFeatures({layers}).flatMap(f => JSON.parse(f.properties.activeIds)))].sort()]);
     m.on('render', sample);
-    const animate = options => new Promise(resolve => { m.once('moveend', resolve); m.easeTo({...options, duration: 500}); });
+    const animate = options =>
+      new Promise(resolve => {
+        m.once('moveend', resolve);
+        m.easeTo({...options, duration: 500});
+      });
     await animate({center: [lon + 0.00005, lat]});
     await animate({center: [lon, lat]});
     await animate({zoom: 17.4});

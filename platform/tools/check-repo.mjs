@@ -45,21 +45,33 @@ const imports = {
   'object-selection.js': [],
   'app.js': [
     '@ivanov-gv/map-core',
-    './object-selection.js',
-    './app-updates.js',
     './core.js',
-    './offline.js',
-    './transport.js',
-    './point-selection.js',
-    './route-planner.js',
-    './map-taps.js',
+    './app-updates.js',
     './data-mode.js',
+    './dom.js',
+    './interface.js',
+    './map-taps.js',
+    './object-selection.js',
+    './offline.js',
+    './offline-panel.js',
+    './place-card.js',
+    './point-selection.js',
     './position.js',
-    './interface.js'
+    './public-layers.js',
+    './route-planner.js',
+    './status-text.js',
+    './tap-targets.js',
+    './transport.js'
   ],
+  'dom.js': [],
   'interface.js': [],
   'core.js': [],
   'offline.js': ['./core.js'],
+  'offline-panel.js': ['./data-mode.js', './dom.js', './offline.js'],
+  'place-card.js': ['@ivanov-gv/map-core', './core.js', './dom.js'],
+  'public-layers.js': ['@ivanov-gv/map-core', './core.js'],
+  'status-text.js': ['./core.js'],
+  'tap-targets.js': ['@ivanov-gv/map-core', './point-selection.js'],
   'transport.js': ['./vehicle-direction.js', './data-mode.js'],
   'vehicle-direction.js': [],
   'data-mode.js': [],
@@ -68,7 +80,7 @@ const imports = {
   'position.js': ['./core.js'],
   'routing.js': [],
   'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
+  'route-planner.js': ['./routing.js', './transit-routing.js', './core.js', './dom.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;
