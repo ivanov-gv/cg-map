@@ -47,7 +47,8 @@ make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from
 make test-all-workflows ACT="gh act -n" # dry run of every target
 ```
 
-A dry run only checks that a workflow parses, so it does not count as a test.
+A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
+reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
 
 `act` has limits that shape these workflows. Its artifact server rejects `upload-artifact@v6` and
 `upload-pages-artifact@v5`, so they stay at `@v5` and `@v4`. Its matrix jobs run in parallel and would share a port on

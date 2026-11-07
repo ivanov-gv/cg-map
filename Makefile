@@ -57,8 +57,8 @@ worktree:
 # Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
 ACT ?= gh act
 ACT_IMAGE := cg-map-act:local
-# A job runs two browser workers, and more jobs than this at once cause load-related test timeouts.
-ACT_JOBS ?= 4
+# Software rendering uses every CPU it can get: four browser jobs at once timed out tests on a 16-thread machine.
+ACT_JOBS ?= 2
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # test-cd-map-core comes first, so a missing VERSION stops the run straight away.
