@@ -386,7 +386,7 @@ reviewed data/artifacts, data/sources/places.geojson, and data/imagery without r
 exist only in dist/web.
 
 Geometry changes require make -C data build-data with its optional Python dependencies. UI changes need only a web
-build. GitHub Actions validates and publishes dist/web on main. Do not commit built output. See
+build. GitHub Actions validates dist/web on a PR and publishes it from main. Do not commit built output. See
 [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).
 
 ### Focused browser checks

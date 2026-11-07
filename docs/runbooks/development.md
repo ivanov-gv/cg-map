@@ -89,5 +89,7 @@ command, not an on-save hook; the repository-wide Markdown check still runs in `
 hooks.
 
 Use [the plan template](../plans/TEMPLATE.md) for multi-session work. Keep acceptance criteria, progress, decisions, and
-remaining work explicit. Commit only from a worktree, even when working alone: `make worktree NAME=<branch>`. The main
-checkout rejects commits. See [parallel sessions](../engineering/README.md#parallel-sessions).
+remaining work explicit. A PR that makes an important decision adds a record to the
+[decisions log](../decisions/AGENTS.md); a PR that makes none says so in its description. Commit only from a worktree,
+even when working alone: `make worktree NAME=<branch>`. The main checkout rejects commits. See
+[parallel sessions](../engineering/README.md#parallel-sessions).

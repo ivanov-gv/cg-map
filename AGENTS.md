@@ -76,17 +76,17 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   .github.
 - tests/ owns cross-component acceptance; component-specific tests live with their component.
 
-## Workflow
+## Workflow: task, plan, PR, decisions log
 
 1. Inspect git status and acceptance criteria; preserve unrelated work.
 2. Read component instructions and language guidelines. For work spanning sessions, write a plan from
-   [the template](docs/plans/TEMPLATE.md) first.
-3. Make a bounded change. Keep runtime modules independent of pipeline/server implementation.
+   [the template](docs/plans/TEMPLATE.md) first. Delete a plan [only when its work is finished](docs/plans/AGENTS.md).
+3. Make a bounded change, with its docs. Keep runtime modules independent of pipeline/server implementation.
 4. Follow the owning component's AGENTS.md for focused tests during iteration and required final verification.
-5. Update docs in the same change as behavior or architecture changes.
-6. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
+5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.
-7. Report executed checks, review findings left open, and limitations.
+6. Report executed checks, review findings left open, and limitations.
+7. In the PR, add a [decision record](docs/decisions/AGENTS.md), or state that it made no important decision.
 
 ## Invariants
 

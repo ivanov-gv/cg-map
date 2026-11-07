@@ -86,8 +86,8 @@ Check a branch with `make ci-plan BASE=origin/main`.
 ## Browser test areas
 
 Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
-Pull requests run only the areas a change maps to. Pushes to main that build the web artifact, and the nightly run,
-always run every area, so a wrong mapping cannot reach users.
+Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests:
+see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 
 | Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
 | ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |

@@ -20,7 +20,7 @@ jobs:
     name: Assemble dev site
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: dev
     permissions: &assemble-permissions
       contents: read
@@ -72,7 +72,7 @@ jobs:
     name: (test-run) Assemble dev site
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: test-run
     permissions: *assemble-permissions
     outputs: *assemble-outputs

@@ -12,7 +12,7 @@ import {
   classify,
   formatOutputs,
   planChanges,
-  withFullBrowser
+  imageMatrix
 } from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
@@ -132,7 +132,7 @@ for (const [name, files] of [
 
 test('outputs give every folder a value and a usable matrix', () => {
   const lines = formatOutputs(planChanges(['apps/web/src/interface.js'])).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 1);
+  assert.equal(lines.length, FOLDERS.length + 2);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
@@ -229,15 +229,13 @@ test('an area limited to one project has a partner covering the other', () => {
   }
 });
 
-test('runs before deploying test every browser area whenever they build the web artifact', () => {
-  assert.deepEqual(withFullBrowser(planChanges(['apps/web/src/interface.js'])).areas, ALL_AREAS);
-  assert.deepEqual(
-    withFullBrowser(planChanges(['apps/web/tests/core.test.mjs'])).areas,
-    ALL_AREAS,
-    'this change builds an artifact too'
-  );
-  assert.deepEqual(withFullBrowser(planChanges(['docs/README.md'])).areas, []);
-  assert.deepEqual(withFullBrowser(planChanges(['services/backend/go.mod'])).areas, []);
+test('a merge publishes the image of each app it selected, and no other', () => {
+  const appsFor = file => imageMatrix(planChanges([file]).folders).include.map(({app}) => app);
+  assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);
+  assert.deepEqual(appsFor('apps/editor/src/sw.js'), ['editor']);
+  assert.deepEqual(appsFor('packages/map-core/src/map.js'), ['core-demo'], 'only core-demo runs unreleased core');
+  assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), ['web', 'editor', 'core-demo']);
+  assert.deepEqual(appsFor('docs/README.md'), []);
 });
 
 test('Markdown never selects code checks, wherever it lives, while Go stays independent of the web', () => {
@@ -342,12 +340,6 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   git('commit', '-qm', 'web');
   const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
   assert.match(narrowed, /Browser areas: interface\n/);
-  const full = execFileSync('node', [planner, '--base', 'HEAD~1', '--full-browser'], {
-    cwd: repo,
-    encoding: 'utf8',
-    env: plannerEnv
-  });
-  assert.match(full, new RegExp(`Browser areas: ${ALL_AREAS.join(', ')}\\n`));
 });
 
 test('each browser project checks only itself, and only the public app reaches the deployment', () => {

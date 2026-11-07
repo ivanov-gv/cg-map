@@ -22,8 +22,8 @@ runs:
       shell: bash
       run: |
         # A normal install takes about 20s. A stalled mirror download rarely recovers on its own, but usually does on a
-        # new connection, so several short attempts beat one long wait.
-        attempt_limit_seconds=120
+        # new connection, so several short attempts beat one long wait. All of them must leave room inside the job limit.
+        attempt_limit_seconds=60
         max_attempts=3
         start=$SECONDS
         for attempt in $(seq 1 "$max_attempts"); do

@@ -17,14 +17,16 @@ GitHub Pages is the dev environment, and there are no pre or prod environments y
 
 Every merge to main updates it, with no tags or releases:
 
-1. [ci-all](../../.github/workflows/ci-all.yml) checks what the change affects. An app it selected, once its checks
-   pass, is built into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`.
+1. [ci-all](../../.github/workflows/ci-all.yml) runs no tests, because the PR run already tested this content. It calls
+   [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects into an image in GHCR,
+   tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. The nightly run tests main.
 2. [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) extracts the `main` image of all three apps into one site
    and deploys it. A deploy replaces the whole site, so it always takes all three.
 
 To put back an older build of an app, retag its image from the commit you want as `main`, then run
 `gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
-affect `CI gate`, so check it after merging.
+affect `CI gate`, so check it after merging. To republish after a failed merge run, use
+`gh workflow run ci-publish.yml --ref main -f test_run=false`, then deploy as above.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 

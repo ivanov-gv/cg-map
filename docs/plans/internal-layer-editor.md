@@ -1,7 +1,7 @@
 # Task: Internal layer editor
 
-Status: in progress. Slices 1-6 are implemented with the gaps listed under Completed and remaining. Slice 7 is the
-offline-first install, served from Pages and optionally over the LAN, without authentication.
+Status: in progress. Slices 1-6 and the offline-first install of slice 7 are merged (#19), with the gaps listed under
+Completed and remaining. The install is served from Pages and optionally over the LAN, without authentication.
 
 ## Goal and acceptance criteria
 
@@ -271,19 +271,14 @@ review compared every assertion with `HEAD`.
 
 ## Handoff
 
-Branch: `feat/internal-editor-draft`; dedicated worktree created through `make worktree`. All of this work, including
-the editor, importer and contracts, is uncommitted. Based on main at `9b1f6e8`.
+Everything so far is on main, through #19. Finish the gaps below in new PRs, and delete this plan with the last of them.
 
 Run `make -C apps/core-demo dev` for shared capabilities and `make -C apps/editor dev` for real source inspection.
 Current implementation details live with the component READMEs.
 
 Known open items:
 
-- The workflows ran through `act` from a clone on the final code, but not on GitHub, because nothing is pushed. Each of
-  the 12 workflows passed when run alone. `make test-ci-all` completed its 14 single-project jobs, then `act` failed
-  with `context deadline exceeded` while removing containers, so its browser jobs and the `CI gate` job have not run
-  under `ci-all`. `cd-pages` is untested: it reads a real `ci-all` run from GitHub. See .github/TESTING.md for these
-  local limits.
+- Installing on a real phone has not been tried. The first check is `/editor/` on Pages, in Chrome.
 - Editor browser tests are sensitive to load: in that parallel run two desktop tests timed out at 15 seconds with the
   page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. This
   belongs with the larger-dataset check.

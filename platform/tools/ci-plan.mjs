@@ -146,19 +146,23 @@ export function planChanges(files) {
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
-// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users. Any run
-// that selects the web builds a deployable artifact, even when the change itself maps to no browser area.
-export function withFullBrowser(plan) {
-  return plan.folders.includes('apps-web') ? {...plan, areas: ALL_AREAS} : plan;
-}
-
 export function browserMatrix(areas) {
   return {include: areas.map(area => ({area, specs: BROWSER_AREAS[area].specs}))};
 }
 
+// A change to an app, or to what it is built from, publishes that app's image.
+export function imageMatrix(folders) {
+  const apps = MAP_APPLICATIONS.filter(folder => folders.includes(folder));
+  return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
+}
+
 export function formatOutputs({folders, areas}) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
-  return [...folderLines, `browser_matrix=${JSON.stringify(browserMatrix(areas))}`].join('\n');
+  return [
+    ...folderLines,
+    `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
+    `image_matrix=${JSON.stringify(imageMatrix(folders))}`
+  ].join('\n');
 }
 
 export function formatSummary({folders, areas, everything}, reason) {
@@ -202,7 +206,6 @@ function main(args) {
     }
   }
 
-  if (args.includes('--full-browser')) plan = withFullBrowser(plan);
   const summary = formatSummary(plan, reason);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

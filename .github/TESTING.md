@@ -1,8 +1,14 @@
 # Testing workflows
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
-on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md) and
-[release](../docs/runbooks/release.md).
+on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
+[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md) and [release](../docs/runbooks/release.md).
+
+## Time limits
+
+A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 or less, and `platform/tests/workflows`
+checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
+`ci-apps-editor` splits its browser tests; do not raise the limit.
 
 ## Test-run mode
 
@@ -65,7 +71,8 @@ cannot see local runs, so record yours in the PR template.
 ## Through a real PR
 
 `ci-all` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from the
-diff. To see what a branch would select:
+diff. A push to main runs no checks and only publishes, and the nightly run checks everything. To see what a branch
+would select:
 
 ```sh
 make ci-plan BASE=origin/main

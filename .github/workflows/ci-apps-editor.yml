@@ -1,25 +1,17 @@
 name: ci-apps-editor
-# The source viewer: its checks, artifact and browser tests.
+# The source viewer: its checks, artifact and browser tests, split so that each job stays inside the job time limit.
 on:
   workflow_call:
     inputs:
       test_run:
         type: boolean
         required: true
-      publish_image:
-        description: Build and push this app's image after its checks pass.
-        type: boolean
-        default: false
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
-      publish_image:
-        description: Build and push this app's image after its checks pass.
-        type: boolean
-        default: false
 permissions:
   contents: read
   packages: read
@@ -27,14 +19,9 @@ jobs:
   verify:
     name: Verify editor
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
-    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
     runs-on: ubuntu-24.04
-    # Two workers took this suite from about 15 minutes towards half that, on GitHub's small runners. See
-    # docs/plans/faster-browser-tests.md before raising this limit: splitting the suite is the lasting fix.
-    timeout-minutes: 20
+    timeout-minutes: 5
     environment: dev
-    env: &verify-env
-      E2E_WORKERS: 2
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -43,68 +30,79 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=apps/editor
-      - uses: ./.github/actions/setup-browser
-      - uses: ./.github/actions/run-check
-        with:
-          command: make -C apps/editor e2e-built
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
-      - name: Share the built artifact with the image job
+      - name: Share the built artifact with the browser jobs
         uses: actions/upload-artifact@v5
         with:
           name: editor-artifact
           path: dist/editor
           include-hidden-files: true
           retention-days: 1
-      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
-      - uses: actions/upload-artifact@v5
-        if: failure()
-        with:
-          name: browser-failure-evidence-apps-editor
-          path: apps/editor/test-results/
-          retention-days: 7
   verify-test-run:
     name: (test-run) Verify editor
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     environment: test-run
-    env: *verify-env
     steps: *verify-steps
-  # Its own job: only this one can write packages, and only main can run it for real.
-  image:
-    name: Publish editor image
+  browser:
+    name: Browser tests (${{ matrix.area }})
     needs: verify
-    if: ${{ (inputs.publish_image == true || inputs.publish_image == 'true') && github.ref == 'refs/heads/main' }}
+    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: dev
-    permissions:
-      contents: read
-      packages: write
-    env: &image-env
-      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
-    steps: &image-steps
+    strategy:
+      fail-fast: false
+      # Sized from measured test time: a new area when one nears the job time limit. Together these must cover every spec
+      # in both projects, which platform/tests/workflows.test.mjs checks.
+      matrix: &browser-matrix
+        include:
+          - area: editing-desktop-1
+            specs: tests/e2e/editing.spec.mjs --project=root-desktop --shard=1/2
+          - area: editing-desktop-2
+            specs: tests/e2e/editing.spec.mjs --project=root-desktop --shard=2/2
+          - area: editing-mobile
+            specs: tests/e2e/editing.spec.mjs --project=pages-mobile
+          - area: offline-desktop
+            specs: tests/e2e/offline.spec.mjs --project=root-desktop
+          - area: offline-mobile
+            specs: tests/e2e/offline.spec.mjs --project=pages-mobile
+          - area: viewer-and-sketch
+            specs: tests/e2e/viewer.spec.mjs tests/e2e/sketch.spec.mjs
+    env: &browser-env
+      # Each job has its own 4 CPUs.
+      E2E_WORKERS: 2
+      AREA: ${{ matrix.area }}
+      E2E_SPECS: ${{ matrix.specs }}
+    steps: &browser-steps
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/setup-web
       - uses: actions/download-artifact@v8
         with:
           name: editor-artifact
           path: dist/editor
-      - uses: ./.github/actions/publish-image
+      - uses: ./.github/actions/setup-browser
+      - uses: ./.github/actions/run-check
         with:
-          app: editor
-          repository: ${{ env.IMAGE_REPOSITORY }}
-          token: ${{ github.token }}
-  image-test-run:
-    name: (test-run) Publish editor image
+          command: make -C apps/editor e2e-built E2E_ARGS="$E2E_SPECS"
+      # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: browser-failure-evidence-editor-${{ env.AREA }}
+          path: apps/editor/test-results/
+          retention-days: 7
+  browser-test-run:
+    name: (test-run) Browser tests (${{ matrix.area }})
     needs: verify-test-run
-    if: ${{ inputs.publish_image == true || inputs.publish_image == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 7
     environment: test-run
-    permissions:
-      contents: read
-      packages: read
-    env: *image-env
-    steps: *image-steps
+    strategy:
+      fail-fast: false
+      matrix: *browser-matrix
+    env: *browser-env
+    steps: *browser-steps

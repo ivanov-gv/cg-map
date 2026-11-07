@@ -6,10 +6,6 @@ on:
       test_run:
         type: boolean
         required: true
-      publish_image:
-        description: Build and push this app's image after its checks pass.
-        type: boolean
-        default: false
       browser_matrix:
         description: The browser areas to run, from the planner. Empty runs them all.
         type: string
@@ -21,10 +17,6 @@ on:
         description: Test run
         type: boolean
         default: true
-      publish_image:
-        description: Build and push this app's image after its checks pass.
-        type: boolean
-        default: false
 permissions:
   contents: read
   packages: read
@@ -34,7 +26,7 @@ jobs:
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     environment: dev
     outputs: &verify-outputs
       browser_matrix: ${{ steps.areas.outputs.browser_matrix }}
@@ -59,7 +51,7 @@ jobs:
             node platform/tools/ci-plan.mjs --all
           fi
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
-      - name: Share the built artifact with the browser and image jobs
+      - name: Share the built artifact with the browser jobs
         uses: actions/upload-artifact@v5
         with:
           name: ${{ env.WEB_ARTIFACT_NAME }}
@@ -70,7 +62,7 @@ jobs:
     name: (test-run) Verify web
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     environment: test-run
     outputs: *verify-outputs
     env: *verify-env
@@ -81,12 +73,14 @@ jobs:
     # A change such as a web unit test needs the web checks but no browser area.
     if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 7
     environment: dev
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix) }}
     env: &browser-env
+      # Each job has its own 4 CPUs, and one worker left the slowest area at the job time limit.
+      E2E_WORKERS: 2
       AREA: ${{ matrix.area }}
       E2E_SPECS: ${{ matrix.specs }}
       WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
@@ -114,50 +108,10 @@ jobs:
     needs: verify-test-run
     if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 7
     environment: test-run
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix) }}
     env: *browser-env
     steps: *browser-steps
-  # After the browser jobs, so that only a build that passed them can reach the dev environment.
-  image:
-    name: Publish web image
-    needs: [verify, browser]
-    # A status function, because browser jobs skip when no area is planned. Only a full pass or a skip may publish.
-    if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.browser.result == 'success' || needs.browser.result == 'skipped') && (inputs.publish_image == true || inputs.publish_image == 'true') && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    environment: dev
-    permissions:
-      contents: read
-      packages: write
-    env: &image-env
-      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
-      WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
-    steps: &image-steps
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ env.WEB_ARTIFACT_NAME }}
-          path: dist/web
-      - uses: ./.github/actions/publish-image
-        with:
-          app: web
-          repository: ${{ env.IMAGE_REPOSITORY }}
-          token: ${{ github.token }}
-  image-test-run:
-    name: (test-run) Publish web image
-    needs: [verify-test-run, browser-test-run]
-    if: ${{ !cancelled() && needs.verify-test-run.result == 'success' && (needs.browser-test-run.result == 'success' || needs.browser-test-run.result == 'skipped') && (inputs.publish_image == true || inputs.publish_image == 'true') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    environment: test-run
-    permissions:
-      contents: read
-      packages: read
-    env: *image-env
-    steps: *image-steps
