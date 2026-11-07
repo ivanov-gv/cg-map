@@ -16,7 +16,8 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
-  'ci-dev-pages.yml': ['deploy']
+  'ci-dev-pages.yml': ['deploy'],
+  'ci-publish.yml': ['select']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.

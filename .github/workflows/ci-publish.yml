@@ -41,10 +41,25 @@ permissions:
   contents: read
   packages: read
 jobs:
+  # No test-run twin: it only passes on its input. A matrix must read a job's output, because under a called workflow act
+  # cannot read inputs in a matrix, as ci-apps-web's browser jobs show too.
+  select:
+    name: Select images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      image_matrix: ${{ steps.images.outputs.image_matrix }}
+    env:
+      IMAGE_MATRIX: ${{ inputs.image_matrix }}
+    steps:
+      - id: images
+        run: echo "image_matrix=$IMAGE_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
   # Only the jobs here can write packages, and only main can run them for real.
   image:
     name: Publish ${{ matrix.app }} image
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && inputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
+    needs: select
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && needs.select.outputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
     # Pinned: the build needs the same tools as the app's own checks.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -54,7 +69,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(inputs.image_matrix) }}
+      matrix: ${{ fromJSON(needs.select.outputs.image_matrix) }}
     env: &image-env
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
       APP: ${{ matrix.app }}
@@ -73,7 +88,8 @@ jobs:
           token: ${{ github.token }}
   image-test-run:
     name: (test-run) Publish ${{ matrix.app }} image
-    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && inputs.image_matrix != '{"include":[]}' }}
+    needs: select
+    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && needs.select.outputs.image_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: test-run
@@ -82,7 +98,7 @@ jobs:
       packages: read
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(inputs.image_matrix) }}
+      matrix: ${{ fromJSON(needs.select.outputs.image_matrix) }}
     env: *image-env
     steps: *image-steps
   # A release promotes what this publishes.
