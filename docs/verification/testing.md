@@ -121,16 +121,17 @@ every area, because every browser test boots them.
 
 The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner:
 
-| Area            | Specs in apps/editor/tests/e2e           | Code it depends on most                                      |
-| --------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| editing-desktop | editing.spec.mjs, root-desktop, two jobs | Commands, session, validation, inspector, review             |
-| editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                     |
-| offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js |
-| offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                     |
-| viewer          | viewer.spec.mjs                          | source-overlay.js                                            |
+| Area            | Specs in apps/editor/tests/e2e           | Code it depends on most                                                    |
+| --------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| editing-desktop | editing.spec.mjs, root-desktop, two jobs | Commands, session, validation, geometry, inspector, review                 |
+| editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                                   |
+| offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js, form editing |
+| offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                                   |
+| viewer          | viewer.spec.mjs                          | Only what every area boots                                                 |
 
-app.js, dom.js, hashing.js, source-bundle.js, draft-store.js, public/, build tools, and anything unmapped run every
-editor area, as does a change from outside the editor that selects it, such as its source bundle.
+app.js, dom.js, hashing.js, source-bundle.js, draft-store.js, layer-rules.js, source-overlay.js, public/, build tools,
+and anything unmapped run every editor area, as does a change from outside the editor that selects it, such as its
+source bundle.
 
 ## Monorepo verification — 2026-10-18
 

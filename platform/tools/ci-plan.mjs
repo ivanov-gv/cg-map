@@ -82,22 +82,25 @@ export const SHARED_WEB_SOURCES = [
   'location-controls.js'
 ];
 
-const EDITING_SOURCES = [
+// The offline tests also make an edit, save it and export it, so they depend on these as well.
+const FORM_EDIT_SOURCES = [
   'active-file-commands.js',
   'changeset.js',
-  'cross-file-checks.js',
-  'drag-gestures.js',
   'edit-session.js',
-  'edit-transaction.js',
-  'geometry-editing.js',
-  'geometry-validation.js',
-  'handle-layer.js',
   'inspector-editing.js',
-  'layer-rules.js',
   'property-form.js',
   'review-panel.js'
 ];
-const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
+const EDITING_SOURCES = [
+  ...FORM_EDIT_SOURCES,
+  'cross-file-checks.js',
+  'drag-gestures.js',
+  'edit-transaction.js',
+  'geometry-editing.js',
+  'geometry-validation.js',
+  'handle-layer.js'
+];
+const OFFLINE_SOURCES = [...FORM_EDIT_SOURCES, 'sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
 // one project has a partner for the other, and both run the same sources.
@@ -127,12 +130,21 @@ export const EDITOR_BROWSER_AREAS = {
   viewer: {
     specs: 'tests/e2e/viewer.spec.mjs',
     specFiles: ['viewer.spec.mjs'],
-    sources: ['source-overlay.js']
+    sources: []
   }
 };
 
-// Every editor browser test boots these. The offline tests also edit and save a draft, so the draft store is shared too.
-export const SHARED_EDITOR_SOURCES = ['app.js', 'dom.js', 'hashing.js', 'source-bundle.js', 'draft-store.js'];
+// Every editor browser test boots these: startup validates the rules, every mode draws and hit tests through the overlay,
+// and the offline tests save a draft.
+export const SHARED_EDITOR_SOURCES = [
+  'app.js',
+  'dom.js',
+  'hashing.js',
+  'source-bundle.js',
+  'draft-store.js',
+  'layer-rules.js',
+  'source-overlay.js'
+];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);

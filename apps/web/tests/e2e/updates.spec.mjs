@@ -59,7 +59,10 @@ test(
         await waitForFailedInstallation(await nextWorker);
       });
       host.release(2);
-      await expectToHold(() => expect(page.locator('#version')).toHaveText('1'), UPDATE_CHECK_WINDOW_MILLISECONDS);
+      await expectToHold(
+        async () => expect(await page.locator('#version').textContent()).toBe('1'),
+        UPDATE_CHECK_WINDOW_MILLISECONDS
+      );
       await page.reload();
       for (const tab of [page, otherTab]) {
         await expect(tab.locator('#version')).toHaveText('2');

@@ -1,8 +1,6 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
-import {expectToHold, mapIdle} from './helpers.mjs';
-
-const CAMERA_MOVE_WINDOW_MILLISECONDS = 600;
+import {CAMERA_HOLD_MILLISECONDS, expectToHold, mapIdle} from './helpers.mjs';
 
 // Software WebGL needs seconds per camera step, and these tests compare many exact camera steps.
 test.describe.configure({timeout: 400000});
@@ -155,15 +153,15 @@ test.describe('stability', () => {
     const all = eligible(data, 17);
     await expectIcons(page, all);
     const before = await page.evaluate(() => window.kompasDebug.map.getCenter().toArray());
-    for (const pixels of [1, 20, -20]) {
+    for (const pixels of [1, 2, 5, 10, 20, -20, -10]) {
       await page.evaluate((x) => window.kompasDebug.map.panBy([x, x / 2], {duration: 0}), pixels);
       await expectIcons(page, all);
     }
-    for (const zoom of [17.01, 17.6, 18, 17]) {
+    for (const zoom of [17.01, 17.1, 17.3, 17.6, 18, 17.2, 17]) {
       await camera(page, {center: before, zoom});
       await expectIcons(page, all);
     }
-    for (const bearing of [90, 0]) {
+    for (const bearing of [15, 90, 200, 0]) {
       await camera(page, {bearing});
       await expectIcons(page, all);
     }
@@ -436,7 +434,7 @@ test(
     await expect(page.locator('#place-name')).toHaveText('2 places here');
     await expectToHold(
       async () => expect(await page.evaluate(() => window.kompasDebug.map.getCenter().toArray())).toEqual(before),
-      CAMERA_MOVE_WINDOW_MILLISECONDS
+      CAMERA_HOLD_MILLISECONDS
     );
     // The keyboard closes: the pending check now runs against the full map area.
     await page.evaluate(() => {

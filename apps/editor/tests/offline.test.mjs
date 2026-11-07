@@ -80,19 +80,28 @@ test('the worker carries the release, because browsers detect an update from its
 
 const quietOptions = {answerMilliseconds: 50, maximumWaitMilliseconds: 2000};
 
-test('a takeover request waits until this window and every other window are quiet', async () => {
+test('a takeover request waits for another window that is not quiet', async testContext => {
   let isOtherWindowQuiet = false;
-  let isThisWindowQuiet = false;
   const otherWindow = answerQuietRequests(() => isOtherWindowQuiet);
+  testContext.after(() => otherWindow.close());
   let isFinished = false;
-  const finished = whenEveryWindowIsQuiet(() => isThisWindowQuiet, quietOptions).then(() => (isFinished = true));
-  await delay(150);
-  isThisWindowQuiet = true;
-  await delay(150);
+  const finished = whenEveryWindowIsQuiet(() => true, quietOptions).then(() => (isFinished = true));
+  await delay(300);
   assert.equal(isFinished, false, 'another window was still loading its map');
   isOtherWindowQuiet = true;
   await finished;
-  otherWindow.close();
+});
+
+test('a takeover request waits for its own window, when every other one is quiet', async testContext => {
+  let isThisWindowQuiet = false;
+  const otherWindow = answerQuietRequests(() => true);
+  testContext.after(() => otherWindow.close());
+  let isFinished = false;
+  const finished = whenEveryWindowIsQuiet(() => isThisWindowQuiet, quietOptions).then(() => (isFinished = true));
+  await delay(300);
+  assert.equal(isFinished, false, 'this window was still loading its map');
+  isThisWindowQuiet = true;
+  await finished;
 });
 
 test('a window that never gets quiet cannot stop a takeover request', async () => {

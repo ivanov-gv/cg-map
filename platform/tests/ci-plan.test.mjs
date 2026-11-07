@@ -236,9 +236,15 @@ test('an area limited to one project has a partner covering the other', () => {
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 
 for (const [name, files, expectedAreas] of [
-  ['one editing source', ['apps/editor/src/review-panel.js'], ['editing-desktop', 'editing-mobile']],
+  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile']],
+  [
+    'a source the offline tests edit through',
+    ['apps/editor/src/review-panel.js'],
+    ['editing-desktop', 'editing-mobile', 'offline-desktop', 'offline-mobile']
+  ],
   ['the offline worker', ['apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']],
-  ['the overlay', ['apps/editor/src/source-overlay.js'], ['viewer']],
+  ['the overlay', ['apps/editor/src/source-overlay.js'], ALL_EDITOR_AREAS],
+  ['the editing rules', ['apps/editor/src/layer-rules.js'], ALL_EDITOR_AREAS],
   ['a shared source', ['apps/editor/src/app.js'], ALL_EDITOR_AREAS],
   ['an unmapped source', ['apps/editor/src/brand-new.js'], ALL_EDITOR_AREAS],
   ['one spec', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['viewer']],
@@ -254,7 +260,7 @@ for (const [name, files, expectedAreas] of [
   });
 }
 
-test('every editor source is mapped to an area or shared, and listed only once per spec', () => {
+test('every editor source is mapped to an area or shared, never both, and exists', () => {
   const sources = fs.readdirSync(path.join(repoRoot, 'apps/editor/src'));
   const mapped = Object.values(EDITOR_BROWSER_AREAS).flatMap(area => area.sources);
   for (const source of sources) {

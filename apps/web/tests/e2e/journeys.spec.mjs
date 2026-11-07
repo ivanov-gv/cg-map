@@ -360,7 +360,10 @@ test(
     await expect
       .poll(() => page.evaluate(() => window.kompasDebug.map.getZoom()))
       .toBeGreaterThan(zoom + 0.2);
-    await expectToHold(() => expect(page.locator('#place-card')).toBeHidden(), TAP_ACTION_WINDOW_MILLISECONDS);
+    await expectToHold(
+      async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+      TAP_ACTION_WINDOW_MILLISECONDS
+    );
   }
 );
 
@@ -396,7 +399,10 @@ test(
     await expect
       .poll(() => page.evaluate(() => window.kompasDebug.map.getZoom()))
       .toBeGreaterThan(zoom + 0.2);
-    await expectToHold(() => expect(page.locator('#place-card')).toBeHidden(), TAP_ACTION_WINDOW_MILLISECONDS);
+    await expectToHold(
+      async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+      TAP_ACTION_WINDOW_MILLISECONDS
+    );
     expect(await page.evaluate(() => window.kompasDebug.endpoints)).toEqual({from: null, to: null});
   }
 );
@@ -526,8 +532,8 @@ test('a place inside a building highlights its footprint across zoom and satelli
       coordinates,
       zoom
     });
-    // With satellite imagery on, software rendering can spend most of 15 seconds on these tiles while the runner is busy,
-    // which had nothing to do with the highlight this test checks.
+    // With satellite imagery on and software rendering, these tiles alone took over 15 seconds in 1 run of 42 with 14 workers
+    // on 16 threads. That has nothing to do with the highlight this test checks, so it has its own limit.
     await expect
       .poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded()), {timeout: SLOW_TILES_MILLISECONDS})
       .toBe(true);

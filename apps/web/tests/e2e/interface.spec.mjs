@@ -12,13 +12,13 @@ import {
   simulateKeyboard,
   stubRouting,
   tapRenderedPlace,
+  CAMERA_HOLD_MILLISECONDS,
   expectCameraToHold,
   expectToHold,
   mapIdle
 } from './helpers.mjs';
 
 const RESORT_WINDOW_MILLISECONDS = 200;
-const CAMERA_MOVE_WINDOW_MILLISECONDS = 600;
 // A little over the card's own WHEEL_GESTURE_MILLISECONDS.
 const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
 
@@ -445,13 +445,14 @@ test(
     await simulateKeyboard(page, 420);
     await expectCameraToHold(page, resting);
     await simulateKeyboard(page, 840);
-    const isPlaceUncovered = async () => {
+    await settled(page);
+    await expect(async () => {
       const point = await pointOnMap(page, place);
       const bubble = await page.locator('#search-bubble').boundingBox();
       const card = await page.locator('#place-card').boundingBox();
-      return point.y > bubble.y + bubble.height && point.y < card.y;
-    };
-    await expect.poll(isPlaceUncovered).toBe(true);
+      expect(point.y).toBeGreaterThan(bubble.y + bubble.height);
+      expect(point.y).toBeLessThan(card.y);
+    }).toPass();
   }
 );
 
@@ -551,7 +552,7 @@ test('a tapped map pin follows the focus zone like a result', {tag: '@phone'}, a
     expect(center[0]).toBeCloseTo(place[0], 6);
     expect(center[1]).toBeCloseTo(place[1], 6);
   };
-  await expectToHold(expectCameraOnPlace, CAMERA_MOVE_WINDOW_MILLISECONDS);
+  await expectToHold(expectCameraOnPlace, CAMERA_HOLD_MILLISECONDS);
   await closeCard(page);
   await expect(page.locator('#place-card')).toBeHidden();
 

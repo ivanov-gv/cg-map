@@ -86,9 +86,22 @@ function sharedSetup(statements, text) {
     .join('\n');
 }
 
+// The statements directly under a loop, condition or block, which can declare tests just as a describe can.
+function nestedStatements(statement) {
+  const branches = [statement.body, statement.consequent, statement.alternate].flat();
+  return branches
+    .filter(Boolean)
+    .flatMap(branch => (branch.type === 'BlockStatement' ? branch.body : [branch]));
+}
+
 function collectTests(statements, text, inherited, tests) {
   const setup = `${inherited.setup}\n${sharedSetup(statements, text)}`;
   for (const statement of statements) {
+    const isDeclaringBlock = /^(For|ForIn|ForOf|While|DoWhile|If|Block)/.test(statement.type);
+    if (isDeclaringBlock) {
+      collectTests(nestedStatements(statement), text, {...inherited, setup}, tests);
+      continue;
+    }
     const call = statement.type === 'ExpressionStatement' ? statement.expression : null;
     const name = call ? testCallName(call) : null;
     if (!name) continue;

@@ -4,7 +4,7 @@ import fileSystem from 'node:fs';
 
 const HOLD_CHECK_MILLISECONDS = 50;
 // Longer than the selection camera's animation, so a move that should not start has had its chance.
-const CAMERA_HOLD_MILLISECONDS = 600;
+export const CAMERA_HOLD_MILLISECONDS = 600;
 
 // No test may reach the real routing provider.
 export const stubRouting = (page) =>
@@ -61,12 +61,13 @@ export const mapIdle = page =>
     () =>
       new Promise(resolve => {
         const {map} = window.kompasDebug;
-        if (map.loaded() && !map.isMoving()) resolve();
-        else map.once('idle', resolve);
+        // A repaint makes idle fire even when nothing is pending. map.loaded() would not do: it ignores symbol placement.
+        map.once('idle', resolve);
+        map.triggerRepaint();
       })
   );
 // Checks that something does not happen. Absence has no state to wait on, so this repeats the assertion for as long as the
-// app could still do it, and a passing moment in the middle of a failure counts as the failure it is.
+// app could still do it. The assertion must read once and not retry, or a brief failure in the middle would pass unseen.
 export async function expectToHold(assertion, milliseconds) {
   const deadline = Date.now() + milliseconds;
   do {

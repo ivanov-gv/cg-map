@@ -24,6 +24,15 @@ test('the tag check finds a dependency in the body of a test', () => {
   assert.deepEqual(untaggedPhoneTests(spec), [`'swipes'`]);
 });
 
+test('the tag check finds a test declared inside a loop or a condition', () => {
+  const inLoop = `for (const value of [1]) {
+    test('swipes in a loop', async ({page}) => { await page.touchscreen.tap(1, 1); });
+  }`;
+  assert.deepEqual(untaggedPhoneTests(inLoop), [`'swipes in a loop'`]);
+  const inCondition = `if (process.env.TOUCH) test('swipes in a condition', async ({page}) => { await page.touchscreen.tap(1, 1); });`;
+  assert.deepEqual(untaggedPhoneTests(inCondition), [`'swipes in a condition'`]);
+});
+
 test('the tag check accepts a tag on the test or on its describe', () => {
   const tagged = `test('swipes', {tag: '@phone'}, async ({page}) => { await page.touchscreen.tap(1, 1); });`;
   assert.deepEqual(untaggedPhoneTests(tagged), []);

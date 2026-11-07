@@ -365,6 +365,31 @@ test.describe('offline-first install', () => {
     await expect(busyWindow.locator('[name="name"]')).toHaveValue('Still typing');
   });
 
+  test('an update the browser holds says how to finish, and reopening finishes it', async ({page, context}) => {
+    await openUntilOffline(page, server);
+    publishNewRelease(server, 'second-release');
+    await page.reload();
+    await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    // Stands in for the race in update-quiet.js, which cannot be caused on demand: the new version never hears the request.
+    await page.evaluate(() => {
+      ServiceWorker.prototype.postMessage = () => {};
+    });
+    await page.locator('#update-app').click();
+    await expect(page.getByText('Close every editor window')).toBeVisible({timeout: 30000});
+    await expect(page.locator('header p')).toHaveText('Layer editor');
+    await page.close();
+    const reopenedWindow = await context.newPage();
+    await expect
+      .poll(
+        async () => {
+          await reopenedWindow.goto(server.url);
+          return reopenedWindow.locator('header p').textContent();
+        },
+        {timeout: 30000}
+      )
+      .toBe('Layer editor second-release');
+  });
+
   test('edits that could not be saved block the update', async ({page}) => {
     await page.addInitScript(() => {
       const realSetItem = Storage.prototype.setItem;
