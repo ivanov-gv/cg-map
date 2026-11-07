@@ -10,13 +10,15 @@ test('page reload checks for a release without background polling and preserves 
   await page.waitForFunction(()=>navigator.serviceWorker.controller&&window.registration);
   await expect(page.locator('#version')).toHaveText('1');
   expect(await page.evaluate(()=>sessionStorage.loads)).toBe('1');
-  const other=await context.newPage();await other.goto(url);
+  const other=await context.newPage();
+  await other.goto(url);
   await other.waitForFunction(()=>navigator.serviceWorker.controller&&window.registration);
   // Finish the initial load checks before publishing the next fixture release.
   await other.evaluate(()=>window.registration.update());
   host.release(2,true);
   await page.evaluate(()=>{
-   window.dispatchEvent(new Event('online'));window.dispatchEvent(new Event('pageshow'));
+   window.dispatchEvent(new Event('online'));
+   window.dispatchEvent(new Event('pageshow'));
    document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.waitForTimeout(1100);
@@ -38,7 +40,8 @@ test('page reload checks for a release without background polling and preserves 
   const counts=await Promise.all([page,other].map(tab=>tab.evaluate(()=>sessionStorage.loads)));
   await page.waitForTimeout(1800);
   expect(await Promise.all([page,other].map(tab=>tab.evaluate(()=>sessionStorage.loads)))).toEqual(counts);
-  await context.setOffline(true);await page.reload();
+  await context.setOffline(true);
+  await page.reload();
   await expect(page.locator('#version')).toHaveText('2');
   expect(await page.evaluate(()=>fetch('version.txt').then(r=>r.text()))).toBe('2');
  }finally{await host.close();}

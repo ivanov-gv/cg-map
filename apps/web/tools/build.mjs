@@ -1,3 +1,5 @@
+// Assembles dist/web from this app's files, the map-core runtime and the verified data release, then finalizes the
+// offline manifests.
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -21,13 +23,19 @@ for (const filename of webModules) {
 }
 fs.mkdirSync(path.join(output, 'data'), {recursive: true});
 fs.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
-assertPublishedPlaces(JSON.parse(fs.readFileSync(path.join(root, 'data/sources/places.geojson'))).features, parseVisibilityConfig(JSON.parse(fs.readFileSync(path.join(root, 'packages/contracts/place-visibility.json')))));
+const readJSON = relativePath => JSON.parse(fs.readFileSync(path.join(root, relativePath)));
+// Fail the build, not the browser, when a published place lacks an explicit reviewed level.
+const publishedPlaces = readJSON('data/sources/places.geojson').features;
+const visibilityConfig = parseVisibilityConfig(readJSON('packages/contracts/place-visibility.json'));
+assertPublishedPlaces(publishedPlaces, visibilityConfig);
 fs.copyFileSync(path.join(root, 'data/sources/places.geojson'), path.join(output, 'data/places.geojson'));
 fs.copyFileSync(path.join(root, 'packages/contracts/place-visibility.json'), path.join(output, 'data/place-visibility.json'));
 fs.copyFileSync(path.join(root, 'data/sources/building-labels.geojson'), path.join(output, 'data/building-labels.geojson'));
 fs.copyFileSync(path.join(root, 'data/sources/transit-network.json'), path.join(output, 'data/transit-network.json'));
 fs.copyFileSync(path.join(root, 'data/sources/transport-stops.geojson'), path.join(output, 'data/transport-stops.geojson'));
-fs.cpSync(path.join(root, 'data/imagery/podgorica'), path.join(output, 'data/satellite'), {recursive: true, filter: source => !source.endsWith('.md')});
+// Imagery notes stay in the repository; only tiles and their metadata ship.
+const isImageryAsset = source => !source.endsWith('.md');
+fs.cpSync(path.join(root, 'data/imagery/podgorica'), path.join(output, 'data/satellite'), {recursive: true, filter: isImageryAsset});
 fs.writeFileSync(path.join(output, '.nojekyll'), '');
 execFileSync(process.execPath, [path.join(root, 'apps/web/tools/finalize.mjs')], {cwd: root, stdio: 'inherit'});
 console.log('Built deployable web artifact: dist/web/');

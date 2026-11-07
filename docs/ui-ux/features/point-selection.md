@@ -25,10 +25,10 @@ dated ePodgorica snapshot. All point selection works with the downloaded offline
 bus availability. Coordinates come from the selected point for places/stops and the actual click for basemap
 polygons/lines.
 
-point-selection.js owns pure point descriptions, endpoint GeoJSON, and endpoint layer installation. app.js owns session
-state, hit testing, and DOM updates. The basemap archive is unchanged; entrance metadata extends the shared
-building-label contract. Browser coverage exercises generic coordinates, real building interiors, stops, directory
-selection, endpoint replacement/clearing, and offline interaction.
+point-selection.js owns pure point descriptions, endpoint GeoJSON, and endpoint layer installation. tap-targets.js owns
+hit testing and place-card.js the card's DOM; app.js owns session state. The basemap archive is unchanged; entrance
+metadata extends the shared building-label contract. Browser coverage exercises generic coordinates, real building
+interiors, stops, directory selection, endpoint replacement/clearing, and offline interaction.
 
 ## Tap and zoom gestures
 

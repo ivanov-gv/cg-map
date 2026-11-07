@@ -114,10 +114,12 @@ committed in repository root.
 ## Browser dependencies
 
 app.js orchestrates application/map state. interface.js owns the overlay dock, compact mobile search, focus, and
-visible-viewport geometry. app.js imports the map-core entry and the public workflow modules. offline.js imports core.js
-for formatting; core.js has no local imports. The map-core package imports no app code. app-updates.js checks for
-releases once per page load or reload; sw.js installs a complete replacement shell before activating and reloading open
-tabs. sw.js imports its generated offline manifest. Repository checks enforce these boundaries.
+visible-viewport geometry. app.js imports the map-core entry and the public workflow modules; place-card.js,
+tap-targets.js, offline-panel.js, public-layers.js and status-text.js each hold one part of its work. offline.js imports
+core.js for formatting; core.js has no local imports, and core.js and status-text.js use no browser globals. The
+map-core package imports no app code. app-updates.js checks for releases once per page load or reload; sw.js installs a
+complete replacement shell before activating and reloading open tabs. sw.js imports its generated offline manifest.
+Repository checks enforce these boundaries.
 
 Shared place categories live in the published contract; integration tests verify UI categories agree. Data validation
 never imports web code. The backend module builds without npm or raw datasets.

@@ -1,7 +1,17 @@
 import {test, expect} from '@playwright/test';
 import fs from 'node:fs';
 import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
-import {closeCard, closeMenu, openMenu, ready, stubRouting, tapMapCenter, tapRenderedPlace} from './helpers.mjs';
+import {
+  closeCard,
+  closeMenu,
+  mapCenterOnScreen,
+  openMenu,
+  ready,
+  screenPoint,
+  stubRouting,
+  tapMapCenter,
+  tapRenderedPlace
+} from './helpers.mjs';
 
 test.beforeEach(({page}) => stubRouting(page));
 
@@ -106,15 +116,23 @@ test('building selection provides feature details and point actions', async ({pa
   // Pick from final-zoom geometry; overzoomed parent tiles shift building edges when they are replaced.
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
   const picked=await page.evaluate(()=>{
-    const m=window.kompasDebug.map, b=m.getCanvas().getBoundingClientRect();
+    const map=window.kompasDebug.map;
+    const canvas=map.getCanvas().getBoundingClientRect();
     // Find a visible building interior away from controls and place markers.
-    for(let y=150;y<b.height-65;y+=8)for(let x=b.width*.5;x<b.width-65;x+=8){
-      const hits=m.queryRenderedFeatures([x,y],{layers:['buildings',...m.getStyle().layers.map(l=>l.id).filter(layer=>/^place-(icons|names)-/.test(layer))]});
-      if(hits.some(f=>f.layer.id==='buildings')&&!hits.some(f=>f.layer.id!=='buildings'))return {x:b.left+x,y:b.top+y,id:hits.find(f=>f.layer.id==='buildings').id};
+    const placeLayers=map.getStyle().layers.map(layer=>layer.id).filter(id=>/^place-(icons|names)-/.test(id));
+    const isBuilding=feature=>feature.layer.id==='buildings';
+    for(let y=150;y<canvas.height-65;y+=8){
+      for(let x=canvas.width*.5;x<canvas.width-65;x+=8){
+        const hits=map.queryRenderedFeatures([x,y],{layers:['buildings',...placeLayers]});
+        const building=hits.find(isBuilding);
+        const isOnlyBuilding=building&&hits.every(isBuilding);
+        if(isOnlyBuilding)return {x:canvas.left+x,y:canvas.top+y,id:building.id};
+      }
     }
     return null;
   });
-  expect(picked).not.toBeNull();await page.mouse.click(picked.x,picked.y);
+  expect(picked).not.toBeNull();
+  await page.mouse.click(picked.x,picked.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-details')).toContainText('Type: building');
   await expect(page.getByRole('button',{name:'To',exact:true})).toBeVisible();
@@ -141,18 +159,22 @@ test.describe('isolated routing provider checks',()=>{
 test('route modes draw different street routes and a bus itinerary; clearing removes the line', async ({page}) => {
   const calls=[];
   await page.route('https://routing.openstreetmap.de/**', route => {
-    const walking=route.request().url().includes('routed-foot');calls.push(walking?'walk':'car');
+    const walking=route.request().url().includes('routed-foot');
+    calls.push(walking?'walk':'car');
     return route.fulfill({json:{code:'Ok',routes:[{distance:walking?850:1200,duration:walking?650:180,geometry:{type:'LineString',coordinates:[[19.254951,42.446057],[19.26,42.445],[19.26345,42.443523]]},legs:[{steps:[{distance:850,name:'Test street',maneuver:{type:'depart'}}]}]}]}});
   });
   await page.route('**/data/transit-network.json', route => route.fulfill({json:{version:1,retrievedAt:'2026-10-18T19:00:00Z',stops:{a:{name:'Start stop',coordinates:[19.254951,42.446057]},b:{name:'End stop',coordinates:[19.26345,42.443523]}},patterns:[{route:'6',name:'Test bus',headsign:'End stop',stops:['a','b'],offsets:[0,600]}]}}));
   await readyForRouting(page);
-  await tapMapCenter(page,[19.254951,42.446057]);await page.getByRole('button',{name:'From',exact:true}).click();
-  await tapMapCenter(page,[19.26345,42.443523]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[19.254951,42.446057]);
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[19.26345,42.443523]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText('3 min · 1.2 km');
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(1);
   await page.getByRole('button',{name:'Walk',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText('11 min · 850 m');
-  expect(calls).toContain('walk');expect(calls).toContain('car');
+  expect(calls).toContain('walk');
+  expect(calls).toContain('car');
   await page.getByRole('button',{name:'Public transport',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText(/10 min \+ waiting/);
   await page.locator('#route-itinerary summary').click();
@@ -164,10 +186,13 @@ test('route modes draw different street routes and a bus itinerary; clearing rem
 
 test('route errors and identical endpoints stay explicit without leaving old lines', async ({page}) => {
   await readyForRouting(page);
-  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'From',exact:true}).click();
-  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[20.8,43.7]);
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[20.8,43.7]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toContainText('same point');
-  await tapMapCenter(page,[20.81,43.71]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[20.81,43.71]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toContainText('unavailable');
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(0);
   await expect(page.locator('#route-retry')).toBeVisible();
@@ -180,14 +205,20 @@ test('single tap opens point actions after a delay; double tap zooms without ope
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
   // Programmatic camera movement also cancels pending point actions.
   await page.waitForTimeout(550);
-  const p=await page.evaluate(()=>{const b=window.kompasDebug.map.getCanvas().getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};});
-  if(isMobile)await page.touchscreen.tap(p.x,p.y);else await page.mouse.click(p.x,p.y);
+  const center=await mapCenterOnScreen(page);
+  if(isMobile)await page.touchscreen.tap(center.x,center.y);
+  else await page.mouse.click(center.x,center.y);
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('#place-card')).toBeVisible();
   await expect(page.locator('#point-from')).toBeVisible();
   await closeCard(page);
   const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
-  if(isMobile){await page.touchscreen.tap(p.x,p.y);await page.touchscreen.tap(p.x,p.y);}else await page.mouse.dblclick(p.x,p.y);
+  if(isMobile){
+    await page.touchscreen.tap(center.x,center.y);
+    await page.touchscreen.tap(center.x,center.y);
+  }else{
+    await page.mouse.dblclick(center.x,center.y);
+  }
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
   await page.waitForTimeout(650);
   await expect(page.locator('#place-card')).toBeHidden();
@@ -198,14 +229,18 @@ test('one-finger tap then drag zooms and never opens point actions', async ({pag
   await ready(page);
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
   await page.waitForTimeout(550);
-  const p=await page.evaluate(()=>{const b=window.kompasDebug.map.getCanvas().getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};});
+  const center=await mapCenterOnScreen(page);
   const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
   const cdp=await context.newCDPSession(page);
-  const touch=(type,y=p.y)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:p.x,y,id:7}]});
-  await touch('touchStart');await touch('touchEnd');
+  const touch=(type,y=center.y)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:center.x,y,id:7}]});
+  await touch('touchStart');
+  await touch('touchEnd');
   await page.waitForTimeout(60);
   await touch('touchStart');
-  for(const dy of [15,35,60,90]){await touch('touchMove',p.y+dy);await page.waitForTimeout(25);}
+  for(const dy of [15,35,60,90]){
+    await touch('touchMove',center.y+dy);
+    await page.waitForTimeout(25);
+  }
   await touch('touchEnd');
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
   await page.waitForTimeout(650);
@@ -225,7 +260,7 @@ test('building house numbers start at the 100m scale and open address details', 
   await page.evaluate(c=>window.kompasDebug.map.jumpTo({center:c,zoom:15}),label.geometry.coordinates);
   await expect(page.locator('.maplibregl-ctrl-scale')).toHaveText('100 m');
   await expect.poll(()=>page.evaluate(id=>window.kompasDebug.map.queryRenderedFeatures({layers:['building-numbers']}).some(f=>f.properties.osm_id===id),label.id)).toBe(true);
-  const point=await page.evaluate(c=>{const m=window.kompasDebug.map,p=m.project(c),b=m.getCanvas().getBoundingClientRect();return {x:b.left+p.x,y:b.top+p.y};},label.geometry.coordinates);
+  const point=await screenPoint(page,label.geometry.coordinates);
   await page.mouse.click(point.x,point.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-name')).toHaveText('Building '+label.properties['addr:housenumber']);
@@ -238,11 +273,12 @@ test('same building keeps its address across zooms and with number labels hidden
   const coordinates=[19.26539,42.43437];
   for(const zoom of [15,17,19,20]) {
     await page.evaluate(({coordinates,zoom})=>{
-      const m=window.kompasDebug.map;m.jumpTo({center:coordinates,zoom});
+      const m=window.kompasDebug.map;
+      m.jumpTo({center:coordinates,zoom});
       m.setLayoutProperty('building-numbers','visibility','none');
     },{coordinates,zoom});
     await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
-    const point=await page.evaluate(c=>{const m=window.kompasDebug.map,p=m.project(c),b=m.getCanvas().getBoundingClientRect();return {x:b.left+p.x,y:b.top+p.y};},coordinates);
+    const point=await screenPoint(page,coordinates);
     await page.mouse.click(point.x,point.y);
     await expect(page.locator('#place-category')).toHaveText('Building');
     await expect(page.locator('#place-name')).toHaveText('Building 105,107');
@@ -252,7 +288,9 @@ test('same building keeps its address across zooms and with number labels hidden
 });
 
 test('a place inside a building highlights its footprint across zoom and satellite changes',async({page})=>{
-  const label=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))).features.find(f=>{const [x,y]=f.geometry.coordinates;return x>19.251&&x<19.261&&y>42.438&&y<42.445;});
+  const labels=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url)));
+  const isInCentralPodgorica=([longitude,latitude])=>longitude>19.251&&longitude<19.261&&latitude>42.438&&latitude<42.445;
+  const label=labels.features.find(feature=>isInCentralPodgorica(feature.geometry.coordinates));
   const coordinates=label.geometry.coordinates,footprintId=label.properties.footprintIndex;
   await page.route('**/data/places.geojson',route=>route.fulfill({json:{type:'FeatureCollection',features:[{
     type:'Feature',geometry:{type:'Point',coordinates},properties:{id:'node/selection-fixture',name:'Building cafe',category:'food',kind:'cafe'}

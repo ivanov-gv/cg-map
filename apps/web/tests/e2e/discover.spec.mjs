@@ -33,7 +33,8 @@ test('first view is at street scale with minimal controls, house numbers and no 
     const m = window.kompasDebug.map, c = m.getContainer();
     return m.unproject([c.clientWidth / 2 - 50, c.clientHeight / 2]).distanceTo(m.unproject([c.clientWidth / 2 + 50, c.clientHeight / 2])) / 100;
   });
-  expect(mpp).toBeGreaterThan(0.8); expect(mpp).toBeLessThan(1.2);
+  expect(mpp).toBeGreaterThan(0.8);
+  expect(mpp).toBeLessThan(1.2);
   await expect(page.locator('#dock-content')).toBeHidden();
   await expect(page.locator('#search-bubble')).toBeHidden();
   await expect(page.locator('#menu-toggle')).toBeVisible();
