@@ -1,9 +1,9 @@
 # Testing workflows
 
 **No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
-passed under `act` on its final commit, inside the same job time limits as GitHub. A run on GitHub does not replace
-this. If a local run cannot pass, fix the local setup. Do not report it as a limit and merge anyway. Any other PR needs
-its owning project's checks, and browser tests where it changes a browser project.
+passed under `act`, inside the same job time limits as GitHub. After a fix, rerun what `make ci-plan` selects for it. A
+run on GitHub does not replace this. If a local run cannot pass, fix the local setup. Do not report it as a limit and
+merge anyway. Any other PR needs its owning project's checks, and browser tests where it changes a browser project.
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
