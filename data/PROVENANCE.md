@@ -16,7 +16,7 @@ Its references are bound to one snapshot and do not survive a re-extract, which 
 
 `visibilityLevel` on each place is editorial product metadata from `sources/place-visibility-policy.json`, not an OSM
 fact or a measure of significance. `places_facts_sha256` in `sources/provenance.json` covers the snapshot without that
-field and still equals the hash of the pre-level snapshot. See the
+field or `correction_changeset`, and until a fact changes still equals the hash of the pre-level snapshot. See the
 [data runbook](../docs/runbooks/data.md#place-visibility-levels).
 
 `sources/context-countries.geojson` preserves the supplied Natural Earth public-domain surrounding-country features

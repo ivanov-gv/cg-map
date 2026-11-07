@@ -49,10 +49,10 @@ Then review density on real data. From apps/web, this saves screenshots at every
 POI_DENSITY_SCREENSHOTS=1 npm run test:e2e -- --grep 'density review'
 ```
 
-The command only writes `visibilityLevel`. `places_facts_sha256` in provenance hashes the snapshot without that field,
-so a level change cannot hide a coordinate or attribute change. With `--update-provenance`, the command refuses changed
-facts unless you also pass `--accept-new-facts` after reviewing them. Without that flag it leaves provenance alone, and
-`make -C data check` fails until levels, policy, and provenance agree.
+The command only writes `visibilityLevel`. `places_facts_sha256` in provenance hashes the snapshot without that field or
+`correction_changeset`, so a level change cannot hide a coordinate or attribute change. With `--update-provenance`, the
+command refuses changed facts unless you also pass `--accept-new-facts` after reviewing them. Without that flag it
+leaves provenance alone, and `make -C data check` fails until levels, policy, and provenance agree.
 
 Each override needs `id`, `level`, `reason`, `active`, and `provenance` (`basis`, `reviewedBy`, `reviewedAt`). Unknown
 or duplicate IDs and unsupported levels are rejected. Level 1 is reserved for editorially reviewed places in the sights

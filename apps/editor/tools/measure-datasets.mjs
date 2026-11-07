@@ -105,22 +105,28 @@ function parseFactors(text) {
   return factors;
 }
 
-// Fails if the server exits first, or something else already holds the port and would be measured instead.
+const isPageAnswering = () =>
+  fetch(pageURL)
+    .then(response => response.ok)
+    .catch(() => false);
+
+// Fails if the server exits first.
 async function waitForServer(server) {
   let exitCode = null;
   server.once('exit', code => (exitCode = code ?? 1));
   const deadline = Date.now() + serverStartMilliseconds;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, serverPollMilliseconds));
-    if (exitCode !== null) throw new Error(`The server on port ${port} exited with code ${exitCode}. Set MEASURE_PORT?`);
-    const isAnswering = await fetch(pageURL).then(response => response.ok).catch(() => false);
-    if (isAnswering) return;
+    if (exitCode !== null) throw new Error(`The server on port ${port} exited with code ${exitCode}.`);
+    if (await isPageAnswering()) return;
   }
   throw new Error(`The server on port ${port} did not answer.`);
 }
 
 async function main() {
   const factors = parseFactors(process.env.FACTORS ?? '1 2 4 8');
+  // Whatever already listens there would answer in place of this server, and be measured instead.
+  if (await isPageAnswering()) throw new Error(`Port ${port} is already in use. Set MEASURE_PORT.`);
   const server = spawn('python3', [serverTool, '--port', String(port), '--app', 'editor'], {
     stdio: ['ignore', 'ignore', 'inherit']
   });
