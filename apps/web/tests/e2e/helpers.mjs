@@ -2,6 +2,10 @@
 import {expect} from '@playwright/test';
 import fileSystem from 'node:fs';
 
+const HOLD_CHECK_MILLISECONDS = 50;
+// Longer than the selection camera's animation, so a move that should not start has had its chance.
+const CAMERA_HOLD_MILLISECONDS = 600;
+
 // No test may reach the real routing provider.
 export const stubRouting = (page) =>
   page.route('https://routing.openstreetmap.de/**', (route) =>
@@ -51,6 +55,28 @@ export const camera = (page) =>
 export async function settled(page) {
   await expect.poll(() => page.evaluate(() => window.kompasDebug.map.isMoving())).toBe(false);
 }
+// Resolves once the map has drawn everything it has and nothing moves, including symbol placement after the last tile.
+export const mapIdle = page =>
+  page.evaluate(
+    () =>
+      new Promise(resolve => {
+        const {map} = window.kompasDebug;
+        if (map.loaded() && !map.isMoving()) resolve();
+        else map.once('idle', resolve);
+      })
+  );
+// Checks that something does not happen. Absence has no state to wait on, so this repeats the assertion for as long as the
+// app could still do it, and a passing moment in the middle of a failure counts as the failure it is.
+export async function expectToHold(assertion, milliseconds) {
+  const deadline = Date.now() + milliseconds;
+  do {
+    await assertion();
+    await new Promise(resolve => setTimeout(resolve, HOLD_CHECK_MILLISECONDS));
+  } while (Date.now() < deadline);
+  await assertion();
+}
+export const expectCameraToHold = (page, expected, milliseconds = CAMERA_HOLD_MILLISECONDS) =>
+  expectToHold(async () => expect(await camera(page)).toEqual(expected), milliseconds);
 export async function pointOnMap(page, coordinates) {
   return page.evaluate((lngLat) => {
     const point = window.kompasDebug.map.project(lngLat);
@@ -75,7 +101,7 @@ export async function tapRenderedPlace(page, coordinates, id) {
       zoom
     });
     await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
-    await page.waitForTimeout(100);
+    await mapIdle(page);
     point = await page.evaluate(
       ({coordinates, id}) => {
         const map = window.kompasDebug.map;

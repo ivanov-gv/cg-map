@@ -1,5 +1,11 @@
 import {test, expect} from '@playwright/test';
+import {expectToHold} from './helpers.mjs';
 import {startUpdateServer} from './update-server.mjs';
+
+// How long a release check started by these events could still change something.
+const UPDATE_CHECK_WINDOW_MILLISECONDS = 1100;
+// Long enough for a reload loop to show itself as a second reload.
+const RELOAD_LOOP_WINDOW_MILLISECONDS = 1800;
 
 test(
   'page reload checks for a release without background polling and preserves offline use',
@@ -24,8 +30,7 @@ test(
         window.dispatchEvent(new Event('pageshow'));
         document.dispatchEvent(new Event('visibilitychange'));
       });
-      await page.waitForTimeout(1100);
-      expect(host.failures).toBe(0);
+      await expectToHold(() => expect(host.failures).toBe(0), UPDATE_CHECK_WINDOW_MILLISECONDS);
       await page.reload();
       await expect.poll(() => host.failures).toBeGreaterThan(0);
       await expect(page.locator('#version')).toHaveText('1');
@@ -54,8 +59,7 @@ test(
         await waitForFailedInstallation(await nextWorker);
       });
       host.release(2);
-      await page.waitForTimeout(1100);
-      await expect(page.locator('#version')).toHaveText('1');
+      await expectToHold(() => expect(page.locator('#version')).toHaveText('1'), UPDATE_CHECK_WINDOW_MILLISECONDS);
       await page.reload();
       for (const tab of [page, otherTab]) {
         await expect(tab.locator('#version')).toHaveText('2');
@@ -67,10 +71,10 @@ test(
       const loadCounts = await Promise.all(
         [page, otherTab].map(tab => tab.evaluate(() => sessionStorage.loads))
       );
-      await page.waitForTimeout(1800);
-      expect(
-        await Promise.all([page, otherTab].map(tab => tab.evaluate(() => sessionStorage.loads)))
-      ).toEqual(loadCounts);
+      await expectToHold(async () => {
+        const counts = await Promise.all([page, otherTab].map(tab => tab.evaluate(() => sessionStorage.loads)));
+        expect(counts).toEqual(loadCounts);
+      }, RELOAD_LOOP_WINDOW_MILLISECONDS);
       await context.setOffline(true);
       await page.reload();
       await expect(page.locator('#version')).toHaveText('2');
