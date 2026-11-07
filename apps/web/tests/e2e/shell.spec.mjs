@@ -5,7 +5,8 @@ import {closeCard, fixture, openMenu, ready, stubRouting, tapMapCenter} from './
 test.beforeEach(({page}) => stubRouting(page));
 
 test('map, fixture search, selection, and satellite preserve the map instance', async ({page, isMobile}) => {
-  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
   expect(await page.evaluate(() => window.kompasDebug.placeCount)).toBe(fixture.features.length);
@@ -33,7 +34,8 @@ test('map, fixture search, selection, and satellite preserve the map instance', 
 });
 
 test('shipped snapshot downloads and reloads offline with real archive data', async ({page, context}) => {
-  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   await ready(page);
   await openMenu(page);
   await expect(page.locator('#download')).toBeEnabled();

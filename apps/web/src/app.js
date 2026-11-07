@@ -31,7 +31,7 @@ import {MapInterface, isInFocusZone} from './interface.js';
 import {installMapTaps} from './map-taps.js';
 import {ObjectSelection} from './object-selection.js';
 import {ArchiveSource} from './offline.js';
-import {OfflinePanel} from './offline-panel.js';
+import {OfflinePanel, renderConnectionBadge} from './offline-panel.js';
 import {listingButton, renderListingChooser, renderPlaceCard, renderPointCard} from './place-card.js';
 import {
   buildingAddressIndex,
@@ -109,6 +109,9 @@ let searchTimer;
 
 const selectionZoom = 15;
 const cameraMilliseconds = 450;
+const fixCenteringMilliseconds = 600;
+const locateMilliseconds = 500;
+const satelliteMilliseconds = 600;
 const searchDebounceMilliseconds = 120;
 const satelliteZoom = 17.5;
 const transportOverviewCenter = [19.26, 42.44];
@@ -277,8 +280,6 @@ function markCurrentResult() {
   }
 }
 
-const isFocusable = element => element.isConnected && element.getClientRects().length > 0;
-
 // Focus returns to what opened the card, or to the map for a tapped point.
 function closeCard(shouldRestoreFocus = true) {
   const hadPoint = Boolean(selectedPoint) || isChoosingListing;
@@ -292,7 +293,8 @@ function closeCard(shouldRestoreFocus = true) {
   renderRequestedPlace();
   markCurrentResult();
   if (shouldRestoreFocus && focusReturnTarget) {
-    mapInterface?.restoreFocus(isFocusable(focusReturnTarget) ? focusReturnTarget : elementById('search'));
+    const canReturnFocus = focusReturnTarget.isConnected && focusReturnTarget.getClientRects().length > 0;
+    mapInterface?.restoreFocus(canReturnFocus ? focusReturnTarget : elementById('search'));
   } else if (shouldRestoreFocus && hadPoint) {
     map?.getCanvas().focus({preventScroll: true});
   }
@@ -457,7 +459,7 @@ function centerOnUsableFix({state, fix}) {
     center: fix.coordinates,
     zoom: Math.max(map.getZoom(), DISCOVER_ZOOM),
     offset,
-    duration: animationMilliseconds(600)
+    duration: animationMilliseconds(fixCenteringMilliseconds)
   });
 }
 
@@ -483,7 +485,7 @@ function locateMe() {
   closeCard(false);
   const {state, fix} = positionSnapshot;
   if (fix && hasUsablePosition(state)) {
-    focusCoordinates(fix.coordinates, DISCOVER_ZOOM, 500);
+    focusCoordinates(fix.coordinates, DISCOVER_ZOOM, locateMilliseconds);
     return;
   }
   isLocationRequested = true;
@@ -790,7 +792,7 @@ function toggleSatellite() {
   hasExplored = true;
   const [west, south, east, north] = satelliteBounds;
   const imageryCenter = [(west + east) / 2, (south + north) / 2];
-  map.easeTo({center: imageryCenter, zoom: satelliteZoom, duration: animationMilliseconds(600)});
+  map.easeTo({center: imageryCenter, zoom: satelliteZoom, duration: animationMilliseconds(satelliteMilliseconds)});
 }
 
 function toggleTransport() {
@@ -861,6 +863,9 @@ function registerControls() {
     mapInterface.restoreFocus(elementById('search'));
   });
   elementById('position-action').addEventListener('click', locateMe);
+  const renderConnection = () => renderConnectionBadge(Boolean(archive?.local));
+  addEventListener('online', renderConnection);
+  addEventListener('offline', renderConnection);
 }
 
 // Opening search or the dock counts as exploring; closing them drops the search preview.

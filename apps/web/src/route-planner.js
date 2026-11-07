@@ -11,6 +11,7 @@ const samePointKilometres = 0.005;
 const minListedWalkMetres = 10;
 const routePadding = {top: 115, right: 65, bottom: 90, left: 65};
 const routeMaxZoom = 17;
+const fitMilliseconds = 450;
 const routeColor = '#195c9e';
 const offlineRoadMessage = 'Car and walking routes need an internet connection.';
 const modeNames = {transit: 'public transport', car: 'car', walk: 'walking'};
@@ -256,7 +257,7 @@ export class RoutePlanner {
     this.map.fitBounds(boundsOf(points), {
       padding: routePadding,
       maxZoom: routeMaxZoom,
-      duration: animationMilliseconds(450)
+      duration: animationMilliseconds(fitMilliseconds)
     });
   }
 }

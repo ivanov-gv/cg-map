@@ -23,8 +23,8 @@ export function transportStatusText({state, count, fetchedAt}) {
 export const USABLE_POSITION_STATES = ['live', 'approximate'];
 // States the person must act on after asking for their location; each becomes a visible error.
 export const FAILED_POSITION_STATES = ['denied', 'unavailable', 'timeout', 'outside', 'insecure', 'unsupported'];
-// States whose dot is on the map, so the camera need not explain the default view.
-const SHOWN_POSITION_STATES = ['live', 'approximate', 'stale'];
+// States that always carry a fix inside the map, so the status already explains where the person is.
+const LOCATED_POSITION_STATES = ['live', 'approximate', 'stale'];
 
 export function hasUsablePosition(state) {
   return USABLE_POSITION_STATES.includes(state);
@@ -50,12 +50,12 @@ export function positionMessage({state, fix, age}) {
   return messages[state] ?? messages.unavailable;
 }
 
-// D-06: the status always names the location condition. Until the person explores, a camera that is not on their fix
-// shows a fallback view, and the status says so.
+// D-06: the status always names the location condition. Until the person explores, a map with no fix inside it shows
+// the default view, and the status says so.
 export function positionStatusText(snapshot, hasExplored) {
   const {state, fix} = snapshot;
-  const isOnFix = fix && state !== 'outside';
-  const isDefaultView = !hasExplored && !isOnFix && !SHOWN_POSITION_STATES.includes(state);
+  const hasFixInsideMap = fix && state !== 'outside';
+  const isDefaultView = !hasExplored && !hasFixInsideMap && !LOCATED_POSITION_STATES.includes(state);
   return positionMessage(snapshot) + (isDefaultView ? ' · default view: Podgorica' : '');
 }
 

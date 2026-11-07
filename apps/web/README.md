@@ -84,7 +84,7 @@ existing features.
 5. start() begins asynchronous initialization.
 6. It rejects file:/content: opening and checks that vendor libraries loaded.
 7. It fetches data/manifest.json, data/places.geojson, and data/place-visibility.json.
-8. It validates each place's level and builds byId and the marker keys from the stable place ID.
+8. It validates each place's level and builds placesById and the marker keys from the stable place ID.
 9. It registers the service worker where supported in a secure context.
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
@@ -123,10 +123,10 @@ Suppose the user types "museum".
 1. The search input emits an input event.
 2. Its handler cancels the previous timer.
 3. It schedules filterPlaces() after 120 ms without another input event.
-4. filterPlaces() calls matches() on all places using the current category.
-5. matches() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
+4. filterPlaces() calls matchesSearch() on all places using the current category.
+5. matchesSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
-7. It assigns the resulting array to filtered.
+7. It assigns the resulting array to matchingPlaces.
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
 10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result
@@ -207,15 +207,15 @@ one below its level's zoom is reached through the result list.
 
 showPlace():
 
-1. Looks up the feature in byId.
-2. Stores selected and the originating control, when supplied.
-3. Fills card text and safe links.
+1. Looks up the feature in placesById.
+2. Stores selectedPlace and the originating control, when supplied.
+3. Fills card text and safe links through renderPlaceCard() in place-card.js.
 4. Shows the existing card element.
 5. Selects the containing building footprint when one is known.
 6. Moves the camera only if the place is outside the focus zone, or zooms in if the map is below street level.
 7. Focuses the close button, which on phones is available only to screen readers.
 
-closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape
+closeCard() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape
 also closes the mobile results panel.
 
 This is all local interaction with already loaded data. No detail endpoint is called.
@@ -234,7 +234,7 @@ Outside the small image footprint the vector basemap remains visible.
 
 Clicking Satellite:
 
-- Toggles satelliteVisible.
+- Toggles isSatelliteVisible.
 - Changes layer visibility rather than replacing the map/style.
 - Updates the button text and aria-pressed state.
 - Shows the coverage/source note.

@@ -26,7 +26,7 @@ const footprintMinZoom = 13;
 const emptyCollection = () => ({type: 'FeatureCollection', features: []});
 
 export class ObjectSelection {
-  // onBuilding(footprintIndex or null) runs whenever the highlighted building changes.
+  // onBuilding(footprintIndex or null) runs on every highlight change, including repeated clears.
   constructor(map, onBuilding = () => {}) {
     this.map = map;
     this.onBuilding = onBuilding;

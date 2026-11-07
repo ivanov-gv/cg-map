@@ -10,9 +10,10 @@ export function createElement(tagName, text, className) {
   return element;
 }
 
-export const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// A live query, so a setting changed during the session applies to the next animation.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 // Camera animations are instant for people who ask for reduced motion.
 export function animationMilliseconds(milliseconds) {
-  return prefersReducedMotion ? 0 : milliseconds;
+  return reducedMotion.matches ? 0 : milliseconds;
 }

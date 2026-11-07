@@ -6,6 +6,16 @@ import {downloadLabel} from './offline.js';
 
 const insecureStorageNote = 'Use HTTPS or localhost with a browser supporting local file storage to enable downloads.';
 
+// Connection state only; it carries no location meaning. Online with no saved map needs no badge. It works before the
+// archive exists, so app.js can keep it current even when startup fails.
+export function renderConnectionBadge(isMapSaved) {
+  const offlineText = isMapSaved ? 'Offline · saved map' : 'Offline · download needed';
+  const onlineText = isMapSaved ? 'Saved map in use' : '';
+  const text = navigator.onLine ? onlineText : offlineText;
+  elementById('connection').textContent = text;
+  elementById('connection').hidden = !text;
+}
+
 // context: {archive, manifest, endpoints, hasServiceWorker, map(), notify(message), clearNotice()}
 export class OfflinePanel {
   #context;
@@ -26,8 +36,6 @@ export class OfflinePanel {
     elementById('download').addEventListener('click', () => this.#download());
     elementById('cancel-download').addEventListener('click', () => this.#downloadController?.abort());
     elementById('remove-download').addEventListener('click', () => this.#remove());
-    addEventListener('online', () => this.#renderConnection());
-    addEventListener('offline', () => this.#renderConnection());
   }
 
   render() {
@@ -41,22 +49,12 @@ export class OfflinePanel {
     elementById('download').disabled = isSaved || !canStore || !hasServiceWorker;
     elementById('remove-download').hidden = !isSaved;
     if (!canStore) this.#showStorageNote(insecureStorageNote);
-    this.#renderConnection();
+    renderConnectionBadge(isSaved);
   }
 
   #showStorageNote(message) {
     elementById('storage-note').textContent = message;
     elementById('storage-note').hidden = !message;
-  }
-
-  // Connection state only; it carries no location meaning. Online with no saved map needs no badge.
-  #renderConnection() {
-    const isSaved = Boolean(this.#context.archive.local);
-    const offlineText = isSaved ? 'Offline · saved map' : 'Offline · download needed';
-    const onlineText = isSaved ? 'Saved map in use' : '';
-    const text = navigator.onLine ? onlineText : offlineText;
-    elementById('connection').textContent = text;
-    elementById('connection').hidden = !text;
   }
 
   // In server mode a download or removal during the session switches the basemap between the API and the verified

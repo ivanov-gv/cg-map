@@ -17,7 +17,7 @@ const latinForCyrillic = {
   н: 'n', њ: 'nj', о: 'o', п: 'p', р: 'r', с: 's', т: 't', ћ: 'c', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'c', џ: 'dz',
   ш: 's', й: 'i', ы: 'y', ь: '', ъ: '', я: 'ya', ю: 'yu', щ: 'sh', э: 'e'
 };
-const combiningDiacritics = /[̀-ͯ]/g;
+const combiningDiacritics = /[\u0300-\u036f]/g;
 const cyrillicLetters = /[а-яјљњћџ]/g;
 
 // Lower-case Latin text without diacritics, so "Njegoševa", "Његошева" and "njegoseva" all compare equal.

@@ -116,15 +116,17 @@ test('building selection provides feature details and point actions', async ({pa
   // Pick from final-zoom geometry; overzoomed parent tiles shift building edges when they are replaced.
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.areTilesLoaded())).toBe(true);
   const picked=await page.evaluate(()=>{
-    const m=window.kompasDebug.map, b=m.getCanvas().getBoundingClientRect();
+    const map=window.kompasDebug.map;
+    const canvas=map.getCanvas().getBoundingClientRect();
     // Find a visible building interior away from controls and place markers.
-    const placeLayers=m.getStyle().layers.map(l=>l.id).filter(layer=>/^place-(icons|names)-/.test(layer));
-    for(let y=150;y<b.height-65;y+=8){
-      for(let x=b.width*.5;x<b.width-65;x+=8){
-        const hits=m.queryRenderedFeatures([x,y],{layers:['buildings',...placeLayers]});
-        const building=hits.find(f=>f.layer.id==='buildings');
-        const isOnlyBuilding=building&&hits.every(f=>f.layer.id==='buildings');
-        if(isOnlyBuilding)return {x:b.left+x,y:b.top+y,id:building.id};
+    const placeLayers=map.getStyle().layers.map(layer=>layer.id).filter(id=>/^place-(icons|names)-/.test(id));
+    for(let y=150;y<canvas.height-65;y+=8){
+      for(let x=canvas.width*.5;x<canvas.width-65;x+=8){
+        const hits=map.queryRenderedFeatures([x,y],{layers:['buildings',...placeLayers]});
+        const isBuilding=feature=>feature.layer.id==='buildings';
+        const building=hits.find(isBuilding);
+        const isOnlyBuilding=building&&hits.every(isBuilding);
+        if(isOnlyBuilding)return {x:canvas.left+x,y:canvas.top+y,id:building.id};
       }
     }
     return null;
@@ -157,18 +159,22 @@ test.describe('isolated routing provider checks',()=>{
 test('route modes draw different street routes and a bus itinerary; clearing removes the line', async ({page}) => {
   const calls=[];
   await page.route('https://routing.openstreetmap.de/**', route => {
-    const walking=route.request().url().includes('routed-foot');calls.push(walking?'walk':'car');
+    const walking=route.request().url().includes('routed-foot');
+    calls.push(walking?'walk':'car');
     return route.fulfill({json:{code:'Ok',routes:[{distance:walking?850:1200,duration:walking?650:180,geometry:{type:'LineString',coordinates:[[19.254951,42.446057],[19.26,42.445],[19.26345,42.443523]]},legs:[{steps:[{distance:850,name:'Test street',maneuver:{type:'depart'}}]}]}]}});
   });
   await page.route('**/data/transit-network.json', route => route.fulfill({json:{version:1,retrievedAt:'2026-10-18T19:00:00Z',stops:{a:{name:'Start stop',coordinates:[19.254951,42.446057]},b:{name:'End stop',coordinates:[19.26345,42.443523]}},patterns:[{route:'6',name:'Test bus',headsign:'End stop',stops:['a','b'],offsets:[0,600]}]}}));
   await readyForRouting(page);
-  await tapMapCenter(page,[19.254951,42.446057]);await page.getByRole('button',{name:'From',exact:true}).click();
-  await tapMapCenter(page,[19.26345,42.443523]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[19.254951,42.446057]);
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[19.26345,42.443523]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText('3 min · 1.2 km');
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(1);
   await page.getByRole('button',{name:'Walk',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText('11 min · 850 m');
-  expect(calls).toContain('walk');expect(calls).toContain('car');
+  expect(calls).toContain('walk');
+  expect(calls).toContain('car');
   await page.getByRole('button',{name:'Public transport',exact:true}).click();
   await expect(page.locator('#route-status')).toHaveText(/10 min \+ waiting/);
   await page.locator('#route-itinerary summary').click();
@@ -180,10 +186,13 @@ test('route modes draw different street routes and a bus itinerary; clearing rem
 
 test('route errors and identical endpoints stay explicit without leaving old lines', async ({page}) => {
   await readyForRouting(page);
-  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'From',exact:true}).click();
-  await tapMapCenter(page,[20.8,43.7]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[20.8,43.7]);
+  await page.getByRole('button',{name:'From',exact:true}).click();
+  await tapMapCenter(page,[20.8,43.7]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toContainText('same point');
-  await tapMapCenter(page,[20.81,43.71]);await page.getByRole('button',{name:'To',exact:true}).click();
+  await tapMapCenter(page,[20.81,43.71]);
+  await page.getByRole('button',{name:'To',exact:true}).click();
   await expect(page.locator('#route-status')).toContainText('unavailable');
   expect(await page.evaluate(()=>window.kompasDebug.map.getSource('planned-route')._data.features.length)).toBe(0);
   await expect(page.locator('#route-retry')).toBeVisible();
@@ -196,18 +205,19 @@ test('single tap opens point actions after a delay; double tap zooms without ope
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
   // Programmatic camera movement also cancels pending point actions.
   await page.waitForTimeout(550);
-  const p=await mapCenterOnScreen(page);
-  if(isMobile)await page.touchscreen.tap(p.x,p.y);else await page.mouse.click(p.x,p.y);
+  const center=await mapCenterOnScreen(page);
+  if(isMobile)await page.touchscreen.tap(center.x,center.y);
+  else await page.mouse.click(center.x,center.y);
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('#place-card')).toBeVisible();
   await expect(page.locator('#point-from')).toBeVisible();
   await closeCard(page);
   const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
   if(isMobile){
-    await page.touchscreen.tap(p.x,p.y);
-    await page.touchscreen.tap(p.x,p.y);
+    await page.touchscreen.tap(center.x,center.y);
+    await page.touchscreen.tap(center.x,center.y);
   }else{
-    await page.mouse.dblclick(p.x,p.y);
+    await page.mouse.dblclick(center.x,center.y);
   }
   await expect.poll(()=>page.evaluate(()=>window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom+.2);
   await page.waitForTimeout(650);
@@ -219,16 +229,16 @@ test('one-finger tap then drag zooms and never opens point actions', async ({pag
   await ready(page);
   await page.evaluate(()=>window.kompasDebug.map.jumpTo({center:[20.8,43.7],zoom:14}));
   await page.waitForTimeout(550);
-  const p=await mapCenterOnScreen(page);
+  const center=await mapCenterOnScreen(page);
   const zoom=await page.evaluate(()=>window.kompasDebug.map.getZoom());
   const cdp=await context.newCDPSession(page);
-  const touch=(type,y=p.y)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:p.x,y,id:7}]});
+  const touch=(type,y=center.y)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:center.x,y,id:7}]});
   await touch('touchStart');
   await touch('touchEnd');
   await page.waitForTimeout(60);
   await touch('touchStart');
   for(const dy of [15,35,60,90]){
-    await touch('touchMove',p.y+dy);
+    await touch('touchMove',center.y+dy);
     await page.waitForTimeout(25);
   }
   await touch('touchEnd');
@@ -280,7 +290,7 @@ test('same building keeps its address across zooms and with number labels hidden
 test('a place inside a building highlights its footprint across zoom and satellite changes',async({page})=>{
   const labels=JSON.parse(fs.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url)));
   const isInCentralPodgorica=([longitude,latitude])=>longitude>19.251&&longitude<19.261&&latitude>42.438&&latitude<42.445;
-  const label=labels.features.find(f=>isInCentralPodgorica(f.geometry.coordinates));
+  const label=labels.features.find(feature=>isInCentralPodgorica(feature.geometry.coordinates));
   const coordinates=label.geometry.coordinates,footprintId=label.properties.footprintIndex;
   await page.route('**/data/places.geojson',route=>route.fulfill({json:{type:'FeatureCollection',features:[{
     type:'Feature',geometry:{type:'Point',coordinates},properties:{id:'node/selection-fixture',name:'Building cafe',category:'food',kind:'cafe'}
