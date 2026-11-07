@@ -90,7 +90,10 @@ export function safeWebsite(value) {
 // Sorts a copy by distance; source feature order stays intact.
 export function selectNearestPlaces(features, center, limit = 40) {
   return features
-    .map(feature => ({feature, distanceKilometres: distanceKilometres(center, feature.geometry.coordinates)}))
+    .map(feature => ({
+      feature,
+      distanceKilometres: distanceKilometres(center, feature.geometry.coordinates)
+    }))
     .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
     .slice(0, limit);
 }
@@ -115,12 +118,12 @@ export const POSITION_FRESH_MILLISECONDS = 30000;
 export const POSITION_TIMEOUT_MILLISECONDS = 15000;
 export const POSITION_APPROXIMATE_METRES = 50;
 // Bounds and coordinates are WGS84 longitude/latitude, including the edges.
-export function inBounds([longitude, latitude], [[west, south], [east, north]]) {
+export function isInBounds([longitude, latitude], [[west, south], [east, north]]) {
   return longitude >= west && longitude <= east && latitude >= south && latitude <= north;
 }
 // An outside fix wins over age and accuracy; it must never recenter the local map.
 export function classifyFix(fix, nowMilliseconds, bounds) {
-  if (!inBounds(fix.coordinates, bounds)) return 'outside';
+  if (!isInBounds(fix.coordinates, bounds)) return 'outside';
   if (nowMilliseconds - fix.timestamp > POSITION_FRESH_MILLISECONDS) return 'stale';
   return fix.accuracy > POSITION_APPROXIMATE_METRES ? 'approximate' : 'live';
 }

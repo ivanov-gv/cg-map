@@ -1,7 +1,9 @@
+import {isReducedMotionPreferred} from './dom.js';
 import {RoadRouter} from './routing.js';
 import {planTransit} from './transit-routing.js';
 import {distanceKilometres} from './core.js';
 const minimumWalkingLegMetres = 10;
+const routeCameraDurationMilliseconds = 450;
 const coincidentEndpointKilometres = 0.005;
 
 const elementById = (elementId) => document.getElementById(elementId);
@@ -252,7 +254,7 @@ export class RoutePlanner {
     this.map.fitBounds(bounds, {
       padding: {top: 115, right: 65, bottom: 90, left: 65},
       maxZoom: 17,
-      duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 450
+      duration: isReducedMotionPreferred() ? 0 : routeCameraDurationMilliseconds
     });
   }
 }

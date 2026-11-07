@@ -1,6 +1,6 @@
 # Task: Apps readability review
 
-Status: implementation and local verification complete; exact-package verification pending; both PRs held draft
+Status: local verification complete; four-worker diagnostics documented; exact-package verification pending; drafts held
 
 ## Goal and acceptance criteria
 
@@ -56,15 +56,35 @@ from introduced changes.
 
 The detailed review is reported to the owner; no external review comment or branch change was made to #22.
 
+## Follow-up review
+
+- Confirmed current #22 remains at `6036592`; a fresh read-only review confirms all five findings, with no additional
+  substantive regression found. Its offline/update defects remain baseline defects; its focus integration is correct.
+- Renamed `inBounds` to `isInBounds` and expanded the CI shared-source inventory to one entry per line.
+- Named the route-camera duration and shared the reduced-motion query without changing when callers read it. The new
+  framing test covers disabled/enabled/disabled preferences and preserves endpoint bounds and camera options.
+- The reported building-selection failure did not reproduce: 12/12 four-worker repetitions passed, as did both
+  deployment cases in the full four-worker run. This is not evidence that the reported flake is fixed.
+- The full four-worker run before further fixture repairs gave 115 passed, 12 existing skips and 5 failures: a location
+  fix aged to 52 seconds, a worker-notification race, two insufficient-frame-count failures (8/10 against >10), and the
+  offline journey's unchanged 90-second timeout. No assertion or timeout was loosened.
+- Refreshed the mock location before live-fix recentering, using changed accuracy to confirm delivery and adding an
+  assertion that a fresh fix does not move the explored camera automatically. All 12 four-worker repetitions pass.
+- Strengthened failed-update synchronization: observe `updatefound` and await that worker's `redundant` state; a
+  temporarily null `installing` property can precede notification. Unexpected activation fails explicitly. All 12
+  four-worker update repetitions pass. The fresh compliance review and bounded fixture recheck pass.
+- Follow-up web verification passes all 74 unit tests, lint, build and offline inventory. The final full two-worker
+  browser run passes 120 cases with 12 existing skips and no failures. This environment has a two-CPU quota; the full
+  four-worker suite was not repeated after the fixture repairs. Remaining frame-count/timeout sensitivity is documented.
+
 ## Verification
 
-Current revision:
+Current web revision; editor/core-demo browser evidence is from unchanged `d0d8be1`:
 
-- `make check` passes across the repository, including web 73 tests, editor 89 and core-demo 2. Documentation,
+- `make check` passes across the repository, including web 74 tests, editor 89 and core-demo 2. Documentation,
   import/dependency and agent-rule checks pass; all 70 CI-planner cases pass.
-- The last factual-boolean and geometry-unit renames pass their 21 affected unit tests and web lint.
-- Independent compliance review passes after fixing its three minor findings: remaining names, dense executable test
-  strings and stale ownership documentation. Its bounded recheck found no regression.
+- Follow-up naming and motion-policy changes pass web verification, including the new route-framing transition test.
+- Independent compliance review and its fixture recheck pass. No findings remain in the reviewed follow-up.
 - Manual UI check through `make -C apps/web dev DEV_FLAGS=-live-transport=false PORT=9176`: inspected desktop 1280px,
   phone 412px and the 720/721px breakpoint. Search results, selected cards and map controls render correctly; category
   controls are 40px high, with no horizontal overflow or script errors. Screenshots and observations are retained as

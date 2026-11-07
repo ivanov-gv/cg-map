@@ -4,14 +4,17 @@ import {ready, renderedPlaceIcons, stubRouting} from './helpers.mjs';
 test.beforeEach(({page}) => stubRouting(page));
 
 test.describe('Discover first view', () => {
+  const locationFix = {latitude: 42.4411, longitude: 19.2627, accuracy: 18};
   test.use({
     permissions: ['geolocation'],
-    geolocation: {latitude: 42.4411, longitude: 19.2627, accuracy: 18}
+    geolocation: locationFix
   });
   test('granted location shows marker, accuracy and status and centers once without a click', async ({
-    page
+    page,
+    context
   }) => {
     await ready(page);
+    await context.setGeolocation(locationFix);
     await expect(page.locator('#position-status')).toHaveText(/You are here · ±18 m/);
     await expect
       .poll(() =>
@@ -32,6 +35,15 @@ test.describe('Discover first view', () => {
       await page.evaluate(() => JSON.stringify({...localStorage}) + JSON.stringify({...sessionStorage}))
     ).not.toContain('42.441');
     await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.25, 42.43], zoom: 16}));
+    // Rendering under parallel load can outlast the fix's freshness window. A changed accuracy
+    // proves the new sensor reading arrived before exercising the live-fix recenter action.
+    await context.setGeolocation({...locationFix, accuracy: 17});
+    await expect(page.locator('#position-status')).toHaveText(/You are here · ±17 m/);
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.kompasDebug.map.getCenter().distanceTo({lng: 19.25, lat: 42.43}))
+      )
+      .toBeLessThan(5);
     await page.locator('#position-action').click();
     await expect(page.locator('#place-card')).toBeHidden();
     await expect

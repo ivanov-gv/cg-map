@@ -43,13 +43,16 @@ function plannerEnvironment(testContext, {router, fetchImpl} = {}) {
   installGlobal('navigator', {onLine: true});
   installGlobal('addEventListener', () => {});
   const publishedRoutes = [];
+  const cameraMoves = [];
   const map = {
     addSource() {},
     addLayer() {},
+    resize() {},
+    fitBounds: (bounds, options) => cameraMoves.push({bounds, options}),
     getSource: () => ({setData: (data) => publishedRoutes.push(data)})
   };
   const planner = new RoutePlanner(map, {router, fetchImpl});
-  return {planner, buttons, elementById, publishedRoutes};
+  return {planner, buttons, elementById, publishedRoutes, cameraMoves, installGlobal};
 }
 
 const from = {coordinates: [19.2, 42.44]};
@@ -124,4 +127,39 @@ test('a cancelled walking refinement propagates cancellation instead of using a 
   await assert.rejects(planner.refineWalkingLegs(result, controller.signal, planner.generation), {
     name: 'AbortError'
   });
+});
+
+// Preserve the route planner's existing live preference, independent of the startup camera policy.
+test('route framing reads reduced motion for each camera move and includes both endpoints', (testContext) => {
+  const {planner, cameraMoves, installGlobal} = plannerEnvironment(testContext);
+  let isReducedMotionEnabled = false;
+  installGlobal('matchMedia', (query) => {
+    assert.equal(query, '(prefers-reduced-motion: reduce)');
+    return {matches: isReducedMotionEnabled};
+  });
+  planner.endpoints = {from, to};
+  const result = {
+    legs: [
+      {
+        coordinates: [
+          [19.21, 42.44],
+          [19.23, 42.44]
+        ]
+      }
+    ]
+  };
+  planner.frameRoute(result);
+  isReducedMotionEnabled = true;
+  planner.frameRoute(result);
+  isReducedMotionEnabled = false;
+  planner.frameRoute(result);
+  assert.deepEqual(
+    cameraMoves.map((move) => move.options.duration),
+    [450, 0, 450]
+  );
+  for (const move of cameraMoves) {
+    assert.deepEqual(move.bounds, [from.coordinates, to.coordinates]);
+    assert.deepEqual(move.options.padding, {top: 115, right: 65, bottom: 90, left: 65});
+    assert.equal(move.options.maxZoom, 17);
+  }
 });

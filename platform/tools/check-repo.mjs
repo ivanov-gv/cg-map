@@ -85,7 +85,7 @@ const imports = {
   'position.js': ['./core.js'],
   'routing.js': [],
   'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
+  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;

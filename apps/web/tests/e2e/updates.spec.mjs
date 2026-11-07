@@ -31,10 +31,28 @@ test(
       await expect(page.locator('#version')).toHaveText('1');
       expect(await page.evaluate(() => sessionStorage.loads)).toBe('2');
       expect(await page.evaluate(() => fetch('version.txt').then(response => response.text()))).toBe('1');
-      // register() and the explicit update() can overlap. Drain the failed update before making
-      // its assets available, or an in-flight installer can succeed without the next reload.
-      await page.evaluate(() => window.registration.update());
-      await expect.poll(() => page.evaluate(() => window.registration.installing === null)).toBe(true);
+      // update() can resolve before updatefound reaches the page. A temporarily null installing
+      // property is insufficient: observe the probe's worker and wait for its failed installation.
+      await page.evaluate(async () => {
+        const registration = window.registration;
+        const waitForFailedInstallation = worker =>
+          new Promise((resolve, reject) => {
+            const onStateChange = () => {
+              if (!['redundant', 'activated'].includes(worker.state)) return;
+              worker.removeEventListener('statechange', onStateChange);
+              if (worker.state === 'redundant') resolve();
+              else reject(new Error('Incomplete release activated'));
+            };
+            worker.addEventListener('statechange', onStateChange);
+            onStateChange();
+          });
+        if (registration.installing) await waitForFailedInstallation(registration.installing);
+        const nextWorker = new Promise(resolve => {
+          registration.addEventListener('updatefound', () => resolve(registration.installing), {once: true});
+        });
+        await registration.update();
+        await waitForFailedInstallation(await nextWorker);
+      });
       host.release(2);
       await page.waitForTimeout(1100);
       await expect(page.locator('#version')).toHaveText('1');

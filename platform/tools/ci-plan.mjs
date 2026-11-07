@@ -68,8 +68,16 @@ export const BROWSER_AREAS = {
 
 // Every browser test boots these, so a change to one can break any area.
 export const SHARED_WEB_SOURCES = [
-  'app.js', 'core.js', 'dom.js', 'place-details.js', 'public-map-layers.js', 'map-selection.js',
-  'offline-controls.js', 'status-messages.js', 'place-selection.js', 'location-controls.js'
+  'app.js',
+  'core.js',
+  'dom.js',
+  'place-details.js',
+  'public-map-layers.js',
+  'map-selection.js',
+  'offline-controls.js',
+  'status-messages.js',
+  'place-selection.js',
+  'location-controls.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);

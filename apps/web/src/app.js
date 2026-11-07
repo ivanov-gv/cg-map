@@ -1,4 +1,4 @@
-import {createElement, elementById} from './dom.js';
+import {createElement, elementById, isReducedMotionPreferred} from './dom.js';
 import {renderPlaceResults} from './place-details.js';
 import {PlaceSelection} from './place-selection.js';
 import {installCityNames, installPublicPlaceLayers} from './public-map-layers.js';
@@ -84,7 +84,7 @@ const startupState = {
 
 const routeEndpoints = {from: null, to: null};
 
-const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const prefersReducedMotion = isReducedMotionPreferred();
 
 const placeSelection = new PlaceSelection({
   map: () => mapState.map,

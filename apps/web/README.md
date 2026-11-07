@@ -126,7 +126,9 @@ Nearest results from `selectNearestPlaces()` carry `feature` and `distanceKilome
 Scale helpers consistently use metres; position limits spell out milliseconds and metres.
 
 There is no automatic reconciliation: handlers change state, update the affected DOM/map views, and restore usable
-focus. Shared data formats, visible text, storage keys and the existing reduced-motion policy are preserved.
+focus. Shared data formats, visible text and storage keys are preserved. The reduced-motion query is shared through
+`isReducedMotionPreferred()` in dom.js: startup captures its value for selection/location moves, while route framing
+reads it for each move, preserving both existing policies.
 
 ## 5. Search: follow one event end to end
 
