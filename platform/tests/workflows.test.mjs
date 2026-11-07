@@ -342,7 +342,11 @@ test('browser jobs and local runs pin one image, whose version matches the repos
     'ci-apps-core-demo.yml': ['verify', 'verify-test-run']
   };
   for (const [file, names] of Object.entries(browserJobs)) {
-    for (const name of names) pins.add(load(file).jobs[name].container.image);
+    for (const name of names) {
+      const {container} = load(file).jobs[name];
+      pins.add(container.image);
+      assert.equal(container.credentials?.password, '${{ github.token }}', `${file} ${name} could not pull a private image`);
+    }
   }
   assert.equal(pins.size, 1, `every pin must match: ${[...pins].join(', ')}`);
   assert.match([...pins][0], expected);

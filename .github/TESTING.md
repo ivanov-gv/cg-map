@@ -38,9 +38,10 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 ## Locally with act
 
-Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
-[the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs run
-the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
+Needs Docker and `gh extension install nektos/gh-act`. The image is private, so a new machine needs
+`gh auth token | docker login ghcr.io --username <you> --password-stdin` once, with `read:packages`. Every target runs
+on [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs
+run the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
 rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 
 ```sh

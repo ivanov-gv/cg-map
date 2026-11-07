@@ -83,6 +83,10 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Private, and this repository has access: without credentials a job's container is pulled anonymously.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
       # Set only on a local run with a GPU: see the Makefile.
       options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
@@ -122,6 +126,10 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Private, and this repository has access: without credentials a job's container is pulled anonymously.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
       # Set only on a local run with a GPU: see the Makefile.
       options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7

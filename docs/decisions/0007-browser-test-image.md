@@ -14,11 +14,12 @@ and nothing merges until local tests pass.
 
 - **One image does both.** platform/browser-image holds Chromium, its system packages and the tools jobs use, published
   as `ghcr.io/ivanov-gv/cg-map/browser-ci`. Browser jobs on GitHub run inside it. `make test-*` runs every local job on
-  it, so another machine needs only Docker, `gh act` and a token, and no build.
+  it, so another machine needs only Docker, `gh act` and a login, and no build.
 - **It follows the same path as core.** A merge that changes it publishes the image tagged by commit. A tag and a
   release such as `browser-image/v1.56.1-r2` start CD, which adds that version without rebuilding. A release version
   never changes.
 - **The version says what is inside:** the Playwright version, then a revision for any other change to the image.
+- **It stays private.** This repository's Actions have access, so jobs pull it with their own token, and people log in.
 - **Pipelines pin a release.** Moving to a new one is a PR, so a bad image cannot reach a pipeline by being merged. A
   test requires every pin to match and to name the repository's Playwright version.
 

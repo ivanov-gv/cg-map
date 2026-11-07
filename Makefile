@@ -79,7 +79,7 @@ test-cd-map-core: act-image
 
 # A release version never changes, so an image already here is the right one. A dry run starts no job, so it needs none.
 act-image:
-	$(if $(findstring -n,$(ACT)),,docker image inspect $(ACT_IMAGE) > /dev/null 2>&1 || docker pull $(ACT_IMAGE))
+	$(if $(findstring -n,$(ACT)),,docker image inspect $(ACT_IMAGE) > /dev/null 2>&1 || docker pull $(ACT_IMAGE) || (echo 'Log in first: gh auth token | docker login ghcr.io --username <you> --password-stdin' && exit 1))
 
 # Needs an image from make test-ci-publish, whose commit it promotes: make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA>
 test-cd-browser-image: act-image
