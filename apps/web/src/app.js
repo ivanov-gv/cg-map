@@ -26,279 +26,593 @@ import {
   placeLayers,
   listingsAtHits
 } from '@ivanov-gv/map-core';
-import {ArchiveSource,downloadLabel} from './offline.js';
-import {installTransport,TransportFeed} from './transport.js';
-import {describePoint,buildingAddressIndex,buildingMapFeatures,entranceFeatures,installEntranceLayers,selectBuildingEntrances,endpointFeatures,installRoutePoints} from './point-selection.js';
+import {ArchiveSource, downloadLabel} from './offline.js';
+import {installTransport, TransportFeed} from './transport.js';
+import {
+  describePoint,
+  buildingAddressIndex,
+  buildingMapFeatures,
+  entranceFeatures,
+  installEntranceLayers,
+  selectBuildingEntrances,
+  endpointFeatures,
+  installRoutePoints
+} from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
 import {ObjectSelection} from './object-selection.js';
 import {registerAppUpdates} from './app-updates.js';
-import {resolveDataMode,dataEndpoints,basemapURL} from './data-mode.js';
+import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
-import {PositionTracker,positionFeatures,installPositionLayers} from './position.js';
-import {MapInterface,isInFocusZone} from './interface.js';
-const $=id=>document.getElementById(id);
-let map,all=[],filtered=[],byId=new Map(),category='all',selected=null,archive,manifest,downloadAbort,returnFocus;
-let satelliteVisible=false,transport,selectedPoint,routePlanner,objectSelection,dataMode,api;
-const endpoints={from:null,to:null};
+import {PositionTracker, positionFeatures, installPositionLayers} from './position.js';
+import {MapInterface, isInFocusZone} from './interface.js';
+const elementById = id => document.getElementById(id);
+let map;
+let allPlaces = [];
+let filteredPlaces = [];
+let placesById = new Map();
+let category = 'all';
+let selectedPlace = null;
+let archive;
+let manifest;
+let downloadAbort;
+let returnFocus;
+let satelliteVisible = false;
+let transport;
+let selectedPoint;
+let routePlanner;
+let objectSelection;
+let dataMode;
+let dataSources;
+const endpoints = {from: null, to: null};
 let loaded = false;
 let errorTimer;
 let searchTimer;
 let serviceWorkerRegistration = null;
 let buildingAddresses = new Map();
-let placesError=null,position={state:'idle',fix:null,age:null},explored=false,ownMove=false,centeredOnFix=false;
-let ui,preview=null,locationRequested=false,pendingReveal=null,choosing=false;
-let visibility,keysById=new Map(),placeHitLayers=['search-place'],requestedKey=null;
-const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let placesError = null;
+let position = {state: 'idle', fix: null, age: null};
+let explored = false;
+let ownMove = false;
+let centeredOnFix = false;
+let mapInterface;
+let previewPlace = null;
+let locationRequested = false;
+let pendingReveal = null;
+let choosing = false;
+let visibilityConfig;
+let markerKeysByPlaceId = new Map();
+let placeHitLayers = ['search-place'];
+let requestedMarkerKey = null;
+const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // config.json comes from the host: the Go server answers {"api":"server"}, static hosts serve the
 // artifact's {"api":"mock"}. A missing file, an offline start or a server error falls back to the
 // bundled data (a server error visibly). Other HTTP errors and invalid content stop startup.
-async function loadDataMode(){
- let response=null,config=null;
- try{response=await fetch('config.json',{cache:'no-store'});}catch(e){console.warn('config.json unreachable (offline start); using bundled data',e);}
- if(response?.ok){try{config=await response.json();}catch(e){throw new Error('Invalid config.json: '+e.message,{cause:e});}}
- else if(response&&response.status>=500){notify(`Server settings unavailable (HTTP ${response.status}). Showing preview data; live buses use the public relay.`);}
- else if(response&&response.status!==404)throw new Error('Could not load config.json: HTTP '+response.status);
- return resolveDataMode(location.search,config);
+async function loadDataMode() {
+  let response = null;
+  let config = null;
+  try {
+    response = await fetch('config.json', {cache: 'no-store'});
+  } catch (error) {
+    console.warn('config.json unreachable (offline start); using bundled data', error);
+  }
+  if (response?.ok) {
+    try {
+      config = await response.json();
+    } catch (error) {
+      throw new Error('Invalid config.json: ' + error.message, {cause: error});
+    }
+  } else if (response && response.status >= 500) {
+    notify(
+      `Server settings unavailable (HTTP ${response.status}). Showing preview data; live buses use the public relay.`
+    );
+  } else if (response && response.status !== 404)
+    throw new Error('Could not load config.json: HTTP ' + response.status);
+  return resolveDataMode(location.search, config);
 }
-function renderTransportStatus({state,count,fetchedAt}){
- const checked=fetchedAt?new Date(fetchedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'';
- const labels={off:'Transport off',loading:'Loading live buses…',live:count?`${count} bus position${count===1?'':'s'} · checked ${checked}`:`No buses reported · checked ${checked}`,stale:`Updates delayed · last checked ${checked}`,unavailable:'Live buses temporarily unavailable · retrying',offline:'Live buses need an internet connection',paused:'Bus updates paused while map is hidden'};
- $('transport-status').textContent=labels[state]??labels.unavailable;
- $('transport-status').dataset.state=state;
+function renderTransportStatus({state, count, fetchedAt}) {
+  const checked = fetchedAt
+    ? new Date(fetchedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})
+    : '';
+  const labels = {
+    off: 'Transport off',
+    loading: 'Loading live buses…',
+    live: count
+      ? `${count} bus position${count === 1 ? '' : 's'} · checked ${checked}`
+      : `No buses reported · checked ${checked}`,
+    stale: `Updates delayed · last checked ${checked}`,
+    unavailable: 'Live buses temporarily unavailable · retrying',
+    offline: 'Live buses need an internet connection',
+    paused: 'Bus updates paused while map is hidden'
+  };
+  elementById('transport-status').textContent = labels[state] ?? labels.unavailable;
+  elementById('transport-status').dataset.state = state;
 }
-function notify(message){$('error-text').textContent=message;$('error').hidden=false;}
-function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
-function syncPanels(){
- $('route-endpoints').hidden=(!endpoints.from&&!endpoints.to)||ui?.view!=='closed'||!$('place-card').hidden;
+function notify(message) {
+  elementById('error-text').textContent = message;
+  elementById('error').hidden = false;
 }
-function focusCoordinates(coordinates,zoom=15,duration=450){
- if(!map)return;
- explored=true;
- map.easeTo({center:coordinates,zoom:Math.max(map.getZoom(),zoom),offset:ui.mapOffset(),duration:reduced?0:duration});
+function createElement(tag, text, className) {
+  const element = document.createElement(tag);
+  if (text !== undefined) element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+function syncPanels() {
+  elementById('route-endpoints').hidden =
+    (!endpoints.from && !endpoints.to) ||
+    mapInterface?.view !== 'closed' ||
+    !elementById('place-card').hidden;
+}
+function focusCoordinates(coordinates, zoom = 15, duration = 450) {
+  if (!map) return;
+  explored = true;
+  map.easeTo({
+    center: coordinates,
+    zoom: Math.max(map.getZoom(), zoom),
+    offset: mapInterface.mapOffset(),
+    duration: prefersReducedMotion ? 0 : duration
+  });
 }
 // Keep a chosen place visible with as little camera movement as possible: pan only when it leaves the focus zone.
-function revealCoordinates(coordinates,{zoom=15,duration=450}={}){
- if(!map)return;
- explored=true;
- const needsZoom=map.getZoom()<zoom;
- if(!needsZoom&&isInFocusZone(map.project(coordinates),ui.mapArea()))return;
- map.easeTo({center:coordinates,zoom:Math.max(map.getZoom(),zoom),offset:ui.mapOffset(),duration:reduced?0:duration});
+function revealCoordinates(coordinates, {zoom = 15, duration = 450} = {}) {
+  if (!map) return;
+  explored = true;
+  const needsZoom = map.getZoom() < zoom;
+  if (!needsZoom && isInFocusZone(map.project(coordinates), mapInterface.mapArea())) return;
+  map.easeTo({
+    center: coordinates,
+    zoom: Math.max(map.getZoom(), zoom),
+    offset: mapInterface.mapOffset(),
+    duration: prefersReducedMotion ? 0 : duration
+  });
 }
 // The camera stays still while the keyboard is up; a pending reveal waits for the layout it leaves behind.
-function flushPendingReveal(){
- const coordinates=pendingReveal?.coordinates??selectedPoint?.coordinates;
- if(!pendingReveal||!coordinates||ui.keyboardOpen())return;
- const options=pendingReveal;pendingReveal=null;
- revealCoordinates(coordinates,options);
+function flushPendingReveal() {
+  const coordinates = pendingReveal?.coordinates ?? selectedPoint?.coordinates;
+  if (!pendingReveal || !coordinates || mapInterface.keyboardOpen()) return;
+  const options = pendingReveal;
+  pendingReveal = null;
+  revealCoordinates(coordinates, options);
 }
-const hasExplicitFilter=()=>!!$('search').value.trim()||category!=='all';
+const hasExplicitFilter = () => !!elementById('search').value.trim() || category !== 'all';
 // Admission is fixed by each band's zoom range. Only the selected listing, or otherwise the leading explicit result,
 // may also appear below its threshold.
-function updatePlaceLayers(){
- if(!loaded||placesError)return;
- objectSelection.setPreview(selected||!preview?null:keysById.get(preview.properties.id));
- const {features,maxzoom}=requestedPlaceMarker(selected??preview,filtered,keysById,visibility);
- const key=`${features[0]?.properties.activeIds}@${maxzoom}`;
- if(key===requestedKey)return;
- requestedKey=key;
- map.getSource('requested-place').setData(collection(features));
- map.setLayerZoomRange('search-place',0,maxzoom);
+function updatePlaceLayers() {
+  if (!loaded || placesError) return;
+  objectSelection.setPreview(
+    selectedPlace || !previewPlace ? null : markerKeysByPlaceId.get(previewPlace.properties.id)
+  );
+  const {features, maxzoom} = requestedPlaceMarker(
+    selectedPlace ?? previewPlace,
+    filteredPlaces,
+    markerKeysByPlaceId,
+    visibilityConfig
+  );
+  const key = `${features[0]?.properties.activeIds}@${maxzoom}`;
+  if (key === requestedMarkerKey) return;
+  requestedMarkerKey = key;
+  map.getSource('requested-place').setData(collection(features));
+  map.setLayerZoomRange('search-place', 0, maxzoom);
 }
-function previewResults(){
- if(!loaded||placesError||ui.view==='closed'||!hasExplicitFilter())return;
- preview=selectNearest(filtered,map.getCenter().toArray(),1)[0]?.f??null;
- updatePlaceLayers();renderResults();
+function previewResults() {
+  if (!loaded || placesError || mapInterface.view === 'closed' || !hasExplicitFilter()) return;
+  previewPlace = selectNearest(filteredPlaces, map.getCenter().toArray(), 1)[0]?.feature ?? null;
+  updatePlaceLayers();
+  renderResults();
 }
-function setChoosing(active){
- choosing=active;$('point-actions').hidden=active;
+function setChoosing(active) {
+  choosing = active;
+  elementById('point-actions').hidden = active;
 }
-function closePlace(restoreFocus=true){
- const hadPoint=!!selectedPoint||choosing;
- selectedPoint=null;selected=null;pendingReveal=null;setChoosing(false);$('place-card').hidden=true;ui?.resetCardState();objectSelection?.clear();updatePlaceLayers();
- markCurrentResult();
- if(restoreFocus&&returnFocus)ui?.restoreFocus(returnFocus.isConnected&&returnFocus.getClientRects().length?returnFocus:$('search'));
- else if(restoreFocus&&hadPoint)map?.getCanvas().focus({preventScroll:true});
- returnFocus=null;syncPanels();
+function closePlace(restoreFocus = true) {
+  const hadPoint = !!selectedPoint || choosing;
+  selectedPoint = null;
+  selectedPlace = null;
+  pendingReveal = null;
+  setChoosing(false);
+  elementById('place-card').hidden = true;
+  mapInterface?.resetCardState();
+  objectSelection?.clear();
+  updatePlaceLayers();
+  markCurrentResult();
+  if (restoreFocus && returnFocus)
+    mapInterface?.restoreFocus(
+      returnFocus.isConnected && returnFocus.getClientRects().length ? returnFocus : elementById('search')
+    );
+  else if (restoreFocus && hadPoint) map?.getCanvas().focus({preventScroll: true});
+  returnFocus = null;
+  syncPanels();
 }
-function markCurrentResult(){
- const currentId=String((selected??preview)?.properties.id);
- for(const row of $('results').querySelectorAll('.result')){
-  if(row.dataset.id===currentId){row.setAttribute('aria-current','true');row.scrollIntoView({block:'nearest'});}
-  else row.removeAttribute('aria-current');
- }
+function markCurrentResult() {
+  const currentId = String((selectedPlace ?? previewPlace)?.properties.id);
+  for (const row of elementById('results').querySelectorAll('.result')) {
+    if (row.dataset.id === currentId) {
+      row.setAttribute('aria-current', 'true');
+      row.scrollIntoView({block: 'nearest'});
+    } else row.removeAttribute('aria-current');
+  }
 }
-function showPlace(id,trigger){const f=byId.get(String(id));if(!f)return;setChoosing(false);selected=f;selectedPoint={name:f.properties.name,coordinates:[...f.geometry.coordinates]};returnFocus=trigger??null;const p=f.properties;$('place-name').textContent=p.name;$('place-category').textContent=categories[p.category]??p.category;
- const details=$('place-details');details.replaceChildren();
- const add=text=>{if(text)details.append(node('p',text,'detail'));};
- add(p['name:en']&&p['name:en']!==p.name?p['name:en']:'');add([p['addr:street'],p['addr:housenumber']].filter(Boolean).join(' '));add(p.kind?.replaceAll('_',' '));add(p.opening_hours?'OSM hours: '+p.opening_hours:'');add(p.phone);add(f.geometry.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', '));
- details.append(node('p','OpenStreetMap listing. Details may be incomplete or out of date.','source-note'));
- function link(text,url){const a=node('a',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';details.append(a);}
- const website=safeWebsite(p.website);if(website)link('Website ↗',website);
- if(/^(node|way)\/\d+$/.test(p.id))link('View source ↗','https://www.openstreetmap.org/'+p.id);
- preview=null;updatePlaceLayers();$('search').blur();
- $('place-card').hidden=false;ui.placeCardOpened();$('place-card').scrollTop=0;syncPanels();markCurrentResult();
- objectSelection.selectPlace(f,keysById.get(p.id));$('close-place').focus({preventScroll:true});
- pendingReveal={zoom:15};flushPendingReveal();
+// Requires a ready map and initialized selection layers; opens a known listing and defers camera
+// framing until the keyboard is closed, preserving the originating control for focus restoration.
+function showPlace(id, trigger) {
+  const feature = placesById.get(String(id));
+  if (!feature) return;
+  setChoosing(false);
+  selectedPlace = feature;
+  selectedPoint = {name: feature.properties.name, coordinates: [...feature.geometry.coordinates]};
+  returnFocus = trigger ?? null;
+  const properties = feature.properties;
+  elementById('place-name').textContent = properties.name;
+  elementById('place-category').textContent = categories[properties.category] ?? properties.category;
+  renderPlaceDetails(feature);
+  previewPlace = null;
+  updatePlaceLayers();
+  elementById('search').blur();
+  elementById('place-card').hidden = false;
+  mapInterface.placeCardOpened();
+  elementById('place-card').scrollTop = 0;
+  syncPanels();
+  markCurrentResult();
+  objectSelection.selectPlace(feature, markerKeysByPlaceId.get(properties.id));
+  elementById('close-place').focus({preventScroll: true});
+  pendingReveal = {zoom: 15};
+  flushPendingReveal();
 }
+// Details and external links use only recorded source fields and safe HTTP URLs.
+function renderPlaceDetails(feature) {
+  const properties = feature.properties;
+  const details = elementById('place-details');
+  details.replaceChildren();
+  const add = text => {
+    if (text) details.append(createElement('p', text, 'detail'));
+  };
+  add(properties['name:en'] && properties['name:en'] !== properties.name ? properties['name:en'] : '');
+  add([properties['addr:street'], properties['addr:housenumber']].filter(Boolean).join(' '));
+  add(properties.kind?.replaceAll('_', ' '));
+  add(properties.opening_hours ? 'OSM hours: ' + properties.opening_hours : '');
+  add(properties.phone);
+  add(
+    feature.geometry.coordinates
+      .slice()
+      .reverse()
+      .map(coordinate => coordinate.toFixed(5))
+      .join(', ')
+  );
+  details.append(
+    createElement('p', 'OpenStreetMap listing. Details may be incomplete or out of date.', 'source-note')
+  );
+  function link(text, url) {
+    const linkElement = createElement('a', text);
+    linkElement.href = url;
+    linkElement.target = '_blank';
+    linkElement.rel = 'noopener noreferrer';
+    details.append(linkElement);
+  }
+  const website = safeWebsite(properties.website);
+  if (website) link('Website ↗', website);
+  if (/^(node|way)\/\d+$/.test(properties.id))
+    link('View source ↗', 'https://www.openstreetmap.org/' + properties.id);
+}
+
 // Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
 function frameBuildingEntrances(entrances, coordinates) {
- const positions=[coordinates,...entrances.map(entrance=>entrance.coordinates)];
- const area=ui.mapArea();
- const horizontalMarginPixels=Math.min(64,(area.right-area.left)/4);
- const verticalMarginPixels=32;
- const canvas=map.getCanvas();
- const bounds=new maplibregl.LngLatBounds();
- for(const position of positions) bounds.extend(position);
- const padding={
-  left:area.left+horizontalMarginPixels,
-  right:canvas.clientWidth-area.right+horizontalMarginPixels,
-  top:area.top+verticalMarginPixels,
-  bottom:canvas.clientHeight-area.bottom+verticalMarginPixels
- };
- map.fitBounds(bounds,{padding,maxZoom:map.getZoom(),duration:reduced?0:450,retainPadding:false});
+  const positions = [coordinates, ...entrances.map(entrance => entrance.coordinates)];
+  const area = mapInterface.mapArea();
+  const horizontalMarginPixels = Math.min(64, (area.right - area.left) / 4);
+  const verticalMarginPixels = 32;
+  const canvas = map.getCanvas();
+  const bounds = new maplibregl.LngLatBounds();
+  for (const position of positions) bounds.extend(position);
+  const padding = {
+    left: area.left + horizontalMarginPixels,
+    right: canvas.clientWidth - area.right + horizontalMarginPixels,
+    top: area.top + verticalMarginPixels,
+    bottom: canvas.clientHeight - area.bottom + verticalMarginPixels
+  };
+  map.fitBounds(bounds, {
+    padding,
+    maxZoom: map.getZoom(),
+    duration: prefersReducedMotion ? 0 : 450,
+    retainPadding: false
+  });
 }
 
 // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
-function showPoint(point,feature=null) {
- closePlace(false);
- selectedPoint=point;
- $('place-name').textContent=point.name;
- $('place-category').textContent=point.kind;
- const details=$('place-details');
- details.replaceChildren();
- const coordinatesLine=point.coordinates.slice().reverse().map(coordinate=>coordinate.toFixed(5)).join(', ');
- for(const text of [...point.details,coordinatesLine]) {
-  if(text) details.append(node('p',text,'detail'));
- }
- $('place-card').hidden=false;
- preview=null;
- updatePlaceLayers();
- ui.close();
- ui.placeCardOpened();
- syncPanels();
- objectSelection.select(feature,point.coordinates);
- const footprintIndex=feature?.layer?.id==='buildings'?feature.id:feature?.properties?.footprintIndex;
- const entrances=point.kind==='Building'?buildingAddresses.get(footprintIndex)?.entrances:[];
- if(entrances?.length){
-  selectedPoint={...point,entrances};
-  frameBuildingEntrances(entrances,point.coordinates);
- }else focusCoordinates(point.coordinates,map.getZoom());
- $('close-place').focus({preventScroll:true});
+function showPoint(point, feature = null) {
+  closePlace(false);
+  selectedPoint = point;
+  elementById('place-name').textContent = point.name;
+  elementById('place-category').textContent = point.kind;
+  const details = elementById('place-details');
+  details.replaceChildren();
+  const coordinatesLine = point.coordinates
+    .slice()
+    .reverse()
+    .map(coordinate => coordinate.toFixed(5))
+    .join(', ');
+  for (const text of [...point.details, coordinatesLine]) {
+    if (text) details.append(createElement('p', text, 'detail'));
+  }
+  elementById('place-card').hidden = false;
+  previewPlace = null;
+  updatePlaceLayers();
+  mapInterface.close();
+  mapInterface.placeCardOpened();
+  syncPanels();
+  objectSelection.select(feature, point.coordinates);
+  const footprintIndex =
+    feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
+  const entrances = point.kind === 'Building' ? buildingAddresses.get(footprintIndex)?.entrances : [];
+  if (entrances?.length) {
+    selectedPoint = {...point, entrances};
+    frameBuildingEntrances(entrances, point.coordinates);
+  } else focusCoordinates(point.coordinates, map.getZoom());
+  elementById('close-place').focus({preventScroll: true});
 }
 // Several listings under one tap: same location, or nearby markers that overlap. Each stays a real listing.
-function showChooser(listings,coordinates) {
- closePlace(false);setChoosing(true);
- $('place-name').textContent=`${listings.length} places here`;$('place-category').textContent='Choose a listing';
- const details=$('place-details');details.replaceChildren();
- const list=node('div',undefined,'place-chooser');list.setAttribute('role','group');list.setAttribute('aria-label','Listings at this point');
- for(const f of listings)list.append(listingButton(f,()=>showPlace(f.properties.id)));
- details.append(list);
- $('search').blur();$('place-card').hidden=false;preview=null;updatePlaceLayers();ui.placeCardOpened();
- // The list must be usable at once, so a phone card opens full instead of as a header-only peek.
- if(ui.view==='search')ui.setCardState('full');
- syncPanels();pendingReveal={zoom:map.getZoom(),coordinates};flushPendingReveal();
- list.firstElementChild.focus({preventScroll:true});
+function showChooser(listings, coordinates) {
+  closePlace(false);
+  setChoosing(true);
+  elementById('place-name').textContent = `${listings.length} places here`;
+  elementById('place-category').textContent = 'Choose a listing';
+  const details = elementById('place-details');
+  details.replaceChildren();
+  const list = createElement('div', undefined, 'place-chooser');
+  list.setAttribute('role', 'group');
+  list.setAttribute('aria-label', 'Listings at this point');
+  for (const feature of listings) list.append(listingButton(feature, () => showPlace(feature.properties.id)));
+  details.append(list);
+  elementById('search').blur();
+  elementById('place-card').hidden = false;
+  previewPlace = null;
+  updatePlaceLayers();
+  mapInterface.placeCardOpened();
+  // The list must be usable at once, so a phone card opens full instead of as a header-only peek.
+  if (mapInterface.view === 'search') mapInterface.setCardState('full');
+  syncPanels();
+  pendingReveal = {zoom: map.getZoom(), coordinates};
+  flushPendingReveal();
+  list.firstElementChild.focus({preventScroll: true});
 }
 function renderEndpoints() {
- for(const role of ['from','to']) {
-  const point=endpoints[role];
-  $('route-'+role).textContent=point?`${point.name} · ${point.coordinates.slice().reverse().map(n=>n.toFixed(5)).join(', ')}`:'Not selected';
- }
- syncPanels();
- map.getSource('route-points').setData(endpointFeatures(endpoints));
- routePlanner?.setEndpoints(endpoints);
+  for (const role of ['from', 'to']) {
+    const point = endpoints[role];
+    elementById('route-' + role).textContent = point
+      ? `${point.name} · ${point.coordinates
+          .slice()
+          .reverse()
+          .map(coordinate => coordinate.toFixed(5))
+          .join(', ')}`
+      : 'Not selected';
+  }
+  syncPanels();
+  map.getSource('route-points').setData(endpointFeatures(endpoints));
+  routePlanner?.setEndpoints(endpoints);
 }
 function setEndpoint(role) {
- if(!selectedPoint)return;
- endpoints[role]={name:selectedPoint.name,coordinates:[...selectedPoint.coordinates]};
- // Route controls live on the map, so choosing an endpoint leaves search or the dock.
- ui.close();renderEndpoints();closePlace();
+  if (!selectedPoint) return;
+  endpoints[role] = {name: selectedPoint.name, coordinates: [...selectedPoint.coordinates]};
+  // Route controls live on the map, so choosing an endpoint leaves search or the dock.
+  mapInterface.close();
+  renderEndpoints();
+  closePlace();
 }
 function listingButton(place, onClick, distance) {
-  const properties = place.properties,
-    button = node('button', undefined, 'result');
+  const properties = place.properties;
+  const button = createElement('button', undefined, 'result');
   button.type = 'button';
   button.dataset.id = properties.id;
-  const symbol = node(
+  const symbol = createElement(
     'span',
     properties.category === 'essentials' ? '+' : (properties.kind ?? properties.category)[0].toUpperCase(),
     'symbol'
   );
   symbol.style.setProperty('--color', placeColors[properties.category]);
   symbol.setAttribute('aria-hidden', 'true');
-  const copy = node('span', undefined, 'copy');
-  copy.append(node('strong', properties.name), node('small', (properties.kind ?? '').replaceAll('_', ' ')));
+  const copy = createElement('span', undefined, 'copy');
+  copy.append(
+    createElement('strong', properties.name),
+    createElement('small', (properties.kind ?? '').replaceAll('_', ' '))
+  );
   button.append(symbol, copy);
-  if (distance) button.append(node('span', distance, 'distance'));
+  if (distance) button.append(createElement('span', distance, 'distance'));
   button.addEventListener('click', onClick);
   return button;
 }
-function renderResults(){if(!map)return;
- // A failed load is an error state, never an empty search result.
- if(placesError){$('results').replaceChildren(node('p',`Places could not load (${placesError}). Reload to try again.`,'empty'));return;}
- const center=map.getCenter().toArray();const nearest=selectNearest(filtered,center);const list=$('results');list.replaceChildren();
- if(!nearest.length){list.append(node('p','No places found. Try another search or category.','empty'));return;}
- for(const {f,d} of nearest){const button=listingButton(f,()=>showPlace(f.properties.id,button),d<1?Math.round(d*1000)+' m':d.toFixed(1)+' km');if((selected??preview)?.properties.id===f.properties.id)button.setAttribute('aria-current','true');list.append(button);}
+function renderResults() {
+  if (!map) return;
+  // A failed load is an error state, never an empty search result.
+  if (placesError) {
+    elementById('results').replaceChildren(
+      createElement('p', `Places could not load (${placesError}). Reload to try again.`, 'empty')
+    );
+    return;
+  }
+  const center = map.getCenter().toArray();
+  const nearest = selectNearest(filteredPlaces, center);
+  const list = elementById('results');
+  list.replaceChildren();
+  if (!nearest.length) {
+    list.append(createElement('p', 'No places found. Try another search or category.', 'empty'));
+    return;
+  }
+  for (const {feature, distanceKilometres} of nearest) {
+    const button = listingButton(
+      feature,
+      () => showPlace(feature.properties.id, button),
+      distanceKilometres < 1
+        ? Math.round(distanceKilometres * 1000) + ' m'
+        : distanceKilometres.toFixed(1) + ' km'
+    );
+    if ((selectedPlace ?? previewPlace)?.properties.id === feature.properties.id)
+      button.setAttribute('aria-current', 'true');
+    list.append(button);
+  }
 }
 // A search or category narrows the candidates; matching icons keep their thresholds.
-function filterPlaces(){
- filtered=all.filter(f=>matches(f,$('search').value,category));
- if(loaded&&!placesError)map.getSource('places').setData(collection(buildPlaceMarkers(filtered,keysById)));
- if(choosing||(selected&&!filtered.some(f=>f.properties.id===selected.properties.id)))closePlace(false);
- preview=null;updatePlaceLayers();renderResults();
- previewResults();
+function filterPlaces() {
+  filteredPlaces = allPlaces.filter(feature => matches(feature, elementById('search').value, category));
+  if (loaded && !placesError)
+    map.getSource('places').setData(collection(buildPlaceMarkers(filteredPlaces, markerKeysByPlaceId)));
+  if (
+    choosing ||
+    (selectedPlace && !filteredPlaces.some(feature => feature.properties.id === selectedPlace.properties.id))
+  )
+    closePlace(false);
+  previewPlace = null;
+  updatePlaceLayers();
+  renderResults();
+  previewResults();
 }
 // Connection state only; it carries no location meaning. Online with no saved map needs no badge.
-function updateConnection(){const saved=!!archive?.local;const text=!navigator.onLine?(saved?'Offline · saved map':'Offline · download needed'):saved?'Saved map in use':'';$('connection').textContent=text;$('connection').hidden=!text;}
+function updateConnection() {
+  const saved = !!archive?.local;
+  const text = !navigator.onLine
+    ? saved
+      ? 'Offline · saved map'
+      : 'Offline · download needed'
+    : saved
+      ? 'Saved map in use'
+      : '';
+  elementById('connection').textContent = text;
+  elementById('connection').hidden = !text;
+}
 // In server mode a download or removal during the session switches the basemap between the API and
 // the verified local archive, so offline use never depends on uncached API tiles.
-function refreshBasemap(){const source=map?.getSource('basemap');const url=basemapURL(api,archive.url,!!archive.local);if(source&&source.url!==url)source.setUrl(url);}
-function storageNote(message){$('storage-note').textContent=message;$('storage-note').hidden=!message;}
-function updateDownload(){if(!manifest)return;refreshBasemap();const ready=!!archive?.local;$('download-title').textContent=ready?'Map saved for offline use':'Download for offline use';$('download').title=downloadLabel(manifest);$('download-state').textContent=ready?'READY':'';$('download').disabled=ready||!archive?.dir||!serviceWorkerRegistration;$('remove-download').hidden=!ready;if(!archive?.dir)storageNote('Use HTTPS or localhost with a browser supporting local file storage to enable downloads.');updateConnection();}
-async function startDownload(){if(downloadAbort)return;downloadAbort=new AbortController();$('download').disabled=true;$('cancel-download').hidden=false;$('download-progress').hidden=false;$('error').hidden=true;
- try{
-  await navigator.serviceWorker.ready;
-  const result=await archive.download(downloadAbort.signal,(done,total)=>{$('download-progress').value=done/total*100;$('download-title').textContent=`Saving map… ${Math.min(100,Math.round(done/total*100))}%`;});
-  storageNote(result.persisted?'Saved on this device. Ready for offline use.':'Saved. Your browser may remove downloads when storage is low.');
- }catch(e){if(e.name!=='AbortError')notify(e.message);else storageNote('Download cancelled. Existing downloads remain available.');}
- finally{downloadAbort=null;$('cancel-download').hidden=true;$('download-progress').hidden=true;updateDownload();}
+function refreshBasemap() {
+  const source = map?.getSource('basemap');
+  const url = basemapURL(dataSources, archive.url, !!archive.local);
+  if (source && source.url !== url) source.setUrl(url);
 }
-async function loadJSON(path,what){
- const response=await fetch(path);if(!response.ok)throw new Error(`${what}: HTTP ${response.status}`);
- try{return await response.json();}catch(e){throw new Error(`${what}: invalid JSON`,{cause:e});}
+function storageNote(message) {
+  elementById('storage-note').textContent = message;
+  elementById('storage-note').hidden = !message;
+}
+function updateDownload() {
+  if (!manifest) return;
+  refreshBasemap();
+  const ready = !!archive?.local;
+  elementById('download-title').textContent = ready
+    ? 'Map saved for offline use'
+    : 'Download for offline use';
+  elementById('download').title = downloadLabel(manifest);
+  elementById('download-state').textContent = ready ? 'READY' : '';
+  elementById('download').disabled = ready || !archive?.directory || !serviceWorkerRegistration;
+  elementById('remove-download').hidden = !ready;
+  if (!archive?.directory)
+    storageNote('Use HTTPS or localhost with a browser supporting local file storage to enable downloads.');
+  updateConnection();
+}
+async function startDownload() {
+  if (downloadAbort) return;
+  downloadAbort = new AbortController();
+  elementById('download').disabled = true;
+  elementById('cancel-download').hidden = false;
+  elementById('download-progress').hidden = false;
+  elementById('error').hidden = true;
+  try {
+    await navigator.serviceWorker.ready;
+    const result = await archive.download(downloadAbort.signal, (done, total) => {
+      elementById('download-progress').value = (done / total) * 100;
+      elementById('download-title').textContent =
+        `Saving map… ${Math.min(100, Math.round((done / total) * 100))}%`;
+    });
+    storageNote(
+      result.persisted
+        ? 'Saved on this device. Ready for offline use.'
+        : 'Saved. Your browser may remove downloads when storage is low.'
+    );
+  } catch (error) {
+    if (error.name !== 'AbortError') notify(error.message);
+    else storageNote('Download cancelled. Existing downloads remain available.');
+  } finally {
+    downloadAbort = null;
+    elementById('cancel-download').hidden = true;
+    elementById('download-progress').hidden = true;
+    updateDownload();
+  }
+}
+async function loadJSON(path, what) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new Error(`${what}: invalid JSON`, {cause: error});
+  }
 }
 // D-06: the status always names the location condition; without a fix the default camera is a fallback view.
 let tracker;
-function renderPosition(snapshot){
- position=snapshot;const {state,fix,age}=snapshot;
- const fallback=explored||(fix&&state!=='outside')?'':' · default view: Podgorica';
- const accuracy=fix?`±${Math.round(fix.accuracy)} m`:'';
- const texts={idle:'Checking location…',insecure:'Location needs a secure (HTTPS) page',unsupported:'This browser cannot share location',prompt:'Allow location to see where you are',acquiring:'Finding your location…',live:`You are here · ${accuracy}`,approximate:`Approximate location · ${accuracy} (over ${POSITION_APPROXIMATE_M} m)`,stale:`Location not updating · last fix ${formatAge(age??0)} ago`,denied:'Location blocked in browser settings',unavailable:'Location unavailable · check device settings',timeout:'No location fix within 15 s',outside:'You are outside the map (Montenegro)'};
- $('position-status').textContent=(texts[state]??texts.unavailable)+(['live','approximate','stale'].includes(state)?'':fallback);
- $('position-badge').dataset.state=state;
- const action=['live','approximate'].includes(state)?'Recenter on your location':'Locate me';
- $('position-action').setAttribute('aria-label',action+'. '+$('position-status').textContent);
- $('position-action').title=$('position-status').textContent;
- $('position-indicator').textContent={idle:'…',prompt:'?',acquiring:'…',approximate:'≈',stale:'◷',live:''}[state]??'!';
- if(locationRequested&&['denied','unavailable','timeout','outside','insecure','unsupported'].includes(state)){
-  notify(texts[state]);locationRequested=false;
- }
- if(locationRequested&&state==='stale'&&tracker?.error){notify('Location is not updating. Check device location settings and try again.');locationRequested=false;}
- if(!map?.getSource('position'))return;
- map.getSource('position').setData(positionFeatures(snapshot));
- // Center once on the first usable fix, never after the person has started exploring.
- if(['live','approximate'].includes(state)&&((!centeredOnFix&&!explored)||locationRequested)){
-  const offset=locationRequested?ui.mapOffset():[0,0];
-  centeredOnFix=true;locationRequested=false;ownMove=true;
-  map.easeTo({center:fix.coordinates,zoom:Math.max(map.getZoom(),DISCOVER_ZOOM),offset,duration:reduced?0:600});
- }
+function renderPosition(snapshot) {
+  position = snapshot;
+  const {state, fix, age} = snapshot;
+  const fallback = explored || (fix && state !== 'outside') ? '' : ' · default view: Podgorica';
+  const accuracy = fix ? `±${Math.round(fix.accuracy)} m` : '';
+  const texts = {
+    idle: 'Checking location…',
+    insecure: 'Location needs a secure (HTTPS) page',
+    unsupported: 'This browser cannot share location',
+    prompt: 'Allow location to see where you are',
+    acquiring: 'Finding your location…',
+    live: `You are here · ${accuracy}`,
+    approximate: `Approximate location · ${accuracy} (over ${POSITION_APPROXIMATE_M} m)`,
+    stale: `Location not updating · last fix ${formatAge(age ?? 0)} ago`,
+    denied: 'Location blocked in browser settings',
+    unavailable: 'Location unavailable · check device settings',
+    timeout: 'No location fix within 15 s',
+    outside: 'You are outside the map (Montenegro)'
+  };
+  elementById('position-status').textContent =
+    (texts[state] ?? texts.unavailable) + (['live', 'approximate', 'stale'].includes(state) ? '' : fallback);
+  elementById('position-badge').dataset.state = state;
+  const action = ['live', 'approximate'].includes(state) ? 'Recenter on your location' : 'Locate me';
+  elementById('position-action').setAttribute(
+    'aria-label',
+    action + '. ' + elementById('position-status').textContent
+  );
+  elementById('position-action').title = elementById('position-status').textContent;
+  elementById('position-indicator').textContent =
+    {idle: '…', prompt: '?', acquiring: '…', approximate: '≈', stale: '◷', live: ''}[state] ?? '!';
+  if (
+    locationRequested &&
+    ['denied', 'unavailable', 'timeout', 'outside', 'insecure', 'unsupported'].includes(state)
+  ) {
+    notify(texts[state]);
+    locationRequested = false;
+  }
+  if (locationRequested && state === 'stale' && tracker?.error) {
+    notify('Location is not updating. Check device location settings and try again.');
+    locationRequested = false;
+  }
+  if (!map?.getSource('position')) return;
+  map.getSource('position').setData(positionFeatures(snapshot));
+  // Center once on the first usable fix, never after the person has started exploring.
+  if (['live', 'approximate'].includes(state) && ((!centeredOnFix && !explored) || locationRequested)) {
+    const offset = locationRequested ? mapInterface.mapOffset() : [0, 0];
+    centeredOnFix = true;
+    locationRequested = false;
+    ownMove = true;
+    map.easeTo({
+      center: fix.coordinates,
+      zoom: Math.max(map.getZoom(), DISCOVER_ZOOM),
+      offset,
+      duration: prefersReducedMotion ? 0 : 600
+    });
+  }
 }
-function positionAction(){
- ui.close();closePlace(false);
- if(position.fix&&['live','approximate'].includes(position.state)){focusCoordinates(position.fix.coordinates,DISCOVER_ZOOM,500);return;}
- locationRequested=true;
- if(['denied','outside','insecure','unsupported'].includes(position.state)){renderPosition(position);return;}
- tracker?.retry();
+function positionAction() {
+  mapInterface.close();
+  closePlace(false);
+  if (position.fix && ['live', 'approximate'].includes(position.state)) {
+    focusCoordinates(position.fix.coordinates, DISCOVER_ZOOM, 500);
+    return;
+  }
+  locationRequested = true;
+  if (['denied', 'outside', 'insecure', 'unsupported'].includes(position.state)) {
+    renderPosition(position);
+    return;
+  }
+  tracker?.retry();
 }
 // Public startup owns location, offline transport and workflow state; core owns the map lifecycle.
 async function start() {
@@ -306,7 +620,7 @@ async function start() {
     notify(
       'Open Kompas through the supplied local server or an HTTPS address. A downloaded HTML file cannot install the offline app.'
     );
-    $('loading').hidden = true;
+    elementById('loading').hidden = true;
     return;
   }
   if (!globalThis.maplibregl || !globalThis.pmtiles) {
@@ -327,7 +641,7 @@ async function start() {
   map = createMap({
     engine: maplibregl,
     container: 'map',
-    basemapURL: basemapURL(api, archive.url, !!archive.local),
+    basemapURL: basemapURL(dataSources, archive.url, !!archive.local),
     assetBaseURL: location.href,
     options: {
       center: DEFAULT_CENTER,
@@ -349,11 +663,11 @@ function loadDirectoryData() {
   ])
     .then(([data, config]) => {
       if (!Array.isArray(data?.features)) throw new Error('Places: missing features');
-      visibility = parseVisibilityConfig(config);
-      all = normalizePlaces(data.features, visibility);
-      keysById = markerKeys(all);
-      byId = new Map(all.map(feature => [String(feature.properties.id), feature]));
-      filtered = all;
+      visibilityConfig = parseVisibilityConfig(config);
+      allPlaces = normalizePlaces(data.features, visibilityConfig);
+      markerKeysByPlaceId = markerKeys(allPlaces);
+      placesById = new Map(allPlaces.map(feature => [String(feature.properties.id), feature]));
+      filteredPlaces = allPlaces;
     })
     .catch(error => {
       console.error(error);
@@ -382,7 +696,7 @@ async function initializeMapTransport() {
     });
   }
   dataMode = await loadDataMode();
-  api = dataEndpoints(dataMode, location.href);
+  dataSources = dataEndpoints(dataMode, location.href);
   document.documentElement.dataset.api = dataMode;
   manifest = await loadJSON('data/manifest.json', 'Map metadata');
   archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
@@ -407,10 +721,10 @@ function installPublicMapDebug() {
       return !!archive.local;
     },
     get selected() {
-      return selected?.properties.id ?? null;
+      return selectedPlace?.properties.id ?? null;
     },
     get placeCount() {
-      return all.length;
+      return allPlaces.length;
     },
     get satellite() {
       return satelliteVisible;
@@ -434,12 +748,12 @@ function installPositionBadge() {
   map.addControl(
     {
       onAdd() {
-        const control = $('position-badge');
+        const control = elementById('position-badge');
         control.classList.add('maplibregl-ctrl', 'maplibregl-ctrl-group');
         return control;
       },
       onRemove() {
-        $('position-badge')?.remove();
+        elementById('position-badge')?.remove();
       }
     },
     'bottom-right'
@@ -541,7 +855,7 @@ function installCityNames() {
 
 // App workflows attach to the shared map after its common sources/layers have loaded.
 function installPublicLayers(placesReady, labelsReady) {
-  $('satellite-toggle').disabled = false;
+  elementById('satellite-toggle').disabled = false;
   installPublicPlaceLayers();
   installCityNames();
   installTransport(map);
@@ -550,10 +864,10 @@ function installPublicLayers(placesReady, labelsReady) {
   objectSelection = new ObjectSelection(map, footprintIndex => selectBuildingEntrances(map, footprintIndex));
   routePlanner = new RoutePlanner(map);
   transport = new TransportFeed(map, {
-    url: api.vehicles,
+    url: dataSources.vehicles,
     onStatus: renderTransportStatus
   });
-  $('transport-toggle').disabled = false;
+  elementById('transport-toggle').disabled = false;
   installPositionLayers(map);
   renderPosition(position);
   Promise.all([placesReady, labelsReady]).then(([, labels]) => {
@@ -562,12 +876,12 @@ function installPublicLayers(placesReady, labelsReady) {
       map.getSource('building-entrances').setData(entranceFeatures(labels));
     }
     if (!placesError) {
-      const {names, icons} = placeLayers(placeBands(all, visibility), visibility);
+      const {names, icons} = placeLayers(placeBands(allPlaces, visibilityConfig), visibilityConfig);
       for (const layer of [...names, ...icons]) map.addLayer(layer, 'road-labels');
       placeHitLayers = ['search-place', ...icons.map(layer => layer.id), ...names.map(layer => layer.id)];
     }
     loaded = true;
-    $('loading').hidden = true;
+    elementById('loading').hidden = true;
     filterPlaces();
   });
 }
@@ -604,7 +918,10 @@ function selectTappedMarker(event) {
     showPoint(describePoint(stops[0], event.lngLat.toArray()), stops[0]);
     return true;
   }
-  const listings = listingsAtHits(map.queryRenderedFeatures(event.point, {layers: placeHitLayers}), byId);
+  const listings = listingsAtHits(
+    map.queryRenderedFeatures(event.point, {layers: placeHitLayers}),
+    placesById
+  );
   if (listings.length === 1) {
     showPlace(listings[0].properties.id);
     return true;
@@ -655,7 +972,7 @@ function registerPublicMapEvents() {
   });
   // The list keeps its order while a chosen place is open, so the row just used does not jump.
   map.on('moveend', () => {
-    if (!selected) renderResults();
+    if (!selectedPlace) renderResults();
     flushPendingReveal();
   });
   installMapTaps(map, selectTappedFeature);
@@ -668,7 +985,8 @@ function registerPublicMapEvents() {
 // A partly drawn map is not ready: errors name the affected data source.
 function registerMapFailures() {
   const failures = {
-    basemap: 'Streets, buildings and water could not load. Check your connection or save the map for offline use.',
+    basemap:
+      'Streets, buildings and water could not load. Check your connection or save the map for offline use.',
     'building-addresses': 'House numbers could not load.',
     'building-entrances': 'Building entrances could not load.',
     'satellite-preview': 'Satellite imagery could not load.',
@@ -687,9 +1005,11 @@ function registerMapFailures() {
     clearTimeout(errorTimer);
     errorTimer = setTimeout(() => notify(message), mapErrorDelayMilliseconds);
   });
-  map.on('webglcontextlost', () => notify('The browser paused graphics rendering. Waiting for it to recover…'));
+  map.on('webglcontextlost', () =>
+    notify('The browser paused graphics rendering. Waiting for it to recover…')
+  );
   map.on('webglcontextrestored', () => {
-    $('error').hidden = true;
+    elementById('error').hidden = true;
     map.triggerRepaint();
   });
 }
@@ -698,68 +1018,177 @@ function warnAboutSlowStartup() {
   const startupTimeoutMilliseconds = 20000;
   setTimeout(() => {
     if (loaded) return;
-    $('loading').hidden = true;
+    elementById('loading').hidden = true;
     notify('Map startup is taking longer than expected. Check your connection and try again.');
   }, startupTimeoutMilliseconds);
 }
 
-for(const [key,label] of Object.entries(categories)){const b=node('button',label);b.type='button';b.dataset.category=key;b.setAttribute('aria-pressed',String(key===category));b.addEventListener('click',()=>{category=category===key?'all':key;for(const other of $('categories').children){const active=other.dataset.category===category;other.setAttribute('aria-pressed',String(active));if(active)other.scrollIntoView({block:'nearest',inline:'nearest'});}filterPlaces();});$('categories').append(b);}
-$('search').addEventListener('input',()=>{ui.openSearch();clearTimeout(searchTimer);searchTimer=setTimeout(filterPlaces,120);});
-$('point-from').addEventListener('click',()=>setEndpoint('from'));
-$('point-to').addEventListener('click',()=>setEndpoint('to'));
-$('clear-route-points').addEventListener('click',()=>{endpoints.from=null;endpoints.to=null;renderEndpoints();});
-$('close-place').addEventListener('click',()=>closePlace());document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('place-card').hidden)closePlace();else ui.close(true);}if(e.key==='/'&&document.activeElement?.tagName!=='INPUT'){e.preventDefault();$('search').focus();}});
-$('satellite-toggle').addEventListener('click',()=>{
- if(!loaded)return;
- satelliteVisible=!satelliteVisible;setSatelliteVisible(map,satelliteVisible);
- $('satellite-toggle').setAttribute('aria-pressed',String(satelliteVisible));
- $('satellite-note').hidden=!satelliteVisible;
- if(satelliteVisible){closePlace(false);explored=true;const [w,s,e,n]=satelliteBounds;map.easeTo({center:[(w+e)/2,(s+n)/2],zoom:17.5,duration:reduced?0:600});}
-});
-$('transport-toggle').addEventListener('click',()=>{
- if(!transport)return;
- const enabled=!transport.enabled;
- if(!enabled&&selectedPoint?.kind==='Bus stop')closePlace(false);
- $('transport-toggle').setAttribute('aria-pressed',String(enabled));
- $('transport-info').hidden=!enabled;
- transport.setEnabled(enabled);
- if(enabled){closePlace(false);explored=true;map.easeTo({center:[19.26,42.44],zoom:12,duration:reduced?0:450});if(!navigator.onLine)transport.pause('offline');}
-});
-document.addEventListener('visibilitychange',()=>{if(!transport?.enabled)return;if(document.hidden)transport.pause('paused');else if(navigator.onLine)transport.refresh();});
-addEventListener('offline',()=>transport?.pause('offline'));
-addEventListener('online',()=>{if(transport?.enabled&&!document.hidden)transport.refresh();});
-$('download').addEventListener('click',startDownload);$('cancel-download').addEventListener('click',()=>downloadAbort?.abort());$('remove-download').addEventListener('click',async()=>{try{await archive.remove();storageNote('');updateDownload();}catch(e){notify('Could not remove offline map: '+e.message);}});
-$('retry').addEventListener('click',()=>location.reload());
-$('dismiss-error').addEventListener('click',()=>{$('error').hidden=true;ui.restoreFocus($('search'));});
-$('position-action').addEventListener('click',positionAction);
-addEventListener('online',updateConnection);addEventListener('offline',updateConnection);
-ui=new MapInterface({
- onSearch:()=>{closePlace(false);filterPlaces();},
- onChange:()=>{
-  syncPanels();
-  if(ui&&ui.view!=='closed'&&!explored){explored=true;renderPosition(position);}
-  if(ui?.view==='closed'){preview=null;updatePlaceLayers();}
- },
- // Recompute selection framing only after keyboard and camera changes have settled.
- onViewport:()=>{
-  const hasSelection=selectedPoint||pendingReveal;
-  if(!loaded||!hasSelection||ui.keyboardOpen()) return;
-  // Building bounds already account for the card; an intermediate zoom would undo their fit.
-  if(selectedPoint?.entrances?.length){
-   if(!map.isMoving()) frameBuildingEntrances(selectedPoint.entrances,selectedPoint.coordinates);
-   return;
+// Category toggles share the same filter and never move the camera.
+function registerCategoryControls() {
+  for (const [key, label] of Object.entries(categories)) {
+    const button = createElement('button', label);
+    button.type = 'button';
+    button.dataset.category = key;
+    button.setAttribute('aria-pressed', String(key === category));
+    button.addEventListener('click', () => {
+      category = category === key ? 'all' : key;
+      for (const other of elementById('categories').children) {
+        const active = other.dataset.category === category;
+        other.setAttribute('aria-pressed', String(active));
+        if (active) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
+      }
+      filterPlaces();
+    });
+    elementById('categories').append(button);
   }
-  if(map.isMoving()){
-   pendingReveal??={zoom:map.getZoom()};
-   return;
-  }
-  if(pendingReveal){
-   flushPendingReveal();
-   return;
-  }
-  revealCoordinates(selectedPoint.coordinates,{zoom:map.getZoom(),duration:0});
- },
- onCardSwipedAway:()=>closePlace(),
- resultsLabel:()=>{const query=$('search').value.trim();return query?`“${query}”`:category==='all'?'Results':categories[category];}
+}
+
+// Search and selection controls operate on the existing map and details card.
+function registerSelectionControls() {
+  elementById('search').addEventListener('input', () => {
+    mapInterface.openSearch();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(filterPlaces, 120);
+  });
+  elementById('point-from').addEventListener('click', () => setEndpoint('from'));
+  elementById('point-to').addEventListener('click', () => setEndpoint('to'));
+  elementById('clear-route-points').addEventListener('click', () => {
+    endpoints.from = null;
+    endpoints.to = null;
+    renderEndpoints();
+  });
+  elementById('close-place').addEventListener('click', () => closePlace());
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      if (!elementById('place-card').hidden) closePlace();
+      else mapInterface.close(true);
+    }
+    if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
+      event.preventDefault();
+      elementById('search').focus();
+    }
+  });
+}
+
+// Optional layers keep their own availability and connection states.
+function registerLayerControls() {
+  elementById('satellite-toggle').addEventListener('click', () => {
+    if (!loaded) return;
+    satelliteVisible = !satelliteVisible;
+    setSatelliteVisible(map, satelliteVisible);
+    elementById('satellite-toggle').setAttribute('aria-pressed', String(satelliteVisible));
+    elementById('satellite-note').hidden = !satelliteVisible;
+    if (satelliteVisible) {
+      closePlace(false);
+      explored = true;
+      const [west, south, east, north] = satelliteBounds;
+      map.easeTo({
+        center: [(west + east) / 2, (south + north) / 2],
+        zoom: 17.5,
+        duration: prefersReducedMotion ? 0 : 600
+      });
+    }
+  });
+  elementById('transport-toggle').addEventListener('click', () => {
+    if (!transport) return;
+    const enabled = !transport.enabled;
+    if (!enabled && selectedPoint?.kind === 'Bus stop') closePlace(false);
+    elementById('transport-toggle').setAttribute('aria-pressed', String(enabled));
+    elementById('transport-info').hidden = !enabled;
+    transport.setEnabled(enabled);
+    if (enabled) {
+      closePlace(false);
+      explored = true;
+      map.easeTo({center: [19.26, 42.44], zoom: 12, duration: prefersReducedMotion ? 0 : 450});
+      if (!navigator.onLine) transport.pause('offline');
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!transport?.enabled) return;
+    if (document.hidden) transport.pause('paused');
+    else if (navigator.onLine) transport.refresh();
+  });
+  addEventListener('offline', () => transport?.pause('offline'));
+  addEventListener('online', () => {
+    if (transport?.enabled && !document.hidden) transport.refresh();
+  });
+}
+
+// Downloads and location actions report failures in the common visible error panel.
+function registerDeviceControls() {
+  elementById('download').addEventListener('click', startDownload);
+  elementById('cancel-download').addEventListener('click', () => downloadAbort?.abort());
+  elementById('remove-download').addEventListener('click', async () => {
+    try {
+      await archive.remove();
+      storageNote('');
+      updateDownload();
+    } catch (error) {
+      notify('Could not remove offline map: ' + error.message);
+    }
+  });
+  elementById('retry').addEventListener('click', () => location.reload());
+  elementById('dismiss-error').addEventListener('click', () => {
+    elementById('error').hidden = true;
+    mapInterface.restoreFocus(elementById('search'));
+  });
+  elementById('position-action').addEventListener('click', positionAction);
+  addEventListener('online', updateConnection);
+  addEventListener('offline', updateConnection);
+}
+
+// Interface callbacks run after construction and always use the current selection.
+function initializeInterface() {
+  mapInterface = new MapInterface({
+    onSearch: () => {
+      closePlace(false);
+      filterPlaces();
+    },
+    onChange: () => {
+      syncPanels();
+      if (mapInterface && mapInterface.view !== 'closed' && !explored) {
+        explored = true;
+        renderPosition(position);
+      }
+      if (mapInterface?.view === 'closed') {
+        previewPlace = null;
+        updatePlaceLayers();
+      }
+    },
+    // Recompute selection framing only after keyboard and camera changes have settled.
+    onViewport: () => {
+      const hasSelection = selectedPoint || pendingReveal;
+      if (!loaded || !hasSelection || mapInterface.keyboardOpen()) return;
+      // Building bounds already account for the card; an intermediate zoom would undo their fit.
+      if (selectedPoint?.entrances?.length) {
+        if (!map.isMoving()) frameBuildingEntrances(selectedPoint.entrances, selectedPoint.coordinates);
+        return;
+      }
+      if (map.isMoving()) {
+        pendingReveal ??= {zoom: map.getZoom()};
+        return;
+      }
+      if (pendingReveal) {
+        flushPendingReveal();
+        return;
+      }
+      revealCoordinates(selectedPoint.coordinates, {zoom: map.getZoom(), duration: 0});
+    },
+    onCardSwipedAway: () => closePlace(),
+    resultsLabel: () => {
+      const query = elementById('search').value.trim();
+      return query ? `“${query}”` : category === 'all' ? 'Results' : categories[category];
+    }
+  });
+}
+
+registerCategoryControls();
+registerSelectionControls();
+registerLayerControls();
+registerDeviceControls();
+initializeInterface();
+start().catch(error => {
+  console.error(error);
+  elementById('loading').hidden = true;
+  notify(error.message || 'Map startup failed.');
 });
-start().catch(e=>{console.error(e);$('loading').hidden=true;notify(e.message||'Map startup failed.');});
