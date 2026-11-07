@@ -78,9 +78,9 @@ assertOfflineModulesIncluded(
 );
 for (const stack of fileSystem.readdirSync(path.join(outputDirectory, 'fonts'))) {
   const filePath = path.join(outputDirectory, 'fonts', stack);
-  if (fileSystem.statSync(filePath).isDirectory())
-    for (const filename of fileSystem.readdirSync(filePath))
-      if (filename.endsWith('.pbf')) shell.push('fonts/' + stack + '/' + filename);
+  if (!fileSystem.statSync(filePath).isDirectory()) continue;
+  const glyphFiles = fileSystem.readdirSync(filePath).filter(filename => filename.endsWith('.pbf'));
+  for (const filename of glyphFiles) shell.push('fonts/' + stack + '/' + filename);
 }
 // Satellite is deliberately small: include every sample asset in offline releases.
 function collectSatellite(directory) {

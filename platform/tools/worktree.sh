@@ -3,11 +3,16 @@
 # Worktrees live next to the repository (../<repo>.worktrees/<name>) so nothing lands in this checkout.
 # Each worktree gets its own dist/, .build/, node_modules and ports (see platform/tools/dev-port.mjs).
 set -eu
+# An existing branch, such as one a cloud session is told to use, is checked out as it is; base applies only to new ones.
 name=${1:?usage: worktree.sh <name> [base-branch]}
 base=${2:-main}
 root=$(git rev-parse --show-toplevel)
 dir="$(dirname "$root")/$(basename "$root").worktrees/$name"
-git -C "$root" worktree add -b "$name" "$dir" "$base"
+if git -C "$root" show-ref --verify --quiet "refs/heads/$name"; then
+  git -C "$root" worktree add "$dir" "$name"
+else
+  git -C "$root" worktree add -b "$name" "$dir" "$base"
+fi
 cd "$dir"
 make --no-print-directory setup
 echo

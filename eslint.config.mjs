@@ -9,5 +9,20 @@ export default [
   {files: nodeFiles, languageOptions: {globals: {...globals.node, ...globals.browser}}},
   {files: ['**/*.js', '**/*.mjs'], rules: {'no-unused-vars': ['error', {argsIgnorePattern: '^_', caughtErrors: 'none'}], 'no-constant-binary-expression': 'error'}},
   {files: ['apps/web/src/*.js'], rules: {'no-restricted-imports': ['error', {patterns: [{group: ['node:*', '**/data/tools/**', '**/services/**', '**/platform/**', '**/tests/**'], message: 'Web runtime must consume contracts and published assets, not server or pipeline code.'}]}]}},
+  // Mechanical part of docs/engineering/readability.md for apps/, the code reviewed against it. Other components adopt it
+  // as they are cleaned up. The aim stays about 60 lines per function; 80 is the backstop, because declarative layer
+  // and style tables count as lines.
+  {
+    files: ['apps/**/*.js', 'apps/**/*.mjs'],
+    rules: {
+      'max-statements-per-line': ['error', {max: 1}],
+      'id-length': ['error', {min: 2, properties: 'never', exceptions: ['x', 'y', 'z', 't', '_']}],
+      'max-depth': ['error', 3]
+    }
+  },
+  {
+    files: ['apps/*/src/**/*.js', 'apps/*/tools/**/*.mjs', 'apps/*/tools/**/*.js'],
+    rules: {'max-lines-per-function': ['error', {max: 80, skipBlankLines: true, skipComments: true}]}
+  },
   {files: ['apps/web/src/core.js', 'apps/web/src/status-messages.js', 'apps/web/src/vehicle-direction.js', 'apps/web/src/data-mode.js'], rules: {'no-restricted-globals': ['error', 'window', 'document', 'navigator', 'location', 'fetch', 'localStorage', 'sessionStorage', 'caches', 'indexedDB']}}
 ];

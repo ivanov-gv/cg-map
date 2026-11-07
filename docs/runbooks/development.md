@@ -40,6 +40,20 @@ E2E_WORKERS=6 E2E_ANGLE=gl-egl make -C apps/web e2e
 `E2E_ANGLE` also takes `vulkan`. Keep the default if the GPU is unavailable. A pass this way does not replace the run CI
 does.
 
+## Cloud and agent sessions
+
+Two setup steps can fail in a sandboxed session. Both have a local fallback; neither replaces CI.
+
+- `make setup` can get HTTP 401 from GitHub Packages for the pinned `@ivanov-gv/map-core`. For local checks, install
+  against the workspace packages/map-core in a scratch copy of the lockfile, and do not commit manifest or lockfile
+  changes. Results then show compatibility with the workspace core, not with the pinned versions; only CI verifies
+  those.
+- The pinned Playwright may expect a different Chromium build than the one preinstalled. Point it at the installed
+  browser with a local, uncommitted config that sets `use.launchOptions.executablePath`, rather than reinstalling
+  browsers.
+
+Record either fallback in the PR's validation section.
+
 ## Markdown checks and formatting
 
 All repository `.md` files, including new/untracked documents, dot directories, and component instructions, use the root
