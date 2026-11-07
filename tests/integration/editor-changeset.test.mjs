@@ -61,6 +61,16 @@ async function exportAndApply(session, sources, root) {
   return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt})};
 }
 
+// What the editor showed, plus the local origin the importer adds to each changed feature.
+function withOriginOnChanges(expected, session, filename) {
+  const changedFeatures = new Set(session.changes(filename).map(({after}) => JSON.stringify(after)));
+  const features = expected.features.map(feature => {
+    if (!changedFeatures.has(JSON.stringify(feature))) return feature;
+    return {...feature, properties: {...feature.properties, correction_changeset: envelope.id}};
+  });
+  return {...expected, features};
+}
+
 const indexOfFirst = (features, isWanted) => features.findIndex(isWanted);
 
 test('POI details, level, position, creation and deletion survive the importer unchanged', async testContext => {
@@ -97,7 +107,7 @@ test('POI details, level, position, creation and deletion survive the importer u
   assert.equal(written.features.length, features.length);
   assert.equal(written.features[0].properties.name, 'Renamed by the editor');
   assert.equal(written.features.at(-1).properties.id, localId);
-  assert.deepEqual(written.features, expected.features);
+  assert.deepEqual(written.features, withOriginOnChanges(expected, session, 'places.geojson').features);
   const policy = JSON.parse(fs.readFileSync(sourcePath(root, 'place-visibility-policy.json')));
   assert.ok(
     policy.overrides.some(({id}) => id === promoted.properties.id),
@@ -123,7 +133,10 @@ test('a road drawn in the editor is accepted, and asks for a tile rebuild', asyn
   const expected = materializedLayer(session, 'roads.geojson');
   const {result} = await exportAndApply(session, sources, root);
   assert.equal(result.needsTileRebuild, true);
-  assert.deepEqual(readSource(root, 'roads.geojson').features, expected.features);
+  assert.deepEqual(
+    readSource(root, 'roads.geojson').features,
+    withOriginOnChanges(expected, session, 'roads.geojson').features
+  );
 });
 
 test('moving an unnamed road keeps its blank source name, and the importer accepts it', async testContext => {

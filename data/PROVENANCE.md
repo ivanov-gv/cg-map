@@ -11,8 +11,8 @@ features including one derived ocean polygon. The place snapshot has 1,811 entri
 `sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
 `packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full
 before and after values. It is what tells a local correction from an imported upstream fact: an edited feature keeps its
-upstream attribution, so read the ledger to see what changed locally. Its references are bound to one snapshot and do
-not survive a re-extract, which replaces the source files.
+upstream attribution and gains a `correction_changeset` property, which names the changeset to look up in the ledger.
+Its references are bound to one snapshot and do not survive a re-extract, which replaces the source files.
 
 `visibilityLevel` on each place is editorial product metadata from `sources/place-visibility-policy.json`, not an OSM
 fact or a measure of significance. `places_facts_sha256` in `sources/provenance.json` covers the snapshot without that

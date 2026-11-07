@@ -232,13 +232,13 @@ consistency needs an explicit data-owned workflow, without combining their file 
   validation fixtures, cross-file label checks and hole checks. Slice 7's durable drafts, snapshot conflict handling and
   visible storage failures are also done.
 - Gaps against the slices:
-  - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`).
-    It separates local corrections from upstream facts, but features carry no local origin of their own, and it is not a
-    stable identity. Adding an address to an unnumbered footprint is not supported.
+  - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`),
+    and corrected features name their changeset in `correction_changeset`. That is a local origin, not a stable
+    identity. Adding an address to an unnumbered footprint is not supported.
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
-  - Slice 7: larger datasets have not been measured.
+  - Slice 7: larger datasets are [measured on desktop](../../apps/editor/README.md#larger-datasets), not on a phone.
 - Not implemented: refresh or rebase of corrections. Indices are bound to one snapshot, so a re-extract still replaces
   local edits, and an existing changeset stops at import. This needs the identity registry described above.
 - Design choices to review: one active source file at a time; one Roads & paths switch with subtype tools; local

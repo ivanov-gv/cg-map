@@ -19,6 +19,9 @@ const ledgerPath = 'data/sources/editor-corrections.json';
 const collinearToleranceDegreesSquared = 1e-13;
 const placeIdentityFields = ['id', 'source'];
 const newFeatureFields = ['type', 'properties', 'geometry'];
+// Names the changeset that last corrected a feature, whose ledger entries say who, why and what. Imported attribution
+// such as source or address_sources stays as it is, so upstream facts and local corrections remain distinguishable.
+const correctionOriginProperty = 'correction_changeset';
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fingerprint = feature => sha256(JSON.stringify(feature));
@@ -349,6 +352,17 @@ function serializeLayer(collection, originalBytes) {
   return JSON.stringify(collection) + (hasFinalNewline ? '\n' : '');
 }
 
+// Marks what each operation leaves behind with its local origin. Done before anything reads the results, so the sources
+// and the ledger agree on the feature and its fingerprint. A deletion leaves nothing to mark.
+function withCorrectionOrigin(changeset) {
+  const operations = changeset.operations.map(operation => {
+    if (!operation.after) return operation;
+    const properties = {...operation.after.properties, [correctionOriginProperty]: changeset.id};
+    return {...operation, after: {...operation.after, properties}};
+  });
+  return {...changeset, operations};
+}
+
 // Keeps the values as well as the hashes: this ledger is what tells a local correction from an imported upstream fact.
 function ledgerEntries(changeset, appliedAt) {
   return changeset.operations.map(({filename, operation, reference, beforeFingerprint, before, after}) => ({
@@ -480,17 +494,18 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
 // Returns a summary. Throws before writing when anything fails validation, leaving reviewed inputs intact, and restores
 // them if the final check on the written files fails. checkFinalData exists so a test can fail that last step.
 export function applyChangeset(
-  changeset,
+  reviewedChangeset,
   root = rootDirectory,
   {now = new Date().toISOString(), checkFinalData = checkData} = {}
 ) {
-  checkEnvelope(changeset);
+  checkEnvelope(reviewedChangeset);
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
   const rules = JSON.parse(read(rulesPath));
   const levelConfig = JSON.parse(read(levelsPath));
   const levels = new Set(levelConfig.levels.map(entry => entry.level));
-  const {sources, originalBytes} = readPinnedSources(changeset, root);
-  for (const operation of changeset.operations) checkOperation(operation, sources, rules, levels);
+  const {sources, originalBytes} = readPinnedSources(reviewedChangeset, root);
+  for (const operation of reviewedChangeset.operations) checkOperation(operation, sources, rules, levels);
+  const changeset = withCorrectionOrigin(reviewedChangeset);
   const {nextBytes, policyBytes, places} = serializedResults(
     changeset,
     sources,

@@ -77,6 +77,40 @@ test('a metadata edit updates the source, provenance and ledger, and still passe
   assert.equal(corrections[0].author, 'Test Editor');
 });
 
+test('a corrected feature names its changeset, keeps its attribution, and matches the ledger', testContext => {
+  const root = temporaryRoot(testContext);
+  const before = readSource(root, 'places.geojson').features[0];
+  const operation = modifyOperation(root, 'places.geojson', 0, feature => {
+    feature.properties.name = 'Corrected name';
+  });
+  const reviewed = changeset(root, 'places.geojson', [operation]);
+  applyChangeset(reviewed, root, {now: reviewedAt});
+  const written = readSource(root, 'places.geojson').features[0];
+  assert.equal(written.properties.correction_changeset, reviewed.id);
+  assert.equal(written.properties.source, before.properties.source);
+  assert.equal(written.properties.id, before.properties.id);
+  const [correction] = JSON.parse(fs.readFileSync(sourcePath(root, 'editor-corrections.json'))).corrections;
+  assert.equal(correction.after.properties.correction_changeset, reviewed.id);
+  assert.equal(correction.afterFingerprint, fingerprint(correction.after));
+  const untouched = readSource(root, 'places.geojson').features[1];
+  assert.equal(untouched.properties.correction_changeset, undefined);
+});
+
+test('a feature corrected twice names the later changeset', testContext => {
+  const root = temporaryRoot(testContext);
+  const rename = name => feature => {
+    feature.properties.name = name;
+  };
+  const first = changeset(root, 'places.geojson', [modifyOperation(root, 'places.geojson', 0, rename('First'))]);
+  applyChangeset(first, root, {now: reviewedAt});
+  const second = {
+    ...changeset(root, 'places.geojson', [modifyOperation(root, 'places.geojson', 0, rename('Second'))]),
+    id: 'later-changeset'
+  };
+  applyChangeset(second, root, {now: reviewedAt});
+  assert.equal(readSource(root, 'places.geojson').features[0].properties.correction_changeset, 'later-changeset');
+});
+
 test('a level edit becomes a policy override, and survives regenerating levels', testContext => {
   const root = temporaryRoot(testContext);
   const operation = modifyOperation(root, 'places.geojson', 0, feature => {
