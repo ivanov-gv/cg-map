@@ -9,7 +9,7 @@ Status: planned / in progress / blocked
 
 ## Decisions
 
-Record consequential choices and reasons. Link an ADR for enduring architecture decisions.
+Record consequential choices and reasons. Important ones go to the [decisions log](../decisions/AGENTS.md) in the PR.
 
 ## Progress
 

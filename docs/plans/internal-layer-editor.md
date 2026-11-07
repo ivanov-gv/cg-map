@@ -1,7 +1,7 @@
 # Task: Internal layer editor
 
-Status: in progress. Slices 1-6 are implemented with the gaps listed under Completed and remaining. Slice 7 is the
-offline-first install, served from Pages and optionally over the LAN, without authentication.
+Status: in progress. Slices 1-6 and the offline-first install of slice 7 are merged (#19), with the gaps listed under
+Completed and remaining. The install is served from Pages and optionally over the LAN, without authentication.
 
 ## Goal and acceptance criteria
 
@@ -32,7 +32,7 @@ reviewable changeset.
 - Reuse public cartography, local assets, visibility rules and map interaction primitives. Preserve public map behavior,
   deployment prefixes and offline invariants. No editorial API or database exists today.
 - A reload must not silently lose production work: save a draft locally, show save failures, and offer recovery/export.
-  The HTML sketch keeps changes in memory only.
+  The HTML sketch, since deleted, kept changes in memory only.
 
 Affected owners: web experience (both apps and shared rendering), map data (editable sources, import/validation), shared
 stewardship (changeset format), platform (builds, boundaries and verification). Backend is unaffected in the first
@@ -40,7 +40,7 @@ stages.
 
 ## Decisions
 
-Everything below is a proposal unless explicitly described as current. The HTML sketch is a disposable interface draft,
+Everything below is a proposal unless explicitly described as current. The HTML sketch was a disposable interface draft,
 not the new production app or a working source-data editor.
 
 ### Current layer inventory
@@ -184,7 +184,7 @@ building metadata/identity contract. Do not fabricate `address_sources` for loca
 correction model and validate the join. Footprint geometry changes must validate label containment and joins across
 files. They may not silently alter building-labels.geojson. If the final working datasets are inconsistent,
 export/import must report the affected files and require explicit corrections in their own modes before applying the
-reviewed batch atomically. The sketch enforces only per-file ownership and simple footprint checks; the production
+reviewed batch atomically. The sketch enforced only per-file ownership and simple footprint checks; the production
 editor and importer implement the label join.
 
 A data-owned importer validates changeset version, base hashes, allowed layer/property types, finite WGS84 coordinates,
@@ -271,26 +271,19 @@ review compared every assertion with `HEAD`.
 
 ## Handoff
 
-Branch: `feat/internal-editor-draft`; dedicated worktree created through `make worktree`. All of this work, including
-the editor, importer and contracts, is uncommitted. Based on main at `9b1f6e8`.
+Everything so far is on main, through #19. Finish the gaps below in new PRs, and delete this plan with the last of them.
 
 Run `make -C apps/core-demo dev` for shared capabilities and `make -C apps/editor dev` for real source inspection.
 Current implementation details live with the component READMEs.
 
 Known open items:
 
-- The workflows ran through `act` from a clone on the final code, but not on GitHub, because nothing is pushed. Each of
-  the 12 workflows passed when run alone. `make test-ci-all` completed its 14 single-project jobs, then `act` failed
-  with `context deadline exceeded` while removing containers, so its browser jobs and the `CI gate` job have not run
-  under `ci-all`. `cd-pages` is untested: it reads a real `ci-all` run from GitHub. See .github/TESTING.md for these
-  local limits.
+- Installing on a real phone has not been tried. The first check is `/editor/` on Pages, in Chrome.
 - Editor browser tests are sensitive to load: in that parallel run two desktop tests timed out at 15 seconds with the
   page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. This
   belongs with the larger-dataset check.
 - Formatting of new code is not enforced: .prettierrc.json covers Markdown only.
 - Dense committed code outside this change remains in apps/web/src/app.js, apps/web/tools/finalize.mjs and older tests.
 
-Open [the HTML draft](../../apps/editor/prototypes/editor.html) directly in a browser; no build/server/dependencies are
-needed. [Draft notes](../../apps/editor/prototypes/README.md) describe controls and limits. Pending implementation work
-above remains proposed; delete this plan when its implementing PR is complete and move enduring decisions to their
-owning docs.
+The HTML sketch was deleted once the real editor existed; git history keeps it. Pending implementation work above
+remains proposed. Delete this plan when its last gap is closed, and move enduring decisions to their owning docs.

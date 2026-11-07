@@ -36,7 +36,7 @@ test('dock expands around a stationary header and keeps layer/download options a
   expect(await page.locator('#search').boundingBox()).toEqual(search);
 });
 
-test('search keeps phone categories fixed above scrolling results and shows a chosen result beside them', async ({page, isMobile}, testInfo) => {
+test('search keeps phone categories fixed above scrolling results and shows a chosen result beside them', {tag: '@phone'}, async ({page, isMobile}, testInfo) => {
   const places = {type: 'FeatureCollection', features: Array.from({length: 30}, (_, i) => ({
     type: 'Feature', geometry: {type: 'Point', coordinates: [19.26 + i * .00002, 42.44]},
     properties: {id: 'search/' + i, name: 'Mobile result ' + String(i).padStart(2, '0'), category: 'shops', kind: 'shop'}
@@ -183,7 +183,7 @@ test('desktop keeps the dock and results open beside the place card', async ({pa
   await expect(row).toBeFocused();
 });
 
-test('phone place card peeks under results and swipes through full and closed', async ({page, isMobile}, testInfo) => {
+test('phone place card peeks under results and swipes through full and closed', {tag: '@phone'}, async ({page, isMobile}, testInfo) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -267,7 +267,7 @@ test('phone place card peeks under results and swipes through full and closed', 
   await expect(card).toBeHidden();
 });
 
-test('phone search stays in the dock or compact view it started from until a result is chosen', async ({page, isMobile}) => {
+test('phone search stays in the dock or compact view it started from until a result is chosen', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -306,7 +306,7 @@ test('phone search stays in the dock or compact view it started from until a res
   await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('phone dock results end above the keyboard, and its options return when it closes', async ({page, isMobile}) => {
+test('phone dock results end above the keyboard, and its options return when it closes', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -330,7 +330,7 @@ test('phone dock results end above the keyboard, and its options return when it 
   await expect(page.locator('.dock-footer')).toBeVisible();
 });
 
-test('phone keyboard: the focus zone is judged after it closes, and the map stays still while it is open', async ({page, isMobile}) => {
+test('phone keyboard: the focus zone is judged after it closes, and the map stays still while it is open', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -369,7 +369,7 @@ test('phone keyboard: the focus zone is judged after it closes, and the map stay
   expect(point.y).toBeLessThan(card.y);
 });
 
-test('a small visual viewport without a phone keyboard does not hold the camera back', async ({page, isMobile}) => {
+test('a small visual viewport without a phone keyboard does not hold the camera back', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -418,7 +418,7 @@ test('search highlights the nearest match on the map without moving it', async (
   expect(await camera(page)).toEqual(before);
 });
 
-test('choosing a route point from a result shows the route controls', async ({page, isMobile}) => {
+test('choosing a route point from a result shows the route controls', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await page.locator('#search').click();
@@ -431,7 +431,7 @@ test('choosing a route point from a result shows the route controls', async ({pa
   await expect(page.locator('#route-from')).toContainText('Nearby place 0');
 });
 
-test('a tapped map pin follows the focus zone like a result', async ({page, isMobile}) => {
+test('a tapped map pin follows the focus zone like a result', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -464,7 +464,7 @@ test('a tapped map pin follows the focus zone like a result', async ({page, isMo
   expect(moved.x).toBeLessThan(pin.x);
 });
 
-test('phone category strip scrolls to the active chip and with a mouse wheel', async ({page, isMobile}) => {
+test('phone category strip scrolls to the active chip and with a mouse wheel', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -492,7 +492,7 @@ test('phone category strip scrolls to the active chip and with a mouse wheel', a
   expect(scrolled).toBeGreaterThan(0);
 });
 
-test('one wheel gesture changes the phone card state only once', async ({page, isMobile}) => {
+test('one wheel gesture changes the phone card state only once', {tag: '@phone'}, async ({page, isMobile}) => {
   test.skip(!isMobile, 'phone layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -526,4 +526,20 @@ test('a narrow desktop window narrows the card and keeps the map controls reacha
   expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
   expect(card.width).toBeLessThan(375);
   expect(card.x + card.width).toBeLessThanOrEqual(locate.x);
+});
+
+test('the layout never scrolls sideways', {tag: '@phone'}, async ({page}) => {
+  await ready(page);
+  const sidewaysScroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(sidewaysScroll).toBeLessThanOrEqual(0);
+});
+
+test('a camera move ending keeps keyboard focus on the same result row', async ({page}) => {
+  await ready(page);
+  await openMenu(page);
+  const row = page.locator('.result').first();
+  const rowId = await row.getAttribute('data-id');
+  await row.focus();
+  await page.evaluate(() => window.kompasDebug.map.fire('moveend'));
+  await expect(page.locator('.result:focus')).toHaveAttribute('data-id', rowId);
 });

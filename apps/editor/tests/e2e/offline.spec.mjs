@@ -117,7 +117,7 @@ const renderedBasemapFeatures = page => page.evaluate(() => window.editorDebug.m
 test.describe('offline-first install under a URL prefix', () => {
   test.use({serviceWorkers: 'allow'});
 
-  test('installs and opens offline under a project prefix', async ({page}) => {
+  test('installs and opens offline under a project prefix', {tag: '@phone'}, async ({page}) => {
     const server = await startReleaseServer('/cg-map/');
     try {
       await openUntilOffline(page, server);
@@ -142,7 +142,7 @@ test.describe('offline-first install', () => {
     await server.stop();
   });
 
-  test('the editor is installable', async ({page, browserName}) => {
+  test('the editor is installable', {tag: '@phone'}, async ({page, browserName}) => {
     test.skip(browserName !== 'chromium', 'The installability report is a Chromium protocol.');
     await openUntilOffline(page, server);
     const browser = await page.context().newCDPSession(page);

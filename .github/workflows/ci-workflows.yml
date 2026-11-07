@@ -83,6 +83,11 @@ jobs:
             echo "::error::Run: gh workflow run ci-all.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
             missing=1
           fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-browser-image\.yml$\|^\.github/actions/\(promote-browser-image\|resolve-release\)/' \
+            && ! has_qualifying_run cd-browser-image.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run cd-browser-image.yml --ref $BRANCH -f test_run=true -f version=<new revision> -f commit=<SHA built on main>, then re-run this check."
+            missing=1
+          fi
           if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-core\.yml$\|^\.github/actions/' \
             && ! has_qualifying_run cd-map-core.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."

@@ -135,3 +135,12 @@ test('project Makefiles reach other projects only through listed contracts', () 
     assert.deepEqual(unlisted, [], `${component}/Makefile reaches another project without a listed contract`);
   }
 });
+
+test('every local workflow run uses the published image', () => {
+  const makefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
+  assert.match(makefile, /-P ubuntu-24\.04=\$\(ACT_IMAGE\) -P ubuntu-latest=\$\(ACT_IMAGE\)/);
+  assert.match(makefile, /^test-ci-all .*: test-%: act-image$/m);
+  assert.match(makefile, /^test-cd-map-core: act-image$/m);
+  assert.match(makefile, /--var BROWSER_CONTAINER_OPTIONS="--device \/dev\/dri"/, 'a job container needs the GPU passed itself');
+  assert.match(makefile, /^test-cd-browser-image: act-image$/m);
+});

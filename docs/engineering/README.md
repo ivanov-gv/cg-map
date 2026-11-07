@@ -91,7 +91,8 @@ mechanical rules in services/backend, through golangci-lint; everything else res
   port, so they get separate origins from the public service worker. dist/ and .build/ are per worktree.
 - Create a worktree and write `docs/plans/<task>.md` there from the [template](../plans/TEMPLATE.md) before launching a
   multi-session task. Split work by component so sessions touch disjoint directories.
-- Integrate one branch at a time: rebase and resolve conflicts in the worktree, run `make check`, then merge by PR.
+- Integrate one branch at a time: rebase and resolve conflicts in the worktree, run `make check`, then merge by PR. No
+  merge until [local tests pass](../../.github/TESTING.md).
 
 ## Changing the rules
 

@@ -1,8 +1,7 @@
 # Internal layer editor
 
 A separately built real-map source editor, using the published `@ivanov-gv/map-core` package, like the public app. It
-changes nothing by itself: edits stay in the browser until exported as a changeset for the data-owned importer. The
-fictional interaction [draft](prototypes/editor.html) remains as the reference for the original tool design.
+changes nothing by itself: edits stay in the browser until exported as a changeset for the data-owned importer.
 
 Run `make -C apps/editor dev` and open the printed local URL. The standalone artifact is `dist/editor`; it is never
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest

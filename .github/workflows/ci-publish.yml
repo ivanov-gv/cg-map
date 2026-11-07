@@ -1,0 +1,167 @@
+name: ci-publish
+# Builds what a merge changed and pushes it to the dev registries. It runs no tests: the PR run already tested this exact
+# content, and the nightly run tests main. See docs/decisions/0006-ci-time-limits-and-tests-before-merge.md.
+on:
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: true
+      image_matrix:
+        description: The apps whose images to publish, from the planner.
+        type: string
+        required: true
+      publish_package:
+        description: Publish the map-core dev package, for a release to promote.
+        type: boolean
+        required: true
+      publish_browser_image:
+        description: Publish the browser test image, for a release to promote.
+        type: boolean
+        required: true
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+      image_matrix:
+        description: The apps whose images to publish.
+        type: string
+        default: '{"include":[{"app":"web"},{"app":"editor"},{"app":"core-demo"}]}'
+      publish_package:
+        description: Publish the map-core dev package, for a release to promote.
+        type: boolean
+        default: true
+      publish_browser_image:
+        description: Publish the browser test image, for a release to promote.
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  packages: read
+jobs:
+  # No test-run twin: it only passes on its input. act gives a called workflow this JSON input empty, as ci-apps-web's verify
+  # job also handles. GitHub always passes it, so only a local run takes every image.
+  select:
+    name: Select images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      image_matrix: ${{ steps.images.outputs.image_matrix }}
+    env:
+      IMAGE_MATRIX: ${{ inputs.image_matrix }}
+      EVERY_IMAGE: '{"include":[{"app":"web"},{"app":"editor"},{"app":"core-demo"}]}'
+    steps:
+      - id: images
+        run: echo "image_matrix=${IMAGE_MATRIX:-$EVERY_IMAGE}" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+  # Only the jobs here can write packages, and only main can run them for real.
+  image:
+    name: Publish ${{ matrix.app }} image
+    needs: select
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && needs.select.outputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
+    # Pinned: the build needs the same tools as the app's own checks.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select.outputs.image_matrix) }}
+    env: &image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      APP: ${{ matrix.app }}
+    steps: &image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/run-check
+        with:
+          command: make -C "apps/$APP" build
+      - uses: ./.github/actions/publish-image
+        with:
+          app: ${{ env.APP }}
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  image-test-run:
+    name: (test-run) Publish ${{ matrix.app }} image
+    needs: select
+    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && needs.select.outputs.image_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select.outputs.image_matrix) }}
+    env: *image-env
+    steps: *image-steps
+  # A release promotes what this publishes.
+  package:
+    name: Publish dev package
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && (inputs.publish_package == true || inputs.publish_package == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &package-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+    steps: &package-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/publish-dev-package
+        with:
+          directory: packages/map-core
+          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
+          token: ${{ github.token }}
+  package-test-run:
+    name: (test-run) Publish dev package
+    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && (inputs.publish_package == true || inputs.publish_package == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *package-env
+    steps: *package-steps
+  # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
+  browser-image:
+    name: Publish browser image
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &browser-image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    steps: &browser-image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/publish-browser-image
+        with:
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  browser-image-test-run:
+    name: (test-run) Publish browser image
+    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *browser-image-env
+    steps: *browser-image-steps

@@ -393,9 +393,19 @@ function setEndpoint(role) {
   closeCard();
 }
 
+// Rebuilding must not take keyboard focus off a row: a camera move can end just after its place card closes.
 function renderResults() {
-  if (!map) return;
   const list = elementById('results');
+  const focusedRow = list.contains(document.activeElement) ? document.activeElement : null;
+  buildResults(list);
+  if (!focusedRow?.dataset.id) return;
+  const sameRow = [...list.children].find(row => row.dataset.id === focusedRow.dataset.id);
+  sameRow?.focus({preventScroll: true});
+}
+
+// Fills the results list with the nearest matches, or the empty or error note.
+function buildResults(list) {
+  if (!map) return;
   // A failed load is an error state, never an empty search result.
   if (placesError) {
     list.replaceChildren(createElement('p', `Places could not load (${placesError}). Reload to try again.`, 'empty'));

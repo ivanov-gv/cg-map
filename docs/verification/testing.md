@@ -19,20 +19,20 @@ Frontend iteration commands and measured check durations live with the
 
 ## Test ownership
 
-| Location                     | Scope                                                                                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| packages/map-core/tests      | Asset URLs, lifecycle and teardown, projection, hit testing, overlay selection, satellite, POI visibility                                                  |
-| apps/editor/tests            | Editing rules, session and history, gestures, changesets, drafts, source bundle integrity, overlay hit resolution, unknown property preservation           |
-| apps/core-demo/tests         | The concept app imports only the public map-core entry                                                                                                     |
-| apps/web/tests               | Pure helpers, offline transactions and module inventory, worker lifecycle, vendor contracts                                                                |
-| data/tests                   | Place/geometry contracts and approved small fixture                                                                                                        |
-| platform/tests               | Actual Python HTTP/range behavior, LAN certificates and TLS, deployment compatibility                                                                      |
-| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                                                           |
-| services/backend/cmd/server  | Go host directory/range behavior                                                                                                                           |
-| tests/integration            | Real archive/MVT decoding, imagery hashes, shared categories, transport, editor changesets through the real importer, editor source bundle round trip      |
-| apps/web/tests/e2e           | Built web artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                                                               |
-| apps/editor/tests/e2e        | Built source editor: every edit through the real map, including touch; offline install and updates; the sketch, desktop/mobile, origin/project-prefix URLs |
-| apps/core-demo/tests/e2e     | Built concept app and each map-core capability, desktop/mobile, origin/project-prefix URLs                                                                 |
+| Location                     | Scope                                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| packages/map-core/tests      | Asset URLs, lifecycle and teardown, projection, hit testing, overlay selection, satellite, POI visibility                                             |
+| apps/editor/tests            | Editing rules, session and history, gestures, changesets, drafts, source bundle integrity, overlay hit resolution, unknown property preservation      |
+| apps/core-demo/tests         | The concept app imports only the public map-core entry                                                                                                |
+| apps/web/tests               | Pure helpers, offline transactions and module inventory, worker lifecycle, vendor contracts                                                           |
+| data/tests                   | Place/geometry contracts and approved small fixture                                                                                                   |
+| platform/tests               | Actual Python HTTP/range behavior, LAN certificates and TLS, deployment compatibility                                                                 |
+| services/transit-relay/tests | Relay normalization, cache sharing, stale outage behavior, and read-only methods                                                                      |
+| services/backend/cmd/server  | Go host directory/range behavior                                                                                                                      |
+| tests/integration            | Real archive/MVT decoding, imagery hashes, shared categories, transport, editor changesets through the real importer, editor source bundle round trip |
+| apps/web/tests/e2e           | Built web artifact, desktop/mobile, origin/project-prefix URLs, real offline download/reload                                                          |
+| apps/editor/tests/e2e        | Built source editor: every edit through the real map, including touch; offline install and updates, desktop/mobile, origin/project-prefix URLs        |
+| apps/core-demo/tests/e2e     | Built concept app and each map-core capability, desktop/mobile, origin/project-prefix URLs                                                            |
 
 make check runs `verify` in every project, which together build dist/web, dist/core-demo and dist/editor and run
 Node/Python tests, JavaScript lint, all-source Markdown structure/format checks, data/provenance/release checks,
@@ -67,6 +67,7 @@ everything.
 | `services/transit-relay`                                    | `transit-relay`                                                                             |
 | `platform/pages`                                            | `platform`, `apps-web`, every browser area                                                  |
 | `platform/tools/serve.py`, `dev-port.mjs`                   | `platform`, every map application, every browser area                                       |
+| `platform/browser-image`                                    | `browser-image`, `platform`                                                                 |
 | `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
 | `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
@@ -83,16 +84,31 @@ everything.
 
 Check a branch with `make ci-plan BASE=origin/main`.
 
+## Phone layout tests
+
+A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. The nightly run and a plain
+`make e2e` run them all, so a phone-only bug that a tag misses appears at most a day later. The desktop layout always
+runs everything. List what a PR runs with `E2E_PHONE=tagged npx playwright test --list --project=pages-mobile`.
+
+Tag a test `@phone` when it:
+
+- only runs on the phone layout, or behaves differently there, branching on `isMobile`, `hasTouch`, touch input or the
+  viewport width: a check fails if such a test has no tag;
+- needs the `/cg-map/` prefix, which only the phone project uses;
+- is the one whole journey for its app, or its one check of layout overflow.
+
+The editor's install test is also tagged. The web app has no install test to tag.
+
 ## Browser test areas
 
 Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
-Pull requests run only the areas a change maps to. Pushes to main that build the web artifact, and the nightly run,
-always run every area, so a wrong mapping cannot reach users.
+Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests:
+see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 
 | Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
 | ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | shell       | shell.spec.mjs, updates.spec.mjs              | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
-| journeys    | journeys.spec.mjs                             | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
+| journeys    | journeys.spec.mjs, in two jobs                | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
 | interface   | interface.spec.mjs                            | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
 | discover    | discover.spec.mjs                             | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
 | poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | data/sources/places*, contracts                                               |

@@ -10,6 +10,7 @@ export const FOLDERS = [
   'workflows',
   'platform',
   'contracts',
+  'browser-image',
   'data',
   'backend',
   'transit-relay',
@@ -29,6 +30,8 @@ export const BROWSER_AREAS = {
   },
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',
+    // One job took 313 seconds against the 300-second aim.
+    jobs: 2,
     specFiles: ['journeys.spec.mjs'],
     sources: [
       'routing.js',
@@ -134,6 +137,9 @@ export function classify(file) {
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
   if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
+  // platform checks that a phone-only browser test is tagged.
+  if (file.startsWith('apps/editor/tests/e2e/') || file === 'apps/editor/playwright.config.mjs')
+    return {folders: ['apps-editor', 'tests', 'platform'], areas: []};
   if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS, areas: areasForWebFile(file)};
@@ -142,6 +148,7 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
+  if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform'], areas: []};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
   return EVERYTHING;
@@ -156,19 +163,33 @@ export function planChanges(files) {
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
-// Runs before deploying and nightly must not rely on the area mapping, so a wrong mapping cannot reach users. Any run
-// that selects the web builds a deployable artifact, even when the change itself maps to no browser area.
-export function withFullBrowser(plan) {
-  return plan.folders.includes('apps-web') ? {...plan, areas: ALL_AREAS} : plan;
+// An area too slow for one job runs as several, each with its own share of the tests.
+function browserJobs(area) {
+  const {specs, jobs = 1} = BROWSER_AREAS[area];
+  if (jobs === 1) return [{area, specs}];
+  return Array.from({length: jobs}, (_, index) => ({
+    area: `${area}-${index + 1}`,
+    specs: `${specs} --shard=${index + 1}/${jobs}`
+  }));
 }
 
 export function browserMatrix(areas) {
-  return {include: areas.map(area => ({area, specs: BROWSER_AREAS[area].specs}))};
+  return {include: areas.flatMap(browserJobs)};
+}
+
+// A change to an app, or to what it is built from, publishes that app's image.
+export function imageMatrix(folders) {
+  const apps = MAP_APPLICATIONS.filter(folder => folders.includes(folder));
+  return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
 export function formatOutputs({folders, areas}) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
-  return [...folderLines, `browser_matrix=${JSON.stringify(browserMatrix(areas))}`].join('\n');
+  return [
+    ...folderLines,
+    `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
+    `image_matrix=${JSON.stringify(imageMatrix(folders))}`
+  ].join('\n');
 }
 
 export function formatSummary({folders, areas, everything}, reason) {
@@ -212,7 +233,6 @@ function main(args) {
     }
   }
 
-  if (args.includes('--full-browser')) plan = withFullBrowser(plan);
   const summary = formatSummary(plan, reason);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
