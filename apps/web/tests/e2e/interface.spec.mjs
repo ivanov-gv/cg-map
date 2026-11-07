@@ -533,3 +533,13 @@ test('the layout never scrolls sideways', {tag: '@phone'}, async ({page}) => {
   const sidewaysScroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(sidewaysScroll).toBeLessThanOrEqual(0);
 });
+
+test('a camera move ending keeps keyboard focus on the same result row', async ({page}) => {
+  await ready(page);
+  await openMenu(page);
+  const row = page.locator('.result').first();
+  const rowId = await row.getAttribute('data-id');
+  await row.focus();
+  await page.evaluate(() => window.kompasDebug.map.fire('moveend'));
+  await expect(page.locator('.result:focus')).toHaveAttribute('data-id', rowId);
+});
