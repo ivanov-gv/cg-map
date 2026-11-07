@@ -10,6 +10,9 @@ import {
   positionStatusText
 } from './status-messages.js';
 
+const firstFixCameraDurationMilliseconds = 600;
+const requestedFixCameraDurationMilliseconds = 500;
+
 // Owns the in-memory fix, explicit location requests and first-fix recentering. Map exploration belongs
 // to the app; its getter prevents a later fix from overriding a camera the person already moved.
 export class LocationControls {
@@ -82,7 +85,7 @@ export class LocationControls {
         center: fix.coordinates,
         zoom: Math.max(this.#map.getZoom(), DISCOVER_ZOOM),
         offset,
-        duration: this.#context.prefersReducedMotion ? 0 : 600
+        duration: this.#context.prefersReducedMotion ? 0 : firstFixCameraDurationMilliseconds
       });
     }
   }
@@ -91,7 +94,11 @@ export class LocationControls {
     this.#interface.close();
     this.#context.closeSelection();
     if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
-      this.#context.focusCoordinates(this.#snapshot.fix.coordinates, DISCOVER_ZOOM, 500);
+      this.#context.focusCoordinates(
+        this.#snapshot.fix.coordinates,
+        DISCOVER_ZOOM,
+        requestedFixCameraDurationMilliseconds
+      );
       return;
     }
     this.#isLocationRequested = true;

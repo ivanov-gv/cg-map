@@ -4,6 +4,8 @@ import {categories, featureCollection, selectNearestPlaces} from './core.js';
 import {createElement, elementById} from './dom.js';
 import {listingButton, renderPlaceDetails} from './place-details.js';
 
+const selectionCameraDurationMilliseconds = 450;
+
 // Owns one selection transaction: listing/point/chooser, map highlights, deferred camera framing and focus.
 // Directory and map getters always read current state, including data that arrives after construction.
 export class PlaceSelection {
@@ -48,7 +50,7 @@ export class PlaceSelection {
   }
 
   // Explicit selection and location requests mark the map explored before moving its camera.
-  focusCoordinates(coordinates, zoom = 15, durationMilliseconds = 450) {
+  focusCoordinates(coordinates, zoom = 15, durationMilliseconds = selectionCameraDurationMilliseconds) {
     if (!this.#map) return;
     this.#context.onExploreMap();
     this.#map.easeTo({
@@ -60,7 +62,7 @@ export class PlaceSelection {
   }
 
   // Keep a chosen place visible with as little camera movement as possible: pan only when it leaves the focus zone.
-  revealCoordinates(coordinates, {zoom = 15, duration: durationMilliseconds = 450} = {}) {
+  revealCoordinates(coordinates, {zoom = 15, duration: durationMilliseconds = selectionCameraDurationMilliseconds} = {}) {
     if (!this.#map) return;
     this.#context.onExploreMap();
     const needsZoom = this.#map.getZoom() < zoom;
@@ -208,7 +210,7 @@ export class PlaceSelection {
     this.#map.fitBounds(bounds, {
       padding,
       maxZoom: this.#map.getZoom(),
-      duration: this.#context.prefersReducedMotion ? 0 : 450,
+      duration: this.#context.prefersReducedMotion ? 0 : selectionCameraDurationMilliseconds,
       retainPadding: false
     });
   }
