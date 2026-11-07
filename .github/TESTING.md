@@ -13,10 +13,10 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
-jobs, `ci-all`'s jobs that call a folder workflow, and the check for test runs below. The twins use the `test-run`
-environment, whose variables send everything to a test destination. Local runs always use it, and manual runs default to
-it. `CI gate` and `approval` have no twin, and neither does the Pages deploy, because Pages can only publish to this
-repository: a test run stops at the assembled site.
+jobs, `ci-all`'s jobs that call another workflow, `Check job times`, and the check for test runs below. The twins use
+the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and manual
+runs default to it. `CI gate` and `approval` have no twin, and neither does the Pages deploy, because Pages can only
+publish to this repository: a test run stops at the assembled site.
 
 The `dev` and `test-run` environments define these variables:
 

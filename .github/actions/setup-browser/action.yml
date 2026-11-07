@@ -23,7 +23,7 @@ runs:
       run: |
         # A normal install takes about 20s. A stalled mirror download rarely recovers on its own, but usually does on a
         # new connection, so several short attempts beat one long wait. All of them must leave room inside the job limit.
-        attempt_limit_seconds=60
+        attempt_limit_seconds=90
         max_attempts=3
         start=$SECONDS
         for attempt in $(seq 1 "$max_attempts"); do
@@ -32,6 +32,8 @@ runs:
           echo "Chromium install attempt $attempt: exit $status after $((SECONDS - start))s" | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$status" -eq 0 ] && exit 0
           echo "::warning::Chromium install attempt $attempt of $max_attempts failed with exit $status"
+          # The limit can stop apt mid-install, and every later attempt then refuses to start until this repairs it.
+          sudo dpkg --configure -a || echo "::warning::Could not repair the interrupted package install"
         done
         echo "::error::Chromium install failed after $max_attempts attempts"
         exit "$status"

@@ -25,8 +25,9 @@ Every merge to main updates it, with no tags or releases:
 
 To put back an older build of an app, retag its image from the commit you want as `main`, then run
 `gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
-affect `CI gate`, so check it after merging. To republish after a failed merge run, use
-`gh workflow run ci-publish.yml --ref main -f test_run=false`, then deploy as above.
+affect `CI gate`, so check it after merging. To republish after a failed merge run, use "Re-run failed jobs" on that
+run: a manual ci-publish would replace `main` for every app it lists, and a dev package version can be published only
+once.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 

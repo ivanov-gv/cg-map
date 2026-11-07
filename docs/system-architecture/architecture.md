@@ -104,9 +104,10 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    separate operation.
 3. apps/web/tools/build.mjs assembles public assets and runtime modules with the reviewed data release into dist/web. It
    generates offline manifests there.
-4. CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload.
-5. A merge to main builds the verified artifact into an image, and the Pages step publishes every app's image, each
-   under its own path. Source files, docs, datasets used for generation, and backend code are excluded.
+4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
+   nightly run does the same on main.
+5. A merge to main rebuilds the same content into an image, and the Pages step publishes every app's image, each under
+   its own path. Source files, docs, datasets used for generation, and backend code are excluded.
 
 The web app runs at /cg-map/web/, and owns only that path's worker. No deployment redirect or web asset tree is
 committed in repository root.

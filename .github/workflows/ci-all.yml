@@ -233,7 +233,8 @@ jobs:
           fi
           echo "CI gate passed." | tee -a "$GITHUB_STEP_SUMMARY"
 
-  # What a merge changed, built and pushed. A test run pushes to a temporary registry instead.
+  # What a merge changed, built and pushed. A test run pushes to a temporary registry instead. No test-run twin: it only
+  # calls ci-publish, which has them.
   publish:
     name: publish
     needs: [switch, plan, plan-test-run, gate]
@@ -250,8 +251,10 @@ jobs:
   # Every merge to main shows main on the dev environment. A test run stops before the actual deploy.
   dev-pages:
     name: dev-pages
-    needs: [switch, publish]
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    needs: [switch, gate, publish]
+    # A merge that selects nothing to publish still deploys, because the chooser page comes from main itself. Whether
+    # GitHub reports such a publish as success or skipped does not matter here.
+    if: ${{ !cancelled() && needs.gate.result == 'success' && (github.event_name == 'push' || needs.switch.outputs.test_run == 'true') && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
     uses: ./.github/workflows/ci-dev-pages.yml
     permissions:
       contents: read
@@ -281,18 +284,18 @@ jobs:
       - name: Warn about jobs over the aim
         run: |
           # Only a warning, including when the timings cannot be read, as under act: the timeouts are the actual limit.
-          if ! slow=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs" --paginate --jq \
+          if ! slow_jobs=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs" --paginate --jq \
             ".jobs[] | select(.started_at != null and .completed_at != null)
               | {name, seconds: ((.completed_at | fromdate) - (.started_at | fromdate))}
               | select(.seconds > $JOB_AIM_SECONDS) | \"\(.seconds)s \(.name)\"" 2>&1); then
-            echo "::warning::Could not read job times: $slow"
+            echo "::warning::Could not read job times: $slow_jobs"
             exit 0
           fi
-          if [ -z "$slow" ]; then
+          if [ -z "$slow_jobs" ]; then
             echo "Every finished job took $JOB_AIM_SECONDS seconds or less." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           while IFS= read -r job; do
             echo "::warning::Over the aim of $JOB_AIM_SECONDS seconds: $job"
             echo "- Over the aim: $job" >> "$GITHUB_STEP_SUMMARY"
-          done <<< "$slow"
+          done <<< "$slow_jobs"

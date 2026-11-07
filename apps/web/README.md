@@ -440,9 +440,9 @@ Browser specs are split by area, and CI runs each area as its own job; see
 [browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
 tests/e2e/helpers.mjs.
 
-The configured worker count is one. Changing `--workers` or enabling `--fully-parallel` is a performance experiment:
-benchmark elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to
-shorten the development feedback loop.
+The default worker count is one, and CI uses two. Raising `E2E_WORKERS` further is a performance experiment: benchmark
+elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to shorten
+the development feedback loop.
 
 ## 14. Debugging with browser DevTools
 

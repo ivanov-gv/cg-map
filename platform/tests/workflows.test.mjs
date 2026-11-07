@@ -209,10 +209,11 @@ test('the editor browser jobs cover every spec in both projects', () => {
     for (const project of ['root-desktop', 'pages-mobile']) {
       const entries = matrix.include.filter(entry => runs(spec, project, entry));
       assert.ok(entries.length > 0, `${spec} does not run on ${project}`);
-      const shards = entries.flatMap(entry => entry.specs.match(/--shard=(\d+)\/(\d+)/) ?? []);
-      if (shards.length === 0) continue;
-      const total = Number(entries[0].specs.match(/--shard=\d+\/(\d+)/)[1]);
-      assert.equal(entries.length, total, `${spec} on ${project} is missing a shard`);
+      const shards = entries.map(entry => entry.specs.match(/--shard=(\d+)\/(\d+)/));
+      if (shards.every(shard => !shard)) continue;
+      assert.ok(shards.every(Boolean), `${spec} on ${project} mixes a whole run with shards`);
+      const everyShard = Array.from({length: Number(shards[0][2])}, (_, index) => String(index + 1));
+      assert.deepEqual(shards.map(shard => shard[1]).toSorted(), everyShard, `${spec} on ${project} misses a shard`);
     }
   }
 });
@@ -239,7 +240,9 @@ test('images and dev packages come only from pushes to main or test runs, never 
   assert.equal(jobs.publish.uses, './.github/workflows/ci-publish.yml');
   assert.match(jobs.publish.if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
   assert.match(jobs.publish.if, /needs\.gate\.result == 'success'/);
-  assert.match(jobs['dev-pages'].if, /needs\.publish\.result == 'success'/);
+  assert.match(jobs['dev-pages'].if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
+  assert.match(jobs['dev-pages'].if, /needs\.gate\.result == 'success'/);
+  assert.match(jobs['dev-pages'].if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'skipped'/);
 });
 
 test('a push to main runs no checks, while PRs and the nightly run do', () => {

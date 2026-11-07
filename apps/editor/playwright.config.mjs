@@ -13,7 +13,7 @@ const port = Number(
     }).trim()
 );
 
-// One at a time and software rendering unless asked otherwise, because that is what CI runs. For a faster local run, see
+// One at a time and software rendering unless asked otherwise. CI sets its own worker count. For a faster local run, see
 // docs/runbooks/development.md: E2E_WORKERS=6 E2E_ANGLE=vulkan.
 const workers = Number(process.env.E2E_WORKERS ?? 1);
 const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';

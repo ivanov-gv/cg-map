@@ -14,7 +14,8 @@ the tests that have found real bugs: offline, updates, and editor exports throug
 All three suites, one worker with software rendering: about 25.5 minutes, and half of that repeats tests on the phone
 layout. With `E2E_WORKERS=6 E2E_ANGLE=gl-egl`: 6.7 minutes on a 16-thread machine with an integrated AMD GPU, with no
 failures or retries. On the viewer tests, the GPU alone saves about 15%, and workers do most of the rest. GitHub's
-standard runners have no GPU and few CPUs. Browser jobs use 2 workers, and the editor suite runs as 6 jobs.
+standard runners have no GPU and few CPUs. Web and editor browser jobs use 2 workers, and the editor suite runs as 6
+jobs.
 
 ## Remaining, in order
 

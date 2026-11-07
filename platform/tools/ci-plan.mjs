@@ -29,6 +29,8 @@ export const BROWSER_AREAS = {
   },
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',
+    // One job took 313 seconds against the 300-second aim.
+    jobs: 2,
     specFiles: ['journeys.spec.mjs'],
     sources: [
       'routing.js',
@@ -146,8 +148,18 @@ export function planChanges(files) {
   return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
+// An area too slow for one job runs as several, each with its own share of the tests.
+function browserJobs(area) {
+  const {specs, jobs = 1} = BROWSER_AREAS[area];
+  if (jobs === 1) return [{area, specs}];
+  return Array.from({length: jobs}, (_, index) => ({
+    area: `${area}-${index + 1}`,
+    specs: `${specs} --shard=${index + 1}/${jobs}`
+  }));
+}
+
 export function browserMatrix(areas) {
-  return {include: areas.map(area => ({area, specs: BROWSER_AREAS[area].specs}))};
+  return {include: areas.flatMap(browserJobs)};
 }
 
 // A change to an app, or to what it is built from, publishes that app's image.
