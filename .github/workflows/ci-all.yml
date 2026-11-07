@@ -83,6 +83,7 @@ jobs:
       apps-editor: ${{ steps.plan.outputs.apps-editor }}
       apps-core-demo: ${{ steps.plan.outputs.apps-core-demo }}
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
+      editor_browser_matrix: ${{ steps.plan.outputs.editor_browser_matrix }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
@@ -206,6 +207,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
       phone_tests: ${{ github.event_name == 'schedule' && 'all' || 'tagged' }}
   apps-core-demo:
     name: apps-core-demo

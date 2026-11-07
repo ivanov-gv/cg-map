@@ -6,7 +6,9 @@ import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {
   BROWSER_AREAS,
+  EDITOR_BROWSER_AREAS,
   FOLDERS,
+  SHARED_EDITOR_SOURCES,
   SHARED_WEB_SOURCES,
   browserMatrix,
   classify,
@@ -134,7 +136,7 @@ for (const [name, files] of [
 
 test('outputs give every folder a value and a usable matrix', () => {
   const lines = formatOutputs(planChanges(['apps/web/src/interface.js'])).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 2);
+  assert.equal(lines.length, FOLDERS.length + 3);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
@@ -231,6 +233,55 @@ test('an area limited to one project has a partner covering the other', () => {
   }
 });
 
+const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
+
+for (const [name, files, expectedAreas] of [
+  ['one editing source', ['apps/editor/src/review-panel.js'], ['editing-desktop', 'editing-mobile']],
+  ['the offline worker', ['apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']],
+  ['the overlay', ['apps/editor/src/source-overlay.js'], ['viewer']],
+  ['a shared source', ['apps/editor/src/app.js'], ALL_EDITOR_AREAS],
+  ['an unmapped source', ['apps/editor/src/brand-new.js'], ALL_EDITOR_AREAS],
+  ['one spec', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['viewer']],
+  ['a unit test', ['apps/editor/tests/offline.test.mjs'], []],
+  ['the stylesheet', ['apps/editor/public/style.css'], ALL_EDITOR_AREAS],
+  ['the browser config', ['apps/editor/playwright.config.mjs'], ALL_EDITOR_AREAS],
+  ['the source bundle producer, from outside the editor', ['data/tools/editor-bundle.mjs'], ALL_EDITOR_AREAS],
+  ['a change that does not select the editor', ['services/backend/main.go'], []],
+  ['a unit test beside a source', ['apps/editor/tests/offline.test.mjs', 'apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']]
+]) {
+  test(`editor areas: ${name}`, () => {
+    assert.deepEqual(planChanges(files).editorAreas, expectedAreas);
+  });
+}
+
+test('every editor source is mapped to an area or shared, and listed only once per spec', () => {
+  const sources = fs.readdirSync(path.join(repoRoot, 'apps/editor/src'));
+  const mapped = Object.values(EDITOR_BROWSER_AREAS).flatMap(area => area.sources);
+  for (const source of sources) {
+    const isMapped = mapped.includes(source);
+    const isShared = SHARED_EDITOR_SOURCES.includes(source);
+    assert.ok(isMapped || isShared, `apps/editor/src/${source} needs an area or a shared entry`);
+    assert.equal(isMapped && isShared, false, `${source} is both mapped and shared`);
+  }
+  for (const source of [...mapped, ...SHARED_EDITOR_SOURCES])
+    assert.ok(sources.includes(source), `${source} no longer exists`);
+});
+
+test('every editor spec has an area, and the areas name real specs', () => {
+  const specs = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
+  const mapped = Object.values(EDITOR_BROWSER_AREAS).flatMap(area => area.specFiles);
+  for (const spec of specs) assert.ok(mapped.includes(spec), `${spec} needs a browser area`);
+  for (const spec of mapped) assert.ok(specs.includes(spec), `${spec} no longer exists`);
+});
+
+test('the editing spec on the desktop layout stays in two jobs', () => {
+  const jobs = browserMatrix(['editing-desktop'], EDITOR_BROWSER_AREAS).include;
+  assert.deepEqual(
+    jobs.map(job => job.area),
+    ['editing-desktop-1', 'editing-desktop-2']
+  );
+});
+
 test('an area too slow for one job runs every share of its tests', () => {
   assert.deepEqual(browserMatrix(['journeys']).include, [
     {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/2'},
@@ -263,11 +314,12 @@ test('Markdown never selects code checks, wherever it lives, while Go stays inde
     'data/PROVENANCE.md',
     'docs/plans/x.md'
   ]) {
-    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], everything: false}, file);
+    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], editorAreas: [], everything: false}, file);
   }
   assert.deepEqual(planChanges(['services/backend/cmd/server/main.go']), {
     folders: ['backend'],
     areas: [],
+    editorAreas: [],
     everything: false
   });
 });

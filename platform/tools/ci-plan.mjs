@@ -56,6 +56,8 @@ export const BROWSER_AREAS = {
   },
   'poi-desktop': {
     specs: 'tests/e2e/poi-visibility.spec.mjs --project=root-desktop',
+    // Runs took 172, 270, 175 and 296 seconds against the 300-second aim.
+    jobs: 2,
     specFiles: ['poi-visibility.spec.mjs'],
     sources: []
   },
@@ -80,27 +82,89 @@ export const SHARED_WEB_SOURCES = [
   'location-controls.js'
 ];
 
+const EDITING_SOURCES = [
+  'active-file-commands.js',
+  'changeset.js',
+  'cross-file-checks.js',
+  'drag-gestures.js',
+  'edit-session.js',
+  'edit-transaction.js',
+  'geometry-editing.js',
+  'geometry-validation.js',
+  'handle-layer.js',
+  'inspector-editing.js',
+  'layer-rules.js',
+  'property-form.js',
+  'review-panel.js'
+];
+const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
+
+// The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
+// one project has a partner for the other, and both run the same sources.
+export const EDITOR_BROWSER_AREAS = {
+  'editing-desktop': {
+    specs: 'tests/e2e/editing.spec.mjs --project=root-desktop',
+    // Sized from measured test time, so that each share stays inside the job time limit.
+    jobs: 2,
+    specFiles: ['editing.spec.mjs'],
+    sources: EDITING_SOURCES
+  },
+  'editing-mobile': {
+    specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
+    specFiles: ['editing.spec.mjs'],
+    sources: EDITING_SOURCES
+  },
+  'offline-desktop': {
+    specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
+    specFiles: ['offline.spec.mjs'],
+    sources: OFFLINE_SOURCES
+  },
+  'offline-mobile': {
+    specs: 'tests/e2e/offline.spec.mjs --project=pages-mobile',
+    specFiles: ['offline.spec.mjs'],
+    sources: OFFLINE_SOURCES
+  },
+  viewer: {
+    specs: 'tests/e2e/viewer.spec.mjs',
+    specFiles: ['viewer.spec.mjs'],
+    sources: ['source-overlay.js']
+  }
+};
+
+// Every editor browser test boots these. The offline tests also edit and save a draft, so the draft store is shared too.
+export const SHARED_EDITOR_SOURCES = ['app.js', 'dom.js', 'hashing.js', 'source-bundle.js', 'draft-store.js'];
+
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
-const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS};
+const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
+const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS, editorAreas: ALL_EDITOR_AREAS};
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime and the reviewed data release: these are their concrete contracts.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 const MAP_CONTRACT_DEPENDENTS = ['map-core', ...MAP_APPLICATIONS, 'tests', 'platform'];
 
-function areasForWebFile(file) {
+// Returns the areas of one project that a changed file needs. Anything not known to be narrower runs every area.
+function areasForFile(file, {project, areaTable, sharedSources}) {
+  const allAreas = Object.keys(areaTable);
   const name = file.split('/').pop();
-  if (/^apps\/web\/tests\/[^/]+\.test\.mjs$/.test(file)) return [];
-  if (file.startsWith('apps/web/src/') && SHARED_WEB_SOURCES.includes(name)) return ALL_AREAS;
-  const isSource = file.startsWith('apps/web/src/');
-  const isSpec = file.startsWith('apps/web/tests/e2e/');
-  const mapped = ALL_AREAS.filter(area => {
-    const {sources, specFiles} = BROWSER_AREAS[area];
+  const isUnitTest = file.startsWith(`${project}/tests/`) && !file.includes('/e2e/') && file.endsWith('.test.mjs');
+  if (isUnitTest) return [];
+  const isSource = file.startsWith(`${project}/src/`);
+  if (isSource && sharedSources.includes(name)) return allAreas;
+  const isSpec = file.startsWith(`${project}/tests/e2e/`);
+  const mapped = allAreas.filter(area => {
+    const {sources, specFiles} = areaTable[area];
     return (isSource && sources.includes(name)) || (isSpec && specFiles.includes(name));
   });
-  return mapped.length ? mapped : ALL_AREAS;
+  return mapped.length ? mapped : allAreas;
 }
 
-// Returns the folders and browser areas one changed path needs.
+const areasForWebFile = file =>
+  areasForFile(file, {project: 'apps/web', areaTable: BROWSER_AREAS, sharedSources: SHARED_WEB_SOURCES});
+const areasForEditorFile = file =>
+  areasForFile(file, {project: 'apps/editor', areaTable: EDITOR_BROWSER_AREAS, sharedSources: SHARED_EDITOR_SOURCES});
+
+// Returns the folders and browser areas one changed path needs. A result without editorAreas that selects apps-editor
+// comes from outside the editor, such as its source bundle, and so needs all of them.
 export function classify(file) {
   const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
   const isMarkdown = file.endsWith('.md') && !isPublishedFile;
@@ -140,8 +204,9 @@ export function classify(file) {
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
   // platform checks that a phone-only browser test is tagged.
   if (file.startsWith('apps/editor/tests/e2e/') || file === 'apps/editor/playwright.config.mjs')
-    return {folders: ['apps-editor', 'tests', 'platform'], areas: []};
-  if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
+    return {folders: ['apps-editor', 'tests', 'platform'], areas: [], editorAreas: areasForEditorFile(file)};
+  if (file.startsWith('apps/editor/'))
+    return {folders: ['apps-editor', 'tests', ...platformFolders], areas: [], editorAreas: areasForEditorFile(file)};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS, areas: areasForWebFile(file)};
 
@@ -161,12 +226,14 @@ export function planChanges(files) {
   const results = files.map(classify);
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
-  return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
+  const editorAreasOf = result => (result.folders.includes('apps-editor') ? (result.editorAreas ?? ALL_EDITOR_AREAS) : []);
+  const editorAreas = ALL_EDITOR_AREAS.filter(area => results.some(result => editorAreasOf(result).includes(area)));
+  return {folders, areas, editorAreas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
 // An area too slow for one job runs as several, each with its own share of the tests.
-function browserJobs(area) {
-  const {specs, jobs = 1} = BROWSER_AREAS[area];
+function browserJobs(area, areaTable) {
+  const {specs, jobs = 1} = areaTable[area];
   if (jobs === 1) return [{area, specs}];
   return Array.from({length: jobs}, (_, index) => ({
     area: `${area}-${index + 1}`,
@@ -174,8 +241,8 @@ function browserJobs(area) {
   }));
 }
 
-export function browserMatrix(areas) {
-  return {include: areas.flatMap(browserJobs)};
+export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
+  return {include: areas.flatMap(area => browserJobs(area, areaTable))};
 }
 
 // A change to an app, or to what it is built from, publishes that app's image.
@@ -184,20 +251,22 @@ export function imageMatrix(folders) {
   return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
-export function formatOutputs({folders, areas}) {
+export function formatOutputs({folders, areas, editorAreas}) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   return [
     ...folderLines,
     `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
+    `editor_browser_matrix=${JSON.stringify(browserMatrix(editorAreas, EDITOR_BROWSER_AREAS))}`,
     `image_matrix=${JSON.stringify(imageMatrix(folders))}`
   ].join('\n');
 }
 
-export function formatSummary({folders, areas, everything}, reason) {
+export function formatSummary({folders, areas, editorAreas, everything}, reason) {
   return [
     `Selected ${everything ? 'everything' : 'a subset of pipelines'}${reason ? ` (${reason})` : ''}.`,
     `- Folders: ${folders.join(', ') || 'none'}`,
-    `- Browser areas: ${areas.join(', ') || 'none'}`
+    `- Browser areas: ${areas.join(', ') || 'none'}`,
+    `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`
   ].join('\n');
 }
 
