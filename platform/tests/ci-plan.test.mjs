@@ -268,10 +268,9 @@ test('Markdown never selects code checks, wherever it lives, while Go stays inde
 
 test('the browser matrix contains exactly the requested areas', () => {
   assert.deepEqual(browserMatrix([]), {include: []});
-  assert.deepEqual(
-    browserMatrix(ALL_AREAS).include.map(({area}) => area),
-    ALL_AREAS
-  );
+  // A job of a split area is named after it, such as journeys-1.
+  const areaOfEachJob = browserMatrix(ALL_AREAS).include.map(({area}) => area.replace(/-\d+$/, ''));
+  assert.deepEqual(new Set(areaOfEachJob), new Set(ALL_AREAS));
 });
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.
