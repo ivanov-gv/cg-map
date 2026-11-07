@@ -12,11 +12,12 @@ const artifactSources = fileURLToPath(new URL('../../../dist/editor/sources/', i
 const serverTool = fileURLToPath(new URL('../../../platform/tools/serve.py', import.meta.url));
 const port = Number(process.env.MEASURE_PORT ?? 9899);
 const pageURL = `http://127.0.0.1:${port}/`;
-// The two largest files, and the two whose whole geometry the editor draws as an overlay.
+// The two largest files.
 const measuredModes = ['buildings.geojson', 'roads.geojson'];
 // Far enough that a repeat does not sit on the original, and small enough to stay valid coordinates.
 const repeatOffsetDegrees = 0.01;
-const serverStartMilliseconds = 2000;
+const serverStartMilliseconds = 15000;
+const serverPollMilliseconds = 100;
 const longOperationMilliseconds = 300000;
 const browserArguments = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 
@@ -57,7 +58,7 @@ function scaledBundle(factor) {
   return filesByName;
 }
 
-async function timed(operation) {
+async function elapsedMilliseconds(operation) {
   const startedAt = performance.now();
   await operation();
   return Math.round(performance.now() - startedAt);
@@ -66,6 +67,7 @@ async function timed(operation) {
 const usedHeapMegabytes = page =>
   page.evaluate(() => Math.round(performance.memory.usedJSHeapSize / 1024 / 1024));
 
+// The editor shows this status only once the map reports that it has drawn the file.
 async function openMode(page, filename) {
   await page.locator(`[data-mode="${filename}"]`).click();
   await page.locator('#status').filter({hasText: `${filename} ·`}).filter({hasText: 'source features'}).waitFor({
@@ -73,7 +75,8 @@ async function openMode(page, filename) {
   });
 }
 
-// One fresh page for one size. Workers are blocked, as in the browser tests, so the bundle comes from the route below.
+// Returns the timings and heap of one size, from a fresh page. Workers are blocked, as in the browser tests, so the bundle
+// comes from the route below.
 async function measure(browser, factor) {
   const bundle = scaledBundle(factor);
   const context = await browser.newContext({serviceWorkers: 'block', viewport: {width: 1280, height: 800}});
@@ -83,23 +86,46 @@ async function measure(browser, factor) {
     return route.fulfill({body: bundle.get(filename), contentType: 'application/json'});
   });
   const result = {factor};
-  result.startupMilliseconds = await timed(async () => {
+  result.startupMilliseconds = await elapsedMilliseconds(async () => {
     await page.goto(pageURL);
     await page.locator('#status').filter({hasText: 'Browse'}).waitFor({timeout: longOperationMilliseconds});
   });
   for (const filename of measuredModes) {
-    result[`${filename} ms`] = await timed(() => openMode(page, filename));
+    result[`${filename} milliseconds`] = await elapsedMilliseconds(() => openMode(page, filename));
   }
   result.heapMegabytes = await usedHeapMegabytes(page);
   await context.close();
   return result;
 }
 
+function parseFactors(text) {
+  const factors = text.trim().split(/\s+/).map(Number);
+  const areValid = factors.every(factor => Number.isInteger(factor) && factor > 0);
+  if (!areValid) throw new Error(`FACTORS must be positive whole numbers, not "${text}".`);
+  return factors;
+}
+
+// Fails if the server exits first, or something else already holds the port and would be measured instead.
+async function waitForServer(server) {
+  let exitCode = null;
+  server.once('exit', code => (exitCode = code ?? 1));
+  const deadline = Date.now() + serverStartMilliseconds;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, serverPollMilliseconds));
+    if (exitCode !== null) throw new Error(`The server on port ${port} exited with code ${exitCode}. Set MEASURE_PORT?`);
+    const isAnswering = await fetch(pageURL).then(response => response.ok).catch(() => false);
+    if (isAnswering) return;
+  }
+  throw new Error(`The server on port ${port} did not answer.`);
+}
+
 async function main() {
-  const factors = (process.env.FACTORS ?? '1 2 4 8').split(' ').map(Number);
-  const server = spawn('python3', [serverTool, '--port', String(port), '--app', 'editor'], {stdio: 'ignore'});
+  const factors = parseFactors(process.env.FACTORS ?? '1 2 4 8');
+  const server = spawn('python3', [serverTool, '--port', String(port), '--app', 'editor'], {
+    stdio: ['ignore', 'ignore', 'inherit']
+  });
   try {
-    await new Promise(resolve => setTimeout(resolve, serverStartMilliseconds));
+    await waitForServer(server);
     const browser = await chromium.launch({args: browserArguments});
     const results = [];
     for (const factor of factors) results.push(await measure(browser, factor));

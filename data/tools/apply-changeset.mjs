@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
+import {
+  applyVisibility,
+  correctionOriginProperty,
+  placesProvenance,
+  resolveLevel,
+  serializePlaces
+} from './apply-place-visibility.mjs';
 import {checkData, validateBuildingLabels, validateCollection} from './check-data.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -19,9 +25,6 @@ const ledgerPath = 'data/sources/editor-corrections.json';
 const collinearToleranceDegreesSquared = 1e-13;
 const placeIdentityFields = ['id', 'source'];
 const newFeatureFields = ['type', 'properties', 'geometry'];
-// Names the changeset that last corrected a feature, whose ledger entries say who, why and what. Imported attribution
-// such as source or address_sources stays as it is, so upstream facts and local corrections remain distinguishable.
-const correctionOriginProperty = 'correction_changeset';
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fingerprint = feature => sha256(JSON.stringify(feature));
@@ -352,12 +355,16 @@ function serializeLayer(collection, originalBytes) {
   return JSON.stringify(collection) + (hasFinalNewline ? '\n' : '');
 }
 
-// Marks what each operation leaves behind with its local origin. Done before anything reads the results, so the sources
-// and the ledger agree on the feature and its fingerprint. A deletion leaves nothing to mark.
+// Marks what each operation leaves behind with its local origin. Imported attribution such as source or address_sources
+// stays as it is, so upstream facts and local corrections remain distinguishable. A deletion leaves nothing to mark.
+// Done before anything reads the results, so the sources and the ledger agree on the feature and its fingerprint. That
+// needs the same key order, and regenerating levels always writes visibilityLevel last.
 function withCorrectionOrigin(changeset) {
   const operations = changeset.operations.map(operation => {
     if (!operation.after) return operation;
-    const properties = {...operation.after.properties, [correctionOriginProperty]: changeset.id};
+    const {visibilityLevel, ...otherProperties} = operation.after.properties;
+    const properties = {...otherProperties, [correctionOriginProperty]: changeset.id};
+    if (visibilityLevel !== undefined) properties.visibilityLevel = visibilityLevel;
     return {...operation, after: {...operation.after, properties}};
   });
   return {...changeset, operations};

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {entranceBearing} from './building-entrances.mjs';
-import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
+import {applyVisibility, placesProvenance, serializePlaces, correctionOriginProperty} from './apply-place-visibility.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const contract=JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/places.schema.json')));
 const categories=new Set(contract.properties.properties.properties.category.enum);
@@ -190,7 +190,24 @@ export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provena
   for (const [key, value] of Object.entries(placesProvenance(placeBytes, places, policyBytes, configBytes))) requireValue(provenance[key] === value, `Place provenance mismatch: ${key}. Review the change and update data/sources/provenance.json.`);
   return count;
 }
+// Every feature that claims a correction must name a changeset the ledger holds, or nobody could find who made it and why.
+function checkCorrectionOrigins(root) {
+  const sourcesDirectory = path.join(root, 'data/sources');
+  const ledgerFile = path.join(sourcesDirectory, 'editor-corrections.json');
+  const ledger = fs.existsSync(ledgerFile) ? JSON.parse(fs.readFileSync(ledgerFile)) : {corrections: []};
+  const knownChangesets = new Set(ledger.corrections.map(correction => correction.changeset));
+  for (const filename of fs.readdirSync(sourcesDirectory).filter(name => name.endsWith('.geojson'))) {
+    const {features} = JSON.parse(fs.readFileSync(path.join(sourcesDirectory, filename)));
+    for (const {properties} of features) {
+      const origin = properties?.[correctionOriginProperty];
+      if (origin === undefined) continue;
+      requireValue(knownChangesets.has(origin), `${filename}: ${correctionOriginProperty} ${origin} is not in the ledger`);
+    }
+  }
+}
+
 export function checkData(root = rootDirectory) {
+  checkCorrectionOrigins(root);
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
   const labelProvenance=JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-labels.provenance.json')));

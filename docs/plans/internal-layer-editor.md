@@ -238,7 +238,8 @@ consistency needs an explicit data-owned workflow, without combining their file 
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
-  - Slice 7: larger datasets are [measured on desktop](../../apps/editor/README.md#larger-datasets), not on a phone.
+  - Slice 7: larger datasets are [measured on desktop](../../apps/editor/README.md#larger-datasets), not on a phone, and
+    without edits or export.
 - Not implemented: refresh or rebase of corrections. Indices are bound to one snapshot, so a re-extract still replaces
   local edits, and an existing changeset stops at import. This needs the identity registry described above.
 - Design choices to review: one active source file at a time; one Roads & paths switch with subtype tools; local
@@ -280,8 +281,8 @@ Known open items:
 
 - Installing on a real phone has not been tried. The first check is `/editor/` on Pages, in Chrome.
 - Editor browser tests are sensitive to load: in that parallel run two desktop tests timed out at 15 seconds with the
-  page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. This
-  belongs with the larger-dataset check.
+  page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. The
+  larger-dataset measurement did not address this.
 - Formatting of new code is not enforced: .prettierrc.json covers Markdown only.
 - Dense committed code outside this change remains in apps/web/src/app.js, apps/web/tools/finalize.mjs and older tests.
 

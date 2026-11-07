@@ -91,9 +91,39 @@ test('a corrected feature names its changeset, keeps its attribution, and matche
   assert.equal(written.properties.id, before.properties.id);
   const [correction] = JSON.parse(fs.readFileSync(sourcePath(root, 'editor-corrections.json'))).corrections;
   assert.equal(correction.after.properties.correction_changeset, reviewed.id);
-  assert.equal(correction.afterFingerprint, fingerprint(correction.after));
+  assert.equal(correction.afterFingerprint, fingerprint(written), 'the ledger must name the feature as it was written');
   const untouched = readSource(root, 'places.geojson').features[1];
   assert.equal(untouched.properties.correction_changeset, undefined);
+});
+
+test('a level-only correction leaves the hash of place facts as it was', testContext => {
+  const root = temporaryRoot(testContext);
+  const readProvenance = () => JSON.parse(fs.readFileSync(sourcePath(root, 'provenance.json')));
+  const factsHashBefore = readProvenance().places_facts_sha256;
+  const operation = modifyOperation(root, 'places.geojson', 0, feature => {
+    feature.properties.visibilityLevel = feature.properties.visibilityLevel === 2 ? 3 : 2;
+  });
+  applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt});
+  assert.equal(readProvenance().places_facts_sha256, factsHashBefore);
+});
+
+test('the data check refuses a correction whose changeset is not in the ledger', testContext => {
+  const root = temporaryRoot(testContext);
+  const operation = modifyOperation(root, 'roads.geojson', 0, feature => {
+    feature.properties.name = 'Corrected road';
+  });
+  applyChangeset(changeset(root, 'roads.geojson', [operation]), root, {now: reviewedAt});
+  assert.doesNotThrow(() => checkData(root));
+  fs.rmSync(sourcePath(root, 'editor-corrections.json'));
+  assert.throws(() => checkData(root), /roads\.geojson: correction_changeset .* is not in the ledger/);
+});
+
+test('a changeset cannot set the local origin itself', testContext => {
+  const root = temporaryRoot(testContext);
+  const operation = modifyOperation(root, 'places.geojson', 0, feature => {
+    feature.properties.correction_changeset = 'someone-else';
+  });
+  assert.throws(() => applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt}), /refused/);
 });
 
 test('a feature corrected twice names the later changeset', testContext => {

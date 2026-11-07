@@ -13,7 +13,7 @@ import {featureProblem} from '../../apps/editor/src/layer-rules.js';
 import {applyChangeset} from '../../data/tools/apply-changeset.mjs';
 
 // The contract between the editor and the importer, end to end: whatever the editor exports, the data-owned
-// importer must accept, and the result must equal what the editor showed.
+// importer must accept, and the result must equal what the editor showed, plus the importer's local origin.
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const envelope = {
   id: 'integration-changeset',
