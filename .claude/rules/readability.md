@@ -80,9 +80,13 @@ means, the meaning is hidden and the name is wrong.
 - A rename reaches every use in the component: tests, error messages, log prefixes, comments, and docs.
 - A readability change preserves behavior. It does not change wire formats or user-visible text, and it never deletes,
   skips, or loosens a test.
+- Preserving behavior does not mean preserving a defect. A defect found while rewriting is fixed in its own commit, with
+  a test that fails without the fix. An improvement noticed in passing, even a small one, waits for its own change.
 
-Outside services/backend, no hook, lint rule, or CI check enforces this guideline. In services/backend, golangci-lint
-enforces part of it: names under three characters used beyond a few lines, functions over 60 lines, `if` nesting and
-overall cognitive complexity, most unnamed numbers outside tests, and comments on exported names. Everything else stays
-with the compliance review, which depends on the agent running it: whether a name is meaningful, abbreviations such as
-`prev`, exact nesting depth, and numbers in tests.
+In apps/, ESLint enforces one statement per line, names under two characters (except `x`, `y`, `z`, `t`, `_` and object
+keys), nesting deeper than three blocks, and functions over 80 lines outside tests: the backstop, while about 60 stays
+the aim. Elsewhere outside services/backend, no lint rule enforces this guideline yet. In services/backend,
+golangci-lint enforces part of it: names under three characters used beyond a few lines, functions over 60 lines, `if`
+nesting and overall cognitive complexity, most unnamed numbers outside tests, and comments on exported names. Everything
+else stays with the compliance review, which depends on the agent running it: whether a name is meaningful,
+abbreviations such as `prev`, exact nesting depth, and numbers in tests.

@@ -8,16 +8,16 @@
 // Coordinates are [longitude, latitude].
 
 // metres a vehicle must move before its direction changes; smaller moves may be GPS noise
-const minMovementMetres = 20;
+const minimumMovementMetres = 20;
 // limits how far one vehicle can plausibly travel between checks
-const maxSpeedMetresPerSecond = 30;
+const maximumSpeedMetresPerSecond = 30;
 // added to the distance a vehicle can plausibly travel between checks
 const matchToleranceMetres = 50;
 // the longest pause between checks that still allows matching vehicles
-const maxTrackingGapMilliseconds = 60000;
+const maximumTrackingGapMilliseconds = 60000;
 const millisecondsPerSecond = 1000;
 // how far from a route a vehicle may be and still take its direction from that route
-const maxRouteDistanceMetres = 2000;
+const maximumRouteDistanceMetres = 2000;
 
 const degreesPerCircle = 360;
 const earthRadiusMetres = 6371008.8;
@@ -29,7 +29,8 @@ const headingUnknown = 'unknown';
 
 // How far point lies east and north of origin, on a flat plane (equirectangular; fine at city scale).
 function offsetMetres(origin, point) {
-  const east = (point[0] - origin[0]) * radiansPerDegree * Math.cos(origin[1] * radiansPerDegree) * earthRadiusMetres;
+  const east =
+    (point[0] - origin[0]) * radiansPerDegree * Math.cos(origin[1] * radiansPerDegree) * earthRadiusMetres;
   const north = (point[1] - origin[1]) * radiansPerDegree * earthRadiusMetres;
   return [east, north];
 }
@@ -58,7 +59,7 @@ export function routeLines(network) {
   const linesByRoute = new Map();
   for (const pattern of network.patterns) {
     const stopIds = pattern.stops ?? [];
-    const line = stopIds.map(stopId => network.stops[stopId]?.coordinates).filter(isCoordinatePair);
+    const line = stopIds.map((stopId) => network.stops[stopId]?.coordinates).filter(isCoordinatePair);
     if (typeof pattern.route !== 'string' || line.length < 2) {
       continue;
     }
@@ -83,19 +84,26 @@ function segmentDistanceMetres(point, start, end) {
   // the closest point on the segment, as a fraction of its length; point is the origin here
   const projection = -(startEast * segmentEast + startNorth * segmentNorth) / lengthSquared;
   const fractionAlongSegment = Math.max(0, Math.min(1, projection));
-  return Math.hypot(startEast + fractionAlongSegment * segmentEast, startNorth + fractionAlongSegment * segmentNorth);
+  return Math.hypot(
+    startEast + fractionAlongSegment * segmentEast,
+    startNorth + fractionAlongSegment * segmentNorth
+  );
 }
 
-// Direction of the nearest route segment within maxRouteDistanceMetres, or null. A combined route name
+// Direction of the nearest route segment within maximumRouteDistanceMetres, or null. A combined route name
 // such as "7|99" falls back to its parts.
 export function routeDirection(linesByRoute, route, point) {
-  const candidateLines = linesByRoute.get(route) ?? route.split('|').flatMap(part => linesByRoute.get(part.trim()) ?? []);
+  const candidateLines =
+    linesByRoute.get(route) ?? route.split('|').flatMap((part) => linesByRoute.get(part.trim()) ?? []);
   let nearestMetres = Infinity;
   let nearestDirection = null;
   for (const line of candidateLines) {
     for (let index = 0; index < line.length - 1; index++) {
       const segmentMetres = segmentDistanceMetres(point, line[index], line[index + 1]);
-      const isNearer = segmentMetres !== null && segmentMetres <= maxRouteDistanceMetres && segmentMetres < nearestMetres;
+      const isNearer =
+        segmentMetres !== null &&
+        segmentMetres <= maximumRouteDistanceMetres &&
+        segmentMetres < nearestMetres;
       if (isNearer) {
         nearestMetres = segmentMetres;
         nearestDirection = compassDirection(line[index], line[index + 1]);
@@ -112,7 +120,7 @@ function knownMovementDirection(vehicle, previousVehicle, match) {
   if (vehicle.properties.heading === headingMovement) {
     return {direction: vehicle.properties.bearing};
   }
-  if (previousVehicle && match.separationMetres >= minMovementMetres) {
+  if (previousVehicle && match.separationMetres >= minimumMovementMetres) {
     return {direction: compassDirection(previousVehicle.movementAnchor, vehicle.geometry.coordinates)};
   }
   if (previousVehicle?.heading === headingMovement) {
@@ -141,15 +149,17 @@ export class DirectionTracker {
 
   // Returns vehicles with bearing and heading set, and remembers this check. fetchedAt is in milliseconds.
   update(vehicles, fetchedAt) {
-    const elapsedMilliseconds = this.previousFetchedAt === null ? Infinity : fetchedAt - this.previousFetchedAt;
+    const elapsedMilliseconds =
+      this.previousFetchedAt === null ? Infinity : fetchedAt - this.previousFetchedAt;
     // After a pause, positions are too far apart in time to match reliably. A repeated (cached)
     // check has elapsed 0: positions match exactly and directions are kept.
-    if (!(elapsedMilliseconds >= 0 && elapsedMilliseconds <= maxTrackingGapMilliseconds)) {
+    if (!(elapsedMilliseconds >= 0 && elapsedMilliseconds <= maximumTrackingGapMilliseconds)) {
       this.previouslyTracked = [];
     }
-    const elapsedSeconds = Math.min(elapsedMilliseconds, maxTrackingGapMilliseconds) / millisecondsPerSecond;
-    const maxMatchDistanceMetres = maxSpeedMetresPerSecond * elapsedSeconds + matchToleranceMetres;
-    const matches = this.matchToPreviouslyTracked(vehicles, maxMatchDistanceMetres);
+    const elapsedSeconds =
+      Math.min(elapsedMilliseconds, maximumTrackingGapMilliseconds) / millisecondsPerSecond;
+    const maximumMatchDistanceMetres = maximumSpeedMetresPerSecond * elapsedSeconds + matchToleranceMetres;
+    const matches = this.matchToPreviouslyTracked(vehicles, maximumMatchDistanceMetres);
 
     const currentlyTracked = [];
     const publishedVehicles = vehicles.map((vehicle, vehicleIndex) => {
@@ -157,7 +167,10 @@ export class DirectionTracker {
       const previousVehicle = match && this.previouslyTracked[match.previousIndex];
       const tracked = this.nextTrackedVehicle(vehicle, previousVehicle, match);
       currentlyTracked.push(tracked);
-      return {...vehicle, properties: {...vehicle.properties, bearing: tracked.direction ?? 0, heading: tracked.heading}};
+      return {
+        ...vehicle,
+        properties: {...vehicle.properties, bearing: tracked.direction ?? 0, heading: tracked.heading}
+      };
     });
 
     this.previouslyTracked = currentlyTracked;
@@ -167,7 +180,7 @@ export class DirectionTracker {
 
   // Pairs each vehicle with at most one previous vehicle, keyed by vehicle index. Each side is used at
   // most once, and the closest available pair wins.
-  matchToPreviouslyTracked(vehicles, maxDistanceMetres) {
+  matchToPreviouslyTracked(vehicles, maximumDistanceMetres) {
     const candidates = [];
     vehicles.forEach((vehicle, vehicleIndex) => {
       this.previouslyTracked.forEach((previousVehicle, previousIndex) => {
@@ -175,7 +188,7 @@ export class DirectionTracker {
           return;
         }
         const separationMetres = distanceMetres(previousVehicle.movementAnchor, vehicle.geometry.coordinates);
-        if (separationMetres <= maxDistanceMetres) {
+        if (separationMetres <= maximumDistanceMetres) {
           candidates.push({vehicleIndex, previousIndex, separationMetres});
         }
       });
@@ -198,8 +211,8 @@ export class DirectionTracker {
   nextTrackedVehicle(vehicle, previousVehicle, match) {
     const {route} = vehicle.properties;
     const position = vehicle.geometry.coordinates;
-    const barelyMoved = previousVehicle && match.separationMetres < minMovementMetres;
-    const movementAnchor = barelyMoved ? previousVehicle.movementAnchor : position;
+    const hasBarelyMoved = previousVehicle && match.separationMetres < minimumMovementMetres;
+    const movementAnchor = hasBarelyMoved ? previousVehicle.movementAnchor : position;
 
     const movement = knownMovementDirection(vehicle, previousVehicle, match);
     if (movement) {

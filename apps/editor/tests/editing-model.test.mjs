@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import fileSystem from 'node:fs';
 import {buildChangeset, importChangeset, materializedLayer} from '../src/changeset.js';
 import {labelJoinProblems} from '../src/cross-file-checks.js';
 import {createActiveFileCommands} from '../src/active-file-commands.js';
@@ -32,7 +32,7 @@ import {
 } from '../src/layer-rules.js';
 
 const readContract = name =>
-  JSON.parse(fs.readFileSync(new URL(`../../../packages/contracts/${name}`, import.meta.url)));
+  JSON.parse(fileSystem.readFileSync(new URL(`../../../packages/contracts/${name}`, import.meta.url)));
 const rules = readContract('editor-layers.json');
 const geometryCases = readContract('fixtures/editor-geometry-cases.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));

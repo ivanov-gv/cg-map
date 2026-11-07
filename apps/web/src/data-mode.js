@@ -9,18 +9,24 @@ export const DATA_MODES = ['server', 'mock'];
 export function resolveDataMode(search, config) {
   const requested = new URLSearchParams(search).get('api');
   if (requested !== null) {
-    if (!DATA_MODES.includes(requested)) throw new Error(`Unknown data mode ?api=${requested}. Use ?api=server or ?api=mock.`);
+    if (!DATA_MODES.includes(requested))
+      throw new Error(`Unknown data mode ?api=${requested}. Use ?api=server or ?api=mock.`);
     return requested;
   }
   // No config means a static host without one, or offline startup: use the bundled data.
   if (config === null) return 'mock';
-  if (!DATA_MODES.includes(config?.api)) throw new Error('Invalid config.json: "api" must be "server" or "mock".');
+  if (!DATA_MODES.includes(config?.api))
+    throw new Error('Invalid config.json: "api" must be "server" or "mock".');
   return config.api;
 }
 
 // base is the app's own URL; server API paths are relative so the app also works under a path prefix.
 export function dataEndpoints(mode, base) {
-  if (mode === 'server') return {layers: new URL('api/v1/layers', base).href, vehicles: new URL('api/v1/transport/vehicles', base).href};
+  if (mode === 'server')
+    return {
+      layers: new URL('api/v1/layers', base).href,
+      vehicles: new URL('api/v1/transport/vehicles', base).href
+    };
   return {layers: null, vehicles: RELAY_URL};
 }
 

@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {findLogProblems, readLog} from './decision-log.mjs';
+import {unreachableInstructions} from './instruction-reach.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -56,8 +58,24 @@ const imports = {
     './map-taps.js',
     './data-mode.js',
     './position.js',
-    './interface.js'
+    './interface.js',
+    './dom.js',
+    './place-details.js',
+    './public-map-layers.js',
+    './map-selection.js',
+    './offline-controls.js',
+    './status-messages.js',
+    './place-selection.js',
+    './location-controls.js'
   ],
+  'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './position.js', './status-messages.js'],
+  'dom.js': [],
+  'place-details.js': ['@ivanov-gv/map-core', './core.js', './dom.js'],
+  'public-map-layers.js': ['@ivanov-gv/map-core', './core.js'],
+  'map-selection.js': ['@ivanov-gv/map-core', './point-selection.js'],
+  'offline-controls.js': ['./data-mode.js', './dom.js', './offline.js'],
+  'status-messages.js': ['./core.js'],
+  'place-selection.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './place-details.js', './interface.js'],
   'interface.js': [],
   'core.js': [],
   'offline.js': ['./core.js'],
@@ -69,7 +87,7 @@ const imports = {
   'position.js': ['./core.js'],
   'routing.js': [],
   'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./routing.js', './transit-routing.js', './core.js']
+  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;
@@ -114,4 +132,11 @@ for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) 
   }
 }
 assert.deepEqual(findLogProblems(readLog('docs/decisions')), [], 'The decisions log is out of sequence');
-console.log('Documentation links, decisions log, component layout, and dependency boundaries passed.');
+// Every instruction file must be reachable from the root AGENTS.md, so agents that do not load nested files still find it.
+const instructionFiles = [
+  ...execFileSync('git', ['ls-files', 'AGENTS.md', '**/AGENTS.md'], {encoding: 'utf8'}).split('\n').filter(Boolean),
+  '.github/pull_request_template.md',
+  '.github/TESTING.md'
+];
+assert.deepEqual(unreachableInstructions('.', instructionFiles), [], 'Link these instruction files from the root AGENTS.md or a file it links');
+console.log('Documentation links, instruction reach, decisions log, component layout, and dependency boundaries passed.');

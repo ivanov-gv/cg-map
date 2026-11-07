@@ -10,8 +10,9 @@ it.
 - apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension,
   and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
   and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
-- A new web module needs its allowed imports declared in platform/tools/check-repo.mjs; dynamic `import()` in web
-  runtime is rejected. Enforced: `npm run check:repo`.
+- A new web module needs its allowed imports declared in platform/tools/check-repo.mjs, its file in the offline shell
+  list in apps/web/tools/finalize.mjs, and a browser area or shared-source entry in platform/tools/ci-plan.mjs. Dynamic
+  `import()` in web runtime is rejected. Enforced: `npm run check:repo`, the offline inventory test, and ci-plan tests.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 
@@ -36,4 +37,7 @@ it.
 - Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
   tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
+- A browser test waits for a state: an event, or a poll on a condition. A fixed delay is not synchronization. A failure
+  seen only with parallel workers is not a flake to dismiss: investigate both races and resource limits (frame rate,
+  time budgets), record the worker count and machine capacity, and keep its assertions.
 - Verify: `make verify PKG=<component>`, then `make check`.

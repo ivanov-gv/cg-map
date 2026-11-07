@@ -1,5 +1,5 @@
 // Describes one release for the service worker: every file with its hash, and a release ID derived from them.
-import fs from 'node:fs';
+import fileSystem from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 
@@ -9,7 +9,7 @@ const generatedManifestFile = 'offline-manifest.js';
 const workerFile = 'sw.js';
 
 function artifactFiles(outputDirectory) {
-  const entries = fs.readdirSync(outputDirectory, {recursive: true, withFileTypes: true});
+  const entries = fileSystem.readdirSync(outputDirectory, {recursive: true, withFileTypes: true});
   return entries
     .filter(entry => entry.isFile())
     .map(entry => path.relative(outputDirectory, path.join(entry.parentPath, entry.name)).split(path.sep).join('/'))
@@ -20,7 +20,7 @@ function artifactFiles(outputDirectory) {
 export function offlineManifest(outputDirectory, archivePath) {
   const hashed = artifactFiles(outputDirectory).map(filePath => ({
     path: filePath,
-    sha256: sha256Of(fs.readFileSync(path.join(outputDirectory, filePath)))
+    sha256: sha256Of(fileSystem.readFileSync(path.join(outputDirectory, filePath)))
   }));
   const release = sha256Of(JSON.stringify(hashed)).slice(0, 16);
   const stored = hashed.filter(({path: filePath}) => filePath !== workerFile && filePath !== generatedManifestFile);
@@ -40,8 +40,8 @@ export function writeOfflineManifest(outputDirectory, archivePath) {
     `export const files = ${JSON.stringify(files)};`,
     ''
   ].join('\n');
-  fs.writeFileSync(path.join(outputDirectory, generatedManifestFile), moduleText);
+  fileSystem.writeFileSync(path.join(outputDirectory, generatedManifestFile), moduleText);
   const workerPath = path.join(outputDirectory, workerFile);
-  fs.writeFileSync(workerPath, `// Release ${release}.\n${fs.readFileSync(workerPath, 'utf8')}`);
+  fileSystem.writeFileSync(workerPath, `// Release ${release}.\n${fileSystem.readFileSync(workerPath, 'utf8')}`);
   return release;
 }

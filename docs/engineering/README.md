@@ -52,7 +52,8 @@ Both come from the personal [agents plugin](https://github.com/ivanov-gv/agents)
 - Codex: the `compliance_reviewer` agent. Codex plugins cannot ship agents, so install it once per machine with
   `./install.sh --codex-agents` from the agents repository (it goes to `~/.codex/agents`). Ask for it by name: "have
   compliance_reviewer check the change".
-- Both are read-only by instruction, not by sandbox: the reviewer can run the check commands.
+- Both are read-only by instruction, not by sandbox: the reviewer can run the check commands. Builds rewrite the
+  worktree's dist/ and .build/, so tell the reviewer not to run them while a browser suite is running.
 
 ### Verify loading after upgrading an agent
 

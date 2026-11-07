@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cardStateAfterSwipe, isInFocusZone, searchBounds, uncoveredMapArea, uncoveredMapOffset} from '../src/interface.js';
+import {
+  cardStateAfterSwipe,
+  isInFocusZone,
+  searchBounds,
+  uncoveredMapArea,
+  uncoveredMapOffset
+} from '../src/interface.js';
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {
@@ -16,7 +22,15 @@ test('search target stays below bubble and above keyboard without changing the m
   for (const visibleHeight of [840, 420]) {
     const bounds = searchBounds({height: visibleHeight, top: 25});
     const searchBottom = bounds.top + bounds.maxHeight;
-    const offset = uncoveredMapOffset({width: 412, height: 840, visibleTop: 25, visibleHeight, headerBottom: 91, searchBottom, mobile: true});
+    const offset = uncoveredMapOffset({
+      width: 412,
+      height: 840,
+      visibleTop: 25,
+      visibleHeight,
+      headerBottom: 91,
+      searchBottom,
+      mobile: true
+    });
     const point = [206 + offset[0], 420 + offset[1]];
     assert.ok(point[0] > 16 && point[0] < 340);
     assert.ok(point[1] > searchBottom);
@@ -25,26 +39,60 @@ test('search target stays below bubble and above keyboard without changing the m
 });
 
 test('selected point stays above phone details and beside desktop details or dock', () => {
-  const phone = uncoveredMapOffset({width: 412, height: 840, headerBottom: 66, details: {top: 480, right: 340}, mobile: true});
+  const phone = uncoveredMapOffset({
+    width: 412,
+    height: 840,
+    headerBottom: 66,
+    details: {top: 480, right: 340},
+    mobile: true
+  });
   assert.ok(420 + phone[1] > 82 && 420 + phone[1] < 464);
-  const desktop = uncoveredMapOffset({width: 1280, height: 800, headerBottom: 74, dockRight: 400, details: {top: 94, right: 395}});
+  const desktop = uncoveredMapOffset({
+    width: 1280,
+    height: 800,
+    headerBottom: 74,
+    dockRight: 400,
+    details: {top: 94, right: 395}
+  });
   assert.ok(640 + desktop[0] > 416 && 640 + desktop[0] < 1208);
 });
 
 test('focus zone is the inner 75% of the uncovered map width and height', () => {
   const area = {left: 100, right: 500, top: 200, bottom: 600};
-  const inside = [{x: 300, y: 400}, {x: 150, y: 250}, {x: 450, y: 550}];
-  const outside = [{x: 149, y: 400}, {x: 451, y: 400}, {x: 300, y: 249}, {x: 300, y: 551}];
+  const inside = [
+    {x: 300, y: 400},
+    {x: 150, y: 250},
+    {x: 450, y: 550}
+  ];
+  const outside = [
+    {x: 149, y: 400},
+    {x: 451, y: 400},
+    {x: 300, y: 249},
+    {x: 300, y: 551}
+  ];
   for (const point of inside) assert.equal(isInFocusZone(point, area), true, JSON.stringify(point));
   for (const point of outside) assert.equal(isInFocusZone(point, area), false, JSON.stringify(point));
 });
 
 test('a place under a panel is never inside the focus zone', () => {
-  const phone = uncoveredMapArea({width: 412, height: 840, headerBottom: 66, searchBottom: 420, details: {top: 742, right: 340}, mobile: true});
+  const phone = uncoveredMapArea({
+    width: 412,
+    height: 840,
+    headerBottom: 66,
+    searchBottom: 420,
+    details: {top: 742, right: 340},
+    mobile: true
+  });
   assert.equal(isInFocusZone({x: 178, y: 300}, phone), false, 'under the results');
   assert.equal(isInFocusZone({x: 178, y: 790}, phone), false, 'under the card');
   assert.equal(isInFocusZone({x: 178, y: 580}, phone), true);
-  const desktop = uncoveredMapArea({width: 1280, height: 800, headerBottom: 74, dockRight: 400, details: {top: 20, right: 787}});
+  const desktop = uncoveredMapArea({
+    width: 1280,
+    height: 800,
+    headerBottom: 74,
+    dockRight: 400,
+    details: {top: 20, right: 787}
+  });
   assert.equal(isInFocusZone({x: 200, y: 400}, desktop), false, 'under the dock');
   assert.equal(isInFocusZone({x: 600, y: 400}, desktop), false, 'under the card');
   assert.equal(isInFocusZone({x: 1000, y: 400}, desktop), true);

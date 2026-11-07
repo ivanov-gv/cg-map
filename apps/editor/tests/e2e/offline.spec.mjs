@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
-import fs from 'node:fs';
+import fileSystem from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -29,12 +29,12 @@ function startReleaseServer(pathPrefix = '/') {
     state.requests.push({path: requestPath, range: request.headers.range});
     if (state.heldPaths.has(requestPath)) await state.heldPaths.get(requestPath);
     const filePath = path.join(artifactDirectory, requestPath);
-    const isServable = state.overrides.has(requestPath) || (fs.existsSync(filePath) && fs.statSync(filePath).isFile());
+    const isServable = state.overrides.has(requestPath) || (fileSystem.existsSync(filePath) && fileSystem.statSync(filePath).isFile());
     if (!isServable) {
       response.writeHead(404).end();
       return;
     }
-    const bytes = state.overrides.get(requestPath) ?? fs.readFileSync(filePath);
+    const bytes = state.overrides.get(requestPath) ?? fileSystem.readFileSync(filePath);
     const headers = {'Content-Type': contentTypes[path.extname(requestPath)] ?? 'application/octet-stream'};
     const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.range ?? '');
     if (range) {
@@ -65,7 +65,7 @@ function startReleaseServer(pathPrefix = '/') {
   });
 }
 
-const readArtifact = file => fs.readFileSync(path.join(artifactDirectory, file));
+const readArtifact = file => fileSystem.readFileSync(path.join(artifactDirectory, file));
 
 const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -187,7 +187,7 @@ test.describe('offline-first install', () => {
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);
-    const {operations} = JSON.parse(fs.readFileSync(savedPath));
+    const {operations} = JSON.parse(fileSystem.readFileSync(savedPath));
     expect(operations[0].after.properties.name).toBe('Added offline');
   });
 

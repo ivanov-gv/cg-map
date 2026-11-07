@@ -22,7 +22,7 @@ function listBrowserTestsThroughMake(makeArguments) {
   });
 }
 
-test('the Makefile preserves project, title and file filters', async t => {
+test('the Makefile preserves project, title and file filters', async testContext => {
   const cases = [
     {
       name: 'mobile transport',
@@ -38,8 +38,11 @@ test('the Makefile preserves project, title and file filters', async t => {
     }
   ];
   for (const scenario of cases) {
-    await t.test(scenario.name, () => {
-      const results = [listBrowserTestsThroughMake(scenario.makeArguments), listBrowserTestsDirectly(scenario.filters)];
+    await testContext.test(scenario.name, () => {
+      const results = [
+        listBrowserTestsThroughMake(scenario.makeArguments),
+        listBrowserTestsDirectly(scenario.filters)
+      ];
       const selections = results.map(result => {
         assert.equal(result.status, 0, `${result.error ?? ''}${result.stdout}${result.stderr}`);
         const output = stripVTControlCharacters(result.stdout);

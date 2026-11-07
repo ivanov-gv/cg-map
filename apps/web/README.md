@@ -27,7 +27,7 @@ result lists free; avoid expensive application work during gestures.
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
 | [style.css](public/style.css)                                                   | Desktop/mobile layout, positioning and visual states                                   |
 | [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
-| [app.js](src/app.js)                                                            | Startup, state, UI handlers, results, markers, place cards                             |
+| [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
 | [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
 | [vehicle-direction.js](src/vehicle-direction.js)                                | Direction of travel for vehicle markers (movement, or route estimate)                  |
 | [config.json](public/config.json)                                               | Static hosts' data mode (`mock`); the Go server answers `server` instead               |
@@ -69,6 +69,11 @@ recovery after an explicit location request. Route controls appear after endpoin
 search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
 existing features.
 
+The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
+handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
+rendering; offline downloads separate shell saving, staging, checksum verification, and activation. Selection, location,
+offline controls and app-owned map layers now have explicit modules; each application continues to build independently.
+
 ## 3. What happens when the page opens
 
 1. The browser parses index.html and creates its DOM.
@@ -78,7 +83,7 @@ existing features.
 5. start() begins asynchronous initialization.
 6. It rejects file:/content: opening and checks that vendor libraries loaded.
 7. It fetches data/manifest.json, data/places.geojson, and data/place-visibility.json.
-8. It validates each place's level and builds byId and the marker keys from the stable place ID.
+8. It validates each place's level and builds placesById and the marker keys from the stable place ID.
 9. It registers the service worker where supported in a secure context.
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
@@ -94,26 +99,36 @@ The top-level start().catch(...) handler displays startup errors. Later map erro
 
 ## 4. Where application state lives
 
-app.js currently uses module variables instead of a state-management library:
+app.js coordinates map, directory and startup state plus route endpoints. Three workflow controllers keep their
+transient state with the behavior that changes it:
 
-| Variable           | Meaning                                        |
-| ------------------ | ---------------------------------------------- |
-| map                | The single long-lived MapLibre instance        |
-| all                | Complete loaded place array                    |
-| filtered           | Places matching current text/category          |
-| byId               | Lookup from place ID to feature                |
-| category           | Active category key                            |
-| selected           | Selected place, or null                        |
-| satelliteVisible   | Whether the two satellite layers are shown     |
-| archive / manifest | Archive reader and downloaded dataset metadata |
-| loaded             | Whether application map-layer setup completed  |
-| downloadAbort      | Active download's cancellation controller      |
-| returnFocus        | Element to focus when closing place details    |
+| Owner                                        | State and responsibility                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `mapState`                                   | The single MapLibre map, its interface/controllers, readiness, optional layers and camera-exploration policy |
+| `directoryState`                             | Loaded places, visibility rules, stable marker keys, building addresses and the active search                |
+| `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
+| `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
+| [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
+| [LocationControls](src/location-controls.js) | The in-memory fix, explicit location requests and first-fix recentering                                      |
+| [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
-Changing a variable alone does not update the screen. The handler must also update DOM elements and/or MapLibre data.
+Controllers read the map and directory through getters because those inputs finish loading independently after the
+controls are bound. Selection and location keep their transient state private; app.js wires their effects together.
 
-There is no automatic React-style reconciliation. Read each handler as a short transaction: change state, update the
-affected views, and restore a usable focus/state.
+[place-details.js](src/place-details.js) renders details and result rows without owning the selection. It preserves the
+focused row when a camera move rebuilds the list. [map-selection.js](src/map-selection.js) chooses the most specific hit
+and calls the matching selection action. [public-map-layers.js](src/public-map-layers.js) installs app-owned overlays;
+shared rendering remains in map-core. [status-messages.js](src/status-messages.js) keeps transport/location wording
+pure.
+
+Nearest results from `selectNearestPlaces()` carry `feature` and `distanceKilometres`. Search normalization is
+`normalizeSearchText()`, its predicate is `matchesPlaceSearch()`, and GeoJSON construction is `featureCollection()`.
+Scale helpers consistently use metres; position limits spell out milliseconds and metres.
+
+There is no automatic reconciliation: handlers change state, update the affected DOM/map views, and restore usable
+focus. Shared data formats, visible text and storage keys are preserved. The reduced-motion query is shared through
+`isReducedMotionPreferred()` in dom.js: startup captures its value for selection/location moves, while route framing
+reads it for each move, preserving both existing policies.
 
 ## 5. Search: follow one event end to end
 
@@ -121,14 +136,14 @@ Suppose the user types "museum".
 
 1. The search input emits an input event.
 2. Its handler cancels the previous timer.
-3. It schedules filterPlaces() after 120 ms without another input event.
-4. filterPlaces() calls matches() on all places using the current category.
-5. matches() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
+3. It schedules applyPlaceSearch() after 120 ms without another input event.
+4. applyPlaceSearch() calls matchesPlaceSearch() on all places using the current category.
+5. matchesPlaceSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
-7. It assigns the resulting array to filtered.
+7. It assigns the resulting array to directoryState.filteredPlaces.
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
-10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result
+10. renderSearchResults() sorts matching places by approximate distance from the map center and creates up to 40 result
     buttons. The camera does not move, and map moves do not reorder the list while a chosen place's card is open.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
@@ -136,9 +151,9 @@ This is substring search over an in-memory dataset. It is not fuzzy search, a fu
 Distance is an approximation in kilometers from the map center, not a route length or necessarily distance from the
 user.
 
-Selecting a category updates category and calls the same filterPlaces() path.
+Selecting a category updates category and calls the same applyPlaceSearch() path.
 
-Panning calls renderResults() on moveend. It changes nearest ordering, not the text/category filters. It does not
+Panning calls renderSearchResults() on moveend. It changes nearest ordering, not the text/category filters. It does not
 restrict the search dataset to the visible rectangle.
 
 ## 6. Two rendering systems share the screen
@@ -199,14 +214,14 @@ CSS does not set vector-road colors. Change map-core/map-style.js for cartograph
 Map clicks use queryRenderedFeatures() on the place icon, place name, and search-place layers. Places are not clustered;
 one below its level's zoom is reached through the result list.
 
-- A hit on one listing passes its place ID to showPlace().
+- A hit on one listing passes its place ID to PlaceSelection.showPlace().
 - A hit on several listings, co-located or overlapping, opens a chooser in the details card.
 - A background click closes the card.
-- A result-list button calls showPlace() directly.
+- A result-list button calls PlaceSelection.showPlace() directly.
 
-showPlace():
+PlaceSelection.showPlace():
 
-1. Looks up the feature in byId.
+1. Looks up the feature in placesById.
 2. Stores selected and the originating control, when supplied.
 3. Fills card text and safe links.
 4. Shows the existing card element.
@@ -214,8 +229,8 @@ showPlace():
 6. Moves the camera only if the place is outside the focus zone, or zooms in if the map is below street level.
 7. Focuses the close button, which on phones is available only to screen readers.
 
-closePlace() clears the feature, hides the card, clears the selection filters and restores focus when possible. Escape
-also closes the mobile results panel.
+PlaceSelection.close() clears the feature, hides the card, clears the selection filters and restores focus when
+possible. Escape also closes the mobile results panel.
 
 This is all local interaction with already loaded data. No detail endpoint is called.
 
@@ -257,8 +272,8 @@ GeoJSON and the MapLibre calls used here use:
 [19.26, 42.437] // Podgorica
 ```
 
-This is the reverse of many human-readable GPS displays. showPlace() reverses a copy only to print latitude/longitude in
-the card.
+This is the reverse of many human-readable GPS displays. PlaceSelection.showPlace() reverses a copy only to print
+latitude/longitude in the card.
 
 Bounds are:
 
@@ -347,21 +362,21 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 
 ## 12. How to make common changes
 
-| Goal                        | Start here                                        | Follow-up                                          |
-| --------------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| Change button wording       | index.html or app.js, depending on who creates it | Regenerate offline manifests                       |
-| Change sidebar/card spacing | style.css                                         | Check desktop and mobile                           |
-| Change road/building colors | map-core/map-style.js                             | No geometry rebuild needed                         |
-| Change marker colors        | map-core/palette.js                               | Check list icons and map                           |
-| Change search fields/rules  | matches() in core.js                              | Add a meaningful search regression test            |
-| Change result limit         | selectNearest() in core.js                        | Consider list cost/usability                       |
-| Change initial center/zoom  | createMap options in app.js                       | Test cold startup                                  |
-| Add a card field            | showPlace() in app.js and place properties        | Use textContent and safe links                     |
-| Add/edit a place            | ../../data/sources/places.geojson                 | Reapply levels (data runbook); review count tests  |
-| Change when a place appears | ../../data/sources/place-visibility-policy.json   | Follow the data runbook's level steps              |
-| Change building footprint   | ../../data/sources/buildings.geojson              | Rebuild vector tiles, then publish                 |
-| Expand satellite coverage   | map-core/satellite.js, tiles, preview, provenance | Keep bounds, corners and tile inventory consistent |
-| Change offline assets       | tools/finalize.mjs                                | Regenerate both manifests                          |
+| Goal                        | Start here                                                    | Follow-up                                          |
+| --------------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| Change button wording       | index.html or app.js, depending on who creates it             | Regenerate offline manifests                       |
+| Change sidebar/card spacing | style.css                                                     | Check desktop and mobile                           |
+| Change road/building colors | map-core/map-style.js                                         | No geometry rebuild needed                         |
+| Change marker colors        | map-core/palette.js                                           | Check list icons and map                           |
+| Change search fields/rules  | matchesPlaceSearch() in core.js                               | Add a meaningful search regression test            |
+| Change result limit         | selectNearestPlaces() in core.js                              | Consider list cost/usability                       |
+| Change initial center/zoom  | createMap options in app.js                                   | Test cold startup                                  |
+| Add a card field            | renderPlaceDetails() in place-details.js and place properties | Use textContent and safe links                     |
+| Add/edit a place            | ../../data/sources/places.geojson                             | Reapply levels (data runbook); review count tests  |
+| Change when a place appears | ../../data/sources/place-visibility-policy.json               | Follow the data runbook's level steps              |
+| Change building footprint   | ../../data/sources/buildings.geojson                          | Rebuild vector tiles, then publish                 |
+| Expand satellite coverage   | map-core/satellite.js, tiles, preview, provenance             | Keep bounds, corners and tile inventory consistent |
+| Change offline assets       | tools/finalize.mjs                                            | Regenerate both manifests                          |
 
 A new module imported by app.js must also be added to the shell list in finalize.mjs (including interface.js). The
 current tooling does not discover JavaScript imports automatically.
