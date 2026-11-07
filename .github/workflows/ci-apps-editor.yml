@@ -57,7 +57,10 @@ jobs:
     name: Browser tests (${{ matrix.area }})
     needs: verify
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: dev
     strategy:
@@ -107,7 +110,10 @@ jobs:
     name: (test-run) Browser tests (${{ matrix.area }})
     needs: verify-test-run
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: test-run
     strategy:

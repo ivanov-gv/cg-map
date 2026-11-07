@@ -20,7 +20,10 @@ jobs:
     name: Verify core demo
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: dev
     steps: &verify-steps
@@ -45,7 +48,10 @@ jobs:
     name: (test-run) Verify core demo
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: test-run
     steps: *verify-steps

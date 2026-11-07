@@ -81,7 +81,10 @@ jobs:
     # A change such as a web unit test needs the web checks but no browser area.
     if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: dev
     strategy:
@@ -117,7 +120,10 @@ jobs:
     needs: verify-test-run
     if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
-    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+    container:
+      image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
+      # Set only on a local run with a GPU: see the Makefile.
+      options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
     environment: test-run
     strategy:

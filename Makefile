@@ -59,7 +59,8 @@ ACT ?= gh act
 # Pinned, as in the workflows: every machine runs local jobs on the same image CI uses.
 ACT_IMAGE := ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
 # Browser jobs render on the GPU where there is one. Too many at once time out tests: four did, with or without a GPU.
-ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--container-options "--device /dev/dri" --env E2E_ANGLE=gl-egl)
+# A job's own container takes its options from the workflow, not from act's flag, so both are needed.
+ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--container-options "--device /dev/dri" --var BROWSER_CONTAINER_OPTIONS="--device /dev/dri" --env E2E_ANGLE=gl-egl)
 ACT_JOBS ?= 2
 # The limit applies to each called workflow, and ci-all calls many at once.
 test-ci-all: ACT_JOBS = 1

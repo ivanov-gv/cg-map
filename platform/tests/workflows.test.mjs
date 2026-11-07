@@ -341,7 +341,7 @@ test('browser jobs and local runs pin one image, whose version matches the repos
     'ci-apps-core-demo.yml': ['verify', 'verify-test-run']
   };
   for (const [file, names] of Object.entries(browserJobs)) {
-    for (const name of names) pins.add(load(file).jobs[name].container);
+    for (const name of names) pins.add(load(file).jobs[name].container.image);
   }
   assert.equal(pins.size, 1, `every pin must match: ${[...pins].join(', ')}`);
   assert.match([...pins][0], expected);
