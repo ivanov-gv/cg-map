@@ -82,25 +82,9 @@ export const SHARED_WEB_SOURCES = [
   'location-controls.js'
 ];
 
-// The offline tests also make an edit, save it and export it, so they depend on these as well.
-const FORM_EDIT_SOURCES = [
-  'active-file-commands.js',
-  'changeset.js',
-  'edit-session.js',
-  'inspector-editing.js',
-  'property-form.js',
-  'review-panel.js'
-];
-const EDITING_SOURCES = [
-  ...FORM_EDIT_SOURCES,
-  'cross-file-checks.js',
-  'drag-gestures.js',
-  'edit-transaction.js',
-  'geometry-editing.js',
-  'geometry-validation.js',
-  'handle-layer.js'
-];
-const OFFLINE_SOURCES = [...FORM_EDIT_SOURCES, 'sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
+// Only moving geometry reaches these, which the offline and viewer tests never do.
+const GEOMETRY_MOVE_SOURCES = ['drag-gestures.js', 'geometry-editing.js', 'handle-layer.js'];
+const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
 // one project has a partner for the other, and both run the same sources.
@@ -110,12 +94,12 @@ export const EDITOR_BROWSER_AREAS = {
     // Sized from measured test time, so that each share stays inside the job time limit.
     jobs: 2,
     specFiles: ['editing.spec.mjs'],
-    sources: EDITING_SOURCES
+    sources: GEOMETRY_MOVE_SOURCES
   },
   'editing-mobile': {
     specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
     specFiles: ['editing.spec.mjs'],
-    sources: EDITING_SOURCES
+    sources: GEOMETRY_MOVE_SOURCES
   },
   'offline-desktop': {
     specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
@@ -134,8 +118,9 @@ export const EDITOR_BROWSER_AREAS = {
   }
 };
 
-// Every editor browser test boots these: startup validates the rules, every mode draws and hit tests through the overlay,
-// and the offline tests save a draft.
+// Every editor browser test goes through these: startup validates the rules and builds the session and review, every mode
+// draws and hit tests through the overlay, selecting a feature opens an edit, and the offline tests also edit, save a draft
+// and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
   'dom.js',
@@ -143,7 +128,16 @@ export const SHARED_EDITOR_SOURCES = [
   'source-bundle.js',
   'draft-store.js',
   'layer-rules.js',
-  'source-overlay.js'
+  'source-overlay.js',
+  'geometry-validation.js',
+  'active-file-commands.js',
+  'changeset.js',
+  'cross-file-checks.js',
+  'edit-session.js',
+  'edit-transaction.js',
+  'inspector-editing.js',
+  'property-form.js',
+  'review-panel.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);

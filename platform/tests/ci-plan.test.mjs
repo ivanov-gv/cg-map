@@ -237,12 +237,9 @@ const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 
 for (const [name, files, expectedAreas] of [
   ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile']],
-  [
-    'a source the offline tests edit through',
-    ['apps/editor/src/review-panel.js'],
-    ['editing-desktop', 'editing-mobile', 'offline-desktop', 'offline-mobile']
-  ],
-  ['the offline worker', ['apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']],
+  ['a source the offline tests edit through', ['apps/editor/src/review-panel.js'], ALL_EDITOR_AREAS],
+  ['a source that opens an edit on selection', ['apps/editor/src/inspector-editing.js'], ALL_EDITOR_AREAS],
+  ['the source behind the rules', ['apps/editor/src/geometry-validation.js'], ALL_EDITOR_AREAS],
   ['the overlay', ['apps/editor/src/source-overlay.js'], ALL_EDITOR_AREAS],
   ['the editing rules', ['apps/editor/src/layer-rules.js'], ALL_EDITOR_AREAS],
   ['a shared source', ['apps/editor/src/app.js'], ALL_EDITOR_AREAS],

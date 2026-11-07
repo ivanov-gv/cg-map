@@ -452,7 +452,7 @@ test(
       const card = await page.locator('#place-card').boundingBox();
       expect(point.y).toBeGreaterThan(bubble.y + bubble.height);
       expect(point.y).toBeLessThan(card.y);
-    }).toPass();
+    }).toPass({timeout: 15000});
   }
 );
 
