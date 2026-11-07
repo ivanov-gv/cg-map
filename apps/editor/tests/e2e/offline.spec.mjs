@@ -285,10 +285,7 @@ test.describe('offline-first install', () => {
     await expect.poll(() => renderedBasemapFeatures(page)).toBeGreaterThan(0);
   });
 
-  test('a version activating while a newer one downloads cannot leave a broken offline copy', async ({
-    page,
-    context
-  }) => {
+  test('a version activating while a newer one downloads cannot leave a broken offline copy', async ({page}) => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
@@ -313,33 +310,14 @@ test.describe('offline-first install', () => {
     server.heldPaths.clear();
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     await page.locator('#update-app').click();
-    // After this sequence the browser sometimes holds the newest version until every window closes, and the editor says
-    // so. Either way, the offline copy must end up whole.
-    const closeWindowsHint = page.getByText('Close every editor window');
-    const newestHeader = page.locator('header p', {hasText: 'third-release'});
-    await expect(closeWindowsHint.or(newestHeader)).toBeVisible({timeout: 30000});
-    let currentWindow = page;
-    if (await closeWindowsHint.isVisible()) {
-      await page.close();
-      currentWindow = await context.newPage();
-      await expect
-        .poll(
-          async () => {
-            await currentWindow.goto(server.url);
-            return currentWindow.locator('header p').textContent();
-          },
-          {timeout: 30000}
-        )
-        .toBe('Layer editor third-release');
-    }
-    await expect(currentWindow.locator('header p')).toHaveText('Layer editor third-release');
-    await expect(currentWindow.locator('#offline-status')).toContainText(readyMessage);
-    await expect.poll(() => editorCaches(currentWindow).then(names => names.length)).toBe(2);
+    await expect(page.locator('header p')).toHaveText('Layer editor third-release', {timeout: 30000});
+    await expect(page.locator('#offline-status')).toContainText(readyMessage);
+    await expect.poll(() => editorCaches(page).then(names => names.length)).toBe(2);
 
     await server.stop();
-    await currentWindow.reload();
-    await expect(currentWindow.locator('header p')).toHaveText('Layer editor third-release');
-    await expectBrowse(currentWindow);
+    await page.reload();
+    await expect(page.locator('header p')).toHaveText('Layer editor third-release');
+    await expectBrowse(page);
   });
 
   test('a failed reinstall of the build in use keeps that build', async ({page}) => {
@@ -364,7 +342,7 @@ test.describe('offline-first install', () => {
     await expectBrowse(page);
   });
 
-  test('every window reloads on an update, except one holding an open edit', async ({page, context}, testInfo) => {
+  test('every window reloads on an update, except one holding an open edit', async ({page, context}) => {
     await openUntilOffline(page, server);
     const quietWindow = await context.newPage();
     const busyWindow = await context.newPage();
@@ -381,20 +359,9 @@ test.describe('offline-first install', () => {
     await page.reload();
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     await page.locator('#update-app').click();
-    // Known limitation, listed in docs/plans/faster-browser-tests.md: the browser sometimes holds the new version until every
-    // window closes, most often with several open. The editor must then say so, and no window may lose its work.
-    const closeWindowsHint = page.getByText('Close every editor window');
-    const newestHeader = page.locator('header p', {hasText: 'second-release'});
-    await expect(closeWindowsHint.or(newestHeader)).toBeVisible({timeout: 30000});
-    const didBrowserHoldUpdate = await closeWindowsHint.isVisible();
-    testInfo.annotations.push({
-      type: 'update takeover',
-      description: didBrowserHoldUpdate ? 'held by the browser' : 'immediate'
-    });
-    if (!didBrowserHoldUpdate) {
-      await expect(quietWindow.locator('header p')).toHaveText('Layer editor second-release');
-      await expect(busyWindow.locator('#offline-status')).toContainText('Finish and save your work, then reload.');
-    }
+    await expect(page.locator('header p')).toHaveText('Layer editor second-release', {timeout: 30000});
+    await expect(quietWindow.locator('header p')).toHaveText('Layer editor second-release');
+    await expect(busyWindow.locator('#offline-status')).toContainText('Finish and save your work, then reload.');
     await expect(busyWindow.locator('[name="name"]')).toHaveValue('Still typing');
   });
 
