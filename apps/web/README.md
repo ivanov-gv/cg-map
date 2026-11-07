@@ -69,6 +69,11 @@ recovery after an explicit location request. Route controls appear after endpoin
 search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
 existing features.
 
+The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
+handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
+rendering; offline downloads separate shell saving, staging, checksum verification, and activation. These steps remain
+inside their owning modules so each application continues to build independently.
+
 ## 3. What happens when the page opens
 
 1. The browser parses index.html and creates its DOM.
@@ -78,7 +83,7 @@ existing features.
 5. start() begins asynchronous initialization.
 6. It rejects file:/content: opening and checks that vendor libraries loaded.
 7. It fetches data/manifest.json, data/places.geojson, and data/place-visibility.json.
-8. It validates each place's level and builds byId and the marker keys from the stable place ID.
+8. It validates each place's level and builds placesById and the marker keys from the stable place ID.
 9. It registers the service worker where supported in a secure context.
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
@@ -99,16 +104,19 @@ app.js currently uses module variables instead of a state-management library:
 | Variable           | Meaning                                        |
 | ------------------ | ---------------------------------------------- |
 | map                | The single long-lived MapLibre instance        |
-| all                | Complete loaded place array                    |
-| filtered           | Places matching current text/category          |
-| byId               | Lookup from place ID to feature                |
+| allPlaces          | Complete loaded place array                    |
+| filteredPlaces     | Places matching current text/category          |
+| placesById         | Lookup from place ID to feature                |
 | category           | Active category key                            |
-| selected           | Selected place, or null                        |
+| selectedPlace      | Selected place, or null                        |
 | satelliteVisible   | Whether the two satellite layers are shown     |
 | archive / manifest | Archive reader and downloaded dataset metadata |
 | loaded             | Whether application map-layer setup completed  |
 | downloadAbort      | Active download's cancellation controller      |
 | returnFocus        | Element to focus when closing place details    |
+
+Nearest results from `selectNearest()` carry `feature` and `distanceKilometres`, so the caller can distinguish a place
+from its distance without decoding abbreviated keys.
 
 Changing a variable alone does not update the screen. The handler must also update DOM elements and/or MapLibre data.
 
@@ -125,7 +133,7 @@ Suppose the user types "museum".
 4. filterPlaces() calls matches() on all places using the current category.
 5. matches() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
-7. It assigns the resulting array to filtered.
+7. It assigns the resulting array to filteredPlaces.
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
 10. renderResults() sorts matching places by approximate distance from the map center and creates up to 40 result
@@ -206,7 +214,7 @@ one below its level's zoom is reached through the result list.
 
 showPlace():
 
-1. Looks up the feature in byId.
+1. Looks up the feature in placesById.
 2. Stores selected and the originating control, when supplied.
 3. Fills card text and safe links.
 4. Shows the existing card element.
