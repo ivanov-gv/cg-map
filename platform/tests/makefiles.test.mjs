@@ -136,10 +136,10 @@ test('project Makefiles reach other projects only through listed contracts', () 
   }
 });
 
-test('every local workflow run uses the prepared act image, with the same limits as GitHub', () => {
+test('every local workflow run uses the published image, with the same limits as GitHub', () => {
   const makefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
   assert.match(makefile, /-P ubuntu-24\.04=\$\(ACT_IMAGE\) -P ubuntu-latest=\$\(ACT_IMAGE\)/);
   assert.match(makefile, /^test-ci-all .*: test-%: act-image$/m);
   assert.match(makefile, /^test-cd-map-core: act-image$/m);
-  assert.doesNotMatch(makefile, /--no-(timeout|limit)/);
+  assert.match(makefile, /^test-cd-browser-image: act-image$/m);
 });

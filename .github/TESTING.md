@@ -37,13 +37,14 @@ A test run really pushes images, to a temporary public registry, and really runs
 ## Locally with act
 
 Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
-[platform/act-image](../platform/act-image/Dockerfile), which it builds first, with Chromium installed from the
-repository's Playwright version. Jobs then run with the same limits as on GitHub. `ACT_JOBS` sets how many run at once.
+[the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so any machine runs
+the same tools as CI, inside the same job limits. `ACT_JOBS` sets how many jobs run at once.
 
 ```sh
 make test-ci-docs                       # one workflow
 make test-ci-all                        # everything CI runs
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
+make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA> # needs an image from make test-ci-publish
 make test-all-workflows ACT="gh act -n" # dry run of every target
 ```
 

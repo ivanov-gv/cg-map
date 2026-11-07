@@ -19,19 +19,18 @@ jobs:
   verify:
     name: Verify core demo
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
-    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
     runs-on: ubuntu-24.04
+    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
     timeout-minutes: 7
     environment: dev
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/install-dependencies
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=apps/core-demo
-      - uses: ./.github/actions/setup-browser
       - uses: ./.github/actions/run-check
         with:
           command: make -C apps/core-demo e2e-built
@@ -46,6 +45,7 @@ jobs:
     name: (test-run) Verify core demo
     if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
+    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
     timeout-minutes: 7
     environment: test-run
     steps: *verify-steps

@@ -10,6 +10,7 @@ export const FOLDERS = [
   'workflows',
   'platform',
   'contracts',
+  'browser-image',
   'data',
   'backend',
   'transit-relay',
@@ -134,6 +135,7 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
+  if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform'], areas: []};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
   return EVERYTHING;

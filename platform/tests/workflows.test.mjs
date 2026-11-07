@@ -15,6 +15,7 @@ const NO_TWIN = {
   'ci-all.yml': ['approval', 'switch', 'gate', 'publish', 'dev-pages', 'job-times', ...FOLDERS],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
+  'cd-browser-image.yml': ['switch'],
   'ci-dev-pages.yml': ['deploy']
 };
 
@@ -102,8 +103,10 @@ test('CI workflows never touch production', () => {
   }
 });
 
-test('CD checks out no application source, and only a release or a manual run can start it', () => {
-  const {jobs, permissions, on} = load('cd-map-core.yml');
+const CD_TAGS = {'cd-map-core.yml': 'map-core/v', 'cd-browser-image.yml': 'browser-image/v'};
+
+for (const [file, tagPrefix] of Object.entries(CD_TAGS)) test(`${file}: CD checks out no application source, and only a release or a manual run can start it`, () => {
+  const {jobs, permissions, on} = load(file);
   assert.deepEqual(permissions, {});
   assert.deepEqual(Object.keys(on).sort(), ['release', 'workflow_dispatch']);
   assert.deepEqual(on.release.types, ['published']);
@@ -115,7 +118,7 @@ test('CD checks out no application source, and only a release or a manual run ca
     assert.equal(checkout.with['sparse-checkout'], '.github/actions');
     assert.equal(checkout.with['sparse-checkout-cone-mode'], false, 'cone mode would also check out root files');
   }
-  assert.match(jobs.switch.if, /startsWith\(github\.event\.release\.tag_name, 'map-core\/v'\)/);
+  assert.ok(jobs.switch.if.includes(`startsWith(github.event.release.tag_name, '${tagPrefix}')`));
   assert.equal(jobs.publish.environment, 'package-release');
   assert.equal(jobs['publish-test-run'].environment, 'test-run');
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
@@ -166,12 +169,12 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
 test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
   const {jobs} = load('ci-publish.yml');
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
-  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['image', 'package']);
+  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package']);
   for (const [name, writer] of writers) {
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
     assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
   }
-  const others = newWorkflowFiles.filter(file => !['ci-publish.yml', 'ci-all.yml', 'cd-map-core.yml'].includes(file));
+  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && !['ci-publish.yml', 'ci-all.yml'].includes(file));
   for (const file of others) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
       assert.notEqual(job.permissions?.packages, 'write', `${file} ${name} must leave publishing to ci-publish`);
@@ -219,8 +222,12 @@ test('the editor browser jobs cover every spec in both projects', () => {
 });
 
 test('CD refuses a commit that is not on main', () => {
-  const stepsText = JSON.stringify(load('cd-map-core.yml').jobs.switch.steps);
-  assert.match(stepsText, /compare\/main\.\.\./);
+  for (const file of Object.keys(CD_TAGS)) {
+    const step = load(file).jobs.switch.steps.find(({id}) => id === 'release');
+    assert.equal(step.uses, './.github/actions/resolve-release', `${file} could release any commit`);
+  }
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/resolve-release/action.yml'), 'utf8');
+  assert.match(action, /compare\/main\.\.\./);
 });
 
 test('a pull request runs nothing until it is approved', () => {
@@ -283,7 +290,7 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'cd-map-core.yml')) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -311,4 +318,30 @@ test('browser jobs run only the planned areas, and none when there are none', ()
 test('the planner has an output on the plan job for every folder', () => {
   const {plan} = load('ci-all.yml').jobs;
   assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'image_matrix']));
+});
+
+test('a release version of the browser image must say which Playwright is inside, and never changes', () => {
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/promote-browser-image/action.yml'), 'utf8');
+  assert.match(action, /playwright\.version/);
+  assert.match(action, /already exists/);
+  const {jobs} = load('cd-browser-image.yml');
+  assert.equal(jobs.publish.environment, 'package-release');
+  assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
+});
+
+test('browser jobs and local runs pin one image, whose version matches the repository\'s Playwright', () => {
+  const readRoot = file => fs.readFileSync(path.join(repoRoot, file), 'utf8');
+  const {version: playwright} = JSON.parse(readRoot('package-lock.json')).packages['node_modules/playwright'];
+  const expected = new RegExp(`^ghcr\\.io/ivanov-gv/cg-map/browser-ci:${playwright.replaceAll('.', '\\.')}-r\\d+$`);
+  const pins = new Set([readRoot('Makefile').match(/^ACT_IMAGE := (.+)$/m)[1]]);
+  const browserJobs = {
+    'ci-apps-web.yml': ['browser', 'browser-test-run'],
+    'ci-apps-editor.yml': ['browser', 'browser-test-run'],
+    'ci-apps-core-demo.yml': ['verify', 'verify-test-run']
+  };
+  for (const [file, names] of Object.entries(browserJobs)) {
+    for (const name of names) pins.add(load(file).jobs[name].container);
+  }
+  assert.equal(pins.size, 1, `every pin must match: ${[...pins].join(', ')}`);
+  assert.match([...pins][0], expected);
 });

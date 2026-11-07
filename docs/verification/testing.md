@@ -67,6 +67,7 @@ everything.
 | `services/transit-relay`                                    | `transit-relay`                                                                             |
 | `platform/pages`                                            | `platform`, `apps-web`, every browser area                                                  |
 | `platform/tools/serve.py`, `dev-port.mjs`                   | `platform`, every map application, every browser area                                       |
+| `platform/browser-image`                                    | `browser-image`, `platform`                                                                 |
 | `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
 | `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |

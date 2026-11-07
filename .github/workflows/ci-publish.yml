@@ -15,6 +15,10 @@ on:
         description: Publish the map-core dev package, for a release to promote.
         type: boolean
         required: true
+      publish_browser_image:
+        description: Publish the browser test image, for a release to promote.
+        type: boolean
+        required: true
   workflow_dispatch:
     inputs:
       test_run:
@@ -29,11 +33,15 @@ on:
         description: Publish the map-core dev package, for a release to promote.
         type: boolean
         default: true
+      publish_browser_image:
+        description: Publish the browser test image, for a release to promote.
+        type: boolean
+        default: true
 permissions:
   contents: read
   packages: read
 jobs:
-  # Only this job and the package job can write packages, and only main can run them for real.
+  # Only the jobs here can write packages, and only main can run them for real.
   image:
     name: Publish ${{ matrix.app }} image
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' && inputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
@@ -109,3 +117,34 @@ jobs:
       packages: read
     env: *package-env
     steps: *package-steps
+  # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
+  browser-image:
+    name: Publish browser image
+    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &browser-image-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    steps: &browser-image-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/publish-browser-image
+        with:
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          token: ${{ github.token }}
+  browser-image-test-run:
+    name: (test-run) Publish browser image
+    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *browser-image-env
+    steps: *browser-image-steps

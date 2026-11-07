@@ -1,0 +1,56 @@
+name: Resolve release
+description: Read a release's version and commit, from the release event or manual inputs, and refuse a commit not on main.
+inputs:
+  tag_prefix:
+    description: What comes before the version in the release tag.
+    required: true
+  release_tag:
+    description: The release's tag. Empty on a manual run.
+    required: false
+    default: ''
+  version:
+    description: The version, on a manual run.
+    required: false
+    default: ''
+  commit:
+    description: The commit, on a manual run.
+    required: false
+    default: ''
+  token:
+    description: Token for the GitHub API.
+    required: true
+outputs:
+  version:
+    description: The release version.
+    value: ${{ steps.release.outputs.version }}
+  commit:
+    description: The release's commit.
+    value: ${{ steps.release.outputs.commit }}
+runs:
+  using: composite
+  steps:
+    - id: release
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_COMMIT: ${{ inputs.commit }}
+        EVENT_COMMIT: ${{ github.sha }}
+        TAG_PREFIX: ${{ inputs.tag_prefix }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+      # Explicit bash adds pipefail, so a failed API call is not mistaken for an answer.
+      shell: bash
+      run: |
+        version="${INPUT_VERSION:-${RELEASE_TAG#"$TAG_PREFIX"}}"
+        commit="${INPUT_COMMIT:-$EVENT_COMMIT}"
+        # curl, not gh: act's runner image has no gh, and this must also run locally.
+        relation=$(curl --fail --silent --show-error --location \
+          --header "Authorization: Bearer $GH_TOKEN" --header "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/$GH_REPO/compare/main...$commit" | jq -r .status)
+        if [ "$relation" != behind ] && [ "$relation" != identical ]; then
+          echo "::error::$commit is not on main ($relation). Release only a commit that CI built on main."
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "commit=$commit" >> "$GITHUB_OUTPUT"
+        echo "Promoting $TAG_PREFIX$version from $commit" | tee -a "$GITHUB_STEP_SUMMARY"

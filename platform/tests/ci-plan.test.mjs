@@ -237,6 +237,10 @@ test('an area too slow for one job runs every share of its tests', () => {
   assert.deepEqual(browserMatrix(['interface']).include, [{area: 'interface', specs: 'tests/e2e/interface.spec.mjs'}]);
 });
 
+test('the browser image has its own pipeline, and a change to it selects no application', () => {
+  assert.deepEqual(classify('platform/browser-image/Dockerfile'), {folders: ['browser-image', 'platform'], areas: []});
+});
+
 test('a merge publishes the image of each app it selected, and no other', () => {
   const appsFor = file => imageMatrix(planChanges([file]).folders).include.map(({app}) => app);
   assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);

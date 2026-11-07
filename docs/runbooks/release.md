@@ -61,6 +61,23 @@ with a new one.
 
 `0.1.0` is the one exception: it was published by hand once, because releases need core to exist before apps can pin it.
 
+## Releasing the browser image
+
+[platform/browser-image](../../platform/browser-image/Dockerfile) holds the tools for browser jobs and local runs:
+[the decision](../decisions/0007-browser-test-image.md). A merge that changes it publishes
+`ghcr.io/ivanov-gv/cg-map/browser-ci:<commit>`. To release it, use the Playwright version it contains, then the next
+revision:
+
+```sh
+git tag browser-image/v1.56.1-r2 <commit on main>
+git push origin browser-image/v1.56.1-r2
+gh release create browser-image/v1.56.1-r2 --verify-tag --title "browser-image 1.56.1-r2" --notes "<what changed>"
+```
+
+The release starts [cd-browser-image](../../.github/workflows/cd-browser-image.yml), which refuses a version that does
+not match the image's Playwright, or one that already exists. To start using it, change the pin in the Makefile and the
+browser jobs in one PR.
+
 ## Upgrading an app to a new core
 
 web and editor each pin an exact version, and upgrade in their own change. That changes package-lock.json, so its PR

@@ -15,8 +15,8 @@ guesswork, and nothing said which PRs should leave a record of what they decided
 
 - **Tests run before merge, and nightly.** A push to main runs no checks: it only publishes what changed and updates the
   dev environment. The nightly run checks everything on main.
-- **No merge until local tests pass.** A change to `.github/**` passes under `act` first, inside the job limits, on an
-  image with the browser already installed. A run on GitHub does not replace this.
+- **No merge until local tests pass.** A change to `.github/**` passes under `act` first, inside the job limits. A run
+  on GitHub does not replace this.
 - **A job aims for 5 minutes and stops at 7.** `timeout-minutes` enforces 7 on every job, and a test enforces that. A
   job over 5 minutes gets a warning, and is split rather than given more time.
 - **Work goes task, plan, PR, decisions log.** A plan stays until its work is finished, however many PRs that takes. A

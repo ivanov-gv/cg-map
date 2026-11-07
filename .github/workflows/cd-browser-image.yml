@@ -1,0 +1,96 @@
+name: cd-browser-image
+# Releases the browser test image: a tag, then a GitHub Release for it such as browser-image/v1.56.1-r2. Holds the only
+# permission to create a release version, touches no application source, and rebuilds nothing.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('cd-browser-image test_run={0} {1}', inputs.test_run, inputs.version)
+  || format('cd-browser-image {0}', github.event.release.tag_name) }}
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to publish, such as 1.56.1-r2
+        type: string
+        required: true
+      commit:
+        description: The full commit SHA CI built on main
+        type: string
+        required: true
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions: {}
+jobs:
+  switch:
+    name: Test-run switch
+    # Every part of this repository shares the release event, and this workflow answers only to its own tags.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'browser-image/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      # Only the local actions: CD never touches the application's source.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+      - id: release
+        uses: ./.github/actions/resolve-release
+        with:
+          tag_prefix: browser-image/v
+          release_tag: ${{ github.event.release.tag_name }}
+          version: ${{ inputs.version }}
+          commit: ${{ inputs.commit }}
+          token: ${{ github.token }}
+
+  publish:
+    name: Publish release version
+    needs: switch
+    if: needs.switch.outputs.test_run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    environment: package-release
+    permissions:
+      contents: read
+      packages: write
+    env: &publish-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      RELEASE_VERSION: ${{ needs.switch.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.switch.outputs.commit }}
+    steps: &publish-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/promote-browser-image
+        with:
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          version: ${{ env.RELEASE_VERSION }}
+          commit: ${{ env.RELEASE_COMMIT }}
+          token: ${{ github.token }}
+  publish-test-run:
+    name: (test-run) Publish release version
+    needs: switch
+    if: needs.switch.outputs.test_run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *publish-env
+    steps: *publish-steps

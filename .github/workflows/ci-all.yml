@@ -73,6 +73,7 @@ jobs:
       workflows: ${{ steps.plan.outputs.workflows }}
       platform: ${{ steps.plan.outputs.platform }}
       contracts: ${{ steps.plan.outputs.contracts }}
+      browser-image: ${{ steps.plan.outputs.browser-image }}
       data: ${{ steps.plan.outputs.data }}
       backend: ${{ steps.plan.outputs.backend }}
       transit-relay: ${{ steps.plan.outputs.transit-relay }}
@@ -138,6 +139,13 @@ jobs:
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && github.event_name != 'push' && (needs.plan.outputs.platform == 'true' || needs.plan-test-run.outputs.platform == 'true') }}
     uses: ./.github/workflows/ci-platform.yml
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+  browser-image:
+    name: browser-image
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && github.event_name != 'push' && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') }}
+    uses: ./.github/workflows/ci-browser-image.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
   contracts:
@@ -210,7 +218,7 @@ jobs:
   gate:
     name: CI gate
     if: always()
-    needs: [approval, switch, plan, plan-test-run, docs, workflows, platform, contracts, data, backend, transit-relay, tests, map-core, apps-web, apps-editor, apps-core-demo]
+    needs: [approval, switch, plan, plan-test-run, docs, workflows, platform, browser-image, contracts, data, backend, transit-relay, tests, map-core, apps-web, apps-editor, apps-core-demo]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -247,6 +255,7 @@ jobs:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       image_matrix: ${{ needs.plan.outputs.image_matrix || needs.plan-test-run.outputs.image_matrix }}
       publish_package: ${{ needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true' }}
+      publish_browser_image: ${{ needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true' }}
 
   # Every merge to main shows main on the dev environment. A test run stops before the actual deploy.
   dev-pages:

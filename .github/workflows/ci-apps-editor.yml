@@ -48,8 +48,8 @@ jobs:
   browser:
     name: Browser tests (${{ matrix.area }})
     needs: verify
-    # Pinned: ubuntu-latest is 26.04, for which Playwright 1.56 has no Chromium build.
     runs-on: ubuntu-24.04
+    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
     timeout-minutes: 7
     environment: dev
     strategy:
@@ -79,12 +79,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-web
+      - uses: ./.github/actions/install-dependencies
       - uses: actions/download-artifact@v8
         with:
           name: editor-artifact
           path: dist/editor
-      - uses: ./.github/actions/setup-browser
       - uses: ./.github/actions/run-check
         with:
           command: make -C apps/editor e2e-built E2E_ARGS="$E2E_SPECS"
@@ -99,6 +98,7 @@ jobs:
     name: (test-run) Browser tests (${{ matrix.area }})
     needs: verify-test-run
     runs-on: ubuntu-24.04
+    container: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
     timeout-minutes: 7
     environment: test-run
     strategy:

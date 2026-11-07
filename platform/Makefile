@@ -1,6 +1,6 @@
 ROOT := ..
 
-.PHONY: verify lint markdown-check repo agents-check build-web test python-test python-check agent-rules worktree
+.PHONY: verify lint markdown-check repo agents-check build-web test python-test python-check agent-rules worktree browser-image
 
 verify: lint markdown-check repo agents-check build-web test python-test python-check
 
@@ -34,3 +34,10 @@ agent-rules:
 
 worktree:
 	cd $(ROOT) && sh platform/tools/worktree.sh $(NAME) $(BASE)
+# make -C platform browser-image [IMAGE=browser-ci:local]: build the browser test image and prove Chromium starts in it.
+IMAGE ?= browser-ci:local
+browser-image:
+	docker build --tag $(IMAGE) browser-image
+	docker run --rm $(IMAGE) node --print "process.version"
+	docker run --rm $(IMAGE) python3 --version
+	docker run --rm $(IMAGE) node --eval "require('playwright').chromium.launch().then(browser => browser.close())"
