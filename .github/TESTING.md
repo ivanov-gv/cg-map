@@ -1,5 +1,10 @@
 # Testing workflows
 
+**No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
+passed under `act` on its final commit, inside the same job time limits as GitHub. A run on GitHub does not replace
+this. If a local run cannot pass, fix the local setup. Do not report it as a limit and merge anyway. Any other PR needs
+its owning project's checks, and browser tests where it changes a browser project.
+
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
 [ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md) and [release](../docs/runbooks/release.md).
@@ -31,7 +36,9 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 ## Locally with act
 
-Needs Docker and `gh extension install nektos/gh-act`.
+Needs Docker and `gh extension install nektos/gh-act`. Every target runs on
+[platform/act-image](../platform/act-image/Dockerfile), which it builds first, with Chromium installed from the
+repository's Playwright version. Jobs then run with the same limits as on GitHub. `ACT_JOBS` sets how many run at once.
 
 ```sh
 make test-ci-docs                       # one workflow

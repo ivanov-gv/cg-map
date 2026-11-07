@@ -46,12 +46,12 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Project commands, from each project's own Makefile
 
 - `make -C apps/<name> build|dev|e2e`: assemble, preview or browser-test that app; `E2E_ARGS=...` filters tests.
-- `make -C apps/web dev` needs Go and runs server mode; `DEV_FLAGS=-live-transport=false` skips upstream calls.
-  `make -C apps/web dev-mock` serves static dist/web, as on GitHub Pages.
+- `make -C apps/web dev` needs Go; `DEV_FLAGS=-live-transport=false` skips upstream. `dev-mock` serves static dist/web.
 - `make -C data build-data`: expensive geography rebuild; requires data/tools/requirements.txt.
 
 ## Hard rules
 
+- **No merge until local tests pass**, and `.github/**` changes pass under act: [the rule](.github/TESTING.md).
 - Never delete, skip, or loosen a failing test, check, or provenance record to get green output. Never commit with
   `--no-verify`.
 - Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
