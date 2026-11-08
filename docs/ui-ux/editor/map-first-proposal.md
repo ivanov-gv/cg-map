@@ -215,23 +215,24 @@ run time, never from a fixed list per layer. Add belongs to the layer's Tools me
 any layer whose rules allow them; property fields come from the rules in the same way. So when the rules widen, a layer
 gains its actions without an interface redesign.
 
-They will widen. Today a changeset can name an object only by its position in one snapshot, which is why most layers
-allow modifications only. [Entity IDs and data releases](../../plans/entity-ids-and-data-releases.md) gives every object
-a stable ID, after which adding and deleting buildings, labels, parks and water can be allowed. The table below is the
+They will widen. **Entity IDs are the blocker:** today a changeset can name an object only by its position in one
+snapshot, so adding and deleting buildings, labels, parks and water, and adding an address to an unnumbered footprint,
+cannot be allowed until [entity IDs and data releases](../../plans/entity-ids-and-data-releases.md) gives every object a
+stable ID. The interface proposed here does not wait for that, and needs no change when it lands. The table below is the
 current contract, not a design limit. Every layer has the same permissions, fields, validation and immediate map
 feedback on desktop and mobile. Its inspector changes position and size with the layout; its capabilities do not change
 with the input device.
 
-| Layer            | Allowed edits today                                     | Add / delete    |
-| ---------------- | ------------------------------------------------------- | --------------- |
-| POIs             | Details, visibility level and position                  | Both allowed    |
-| Buildings        | Existing footprint corners and whole-footprint position | Neither allowed |
-| Building labels  | Existing address values and label position              | Neither allowed |
-| Roads & paths    | Name, type, vertices and whole-line position            | Both allowed    |
-| Land             | Name and shape of existing parks                        | Neither allowed |
-| Water            | Name and shape of existing water polygons and rivers    | Neither allowed |
-| Country outlines | Inspection only                                         | Neither allowed |
-| Bus stops        | Inspection only                                         | Neither allowed |
+| Layer            | Allowed edits today                                     | Add / delete today | What unblocks add / delete                     |
+| ---------------- | ------------------------------------------------------- | ------------------ | ---------------------------------------------- |
+| POIs             | Details, visibility level and position                  | Both allowed       | Nothing needed                                 |
+| Buildings        | Existing footprint corners and whole-footprint position | Neither allowed    | Blocked by entity IDs                          |
+| Building labels  | Existing address values and label position              | Neither allowed    | Blocked by entity IDs                          |
+| Roads & paths    | Name, type, vertices and whole-line position            | Both allowed       | Nothing needed                                 |
+| Land             | Name and shape of existing parks                        | Neither allowed    | Blocked by entity IDs                          |
+| Water            | Name and shape of existing water polygons and rivers    | Neither allowed    | Blocked by entity IDs; the ocean stays derived |
+| Country outlines | Inspection only                                         | Neither allowed    | Not planned: Natural Earth refresh             |
+| Bus stops        | Inspection only                                         | Neither allowed    | Not planned: transit import                    |
 
 ### POIs
 
@@ -263,7 +264,8 @@ selectable footprints and a stronger outline for the selected one; avoid coverin
 
 Offer Move whole footprint and Edit corners. As today, the corner tool can move, insert and remove a corner. Show vertex
 handles only for that tool. The inspector does not need an empty property form, because this layer permits geometry
-changes only. Address edits belong to Building labels. Add and Delete appear once the rules allow them.
+changes only. Address edits belong to Building labels. Add and Delete are blocked by entity IDs and appear once the
+rules allow them.
 
 Applying a move or corner change updates the footprint immediately. Its address label remains a separate object and must
 not move automatically. If a correction leaves that label outside its footprint, identify the issue in Changes and
@@ -275,9 +277,9 @@ Keep house numbers visible as text, with subtle position guides when editing thi
 number, Street and Move label. Source properties remain in expandable details.
 
 Apply updates the displayed address and position immediately. It must not reshape or move the building. Creating or
-deleting labels, including adding an address to an unnumbered footprint, waits for the rules to allow it; the label then
-still stays a separate object from its footprint. Invalid house numbers or a broken footprint relationship need an
-actionable validation message.
+deleting labels, including adding an address to an unnumbered footprint, is blocked by entity IDs and appears once the
+rules allow it; the label then still stays a separate object from its footprint. Invalid house numbers or a broken
+footprint relationship need an actionable validation message.
 
 ### Roads & paths
 
@@ -297,8 +299,8 @@ Preserve the normal land colours and context. Editing guides should identify exi
 remains inspectable with a concise explanation of its restriction.
 
 For a park, offer Name, Move whole shape and Edit corners, with corner insert and remove. Apply updates its shape and
-name immediately. Offer adding or deleting parks once the rules allow them. Country and context shapes stay outside this
-layer.
+name immediately. Adding and deleting parks is blocked by entity IDs; offer it once the rules allow it. Country and
+context shapes stay outside this layer.
 
 ### Water
 
@@ -307,7 +309,7 @@ without tinting the entire water layer as one editing surface.
 
 For an existing water polygon or river, offer Name, Move whole shape and Edit points, with point insert and remove.
 Apply updates its geometry and label immediately. The ocean remains inspection-only because it is derived by the data
-workflow. Offer adding or deleting water features once the rules allow them.
+workflow. Adding and deleting water features is blocked by entity IDs; offer it once the rules allow it.
 
 ### Country outlines
 
