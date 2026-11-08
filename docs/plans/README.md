@@ -6,7 +6,7 @@ that takes, and the PR that finishes it deletes it. Git history keeps deleted pl
 
 - [Internal layer editor](internal-layer-editor.md): source inventory, shared map, editing slices and HTML draft. Slices
   1 to 6 and the offline install are merged, with listed gaps.
-- [Entity IDs and data releases](entity-ids-and-data-releases.md): OSM IDs on every object, merging parallel fixes by
-  ID, tagged data releases. Planned.
+- [Entity IDs and data releases](entity-ids-and-data-releases.md): OSM IDs on every object, parallel fixes as ordinary
+  PRs, tagged data releases. Planned.
 - [Faster browser tests](faster-browser-tests.md): CI jobs are split to fit their limit; the remaining steps towards a
   5-minute full suite locally.
