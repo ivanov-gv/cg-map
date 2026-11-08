@@ -17,3 +17,6 @@ Story baselines and target requirements are distinct from implementation truth. 
 [system architecture](../system-architecture/README.md), the owning component's documentation, and
 [verification guidance](../verification/README.md) for implementation boundaries and evidence. Approved targets do not
 claim that data, UI, or tests already fulfill them.
+
+Interface proposals for the internal source editor, a maintainer tool outside this journey, live in
+[editor](editor/README.md).
