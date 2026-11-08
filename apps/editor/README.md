@@ -13,13 +13,14 @@ are not invented upstream IDs. Selecting a feature reads full source geometry/pr
 Unknown properties, provenance and any source feature ID are displayed unchanged. Source files are never written.
 Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
-A [map-first redesign](../../docs/ui-ux/editor/map-first-proposal.md) of this interface is proposed for review; this
-README describes what is implemented.
+The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
+The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an
+object to open the inspector; closing it preserves the open edit and a selection button reopens it.
 
-The dock has a layers table and exactly one switch per source file. Footprints and labels are independent; roads and
-paths share roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding
-published layers are restored. Source overlays ignore public POI visibility thresholds. Switching modes shows a loading
-status until the new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
+Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
+roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding published layers
+are restored. Source overlays ignore public POI visibility thresholds. Switching modes shows a loading status until the
+new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
 
 ## Editing
 

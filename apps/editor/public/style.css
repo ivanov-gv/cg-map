@@ -257,3 +257,126 @@ select {
     min-height: 360px;
   }
 }
+
+/* The map stays in place while workspace panels overlay it. */
+body {
+  display: block;
+  height: 100dvh;
+  overflow: hidden;
+}
+main {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  z-index: 0;
+}
+.workspace-toolbar,
+#current-layer,
+.utility-panel,
+.inspector,
+#open-inspector,
+#offline-notice {
+  position: absolute;
+  z-index: 2;
+}
+.workspace-toolbar {
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+}
+#current-layer {
+  top: 12px;
+  right: 12px;
+  max-width: 40vw;
+}
+.dock {
+  padding: 0;
+  border: 0;
+}
+.utility-panel,
+.inspector {
+  top: 64px;
+  bottom: 12px;
+  width: min(320px, 35vw);
+  overflow: auto;
+  padding: 16px;
+  background: #fffffb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px #0003;
+}
+.utility-panel {
+  left: 12px;
+}
+.inspector {
+  right: 12px;
+  width: min(340px, 35vw);
+}
+#open-inspector {
+  top: 64px;
+  right: 12px;
+}
+.map-status {
+  top: 64px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+#status:not(.attention) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.utility-panel footer {
+  margin-top: 20px;
+}
+@media (max-width: 720px) {
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right {
+    bottom: calc(54px + env(safe-area-inset-bottom));
+  }
+  .workspace-toolbar {
+    top: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    right: 8px;
+  }
+  .workspace-toolbar button {
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .utility-panel,
+  .inspector {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 50dvh;
+    overflow: auto;
+  }
+  #open-inspector {
+    top: auto;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+  }
+}
+
+#offline-notice {
+  top: 64px;
+  left: 12px;
+  max-width: 240px;
+  z-index: 2;
+  background: #fff7e6;
+}
+@media (max-width: 720px) {
+  #offline-notice {
+    top: 12px;
+    max-width: 55vw;
+  }
+}
