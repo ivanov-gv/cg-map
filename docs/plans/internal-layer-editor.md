@@ -235,7 +235,8 @@ consistency needs an explicit data-owned workflow, without combining their file 
   - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`).
     It separates local corrections from upstream facts, but features carry no local origin of their own, and it is not a
     stable identity. Adding an address to an unnumbered footprint is not supported.
-  - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
+  - Slice 5: the rebuild preview draws every pending edit with the public layers; below street scale it shows more
+    detail than real tiles, which simplify. See [the editor README](../../apps/editor/README.md#editing).
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
   - Slice 7: larger datasets have not been measured.

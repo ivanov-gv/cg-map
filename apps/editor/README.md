@@ -53,13 +53,18 @@ stays in place and autosave stays off, with a visible error, until you do. Disca
 Outside a mode the map shows the reviewed release, so a pending edit appears only in its own mode. Review and export
 stay available there.
 
+Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
+public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode. It is not
+an actual rebuild. Below street scale the tiles simplify geometry and drop minor roads, which the preview does not do,
+so it shows more detail there than the release will. In the rare case that an edit gives a spot a new combination of
+place levels, that marker is missing from the preview.
+
 ### Limits
 
 - Not editable: building metadata other than addresses, adding an address to an unnumbered footprint, and adding or
   deleting footprints or labels. These need a building identity contract that does not exist yet.
 - Parks and water can be reshaped and renamed, but not added or deleted: the contract allows only modifications there.
-- No preview of rebuilt tiles: the working overlay shows a geometry edit, and the importer says when a rebuild is
-  needed.
+- The preview is not a rebuild: see Preview all edits above. The importer says when tiles need one.
 - Corrections cannot follow a re-extract. References are bound to one snapshot, so an old changeset is refused.
 - Editing water rewrites that whole file through JSON serialization, which normalizes a coordinate written as `41.0` in
   the ocean feature. Expect that one extra line of difference on the first water edit.
