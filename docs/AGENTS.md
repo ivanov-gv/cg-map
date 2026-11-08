@@ -7,7 +7,8 @@
   architecture.
 - Keep one authoritative home per fact, use relative links, and update links whenever documents move.
 - Preserve decision records as historical records; label historical guidance and defer to current docs.
-- Delete a plan only in the PR that finishes it, as [the plan rules](plans/AGENTS.md) describe.
+- A plan records the history of an issue, which is the source of truth; delete it only in the PR that resolves that
+  issue, as [the plan rules](plans/AGENTS.md) describe.
 - Add a record to [the decisions log](decisions/AGENTS.md) from any PR that makes an important decision.
 - Run `make verify PKG=docs` after documentation changes.
 

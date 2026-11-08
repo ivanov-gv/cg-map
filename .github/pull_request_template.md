@@ -1,8 +1,10 @@
 # Change
 
+Closes #N, or Part of #N when this PR does only part of the issue. Every PR has an issue: open one first.
+
 ## Behavior
 
-What changes for a user or maintainer? Link the issue and state acceptance criteria.
+What changes for a user or maintainer? State the acceptance criteria from the issue.
 
 ## Validation
 

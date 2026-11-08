@@ -102,8 +102,8 @@ Run `make -f platform/docs.mk lint` after documentation edits for a docs-scoped 
 command, not an on-save hook; the repository-wide Markdown check still runs in `make check`, CI, and the installed Git
 hooks.
 
-Use [the plan template](../plans/TEMPLATE.md) for multi-session work. Keep acceptance criteria, progress, decisions, and
-remaining work explicit. A PR that makes an important decision adds a record to the
+Track multi-session work in a GitHub issue, with sub-issues and "blocked by" links, and record its history in a plan
+from [the template](../plans/TEMPLATE.md). A PR that makes an important decision adds a record to the
 [decisions log](../decisions/AGENTS.md); a PR that makes none says so in its description. Commit only from a worktree,
 even when working alone: `make worktree NAME=<branch>`. The main checkout rejects commits. See
 [parallel sessions](../engineering/README.md#parallel-sessions).

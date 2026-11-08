@@ -1,26 +1,18 @@
 # Task: `<name>`
 
-Status: planned / in progress / blocked
+Issue: `#N`. The issue and its sub-issues hold scope, status and dependencies; this plan holds their history.
 
-## Goal and acceptance criteria
+## Context
 
-- Observable behavior:
-- Constraints and affected components:
+Why this work exists and the constraints that shaped the plan. Keep it short; acceptance criteria belong in the issue.
 
 ## Decisions
 
-Record consequential choices and reasons. Important ones go to the [decisions log](../decisions/AGENTS.md) in the PR.
+Consequential choices and their reasons. Important ones go to the [decisions log](../decisions/AGENTS.md) in the PR that
+makes them.
 
-## Progress
+## History
 
-- Completed:
-- Remaining:
-- Blockers:
+Newest first. One entry per change to the plan: what changed, why, and the PR or issue it came from.
 
-## Verification
-
-Commands and results; browser evidence where relevant. State checks not run and why.
-
-## Handoff
-
-Branch/commit, remaining work, known limitations. Do not store credentials or private data.
+- YYYY-MM-DD: what changed. Why. (#PR or #issue)
