@@ -13,19 +13,19 @@ data stays comparable with OSM and edits can travel both ways.
 - **One ID scheme for everything else.** Objects from other sources carry that source's ID under its own prefix:
   `ne:<code>` for Natural Earth countries, `epodgorica:<stopId>` for bus stops, `derived:<name>` for what the pipeline
   computes, such as the ocean. A new object made by an editor is `local:<uuid>` until it exists upstream.
-- **Merge by ID.** A changeset says "object X, based on version N, changes these fields". Any number of changesets merge
-  automatically; only the same field changed in two different ways is a conflict, reported for a person to decide.
-  Changesets no longer break when the data is refreshed: an object still at its version applies, one changed upstream is
-  reported.
-- **Releases.** Merging, validation and the tile rebuild produce a release, which is committed and tagged
-  `data/vYYYY.MM.N`. A CD pipeline attaches the release to a GitHub release as a versioned download.
+- **Fixes merge as ordinary PRs.** Each person or agent opens a PR that changes the dataset itself, and git merges them.
+  PRs that change different objects merge cleanly; two that change the same object conflict in git, for a person to
+  resolve. A changeset names objects by ID and base version, so it still applies after a data refresh: an object still
+  at its version applies, one changed upstream is reported.
+- **Releases.** Validation and the tile rebuild on `main` produce a release, tagged `data/vYYYY.MM.N`. A CD pipeline
+  attaches it to a GitHub release as a versioned download.
 - **Rich in the repository, light for users.** data/ keeps everything needed to compare with and write back to OSM: ID,
   version, all tags, and the node IDs of each outline. The editor reads all of it. Public builds strip what users do not
   need, so apps and tiles get no heavier.
 - **Back to OSM**, last: an export of our changes as an OSM change file against current OSM, tags first, then geometry.
 
 Affected: data (extraction, sources, importer, releases), packages/contracts (schemas, changeset version 2), apps/editor
-(references by ID, merge-friendly export), apps/web and the tile build (stripping), .github (release pipeline).
+(references by ID), apps/web and the tile build (stripping), .github (release pipeline).
 
 ## Decisions
 
@@ -38,8 +38,9 @@ Defaults chosen with the owner's agreement; record the lasting ones in the decis
 - **Same coverage and detail** as today: detailed central Podgorica, major roads and attractions countrywide.
 - **Display geometry stays simplified**, as today, for size. The node IDs and full-precision coordinates needed for
   writing geometry back live beside it in data/, not in public files.
-- **Changesets live in the repository**, as files under data/changesets/, arriving by PR. A release merges all pending
-  ones and records which it contains.
+- **Git is the merge tool.** No changeset store and no merge tool: a fix is a PR to the dataset. That needs source files
+  written one feature per line in ID order, so that git merges by object, and no derived file in a fixing PR, because
+  hashes and counts would make every pair of PRs conflict. Derived files are regenerated at release.
 - **Date-based release versions**, `data/vYYYY.MM.N`, like the existing tag-driven releases of map-core and the browser
   image.
 - **One feature per OSM object.** An object the pipeline splits or clips keeps its ID on every part, with a part number.
@@ -55,12 +56,14 @@ Defaults chosen with the owner's agreement; record the lasting ones in the decis
      labels and tiles; review counts and provenance. A deliberate data refresh, reviewed as one.
   3. **Strip for users.** The web build and tile build drop what users do not need; a test proves the public artifact
      holds only listed properties, and sizes are compared with today's.
-  4. **Changeset version 2.** References by entity ID and base version instead of file index and snapshot hash. The
-     editor exports it, the importer applies it, and version 1 changesets stay readable until none remain.
-  5. **Merge tool.** Merges every changeset under data/changesets/, applies the result, and reports conflicts by object
-     and field, with tests for parallel edits to the same and different objects.
-  6. **Release pipeline.** Tag, release notes from the merged changesets, and a CD workflow publishing sources, tiles
-     and provenance as release assets, in test-run mode first as `.github/TESTING.md` requires.
+  4. **Mergeable sources.** One feature per line in ID order; provenance hashes, counts and tiles leave fixing PRs and
+     are regenerated at release, with a check on `main` that they match. Proved by two branches that edit different
+     objects in one file merging cleanly, and two that edit the same object conflicting.
+  5. **Changeset version 2.** References by entity ID and base version instead of file index and snapshot hash. The
+     editor exports it, and the importer applies it as a commit for a PR. Version 1 changesets stay readable until none
+     remain.
+  6. **Release pipeline.** Tag, release notes from the merged PRs, and a CD workflow publishing sources, tiles and
+     provenance as release assets, in test-run mode first as `.github/TESTING.md` requires.
   7. **Export to OSM.** An OSM change file of our tag edits against current OSM, refusing objects whose OSM version
      moved; then geometry, through the stored node IDs. Uploading follows OSM's import and automated edits guidelines, a
      manual step this plan does not automate.
