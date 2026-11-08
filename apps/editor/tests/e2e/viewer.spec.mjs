@@ -70,10 +70,12 @@ test.describe('source viewer', () => {
     await expect(page.locator('[data-source]')).toHaveCount(8);
     const manifest = await fetchSource(page, 'manifest.json');
     for (const layer of manifest.layers) {
+      await page.getByRole('button', {name: 'Layers', exact: true}).click();
       await page.locator(`[data-mode="${layer.filename}"]`).click();
       await expect(page.locator('#status')).toHaveText(modeStatus(manifest, layer.filename));
       await expect(page.locator('[data-mode][aria-pressed="true"]')).toHaveCount(1);
     }
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="places.geojson"]').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'places.geojson'));
     const places = await fetchSource(page, 'places.geojson');
@@ -106,9 +108,8 @@ test.describe('source viewer', () => {
         )
       )
       .toBeGreaterThan(0);
-    // The inspector sits below the map on phones, so the status over the map must point to it.
-    const isInspectorBelowMap = await page.evaluate(() => matchMedia('(max-width: 720px)').matches);
-    if (isInspectorBelowMap) await expect(page.locator('#status')).toContainText('details below the map');
+    await expect(page.locator('.inspector')).toBeVisible();
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="transport-stops.geojson"]').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'transport-stops.geojson'));
     const stops = await fetchSource(page, 'transport-stops.geojson');
@@ -116,14 +117,17 @@ test.describe('source viewer', () => {
     await centerSourceMap(page, stop.geometry.coordinates, 15);
     await clickMapCenter(page, 'editor-source-point');
     await expect(page.locator('#source-id')).toHaveText(`Source feature ID: ${stop.id}`);
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="building-labels.geojson"]').click();
     await expect(page.locator('#properties')).toBeEmpty();
     await expect(page.locator('#source-id')).toBeEmpty();
     await expect(page.locator('#selection-source')).toHaveText('Inspecting building-labels.geojson');
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="buildings.geojson"]').click();
     await expect(page.locator('[data-mode="building-labels.geojson"]')).toHaveAttribute('aria-pressed', 'false');
     const publishedBuildingsFilter = () => page.evaluate(() => window.editorDebug.map.getFilter('buildings') ?? null);
     expect(await publishedBuildingsFilter()).not.toBeNull();
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('#browse').click();
     expect(await publishedBuildingsFilter()).toBeNull();
     await expect(page.locator('[data-mode][aria-pressed="true"]')).toHaveCount(0);
@@ -131,8 +135,8 @@ test.describe('source viewer', () => {
     // Browse selects nothing and offers no feature tools. Editing.spec covers what happens with pending changes.
     await clickMapCenter(page, 'buildings');
     await expect(page.locator('#selection-title')).toHaveText('Select an object');
-    await expect(page.locator('#editor')).toBeHidden();
-    await expect(page.locator('#add-feature')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
     await expect(page.locator('#undo')).toBeDisabled();
     await expect(page.locator('#redo')).toBeDisabled();
     await expect(page.locator('#error')).toBeHidden();
@@ -145,6 +149,7 @@ test.describe('source viewer', () => {
     const manifest = await fetchSource(page, 'manifest.json');
     const closeZoom = 18;
 
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="buildings.geojson"]').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'buildings.geojson'));
     const buildings = await fetchSource(page, 'buildings.geojson');
@@ -157,6 +162,7 @@ test.describe('source viewer', () => {
     await expect(page.locator('#selection-source')).toContainText('buildings.geojson · feature');
     await expectRenderedSelection(page, 'editor-source-selection-fill');
 
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="roads.geojson"]').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'roads.geojson'));
     const roads = await fetchSource(page, 'roads.geojson');
@@ -168,6 +174,7 @@ test.describe('source viewer', () => {
 
     const satelliteVisibility = () =>
       page.evaluate(() => window.editorDebug.map.getLayoutProperty('satellite-preview', 'visibility'));
+    await page.getByRole('button', {name: 'Tools', exact: true}).click();
     await page.locator('#satellite').click();
     await expect(page.locator('#satellite')).toHaveAttribute('aria-pressed', 'true');
     expect(await satelliteVisibility()).toBe('visible');
@@ -186,4 +193,54 @@ test.describe('source viewer', () => {
     await expect(page.locator('[data-mode]')).toHaveCount(0);
     await expect(page.locator('#browse')).toBeDisabled();
   });
+});
+
+test('workspace keeps the map and layer when its available space changes', {tag: '@phone'}, async ({page}) => {
+  await page.setViewportSize({width: 360, height: 740});
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const attribution = page.locator('.maplibregl-ctrl-attrib');
+  await expect(attribution).not.toHaveAttribute('open', '');
+  await attribution.locator('summary').click();
+  await expect(attribution).toHaveAttribute('open', '');
+  const map = page.locator('#map');
+  await expect(map).toHaveCSS('height', '740px');
+  await page.evaluate(() => {
+    document.querySelector('#offline-notice').hidden = false;
+    document.querySelector('#draft-notice').hidden = false;
+    document.querySelector('#status').classList.add('attention');
+  });
+  const layerBounds = await page.locator('#current-layer').boundingBox();
+  const offlineBounds = await page.locator('#offline-notice').boundingBox();
+  const draftBounds = await page.locator('#draft-notice').boundingBox();
+  const statusBounds = await page.locator('#status').boundingBox();
+  expect(offlineBounds.y).toBeGreaterThanOrEqual(layerBounds.y + layerBounds.height);
+  expect(draftBounds.y).toBeGreaterThanOrEqual(offlineBounds.y + offlineBounds.height);
+  expect(statusBounds.y).toBeGreaterThanOrEqual(draftBounds.y + draftBounds.height);
+  await page.evaluate(() => {
+    document.querySelector('#offline-notice').hidden = true;
+    document.querySelector('#draft-notice').hidden = true;
+    document.querySelector('#status').classList.remove('attention');
+  });
+  const changes = page.getByRole('button', {name: 'Changes', exact: true});
+  expect(await changes.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(740);
+
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await page.locator('[data-mode="places.geojson"]').click();
+  await expect(page.locator('#current-layer')).toHaveText('POIs');
+  await expect(page.locator('#status')).toContainText('source features');
+  const initialView = await page.evaluate(() => ({
+    center: window.editorDebug.map.getCenter().toArray(),
+    zoom: window.editorDebug.map.getZoom()
+  }));
+  await page.setViewportSize({width: 900, height: 500});
+  await expect(page.locator('#current-layer')).toHaveText('POIs');
+  expect(await page.evaluate(() => ({
+    center: window.editorDebug.map.getCenter().toArray(),
+    zoom: window.editorDebug.map.getZoom()
+  }))).toEqual(initialView);
+  await expect(page.locator('#map')).toHaveCSS('height', '500px');
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await expect(page.locator('#layers-panel').getByRole('link', {name: 'OpenStreetMap contributors'})).toBeVisible();
 });

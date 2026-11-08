@@ -60,8 +60,8 @@ const basemapLayers = {
 };
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 const addFeatureLabels = {'places.geojson': 'Add POI', 'roads.geojson': 'Draw road'};
-// Matches the stylesheet breakpoint where the inspector moves below the map.
-const stackedLayoutQuery = '(max-width: 720px)';
+// The panels occupy at most 320 + 340 px; 660 / 0.4 leaves 60% of a 1650 px window for the map.
+const sharedPanelSpace = matchMedia('(max-width: 1650px)');
 let map;
 let sources;
 let overlay;
@@ -80,12 +80,19 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 
+// Status messages declare whether they need to be visible over the map.
+function setStatus(message, needsAttention = false) {
+  const status = elementById('status');
+  status.textContent = message;
+  status.classList.toggle('attention', needsAttention);
+}
+
 // Errors stay on screen even when part of the map rendered successfully.
 function showError(error) {
   isDraftProblemShown = false;
   elementById('error').textContent = error.message;
   elementById('error').hidden = false;
-  elementById('status').textContent = 'Source viewer needs attention';
+  setStatus('Source viewer needs attention', true);
 }
 
 // A draft problem can clear itself once a save succeeds. Any other error stays on screen.
@@ -98,7 +105,7 @@ function clearDraftProblem() {
   if (!isDraftProblemShown) return;
   isDraftProblemShown = false;
   elementById('error').hidden = true;
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 async function loadJSON(url) {
@@ -121,11 +128,9 @@ function modeStatus() {
   return `${activeFile} · ${featureCount} source features · ${access}`;
 }
 
-// On phones the inspector sits below the map, so the status over the map has to point at it.
+// The inspector is an overlay in either layout, so selection never changes the map view.
 function selectionStatus(index) {
-  const isInspectorBelowMap = matchMedia(stackedLayoutQuery).matches;
-  const inspectorHint = isInspectorBelowMap ? ' · details below the map' : '';
-  return `${activeFile} · feature ${index} selected${inspectorHint}`;
+  return `${activeFile} · feature ${index} selected`;
 }
 
 function appendProperty(name, value) {
@@ -145,6 +150,7 @@ function showLockReason(reason) {
 // shown here because overlay features use the array index as their ID instead.
 function showFeature(feature, index) {
   editing.close();
+  showInspector();
   const properties = feature.properties;
   const hash = sources.get(activeFile).metadata.sha256;
   elementById('selection-title').textContent =
@@ -154,7 +160,7 @@ function showFeature(feature, index) {
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
   elementById('properties').replaceChildren();
   for (const [name, value] of Object.entries(properties)) appendProperty(name, value);
-  elementById('status').textContent = selectionStatus(index);
+  setStatus(selectionStatus(index));
   overlay.setSelection(feature);
   const {canModify, lockReason} = featureCapabilities(feature, rules.layers[activeFile]);
   showLockReason(lockReason);
@@ -164,6 +170,8 @@ function showFeature(feature, index) {
 // Returns the inspector to its empty state for the active mode.
 function clearSelection() {
   editing.close();
+  elementById('open-inspector').hidden = true;
+  document.querySelector('.inspector').hidden = true;
   showLockReason(activeFile ? layerLockReason(rules.layers[activeFile]) : null);
   elementById('selection-title').textContent = 'Select an object';
   elementById('selection-source').textContent = activeFile
@@ -172,7 +180,7 @@ function clearSelection() {
   elementById('properties').replaceChildren();
   elementById('identity').textContent = '';
   elementById('source-id').textContent = '';
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 // Hide the corresponding published geometry while the complete source is visible.
@@ -201,7 +209,7 @@ function refreshOverlay() {
 
 function showLoadingStatus() {
   isModeLoading = activeFile !== null;
-  if (isModeLoading) elementById('status').textContent = `Loading ${activeFile}…`;
+  if (isModeLoading) setStatus(`Loading ${activeFile}…`, true);
 }
 
 function hasOnlyInMemoryChanges() {
@@ -272,6 +280,7 @@ function startNewFeature() {
   } else {
     editing.openNewLine(localId, {});
   }
+  showInspector();
   elementById('selection-title').textContent = addFeatureLabels[activeFile];
   elementById('selection-source').textContent = `${activeFile} · new feature`;
 }
@@ -280,13 +289,15 @@ function startNewFeature() {
 function setMode(filename) {
   // A geometry preview is dropped by a mode switch, but typed details must be applied or discarded explicitly.
   if (editing.hasTypedDetails) {
+    showInspector();
     editing.showProblem(applyOrCancelMessage);
-    elementById('status').textContent = applyOrCancelMessage;
-    return;
+    setStatus(applyOrCancelMessage, true);
+    return false;
   }
   editing.close();
   if (preview.isShown) hidePreview();
   activeFile = activeFile === filename ? null : filename;
+  elementById('current-layer').textContent = activeFile ? layerNames[activeFile] : 'Browse';
   maskPublishedLayer(activeFile);
   refreshOverlay();
   clearSelection();
@@ -299,6 +310,14 @@ function setMode(filename) {
   for (const row of document.querySelectorAll('[data-source]')) {
     row.setAttribute('aria-current', String(row.dataset.source === activeFile));
   }
+  return true;
+}
+
+// Choosing a layer closes its picker only after the mode switch succeeds.
+function chooseMode(filename) {
+  if (!setMode(filename)) return;
+  showPanel(null);
+  elementById('current-layer').focus();
 }
 
 // Builds one table row and one mode switch per verified source file.
@@ -318,10 +337,7 @@ function renderLayers() {
     button.textContent = layerNames[filename];
     button.setAttribute('aria-label', `${layerNames[filename]} · ${filename}`);
     button.setAttribute('aria-pressed', 'false');
-    const label = document.createElement('small');
-    label.textContent = filename;
-    button.append(label);
-    button.onclick = () => setMode(filename);
+    button.onclick = () => chooseMode(filename);
     elementById('modes').append(button);
   }
 }
@@ -330,7 +346,7 @@ function renderLayers() {
 function finishModeLoading() {
   if (!isModeLoading) return;
   isModeLoading = false;
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 // Clicks wait for the mode to finish loading, and a hit from another file never selects anything.
@@ -342,7 +358,7 @@ function selectFeatureAtClick(event) {
   }
   // A stray tap must not silently throw away typed details.
   if (editing.hasUnappliedEdit) {
-    elementById('status').textContent = applyOrCancelMessage;
+    setStatus(applyOrCancelMessage, true);
     return;
   }
   const hit = hitTest(map, event.point, overlay.layerIds)[0];
@@ -365,6 +381,7 @@ function offerSetAsideDrafts() {
     : [];
   const drafts = [...setAsideDrafts, ...blockingDraft];
   elementById('draft-conflict').hidden = drafts.length === 0;
+  elementById('draft-notice').hidden = drafts.length === 0;
   elementById('draft-conflict-actions').hidden = drafts.length === 0;
   if (drafts.length === 0) return;
   const reasons = drafts.map(({reason}) => reason).join('; ');
@@ -464,7 +481,7 @@ function showPreview() {
   }
   elementById('preview').setAttribute('aria-pressed', 'true');
   isModeLoading = true;
-  elementById('status').textContent = 'Loading preview…';
+  setStatus('Loading preview…', true);
 }
 
 function hidePreview() {
@@ -476,7 +493,7 @@ function hidePreview() {
 function togglePreview() {
   if (preview.isShown) {
     hidePreview();
-    elementById('status').textContent = modeStatus();
+    setStatus(modeStatus());
     return;
   }
   setMode(null);
@@ -492,8 +509,80 @@ function toggleSatellite() {
   if (isSatelliteVisible) map.fitBounds(satelliteBounds, {duration: 0, padding: 20});
 }
 
+// Utility panels share space without changing the map or the pending edit.
+function showPanel(panelId) {
+  for (const panel of document.querySelectorAll('.utility-panel')) {
+    panel.hidden = panel.id !== panelId;
+  }
+  for (const button of document.querySelectorAll('[data-panel]')) {
+    button.setAttribute('aria-expanded', String(button.dataset.panel === panelId));
+  }
+  elementById('current-layer').setAttribute('aria-expanded', String(panelId === 'layers-panel'));
+  if (panelId && sharedPanelSpace.matches && !document.querySelector('.inspector').hidden) {
+    document.querySelector('.inspector').hidden = true;
+    elementById('open-inspector').hidden = false;
+  }
+}
+
+// Hiding the inspector only changes its presentation; the edit remains in memory.
+function showInspector() {
+  if (sharedPanelSpace.matches) showPanel(null);
+  document.querySelector('.inspector').hidden = false;
+  elementById('open-inspector').hidden = true;
+}
+
+// Collapse one panel when a resize would leave too little map visible.
+function installPanelResize() {
+  sharedPanelSpace.addEventListener('change', event => {
+    const hasOpenPanel = [...document.querySelectorAll('.utility-panel')].some(panel => !panel.hidden);
+    const inspector = document.querySelector('.inspector');
+    if (event.matches && hasOpenPanel && !inspector.hidden) {
+      inspector.hidden = true;
+      elementById('open-inspector').hidden = false;
+    }
+  });
+}
+
+// Panel buttons use the same space and preserve the selected edit.
+function installPanelButtons() {
+  for (const button of document.querySelectorAll('[data-panel]')) {
+    button.disabled = false;
+    button.onclick = () => {
+      const panelId = button.dataset.panel;
+      showPanel(elementById(panelId).hidden ? panelId : null);
+    };
+  }
+  elementById('current-layer').disabled = false;
+  elementById('current-layer').onclick = () => {
+    showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null);
+  };
+  elementById('offline-notice').onclick = () => showPanel('layers-panel');
+  elementById('draft-notice').onclick = () => showPanel('changes-panel');
+}
+
+// Closing the inspector preserves the edit and puts focus on the control that reopens it.
+function installInspectorToggle() {
+  elementById('close-inspector').onclick = () => {
+    document.querySelector('.inspector').hidden = true;
+    elementById('open-inspector').hidden = false;
+    elementById('open-inspector').focus();
+  };
+  elementById('open-inspector').onclick = () => {
+    showInspector();
+    elementById('close-inspector').focus();
+  };
+}
+
+// Install workspace interactions before asynchronous startup begins.
+function installWorkspaceControls() {
+  installPanelResize();
+  installPanelButtons();
+  installInspectorToggle();
+}
+
 // Sources are verified before the map starts, so a mode can never open on unverified data.
 async function start() {
+  installWorkspaceControls();
   const canReloadNow = () => !editing?.hasUnappliedEdit && !(session && hasOnlyInMemoryChanges());
   startOfflineCopy(canReloadNow, () => Boolean(map?.loaded()));
   const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
@@ -516,6 +605,12 @@ async function start() {
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
   await whenMapReady(map);
+  // MapLibre 5.12 opens compact attribution at startup; keep its details and class in sync when collapsing it.
+  const attribution = document.querySelector('.maplibregl-ctrl-attrib');
+  if (attribution instanceof HTMLDetailsElement) {
+    attribution.open = false;
+    attribution.classList.remove('maplibregl-compact-show');
+  }
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
@@ -527,7 +622,7 @@ async function start() {
   renderLayers();
   renderFeatureCounts();
   elementById('browse').disabled = false;
-  elementById('browse').onclick = () => setMode(null);
+  elementById('browse').onclick = () => chooseMode(null);
   elementById('satellite').disabled = false;
   elementById('satellite').onclick = toggleSatellite;
   elementById('preview').disabled = false;

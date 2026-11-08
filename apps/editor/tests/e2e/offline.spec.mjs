@@ -20,6 +20,13 @@ const contentTypes = {
 };
 const readyMessage = 'Saved on this device. Works offline.';
 
+// Opens the requested workspace panel without closing it if it is already open.
+async function openPanel(page, name) {
+  const button = page.getByRole('button', {name, exact: true});
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+}
+
+
 // overrides maps a path to the bytes a release serves there instead of the built file. requests records every read.
 function startReleaseServer(pathPrefix = '/') {
   const state = {overrides: new Map(), requests: [], heldPaths: new Map()};
@@ -72,7 +79,7 @@ const sha256Of = bytes => createHash('sha256').update(bytes).digest('hex');
 // What a real build changes for a new release: the worker's bytes, the manifest and at least one page file.
 function publishNewRelease(server, marker) {
   const previousPage = readArtifact('index.html');
-  const page = Buffer.from(previousPage.toString().replace('Layer editor', `Layer editor ${marker}`));
+  const page = Buffer.from(previousPage.toString().replace('Kompas · layer editor', `Kompas · layer editor ${marker}`));
   const manifest = readArtifact('offline-manifest.js')
     .toString()
     .replace(sha256Of(previousPage), sha256Of(page))
@@ -142,6 +149,16 @@ test.describe('offline-first install', () => {
     await server.stop();
   });
 
+  test('warns when the browser may clear offline storage', async ({page}) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator.storage, 'persist', {value: async () => false});
+    });
+    await openUntilOffline(page, server);
+    await expect(page.locator('#offline-notice')).toBeVisible();
+    await page.locator('#offline-notice').click();
+    await expect(page.locator('#offline-status')).toContainText('may clear it if storage runs low');
+  });
+
   test('the editor is installable', {tag: '@phone'}, async ({page, browserName}) => {
     test.skip(browserName !== 'chromium', 'The installability report is a Chromium protocol.');
     await openUntilOffline(page, server);
@@ -162,24 +179,29 @@ test.describe('offline-first install', () => {
     await expect(page.locator('#error')).toBeHidden();
     await expect.poll(() => renderedBasemapFeatures(page)).toBeGreaterThan(0);
 
+    await openPanel(page, 'Layers');
     await page.locator('[data-mode="places.geojson"]').click();
     await expect(page.locator('#status')).toContainText('source features · editable');
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
+    await page.locator('#close-inspector').click();
     await page.locator('#map').scrollIntoViewIfNeeded();
     const center = await page.evaluate(() => {
       const bounds = window.editorDebug.map.getCanvas().getBoundingClientRect();
       return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
     });
     await page.mouse.click(center.x, center.y);
+    await page.locator('#open-inspector').click();
     await page.locator('[name="name"]').fill('Added offline');
     await page.locator('[name="category"]').selectOption('food');
     await page.locator('[name="kind"]').fill('cafe');
     await page.locator('[name="visibilityLevel"]').selectOption('4');
     await page.locator('#apply-edit').click();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
 
     await page.reload();
     await expect(page.locator('#review-message')).toHaveText('Restored your saved draft.');
+    await openPanel(page, 'Changes');
     await page.locator('#changeset-author').fill('Offline Test');
     await page.locator('#changeset-reason').fill('Works without a server');
     const downloadPromise = page.waitForEvent('download');
@@ -196,23 +218,25 @@ test.describe('offline-first install', () => {
     publishNewRelease(server, 'second-release');
     server.requests.length = 0;
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
-    await expect(page.locator('header p')).toHaveText('Layer editor');
+    await expect(page).toHaveTitle('Kompas · layer editor');
     const archiveDownloads = server.requests.filter(
       ({path: filePath, range}) => filePath.endsWith('.pmtiles') && !range
     );
     expect(archiveDownloads).toEqual([]);
 
+    await openPanel(page, 'Layers');
     await page.locator('#update-app').click();
-    await expect(page.locator('header p')).toHaveText('Layer editor second-release');
-    await expect(page.locator('#update-app')).toBeHidden();
+    await expect(page).toHaveTitle('Kompas · layer editor second-release');
+    await expect(page.locator('#update-app')).toHaveAttribute('hidden', '');
     await expectBrowse(page);
     await expect(page.locator('#offline-status')).toContainText(readyMessage);
     await expect.poll(() => renderedBasemapFeatures(page)).toBeGreaterThan(0);
 
     await server.stop();
     await page.reload();
-    await expect(page.locator('header p')).toHaveText('Layer editor second-release');
+    await expect(page).toHaveTitle('Kompas · layer editor second-release');
     await expectBrowse(page);
   });
 
@@ -220,9 +244,12 @@ test.describe('offline-first install', () => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    await openPanel(page, 'Layers');
     await page.locator('[data-mode="places.geojson"]').click();
     await expect(page.locator('#status')).toContainText('editable');
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
     await expect(page.locator('#update-app')).toBeDisabled();
     await page.locator('#cancel-edit').click();
@@ -237,11 +264,11 @@ test.describe('offline-first install', () => {
     await expect(page.locator('#offline-status')).toHaveText('The update failed. This version keeps working.', {
       timeout: 60000
     });
-    await expect(page.locator('#update-app')).toBeHidden();
+    await expect(page.locator('#update-app')).toHaveAttribute('hidden', '');
     await server.stop();
     await page.reload();
     await expectBrowse(page);
-    await expect(page.locator('header p')).toHaveText('Layer editor');
+    await expect(page).toHaveTitle('Kompas · layer editor');
   });
 
   test('an update removes the old release, and a new map replaces the old one and works offline', async ({page}) => {
@@ -250,9 +277,11 @@ test.describe('offline-first install', () => {
     publishNewRelease(server, 'second-release');
     publishNewMap(server);
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    await openPanel(page, 'Layers');
     await page.locator('#update-app').click();
-    await expect(page.locator('header p')).toHaveText('Layer editor second-release');
+    await expect(page).toHaveTitle('Kompas · layer editor second-release');
     await expect(page.locator('#offline-status')).toContainText(readyMessage);
     await expect.poll(() => editorCaches(page).then(names => names.length)).toBe(2);
     const cacheNames = await editorCaches(page);
@@ -289,6 +318,7 @@ test.describe('offline-first install', () => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
 
     publishNewRelease(server, 'third-release');
@@ -297,7 +327,7 @@ test.describe('offline-first install', () => {
     server.requests.length = 0;
     await page.reload();
     await expect(page.locator('#offline-status')).toHaveText('Downloading a new version…', {timeout: 60000});
-    await expect(page.locator('#update-app')).toBeHidden();
+    await expect(page.locator('#update-app')).toHaveAttribute('hidden', '');
     await expect.poll(() => server.requests.some(({path: filePath}) => filePath === 'style.css')).toBe(true);
 
     // Closing every window would do the same as this message: the older waiting version takes over.
@@ -305,18 +335,20 @@ test.describe('offline-first install', () => {
       const registration = await navigator.serviceWorker.getRegistration();
       registration.waiting.postMessage({type: 'activate-update'});
     });
-    await expect(page.locator('header p')).toHaveText('Layer editor second-release');
+    await expect(page).toHaveTitle('Kompas · layer editor second-release');
     releaseStyle();
     server.heldPaths.clear();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    await openPanel(page, 'Layers');
     await page.locator('#update-app').click();
-    await expect(page.locator('header p')).toHaveText('Layer editor third-release', {timeout: 30000});
+    await expect(page).toHaveTitle('Kompas · layer editor third-release', {timeout: 30000});
     await expect(page.locator('#offline-status')).toContainText(readyMessage);
     await expect.poll(() => editorCaches(page).then(names => names.length)).toBe(2);
 
     await server.stop();
     await page.reload();
-    await expect(page.locator('header p')).toHaveText('Layer editor third-release');
+    await expect(page).toHaveTitle('Kompas · layer editor third-release');
     await expectBrowse(page);
   });
 
@@ -324,6 +356,7 @@ test.describe('offline-first install', () => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     // Going back to the first build gives it the same cache name as the one in use, and this copy of it is bad.
     server.overrides.clear();
@@ -335,10 +368,11 @@ test.describe('offline-first install', () => {
         timeout: 60000
       }
     );
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible();
     await server.stop();
     await page.reload();
-    await expect(page.locator('header p')).toHaveText('Layer editor');
+    await expect(page).toHaveTitle('Kompas · layer editor');
     await expectBrowse(page);
   });
 
@@ -350,17 +384,21 @@ test.describe('offline-first install', () => {
       await editorWindow.goto(server.url);
       await expectBrowse(editorWindow);
     }
+    await openPanel(busyWindow, 'Layers');
     await busyWindow.locator('[data-mode="places.geojson"]').click();
     await expect(busyWindow.locator('#status')).toContainText('editable');
+    await openPanel(busyWindow, 'Tools');
     await busyWindow.locator('#add-feature').click();
     await busyWindow.locator('[name="name"]').fill('Still typing');
 
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    await openPanel(page, 'Layers');
     await page.locator('#update-app').click();
-    await expect(page.locator('header p')).toHaveText('Layer editor second-release', {timeout: 30000});
-    await expect(quietWindow.locator('header p')).toHaveText('Layer editor second-release');
+    await expect(page).toHaveTitle('Kompas · layer editor second-release', {timeout: 30000});
+    await expect(quietWindow).toHaveTitle('Kompas · layer editor second-release');
     await expect(busyWindow.locator('#offline-status')).toContainText('Finish and save your work, then reload.');
     await expect(busyWindow.locator('[name="name"]')).toHaveValue('Still typing');
   });
@@ -369,25 +407,30 @@ test.describe('offline-first install', () => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     // Stands in for the race in update-quiet.js, which cannot be caused on demand: the new version never hears the request.
     await page.evaluate(() => {
       ServiceWorker.prototype.postMessage = () => {};
     });
+    await openPanel(page, 'Layers');
     await page.locator('#update-app').click();
-    await expect(page.getByText('Close every editor window')).toBeVisible({timeout: 30000});
-    await expect(page.locator('header p')).toHaveText('Layer editor');
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
+    await expect(page.locator('#offline-notice')).toBeVisible({timeout: 30000});
+    await page.locator('#offline-notice').click();
+    await expect(page.getByText('Close every editor window')).toBeVisible();
+    await expect(page).toHaveTitle('Kompas · layer editor');
     await page.close();
     const reopenedWindow = await context.newPage();
     await expect
       .poll(
         async () => {
           await reopenedWindow.goto(server.url);
-          return reopenedWindow.locator('header p').textContent();
+          return reopenedWindow.locator('title').textContent();
         },
         {timeout: 30000}
       )
-      .toBe('Layer editor second-release');
+      .toBe('Kompas · layer editor second-release');
   });
 
   test('edits that could not be saved block the update', async ({page}) => {
@@ -401,19 +444,24 @@ test.describe('offline-first install', () => {
     await openUntilOffline(page, server);
     publishNewRelease(server, 'second-release');
     await page.reload();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
+    await openPanel(page, 'Layers');
     await page.locator('[data-mode="places.geojson"]').click();
     await expect(page.locator('#status')).toContainText('editable');
     await page.evaluate(() => {
       window.isStorageFull = true;
     });
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
+    await page.locator('#close-inspector').click();
     await page.locator('#map').scrollIntoViewIfNeeded();
     const center = await page.evaluate(() => {
       const bounds = window.editorDebug.map.getCanvas().getBoundingClientRect();
       return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
     });
     await page.mouse.click(center.x, center.y);
+    await page.locator('#open-inspector').click();
     await page.locator('[name="name"]').fill('Only in memory');
     await page.locator('[name="category"]').selectOption('food');
     await page.locator('[name="kind"]').fill('cafe');
@@ -421,11 +469,13 @@ test.describe('offline-first install', () => {
     await page.locator('#apply-edit').click();
     await expect(page.locator('#error')).toContainText('Draft not saved');
     await expect(page.locator('#update-app')).toBeDisabled();
+    await openPanel(page, 'Layers');
     await expect(page.locator('#update-hint')).toBeVisible();
 
     await page.evaluate(() => {
       window.isStorageFull = false;
     });
+    await openPanel(page, 'Tools');
     await page.locator('#undo').click();
     await expect(page.locator('#update-app')).toBeEnabled();
   });

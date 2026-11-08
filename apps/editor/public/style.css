@@ -12,36 +12,18 @@
   box-sizing: border-box;
 }
 body {
-  display: grid;
-  grid-template-columns: 270px minmax(0, 1fr) 280px;
   margin: 0;
   height: 100dvh;
+  overflow: hidden;
 }
-.dock,
-.inspector {
-  padding: 18px;
-  overflow: auto;
-  background: #fffffb;
-}
-.dock {
-  border-right: 1px solid var(--line);
-}
-.inspector {
-  border-left: 1px solid var(--line);
-}
-h1,
 h2,
 p {
   margin: 0 0 12px;
-}
-h1 {
-  font-size: 24px;
 }
 h2 {
   font-size: 14px;
   margin-top: 18px;
 }
-header p,
 .hint {
   color: var(--muted);
   font-size: 12px;
@@ -96,11 +78,6 @@ button:disabled {
   opacity: 0.55;
   cursor: wait;
 }
-button small {
-  display: block;
-  margin-top: 4px;
-  font-size: 10px;
-}
 #browse,
 #satellite,
 #preview {
@@ -112,9 +89,9 @@ button small {
   outline-offset: 2px;
 }
 main {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 #map {
   position: absolute;
@@ -122,10 +99,21 @@ main {
 }
 .map-status {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 64px;
+  left: 50%;
+  width: min(320px, 80vw);
+  transform: translateX(-50%);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   pointer-events: none;
+}
+.map-status button {
+  max-width: 100%;
+  background: #fff7e6;
+  pointer-events: auto;
 }
 .map-status p {
   padding: 10px 14px;
@@ -226,34 +214,93 @@ select {
 [hidden] {
   display: none !important;
 }
+/* The map stays in place while workspace panels overlay it. */
+.workspace-toolbar,
+#current-layer,
+.utility-panel,
+.inspector,
+#open-inspector {
+  position: absolute;
+  z-index: 2;
+}
+.workspace-toolbar {
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 6px;
+}
+#current-layer {
+  top: 12px;
+  right: 12px;
+  max-width: 40vw;
+}
+.dock {
+  padding: 0;
+  border: 0;
+}
+.utility-panel,
+.inspector {
+  top: 64px;
+  bottom: 12px;
+  width: min(320px, 35vw);
+  overflow: auto;
+  padding: 16px;
+  background: #fffffb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px #0003;
+}
+.utility-panel {
+  left: 12px;
+}
+.inspector {
+  right: 12px;
+  width: min(340px, 35vw);
+}
+#open-inspector {
+  position: fixed;
+  top: 64px;
+  right: 12px;
+}
+#status:not(.attention) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.utility-panel footer {
+  margin-top: 20px;
+}
 @media (max-width: 720px) {
-  body {
-    display: block;
-    height: auto;
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right {
+    bottom: calc(54px + env(safe-area-inset-bottom));
   }
-  .dock,
+  .workspace-toolbar {
+    top: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    right: 8px;
+  }
+  .workspace-toolbar button {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 4px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .utility-panel,
   .inspector {
-    padding: 12px;
-    overflow: visible;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 50dvh;
+    overflow: auto;
   }
-  .tiles {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .tiles button {
-    padding: 7px;
-    font-size: 12px;
-  }
-  .tiles small {
-    display: none;
-  }
-  .layer-table {
-    max-height: 120px;
-  }
-  .notice {
-    margin-bottom: 8px;
-  }
-  main {
-    height: 55dvh;
-    min-height: 360px;
+  #open-inspector {
+    position: static;
   }
 }
