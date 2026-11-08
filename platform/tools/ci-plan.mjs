@@ -82,8 +82,8 @@ export const SHARED_WEB_SOURCES = [
   'location-controls.js'
 ];
 
-// Only moving geometry reaches these, which the offline and viewer tests never do.
-const GEOMETRY_MOVE_SOURCES = ['drag-gestures.js', 'geometry-editing.js', 'handle-layer.js'];
+// Only moving geometry or previewing all edits reaches these, which the offline and viewer tests never do.
+const EDITING_ONLY_SOURCES = ['drag-gestures.js', 'geometry-editing.js', 'handle-layer.js', 'edit-preview.js'];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
@@ -94,12 +94,12 @@ export const EDITOR_BROWSER_AREAS = {
     // Sized from measured test time, so that each share stays inside the job time limit.
     jobs: 2,
     specFiles: ['editing.spec.mjs'],
-    sources: GEOMETRY_MOVE_SOURCES
+    sources: EDITING_ONLY_SOURCES
   },
   'editing-mobile': {
     specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
     specFiles: ['editing.spec.mjs'],
-    sources: GEOMETRY_MOVE_SOURCES
+    sources: EDITING_ONLY_SOURCES
   },
   'offline-desktop': {
     specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
