@@ -13,6 +13,7 @@ had to be kept current by a docs PR. GitHub issues support sub-issues and "block
 ## Decision
 
 - A GitHub issue is the source of truth for a task: scope, acceptance criteria, status and remaining work.
+- Every PR is connected to an issue, with `Closes #N`, or `Part of #N` when it does only part of the work.
 - Multi-PR work is split into sub-issues, one per PR, with "blocked by" links for real dependencies only.
 - The task's plan in `docs/plans/` links the issue and is its history: dated entries recording how the plan changed and
   why, and its decisions. It copies no status from the issue.

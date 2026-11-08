@@ -1,5 +1,6 @@
 # Task plans
 
+- **Every PR has an issue**, linked with `Closes #N`, or `Part of #N` when it does only part of the work.
 - **The issue is the source of truth.** Scope, acceptance criteria, status and remaining work live in a GitHub issue.
   Split multi-PR work into sub-issues, one per PR, and record order as "blocked by" links between them.
 - **The plan is the history.** It links its issue and records how the plan changed and why: dated entries for changed
