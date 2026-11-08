@@ -205,6 +205,23 @@ test('workspace keeps the map and layer when its available space changes', {tag:
   await expect(attribution).toHaveAttribute('open', '');
   const map = page.locator('#map');
   await expect(map).toHaveCSS('height', '740px');
+  await page.evaluate(() => {
+    document.querySelector('#offline-notice').hidden = false;
+    document.querySelector('#draft-notice').hidden = false;
+    document.querySelector('#status').classList.add('attention');
+  });
+  const layerBounds = await page.locator('#current-layer').boundingBox();
+  const offlineBounds = await page.locator('#offline-notice').boundingBox();
+  const draftBounds = await page.locator('#draft-notice').boundingBox();
+  const statusBounds = await page.locator('#status').boundingBox();
+  expect(offlineBounds.y).toBeGreaterThanOrEqual(layerBounds.y + layerBounds.height);
+  expect(draftBounds.y).toBeGreaterThanOrEqual(offlineBounds.y + offlineBounds.height);
+  expect(statusBounds.y).toBeGreaterThanOrEqual(draftBounds.y + draftBounds.height);
+  await page.evaluate(() => {
+    document.querySelector('#offline-notice').hidden = true;
+    document.querySelector('#draft-notice').hidden = true;
+    document.querySelector('#status').classList.remove('attention');
+  });
   const changes = page.getByRole('button', {name: 'Changes', exact: true});
   expect(await changes.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(740);

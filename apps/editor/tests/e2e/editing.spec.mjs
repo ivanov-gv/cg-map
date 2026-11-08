@@ -77,7 +77,7 @@ test.describe('source editing', () => {
       return {x: bounds.left + x, y: bounds.top + y};
     }, coordinate);
 
-  // Measures after scrolling, because the inspector and dock can push the map off screen on the stacked phone layout.
+  // Map interactions first close overlays so the selected coordinate is reachable.
   const tapMapAt = async (page, coordinate) => {
     await uncoverMap(page);
     await page.locator('#map').scrollIntoViewIfNeeded();
@@ -205,6 +205,29 @@ test.describe('source editing', () => {
     await page.getByRole('button', {name: 'Changes', exact: true}).click();
     await openPanel(page, 'Changes');
     await expect(page.locator('[data-changed-file="places.geojson"]')).toBeVisible();
+  });
+
+  test('selection and utility panels fit on narrow and wide windows', {tag: '@phone'}, async ({page}) => {
+    await page.setViewportSize({width: 360, height: 740});
+    await openEditor(page);
+    await selectPlace(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Tools');
+    const selection = page.locator('#open-inspector');
+    const panel = page.locator('#tools-panel');
+    await expect(selection).toBeVisible();
+    const selectionBounds = await selection.boundingBox();
+    const panelBounds = await panel.boundingBox();
+    expect(selectionBounds.y).toBeGreaterThanOrEqual(panelBounds.y + panelBounds.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+    await page.setViewportSize({width: 1800, height: 800});
+    await selection.click();
+    await expect(page.locator('.inspector')).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    const inspectorBounds = await page.locator('.inspector').boundingBox();
+    const widePanelBounds = await panel.boundingBox();
+    expect(inspectorBounds.x - (widePanelBounds.x + widePanelBounds.width)).toBeGreaterThanOrEqual(1800 * 0.6);
   });
 
   test('invalid details are refused and record nothing', async ({page}) => {
@@ -802,6 +825,8 @@ test.describe('source editing', () => {
 
     await openPanel(page, 'Tools');
     await page.locator('#preview').click();
+    await expect(page.locator('#tools-panel')).toBeVisible();
+    await expect(page.locator('#preview')).toBeFocused();
     await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#status')).toHaveText('Preview · edits in 2 files applied');
     await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);

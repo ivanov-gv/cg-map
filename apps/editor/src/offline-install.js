@@ -7,6 +7,13 @@ const updateHintDelayMilliseconds = 10000;
 // Set once a new version has taken over a window that cannot reload yet. Its warning must then stay on screen.
 let isAwaitingReload = false;
 let isMapQuiet = () => true;
+let isOfflineProblem = false;
+let isUpdateOffered = false;
+
+// Both an offline problem and an available update need a visible route into Layers.
+function updateOfflineNotice() {
+  elementById('offline-notice').hidden = !isOfflineProblem && !isUpdateOffered;
+}
 
 function showOfflineStatus(message, isProblem = false) {
   if (isAwaitingReload) return;
@@ -14,6 +21,8 @@ function showOfflineStatus(message, isProblem = false) {
   status.textContent = message;
   status.setAttribute('role', isProblem ? 'alert' : 'status');
   status.classList.toggle('problem', isProblem);
+  isOfflineProblem = isProblem;
+  updateOfflineNotice();
 }
 
 // The new release is already stored, so taking over needs no network.
@@ -21,8 +30,10 @@ function offerUpdate(worker, message = 'A new version is ready.') {
   showOfflineStatus(message);
   const button = elementById('update-app');
   button.hidden = false;
+  isUpdateOffered = true;
+  updateOfflineNotice();
   button.onclick = async () => {
-    button.hidden = true;
+    hideUpdateOffer();
     showOfflineStatus('Updating…');
     await whenEveryWindowIsQuiet(isMapQuiet);
     askUntilTakeover(worker);
@@ -51,6 +62,8 @@ function askUntilTakeover(worker) {
 
 function hideUpdateOffer() {
   elementById('update-app').hidden = true;
+  isUpdateOffered = false;
+  updateOfflineNotice();
 }
 
 function reportFailedInstall(registration) {

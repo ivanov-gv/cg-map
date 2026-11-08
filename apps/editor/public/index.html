@@ -14,94 +14,153 @@
   </head>
   <body>
     <nav class="workspace-toolbar" aria-label="Workspace">
-      <button type="button" data-panel="layers-panel" disabled aria-controls="layers-panel" aria-expanded="false">Layers</button>
-      <button type="button" data-panel="tools-panel" disabled aria-controls="tools-panel" aria-expanded="false">Tools</button>
-      <button type="button" data-panel="changes-panel" disabled aria-controls="changes-panel" aria-expanded="false">Changes</button>
+      <button
+        type="button"
+        data-panel="layers-panel"
+        disabled
+        aria-controls="layers-panel"
+        aria-expanded="false"
+      >
+        Layers
+      </button>
+      <button
+        type="button"
+        data-panel="tools-panel"
+        disabled
+        aria-controls="tools-panel"
+        aria-expanded="false"
+      >
+        Tools
+      </button>
+      <button
+        type="button"
+        data-panel="changes-panel"
+        disabled
+        aria-controls="changes-panel"
+        aria-expanded="false"
+      >
+        Changes
+      </button>
+      <button id="open-inspector" type="button" hidden>Selection</button>
     </nav>
-    <button id="draft-notice" type="button" hidden>Saved draft needs attention</button>
-    <button id="offline-notice" type="button" hidden>Offline status needs attention</button>
-    <button id="current-layer" type="button" disabled aria-controls="layers-panel" aria-expanded="false">Browse</button>
+    <button
+      id="current-layer"
+      type="button"
+      disabled
+      aria-controls="layers-panel"
+      aria-expanded="false"
+    >
+      Browse
+    </button>
     <aside class="dock" aria-label="Workspace panels">
       <section id="layers-panel" class="utility-panel" hidden>
-      <h2>Layers</h2>
-      <p id="offline-status" class="hint" role="status"></p>
-      <button id="update-app" hidden>Update and reload</button>
-      <p id="update-hint" class="hint" hidden>
-        Export your pending changes before updating: if the update changes one of those source files, your draft is set
-        aside instead of resumed.
-      </p>
-      <details>
-        <summary>Source details</summary>
-      <div class="layer-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Source file</th>
-              <th>Features</th>
-            </tr>
-          </thead>
-          <tbody id="layers"></tbody>
-        </table>
-      </div>
-      </details>
-      <h2>Choose what to edit</h2>
-      <div id="modes" class="tiles"></div>
-      <button id="browse" disabled>Browse · all files locked</button>
-      <p class="hint">
-        One GeoJSON file per mode. Every edit and undo changes only the active file. Importing a reviewed changeset is
-        the one exception, because it names its own files.
-      </p>
-      <footer class="hint">
-        © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> ·
-        <a href="https://opendatacommons.org/licenses/odbl/">ODbL</a> · Natural Earth.
-        Stops: ePodgorica. Satellite: eMapa Ortofoto 2025.
-      </footer>
+        <h2>Layers</h2>
+        <p id="offline-status" class="hint" role="status"></p>
+        <button id="update-app" hidden>Update and reload</button>
+        <p id="update-hint" class="hint" hidden>
+          Export your pending changes before updating: if the update changes one
+          of those source files, your draft is set aside instead of resumed.
+        </p>
+        <details>
+          <summary>Source details</summary>
+          <div class="layer-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source file</th>
+                  <th>Features</th>
+                </tr>
+              </thead>
+              <tbody id="layers"></tbody>
+            </table>
+          </div>
+        </details>
+        <h2>Choose what to edit</h2>
+        <div id="modes" class="tiles"></div>
+        <button id="browse" disabled>Browse · all files locked</button>
+        <p class="hint">
+          One GeoJSON file per mode. Every edit and undo changes only the active
+          file. Importing a reviewed changeset is the one exception, because it
+          names its own files.
+        </p>
+        <footer class="hint">
+          ©
+          <a href="https://www.openstreetmap.org/copyright"
+            >OpenStreetMap contributors</a
+          >
+          · <a href="https://opendatacommons.org/licenses/odbl/">ODbL</a> ·
+          Natural Earth. Stops: ePodgorica. Satellite: eMapa Ortofoto 2025.
+        </footer>
       </section>
       <section id="tools-panel" class="utility-panel" hidden>
-      <h2>Tools</h2>
-      <button id="add-feature" hidden></button>
-      <div class="button-row">
-        <button id="undo" disabled>Undo</button>
-        <button id="redo" disabled>Redo</button>
-      </div>
-      <button id="satellite" aria-pressed="false" disabled>Satellite sample</button>
-      <button id="preview" aria-pressed="false" disabled>Preview all edits</button>
-      <p class="hint">
-        Shows the map with every pending edit applied, as a rebuild would. Below street scale a release simplifies more.
-      </p>
+        <h2>Tools</h2>
+        <button id="add-feature" hidden></button>
+        <div class="button-row">
+          <button id="undo" disabled>Undo</button>
+          <button id="redo" disabled>Redo</button>
+        </div>
+        <button id="satellite" aria-pressed="false" disabled>
+          Satellite sample
+        </button>
+        <button id="preview" aria-pressed="false" disabled>
+          Preview all edits
+        </button>
+        <p class="hint">
+          Shows the map with every pending edit applied, as a rebuild would.
+          Below street scale a release simplifies more.
+        </p>
       </section>
       <section id="changes-panel" class="utility-panel" hidden>
-      <h2>Review and export</h2>
-      <p id="draft-conflict" class="notice" role="alert" hidden></p>
-      <div id="draft-conflict-actions" class="button-row" hidden>
-        <button id="draft-download">Download old draft</button>
-        <button id="draft-discard">Discard old draft</button>
-      </div>
-      <p id="review-empty" class="hint">No pending changes. The map outside a mode shows the reviewed release.</p>
-      <div id="review-files"></div>
-      <ul id="review-problems" role="alert"></ul>
-      <label>Author <input id="changeset-author" autocomplete="name" /></label>
-      <label>Reason <input id="changeset-reason" /></label>
-      <button id="export-changeset" disabled>Export changeset</button>
-      <label class="file-button"
-        >Import changeset <input id="import-changeset" type="file" accept=".json,application/json"
-      /></label>
-      <button id="discard-changes" disabled>Discard all changes</button>
-      <p id="review-message" role="status" hidden></p>
+        <h2>Review and export</h2>
+        <p id="draft-conflict" class="notice" role="alert" hidden></p>
+        <div id="draft-conflict-actions" class="button-row" hidden>
+          <button id="draft-download">Download old draft</button>
+          <button id="draft-discard">Discard old draft</button>
+        </div>
+        <p id="review-empty" class="hint">
+          No pending changes. The map outside a mode shows the reviewed release.
+        </p>
+        <div id="review-files"></div>
+        <ul id="review-problems" role="alert"></ul>
+        <label
+          >Author <input id="changeset-author" autocomplete="name"
+        /></label>
+        <label>Reason <input id="changeset-reason" /></label>
+        <button id="export-changeset" disabled>Export changeset</button>
+        <label class="file-button"
+          >Import changeset
+          <input
+            id="import-changeset"
+            type="file"
+            accept=".json,application/json"
+        /></label>
+        <button id="discard-changes" disabled>Discard all changes</button>
+        <p id="review-message" role="status" hidden></p>
       </section>
     </aside>
     <main>
       <div id="map" aria-label="Source layer map"></div>
       <div class="map-status">
-        <p id="status" role="status">Loading verified sources…</p>
+        <button id="offline-notice" type="button" hidden>
+          Offline status needs attention
+        </button>
+        <button id="draft-notice" type="button" hidden>
+          Saved draft needs attention
+        </button>
+        <p id="status" class="attention" role="status">
+          Loading verified sources…
+        </p>
         <p id="error" role="alert" hidden></p>
       </div>
     </main>
-    <button id="open-inspector" type="button" hidden>Selected object</button>
     <aside class="inspector" hidden>
-      <button id="close-inspector" type="button" aria-label="Close inspector">Close</button>
+      <button id="close-inspector" type="button" aria-label="Close inspector">
+        Close
+      </button>
       <h2 id="selection-title">Select an object</h2>
-      <p id="selection-source">Choose a file mode, then select its geometry on the map.</p>
+      <p id="selection-source">
+        Choose a file mode, then select its geometry on the map.
+      </p>
       <p id="source-id"></p>
       <dl id="properties"></dl>
       <p id="identity" class="hint"></p>

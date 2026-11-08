@@ -60,6 +60,8 @@ const basemapLayers = {
 };
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 const addFeatureLabels = {'places.geojson': 'Add POI', 'roads.geojson': 'Draw road'};
+// The panels occupy at most 320 + 340 px; 660 / 0.4 leaves 60% of a 1650 px window for the map.
+const sharedPanelSpace = matchMedia('(max-width: 1650px)');
 let map;
 let sources;
 let overlay;
@@ -78,12 +80,19 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 
+// Status messages declare whether they need to be visible over the map.
+function setStatus(message, needsAttention = false) {
+  const status = elementById('status');
+  status.textContent = message;
+  status.classList.toggle('attention', needsAttention);
+}
+
 // Errors stay on screen even when part of the map rendered successfully.
 function showError(error) {
   isDraftProblemShown = false;
   elementById('error').textContent = error.message;
   elementById('error').hidden = false;
-  elementById('status').textContent = 'Source viewer needs attention';
+  setStatus('Source viewer needs attention', true);
 }
 
 // A draft problem can clear itself once a save succeeds. Any other error stays on screen.
@@ -96,7 +105,7 @@ function clearDraftProblem() {
   if (!isDraftProblemShown) return;
   isDraftProblemShown = false;
   elementById('error').hidden = true;
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 async function loadJSON(url) {
@@ -151,7 +160,7 @@ function showFeature(feature, index) {
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
   elementById('properties').replaceChildren();
   for (const [name, value] of Object.entries(properties)) appendProperty(name, value);
-  elementById('status').textContent = selectionStatus(index);
+  setStatus(selectionStatus(index));
   overlay.setSelection(feature);
   const {canModify, lockReason} = featureCapabilities(feature, rules.layers[activeFile]);
   showLockReason(lockReason);
@@ -171,7 +180,7 @@ function clearSelection() {
   elementById('properties').replaceChildren();
   elementById('identity').textContent = '';
   elementById('source-id').textContent = '';
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 // Hide the corresponding published geometry while the complete source is visible.
@@ -200,7 +209,7 @@ function refreshOverlay() {
 
 function showLoadingStatus() {
   isModeLoading = activeFile !== null;
-  if (isModeLoading) elementById('status').textContent = `Loading ${activeFile}…`;
+  if (isModeLoading) setStatus(`Loading ${activeFile}…`, true);
 }
 
 function hasOnlyInMemoryChanges() {
@@ -277,22 +286,18 @@ function startNewFeature() {
 }
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
-function setMode(filename, isInitial = false) {
+function setMode(filename) {
   // A geometry preview is dropped by a mode switch, but typed details must be applied or discarded explicitly.
   if (editing.hasTypedDetails) {
     showInspector();
     editing.showProblem(applyOrCancelMessage);
-    elementById('status').textContent = applyOrCancelMessage;
-    return;
+    setStatus(applyOrCancelMessage, true);
+    return false;
   }
   editing.close();
   if (preview.isShown) hidePreview();
   activeFile = activeFile === filename ? null : filename;
   elementById('current-layer').textContent = activeFile ? layerNames[activeFile] : 'Browse';
-  if (!isInitial) {
-    showPanel(null);
-    elementById('current-layer').focus();
-  }
   maskPublishedLayer(activeFile);
   refreshOverlay();
   clearSelection();
@@ -305,6 +310,14 @@ function setMode(filename, isInitial = false) {
   for (const row of document.querySelectorAll('[data-source]')) {
     row.setAttribute('aria-current', String(row.dataset.source === activeFile));
   }
+  return true;
+}
+
+// Choosing a layer closes its picker only after the mode switch succeeds.
+function chooseMode(filename) {
+  if (!setMode(filename)) return;
+  showPanel(null);
+  elementById('current-layer').focus();
 }
 
 // Builds one table row and one mode switch per verified source file.
@@ -324,7 +337,7 @@ function renderLayers() {
     button.textContent = layerNames[filename];
     button.setAttribute('aria-label', `${layerNames[filename]} · ${filename}`);
     button.setAttribute('aria-pressed', 'false');
-    button.onclick = () => setMode(filename);
+    button.onclick = () => chooseMode(filename);
     elementById('modes').append(button);
   }
 }
@@ -333,7 +346,7 @@ function renderLayers() {
 function finishModeLoading() {
   if (!isModeLoading) return;
   isModeLoading = false;
-  elementById('status').textContent = modeStatus();
+  setStatus(modeStatus());
 }
 
 // Clicks wait for the mode to finish loading, and a hit from another file never selects anything.
@@ -345,7 +358,7 @@ function selectFeatureAtClick(event) {
   }
   // A stray tap must not silently throw away typed details.
   if (editing.hasUnappliedEdit) {
-    elementById('status').textContent = applyOrCancelMessage;
+    setStatus(applyOrCancelMessage, true);
     return;
   }
   const hit = hitTest(map, event.point, overlay.layerIds)[0];
@@ -368,6 +381,7 @@ function offerSetAsideDrafts() {
     : [];
   const drafts = [...setAsideDrafts, ...blockingDraft];
   elementById('draft-conflict').hidden = drafts.length === 0;
+  elementById('draft-notice').hidden = drafts.length === 0;
   elementById('draft-conflict-actions').hidden = drafts.length === 0;
   if (drafts.length === 0) return;
   const reasons = drafts.map(({reason}) => reason).join('; ');
@@ -467,7 +481,7 @@ function showPreview() {
   }
   elementById('preview').setAttribute('aria-pressed', 'true');
   isModeLoading = true;
-  elementById('status').textContent = 'Loading preview…';
+  setStatus('Loading preview…', true);
 }
 
 function hidePreview() {
@@ -479,7 +493,7 @@ function hidePreview() {
 function togglePreview() {
   if (preview.isShown) {
     hidePreview();
-    elementById('status').textContent = modeStatus();
+    setStatus(modeStatus());
     return;
   }
   setMode(null);
@@ -504,7 +518,7 @@ function showPanel(panelId) {
     button.setAttribute('aria-expanded', String(button.dataset.panel === panelId));
   }
   elementById('current-layer').setAttribute('aria-expanded', String(panelId === 'layers-panel'));
-  if (panelId && matchMedia('(max-width: 1650px)').matches && !document.querySelector('.inspector').hidden) {
+  if (panelId && sharedPanelSpace.matches && !document.querySelector('.inspector').hidden) {
     document.querySelector('.inspector').hidden = true;
     elementById('open-inspector').hidden = false;
   }
@@ -512,14 +526,14 @@ function showPanel(panelId) {
 
 // Hiding the inspector only changes its presentation; the edit remains in memory.
 function showInspector() {
-  if (matchMedia('(max-width: 1650px)').matches) showPanel(null);
+  if (sharedPanelSpace.matches) showPanel(null);
   document.querySelector('.inspector').hidden = false;
   elementById('open-inspector').hidden = true;
 }
 
-function installWorkspaceControls() {
-  const compactPanelSpace = matchMedia('(max-width: 1650px)');
-  compactPanelSpace.addEventListener('change', event => {
+// Collapse one panel when a resize would leave too little map visible.
+function installPanelResize() {
+  sharedPanelSpace.addEventListener('change', event => {
     const hasOpenPanel = [...document.querySelectorAll('.utility-panel')].some(panel => !panel.hidden);
     const inspector = document.querySelector('.inspector');
     if (event.matches && hasOpenPanel && !inspector.hidden) {
@@ -527,31 +541,10 @@ function installWorkspaceControls() {
       elementById('open-inspector').hidden = false;
     }
   });
-  const status = elementById('status');
-  const updateStatusVisibility = () => {
-    const needsAttention = status.textContent.startsWith('Loading') || status.textContent === applyOrCancelMessage;
-    status.classList.toggle('attention', needsAttention);
-  };
-  new MutationObserver(updateStatusVisibility).observe(status, {childList: true, characterData: true, subtree: true});
-  updateStatusVisibility();
-  const offlineStatus = elementById('offline-status');
-  const updateButton = elementById('update-app');
-  const updateOfflineNotice = () => {
-    const needsAttention = offlineStatus.classList.contains('problem') || !updateButton.hidden;
-    elementById('offline-notice').hidden = !needsAttention;
-  };
-  const offlineObserver = new MutationObserver(updateOfflineNotice);
-  offlineObserver.observe(offlineStatus, {attributes: true});
-  offlineObserver.observe(updateButton, {attributes: true, attributeFilter: ['hidden']});
-  elementById('offline-notice').onclick = () => showPanel('layers-panel');
-  updateOfflineNotice();
-  const draftConflict = elementById('draft-conflict');
-  const updateDraftNotice = () => {
-    elementById('draft-notice').hidden = draftConflict.hidden;
-  };
-  new MutationObserver(updateDraftNotice).observe(draftConflict, {attributes: true, attributeFilter: ['hidden']});
-  elementById('draft-notice').onclick = () => showPanel('changes-panel');
-  updateDraftNotice();
+}
+
+// Panel buttons use the same space and preserve the selected edit.
+function installPanelButtons() {
   for (const button of document.querySelectorAll('[data-panel]')) {
     button.disabled = false;
     button.onclick = () => {
@@ -563,6 +556,12 @@ function installWorkspaceControls() {
   elementById('current-layer').onclick = () => {
     showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null);
   };
+  elementById('offline-notice').onclick = () => showPanel('layers-panel');
+  elementById('draft-notice').onclick = () => showPanel('changes-panel');
+}
+
+// Closing the inspector preserves the edit and puts focus on the control that reopens it.
+function installInspectorToggle() {
   elementById('close-inspector').onclick = () => {
     document.querySelector('.inspector').hidden = true;
     elementById('open-inspector').hidden = false;
@@ -572,6 +571,13 @@ function installWorkspaceControls() {
     showInspector();
     elementById('close-inspector').focus();
   };
+}
+
+// Install workspace interactions before asynchronous startup begins.
+function installWorkspaceControls() {
+  installPanelResize();
+  installPanelButtons();
+  installInspectorToggle();
 }
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.
@@ -599,7 +605,7 @@ async function start() {
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
   await whenMapReady(map);
-  // MapLibre opens its compact attribution on startup; keep it available without covering the map at rest.
+  // MapLibre 5.12 opens compact attribution at startup; keep its details and class in sync when collapsing it.
   const attribution = document.querySelector('.maplibregl-ctrl-attrib');
   if (attribution instanceof HTMLDetailsElement) {
     attribution.open = false;
@@ -616,12 +622,12 @@ async function start() {
   renderLayers();
   renderFeatureCounts();
   elementById('browse').disabled = false;
-  elementById('browse').onclick = () => setMode(null);
+  elementById('browse').onclick = () => chooseMode(null);
   elementById('satellite').disabled = false;
   elementById('satellite').onclick = toggleSatellite;
   elementById('preview').disabled = false;
   elementById('preview').onclick = togglePreview;
-  setMode(null, true);
+  setMode(null);
 }
 
 start().catch(showError);
