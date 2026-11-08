@@ -6,7 +6,8 @@ This is the human entry point to project documentation. Each folder covers one c
 - [System architecture](system-architecture/README.md): implemented system boundaries, ownership, known gaps, and
   historical architecture exploration. This is not the UI/UX design area.
 - [Map data](map-data/README.md): dataset terms, building-number labels, and data refresh context.
-- [UI/UX](ui-ux/README.md): the path from user stories and journey requirements to justified interface and map features.
+- [UI/UX](ui-ux/README.md): the path from user stories and journey requirements to justified interface and map features,
+  and proposals for the internal editor.
 - [Verification](verification/README.md): test commands, evidence, and device-check limitations.
 - [Engineering](engineering/README.md): language conventions and agent-instruction mechanisms.
 - [Runbooks](runbooks/README.md): operational procedures for development, data, and release.
