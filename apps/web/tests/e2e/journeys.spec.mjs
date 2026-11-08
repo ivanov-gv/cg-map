@@ -8,8 +8,16 @@ import {
   ready,
   stubRouting,
   tapMapCenter,
-  tapRenderedPlace
+  tapRenderedPlace,
+  expectToHold
 } from './helpers.mjs';
+
+// A little over the delay in src/map-taps.js, which is both the wait for a second tap and the block after a camera move.
+const TAP_BLOCK_AFTER_MOVE_MILLISECONDS = 550;
+const TAP_ACTION_WINDOW_MILLISECONDS = 650;
+const TAP_THEN_DRAG_GAP_MILLISECONDS = 60;
+const DRAG_STEP_MILLISECONDS = 25;
+const SLOW_TILES_MILLISECONDS = 60000;
 
 test.beforeEach(({page}) => stubRouting(page));
 
@@ -332,8 +340,8 @@ test(
   async ({page, isMobile}) => {
     await ready(page);
     await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
-    // Programmatic camera movement also cancels pending point actions.
-    await page.waitForTimeout(550);
+    // Input timing: a tap is ignored until this long after a camera move, including a programmatic one.
+    await page.waitForTimeout(TAP_BLOCK_AFTER_MOVE_MILLISECONDS);
     const screenPoint = await page.evaluate(() => {
       const canvasBounds = window.kompasDebug.map.getCanvas().getBoundingClientRect();
       return {x: canvasBounds.left + canvasBounds.width / 2, y: canvasBounds.top + canvasBounds.height / 2};
@@ -352,8 +360,10 @@ test(
     await expect
       .poll(() => page.evaluate(() => window.kompasDebug.map.getZoom()))
       .toBeGreaterThan(zoom + 0.2);
-    await page.waitForTimeout(650);
-    await expect(page.locator('#place-card')).toBeHidden();
+    await expectToHold(
+      async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+      TAP_ACTION_WINDOW_MILLISECONDS
+    );
   }
 );
 
@@ -364,7 +374,7 @@ test(
     test.skip(!isMobile, 'Native mobile touch gesture');
     await ready(page);
     await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
-    await page.waitForTimeout(550);
+    await page.waitForTimeout(TAP_BLOCK_AFTER_MOVE_MILLISECONDS);
     const screenPoint = await page.evaluate(() => {
       const canvasBounds = window.kompasDebug.map.getCanvas().getBoundingClientRect();
       return {x: canvasBounds.left + canvasBounds.width / 2, y: canvasBounds.top + canvasBounds.height / 2};
@@ -378,18 +388,21 @@ test(
       });
     await touch('touchStart');
     await touch('touchEnd');
-    await page.waitForTimeout(60);
+    // Input timing: the gap between tap and drag, and the pace of the drag.
+    await page.waitForTimeout(TAP_THEN_DRAG_GAP_MILLISECONDS);
     await touch('touchStart');
     for (const verticalOffsetPixels of [15, 35, 60, 90]) {
       await touch('touchMove', screenPoint.y + verticalOffsetPixels);
-      await page.waitForTimeout(25);
+      await page.waitForTimeout(DRAG_STEP_MILLISECONDS);
     }
     await touch('touchEnd');
     await expect
       .poll(() => page.evaluate(() => window.kompasDebug.map.getZoom()))
       .toBeGreaterThan(zoom + 0.2);
-    await page.waitForTimeout(650);
-    await expect(page.locator('#place-card')).toBeHidden();
+    await expectToHold(
+      async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+      TAP_ACTION_WINDOW_MILLISECONDS
+    );
     expect(await page.evaluate(() => window.kompasDebug.endpoints)).toEqual({from: null, to: null});
   }
 );
@@ -519,6 +532,11 @@ test('a place inside a building highlights its footprint across zoom and satelli
       coordinates,
       zoom
     });
+    // With satellite imagery on and software rendering, these tiles alone took over 15 seconds in 1 run of 42 with 14 workers
+    // on 16 threads. That has nothing to do with the highlight this test checks, so it has its own limit.
+    await expect
+      .poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded()), {timeout: SLOW_TILES_MILLISECONDS})
+      .toBe(true);
     await expect
       .poll(() =>
         page.evaluate(id => {

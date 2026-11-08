@@ -11,8 +11,16 @@ import {
   settled,
   simulateKeyboard,
   stubRouting,
-  tapRenderedPlace
+  tapRenderedPlace,
+  CAMERA_HOLD_MILLISECONDS,
+  expectCameraToHold,
+  expectToHold,
+  mapIdle
 } from './helpers.mjs';
+
+const RESORT_WINDOW_MILLISECONDS = 200;
+// A little over the card's own WHEEL_GESTURE_MILLISECONDS.
+const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
 
 test.beforeEach(({page}) => stubRouting(page));
 
@@ -151,8 +159,7 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await expect(page.locator('.result')).toHaveCount(3);
   await page.locator('#search').fill('Nearby place 3');
   await expect(page.locator('.result')).toHaveCount(1);
-  await page.waitForTimeout(600);
-  expect(await camera(page)).toEqual(before);
+  await expectCameraToHold(page, before);
 });
 
 test('choosing a result moves the map only when the result is outside the focus zone', async ({page}) => {
@@ -176,8 +183,7 @@ test('choosing a result moves the map only when the result is outside the focus 
   await expect(page.locator('#place-card')).toBeHidden();
   await row.click();
   await expect(page.locator('#place-card')).toBeVisible();
-  await page.waitForTimeout(600);
-  expect(await camera(page)).toEqual(revealed);
+  await expectCameraToHold(page, revealed);
 });
 
 test('a chosen result still zooms in to street level from far out', async ({page}) => {
@@ -424,7 +430,7 @@ test(
     await row.click();
     await expect(page.locator('#place-card')).toBeVisible();
     await settled(page);
-    await page.waitForTimeout(500);
+    await mapIdle(page);
     const resting = await camera(page);
     await closeCard(page);
 
@@ -433,20 +439,20 @@ test(
     await row.click();
     await expect(page.locator('#place-card')).toBeVisible();
     await simulateKeyboard(page, 840);
-    await page.waitForTimeout(700);
-    expect(await camera(page)).toEqual(resting);
+    await expectCameraToHold(page, resting);
 
     // A keyboard raised over an open card leaves the camera still, and closing it leaves the place uncovered.
     await simulateKeyboard(page, 420);
-    await page.waitForTimeout(300);
-    expect(await camera(page)).toEqual(resting);
+    await expectCameraToHold(page, resting);
     await simulateKeyboard(page, 840);
-    await page.waitForTimeout(300);
-    const point = await pointOnMap(page, place);
-    const bubble = await page.locator('#search-bubble').boundingBox();
-    const card = await page.locator('#place-card').boundingBox();
-    expect(point.y).toBeGreaterThan(bubble.y + bubble.height);
-    expect(point.y).toBeLessThan(card.y);
+    await settled(page);
+    await expect(async () => {
+      const point = await pointOnMap(page, place);
+      const bubble = await page.locator('#search-bubble').boundingBox();
+      const card = await page.locator('#place-card').boundingBox();
+      expect(point.y).toBeGreaterThan(bubble.y + bubble.height);
+      expect(point.y).toBeLessThan(card.y);
+    }).toPass({timeout: 15000});
   }
 );
 
@@ -486,8 +492,7 @@ test('the result list keeps its order while a chosen place is open and re-sorts 
   await page.locator('.result', {hasText: 'Nearby place 0'}).click();
   await expect.poll(async () => (await camera(page)).center[0]).toBeLessThan(lastPlace[0] - 0.01);
   await settled(page);
-  await page.waitForTimeout(200);
-  expect(await names.allTextContents()).toEqual(order);
+  await expectToHold(async () => expect(await names.allTextContents()).toEqual(order), RESORT_WINDOW_MILLISECONDS);
 
   await closeCard(page);
   await page.evaluate(() => window.kompasDebug.map.panBy([1, 0], {duration: 0}));
@@ -542,10 +547,12 @@ test('a tapped map pin follows the focus zone like a result', {tag: '@phone'}, a
   // The helper centres the map on the pin, which is inside the zone with the card open: no move.
   await tapRenderedPlace(page, place, firstFeatureId);
   await expect(page.locator('#place-name')).toHaveText('Nearby place 0');
-  await page.waitForTimeout(600);
-  const inZone = await camera(page);
-  expect(inZone.center[0]).toBeCloseTo(place[0], 6);
-  expect(inZone.center[1]).toBeCloseTo(place[1], 6);
+  const expectCameraOnPlace = async () => {
+    const {center} = await camera(page);
+    expect(center[0]).toBeCloseTo(place[0], 6);
+    expect(center[1]).toBeCloseTo(place[1], 6);
+  };
+  await expectToHold(expectCameraOnPlace, CAMERA_HOLD_MILLISECONDS);
   await closeCard(page);
   await expect(page.locator('#place-card')).toBeHidden();
 
@@ -615,10 +622,11 @@ test(
       }, deltaY);
     await wheelBurst(40);
     await expect(card).toHaveAttribute('data-state', 'full');
-    await page.waitForTimeout(650);
+    // Input timing, not a wait for state: the card ignores wheel events until the previous gesture has ended.
+    await page.waitForTimeout(WHEEL_GESTURE_GAP_MILLISECONDS);
     await wheelBurst(-40);
     await expect(card).toHaveAttribute('data-state', 'peek');
-    await page.waitForTimeout(650);
+    await page.waitForTimeout(WHEEL_GESTURE_GAP_MILLISECONDS);
     await wheelBurst(-40);
     await expect(card).toBeHidden();
   }

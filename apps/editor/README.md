@@ -59,6 +59,22 @@ It is not an actual rebuild. Below street scale the tiles simplify geometry and 
 not do, so it shows more detail there than the release will. In the rare case that an edit gives a spot a new
 combination of place levels, that marker is missing from the preview.
 
+### Larger datasets
+
+`make -C apps/editor measure-datasets` repeats the features of buildings.geojson and roads.geojson and times the real
+editor. Measured on 2026-11-07, one run per size, on a 16-thread machine with software rendering:
+
+| Size of both files         | Startup | Open Buildings | Open Roads & paths | JavaScript heap |
+| -------------------------- | ------- | -------------- | ------------------ | --------------- |
+| Today: 25,213 + 17,881     | 2.4 s   | 1.5 s          | 0.9 s              | 104 MB          |
+| 2 times                    | 2.0 s   | 2.0 s          | 1.5 s              | 78 MB           |
+| 4 times                    | 2.6 s   | 3.3 s          | 2.6 s              | 228 MB          |
+| 8 times: 201,704 + 143,048 | 3.8 s   | 6.2 s          | 4.2 s              | 595 MB          |
+
+Opening a mode grows about linearly, and at 8 times takes long enough to notice but still works. The heap figures are
+one reading at an arbitrary moment of garbage collection, so only their overall growth means anything. This does not
+measure a phone, or edits and export at these sizes.
+
 ### Limits
 
 - Not editable: building metadata other than addresses, adding an address to an unnumbered footprint, and adding or
@@ -120,9 +136,10 @@ does not download it again. An update that changes the map needs room for both a
 With the server reachable, opening the editor finds a new build and offers Update and reload. It waits while an edit is
 open or while applied edits could not be saved. Updating reloads every other editor window too, except one with unsaved
 work, which says so and keeps running. A browser also activates a waiting version by itself once every window of the app
-is closed, so reopening it can bring the new version without a click. Rarely, after a newer build arrives while an older
-update is taking over, the browser holds the update until then, and the editor says to close its windows. No applied
-edit is lost either way.
+is closed, so reopening it can bring the new version without a click. Updating first waits for every window's map to
+finish loading, up to 5 seconds: a map read that reaches the current version as the browser stops it would otherwise
+hold the update for up to 5 minutes. If that still happens, for example because someone moves a map at that moment, the
+editor says to close its windows. No applied edit is lost either way.
 
 A draft resumes only on the same source files. If a new build changes any file you have pending changes in, the whole
 draft is set aside for download, as raw draft data rather than a changeset, so export a changeset before updating.
