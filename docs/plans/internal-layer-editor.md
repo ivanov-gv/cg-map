@@ -190,7 +190,8 @@ editor and importer implement the label join.
 A data-owned importer validates changeset version, base hashes, allowed layer/property types, finite WGS84 coordinates,
 unique identities, nonempty names, visibility policy, closed rings and label joins before writing anything. Producer
 validation and editor/consumer tests change together. Writes must be staged so validation failure leaves reviewed inputs
-intact. New corrections retain base attribution plus their own local origin; imported upstream facts and local
+intact. New corrections retain base attribution, and the ledger records each one: corrected features carry no origin of
+their own, by [decision 0008](../decisions/0008-no-correction-origin-on-features.md). Imported upstream facts and local
 corrections remain distinguishable.
 
 Then review updated counts, provenance/hashes and visibility overrides. POI-only changes follow the existing source
@@ -233,12 +234,13 @@ consistency needs an explicit data-owned workflow, without combining their file 
   visible storage failures are also done.
 - Gaps against the slices:
   - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`).
-    It separates local corrections from upstream facts, but features carry no local origin of their own, and it is not a
-    stable identity. Adding an address to an unnumbered footprint is not supported.
+    Features carry no origin of their own, by decision, and the ledger is not a stable identity. Adding an address to an
+    unnumbered footprint is not supported.
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
-  - Slice 7: larger datasets have not been measured.
+  - Slice 7: larger datasets are [measured on desktop](../../apps/editor/README.md#larger-datasets), not on a phone, and
+    without edits or export.
 - Not implemented: refresh or rebase of corrections. Indices are bound to one snapshot, so a re-extract still replaces
   local edits, and an existing changeset stops at import. This needs the identity registry described above.
 - Design choices to review: one active source file at a time; one Roads & paths switch with subtype tools; local
@@ -280,8 +282,8 @@ Known open items:
 
 - Installing on a real phone has not been tried. The first check is `/editor/` on Pages, in Chrome.
 - Editor browser tests are sensitive to load: in that parallel run two desktop tests timed out at 15 seconds with the
-  page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. This
-  belongs with the larger-dataset check.
+  page still loading its sources, and passed on retry. Run on their own, the last two full runs had no failures. The
+  larger-dataset measurement did not address this.
 - Formatting of new code is not enforced: .prettierrc.json covers Markdown only.
 - Dense committed code outside this change remains in apps/web/src/app.js, apps/web/tools/finalize.mjs and older tests.
 

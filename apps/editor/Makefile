@@ -6,7 +6,7 @@ E2E_ARGS ?=
 LAN_PORT ?= 8443
 LAN_TLS := $(ROOT)/.build/lan-tls
 
-.PHONY: verify lint test build dev lan e2e e2e-built
+.PHONY: verify lint test build dev lan e2e e2e-built measure-datasets
 
 verify: lint build test
 
@@ -34,3 +34,7 @@ e2e:
 # Reuses the artifact from a successful build, as CI does after verify.
 e2e-built:
 	npm run test:e2e:built -- $(E2E_ARGS)
+
+# How startup and mode switches grow with source size, in a real browser. See README.md, "Larger datasets".
+measure-datasets: build
+	node tools/measure-datasets.mjs
