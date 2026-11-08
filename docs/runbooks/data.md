@@ -49,10 +49,10 @@ Then review density on real data. From apps/web, this saves screenshots at every
 POI_DENSITY_SCREENSHOTS=1 npm run test:e2e -- --grep 'density review'
 ```
 
-The command only writes `visibilityLevel`. `places_facts_sha256` in provenance hashes the snapshot without that field or
-`correction_changeset`, so a level change cannot hide a coordinate or attribute change. With `--update-provenance`, the
-command refuses changed facts unless you also pass `--accept-new-facts` after reviewing them. Without that flag it
-leaves provenance alone, and `make -C data check` fails until levels, policy, and provenance agree.
+The command only writes `visibilityLevel`. `places_facts_sha256` in provenance hashes the snapshot without that field,
+so a level change cannot hide a coordinate or attribute change. With `--update-provenance`, the command refuses changed
+facts unless you also pass `--accept-new-facts` after reviewing them. Without that flag it leaves provenance alone, and
+`make -C data check` fails until levels, policy, and provenance agree.
 
 Each override needs `id`, `level`, `reason`, `active`, and `provenance` (`basis`, `reviewedBy`, `reviewedAt`). Unknown
 or duplicate IDs and unsupported levels are rejected. Level 1 is reserved for editorially reviewed places in the sights
@@ -76,11 +76,9 @@ The importer checks everything before the first write: version, base hashes, fin
 properties, geometry and label joins. It then stages its writes, and restores the reviewed files if the final data check
 fails. It never commits. A level edit becomes a policy override, so regenerating levels keeps it, and each change is
 recorded with its author, reason and both values in data/sources/editor-corrections.json; see
-[provenance](../../data/PROVENANCE.md). Each added or changed feature also gains `correction_changeset`, naming its
-changeset, which is published with the feature: see [the decision](../decisions/0008-correction-origin-on-features.md).
-New features use a `local:` reference and claim nothing the rules do not list; a new place also takes the contract's
-local source value, never a fabricated upstream ID. An edit or deletion that would replace or remove a commercial
-override is refused by name: review it in the policy first.
+[provenance](../../data/PROVENANCE.md). New features use a `local:` reference and claim nothing the rules do not list; a
+new place also takes the contract's local source value, never a fabricated upstream ID. An edit or deletion that would
+replace or remove a commercial override is refused by name: review it in the policy first.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the

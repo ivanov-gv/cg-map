@@ -10,10 +10,6 @@ const PLACES = 'data/sources/places.geojson', POLICY = 'data/sources/place-visib
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const nonblank = value => typeof value === 'string' && value.trim().length > 0;
 
-// Names the changeset that last corrected a feature, whose ledger entries say who, why and what. It is local metadata, not
-// a fact about the place.
-export const correctionOriginProperty = 'correction_changeset';
-
 function withoutLevel(properties) {
   const copy = {...properties};
   delete copy.visibilityLevel;
@@ -73,16 +69,7 @@ export function withoutVisibility(collection) {
 }
 
 export const serializePlaces = collection => JSON.stringify(collection);
-// Only facts count: neither a level nor the record of who corrected something changes what is known about a place.
-export function placeFactsHash(collection) {
-  const facts = withoutVisibility(collection);
-  const features = facts.features.map(feature => {
-    const properties = {...feature.properties};
-    delete properties[correctionOriginProperty];
-    return {...feature, properties};
-  });
-  return sha256(serializePlaces({...facts, features}));
-}
+export const placeFactsHash = collection => sha256(serializePlaces(withoutVisibility(collection)));
 
 export function placesProvenance(bytes, collection, policyBytes, configBytes) {
   return {places_bytes: Buffer.byteLength(bytes), places_sha256: sha256(bytes), places_facts_sha256: placeFactsHash(collection), place_visibility_policy_sha256: sha256(policyBytes), place_visibility_config_sha256: sha256(configBytes)};

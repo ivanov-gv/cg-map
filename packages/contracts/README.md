@@ -64,11 +64,7 @@ identity. `editor-changeset.schema.json` defines the export: base hash per chang
 revision-bound reference, a fingerprint and full before/after features. `fixtures/editor-geometry-cases.json` and
 `fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
 against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. The importer also sets
-`correction_changeset` on every feature a changeset adds or modifies, naming that changeset in the ledger. It is a local
-origin, not an identity, and the editor preserves it like any other unlisted property. `data/tools/check-data.mjs`
-requires every value to be in the ledger. It reaches public files and tiles, so a changeset ID must never hold private
-text.
+`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and

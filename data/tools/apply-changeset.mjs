@@ -4,13 +4,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {
-  applyVisibility,
-  correctionOriginProperty,
-  placesProvenance,
-  resolveLevel,
-  serializePlaces
-} from './apply-place-visibility.mjs';
+import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
 import {checkData, validateBuildingLabels, validateCollection} from './check-data.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -355,21 +349,6 @@ function serializeLayer(collection, originalBytes) {
   return JSON.stringify(collection) + (hasFinalNewline ? '\n' : '');
 }
 
-// Marks what each operation leaves behind with its local origin. Imported attribution such as source or address_sources
-// stays as it is, so upstream facts and local corrections remain distinguishable. A deletion leaves nothing to mark.
-// Done before anything reads the results, so the sources and the ledger agree on the feature and its fingerprint. That
-// needs the same key order, and regenerating levels always writes visibilityLevel last.
-function withCorrectionOrigin(changeset) {
-  const operations = changeset.operations.map(operation => {
-    if (!operation.after) return operation;
-    const {visibilityLevel, ...otherProperties} = operation.after.properties;
-    const properties = {...otherProperties, [correctionOriginProperty]: changeset.id};
-    if (visibilityLevel !== undefined) properties.visibilityLevel = visibilityLevel;
-    return {...operation, after: {...operation.after, properties}};
-  });
-  return {...changeset, operations};
-}
-
 // Keeps the values as well as the hashes: this ledger is what tells a local correction from an imported upstream fact.
 function ledgerEntries(changeset, appliedAt) {
   return changeset.operations.map(({filename, operation, reference, beforeFingerprint, before, after}) => ({
@@ -501,18 +480,17 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
 // Returns a summary. Throws before writing when anything fails validation, leaving reviewed inputs intact, and restores
 // them if the final check on the written files fails. checkFinalData exists so a test can fail that last step.
 export function applyChangeset(
-  reviewedChangeset,
+  changeset,
   root = rootDirectory,
   {now = new Date().toISOString(), checkFinalData = checkData} = {}
 ) {
-  checkEnvelope(reviewedChangeset);
+  checkEnvelope(changeset);
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
   const rules = JSON.parse(read(rulesPath));
   const levelConfig = JSON.parse(read(levelsPath));
   const levels = new Set(levelConfig.levels.map(entry => entry.level));
-  const {sources, originalBytes} = readPinnedSources(reviewedChangeset, root);
-  for (const operation of reviewedChangeset.operations) checkOperation(operation, sources, rules, levels);
-  const changeset = withCorrectionOrigin(reviewedChangeset);
+  const {sources, originalBytes} = readPinnedSources(changeset, root);
+  for (const operation of changeset.operations) checkOperation(operation, sources, rules, levels);
   const {nextBytes, policyBytes, places} = serializedResults(
     changeset,
     sources,

@@ -190,7 +190,8 @@ editor and importer implement the label join.
 A data-owned importer validates changeset version, base hashes, allowed layer/property types, finite WGS84 coordinates,
 unique identities, nonempty names, visibility policy, closed rings and label joins before writing anything. Producer
 validation and editor/consumer tests change together. Writes must be staged so validation failure leaves reviewed inputs
-intact. New corrections retain base attribution plus their own local origin; imported upstream facts and local
+intact. New corrections retain base attribution, and the ledger records each one: corrected features carry no origin of
+their own, by [decision 0008](../decisions/0008-no-correction-origin-on-features.md). Imported upstream facts and local
 corrections remain distinguishable.
 
 Then review updated counts, provenance/hashes and visibility overrides. POI-only changes follow the existing source
@@ -232,9 +233,9 @@ consistency needs an explicit data-owned workflow, without combining their file 
   validation fixtures, cross-file label checks and hole checks. Slice 7's durable drafts, snapshot conflict handling and
   visible storage failures are also done.
 - Gaps against the slices:
-  - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`),
-    and corrected features name their changeset in `correction_changeset`. That is a local origin, not a stable
-    identity. Adding an address to an unnumbered footprint is not supported.
+  - Slice 4: the correction model is a reviewed ledger with before and after values (`editor-corrections.schema.json`).
+    Features carry no origin of their own, by decision, and the ledger is not a stable identity. Adding an address to an
+    unnumbered footprint is not supported.
   - Slice 5: no rebuild preview. The working overlay shows the edit, and the importer says when tiles need a rebuild.
   - Slice 6: no additional building metadata, which needs a building identity contract. Stops stay read-only by
     contract: they duplicate transit-network.json and need the transit import, so editing them waits for an actual need.
