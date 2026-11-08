@@ -1,31 +1,13 @@
 # Task: Entity IDs and data releases
 
-Status: planned. Agreed with the owner on 2026-11-08, after #23.
+Issue: #30. The issue and its sub-issues #31 to #37 hold scope, status and dependencies; this plan holds their history.
 
-## Goal and acceptance criteria
+## Context
 
-Every map object has an entity ID. Several people or agents fix data in parallel, their fixes merge by that ID into one
-release, and the release is tagged and published. Where an object comes from OpenStreetMap, the ID is OSM's own, so our
-data stays comparable with OSM and edits can travel both ways.
-
-- **Same ID as OSM.** An object from OSM carries its typed OSM ID, `node/N`, `way/N` or `relation/N`, and the OSM
-  version it was read at. The same building on openstreetmap.org has the same ID.
-- **One ID scheme for everything else.** Objects from other sources carry that source's ID under its own prefix:
-  `ne:<code>` for Natural Earth countries, `epodgorica:<stopId>` for bus stops, `derived:<name>` for what the pipeline
-  computes, such as the ocean. A new object made by an editor is `local:<uuid>` until it exists upstream.
-- **Fixes merge as ordinary PRs.** Each person or agent opens a PR that changes the dataset itself, and git merges them.
-  PRs that change different objects merge cleanly; two that change the same object conflict in git, for a person to
-  resolve. A changeset names objects by ID and base version, so it still applies after a data refresh: an object still
-  at its version applies, one changed upstream is reported.
-- **Releases.** Validation and the tile rebuild on `main` produce a release, tagged `data/vYYYY.MM.N`. A CD pipeline
-  attaches it to a GitHub release as a versioned download.
-- **Rich in the repository, light for users.** data/ keeps everything needed to compare with and write back to OSM: ID,
-  version, all tags, and the node IDs of each outline. The editor reads all of it. Public builds strip what users do not
-  need, so apps and tiles get no heavier.
-- **Back to OSM**, last: an export of our changes as an OSM change file against current OSM, tags first, then geometry.
-
-Affected: data (extraction, sources, importer, releases), packages/contracts (schemas, changeset version 2), apps/editor
-(references by ID), apps/web and the tile build (stripping), .github (release pipeline).
+Corrections today name an object by its position in one source snapshot, so they cannot survive a data refresh, and most
+editor layers cannot add or delete objects. Several people or agents also need to fix data in parallel and publish the
+result as tagged releases. Stable entity IDs, the same as OpenStreetMap's where an object comes from OSM, solve both.
+Affected: data, packages/contracts, apps/editor, apps/web and the tile build, and .github.
 
 ## Decisions
 
@@ -46,35 +28,13 @@ Defaults chosen with the owner's agreement; record the lasting ones in the decis
 - **One feature per OSM object.** An object the pipeline splits or clips keeps its ID on every part, with a part number.
   An object it merges is not allowed: merging would lose identity.
 
-## Progress
+## History
 
-- Completed: places already carry OSM IDs (1,526 `node/`, 285 `way/`), and address labels carry recovered way IDs.
-- Remaining, one PR each, in order:
-  1. **ID contract.** Schemas for the ID, version and prefixes on every source file; validation in check-data; the
-     consumer tests in web and editor. No data change yet.
-  2. **Fresh extract.** Extend data/tools/extract-osm.py to keep IDs, versions, tags and node IDs; re-extract; rebuild
-     labels and tiles; review counts and provenance. A deliberate data refresh, reviewed as one.
-  3. **Strip for users.** The web build and tile build drop what users do not need; a test proves the public artifact
-     holds only listed properties, and sizes are compared with today's.
-  4. **Mergeable sources.** One feature per line in ID order; provenance hashes, counts and tiles leave fixing PRs and
-     are regenerated at release, with a check on `main` that they match. Proved by two branches that edit different
-     objects in one file merging cleanly, and two that edit the same object conflicting.
-  5. **Changeset version 2.** References by entity ID and base version instead of file index and snapshot hash. The
-     editor exports it, and the importer applies it as a commit for a PR. Version 1 changesets stay readable until none
-     remain.
-  6. **Release pipeline.** Tag, release notes from the merged PRs, and a CD workflow publishing sources, tiles and
-     provenance as release assets, in test-run mode first as `.github/TESTING.md` requires.
-  7. **Export to OSM.** An OSM change file of our tag edits against current OSM, refusing objects whose OSM version
-     moved; then geometry, through the stored node IDs. Uploading follows OSM's import and automated edits guidelines, a
-     manual step this plan does not automate.
-- Unblocked by step 2: addresses on unnumbered footprints, building metadata, and carrying corrections across snapshots,
-  from [the editor plan](internal-layer-editor.md).
-- Blockers: none.
-
-## Verification
-
-Each PR records its own. Step 2 must show, for a sample of objects, the same ID and version as on openstreetmap.org.
-
-## Handoff
-
-Nothing implemented yet. Start with step 1. The rebuild preview from the editor plan is independent and goes first.
+- 2026-11-08: moved the goal, acceptance criteria, status and the seven steps into #30 and its sub-issues, under the new
+  rule that an issue is the source of truth and a plan its history. The steps, previously one ordered list, became
+  "blocked by" links that record only real dependencies: the contract (#31) blocks the fresh extract (#32), which blocks
+  stripping (#33), mergeable sources (#34) and changeset version 2 (#35). Version 2 also waits for mergeable sources,
+  because the importer applies it as a commit for a PR. The release pipeline (#36) needs stripping and mergeable
+  sources, and export to OSM (#37) needs version 2 references. So #33 and #34 can run in parallel.
+- 2026-11-08: plan agreed with the owner, after #23, as a fresh extract rather than a recovery of IDs for the October
+  snapshot. (#27)

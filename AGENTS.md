@@ -79,8 +79,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Workflow: task, plan, PR, decisions log
 
 1. Inspect git status, acceptance criteria and open PRs for the same scope; preserve unrelated work.
-2. Read component instructions and language guidelines. For work spanning sessions, write a plan from
-   [the template](docs/plans/TEMPLATE.md) first. Delete a plan [only when its work is finished](docs/plans/AGENTS.md).
+2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
+   history: [plan rules](docs/plans/AGENTS.md).
 3. Make a bounded change, with its docs. Keep runtime modules independent of pipeline/server implementation.
 4. Follow the owning component's AGENTS.md for focused tests during iteration and required final verification.
 5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`

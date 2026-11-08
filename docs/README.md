@@ -12,7 +12,7 @@ This is the human entry point to project documentation. Each folder covers one c
 - [Engineering](engineering/README.md): language conventions and agent-instruction mechanisms.
 - [Runbooks](runbooks/README.md): operational procedures for development, data, and release.
 - [Decisions](decisions/README.md): the log of important decisions, including superseded historical choices.
-- [Plans](plans/README.md): task plans and the reusable plan template.
+- [Plans](plans/README.md): the history of each tracked issue's plan, and the plan template.
 - [Mapping research](mapping-research/README.md): exploratory research, not maintained implementation guidance.
 
 Update docs in the same change as affected behavior. Keep each fact in one authoritative location and link to it instead
