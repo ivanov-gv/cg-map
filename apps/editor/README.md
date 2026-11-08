@@ -54,10 +54,10 @@ Outside a mode the map shows the reviewed release, so a pending edit appears onl
 stay available there.
 
 Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
-public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode. It is not
-an actual rebuild. Below street scale the tiles simplify geometry and drop minor roads, which the preview does not do,
-so it shows more detail there than the release will. In the rare case that an edit gives a spot a new combination of
-place levels, that marker is missing from the preview.
+public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode or Browse.
+It is not an actual rebuild. Below street scale the tiles simplify geometry and drop minor roads, which the preview does
+not do, so it shows more detail there than the release will. In the rare case that an edit gives a spot a new
+combination of place levels, that marker is missing from the preview.
 
 ### Limits
 

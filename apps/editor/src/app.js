@@ -20,7 +20,7 @@ import {
   saveDraft
 } from './draft-store.js';
 import {downloadJSON, elementById} from './dom.js';
-import {EditPreview} from './edit-preview.js';
+import {EditPreview, hiddenLayerFilter} from './edit-preview.js';
 import {EditSession} from './edit-session.js';
 import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
@@ -62,7 +62,6 @@ const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 const addFeatureLabels = {'places.geojson': 'Add POI', 'roads.geojson': 'Draw road'};
 // Matches the stylesheet breakpoint where the inspector moves below the map.
 const stackedLayoutQuery = '(max-width: 720px)';
-const hiddenLayerFilter = ['==', ['literal', 1], 0];
 let map;
 let sources;
 let overlay;
@@ -99,7 +98,7 @@ function clearDraftProblem() {
   if (!isDraftProblemShown) return;
   isDraftProblemShown = false;
   elementById('error').hidden = true;
-  elementById('status').textContent = activeFile ? modeStatus() : 'Browse · all source files locked';
+  elementById('status').textContent = modeStatus();
 }
 
 async function loadJSON(url) {
@@ -108,12 +107,13 @@ async function loadJSON(url) {
   return response.json();
 }
 
-// The status for the active mode with nothing selected and its source fully rendered.
+// The status for what the map shows, with nothing selected and fully rendered: Browse, the preview or the active mode.
 function modeStatus() {
   if (preview?.isShown) {
     const changedFileCount = session.changedFiles().length;
     if (changedFileCount === 0) return 'Preview · no edits yet';
-    return `Preview · edits in ${changedFileCount} ${changedFileCount === 1 ? 'file' : 'files'} applied`;
+    const fileWord = changedFileCount === 1 ? 'file' : 'files';
+    return `Preview · edits in ${changedFileCount} ${fileWord} applied`;
   }
   if (!activeFile) return 'Browse · all source files locked';
   const featureCount = session.workingEntries(activeFile).length;
@@ -453,10 +453,18 @@ function workingFeaturesOfChangedFiles() {
   return new Map(changedFiles.map(filename => [filename, session.workingEntries(filename).map(({feature}) => feature)]));
 }
 
+// The status waits for the map to draw, as a mode switch does: on the largest files that takes seconds.
 function showPreview() {
-  preview.show(workingFeaturesOfChangedFiles());
+  try {
+    preview.show(workingFeaturesOfChangedFiles());
+  } catch (error) {
+    hidePreview();
+    showError(new Error(`Preview failed: ${error.message}`));
+    return;
+  }
   elementById('preview').setAttribute('aria-pressed', 'true');
-  elementById('status').textContent = modeStatus();
+  isModeLoading = true;
+  elementById('status').textContent = 'Loading preview…';
 }
 
 function hidePreview() {
@@ -471,8 +479,9 @@ function togglePreview() {
     elementById('status').textContent = modeStatus();
     return;
   }
-  if (activeFile) setMode(null);
-  if (activeFile) return;
+  setMode(null);
+  const isModeSwitchRefused = activeFile !== null;
+  if (isModeSwitchRefused) return;
   showPreview();
 }
 

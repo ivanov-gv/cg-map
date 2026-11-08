@@ -104,14 +104,31 @@ test('places and building labels are previewed through their own sources, and re
       ['building-labels.geojson', [label]]
     ])
   );
-  const previewedLabels = JSON.parse(map.sources.places.data.features[0].properties.activeIds);
-  assert.deepEqual(previewedLabels, ['node/1']);
+  const previewedPlaceIds = JSON.parse(map.sources.places.data.features[0].properties.activeIds);
+  assert.deepEqual(previewedPlaceIds, ['node/1']);
   assert.equal(map.sources.places.data.features[0].properties.label, 'Renamed cafe');
   assert.deepEqual(map.sources['building-addresses'].data.features, [label]);
 
   preview.hide();
   assert.equal(map.sources.places.data.features[0].properties.label, 'Published cafe');
   assert.equal(map.sources['building-addresses'].data, 'data/building-labels.geojson');
+});
+
+test('a place the public map would refuse leaves the map untouched and the preview hidden', () => {
+  const map = fakeMap();
+  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const layersBefore = map.layers.map(({id}) => id);
+  const unpublishable = place('node/2', 'Unpublishable');
+  unpublishable.properties.visibilityLevel = 0;
+  const edits = new Map([
+    ['roads.geojson', [road('Edited', [[19.26, 42.44], [19.27, 42.44]])]],
+    ['places.geojson', [unpublishable]]
+  ]);
+  assert.throws(() => preview.show(edits));
+  assert.equal(preview.isShown, false);
+  assert.deepEqual(map.layers.map(({id}) => id), layersBefore);
+  assert.deepEqual(map.filters.get('minor-roads'), minorRoads.filter);
+  assert.equal(map.sources['edit-preview-roads.geojson'], undefined);
 });
 
 test('showing again replaces the previous preview instead of drawing it twice', () => {

@@ -8,7 +8,8 @@ const placesFile = 'places.geojson';
 const labelsFile = 'building-labels.geojson';
 const placesSource = 'places';
 const labelsSource = 'building-addresses';
-const hiddenLayerFilter = ['==', ['literal', 1], 0];
+// Hides a published layer while keeping it in the style, so its own filter can be put back.
+export const hiddenLayerFilter = ['==', ['literal', 1], 0];
 
 const featureCollection = features => ({type: 'FeatureCollection', features});
 
@@ -55,12 +56,18 @@ export class EditPreview {
   }
 
   // Replaces what is shown with these files. Each entry is a changed file and all its working features; a file with no
-  // entry keeps its published form.
+  // entry keeps its published form. Everything that can fail is built before the map changes, so a throw, such as a place
+  // the public map would refuse, leaves the published map as it was and the preview hidden.
   show(workingFeaturesByFile) {
     this.hide();
+    const placeData = workingFeaturesByFile.has(placesFile)
+      ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
+      : null;
+    const publishedPlaceData = placeData ? this.#publishedData(placesSource) : null;
+    if (placeData) this.#replaceSourceData(placesSource, placeData, publishedPlaceData);
     for (const [filename, features] of workingFeaturesByFile) {
-      if (filename === placesFile) this.#replaceSourceData(placesSource, placeMarkers(features, this.#visibilityConfig));
-      else if (filename === labelsFile) this.#replaceSourceData(labelsSource, featureCollection(features));
+      if (filename === labelsFile)
+        this.#replaceSourceData(labelsSource, featureCollection(features), this.#publishedData(labelsSource));
       else if (this.#basemapLayers[filename]) this.#drawInsteadOfBasemap(filename, features);
     }
     this.#isShown = true;
@@ -79,8 +86,8 @@ export class EditPreview {
     this.#isShown = false;
   }
 
-  #replaceSourceData(sourceId, data) {
-    this.#replacedSources.set(sourceId, this.#publishedData(sourceId));
+  #replaceSourceData(sourceId, data, publishedData) {
+    this.#replacedSources.set(sourceId, publishedData);
     this.#map.getSource(sourceId).setData(data);
   }
 
