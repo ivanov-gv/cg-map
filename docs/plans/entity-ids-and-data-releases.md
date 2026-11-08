@@ -1,6 +1,6 @@
 # Task: Entity IDs and data releases
 
-Issue: #30. The issue and its sub-issues #31 to #37 hold scope, status and dependencies; this plan holds their history.
+Issue: #30. The issue and its sub-issues hold scope, status and dependencies; this plan holds their history.
 
 ## Context
 
@@ -35,6 +35,7 @@ Defaults chosen with the owner's agreement; record the lasting ones in the decis
   "blocked by" links that record only real dependencies: the contract (#31) blocks the fresh extract (#32), which blocks
   stripping (#33), mergeable sources (#34) and changeset version 2 (#35). Version 2 also waits for mergeable sources,
   because the importer applies it as a commit for a PR. The release pipeline (#36) needs stripping and mergeable
-  sources, and export to OSM (#37) needs version 2 references. So #33 and #34 can run in parallel.
+  sources, and export to OSM (#37) needs version 2 references. The old list put export to OSM last; that was a
+  preference, not a dependency, so it was dropped.
 - 2026-11-08: plan agreed with the owner, after #23, as a fresh extract rather than a recovery of IDs for the October
   snapshot. (#27)

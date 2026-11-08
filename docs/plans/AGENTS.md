@@ -5,7 +5,8 @@
 - **The plan is the history.** It links its issue and records how the plan changed and why: dated entries for changed
   scope, reordered or dropped steps, and choices made along the way. Do not copy status or remaining work from the
   issue.
-- Write a plan from `TEMPLATE.md` for multi-session work, and add an entry in each PR that changes the plan.
+- Write a plan from `TEMPLATE.md` for multi-session work. A PR that changes the plan adds a History entry and updates
+  the issue and its sub-issues in the same PR. The PR that does a sub-issue's work closes it with `Closes #N`.
 - A plan stays until its issue is resolved. Delete it only then, in the PR that resolves it; git history keeps it.
 - Before deleting a plan, move anything still true into the owning documentation, and its decisions into
   [the decisions log](../decisions/AGENTS.md).
