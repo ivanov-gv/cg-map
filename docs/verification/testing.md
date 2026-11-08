@@ -121,13 +121,13 @@ every area, because every browser test boots them.
 
 The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner:
 
-| Area            | Specs in apps/editor/tests/e2e           | Code only it depends on                                      |
-| --------------- | ---------------------------------------- | ------------------------------------------------------------ |
-| editing-desktop | editing.spec.mjs, root-desktop, two jobs | drag-gestures.js, geometry-editing.js, handle-layer.js       |
-| editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                     |
-| offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js |
-| offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                     |
-| viewer          | viewer.spec.mjs                          | None                                                         |
+| Area            | Specs in apps/editor/tests/e2e           | Code only it depends on                                                 |
+| --------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| editing-desktop | editing.spec.mjs, root-desktop, two jobs | drag-gestures.js, geometry-editing.js, handle-layer.js, edit-preview.js |
+| editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                                |
+| offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
+| offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                                |
+| viewer          | viewer.spec.mjs                          | None                                                                    |
 
 Every other editor source runs every editor area, because each test boots, selects, or edits and exports through it. So
 do public/, build tools, anything unmapped, and a change from outside the editor that selects it, such as its source

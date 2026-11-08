@@ -627,6 +627,64 @@ test.describe('source editing', () => {
     expect(operation.after.geometry.coordinates).toHaveLength(2);
   });
 
+  test('the preview shows every pending edit in the public cartography, and ends on a mode switch', async ({page}) => {
+    const renderedCount = (layerId, center) =>
+      page.evaluate(
+        ({layerId, center}) => {
+          const {map} = window.editorDebug;
+          const point = map.project(center);
+          const around = [
+            [point.x - 40, point.y - 40],
+            [point.x + 80, point.y + 60]
+          ];
+          return map.queryRenderedFeatures(around, {layers: [layerId]}).length;
+        },
+        {layerId, center}
+      );
+    await openEditor(page);
+    const {feature} = await selectPlace(page);
+    // The public map labels a place with its English name when it has one.
+    await page.locator('[name="name:en"]').fill(editedName);
+    await applyAndWait(page);
+    await chooseMode(page, roadsFile);
+    const center = [19.2594, 42.4411];
+    await centerMapOn(page, center, 18);
+    await expect(page.locator('#status')).toContainText('source features');
+    await page.locator('#add-feature').click();
+    await page.locator('[name="kind"]').selectOption('footway');
+    await tapMapAt(page, center);
+    await tapMapAt(page, await coordinateOffsetBy(page, center, 60, 30));
+    await applyAndWait(page);
+
+    await page.locator('#preview').click();
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#status')).toHaveText('Preview · edits in 2 files applied');
+    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    // The source holds only what the tiles around the view need, so look where the place is.
+    await centerMapOn(page, feature.geometry.coordinates);
+    const previewedPlaceName = () =>
+      page.evaluate(
+        id =>
+          window.editorDebug.map
+            .querySourceFeatures('places')
+            .find(marker => JSON.parse(marker.properties.activeIds).includes(id))?.properties.label,
+        feature.properties.id
+      );
+    await expect.poll(previewedPlaceName).toBe(editedName);
+    await centerMapOn(page, center, 18);
+
+    await page.locator('#preview').click();
+    await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+    await expect.poll(() => renderedCount('footways', center)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => Boolean(window.editorDebug.map.getLayer('edit-preview-footways')))).toBe(false);
+
+    await page.locator('#preview').click();
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await chooseMode(page, roadsFile);
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(() => Boolean(window.editorDebug.map.getLayer('edit-preview-footways')))).toBe(false);
+  });
+
   // A simple footprint, so that one moved corner can only produce a valid shape.
   const selectNumberedBuilding = async page => {
     const maxSimpleRingLength = 7;
