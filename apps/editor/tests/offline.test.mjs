@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
 import operatingSystem from 'node:os';
 import path from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {byteRangeResponse, parseByteRange} from '../src/offline-cache.js';
+import {answerQuietRequests, whenEveryWindowIsQuiet} from '../src/update-quiet.js';
 import {offlineManifest, writeOfflineManifest} from '../tools/offline-manifest.mjs';
 
 const archivePath = 'data/map.pmtiles';
@@ -74,4 +76,47 @@ test('the worker carries the release, because browsers detect an update from its
   const moduleText = fileSystem.readFileSync(path.join(directory, 'offline-manifest.js'), 'utf8');
   assert.match(moduleText, new RegExp(`export const release = "${release}";`));
   assert.ok(!moduleText.includes('"sw.js"'));
+});
+
+const quietOptions = {answerMilliseconds: 50, maximumWaitMilliseconds: 2000};
+
+test('a takeover request waits for another window that is not quiet', async testContext => {
+  let isOtherWindowQuiet = false;
+  const otherWindow = answerQuietRequests(() => isOtherWindowQuiet);
+  testContext.after(() => otherWindow.close());
+  let isFinished = false;
+  const finished = whenEveryWindowIsQuiet(() => true, quietOptions).then(() => (isFinished = true));
+  await delay(300);
+  assert.equal(isFinished, false, 'another window was still loading its map');
+  isOtherWindowQuiet = true;
+  await finished;
+});
+
+test('a takeover request waits for its own window, when every other one is quiet', async testContext => {
+  let isThisWindowQuiet = false;
+  const otherWindow = answerQuietRequests(() => true);
+  testContext.after(() => otherWindow.close());
+  let isFinished = false;
+  const finished = whenEveryWindowIsQuiet(() => isThisWindowQuiet, quietOptions).then(() => (isFinished = true));
+  await delay(300);
+  assert.equal(isFinished, false, 'this window was still loading its map');
+  isThisWindowQuiet = true;
+  await finished;
+});
+
+test('a window that never gets quiet cannot stop a takeover request', async () => {
+  const otherWindowWaitMilliseconds = 600;
+  const otherWindow = answerQuietRequests(() => false, otherWindowWaitMilliseconds);
+  const startedAt = Date.now();
+  await whenEveryWindowIsQuiet(() => true, {answerMilliseconds: 50, maximumWaitMilliseconds: 200});
+  assert.ok(Date.now() - startedAt < otherWindowWaitMilliseconds);
+  // The other window finishes its own wait first, because closing would make its answer throw.
+  await delay(otherWindowWaitMilliseconds);
+  otherWindow.close();
+});
+
+test('with no other window, a takeover request only waits for its own window', async () => {
+  const startedAt = Date.now();
+  await whenEveryWindowIsQuiet(() => true, quietOptions);
+  assert.ok(Date.now() - startedAt < 1000);
 });

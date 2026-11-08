@@ -10,6 +10,11 @@ on:
         description: On the phone layout, run only tests tagged @phone, or all.
         type: string
         default: tagged
+      browser_matrix:
+        description: The browser areas to run, from the planner. Empty runs them all.
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
     inputs:
       test_run:
@@ -30,6 +35,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: dev
+    outputs: &verify-outputs
+      browser_matrix: ${{ steps.areas.outputs.editor_browser_matrix }}
+    env: &verify-env
+      BROWSER_MATRIX: ${{ inputs.browser_matrix }}
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -38,6 +47,14 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=apps/editor
+      - name: Select browser areas
+        id: areas
+        run: |
+          if [ -n "$BROWSER_MATRIX" ]; then
+            echo "editor_browser_matrix=$BROWSER_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+          else
+            node platform/tools/ci-plan.mjs --all
+          fi
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - name: Share the built artifact with the browser jobs
         uses: actions/upload-artifact@v5
@@ -52,10 +69,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: test-run
+    outputs: *verify-outputs
+    env: *verify-env
     steps: *verify-steps
   browser:
     name: Browser tests (${{ matrix.area }})
     needs: verify
+    # A change such as an editor unit test needs the editor checks but no browser area.
+    if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -69,22 +90,7 @@ jobs:
     environment: dev
     strategy:
       fail-fast: false
-      # Sized from measured test time: a new area when one nears the job time limit. Together these must cover every spec
-      # in both projects, which platform/tests/workflows.test.mjs checks.
-      matrix: &browser-matrix
-        include:
-          - area: editing-desktop-1
-            specs: tests/e2e/editing.spec.mjs --project=root-desktop --shard=1/2
-          - area: editing-desktop-2
-            specs: tests/e2e/editing.spec.mjs --project=root-desktop --shard=2/2
-          - area: editing-mobile
-            specs: tests/e2e/editing.spec.mjs --project=pages-mobile
-          - area: offline-desktop
-            specs: tests/e2e/offline.spec.mjs --project=root-desktop
-          - area: offline-mobile
-            specs: tests/e2e/offline.spec.mjs --project=pages-mobile
-          - area: viewer
-            specs: tests/e2e/viewer.spec.mjs
+      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix) }}
     env: &browser-env
       # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
@@ -113,6 +119,7 @@ jobs:
   browser-test-run:
     name: (test-run) Browser tests (${{ matrix.area }})
     needs: verify-test-run
+    if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -126,6 +133,6 @@ jobs:
     environment: test-run
     strategy:
       fail-fast: false
-      matrix: *browser-matrix
+      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix) }}
     env: *browser-env
     steps: *browser-steps

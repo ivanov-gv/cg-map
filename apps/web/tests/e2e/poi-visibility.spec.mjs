@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
+import {CAMERA_HOLD_MILLISECONDS, expectToHold, mapIdle} from './helpers.mjs';
 
 // Software WebGL needs seconds per camera step, and these tests compare many exact camera steps.
 test.describe.configure({timeout: 400000});
@@ -111,21 +112,20 @@ async function openMenu(page) {
     await page.locator('#menu-toggle').click();
 }
 
-test('every level is absent just below its threshold, present at it, and reversible', async ({page}) => {
+// Every level's own threshold is a unit test of the layers in packages/map-core. What only an engine can prove is that its
+// inclusive minzoom behaves at fractional zooms, the same at any threshold, so this crosses one, both ways.
+test('a level is absent just below its threshold, present at it, and reversible', async ({page}) => {
   const data = ladder();
   await open(page, data);
   // Icon admission must not depend on the basemap (other tests keep it, with real label collisions). Without it, these
-  // 30 camera steps across wide scales do not spend CI's time limit drawing streets in software WebGL.
+  // camera steps do not spend CI's time limit drawing streets in software WebGL.
   await page.evaluate(() => {
     const map = window.kompasDebug.map;
     for (const {id} of map.getStyle().layers)
       if (!/^place-|^search-place$/.test(id)) map.setLayoutProperty(id, 'visibility', 'none');
   });
-  const zooms = Object.values(THRESHOLDS).flatMap((thresholdZoom) => [
-    thresholdZoom - 0.01,
-    thresholdZoom,
-    thresholdZoom + 0.01
-  ]);
+  const thresholdZoom = THRESHOLDS[3];
+  const zooms = [thresholdZoom - 0.01, thresholdZoom, thresholdZoom + 0.01];
   const iconsByIncreasingZoom = [];
   for (const zoom of zooms) {
     await camera(page, {zoom});
@@ -432,8 +432,10 @@ test(
     const before = await page.evaluate(() => window.kompasDebug.map.getCenter().toArray());
     await tap(page, coordinates);
     await expect(page.locator('#place-name')).toHaveText('2 places here');
-    await page.waitForTimeout(600);
-    expect(await page.evaluate(() => window.kompasDebug.map.getCenter().toArray())).toEqual(before);
+    await expectToHold(
+      async () => expect(await page.evaluate(() => window.kompasDebug.map.getCenter().toArray())).toEqual(before),
+      CAMERA_HOLD_MILLISECONDS
+    );
     // The keyboard closes: the pending check now runs against the full map area.
     await page.evaluate(() => {
       Object.assign(window.visualViewport, {height: 840});
@@ -618,7 +620,7 @@ test('real data at every threshold, for visual density review', async ({page}, t
       await expect
         .poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded()), {timeout: 30000})
         .toBe(true);
-      await page.waitForTimeout(400);
+      await mapIdle(page);
       const ids = await iconIds(page);
       const known = new Map(
         places.map((feature) => [feature.properties.id, feature.properties.visibilityLevel])

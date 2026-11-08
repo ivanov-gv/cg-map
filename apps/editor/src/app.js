@@ -447,7 +447,8 @@ function toggleSatellite() {
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.
 async function start() {
-  startOfflineCopy(() => !editing?.hasUnappliedEdit && !(session && hasOnlyInMemoryChanges()));
+  const canReloadNow = () => !editing?.hasUnappliedEdit && !(session && hasOnlyInMemoryChanges());
+  startOfflineCopy(canReloadNow, () => Boolean(map?.loaded()));
   const [bundle, mapMetadata, visibilityConfig, layerRules] = await Promise.all([
     loadSourceBundle(new URL('sources/', location.href)),
     loadJSON('data/map.json'),
