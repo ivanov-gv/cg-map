@@ -31,8 +31,8 @@ the map. Names and category icons belong to the map and remain useful context.
 | Layers, Tools, Changes                              | A compact toolbar on desktop and a bottom bar on mobile. Changes may include an applied-change count. |
 | Zoom and scale                                      | Keep compact map controls clear of the bottom bar and open panels.                                    |
 | Logo and branding block                             | Remove from the map interface.                                                                        |
-| “Tap a POI to edit” and similar routine prompts     | Remove from the map. Put guidance inside the relevant panel when needed.                              |
-| “Editable / Changed” legend                         | Remove from the map. Explain marker styling in layer help inside the menu.                            |
+| Routine prompts, such as the dock's editing hints   | Remove from the map. Put guidance inside the relevant panel when needed.                              |
+| An editable / changed colour legend                 | Remove from the map. Explain marker styling in layer help inside the menu.                            |
 | Source filenames, feature counts and identity       | Put in expandable source details. Use human layer names in normal controls.                           |
 | Offline status, source integrity and update details | Put in the Layers menu. Surface a compact notice only when attention is needed.                       |
 | Attribution and licensing                           | Move into the footer of the Layers menu, including the OSM contributor and licence links.             |
@@ -254,9 +254,9 @@ where that POI can still be edited.
 Keep the normal building fills, surrounding roads and existing house numbers visible. Use a restrained outline for
 selectable footprints and a stronger outline for the selected one; avoid covering every building with an opaque tint.
 
-Offer Move whole footprint and Edit corners. Show vertex handles only for the corner tool. The inspector does not need
-an empty property form, because this layer permits geometry changes only. Do not offer adding, deleting or address
-edits.
+Offer Move whole footprint and Edit corners. As today, the corner tool can move, insert and remove a corner. Show vertex
+handles only for that tool. The inspector does not need an empty property form, because this layer permits geometry
+changes only. Do not offer adding, deleting or address edits.
 
 Applying a move or corner change updates the footprint immediately. Its address label remains a separate object and must
 not move automatically. If a correction leaves that label outside its footprint, identify the issue in Changes and
@@ -288,17 +288,17 @@ points. Endpoint snapping, automatic network repair and routing recalculation ar
 Preserve the normal land colours and context. Editing guides should identify existing parks; other context geometry
 remains inspectable with a concise explanation of its restriction.
 
-For a park, offer Name, Move whole shape and Edit corners. Apply updates its shape and name immediately. Do not offer
-adding or deleting parks, or editing country/context shapes through this layer.
+For a park, offer Name, Move whole shape and Edit corners, with corner insert and remove. Apply updates its shape and
+name immediately. Do not offer adding or deleting parks, or editing country/context shapes through this layer.
 
 ### Water
 
 Keep water fills and river lines recognisable. Offer selection and geometry guides appropriate to the selected shape,
 without tinting the entire water layer as one editing surface.
 
-For an existing water polygon or river, offer Name, Move whole shape and Edit points. Apply updates its geometry and
-label immediately. The ocean remains inspection-only because it is derived by the data workflow. Do not offer adding or
-deleting water features.
+For an existing water polygon or river, offer Name, Move whole shape and Edit points, with point insert and remove.
+Apply updates its geometry and label immediately. The ocean remains inspection-only because it is derived by the data
+workflow. Do not offer adding or deleting water features.
 
 ### Country outlines
 
@@ -394,9 +394,10 @@ not the desktop panel arrangements or any layer other than POIs. What they show 
 | Attribution                       | Footer of the hidden Layers menu, as requested.                                                           |
 
 The attribution choice needs one check before it is implemented. The OpenStreetMap attribution guidelines expect
-attribution on or next to an interactive map, and accept it behind a small control on a small screen. A menu footer is
-further away than that, even though the editor is an internal tool. If review finds it insufficient, the least intrusive
-alternative is a small information control in a map corner that opens the same footer.
+attribution on or next to an interactive map, and accept it behind a small control on a small screen. The editor already
+has such a compact attribution control from map-core, besides the credit line in its dock. Moving attribution only into
+a menu footer would be a step away from the guidelines, even for an internal tool. If review agrees, keep the compact
+map control, which leaves no text over the map until opened, and put the full credits in the Layers footer.
 
 Edit guide density is also open. The desktop prototype shows overlapping rings at city zoom, because guides reveal every
 POI regardless of its level. Options include showing guides only from a zoom where rings stay separable, or grouping
@@ -415,14 +416,17 @@ changes to the publishing workflow.
 The [editor README](../../../apps/editor/README.md) describes what is implemented today. This proposal changes the
 following behaviour; everything else, including permissions, validation, the draft store and export, stays as it is.
 
-| Today                                                                                       | Proposed                                                                                        |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| A dock with a layers table, one switch per source file, and status under the title.         | A full map with a layer selector, a Layers / Tools / Changes toolbar or bottom bar, and panels. |
-| Outside a mode the map shows the reviewed release; a pending edit appears only in its mode. | Applied edits appear in every layer and in Browse.                                              |
-| Preview all edits shows the working map on request, from Browse.                            | No separate preview: the working map is always shown, with the same not-a-rebuild caveat.       |
-| Escape, like Cancel, drops the open edit.                                                   | Escape cancels only a gesture in progress, or closes the foremost panel; Cancel drops the edit. |
-| A mode switch silently drops a geometry preview, and is blocked by typed details.           | A mode switch asks Apply / Discard edit / Keep editing for both kinds of unapplied edit.        |
-| Source overlays draw filled editing markers over the map.                                   | Hollow guides around the normal map symbols, which can be turned off in Tools.                  |
-| Selection picks one feature under the pointer.                                              | A named choice list for overlapping objects and a keyboard selection list for the current view. |
+| Today                                                                                        | Proposed                                                                                        |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| A dock with a layers table, one switch per source file, and status under the title.          | A full map with a layer selector, a Layers / Tools / Changes toolbar or bottom bar, and panels. |
+| Outside a mode the map shows the reviewed release; a pending edit appears only in its mode.  | Applied edits appear in every layer and in Browse.                                              |
+| Preview all edits shows the working map on request, from Browse.                             | No separate preview: the working map is always shown, with the same not-a-rebuild caveat.       |
+| Escape, like Cancel, drops the open edit.                                                    | Escape cancels only a gesture in progress, or closes the foremost panel; Cancel drops the edit. |
+| A mode switch silently drops a geometry preview, and is blocked by typed details.            | A mode switch asks Apply / Discard edit / Keep editing for both kinds of unapplied edit.        |
+| A mode hides that file's published rendering and draws uniform fills, lines and filled dots. | Hollow guides around the normal map symbols, which can be turned off in Tools.                  |
+| A permanent inspector column shows “Select an object” when nothing is selected.              | The inspector opens on selection and closes when the selection is cleared.                      |
+| Below 720 pixels, the dock, map and inspector stack into one scrolling page.                 | The map stays fixed to the viewport, with a bottom bar and one bottom sheet.                    |
+| A compact attribution control on the map, and a credit line in the dock.                     | Full credits in the Layers footer; see section 9 on keeping the compact control.                |
+| Selection picks one feature under the pointer.                                               | A named choice list for overlapping objects and a keyboard selection list for the current view. |
 
 Any unapplied edit still blocks undo, redo, adding a feature, export, import and discarding the draft, as it does today.
