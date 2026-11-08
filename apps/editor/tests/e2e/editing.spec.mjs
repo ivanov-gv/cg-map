@@ -230,6 +230,156 @@ test.describe('source editing', () => {
     expect(inspectorBounds.x - (widePanelBounds.x + widePanelBounds.width)).toBeGreaterThanOrEqual(1800 * 0.6);
   });
 
+  test('keyboard collapse and panel replacement preserve typed values and geometry', {tag: '@phone'}, async ({page}, testInfo) => {
+    await openEditor(page);
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(page.locator('#open-inspector')).toBeHidden();
+    const {feature} = await selectPlace(page);
+    const expected = await coordinateOffsetBy(page, feature.geometry.coordinates, 60, 0);
+    await page.locator('[name="name"]').fill(editedName);
+    await page.locator('#tool-move').click();
+    await dragMap(page, feature.geometry.coordinates, 60, 0);
+    const opener = page.locator('#open-inspector');
+    await expect(opener).toContainText(feature.properties.name);
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#close-inspector')).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(opener).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.locator('[name="name"]').focus();
+    await page.keyboard.press('Escape');
+    await expect(opener).toBeFocused();
+    await openPanel(page, 'Tools');
+    await openPanel(page, 'Changes');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', {name: 'Changes', exact: true})).toBeFocused();
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await page.locator('#apply-edit').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(opener).toBeHidden();
+    const {changeset} = await exportChangeset(page, testInfo);
+    expect(changeset.operations[0].after.properties.name).toBe(editedName);
+    expectCoordinateNear(changeset.operations[0].after.geometry.coordinates, expected);
+  });
+
+  test('Enter in a property field applies the form and returns focus to the layer control', {tag: '@phone'}, async ({page}, testInfo) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(page.locator('#current-layer')).toBeFocused();
+    const {changeset} = await exportChangeset(page, testInfo);
+    expect(changeset.operations[0].after.properties.name).toBe(editedName);
+  });
+
+  test('inspector actions stay visible while fields scroll and the keyboard viewport moves', {tag: '@phone'}, async ({page}, testInfo) => {
+    await openEditor(page);
+    await selectPlace(page);
+    const inspector = page.locator('.inspector');
+    const actions = page.locator('#edit-actions');
+    const field = page.locator('[name="opening_hours"]');
+    const inspectorBounds = await inspector.boundingBox();
+    if (testInfo.project.name === 'pages-mobile') {
+      expect(inspectorBounds.height).toBeLessThanOrEqual(840 / 2);
+      expect(inspectorBounds.y).toBeGreaterThan(840 / 2 - 70);
+    } else {
+      expect(inspectorBounds.x).toBeGreaterThan(1280 / 2);
+    }
+    await page.screenshot({path: testInfo.outputPath('inspector-open.png')});
+    await testInfo.attach('inspector-open', {path: testInfo.outputPath('inspector-open.png'), contentType: 'image/png'});
+    const initialActions = await actions.boundingBox();
+    await field.focus();
+    await field.fill('Mo-Fr 09:00-17:00');
+    expect(await actions.boundingBox()).toEqual(initialActions);
+    const sourceDetails = page.locator('#selection-details summary');
+    await sourceDetails.scrollIntoViewIfNeeded();
+    const sourceDetailsBounds = await sourceDetails.boundingBox();
+    expect(sourceDetailsBounds.height).toBeGreaterThanOrEqual(40);
+    await sourceDetails.click();
+    await page.locator('#identity').scrollIntoViewIfNeeded();
+    expect(await actions.boundingBox()).toEqual(initialActions);
+    await field.focus();
+    // Desktop Chromium does not open a phone IME. Model its visualViewport resize and pan, including landscape height.
+    for (const height of [430, 240]) {
+      await page.evaluate(height => {
+        const viewport = window.visualViewport;
+        Object.defineProperty(viewport, 'height', {configurable: true, value: height});
+        Object.defineProperty(viewport, 'offsetTop', {configurable: true, value: 35});
+        viewport.dispatchEvent(new Event('resize'));
+        viewport.dispatchEvent(new Event('scroll'));
+      }, height);
+      await expect(field).toBeInViewport({ratio: 1});
+      const fieldBounds = await field.boundingBox();
+      const applyBounds = await page.locator('#apply-edit').boundingBox();
+      const cancelBounds = await page.locator('#cancel-edit').boundingBox();
+      const headingBounds = await page.locator('.inspector-heading').boundingBox();
+      expect(fieldBounds.y).toBeGreaterThanOrEqual(headingBounds.y + headingBounds.height);
+      expect(fieldBounds.y + fieldBounds.height).toBeLessThanOrEqual(applyBounds.y);
+      for (const bounds of [applyBounds, cancelBounds]) {
+        expect(bounds.y).toBeGreaterThanOrEqual(35);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(35 + height);
+      }
+      const screenshotPath = testInfo.outputPath(`inspector-keyboard-${height}.png`);
+      await page.screenshot({path: screenshotPath});
+      await testInfo.attach(`inspector-keyboard-${height}`, {path: screenshotPath, contentType: 'image/png'});
+    }
+    await page.locator('#apply-edit').click();
+    await expect(inspector).toBeHidden();
+    await page.evaluate(() => {
+      delete window.visualViewport.height;
+      delete window.visualViewport.offsetTop;
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    const {changeset} = await exportChangeset(page, testInfo);
+    expect(changeset.operations[0].after.properties.opening_hours).toBe('Mo-Fr 09:00-17:00');
+  });
+
+  test('a wrapped validation message preserves the active field and actions with a short keyboard', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await page.locator('[name="category"]').selectOption('food');
+    await page.locator('[name="visibilityLevel"]').selectOption('1');
+    const field = page.locator('[name="opening_hours"]');
+    await field.focus();
+    await page.evaluate(() => {
+      const viewport = window.visualViewport;
+      Object.defineProperty(viewport, 'height', {configurable: true, value: 240});
+      Object.defineProperty(viewport, 'offsetTop', {configurable: true, value: 35});
+      viewport.dispatchEvent(new Event('resize'));
+      // This is the same native submit path as Enter, while retaining the input focus and keyboard viewport.
+      document.querySelector('#property-form').requestSubmit();
+    });
+    const problem = page.locator('#edit-problem');
+    await expect(problem).toContainText('reserved for sights landmarks');
+    await expect(field).toBeInViewport({ratio: 1});
+    const fieldBounds = await field.boundingBox();
+    const headingBounds = await page.locator('.inspector-heading').boundingBox();
+    const problemBounds = await problem.boundingBox();
+    expect(problemBounds.height).toBeGreaterThan(20, 'the message must wrap to exercise footer height');
+    expect(fieldBounds.y).toBeGreaterThanOrEqual(headingBounds.y + headingBounds.height);
+    expect(fieldBounds.y + fieldBounds.height).toBeLessThanOrEqual(problemBounds.y);
+    for (const id of ['apply-edit', 'cancel-edit']) {
+      const bounds = await page.locator(`#${id}`).boundingBox();
+      expect(bounds.y).toBeGreaterThanOrEqual(35);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(275);
+    }
+    await page.locator('#cancel-edit').click();
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(page.locator('#open-inspector')).toBeHidden();
+    await page.evaluate(() => {
+      delete window.visualViewport.height;
+      delete window.visualViewport.offsetTop;
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await openPanel(page, 'Changes');
+    await expect(page.locator('#review-empty')).toBeVisible();
+  });
+
   test('invalid details are refused and record nothing', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
@@ -497,6 +647,13 @@ test.describe('source editing', () => {
     await expect(page.locator('#discard-changes')).toBeDisabled();
     await expect(page.locator('#import-changeset')).toBeDisabled();
     await page.keyboard.press('Escape');
+    await expect(page.locator('#export-changeset')).toBeDisabled();
+    await expect(page.locator('#discard-changes')).toBeDisabled();
+    await expect(page.locator('#import-changeset')).toBeDisabled();
+    await openInspector(page);
+    await expect(page.locator('[name="name"]')).toHaveValue('Second thoughts');
+    await page.locator('#cancel-edit').click();
+    await expect(page.locator('#discard-changes')).toBeEnabled();
     await expect(page.locator('#export-changeset')).toBeEnabled();
     await expect(page.locator('#import-changeset')).toBeEnabled();
   });
@@ -562,7 +719,7 @@ test.describe('source editing', () => {
     await expect(page.locator('#edit-problem')).toContainText('reserved for sights landmarks');
   });
 
-  test('a typed edit is not lost to a stray tap, and Cancel and Escape discard it', async ({page}) => {
+  test('a typed edit survives stray taps and Escape until explicitly cancelled', async ({page}) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
     await openInspector(page);
@@ -571,7 +728,13 @@ test.describe('source editing', () => {
     await tapMapAt(page, emptyCoordinate);
     await expect(page.locator('#status')).toHaveText('Apply or Cancel the current edit first.');
     await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await openInspector(page);
     await page.keyboard.press('Escape');
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(page.locator('#open-inspector')).toBeFocused();
+    await openInspector(page);
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await page.locator('#cancel-edit').click();
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
     await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
@@ -662,7 +825,7 @@ test.describe('source editing', () => {
     expectCoordinateNear(after.geometry.coordinates, expected);
   });
 
-  test('Escape in the middle of a drag ends the edit cleanly', async ({page}) => {
+  test('Escape interrupts only the current drag and preserves the open edit', async ({page}, testInfo) => {
     const scriptErrors = [];
     page.on('pageerror', error => scriptErrors.push(error.message));
     await openEditor(page);
@@ -677,9 +840,14 @@ test.describe('source editing', () => {
     await page.keyboard.press('Escape');
     await page.mouse.move(start.x + 60, start.y, {steps: 2});
     await page.mouse.up();
-    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-    await openPanel(page, 'Changes');
-    await expect(page.locator('#review-empty')).toBeVisible();
+    await openInspector(page);
+    await expect(page.locator('#editor')).toBeVisible();
+    await expect(page.locator('#tool-hint')).toContainText('Drag anywhere');
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    const {changeset} = await exportChangeset(page, testInfo);
+    expect(changeset.operations[0].after.geometry).toEqual(feature.geometry);
+    expect(changeset.operations[0].after.properties.name).toBe(editedName);
     expect(scriptErrors).toEqual([]);
   });
 

@@ -75,6 +75,7 @@ export class InspectorEditing {
     this.#transaction = transaction;
     this.showProblem(null);
     elementById('editor').hidden = false;
+    elementById('edit-actions').hidden = false;
     this.#renderToolButtons();
     this.#renderPreview();
     this.#context.onEditStateChanged();
@@ -100,9 +101,11 @@ export class InspectorEditing {
   }
 
   close() {
+    if (document.querySelector('.inspector').contains(document.activeElement)) elementById('current-layer').focus();
     this.#transaction = null;
     this.showProblem(null);
     elementById('editor').hidden = true;
+    elementById('edit-actions').hidden = true;
     this.#context.handles.clear();
     this.#context.overlay.setSelection(null);
     this.#context.onEditStateChanged();
@@ -181,7 +184,6 @@ export class InspectorEditing {
     onClick('tool-vertices', () => this.#update(withTool(this.#transaction, editTools.vertices)));
     onClick('vertex-insert', () => this.#changeSelectedVertex(insertVertex));
     onClick('vertex-remove', () => this.#changeSelectedVertex(removeVertex));
-    onClick('apply-edit', () => this.#apply());
     onClick('cancel-edit', () => this.#cancel());
     onClick('delete-feature', () => this.#deleteFeature());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
@@ -189,10 +191,14 @@ export class InspectorEditing {
       event.preventDefault();
       this.#apply();
     };
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && this.#transaction) this.#cancel();
-    });
     this.#installGestures();
+  }
+
+  // Escape rolls back only the drag in progress; previous adjustments and typed fields survive.
+  cancelActiveGesture() {
+    if (!this.#transaction?.gesture) return false;
+    this.#update(cancelGesture(this.#transaction));
+    return true;
   }
 
   get hasGeometryTool() {

@@ -28,6 +28,7 @@ import {startOfflineCopy} from './offline-install.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
+import {installInspectorViewport} from './inspector-viewport.js';
 import {overlayCollection, sourceFeatureForHit} from './source-overlay.js';
 
 const layerNames = {
@@ -160,6 +161,8 @@ function showFeature(feature, index) {
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
   elementById('properties').replaceChildren();
   for (const [name, value] of Object.entries(properties)) appendProperty(name, value);
+  elementById('selection-details').open = false;
+  elementById('open-inspector').textContent = `Selection: ${elementById('selection-title').textContent}`;
   setStatus(selectionStatus(index));
   overlay.setSelection(feature);
   const {canModify, lockReason} = featureCapabilities(feature, rules.layers[activeFile]);
@@ -171,6 +174,7 @@ function showFeature(feature, index) {
 function clearSelection() {
   editing.close();
   elementById('open-inspector').hidden = true;
+  elementById('open-inspector').setAttribute('aria-expanded', 'false');
   document.querySelector('.inspector').hidden = true;
   showLockReason(activeFile ? layerLockReason(rules.layers[activeFile]) : null);
   elementById('selection-title').textContent = 'Select an object';
@@ -283,6 +287,7 @@ function startNewFeature() {
   showInspector();
   elementById('selection-title').textContent = addFeatureLabels[activeFile];
   elementById('selection-source').textContent = `${activeFile} · new feature`;
+  elementById('open-inspector').textContent = addFeatureLabels[activeFile];
 }
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
@@ -519,8 +524,7 @@ function showPanel(panelId) {
   }
   elementById('current-layer').setAttribute('aria-expanded', String(panelId === 'layers-panel'));
   if (panelId && sharedPanelSpace.matches && !document.querySelector('.inspector').hidden) {
-    document.querySelector('.inspector').hidden = true;
-    elementById('open-inspector').hidden = false;
+    collapseInspector(false);
   }
 }
 
@@ -529,6 +533,7 @@ function showInspector() {
   if (sharedPanelSpace.matches) showPanel(null);
   document.querySelector('.inspector').hidden = false;
   elementById('open-inspector').hidden = true;
+  elementById('open-inspector').setAttribute('aria-expanded', 'true');
 }
 
 // Collapse one panel when a resize would leave too little map visible.
@@ -537,8 +542,7 @@ function installPanelResize() {
     const hasOpenPanel = [...document.querySelectorAll('.utility-panel')].some(panel => !panel.hidden);
     const inspector = document.querySelector('.inspector');
     if (event.matches && hasOpenPanel && !inspector.hidden) {
-      inspector.hidden = true;
-      elementById('open-inspector').hidden = false;
+      collapseInspector(inspector.contains(document.activeElement));
     }
   });
 }
@@ -560,17 +564,34 @@ function installPanelButtons() {
   elementById('draft-notice').onclick = () => showPanel('changes-panel');
 }
 
-// Closing the inspector preserves the edit and puts focus on the control that reopens it.
+// Collapse changes presentation only. Explicit Cancel owns discarding the edit.
+function collapseInspector(shouldFocus = true) {
+  document.querySelector('.inspector').hidden = true;
+  const opener = elementById('open-inspector');
+  opener.hidden = false;
+  opener.setAttribute('aria-expanded', 'false');
+  if (shouldFocus) opener.focus();
+}
+
+// Native buttons provide keyboard opening and applying; Escape closes the foremost panel without discarding work.
 function installInspectorToggle() {
-  elementById('close-inspector').onclick = () => {
-    document.querySelector('.inspector').hidden = true;
-    elementById('open-inspector').hidden = false;
-    elementById('open-inspector').focus();
-  };
+  elementById('close-inspector').onclick = () => collapseInspector();
   elementById('open-inspector').onclick = () => {
     showInspector();
     elementById('close-inspector').focus();
   };
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    event.preventDefault();
+    if (editing?.cancelActiveGesture()) return;
+    const openPanel = [...document.querySelectorAll('.utility-panel')].find(panel => !panel.hidden);
+    if (openPanel) {
+      showPanel(null);
+      document.querySelector(`[data-panel="${openPanel.id}"]`).focus();
+      return;
+    }
+    if (!document.querySelector('.inspector').hidden) collapseInspector();
+  });
 }
 
 // Install workspace interactions before asynchronous startup begins.
@@ -578,6 +599,7 @@ function installWorkspaceControls() {
   installPanelResize();
   installPanelButtons();
   installInspectorToggle();
+  installInspectorViewport();
 }
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.

@@ -1,7 +1,7 @@
 import {appendLinePoint, moveVertex, roundedCoordinate, translateGeometry, vertexHandles} from './geometry-editing.js';
 
 // One pending edit of one feature. Nothing here touches the session: Apply records the result as a single
-// undoable step, and Cancel or Escape simply drop the transaction.
+// undoable step, and Cancel drops the transaction. Escape only interrupts the current gesture.
 export const editTools = {
   placePoint: 'place-point',
   drawLine: 'draw-line',
