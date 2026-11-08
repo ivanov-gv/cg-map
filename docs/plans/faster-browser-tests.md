@@ -17,21 +17,16 @@ failures or retries. On the viewer tests, the GPU alone saves about 15%, and wor
 standard runners have no GPU and few CPUs. Web and editor browser jobs use 2 workers, and the editor suite runs as 6
 jobs.
 
-## Remaining, in order
+## Remaining
 
-1. Select the editor's browser jobs by what changed, as web's are. They run in parallel but always all run.
-2. Move logic out of browser tests. Two `poi-visibility` tests take 40 to 50 seconds each to step through zoom
-   thresholds, which a unit test plus one browser check can cover. Many `editing` tests can shrink the same way.
-3. Replace the fixed waits in web's tests with waits on actual state.
+- Many `editing` tests can move their logic into unit tests, as `poi-visibility` did. All three suites in sequence took
+  5.8 minutes with `E2E_WORKERS=6 E2E_ANGLE=gl-egl` on 2026-11-07: web 3.0, editor 2.5.
+- Six fixed waits stay in web's tests, on purpose. They time input rather than wait for state: the block after a camera
+  move, the gap between wheel gestures, and the pace of a drag.
+- The editor gains a quarter of its startup from the icon change in packages/map-core once it pins a release with it:
+  1.25 to 0.92 seconds, unloaded, with software rendering. Web gains too.
 
 ## Handoff
 
 Parallel load causes test timeouts at 15 seconds, and 90 seconds in the slowest web test, when many browser jobs share
 one machine under `act`. Six workers on one host did not. Measure after each step.
-
-## Open problem: editor update takeover
-
-After Update, the browser sometimes keeps a waiting worker from activating, even with repeated requests, until every
-window closes. It is more likely with several windows and under load. The editor says what to do and nothing is lost,
-and the three-window test in `offline.spec.mjs` accepts this outcome and records which one occurred. The cause is not
-diagnosed: the next step is finding what keeps the active worker busy, then making that test strict again.

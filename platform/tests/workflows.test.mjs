@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
-import {FOLDERS} from '../tools/ci-plan.mjs';
+import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
 const workflowDir = path.join(repoRoot, '.github/workflows');
@@ -206,7 +206,7 @@ test('job times are checked after everything else, and can only warn', () => {
 });
 
 test('the editor browser jobs cover every spec in both projects', () => {
-  const {matrix} = load('ci-apps-editor.yml').jobs.browser.strategy;
+  const matrix = browserMatrix(Object.keys(EDITOR_BROWSER_AREAS), EDITOR_BROWSER_AREAS);
   const specFiles = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
   const runs = (spec, project, entry) =>
     entry.specs.includes(spec) && (entry.specs.includes(`--project=${project}`) || !entry.specs.includes('--project='));
@@ -307,19 +307,22 @@ test('only the new pipelines run on the repository', () => {
 });
 
 test('browser jobs run only the planned areas, and none when there are none', () => {
-  const {jobs} = load('ci-apps-web.yml');
   const allJobs = load('ci-all.yml').jobs;
-  assert.match(
-    allJobs['apps-web'].with.browser_matrix,
-    /needs\.plan\.outputs\.browser_matrix \|\| needs\.plan-test-run\.outputs\.browser_matrix/
-  );
-  assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
-  assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
+  const plannedMatrixByApp = {'apps-web': 'browser_matrix', 'apps-editor': 'editor_browser_matrix'};
+  for (const [app, output] of Object.entries(plannedMatrixByApp)) {
+    assert.equal(
+      allJobs[app].with.browser_matrix,
+      `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`
+    );
+    const {jobs} = load(`ci-${app}.yml`);
+    assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
+    assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
+  }
 });
 
 test('the planner has an output on the plan job for every folder', () => {
   const {plan} = load('ci-all.yml').jobs;
-  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'image_matrix']));
+  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'editor_browser_matrix', 'image_matrix']));
 });
 
 test('a release version of the browser image must say which Playwright is inside, and never changes', () => {
@@ -363,18 +366,8 @@ test('a PR runs the phone layout only for tagged tests, and the nightly run runs
   }
 });
 
-// Reads the source, so a dependency hidden in a helper or a describe-level skip gets past it. The nightly run catches those.
-test('a test that depends on the phone layout is tagged, or a PR would not run it there', () => {
-  const specDirectories = ['apps/web/tests/e2e', 'apps/editor/tests/e2e'];
-  for (const directory of specDirectories) {
-    for (const file of fs.readdirSync(path.join(repoRoot, directory)).filter(name => name.endsWith('.spec.mjs'))) {
-      const text = fs.readFileSync(path.join(repoRoot, directory, file), 'utf8');
-      for (const body of text.split(/^(?=\s*test\()/m).slice(1)) {
-        const isDesktopOnly = /test\.skip\(\s*isMobile/.test(body);
-        const dependsOnPhone = /\b(isMobile|hasTouch)\b|touchscreen|viewportSize\(\)\.width/.test(body);
-        if (isDesktopOnly || !dependsOnPhone) continue;
-        assert.match(body, /tag: '@phone'/, `${file}: ${body.slice(0, 80)}`);
-      }
-    }
-  }
+test('the browser image runs the Node version the repository pins', () => {
+  const pinnedVersion = fs.readFileSync(path.join(repoRoot, '.node-version'), 'utf8').trim();
+  const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/browser-image/Dockerfile'), 'utf8');
+  assert.equal(dockerfile.match(/^ARG NODE_VERSION=(.+)$/m)?.[1], pinnedVersion);
 });

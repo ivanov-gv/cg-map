@@ -62,7 +62,9 @@ export function installPlaceIcons(map, colors) {
     const canvas = document.createElement('canvas');
     canvas.width = iconSizePixels * iconPixelRatio;
     canvas.height = iconSizePixels * iconPixelRatio;
-    const context = canvas.getContext('2d');
+    // Each icon is read back at once. Without this the browser draws it on the GPU and copies it back, which took a quarter
+    // of the editor's startup under software rendering.
+    const context = canvas.getContext('2d', {willReadFrequently: true});
     if (!context) throw new Error('Canvas 2D is unavailable; place symbols cannot be drawn.');
     context.scale(iconPixelRatio, iconPixelRatio);
     context.translate(iconSizePixels / 2, iconSizePixels / 2);

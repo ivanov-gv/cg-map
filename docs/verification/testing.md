@@ -71,7 +71,7 @@ everything.
 | `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
 | `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
-| `apps/editor`                                               | `apps-editor`, `tests`                                                                      |
+| `apps/editor`                                               | `apps-editor`, `tests`, and the editor browser areas below                                  |
 | `apps/core-demo`                                            | `apps-core-demo`                                                                            |
 | `packages/map-core`                                         | `map-core`, every map application, `tests`, `platform`, every browser area                  |
 | `data/tools/editor-bundle.mjs`                              | `data`, `apps-editor`, `tests`                                                              |
@@ -93,7 +93,9 @@ runs everything. List what a PR runs with `E2E_PHONE=tagged npx playwright test 
 Tag a test `@phone` when it:
 
 - only runs on the phone layout, or behaves differently there, branching on `isMobile`, `hasTouch`, touch input or the
-  viewport width: a check fails if such a test has no tag;
+  viewport width, in its own body, a helper it calls, or the skips and hooks of its describe: a check in
+  [phone-tags](../../platform/tools/phone-tags.mjs) fails if such a test has no tag. A helper that only chooses how to
+  press something on each layout, such as `closeCard`, is listed as neutral in its test;
 - needs the `/cg-map/` prefix, which only the phone project uses;
 - is the one whole journey for its app, or its one check of layout overflow.
 
@@ -105,17 +107,31 @@ Browser tests are split by area. CI builds once, then runs each selected area as
 Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests:
 see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 
-| Area        | Specs in apps/web/tests/e2e                   | Covers                                                  | Code it depends on most                                                       |
-| ----------- | --------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| shell       | shell.spec.mjs, updates.spec.mjs              | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
-| journeys    | journeys.spec.mjs, in two jobs                | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
-| interface   | interface.spec.mjs                            | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
-| discover    | discover.spec.mjs                             | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
-| poi-desktop | poi-visibility.spec.mjs, root-desktop project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
-| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project | POI levels, chooser                                     | data/sources/places*, contracts                                               |
+| Area        | Specs in apps/web/tests/e2e                     | Covers                                                  | Code it depends on most                                                       |
+| ----------- | ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| shell       | shell.spec.mjs, updates.spec.mjs                | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
+| journeys    | journeys.spec.mjs, in two jobs                  | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
+| interface   | interface.spec.mjs                              | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
+| discover    | discover.spec.mjs                               | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
+| poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs | POI levels, chooser                                     | data/sources/places*, contracts                                               |
+| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project   | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
 every area, because every browser test boots them.
+
+The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner:
+
+| Area            | Specs in apps/editor/tests/e2e           | Code only it depends on                                      |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| editing-desktop | editing.spec.mjs, root-desktop, two jobs | drag-gestures.js, geometry-editing.js, handle-layer.js       |
+| editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                     |
+| offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js |
+| offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                     |
+| viewer          | viewer.spec.mjs                          | None                                                         |
+
+Every other editor source runs every editor area, because each test boots, selects, or edits and exports through it. So
+do public/, build tools, anything unmapped, and a change from outside the editor that selects it, such as its source
+bundle.
 
 ## Monorepo verification — 2026-10-18
 

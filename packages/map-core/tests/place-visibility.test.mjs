@@ -43,6 +43,21 @@ test('published levels are consecutive, cumulative, and inclusive at each thresh
     }
 });
 
+test('at every threshold, a level is absent just below it and present at it and above', () => {
+  const {icons} = placeLayers(placeBands([], config), config);
+  const levelsDrawnAt = zoom =>
+    icons
+      .filter(layer => layer.minzoom <= zoom)
+      .map(layer => Number(layer.id.match(/-(\d)-open$/)[1]))
+      .sort();
+  for (const {level, minZoom} of rawConfig.levels) {
+    const levelsUpTo = rawConfig.levels.filter(rule => rule.level <= level).map(rule => rule.level);
+    assert.deepEqual(levelsDrawnAt(minZoom - 0.01), levelsUpTo.slice(0, -1));
+    assert.deepEqual(levelsDrawnAt(minZoom), levelsUpTo);
+    assert.deepEqual(levelsDrawnAt(minZoom + 0.01), levelsUpTo);
+  }
+});
+
 test('ordinary businesses never appear at country or region scale', () => {
   assert.ok(Math.min(...config.thresholds.values()) >= 12);
 });

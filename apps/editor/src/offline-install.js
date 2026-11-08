@@ -1,10 +1,12 @@
 import {elementById} from './dom.js';
+import {answerQuietRequests, whenEveryWindowIsQuiet} from './update-quiet.js';
 
 const readyMessage = 'Saved on this device. Works offline.';
 const updateRetryMilliseconds = 1000;
 const updateHintDelayMilliseconds = 10000;
 // Set once a new version has taken over a window that cannot reload yet. Its warning must then stay on screen.
 let isAwaitingReload = false;
+let isMapQuiet = () => true;
 
 function showOfflineStatus(message, isProblem = false) {
   if (isAwaitingReload) return;
@@ -19,16 +21,19 @@ function offerUpdate(worker, message = 'A new version is ready.') {
   showOfflineStatus(message);
   const button = elementById('update-app');
   button.hidden = false;
-  button.onclick = () => {
+  button.onclick = async () => {
     button.hidden = true;
     showOfflineStatus('Updating…');
+    await whenEveryWindowIsQuiet(isMapQuiet);
     askUntilTakeover(worker);
   };
 }
 
-// The browser can ignore one request while the current version is still busy, and then wait for every window to close. So
-// ask until the takeover reloads this page, and say how to finish if it never does.
+// A request can still lose the race described in update-quiet.js, for example to someone moving a map, and then the browser
+// waits for every window to close. So ask until the takeover reloads this page, and say how to finish if it never does.
 function askUntilTakeover(worker) {
+  // A newer version can replace this one during the wait for quiet windows, and it makes its own offer.
+  if (worker.state !== 'installed') return;
   const startedAt = Date.now();
   const ask = () => worker.postMessage({type: 'activate-update'});
   ask();
@@ -94,7 +99,7 @@ function reloadOnTakeover(canReloadNow) {
 }
 
 // Never stops the editor from opening: everything here only decides whether it also works offline.
-export async function startOfflineCopy(canReloadNow) {
+export async function startOfflineCopy(canReloadNow, isQuiet) {
   if (!('serviceWorker' in navigator) || !isSecureContext) {
     showOfflineStatus('Installing and offline use need HTTPS or localhost.', true);
     return;
@@ -104,6 +109,8 @@ export async function startOfflineCopy(canReloadNow) {
     const registration = await navigator.serviceWorker.register('sw.js', options);
     // Browser tests outside the offline suite block workers, and register then returns nothing.
     if (!registration) return;
+    isMapQuiet = isQuiet;
+    answerQuietRequests(isMapQuiet);
     reloadOnTakeover(canReloadNow);
     registration.addEventListener('updatefound', () => followInstall(registration.installing, registration));
     if (registration.installing) followInstall(registration.installing, registration);
