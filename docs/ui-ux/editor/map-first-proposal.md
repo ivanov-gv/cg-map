@@ -210,12 +210,19 @@ geometry changes alike. Merely hiding a panel must never trigger that decision o
 
 ## 6. Layer functionality
 
-The following permissions describe the current shared editing contract. The proposed presentation changes how these
-actions are reached, without granting additional kinds of edits. Every layer below has the same permissions, fields,
-validation and immediate map feedback on desktop and mobile. Its inspector changes position and size with the layout;
-its capabilities do not change with the input device.
+The interface takes every permission from [the shared layer rules](../../../packages/contracts/editor-layers.json) at
+run time, never from a fixed list per layer. Add belongs to the layer's Tools menu and Delete to a selected object, in
+any layer whose rules allow them; property fields come from the rules in the same way. So when the rules widen, a layer
+gains its actions without an interface redesign.
 
-| Layer            | Allowed edits                                           | Add / delete    |
+They will widen. Today a changeset can name an object only by its position in one snapshot, which is why most layers
+allow modifications only. [Entity IDs and data releases](../../plans/entity-ids-and-data-releases.md) gives every object
+a stable ID, after which adding and deleting buildings, labels, parks and water can be allowed. The table below is the
+current contract, not a design limit. Every layer has the same permissions, fields, validation and immediate map
+feedback on desktop and mobile. Its inspector changes position and size with the layout; its capabilities do not change
+with the input device.
+
+| Layer            | Allowed edits today                                     | Add / delete    |
 | ---------------- | ------------------------------------------------------- | --------------- |
 | POIs             | Details, visibility level and position                  | Both allowed    |
 | Buildings        | Existing footprint corners and whole-footprint position | Neither allowed |
@@ -256,7 +263,7 @@ selectable footprints and a stronger outline for the selected one; avoid coverin
 
 Offer Move whole footprint and Edit corners. As today, the corner tool can move, insert and remove a corner. Show vertex
 handles only for that tool. The inspector does not need an empty property form, because this layer permits geometry
-changes only. Do not offer adding, deleting or address edits.
+changes only. Address edits belong to Building labels. Add and Delete appear once the rules allow them.
 
 Applying a move or corner change updates the footprint immediately. Its address label remains a separate object and must
 not move automatically. If a correction leaves that label outside its footprint, identify the issue in Changes and
@@ -268,8 +275,9 @@ Keep house numbers visible as text, with subtle position guides when editing thi
 number, Street and Move label. Source properties remain in expandable details.
 
 Apply updates the displayed address and position immediately. It must not reshape or move the building. Creating or
-deleting labels, including adding an address to an unnumbered footprint, is outside this concept's editing permissions.
-Invalid house numbers or a broken footprint relationship need an actionable validation message.
+deleting labels, including adding an address to an unnumbered footprint, waits for the rules to allow it; the label then
+still stays a separate object from its footprint. Invalid house numbers or a broken footprint relationship need an
+actionable validation message.
 
 ### Roads & paths
 
@@ -289,7 +297,8 @@ Preserve the normal land colours and context. Editing guides should identify exi
 remains inspectable with a concise explanation of its restriction.
 
 For a park, offer Name, Move whole shape and Edit corners, with corner insert and remove. Apply updates its shape and
-name immediately. Do not offer adding or deleting parks, or editing country/context shapes through this layer.
+name immediately. Offer adding or deleting parks once the rules allow them. Country and context shapes stay outside this
+layer.
 
 ### Water
 
@@ -298,7 +307,7 @@ without tinting the entire water layer as one editing surface.
 
 For an existing water polygon or river, offer Name, Move whole shape and Edit points, with point insert and remove.
 Apply updates its geometry and label immediately. The ocean remains inspection-only because it is derived by the data
-workflow. Do not offer adding or deleting water features.
+workflow. Offer adding or deleting water features once the rules allow them.
 
 ### Country outlines
 
@@ -408,8 +417,8 @@ and which shortcuts deserve visible hints inside Tools. Exact breakpoints and pa
 review on small laptops, large monitors, tablets and phones; the measurements above are starting points.
 
 Review should settle the screen hierarchy, panel behaviour and layer-specific actions first. Exact icon shapes, colours,
-spacing and transitions can be refined later. This proposal does not expand the shared editing permissions or require
-changes to the publishing workflow.
+spacing and transitions can be refined later. This proposal does not itself expand the shared editing permissions or
+require changes to the publishing workflow; it is designed to follow them as entity IDs widen them.
 
 ## 10. What changes from the current editor
 
