@@ -14,12 +14,13 @@
   </head>
   <body>
     <nav class="workspace-toolbar" aria-label="Workspace">
-      <button type="button" data-panel="layers-panel" aria-expanded="false">Layers</button>
-      <button type="button" data-panel="tools-panel" aria-expanded="false">Tools</button>
-      <button type="button" data-panel="changes-panel" aria-expanded="false">Changes</button>
+      <button type="button" data-panel="layers-panel" disabled aria-controls="layers-panel" aria-expanded="false">Layers</button>
+      <button type="button" data-panel="tools-panel" disabled aria-controls="tools-panel" aria-expanded="false">Tools</button>
+      <button type="button" data-panel="changes-panel" disabled aria-controls="changes-panel" aria-expanded="false">Changes</button>
     </nav>
+    <button id="draft-notice" type="button" hidden>Saved draft needs attention</button>
     <button id="offline-notice" type="button" hidden>Offline status needs attention</button>
-    <button id="current-layer" type="button" aria-controls="layers-panel" aria-expanded="false">Browse</button>
+    <button id="current-layer" type="button" disabled aria-controls="layers-panel" aria-expanded="false">Browse</button>
     <aside class="dock" aria-label="Workspace panels">
       <section id="layers-panel" class="utility-panel" hidden>
       <h2>Layers</h2>

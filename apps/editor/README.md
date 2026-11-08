@@ -132,7 +132,7 @@ accepts no writes.
 
 ### Offline and updates
 
-The status under the title says when the copy is saved, and warns if the browser may clear it when storage runs low.
+The status in Layers says when the copy is saved. A notice on the map calls attention to storage warnings and updates.
 Every file is checked against the release manifest before it is stored. A failed or tampered download is reported and
 the current version keeps working. The map archive is stored apart, named by its content, so an update with the same map
 does not download it again. An update that changes the map needs room for both archives for a moment.

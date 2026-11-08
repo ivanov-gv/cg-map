@@ -44,7 +44,7 @@ function askUntilTakeover(worker) {
     }
     ask();
     if (Date.now() - startedAt > updateHintDelayMilliseconds) {
-      showOfflineStatus('The update is ready. Close every editor window and open it again to finish.');
+      showOfflineStatus('The update is ready. Close every editor window and open it again to finish.', true);
     }
   }, updateRetryMilliseconds);
 }
@@ -76,7 +76,7 @@ function followInstall(worker, registration) {
 async function showReady() {
   showOfflineStatus(readyMessage);
   const isPersistent = await navigator.storage?.persist?.().catch(() => false);
-  if (isPersistent === false) showOfflineStatus(`${readyMessage} The browser may clear it if storage runs low.`);
+  if (isPersistent === false) showOfflineStatus(`${readyMessage} The browser may clear it if storage runs low.`, true);
 }
 
 // A new version takes over every window, whichever one asked. Each must reload, because old code against new files can

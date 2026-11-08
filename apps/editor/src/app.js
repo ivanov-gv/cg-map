@@ -277,7 +277,7 @@ function startNewFeature() {
 }
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
-function setMode(filename) {
+function setMode(filename, isInitial = false) {
   // A geometry preview is dropped by a mode switch, but typed details must be applied or discarded explicitly.
   if (editing.hasTypedDetails) {
     showInspector();
@@ -289,7 +289,10 @@ function setMode(filename) {
   if (preview.isShown) hidePreview();
   activeFile = activeFile === filename ? null : filename;
   elementById('current-layer').textContent = activeFile ? layerNames[activeFile] : 'Browse';
-  showPanel(null);
+  if (!isInitial) {
+    showPanel(null);
+    elementById('current-layer').focus();
+  }
   maskPublishedLayer(activeFile);
   refreshOverlay();
   clearSelection();
@@ -515,6 +518,15 @@ function showInspector() {
 }
 
 function installWorkspaceControls() {
+  const compactPanelSpace = matchMedia('(max-width: 1650px)');
+  compactPanelSpace.addEventListener('change', event => {
+    const hasOpenPanel = [...document.querySelectorAll('.utility-panel')].some(panel => !panel.hidden);
+    const inspector = document.querySelector('.inspector');
+    if (event.matches && hasOpenPanel && !inspector.hidden) {
+      inspector.hidden = true;
+      elementById('open-inspector').hidden = false;
+    }
+  });
   const status = elementById('status');
   const updateStatusVisibility = () => {
     const needsAttention = status.textContent.startsWith('Loading') || status.textContent === applyOrCancelMessage;
@@ -533,20 +545,33 @@ function installWorkspaceControls() {
   offlineObserver.observe(updateButton, {attributes: true, attributeFilter: ['hidden']});
   elementById('offline-notice').onclick = () => showPanel('layers-panel');
   updateOfflineNotice();
+  const draftConflict = elementById('draft-conflict');
+  const updateDraftNotice = () => {
+    elementById('draft-notice').hidden = draftConflict.hidden;
+  };
+  new MutationObserver(updateDraftNotice).observe(draftConflict, {attributes: true, attributeFilter: ['hidden']});
+  elementById('draft-notice').onclick = () => showPanel('changes-panel');
+  updateDraftNotice();
   for (const button of document.querySelectorAll('[data-panel]')) {
+    button.disabled = false;
     button.onclick = () => {
       const panelId = button.dataset.panel;
       showPanel(elementById(panelId).hidden ? panelId : null);
     };
   }
+  elementById('current-layer').disabled = false;
   elementById('current-layer').onclick = () => {
     showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null);
   };
   elementById('close-inspector').onclick = () => {
     document.querySelector('.inspector').hidden = true;
     elementById('open-inspector').hidden = false;
+    elementById('open-inspector').focus();
   };
-  elementById('open-inspector').onclick = showInspector;
+  elementById('open-inspector').onclick = () => {
+    showInspector();
+    elementById('close-inspector').focus();
+  };
 }
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.
@@ -574,6 +599,12 @@ async function start() {
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
   await whenMapReady(map);
+  // MapLibre opens its compact attribution on startup; keep it available without covering the map at rest.
+  const attribution = document.querySelector('.maplibregl-ctrl-attrib');
+  if (attribution instanceof HTMLDetailsElement) {
+    attribution.open = false;
+    attribution.classList.remove('maplibregl-compact-show');
+  }
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
@@ -590,7 +621,7 @@ async function start() {
   elementById('satellite').onclick = toggleSatellite;
   elementById('preview').disabled = false;
   elementById('preview').onclick = togglePreview;
-  setMode(null);
+  setMode(null, true);
 }
 
 start().catch(showError);

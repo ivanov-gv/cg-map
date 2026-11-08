@@ -276,6 +276,7 @@ main {
 .utility-panel,
 .inspector,
 #open-inspector,
+#draft-notice,
 #offline-notice {
   position: absolute;
   z-index: 2;
@@ -377,6 +378,20 @@ main {
 @media (max-width: 720px) {
   #offline-notice {
     top: 12px;
+    max-width: 55vw;
+  }
+}
+
+#draft-notice {
+  top: 112px;
+  left: 12px;
+  max-width: 240px;
+  z-index: 2;
+  background: #fff7e6;
+}
+@media (max-width: 720px) {
+  #draft-notice {
+    top: 60px;
     max-width: 55vw;
   }
 }

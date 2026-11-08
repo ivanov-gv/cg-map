@@ -1,6 +1,24 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
 
+// Panel navigation keeps the same editing and review assertions usable at either viewport size.
+async function openPanel(page, name) {
+  const button = page.getByRole('button', {name, exact: true});
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+}
+
+async function uncoverMap(page) {
+  const expandedButton = page.locator('[data-panel][aria-expanded="true"]');
+  if (await expandedButton.count()) await expandedButton.click();
+  const closeInspector = page.locator('#close-inspector');
+  if (await closeInspector.isVisible()) await closeInspector.click();
+}
+
+async function openInspector(page) {
+  const button = page.locator('#open-inspector');
+  if (await button.isVisible()) await button.click();
+}
+
 // Every test edits through the real map and inspector, and asserts on what an export would contain.
 test.describe('source editing', () => {
   const placesFile = 'places.geojson';
@@ -20,6 +38,7 @@ test.describe('source editing', () => {
   };
 
   const chooseMode = async (page, filename) => {
+    await openPanel(page, 'Layers');
     await page.locator(`[data-mode="${filename}"]`).click();
     await expect(page.locator('#status')).toContainText(`${filename} ·`);
     await expect(page.locator('#status')).toContainText('source features');
@@ -60,6 +79,7 @@ test.describe('source editing', () => {
 
   // Measures after scrolling, because the inspector and dock can push the map off screen on the stacked phone layout.
   const tapMapAt = async (page, coordinate) => {
+    await uncoverMap(page);
     await page.locator('#map').scrollIntoViewIfNeeded();
     const {x, y} = await screenPoint(page, coordinate);
     await page.mouse.click(x, y);
@@ -78,6 +98,7 @@ test.describe('source editing', () => {
 
   // Presses anywhere on the map and drags by this many pixels with the left button.
   const dragMap = async (page, fromCoordinate, xPixels, yPixels) => {
+    await uncoverMap(page);
     await page.locator('#map').scrollIntoViewIfNeeded();
     const start = await screenPoint(page, fromCoordinate);
     await page.mouse.move(start.x, start.y);
@@ -106,15 +127,19 @@ test.describe('source editing', () => {
   };
 
   const applyAndWait = async page => {
+    await openInspector(page);
     await page.locator('#apply-edit').click();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
     await expect(page.locator('#status')).toContainText('source features');
   };
 
   const exportChangeset = async (page, testInfo) => {
+    await openPanel(page, 'Changes');
     await page.locator('#changeset-author').fill('Browser Test');
+    await openPanel(page, 'Changes');
     await page.locator('#changeset-reason').fill('Acceptance test');
     const downloadPromise = page.waitForEvent('download');
+    await openPanel(page, 'Changes');
     await page.locator('#export-changeset').click();
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
@@ -127,7 +152,9 @@ test.describe('source editing', () => {
   }, testInfo) => {
     await openEditor(page);
     const {index, feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
+    await openInspector(page);
     await page.locator('[name="visibilityLevel"]').selectOption('2');
     await applyAndWait(page);
     await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
@@ -142,19 +169,54 @@ test.describe('source editing', () => {
     expect(operation.after.geometry).toEqual(feature.geometry);
 
     page.once('dialog', dialog => dialog.accept());
+    await openPanel(page, 'Changes');
     await page.locator('#discard-changes').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
+    await openPanel(page, 'Changes');
     await page.locator('#import-changeset').setInputFiles(savedPath);
     await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
     await expect(page.locator('#review-message')).toContainText('Imported 1 changes');
   });
 
+  test('resizing preserves the selected layer, unfinished edit and saved draft', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    const view = await page.evaluate(() => ({
+      center: window.editorDebug.map.getCenter().toArray(),
+      zoom: window.editorDebug.map.getZoom()
+    }));
+    await page.setViewportSize({width: 360, height: 740});
+    await page.locator('#close-inspector').click();
+    await page.getByRole('button', {name: 'Tools', exact: true}).click();
+    await page.locator('#open-inspector').click();
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await expect(page.locator('#current-layer')).toHaveText('POIs');
+    expect(await page.evaluate(() => ({
+      center: window.editorDebug.map.getCenter().toArray(),
+      zoom: window.editorDebug.map.getZoom()
+    }))).toEqual(view);
+    await openInspector(page);
+    await page.locator('#apply-edit').click();
+    await page.reload();
+    await expect(page.locator('#review-message')).toHaveText('Restored your saved draft.');
+    await page.getByRole('button', {name: 'Changes', exact: true}).click();
+    await openPanel(page, 'Changes');
+    await expect(page.locator('[data-changed-file="places.geojson"]')).toBeVisible();
+  });
+
   test('invalid details are refused and record nothing', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill('');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('name must be nonempty');
+    await page.getByRole('button', {name: 'Changes', exact: true}).click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await expect(page.locator('#undo')).toBeDisabled();
   });
@@ -171,14 +233,18 @@ test.describe('source editing', () => {
       ]
     };
     fileSystem.writeFileSync(refusedPath, JSON.stringify(changeset));
+    await page.getByRole('button', {name: 'Changes', exact: true}).click();
+    await openPanel(page, 'Changes');
     await page.locator('#import-changeset').setInputFiles(refusedPath);
     await expect(page.locator('#review-message')).toContainText('differs from this snapshot');
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
   test('undo and redo stay within the active file, and an open edit blocks them', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await expect(page.locator('#undo')).toBeEnabled();
@@ -188,17 +254,23 @@ test.describe('source editing', () => {
     await chooseMode(page, placesFile);
     await expect(page.locator('#undo')).toBeEnabled();
 
+    await openPanel(page, 'Tools');
     await page.locator('#undo').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await expect(page.locator('#redo')).toBeEnabled();
+    await openPanel(page, 'Tools');
     await page.locator('#redo').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
     await expect(page.locator('#status')).toContainText('source features');
 
     const features = await fetchFeatures(page, placesFile);
     await tapMapAt(page, features[isolatedPlaceIndex(features)].geometry.coordinates);
+    await openInspector(page);
     await page.locator('[name="name"]').fill('Still being typed');
     await expect(page.locator('#undo')).toBeDisabled();
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
     await expect(page.locator('#undo')).toBeEnabled();
   });
@@ -206,15 +278,20 @@ test.describe('source editing', () => {
   test('typed details survive a mode switch until they are applied or discarded explicitly', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Layers');
     await page.locator(`[data-mode="${roadsFile}"]`).click();
     await expect(page.locator('#edit-problem')).toHaveText('Apply or Cancel the current edit first.');
     await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await openPanel(page, 'Layers');
     await page.locator('#browse').click();
     await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
     await chooseMode(page, roadsFile);
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
@@ -222,12 +299,16 @@ test.describe('source editing', () => {
     await openEditor(page);
     await selectPlace(page);
     await expect(page.locator('#add-feature')).toBeEnabled();
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await expect(page.locator('#add-feature')).toBeDisabled();
     await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
     await expect(page.locator('#add-feature')).toBeDisabled();
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
     await expect(page.locator('#add-feature')).toBeEnabled();
   });
@@ -240,9 +321,11 @@ test.describe('source editing', () => {
     });
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await expect(page.locator('#error')).toContainText('Draft not saved: quota exceeded');
+    await openPanel(page, 'Changes');
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
   });
 
@@ -262,19 +345,23 @@ test.describe('source editing', () => {
     await expect(page.locator('#error')).toContainText('new changes will not be saved');
     await expect(page.locator('#draft-conflict')).toContainText('could not be set aside');
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     expect(await page.evaluate(() => localStorage.getItem('kompas-editor-draft-v1'))).toBe('{broken');
 
     const downloadPromise = page.waitForEvent('download');
+    await openPanel(page, 'Changes');
     await page.locator('#draft-download').click();
     await downloadPromise;
     page.once('dialog', dialog => dialog.dismiss());
+    await openPanel(page, 'Changes');
     await page.locator('#draft-discard').click();
     await expect(page.locator('#draft-conflict')).toBeVisible();
     page.once('dialog', dialog => dialog.accept());
+    await openPanel(page, 'Changes');
     await page.locator('#draft-discard').click();
-    await expect(page.locator('#draft-conflict')).toBeHidden();
+    await expect(page.locator('#draft-conflict')).toHaveAttribute('hidden', '');
     // Saved by the discard itself: nothing else has happened since the edit was applied.
     expect(await page.evaluate(() => localStorage.getItem('kompas-editor-draft-v1'))).toContain(editedName);
     await expect(page.locator('#error')).toBeHidden();
@@ -295,19 +382,23 @@ test.describe('source editing', () => {
     });
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await expect(page.locator('#error')).toContainText('Draft not saved');
 
     page.once('dialog', dialog => dialog.accept());
+    await openPanel(page, 'Changes');
     await page.locator('#draft-discard').click();
     await expect(page.locator('#error')).toContainText('Draft not saved');
 
     await page.evaluate(() => {
       window.isStorageFull = false;
     });
+    await openPanel(page, 'Tools');
     await page.locator('#undo').click();
     await expect(page.locator('#error')).toBeHidden();
+    await openPanel(page, 'Tools');
     await page.locator('#redo').click();
     await expect.poll(() => page.evaluate(() => localStorage.getItem('kompas-editor-draft-v1'))).toContain(editedName);
   });
@@ -315,6 +406,7 @@ test.describe('source editing', () => {
   test('losing the window in the middle of a drag restores the preview', async ({page}) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await page.locator('#map').scrollIntoViewIfNeeded();
     const start = await screenPoint(page, feature.geometry.coordinates);
@@ -325,7 +417,9 @@ test.describe('source editing', () => {
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     await page.mouse.move(start.x + 80, start.y, {steps: 2});
     await page.mouse.up();
+    await openInspector(page);
     await page.locator('#apply-edit').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await expect(page.locator('#undo')).toBeDisabled();
   });
@@ -334,6 +428,7 @@ test.describe('source editing', () => {
     test.skip(!hasTouch, 'Touch input exists only in the phone project.');
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await page.locator('#map').scrollIntoViewIfNeeded();
     const start = await screenPoint(page, feature.geometry.coordinates);
@@ -345,29 +440,35 @@ test.describe('source editing', () => {
     await touch('touchMove', [firstFinger(30)]);
     await touch('touchStart', [firstFinger(30), secondFinger]);
     await touch('touchEnd', []);
+    await openInspector(page);
     await page.locator('#apply-edit').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
   test('a moving preview is dropped by a mode switch, and records nothing', async ({page}) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await dragMap(page, feature.geometry.coordinates, 70, 0);
     await chooseMode(page, roadsFile);
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
   test('an open edit blocks export, import and discarding until it is applied or cancelled', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await expect(page.locator('#export-changeset')).toBeEnabled();
     await expect(page.locator('#discard-changes')).toBeEnabled();
     const features = await fetchFeatures(page, placesFile);
     await tapMapAt(page, features[isolatedPlaceIndex(features)].geometry.coordinates);
+    await openInspector(page);
     await page.locator('[name="name"]').fill('Second thoughts');
     await expect(page.locator('#export-changeset')).toBeDisabled();
     await expect(page.locator('#discard-changes')).toBeDisabled();
@@ -382,23 +483,28 @@ test.describe('source editing', () => {
   }) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
+    await openPanel(page, 'Layers');
     await page.locator('#browse').click();
     await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
     await tapMapAt(page, feature.geometry.coordinates);
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
     await expect(page.locator('#undo')).toBeDisabled();
-    await expect(page.locator('#add-feature')).toBeHidden();
+    await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
     await expect(page.locator('#export-changeset')).toBeEnabled();
+    await openPanel(page, 'Changes');
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
   });
 
   test('applying an unchanged form records nothing', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('#apply-edit').click();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await expect(page.locator('#undo')).toBeDisabled();
   });
@@ -410,9 +516,12 @@ test.describe('source editing', () => {
     await centerMapOn(page, labels[0].geometry.coordinates, 18);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, labels[0].geometry.coordinates);
+    await openInspector(page);
     await page.locator('[name="addr:housenumber"]').fill('n/a');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('placeholder');
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
 
     const places = await fetchFeatures(page, placesFile);
@@ -423,7 +532,9 @@ test.describe('source editing', () => {
     await centerMapOn(page, places[nonLandmark].geometry.coordinates);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, places[nonLandmark].geometry.coordinates);
+    await openInspector(page);
     await page.locator('[name="visibilityLevel"]').selectOption('1');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('reserved for sights landmarks');
   });
@@ -431,24 +542,28 @@ test.describe('source editing', () => {
   test('a typed edit is not lost to a stray tap, and Cancel and Escape discard it', async ({page}) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     const emptyCoordinate = await coordinateOffsetBy(page, feature.geometry.coordinates, 60, 60);
     await tapMapAt(page, emptyCoordinate);
     await expect(page.locator('#status')).toHaveText('Apply or Cancel the current edit first.');
     await expect(page.locator('[name="name"]')).toHaveValue(editedName);
     await page.keyboard.press('Escape');
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
   test('a draft survives a reload', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await page.reload();
     await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
     await expect(page.locator('#review-message')).toHaveText('Restored your saved draft.');
+    await openPanel(page, 'Changes');
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
     await chooseMode(page, placesFile);
     await expect(page.locator('#undo')).toBeEnabled();
@@ -462,9 +577,11 @@ test.describe('source editing', () => {
     }, placesFile);
     await page.reload();
     await expect(page.locator('#draft-conflict')).toContainText(placesFile);
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
 
     await selectPlace(page);
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await applyAndWait(page);
     await page.reload();
@@ -472,14 +589,17 @@ test.describe('source editing', () => {
     await expect(page.locator('#review-message')).toHaveText('Restored your saved draft.');
 
     const downloadPromise = page.waitForEvent('download');
+    await openPanel(page, 'Changes');
     await page.locator('#draft-download').click();
     await downloadPromise;
     page.once('dialog', dialog => dialog.accept());
+    await openPanel(page, 'Changes');
     await page.locator('#draft-discard').click();
-    await expect(page.locator('#draft-conflict')).toBeHidden();
+    await expect(page.locator('#draft-conflict')).toHaveAttribute('hidden', '');
     await page.reload();
     await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
-    await expect(page.locator('#draft-conflict')).toBeHidden();
+    await expect(page.locator('#draft-conflict')).toHaveAttribute('hidden', '');
+    await openPanel(page, 'Changes');
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
   });
 
@@ -498,6 +618,7 @@ test.describe('source editing', () => {
     const origin = feature.geometry.coordinates;
     const expected = await coordinateOffsetBy(page, origin, 90, 0);
     const pressPoint = await coordinateOffsetBy(page, origin, -60, 50);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await dragMap(page, pressPoint, 70, 0);
     await dragMap(page, pressPoint, 20, 0);
@@ -523,6 +644,7 @@ test.describe('source editing', () => {
     page.on('pageerror', error => scriptErrors.push(error.message));
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await page.locator('#map').scrollIntoViewIfNeeded();
     const start = await screenPoint(page, feature.geometry.coordinates);
@@ -532,7 +654,8 @@ test.describe('source editing', () => {
     await page.keyboard.press('Escape');
     await page.mouse.move(start.x + 60, start.y, {steps: 2});
     await page.mouse.up();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     expect(scriptErrors).toEqual([]);
   });
@@ -546,7 +669,9 @@ test.describe('source editing', () => {
     const {feature} = await selectPlace(page);
     const expected = await coordinateOffsetBy(page, feature.geometry.coordinates, 60, 0);
     const pressPoint = await coordinateOffsetBy(page, feature.geometry.coordinates, -40, 40);
+    await openInspector(page);
     await page.locator('#tool-move').click();
+    await uncoverMap(page);
     await page.locator('#map').scrollIntoViewIfNeeded();
     const start = await screenPoint(page, pressPoint);
     const browser = await page.context().newCDPSession(page);
@@ -562,6 +687,7 @@ test.describe('source editing', () => {
     };
     await swipe('touchEnd', 60);
     await swipe('touchCancel', 120);
+    await openInspector(page);
     await expect(page.locator('#apply-edit')).toBeVisible();
     await applyAndWait(page);
     const {changeset} = await exportChangeset(page, testInfo);
@@ -571,26 +697,38 @@ test.describe('source editing', () => {
   test('a new POI gets a local identity, and deleting a source POI can be undone', async ({page}, testInfo) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
+    await openInspector(page);
     await page.locator('#delete-feature').click();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
     await expect(page.locator(`[data-changed-file="${placesFile}"] summary`)).toContainText('delete');
+    await openPanel(page, 'Tools');
     await page.locator('#undo').click();
+    await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await expect(page.locator('#status')).toContainText('source features');
 
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
     await expect(page.locator('#add-feature')).toHaveText('Add POI');
+    await openInspector(page);
     await page.locator('[name="name"]').fill('');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('Tap the map');
     await tapMapAt(page, await coordinateOffsetBy(page, feature.geometry.coordinates, 70, 40));
+    await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
+    await openInspector(page);
     await page.locator('[name="kind"]').fill('cafe');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('category is required');
+    await openInspector(page);
     await page.locator('[name="category"]').selectOption('food');
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('visibilityLevel is required');
+    await openInspector(page);
     await page.locator('[name="visibilityLevel"]').selectOption('4');
     await applyAndWait(page);
 
@@ -612,9 +750,12 @@ test.describe('source editing', () => {
     await centerMapOn(page, center, 18);
     await expect(page.locator('#status')).toContainText('source features');
     await expect(page.locator('#add-feature')).toHaveText('Draw road');
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
+    await openInspector(page);
     await page.locator('[name="kind"]').selectOption('footway');
     await tapMapAt(page, center);
+    await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('at least two points');
     await tapMapAt(page, await coordinateOffsetBy(page, center, 60, 30));
@@ -644,18 +785,22 @@ test.describe('source editing', () => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
     // The public map labels a place with its English name when it has one.
+    await openInspector(page);
     await page.locator('[name="name:en"]').fill(editedName);
     await applyAndWait(page);
     await chooseMode(page, roadsFile);
     const center = [19.2594, 42.4411];
     await centerMapOn(page, center, 18);
     await expect(page.locator('#status')).toContainText('source features');
+    await openPanel(page, 'Tools');
     await page.locator('#add-feature').click();
+    await openInspector(page);
     await page.locator('[name="kind"]').selectOption('footway');
     await tapMapAt(page, center);
     await tapMapAt(page, await coordinateOffsetBy(page, center, 60, 30));
     await applyAndWait(page);
 
+    await openPanel(page, 'Tools');
     await page.locator('#preview').click();
     await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#status')).toHaveText('Preview · edits in 2 files applied');
@@ -673,11 +818,13 @@ test.describe('source editing', () => {
     await expect.poll(previewedPlaceName).toBe(editedName);
     await centerMapOn(page, center, 18);
 
+    await openPanel(page, 'Tools');
     await page.locator('#preview').click();
     await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
     await expect.poll(() => renderedCount('footways', center)).toBeGreaterThan(0);
     expect(await page.evaluate(() => Boolean(window.editorDebug.map.getLayer('edit-preview-footways')))).toBe(false);
 
+    await openPanel(page, 'Tools');
     await page.locator('#preview').click();
     await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
     await chooseMode(page, roadsFile);
@@ -710,6 +857,7 @@ test.describe('source editing', () => {
     await openEditor(page);
     const {label, labelIndex, footprint, footprintIndex} = await selectNumberedBuilding(page);
     const dragPixels = 150;
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await expect(page.locator('#tool-move')).toHaveText('Move whole shape');
     await dragMap(page, label.geometry.coordinates, dragPixels, 0);
@@ -722,6 +870,7 @@ test.describe('source editing', () => {
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, label.geometry.coordinates);
     await expect(page.locator('#selection-source')).toHaveText(`${labelsFile} · feature ${labelIndex}`);
+    await openInspector(page);
     await page.locator('#tool-move').click();
     await dragMap(page, label.geometry.coordinates, dragPixels, 0);
     await applyAndWait(page);
@@ -741,11 +890,14 @@ test.describe('source editing', () => {
     await openEditor(page);
     const {footprint} = await selectNumberedBuilding(page);
     const corner = footprint.geometry.coordinates[0][0];
+    await openInspector(page);
     await page.locator('#tool-vertices').click();
     await expect(page.locator('#vertex-insert')).toBeVisible();
+    await openInspector(page);
     await page.locator('#vertex-insert').click();
     await expect(page.locator('#edit-problem')).toHaveText('Select a corner or point first.');
     await tapMapAt(page, corner);
+    await openInspector(page);
     await page.locator('#vertex-insert').click();
     await applyAndWait(page);
     const {changeset} = await exportChangeset(page, testInfo);
@@ -775,7 +927,9 @@ test.describe('source editing', () => {
     );
     const dragPixels = 12;
     const mapCenterBefore = await page.evaluate(() => window.editorDebug.map.getCenter().toArray());
+    await openInspector(page);
     await page.locator('#tool-vertices').click();
+    await uncoverMap(page);
     await page.locator('#map').scrollIntoViewIfNeeded();
     await expect
       .poll(() =>
@@ -818,7 +972,8 @@ test.describe('source editing', () => {
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, parkPoint);
     await expect(page.locator('#editor')).toBeVisible();
-    await expect(page.locator('#lock-reason')).toBeHidden();
+    await expect(page.locator('#lock-reason')).toHaveAttribute('hidden', '');
+    await openInspector(page);
     await page.locator('#cancel-edit').click();
     const country = land.find(({properties}) => properties.kind === 'context');
     const countryPoint = country.geometry.coordinates[0][0];
@@ -826,7 +981,7 @@ test.describe('source editing', () => {
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, countryPoint);
     await expect(page.locator('#lock-reason')).toContainText('Country shapes');
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
 
   test('read-only files explain themselves and offer no editing', async ({page}) => {
@@ -834,7 +989,7 @@ test.describe('source editing', () => {
     await chooseMode(page, 'transport-stops.geojson');
     await expect(page.locator('#status')).toContainText('read-only');
     await expect(page.locator('#lock-reason')).toContainText('transit import');
-    await expect(page.locator('#add-feature')).toBeHidden();
-    await expect(page.locator('#editor')).toBeHidden();
+    await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
 });
