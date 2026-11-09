@@ -2,12 +2,15 @@ import {readFileSync} from 'node:fs';
 
 const schema = JSON.parse(readFileSync(new URL('../../packages/contracts/entity-identity.schema.json', import.meta.url)));
 const collectionSchema = JSON.parse(readFileSync(new URL('../../packages/contracts/source-entities.schema.json', import.meta.url)));
-const identifierPatterns = schema.$defs.entityId.oneOf.map(rule => new RegExp(rule.pattern));
-const osmIdentifierPattern = new RegExp(schema.$defs.entityId.oneOf[0].pattern);
+const identifierPatterns = schema.$defs.entityId.oneOf.map(rule => {
+  const definition = rule.$ref ? schema.$defs[rule.$ref.split('/').at(-1)] : rule;
+  return new RegExp(definition.pattern);
+});
+const osmIdentifierPattern = new RegExp(schema.$defs.osmEntityId.pattern);
 const contentVersionPattern = new RegExp(schema.$defs.contentVersion.pattern);
 const identityFields = Object.keys(schema.properties);
 
-// JSON Schema patterns may match before a final newline; source identifiers must match the entire string.
+// Require the entire string across regular expression engines, including before a trailing newline.
 function matchesEntireString(pattern, value) {
   return typeof value === 'string' && pattern.exec(value)?.[0] === value;
 }

@@ -109,10 +109,14 @@ IDs are strings, including OSM numbers beyond JavaScript's safe integer range. U
 variant form, versions 1–8; no nil UUIDs. Codes and stop IDs use ASCII letters, digits, underscores and hyphens; derived
 names start with a lowercase letter and use lowercase letters, digits, underscores and hyphens. A version is either a
 positive safe integer for OSM, or `sha256:` followed by 64 lowercase hexadecimal digits. Non-OSM objects cannot claim an
-OSM version. A content version identifies the base source feature: SHA-256 of its UTF-8 `JSON.stringify` representation
-with `entityId`, `entityVersion` and `entityPart` removed from properties. Key and coordinate order are significant, as
-in existing editor fingerprints. Assignment belongs to #66; validation checks the format, not the truth of an upstream
-version or the availability of those base bytes. Edits retain the base source version; it is not a correction counter.
+OSM version. A content version is an opaque base-revision token, encoded as `sha256:` and a lowercase digest. Its
+assignment belongs to #66. Validation checks its form, not its derivation or the availability of the original base
+bytes. Split parts share a token and editor edits retain the base token, so consumers must not try to recompute it from
+a current feature.
+
+Adopting a file whose editor rules allow `add` depends on #66: today version-1 additions cannot carry entity metadata,
+and the importer rejects an added feature in an adopted collection. That migration must assign a `local:<uuid>` identity
+and a base version when applying an addition before such files can be adopted.
 
 An entity split or clipped into multiple features keeps its ID and version on each part and adds a nonnegative safe
 integer `entityPart`, starting at zero. Within a file an ID occurs once without a part, or has distinct part numbers on

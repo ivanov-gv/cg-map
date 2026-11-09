@@ -33,21 +33,25 @@
       "type": "string",
       "oneOf": [
         {
-          "pattern": "^(node|way|relation)/[1-9][0-9]*$(?![\\s\\S])"
+          "$ref": "#/$defs/osmEntityId"
         },
         {
-          "pattern": "^ne:[A-Za-z0-9_-]+$(?![\\s\\S])"
+          "pattern": "^ne:[A-Za-z0-9_-]+$"
         },
         {
-          "pattern": "^epodgorica:[A-Za-z0-9_-]+$(?![\\s\\S])"
+          "pattern": "^epodgorica:[A-Za-z0-9_-]+$"
         },
         {
-          "pattern": "^derived:[a-z][a-z0-9_-]*$(?![\\s\\S])"
+          "pattern": "^derived:[a-z][a-z0-9_-]*$"
         },
         {
-          "pattern": "^(local|cg-map-id):[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])"
+          "pattern": "^(local|cg-map-id):[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
         }
-      ]
+      ],
+      "not": {
+        "pattern": "[\\r\\n]"
+      },
+      "description": "Identifiers exclude line breaks so end anchors behave consistently across regular expression engines."
     },
     "osmVersion": {
       "type": "integer",
@@ -56,7 +60,11 @@
     },
     "contentVersion": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "maxLength": 71
+    },
+    "osmEntityId": {
+      "pattern": "^(node|way|relation)/[1-9][0-9]*$"
     }
   },
   "allOf": [

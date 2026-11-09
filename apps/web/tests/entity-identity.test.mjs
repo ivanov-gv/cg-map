@@ -14,13 +14,10 @@ for (const {name, properties} of fixture.valid) {
     Object.assign(source.properties, properties);
     const before = structuredClone(source);
     const [place] = normalizePlaces([source], levels);
-    const placesById = new Map([[place.properties.id, place]]);
     assert.deepEqual(place, before);
     assert.deepEqual(source, before);
-    assert.equal(placesById.get('node/1'), place);
-    assert.equal(markerKeys([place]).get('node/1'), 'node/1');
+    assert.equal(markerKeys([place]).get(before.properties.id), before.properties.id);
     assert.equal(matchesPlaceSearch(place, 'cafe', 'food'), true);
     assert.equal(selectNearestPlaces([place], [19.25, 42.44])[0].feature, place);
-    assert.deepEqual(place.properties, before.properties);
   });
 }

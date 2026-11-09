@@ -26,8 +26,9 @@ on each numbered part; independent layer representations may share a source iden
 ## Consequences
 
 This PR can establish and test the contract without rewriting sources, inventing OSM claims, or rebuilding geography.
-The migrations must explicitly opt in each file and assign its identities and base versions. Existing place IDs, stop
-IDs, footprint joins and version-1 changesets continue to use their current formats until their own migrations.
+The migrations must explicitly opt in each file and assign its identities and base versions. Files permitting additions
+need #66 to assign identity and a version during import before adoption. Existing place IDs, stop IDs, footprint joins
+and version-1 changesets continue to use their current formats until their own migrations.
 
 Source identity and its base version are not a record of corrections. The correction ledger remains authoritative, as
 [decision 0008](0008-no-correction-origin-on-features.md) requires. Public property stripping remains separate work.
