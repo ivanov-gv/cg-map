@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/entity-identity/v1",
+  "title": "Source entity identity v1",
+  "description": "Source identity in Feature.properties, independent of display IDs and legacy snapshot indices.",
+  "type": "object",
+  "required": [
+    "entityId",
+    "entityVersion"
+  ],
+  "properties": {
+    "entityId": {
+      "$ref": "#/$defs/entityId"
+    },
+    "entityVersion": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/osmVersion"
+        },
+        {
+          "$ref": "#/$defs/contentVersion"
+        }
+      ]
+    },
+    "entityPart": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/osmEntityId"
+        },
+        {
+          "pattern": "^ne:[A-Za-z0-9_-]+$"
+        },
+        {
+          "pattern": "^epodgorica:[A-Za-z0-9_-]+$"
+        },
+        {
+          "pattern": "^derived:[a-z][a-z0-9_-]*$"
+        },
+        {
+          "pattern": "^(local|cg-map-id):[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      ],
+      "not": {
+        "pattern": "[\\r\\n]"
+      },
+      "description": "Identifiers exclude line breaks so end anchors behave consistently across regular expression engines."
+    },
+    "osmVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "contentVersion": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "maxLength": 71
+    },
+    "osmEntityId": {
+      "pattern": "^(node|way|relation)/[1-9][0-9]*$",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "entityId": {
+            "pattern": "^(node|way|relation)/",
+            "type": "string"
+          }
+        }
+      },
+      "then": {},
+      "else": {
+        "properties": {
+          "entityVersion": {
+            "$ref": "#/$defs/contentVersion"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {entranceBearing} from './building-entrances.mjs';
+import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const contract=JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/places.schema.json')));
@@ -33,6 +34,7 @@ function geometry(g, label) {
 }
 export function validateCollection(data, {places = false, label = 'GeoJSON', geometryTypes, requireKind = false} = {}) {
   requireValue(data?.type === 'FeatureCollection' && Array.isArray(data.features), `${label}: expected FeatureCollection`);
+  validateSourceEntities(data, {label});
   const ids = new Set();
   for (const [i, f] of data.features.entries()) {
     const name = `${label} feature ${i}`;
@@ -194,7 +196,9 @@ export function checkData(root = rootDirectory) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
   const labelProvenance=JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-labels.provenance.json')));
-  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),JSON.parse(buildingBytes));
+  const buildings = JSON.parse(buildingBytes);
+  validateSourceEntities(buildings, {label: 'buildings.geojson'});
+  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),buildings);
   requireValue(labelCount===labelProvenance.features && labelBytes.length===labelProvenance.bytes && crypto.createHash('sha256').update(labelBytes).digest('hex')===labelProvenance.sha256 && crypto.createHash('sha256').update(buildingBytes).digest('hex')===labelProvenance.buildings_sha256, 'Building label provenance mismatch');
 
   const transitBytes = fs.readFileSync(path.join(root, 'data/sources/transit-network.json'));
