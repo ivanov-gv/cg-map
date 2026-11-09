@@ -50,8 +50,9 @@ line point. Dragging a whole shape or a vertex pans nothing; with nothing to mov
 
 Cancel discards the open edit. Escape interrupts an active drag, restoring its start while keeping earlier adjustments;
 otherwise it collapses the foremost panel and returns focus to its opener. Apply is a keyboard-accessible button; Enter
-in a property field also applies the form. A mode switch drops a geometry preview, but typed details block it until they
-are applied or cancelled. Any unapplied edit blocks undo, redo, adding a feature, export, import and discarding.
+in a property field also applies the form. Apply, Cancel and Delete return keyboard focus to the status message. A mode
+switch drops a geometry preview, but typed details block it until they are applied or cancelled. Any unapplied edit
+blocks undo, redo, adding a feature, export, import and discarding.
 
 A footprint and its label never rewrite each other. If an edit leaves a label outside its footprint, the review panel
 names it and export stays disabled until it is corrected in its own mode.

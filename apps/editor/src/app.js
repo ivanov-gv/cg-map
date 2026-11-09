@@ -604,10 +604,8 @@ function installInspectorToggle() {
       event.preventDefault();
       const opener = panelOpener;
       showPanel(null);
-      const fallback = document.querySelector(`[data-panel="${openPanel.id}"]`);
-      const isVisible = opener?.checkVisibility?.() ?? Boolean(opener?.getClientRects().length);
-      if (opener?.isConnected && isVisible) opener.focus();
-      else fallback.focus();
+      if (opener?.checkVisibility()) opener.focus();
+      else document.querySelector(`[data-panel="${openPanel.id}"]`).focus();
       return;
     }
     if (!inspector.hidden) {

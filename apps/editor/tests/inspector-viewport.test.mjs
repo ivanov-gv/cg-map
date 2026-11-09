@@ -88,6 +88,30 @@ test('keyboard resize and pan track the visible viewport and reveal only inspect
   assert.equal(classes.get('has-short-viewport'), false);
 });
 
+test('fractional viewport rounding does not masquerade as a keyboard', t => {
+  const viewport = Object.assign(new EventTarget(), {height: 329.6, offsetTop: 0});
+  const {classes, document, frames} = viewportEnvironment(t, viewport);
+  document.documentElement.clientHeight = 330;
+  installInspectorViewport();
+  frames.shift()();
+  assert.equal(classes.get('has-short-viewport'), true);
+  assert.equal(classes.get('has-keyboard-inset'), false);
+  viewport.scale = 2;
+  viewport.height = 165;
+  viewport.dispatchEvent(new Event('resize'));
+  frames.shift()();
+  assert.equal(classes.get('has-keyboard-inset'), false, 'pinch zoom alone does not indicate a keyboard');
+  viewport.height = 60;
+  viewport.dispatchEvent(new Event('resize'));
+  frames.shift()();
+  assert.equal(classes.get('has-keyboard-inset'), true, 'a keyboard is detected even while zoomed');
+  viewport.scale = 1;
+  viewport.height = 230;
+  viewport.dispatchEvent(new Event('resize'));
+  frames.shift()();
+  assert.equal(classes.get('has-keyboard-inset'), true);
+});
+
 test('browsers without visualViewport keep the CSS viewport fallback', t => {
   const {styles, frames} = viewportEnvironment(t, undefined);
   installInspectorViewport();

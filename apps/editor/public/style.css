@@ -262,7 +262,7 @@ select {
   top: 64px;
   right: 12px;
 }
-#status:not(.attention):not(:focus) {
+#status:not(.attention):not(:focus-visible) {
   position: absolute;
   width: 1px;
   height: 1px;

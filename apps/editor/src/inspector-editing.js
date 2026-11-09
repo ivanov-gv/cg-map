@@ -121,6 +121,13 @@ export class InspectorEditing {
     return {feature, problem: featureProblem(feature, this.#activeRule, this.#context.levels, before)};
   }
 
+  // A user decision closes the edit and releases focus before its UI disappears.
+  #finishEdit(afterClose) {
+    this.#context.releaseInspectorFocus();
+    this.close();
+    afterClose();
+  }
+
   #apply() {
     const {feature, problem} = this.#validatedFeature();
     if (problem) {
@@ -128,22 +135,16 @@ export class InspectorEditing {
       return;
     }
     this.#context.commands.recordEdit(this.#transaction.key, feature);
-    this.#context.releaseInspectorFocus();
-    this.close();
-    this.#context.onRecorded();
+    this.#finishEdit(this.#context.onRecorded);
   }
 
   #cancel() {
-    this.#context.releaseInspectorFocus();
-    this.close();
-    this.#context.onClosed();
+    this.#finishEdit(this.#context.onClosed);
   }
 
   #deleteFeature() {
     this.#context.commands.recordEdit(this.#transaction.key, null);
-    this.#context.releaseInspectorFocus();
-    this.close();
-    this.#context.onRecorded();
+    this.#finishEdit(this.#context.onRecorded);
   }
 
   #changeSelectedVertex(changeGeometry) {

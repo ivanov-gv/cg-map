@@ -5,6 +5,8 @@ export function installInspectorViewport() {
   if (!viewport) return;
   // Below this height, the toolbar clearance would leave less than a full input between heading and actions.
   const shortViewportHeightPixels = 360;
+  // Ignore small viewport rounding and browser chrome changes when deciding whether a keyboard is present.
+  const keyboardInsetPixels = 100;
   const content = document.querySelector('.inspector-content');
   const revealActiveField = () => {
     const activeField = document.activeElement;
@@ -16,11 +18,14 @@ export function installInspectorViewport() {
     framePending = false;
     const root = document.documentElement;
     const bottomInset = Math.max(0, root.clientHeight - viewport.height - viewport.offsetTop);
-    const currentViewport = `${viewport.height},${viewport.offsetTop},${bottomInset}`;
+    const scale = viewport.scale || 1;
+    const unoccludedHeight = root.clientHeight / scale;
+    const keyboardOcclusion = Math.max(0, unoccludedHeight - viewport.height);
+    const currentViewport = `${viewport.height},${viewport.offsetTop},${bottomInset},${scale}`;
     if (currentViewport !== previousViewport) {
       previousViewport = currentViewport;
       root.classList.toggle('has-short-viewport', viewport.height < shortViewportHeightPixels);
-      root.classList.toggle('has-keyboard-inset', bottomInset > 0);
+      root.classList.toggle('has-keyboard-inset', keyboardOcclusion >= keyboardInsetPixels);
       root.style.setProperty('--viewport-height', `${viewport.height}px`);
       root.style.setProperty('--viewport-top', `${viewport.offsetTop}px`);
       root.style.setProperty('--viewport-bottom', `${bottomInset}px`);

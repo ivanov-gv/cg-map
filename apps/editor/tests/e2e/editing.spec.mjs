@@ -273,8 +273,18 @@ test.describe('source editing', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
+    await expect(page.locator('#status')).toHaveCSS('clip-path', 'none');
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
+  });
+
+  test('pointer Apply keeps the routine status visually hidden', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await page.locator('#apply-edit').click();
+    await expect(page.locator('#status')).toBeFocused();
+    await expect(page.locator('#status')).toHaveCSS('clip-path', 'inset(50%)');
   });
 
   test('inspector actions stay visible while fields scroll and the keyboard viewport moves', {tag: '@phone'}, async ({page}, testInfo) => {
@@ -444,15 +454,15 @@ test.describe('source editing', () => {
     await tools.dispatchEvent('click');
     await page.keyboard.press('Escape');
     await expect(tools).toBeFocused();
-    await page.evaluate(() => {
-      document.querySelector('#offline-notice').hidden = false;
-    });
-    await page.locator('#offline-notice').dispatchEvent('click');
-    await page.evaluate(() => {
-      document.querySelector('#offline-notice').parentElement.hidden = true;
-    });
+    await page.evaluate(() => localStorage.setItem('kompas-editor-draft-v1', '{broken'));
+    await page.reload();
+    await expect(page.locator('#draft-notice')).toBeVisible();
+    await page.locator('#draft-notice').click();
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('#draft-discard').click();
+    await expect(page.locator('#draft-notice')).toBeHidden();
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('button', {name: 'Layers', exact: true})).toBeFocused();
+    await expect(page.getByRole('button', {name: 'Changes', exact: true})).toBeFocused();
   });
 
   test('Safari IME Escape does not dismiss the inspector', {tag: '@phone'}, async ({page}) => {
