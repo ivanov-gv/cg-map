@@ -28,6 +28,7 @@ import {startOfflineCopy} from './offline-install.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
+import {installInspectorViewport} from './inspector-viewport.js';
 import {overlayCollection, sourceFeatureForHit} from './source-overlay.js';
 
 const layerNames = {
@@ -79,6 +80,7 @@ let wasEditOpen = false;
 let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
+let panelOpener = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -160,6 +162,8 @@ function showFeature(feature, index) {
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
   elementById('properties').replaceChildren();
   for (const [name, value] of Object.entries(properties)) appendProperty(name, value);
+  elementById('selection-details').open = false;
+  elementById('open-inspector').textContent = `Selection: ${elementById('selection-title').textContent}`;
   setStatus(selectionStatus(index));
   overlay.setSelection(feature);
   const {canModify, lockReason} = featureCapabilities(feature, rules.layers[activeFile]);
@@ -171,6 +175,8 @@ function showFeature(feature, index) {
 function clearSelection() {
   editing.close();
   elementById('open-inspector').hidden = true;
+  elementById('selection-details').open = false;
+  elementById('open-inspector').setAttribute('aria-expanded', 'false');
   document.querySelector('.inspector').hidden = true;
   showLockReason(activeFile ? layerLockReason(rules.layers[activeFile]) : null);
   elementById('selection-title').textContent = 'Select an object';
@@ -283,6 +289,7 @@ function startNewFeature() {
   showInspector();
   elementById('selection-title').textContent = addFeatureLabels[activeFile];
   elementById('selection-source').textContent = `${activeFile} · new feature`;
+  elementById('open-inspector').textContent = `Selection: ${addFeatureLabels[activeFile]}`;
 }
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
@@ -445,6 +452,12 @@ function startEditing(visibilityConfig) {
     activeFile: () => activeFile,
     onRecorded: showSessionChange,
     onClosed: clearSelection,
+    releaseInspectorFocus: () => {
+      const hadFocus = document.querySelector('.inspector').contains(document.activeElement);
+      if (hadFocus) elementById('current-layer').focus({preventScroll: true});
+      return hadFocus;
+    },
+    focusStatus: () => elementById('status').focus(),
     onEditStateChanged: renderCommandsWhenEditOpensOrCloses
   });
   review = new ReviewPanel({
@@ -510,7 +523,8 @@ function toggleSatellite() {
 }
 
 // Utility panels share space without changing the map or the pending edit.
-function showPanel(panelId) {
+function showPanel(panelId, opener = null) {
+  if (panelId) panelOpener = opener;
   for (const panel of document.querySelectorAll('.utility-panel')) {
     panel.hidden = panel.id !== panelId;
   }
@@ -519,8 +533,7 @@ function showPanel(panelId) {
   }
   elementById('current-layer').setAttribute('aria-expanded', String(panelId === 'layers-panel'));
   if (panelId && sharedPanelSpace.matches && !document.querySelector('.inspector').hidden) {
-    document.querySelector('.inspector').hidden = true;
-    elementById('open-inspector').hidden = false;
+    collapseInspector(false);
   }
 }
 
@@ -529,6 +542,7 @@ function showInspector() {
   if (sharedPanelSpace.matches) showPanel(null);
   document.querySelector('.inspector').hidden = false;
   elementById('open-inspector').hidden = true;
+  elementById('open-inspector').setAttribute('aria-expanded', 'true');
 }
 
 // Collapse one panel when a resize would leave too little map visible.
@@ -537,8 +551,7 @@ function installPanelResize() {
     const hasOpenPanel = [...document.querySelectorAll('.utility-panel')].some(panel => !panel.hidden);
     const inspector = document.querySelector('.inspector');
     if (event.matches && hasOpenPanel && !inspector.hidden) {
-      inspector.hidden = true;
-      elementById('open-inspector').hidden = false;
+      collapseInspector(inspector.contains(document.activeElement));
     }
   });
 }
@@ -547,30 +560,63 @@ function installPanelResize() {
 function installPanelButtons() {
   for (const button of document.querySelectorAll('[data-panel]')) {
     button.disabled = false;
-    button.onclick = () => {
+    button.onclick = event => {
       const panelId = button.dataset.panel;
-      showPanel(elementById(panelId).hidden ? panelId : null);
+      showPanel(elementById(panelId).hidden ? panelId : null, event.currentTarget);
     };
   }
   elementById('current-layer').disabled = false;
-  elementById('current-layer').onclick = () => {
-    showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null);
+  elementById('current-layer').onclick = event => {
+    showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null, event.currentTarget);
   };
-  elementById('offline-notice').onclick = () => showPanel('layers-panel');
-  elementById('draft-notice').onclick = () => showPanel('changes-panel');
+  elementById('offline-notice').onclick = event => showPanel('layers-panel', event.currentTarget);
+  elementById('draft-notice').onclick = event => showPanel('changes-panel', event.currentTarget);
 }
 
-// Closing the inspector preserves the edit and puts focus on the control that reopens it.
+// Collapse changes presentation only. Explicit Cancel owns discarding the edit.
+function collapseInspector(shouldFocus = true) {
+  document.querySelector('.inspector').hidden = true;
+  const opener = elementById('open-inspector');
+  opener.hidden = false;
+  opener.setAttribute('aria-expanded', 'false');
+  if (shouldFocus) opener.focus();
+}
+
+// Native buttons provide keyboard opening and applying; Escape closes the foremost panel without discarding work.
 function installInspectorToggle() {
-  elementById('close-inspector').onclick = () => {
-    document.querySelector('.inspector').hidden = true;
-    elementById('open-inspector').hidden = false;
-    elementById('open-inspector').focus();
-  };
+  elementById('close-inspector').onclick = () => collapseInspector();
   elementById('open-inspector').onclick = () => {
     showInspector();
     elementById('close-inspector').focus();
   };
+  document.addEventListener('keydown', event => {
+    const isImeKey = event.isComposing || event.keyCode === 229;
+    if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
+    if (editing?.cancelActiveGesture()) {
+      event.preventDefault();
+      return;
+    }
+    const inspector = document.querySelector('.inspector');
+    if (!inspector.hidden && inspector.contains(document.activeElement)) {
+      event.preventDefault();
+      collapseInspector();
+      return;
+    }
+    const openPanel = [...document.querySelectorAll('.utility-panel')].find(panel => !panel.hidden);
+    if (openPanel) {
+      event.preventDefault();
+      const opener = panelOpener;
+      showPanel(null);
+      const isOpenerVisible = opener?.checkVisibility?.() ?? Boolean(opener?.getClientRects().length);
+      if (isOpenerVisible) opener.focus();
+      else document.querySelector(`[data-panel="${openPanel.id}"]`).focus();
+      return;
+    }
+    if (!inspector.hidden) {
+      event.preventDefault();
+      collapseInspector();
+    }
+  });
 }
 
 // Install workspace interactions before asynchronous startup begins.
@@ -578,6 +624,7 @@ function installWorkspaceControls() {
   installPanelResize();
   installPanelButtons();
   installInspectorToggle();
+  installInspectorViewport();
 }
 
 // Sources are verified before the map starts, so a mode can never open on unverified data.

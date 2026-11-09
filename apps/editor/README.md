@@ -15,7 +15,11 @@ Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an
-object to open the inspector; closing it preserves the open edit and a selection button reopens it.
+object to open a right-side inspector on wide windows or a half-height bottom sheet on narrow ones. Its heading and
+Apply / Cancel edge stay visible while the fields and collapsed source details scroll. Collapse (including the sheet
+handle) preserves the selection, typed values and geometry preview; a compact button names the selected object and
+reopens it with Enter or Space. Opening or replacing a utility panel also preserves the edit. The phone inspector
+follows the visual viewport so the active field and actions remain above the onscreen keyboard.
 
 Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
 roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding published layers
@@ -44,8 +48,11 @@ point, and several drags adjust one preview. A corner or line point is tapped to
 second finger or losing the window restores the position from before that gesture. A tap places a new point or adds a
 line point. Dragging a whole shape or a vertex pans nothing; with nothing to move, the map pans as usual.
 
-Cancel and Escape drop the open edit. A mode switch drops a geometry preview, but typed details block it until they are
-applied or cancelled. Any unapplied edit blocks undo, redo, adding a feature, export, import and discarding.
+Cancel discards the open edit. Escape interrupts an active drag, restoring its start while keeping earlier adjustments;
+otherwise it collapses the foremost panel and returns focus to its opener. Apply is a keyboard-accessible button; Enter
+in a property field also applies the form. Apply, Cancel and Delete return keyboard focus to the status message. A mode
+switch drops a geometry preview, but typed details block it until they are applied or cancelled. Any unapplied edit
+blocks undo, redo, adding a feature, export, import and discarding.
 
 A footprint and its label never rewrite each other. If an edit leaves a label outside its footprint, the review panel
 names it and export stays disabled until it is corrected in its own mode.

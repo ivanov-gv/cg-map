@@ -41,7 +41,7 @@
       >
         Changes
       </button>
-      <button id="open-inspector" type="button" hidden>Selection</button>
+      <button id="open-inspector" type="button" aria-controls="inspector" aria-expanded="false" hidden>Selection</button>
     </nav>
     <button
       id="current-layer"
@@ -147,41 +147,48 @@
         <button id="draft-notice" type="button" hidden>
           Saved draft needs attention
         </button>
-        <p id="status" class="attention" role="status">
+        <p id="status" class="attention" role="status" tabindex="-1">
           Loading verified sources…
         </p>
         <p id="error" role="alert" hidden></p>
       </div>
     </main>
-    <aside class="inspector" hidden>
-      <button id="close-inspector" type="button" aria-label="Close inspector">
-        Close
-      </button>
-      <h2 id="selection-title">Select an object</h2>
-      <p id="selection-source">
-        Choose a file mode, then select its geometry on the map.
-      </p>
-      <p id="source-id"></p>
-      <dl id="properties"></dl>
-      <p id="identity" class="hint"></p>
-      <p id="lock-reason" class="notice" hidden></p>
-      <div id="editor" hidden>
-        <h2>Edit</h2>
-        <form id="property-form"></form>
-        <div class="button-row">
-          <button id="tool-move" hidden>Move point</button>
-          <button id="tool-vertices" hidden>Edit points</button>
-          <button id="vertex-insert" hidden>Insert point</button>
-          <button id="vertex-remove" hidden>Remove point</button>
+    <aside id="inspector" class="inspector" aria-labelledby="selection-title" hidden>
+      <header class="inspector-heading">
+        <h2 id="selection-title">Select an object</h2>
+        <button id="close-inspector" type="button" aria-label="Collapse inspector">
+          <span class="sheet-handle" aria-hidden="true"></span>
+          Collapse
+        </button>
+      </header>
+      <div class="inspector-content">
+        <p id="lock-reason" class="notice" hidden></p>
+        <div id="editor" hidden>
+          <form id="property-form"></form>
+          <div class="button-row">
+            <button id="tool-move" hidden>Move point</button>
+            <button id="tool-vertices" hidden>Edit points</button>
+            <button id="vertex-insert" hidden>Insert point</button>
+            <button id="vertex-remove" hidden>Remove point</button>
+          </div>
+          <p id="tool-hint" class="hint"></p>
+          <button id="delete-feature" hidden>Delete feature</button>
         </div>
-        <p id="tool-hint" class="hint"></p>
+        <details id="selection-details">
+          <summary>Source details</summary>
+          <p id="selection-source">Choose a file mode, then select its geometry on the map.</p>
+          <p id="source-id"></p>
+          <dl id="properties"></dl>
+          <p id="identity" class="hint"></p>
+        </details>
+      </div>
+      <footer id="edit-actions" hidden>
         <p id="edit-problem" role="alert" hidden></p>
         <div class="button-row">
-          <button id="apply-edit">Apply</button>
+          <button id="apply-edit" type="submit" form="property-form">Apply</button>
           <button id="cancel-edit">Cancel</button>
         </div>
-        <button id="delete-feature" hidden>Delete feature</button>
-      </div>
+      </footer>
     </aside>
   </body>
 </html>

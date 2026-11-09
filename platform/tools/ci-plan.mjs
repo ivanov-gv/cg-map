@@ -136,6 +136,7 @@ export const SHARED_EDITOR_SOURCES = [
   'edit-session.js',
   'edit-transaction.js',
   'inspector-editing.js',
+  'inspector-viewport.js',
   'property-form.js',
   'review-panel.js'
 ];
