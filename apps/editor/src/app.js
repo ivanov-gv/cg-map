@@ -453,8 +453,11 @@ function startEditing(visibilityConfig) {
     onRecorded: showSessionChange,
     onClosed: clearSelection,
     releaseInspectorFocus: () => {
-      if (document.querySelector('.inspector').contains(document.activeElement)) elementById('status').focus();
+      const hadFocus = document.querySelector('.inspector').contains(document.activeElement);
+      if (hadFocus) elementById('current-layer').focus({preventScroll: true});
+      return hadFocus;
     },
+    focusStatus: () => elementById('status').focus(),
     onEditStateChanged: renderCommandsWhenEditOpensOrCloses
   });
   review = new ReviewPanel({
@@ -604,7 +607,8 @@ function installInspectorToggle() {
       event.preventDefault();
       const opener = panelOpener;
       showPanel(null);
-      if (opener?.checkVisibility()) opener.focus();
+      const isOpenerVisible = opener?.checkVisibility?.() ?? Boolean(opener?.getClientRects().length);
+      if (isOpenerVisible) opener.focus();
       else document.querySelector(`[data-panel="${openPanel.id}"]`).focus();
       return;
     }

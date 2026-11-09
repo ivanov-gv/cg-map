@@ -270,9 +270,22 @@ test.describe('source editing', () => {
     await openEditor(page);
     await selectPlace(page);
     await page.locator('[name="name"]').fill(editedName);
+    await page.evaluate(() => {
+      const status = document.querySelector('#status');
+      window.focusSequence = [];
+      document.querySelector('#current-layer').addEventListener('focus', () => {
+        window.focusSequence.push('layer');
+      }, {once: true});
+      status.addEventListener('focus', () => {
+        window.focusSequence.push('status');
+        window.statusAtFocus = status.textContent;
+      }, {once: true});
+    });
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
+    expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading places.geojson…');
+    expect(await page.evaluate(() => window.focusSequence)).toEqual(['layer', 'status']);
     await expect(page.locator('#status')).toHaveCSS('clip-path', 'none');
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
@@ -449,11 +462,15 @@ test.describe('source editing', () => {
     await openEditor(page);
     await selectPlace(page);
     await page.locator('[name="name"]').focus();
-    const tools = page.getByRole('button', {name: 'Tools', exact: true});
+    const tools = page.locator('[data-panel="tools-panel"]');
     // Dispatch without focusing the button, as Safari does on a pointer click.
+    await tools.evaluate(button => Object.defineProperty(button, 'checkVisibility', {configurable: true, value: undefined}));
     await tools.dispatchEvent('click');
     await page.keyboard.press('Escape');
     await expect(tools).toBeFocused();
+    await tools.evaluate(button => {
+      delete button.checkVisibility;
+    });
     await page.evaluate(() => localStorage.setItem('kompas-editor-draft-v1', '{broken'));
     await page.reload();
     await expect(page.locator('#draft-notice')).toBeVisible();

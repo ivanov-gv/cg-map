@@ -27,7 +27,7 @@ const toolHints = {
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, activeFile(), onRecorded(), onClosed(),
-// onEditStateChanged()}
+// releaseInspectorFocus(), focusStatus(), onEditStateChanged()}
 export class InspectorEditing {
   #context;
   #transaction = null;
@@ -121,11 +121,12 @@ export class InspectorEditing {
     return {feature, problem: featureProblem(feature, this.#activeRule, this.#context.levels, before)};
   }
 
-  // A user decision closes the edit and releases focus before its UI disappears.
+  // Release focus before hiding the inspector; focus the status only after its text has been updated.
   #finishEdit(afterClose) {
-    this.#context.releaseInspectorFocus();
+    const hadInspectorFocus = this.#context.releaseInspectorFocus();
     this.close();
     afterClose();
+    if (hadInspectorFocus) this.#context.focusStatus();
   }
 
   #apply() {
@@ -135,16 +136,16 @@ export class InspectorEditing {
       return;
     }
     this.#context.commands.recordEdit(this.#transaction.key, feature);
-    this.#finishEdit(this.#context.onRecorded);
+    this.#finishEdit(() => this.#context.onRecorded());
   }
 
   #cancel() {
-    this.#finishEdit(this.#context.onClosed);
+    this.#finishEdit(() => this.#context.onClosed());
   }
 
   #deleteFeature() {
     this.#context.commands.recordEdit(this.#transaction.key, null);
-    this.#finishEdit(this.#context.onRecorded);
+    this.#finishEdit(() => this.#context.onRecorded());
   }
 
   #changeSelectedVertex(changeGeometry) {
