@@ -452,8 +452,8 @@ function startEditing(visibilityConfig) {
     activeFile: () => activeFile,
     onRecorded: showSessionChange,
     onClosed: clearSelection,
-    onBeforeClose: () => {
-      if (document.querySelector('.inspector').contains(document.activeElement)) elementById('current-layer').focus();
+    releaseInspectorFocus: () => {
+      if (document.querySelector('.inspector').contains(document.activeElement)) elementById('status').focus();
     },
     onEditStateChanged: renderCommandsWhenEditOpensOrCloses
   });
@@ -520,8 +520,8 @@ function toggleSatellite() {
 }
 
 // Utility panels share space without changing the map or the pending edit.
-function showPanel(panelId) {
-  if (panelId) panelOpener = document.activeElement;
+function showPanel(panelId, opener = null) {
+  if (panelId) panelOpener = opener;
   for (const panel of document.querySelectorAll('.utility-panel')) {
     panel.hidden = panel.id !== panelId;
   }
@@ -557,17 +557,17 @@ function installPanelResize() {
 function installPanelButtons() {
   for (const button of document.querySelectorAll('[data-panel]')) {
     button.disabled = false;
-    button.onclick = () => {
+    button.onclick = event => {
       const panelId = button.dataset.panel;
-      showPanel(elementById(panelId).hidden ? panelId : null);
+      showPanel(elementById(panelId).hidden ? panelId : null, event.currentTarget);
     };
   }
   elementById('current-layer').disabled = false;
-  elementById('current-layer').onclick = () => {
-    showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null);
+  elementById('current-layer').onclick = event => {
+    showPanel(elementById('layers-panel').hidden ? 'layers-panel' : null, event.currentTarget);
   };
-  elementById('offline-notice').onclick = () => showPanel('layers-panel');
-  elementById('draft-notice').onclick = () => showPanel('changes-panel');
+  elementById('offline-notice').onclick = event => showPanel('layers-panel', event.currentTarget);
+  elementById('draft-notice').onclick = event => showPanel('changes-panel', event.currentTarget);
 }
 
 // Collapse changes presentation only. Explicit Cancel owns discarding the edit.
@@ -587,7 +587,8 @@ function installInspectorToggle() {
     elementById('close-inspector').focus();
   };
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+    const isImeKey = event.isComposing || event.keyCode === 229;
+    if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
     if (editing?.cancelActiveGesture()) {
       event.preventDefault();
       return;
@@ -603,7 +604,10 @@ function installInspectorToggle() {
       event.preventDefault();
       const opener = panelOpener;
       showPanel(null);
-      if (opener?.isConnected && !opener.hidden) opener.focus();
+      const fallback = document.querySelector(`[data-panel="${openPanel.id}"]`);
+      const isVisible = opener?.checkVisibility?.() ?? Boolean(opener?.getClientRects().length);
+      if (opener?.isConnected && isVisible) opener.focus();
+      else fallback.focus();
       return;
     }
     if (!inspector.hidden) {

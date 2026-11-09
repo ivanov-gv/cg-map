@@ -20,6 +20,7 @@ export function installInspectorViewport() {
     if (currentViewport !== previousViewport) {
       previousViewport = currentViewport;
       root.classList.toggle('has-short-viewport', viewport.height < shortViewportHeightPixels);
+      root.classList.toggle('has-keyboard-inset', bottomInset > 0);
       root.style.setProperty('--viewport-height', `${viewport.height}px`);
       root.style.setProperty('--viewport-top', `${viewport.offsetTop}px`);
       root.style.setProperty('--viewport-bottom', `${bottomInset}px`);

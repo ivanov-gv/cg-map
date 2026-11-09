@@ -262,7 +262,7 @@ select {
   top: 64px;
   right: 12px;
 }
-#status:not(.attention) {
+#status:not(.attention):not(:focus) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -401,7 +401,7 @@ select {
   max-height: calc(var(--viewport-height, 100dvh) - 16px);
 }
 @media (min-width: 721px) {
-  .has-short-viewport .inspector {
+  .has-short-viewport:not(.has-keyboard-inset) .inspector {
     top: max(64px, calc(8px + var(--viewport-top, 0px)));
     right: 12px;
   }
@@ -430,4 +430,18 @@ select {
 }
 .has-short-viewport #edit-actions .button-row {
   flex-wrap: nowrap;
+}
+/* A landscape keyboard can leave only enough height for one field and the two fixed edges. */
+.has-short-viewport.has-keyboard-inset .inspector-heading,
+.has-short-viewport.has-keyboard-inset #edit-actions,
+.has-short-viewport.has-keyboard-inset .inspector-content {
+  padding: 0 8px;
+}
+.has-short-viewport.has-keyboard-inset .inspector {
+  top: var(--viewport-top, 0px);
+  bottom: var(--viewport-bottom, 0px);
+  max-height: var(--viewport-height, 100dvh);
+}
+.has-short-viewport.has-keyboard-inset .inspector-content {
+  scroll-padding-block: 0;
 }

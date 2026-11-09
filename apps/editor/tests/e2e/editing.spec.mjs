@@ -266,13 +266,13 @@ test.describe('source editing', () => {
     expectCoordinateNear(changeset.operations[0].after.geometry.coordinates, expected);
   });
 
-  test('Enter in a property field applies the form and returns focus to the layer control', {tag: '@phone'}, async ({page}, testInfo) => {
+  test('Enter in a property field applies the form and focuses the status', {tag: '@phone'}, async ({page}, testInfo) => {
     await openEditor(page);
     await selectPlace(page);
     await page.locator('[name="name"]').fill(editedName);
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
-    await expect(page.locator('#current-layer')).toBeFocused();
+    await expect(page.locator('#status')).toBeFocused();
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
   });
@@ -380,31 +380,48 @@ test.describe('source editing', () => {
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
-  test('Escape respects focus, composition and the utility panel opener', async ({page}) => {
+  test('Escape closes the focused inspector before a utility panel', async ({page}) => {
     await page.setViewportSize({width: 1800, height: 800});
     await openEditor(page);
     await selectPlace(page);
     await openPanel(page, 'Tools');
     const field = page.locator('[name="name"]');
     await field.fill(editedName);
-    await field.dispatchEvent('keydown', {key: 'Escape', isComposing: true, bubbles: true});
-    await expect(page.locator('.inspector')).toBeVisible();
     await field.press('Escape');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#tools-panel')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', {name: 'Tools', exact: true})).toBeFocused();
-    await page.locator('#current-layer').click();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#current-layer')).toBeFocused();
+  });
+
+  test('Escape leaves composition and idle key events alone', async ({page}) => {
+    await page.setViewportSize({width: 1800, height: 800});
+    await openEditor(page);
+    await selectPlace(page);
+    const field = page.locator('[name="name"]');
+    await field.focus();
+    await field.dispatchEvent('keydown', {key: 'Escape', isComposing: true, bubbles: true});
+    await expect(page.locator('.inspector')).toBeVisible();
+    await field.press('Escape');
     const wasPrevented = await page.evaluate(() => {
       const event = new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true});
       document.dispatchEvent(event);
       return event.defaultPrevented;
     });
     expect(wasPrevented).toBe(false);
+  });
+
+  test('Escape returns focus to the current-layer opener', async ({page}) => {
+    await openEditor(page);
+    await page.locator('#current-layer').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#current-layer')).toBeFocused();
+  });
+
+  test('short wide windows keep workspace controls reachable', async ({page}) => {
     await page.setViewportSize({width: 844, height: 340});
-    await openInspector(page);
+    await openEditor(page);
+    await selectPlace(page);
     const inspector = await page.locator('.inspector').boundingBox();
     const layer = await page.locator('#current-layer').boundingBox();
     expect(inspector.y).toBeGreaterThanOrEqual(layer.y + layer.height);
@@ -416,6 +433,57 @@ test.describe('source editing', () => {
     await expect(page.locator('#changes-panel')).toBeVisible();
     await page.locator('#current-layer').click();
     await expect(page.locator('#layers-panel')).toBeVisible();
+  });
+
+  test('panel Escape restores the actual clicked opener and falls back if hidden', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await page.locator('[name="name"]').focus();
+    const tools = page.getByRole('button', {name: 'Tools', exact: true});
+    // Dispatch without focusing the button, as Safari does on a pointer click.
+    await tools.dispatchEvent('click');
+    await page.keyboard.press('Escape');
+    await expect(tools).toBeFocused();
+    await page.evaluate(() => {
+      document.querySelector('#offline-notice').hidden = false;
+    });
+    await page.locator('#offline-notice').dispatchEvent('click');
+    await page.evaluate(() => {
+      document.querySelector('#offline-notice').parentElement.hidden = true;
+    });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', {name: 'Layers', exact: true})).toBeFocused();
+  });
+
+  test('Safari IME Escape does not dismiss the inspector', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    const field = page.locator('[name="name"]');
+    await field.focus();
+    await field.dispatchEvent('keydown', {key: 'Escape', keyCode: 229, isComposing: false, bubbles: true});
+    await expect(page.locator('.inspector')).toBeVisible();
+    await expect(field).toBeFocused();
+  });
+
+  test('landscape keyboard keeps the active field and actions in the visual viewport', {tag: '@phone'}, async ({page}) => {
+    await page.setViewportSize({width: 844, height: 390});
+    await openEditor(page);
+    await selectPlace(page);
+    const field = page.locator('[name="name"]');
+    await field.focus();
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport, 'height', {configurable: true, value: 150});
+      Object.defineProperty(window.visualViewport, 'offsetTop', {configurable: true, value: 0});
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('has-keyboard-inset'))).toBe(true);
+    await expect(field).toBeInViewport({ratio: 1});
+    const fieldBounds = await field.boundingBox();
+    const applyBounds = await page.locator('#apply-edit').boundingBox();
+    const cancelBounds = await page.locator('#cancel-edit').boundingBox();
+    expect(fieldBounds.y).toBeGreaterThanOrEqual(0);
+    expect(fieldBounds.y + fieldBounds.height).toBeLessThanOrEqual(applyBounds.y);
+    for (const bounds of [applyBounds, cancelBounds]) expect(bounds.y + bounds.height).toBeLessThanOrEqual(150);
   });
 
   test('a new feature starts with collapsed source details and a selection opener', {tag: '@phone'}, async ({page}) => {

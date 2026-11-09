@@ -101,7 +101,6 @@ export class InspectorEditing {
   }
 
   close() {
-    this.#context.onBeforeClose();
     this.#transaction = null;
     this.showProblem(null);
     elementById('editor').hidden = true;
@@ -129,17 +128,20 @@ export class InspectorEditing {
       return;
     }
     this.#context.commands.recordEdit(this.#transaction.key, feature);
+    this.#context.releaseInspectorFocus();
     this.close();
     this.#context.onRecorded();
   }
 
   #cancel() {
+    this.#context.releaseInspectorFocus();
     this.close();
     this.#context.onClosed();
   }
 
   #deleteFeature() {
     this.#context.commands.recordEdit(this.#transaction.key, null);
+    this.#context.releaseInspectorFocus();
     this.close();
     this.#context.onRecorded();
   }

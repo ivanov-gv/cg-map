@@ -25,7 +25,6 @@ function viewportEnvironment(t, viewport) {
     }
   };
   const window = new EventTarget();
-  window.innerHeight = 840;
   window.visualViewport = viewport;
   const globals = {window, document, requestAnimationFrame: callback => frames.push(callback)};
   for (const [name, value] of Object.entries(globals)) {
@@ -48,7 +47,7 @@ test('keyboard resize and pan track the visible viewport and reveal only inspect
   assert.equal(styles.get('--viewport-bottom'), '0px');
   assert.deepEqual(scrollRequests, [{block: 'nearest'}]);
 
-  window.innerHeight = 430;
+  // The layout viewport stays at 840px as the visual viewport shrinks for the keyboard.
   viewport.height = 430;
   viewport.offsetTop = 35;
   viewport.dispatchEvent(new Event('resize'));
@@ -58,6 +57,7 @@ test('keyboard resize and pan track the visible viewport and reveal only inspect
   assert.equal(styles.get('--viewport-height'), '430px');
   assert.equal(styles.get('--viewport-top'), '35px');
   assert.equal(styles.get('--viewport-bottom'), '375px');
+  assert.equal(classes.get('has-keyboard-inset'), true);
   assert.equal(scrollRequests.length, 2);
   assert.equal(writes.length, 6);
   viewport.dispatchEvent(new Event('scroll'));
