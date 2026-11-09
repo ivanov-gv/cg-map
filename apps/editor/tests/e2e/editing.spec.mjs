@@ -272,20 +272,19 @@ test.describe('source editing', () => {
     await page.locator('[name="name"]').fill(editedName);
     await page.evaluate(() => {
       const status = document.querySelector('#status');
-      window.focusSequence = [];
-      document.querySelector('#current-layer').addEventListener('focus', () => {
-        window.focusSequence.push('layer');
-      }, {once: true});
+      window.statusFocusCount = 0;
       status.addEventListener('focus', () => {
-        window.focusSequence.push('status');
+        window.statusFocusCount += 1;
         window.statusAtFocus = status.textContent;
-      }, {once: true});
+      });
     });
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading places.geojson…');
-    expect(await page.evaluate(() => window.focusSequence)).toEqual(['layer', 'status']);
+    await expect(page.locator('#status')).not.toHaveClass(/attention/);
+    await expect(page.locator('#status')).toBeFocused();
+    expect(await page.evaluate(() => window.statusFocusCount)).toBe(1);
     await expect(page.locator('#status')).toHaveCSS('clip-path', 'none');
     const {changeset} = await exportChangeset(page, testInfo);
     expect(changeset.operations[0].after.properties.name).toBe(editedName);
@@ -296,6 +295,7 @@ test.describe('source editing', () => {
     await selectPlace(page);
     await page.locator('[name="name"]').fill(editedName);
     await page.locator('#apply-edit').click();
+    await expect(page.locator('#status')).not.toHaveClass(/attention/);
     await expect(page.locator('#status')).toBeFocused();
     await expect(page.locator('#status')).toHaveCSS('clip-path', 'inset(50%)');
   });

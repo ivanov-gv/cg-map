@@ -27,7 +27,8 @@ const toolHints = {
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, activeFile(), onRecorded(), onClosed(),
-// releaseInspectorFocus(), focusStatus(), onEditStateChanged()}
+// releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
+// and returns whether the inspector held focus, so the status is focused only when it was needed.
 export class InspectorEditing {
   #context;
   #transaction = null;
