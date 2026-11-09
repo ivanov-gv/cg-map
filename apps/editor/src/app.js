@@ -80,6 +80,7 @@ let wasEditOpen = false;
 let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
+let panelOpener = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -174,6 +175,7 @@ function showFeature(feature, index) {
 function clearSelection() {
   editing.close();
   elementById('open-inspector').hidden = true;
+  elementById('selection-details').open = false;
   elementById('open-inspector').setAttribute('aria-expanded', 'false');
   document.querySelector('.inspector').hidden = true;
   showLockReason(activeFile ? layerLockReason(rules.layers[activeFile]) : null);
@@ -287,7 +289,7 @@ function startNewFeature() {
   showInspector();
   elementById('selection-title').textContent = addFeatureLabels[activeFile];
   elementById('selection-source').textContent = `${activeFile} · new feature`;
-  elementById('open-inspector').textContent = addFeatureLabels[activeFile];
+  elementById('open-inspector').textContent = `Selection: ${addFeatureLabels[activeFile]}`;
 }
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
@@ -450,6 +452,9 @@ function startEditing(visibilityConfig) {
     activeFile: () => activeFile,
     onRecorded: showSessionChange,
     onClosed: clearSelection,
+    onBeforeClose: () => {
+      if (document.querySelector('.inspector').contains(document.activeElement)) elementById('current-layer').focus();
+    },
     onEditStateChanged: renderCommandsWhenEditOpensOrCloses
   });
   review = new ReviewPanel({
@@ -516,6 +521,7 @@ function toggleSatellite() {
 
 // Utility panels share space without changing the map or the pending edit.
 function showPanel(panelId) {
+  if (panelId) panelOpener = document.activeElement;
   for (const panel of document.querySelectorAll('.utility-panel')) {
     panel.hidden = panel.id !== panelId;
   }
@@ -581,16 +587,29 @@ function installInspectorToggle() {
     elementById('close-inspector').focus();
   };
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || event.defaultPrevented) return;
-    event.preventDefault();
-    if (editing?.cancelActiveGesture()) return;
-    const openPanel = [...document.querySelectorAll('.utility-panel')].find(panel => !panel.hidden);
-    if (openPanel) {
-      showPanel(null);
-      document.querySelector(`[data-panel="${openPanel.id}"]`).focus();
+    if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+    if (editing?.cancelActiveGesture()) {
+      event.preventDefault();
       return;
     }
-    if (!document.querySelector('.inspector').hidden) collapseInspector();
+    const inspector = document.querySelector('.inspector');
+    if (!inspector.hidden && inspector.contains(document.activeElement)) {
+      event.preventDefault();
+      collapseInspector();
+      return;
+    }
+    const openPanel = [...document.querySelectorAll('.utility-panel')].find(panel => !panel.hidden);
+    if (openPanel) {
+      event.preventDefault();
+      const opener = panelOpener;
+      showPanel(null);
+      if (opener?.isConnected && !opener.hidden) opener.focus();
+      return;
+    }
+    if (!inspector.hidden) {
+      event.preventDefault();
+      collapseInspector();
+    }
   });
 }
 

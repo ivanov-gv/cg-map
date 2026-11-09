@@ -400,6 +400,19 @@ select {
   bottom: calc(8px + var(--viewport-bottom, 0px));
   max-height: calc(var(--viewport-height, 100dvh) - 16px);
 }
+@media (min-width: 721px) {
+  .has-short-viewport .inspector {
+    top: max(64px, calc(8px + var(--viewport-top, 0px)));
+    right: 12px;
+  }
+  .has-short-viewport .inspector-heading,
+  .has-short-viewport #edit-actions {
+    padding: 4px 12px;
+  }
+  .has-short-viewport .inspector-content {
+    padding: 4px 12px;
+  }
+}
 .inspector-content summary {
   min-height: 40px;
   padding-block: 10px;

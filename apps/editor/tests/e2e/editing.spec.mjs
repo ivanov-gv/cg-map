@@ -380,6 +380,57 @@ test.describe('source editing', () => {
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
+  test('Escape respects focus, composition and the utility panel opener', async ({page}) => {
+    await page.setViewportSize({width: 1800, height: 800});
+    await openEditor(page);
+    await selectPlace(page);
+    await openPanel(page, 'Tools');
+    const field = page.locator('[name="name"]');
+    await field.fill(editedName);
+    await field.dispatchEvent('keydown', {key: 'Escape', isComposing: true, bubbles: true});
+    await expect(page.locator('.inspector')).toBeVisible();
+    await field.press('Escape');
+    await expect(page.locator('.inspector')).toBeHidden();
+    await expect(page.locator('#tools-panel')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', {name: 'Tools', exact: true})).toBeFocused();
+    await page.locator('#current-layer').click();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#current-layer')).toBeFocused();
+    const wasPrevented = await page.evaluate(() => {
+      const event = new KeyboardEvent('keydown', {key: 'Escape', bubbles: true, cancelable: true});
+      document.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(wasPrevented).toBe(false);
+    await page.setViewportSize({width: 844, height: 340});
+    await openInspector(page);
+    const inspector = await page.locator('.inspector').boundingBox();
+    const layer = await page.locator('#current-layer').boundingBox();
+    expect(inspector.y).toBeGreaterThanOrEqual(layer.y + layer.height);
+    await page.setViewportSize({width: 721, height: 340});
+    const toolbar = await page.locator('.workspace-toolbar').boundingBox();
+    const shortInspector = await page.locator('.inspector').boundingBox();
+    expect(shortInspector.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height);
+    await page.getByRole('button', {name: 'Changes', exact: true}).click();
+    await expect(page.locator('#changes-panel')).toBeVisible();
+    await page.locator('#current-layer').click();
+    await expect(page.locator('#layers-panel')).toBeVisible();
+  });
+
+  test('a new feature starts with collapsed source details and a selection opener', {tag: '@phone'}, async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    const details = page.locator('#selection-details');
+    await details.locator('summary').click();
+    await expect(details).toHaveAttribute('open', '');
+    await openPanel(page, 'Tools');
+    await page.locator('#add-feature').click();
+    await expect(details).not.toHaveAttribute('open', '');
+    await page.locator('#close-inspector').click();
+    await expect(page.locator('#open-inspector')).toHaveText('Selection: Add POI');
+  });
+
   test('invalid details are refused and record nothing', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);

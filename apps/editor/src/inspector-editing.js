@@ -101,7 +101,7 @@ export class InspectorEditing {
   }
 
   close() {
-    if (document.querySelector('.inspector').contains(document.activeElement)) elementById('current-layer').focus();
+    this.#context.onBeforeClose();
     this.#transaction = null;
     this.showProblem(null);
     elementById('editor').hidden = true;
