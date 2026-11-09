@@ -1,0 +1,656 @@
+{
+  "valid": [
+    {
+      "name": "OSM node and source version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7
+      }
+    },
+    {
+      "name": "OSM way and source version",
+      "properties": {
+        "entityId": "way/456",
+        "entityVersion": 1
+      }
+    },
+    {
+      "name": "OSM relation and source version",
+      "properties": {
+        "entityId": "relation/789",
+        "entityVersion": 42
+      }
+    },
+    {
+      "name": "known OSM ID before version recovery",
+      "properties": {
+        "entityId": "way/456",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "Natural Earth country",
+      "properties": {
+        "entityId": "ne:ALB",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "ePodgorica stop",
+      "properties": {
+        "entityId": "epodgorica:17",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "derived ocean",
+      "properties": {
+        "entityId": "derived:ocean",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "new local object",
+      "properties": {
+        "entityId": "local:550e8400-e29b-41d4-a716-446655440000",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "legacy geometry without upstream identity",
+      "properties": {
+        "entityId": "cg-map-id:550e8400-e29b-41d4-a716-446655440000",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "name": "split OSM way",
+      "properties": {
+        "entityId": "way/456",
+        "entityVersion": 2,
+        "entityPart": 0
+      }
+    },
+    {
+      "name": "OSM ID beyond JavaScript integer precision",
+      "properties": {
+        "entityId": "node/9007199254740993",
+        "entityVersion": 1
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown namespace",
+      "properties": {
+        "entityId": "osm:123",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "untyped OSM ID",
+      "properties": {
+        "entityId": "123",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "negative OSM ID",
+      "properties": {
+        "entityId": "node/-1",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "zero OSM ID",
+      "properties": {
+        "entityId": "way/0",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "leading zero",
+      "properties": {
+        "entityId": "node/01",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "fractional OSM ID",
+      "properties": {
+        "entityId": "node/1.5",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "numeric ID",
+      "properties": {
+        "entityId": 123,
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "missing suffix",
+      "properties": {
+        "entityId": "ne:",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "blank suffix",
+      "properties": {
+        "entityId": "epodgorica: ",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "unknown derived name syntax",
+      "properties": {
+        "entityId": "derived:two words",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "bad UUID",
+      "properties": {
+        "entityId": "local:not-a-uuid",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "non UUID interim ID",
+      "properties": {
+        "entityId": "cg-map-id:1",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "UUID without variant",
+      "properties": {
+        "entityId": "local:550e8400-e29b-41d4-0716-446655440000",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "trailing newline",
+      "properties": {
+        "entityId": "node/123\n",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "leading space",
+      "properties": {
+        "entityId": " node/123",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "string OSM version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": "1"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "zero version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 0
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "negative version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": -1
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "fractional version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 1.5
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "unsafe version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 9007199254740992
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "null version",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": null
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "unqualified hash",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "short hash",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": "sha256:ab"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "uppercase hash",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "hash with newline",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "negative part",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7,
+        "entityPart": -1
+      },
+      "expectedError": "entityPart"
+    },
+    {
+      "name": "fractional part",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7,
+        "entityPart": 0.5
+      },
+      "expectedError": "entityPart"
+    },
+    {
+      "name": "string part",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7,
+        "entityPart": "0"
+      },
+      "expectedError": "entityPart"
+    },
+    {
+      "name": "null part",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7,
+        "entityPart": null
+      },
+      "expectedError": "entityPart"
+    },
+    {
+      "name": "unsafe part",
+      "properties": {
+        "entityId": "node/123",
+        "entityVersion": 7,
+        "entityPart": 9007199254740992
+      },
+      "expectedError": "entityPart"
+    },
+    {
+      "name": "missing entityId",
+      "properties": {
+        "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expectedError": "entityId"
+    },
+    {
+      "name": "missing entityVersion",
+      "properties": {
+        "entityId": "node/123"
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "non OSM integer version ne:ALB",
+      "properties": {
+        "entityId": "ne:ALB",
+        "entityVersion": 1
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "non OSM integer version epodgorica:17",
+      "properties": {
+        "entityId": "epodgorica:17",
+        "entityVersion": 1
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "non OSM integer version derived:ocean",
+      "properties": {
+        "entityId": "derived:ocean",
+        "entityVersion": 1
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "non OSM integer version local:550e8400-e29b-41d4-a716-446655440000",
+      "properties": {
+        "entityId": "local:550e8400-e29b-41d4-a716-446655440000",
+        "entityVersion": 1
+      },
+      "expectedError": "entityVersion"
+    },
+    {
+      "name": "non OSM integer version cg-map-id:550e8400-e29b-41d4-a716-446655440000",
+      "properties": {
+        "entityId": "cg-map-id:550e8400-e29b-41d4-a716-446655440000",
+        "entityVersion": 1
+      },
+      "expectedError": "entityVersion"
+    }
+  ],
+  "sources": {
+    "building-labels.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.4405
+            ]
+          },
+          "properties": {
+            "kind": "building",
+            "osm_id": "way/2",
+            "footprintIndex": 0,
+            "addr:housenumber": "1",
+            "address_sources": [
+              "way/2"
+            ],
+            "entityId": "way/2",
+            "entityVersion": 2
+          },
+          "id": "way/2"
+        }
+      ]
+    },
+    "buildings.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  19.25,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.44
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "building",
+            "entityId": "way/2",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
+    "context-countries.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  19.25,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.44
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "context",
+            "name": "Albania",
+            "entityId": "ne:ALB",
+            "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
+    },
+    "land.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  19.25,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.44
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "park",
+            "name": "Park",
+            "entityId": "relation/3",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
+    "places.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.4405
+            ]
+          },
+          "properties": {
+            "id": "node/1",
+            "name": "Cafe",
+            "kind": "cafe",
+            "category": "food",
+            "visibilityLevel": 4,
+            "source": "OpenStreetMap",
+            "entityId": "node/1",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
+    "roads.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                19.25,
+                42.44
+              ],
+              [
+                19.251,
+                42.44
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "residential",
+            "name": "Street",
+            "entityId": "way/4",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
+    "transport-stops.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.4405
+            ]
+          },
+          "properties": {
+            "stopId": "17",
+            "name": "Stop",
+            "entityId": "epodgorica:17",
+            "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "id": "17"
+        }
+      ]
+    },
+    "water.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  19.25,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.44
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "ocean",
+            "entityId": "derived:ocean",
+            "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/source-entities/v1",
+  "title": "Source GeoJSON entity identities v1",
+  "description": "An additive identity contract for every source GeoJSON file. Geometry and domain properties remain governed by their existing contracts. Within a file an entity is unsplit, or all its parts have distinct entityPart numbers and the same entityVersion; check-data enforces that collection constraint.",
+  "type": "object",
+  "required": [
+    "type",
+    "entitySchemaVersion",
+    "features"
+  ],
+  "properties": {
+    "type": {
+      "const": "FeatureCollection"
+    },
+    "entitySchemaVersion": {
+      "const": 1
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "const": "Feature"
+          },
+          "geometry": {
+            "type": "object"
+          },
+          "properties": {
+            "$ref": "https://github.com/ivanov-gv/cg-map/contracts/entity-identity/v1"
+          }
+        }
+      }
+    }
+  }
+}
