@@ -31,7 +31,7 @@ for (const {name, properties, expectedError} of fixture.invalid) {
 
 test('identity schema and producer agree on every shared case', () => {
   const schema = JSON.parse(readFileSync(new URL('../../packages/contracts/entity-identity.schema.json', import.meta.url)));
-  const validate = new Ajv2020({strict: false}).compile(schema);
+  const validate = new Ajv2020().compile(schema);
   for (const {name, properties} of fixture.valid) {
     assert.equal(validate(properties), true, name);
     assert.doesNotThrow(() => validateSourceEntities(collectionWith(properties)), name);
@@ -40,6 +40,21 @@ test('identity schema and producer agree on every shared case', () => {
     assert.equal(validate(properties), false, name);
     assert.throws(() => validateSourceEntities(collectionWith(properties)), undefined, name);
   }
+});
+
+test('collection schema resolves the identity contract and validates adopted sources', () => {
+  const identity = JSON.parse(readFileSync(new URL('../../packages/contracts/entity-identity.schema.json', import.meta.url)));
+  const collection = JSON.parse(readFileSync(new URL('../../packages/contracts/source-entities.schema.json', import.meta.url)));
+  const validator = new Ajv2020().addSchema(identity).compile(collection);
+  for (const [filename, source] of Object.entries(fixture.sources)) {
+    assert.equal(validator(source), true, filename);
+  }
+  const source = structuredClone(fixture.sources['places.geojson']);
+  delete source.entitySchemaVersion;
+  assert.equal(validator(source), false, 'missing adoption marker');
+  source.entitySchemaVersion = 1;
+  source.features[0].properties.entityId = 'unknown:1';
+  assert.equal(validator(source), false, 'invalid referenced identity');
 });
 
 test('adoption is explicit, supported, and complete across a source file', () => {
