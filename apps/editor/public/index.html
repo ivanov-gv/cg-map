@@ -111,7 +111,7 @@
         </p>
       </section>
       <section id="changes-panel" class="utility-panel" hidden>
-        <h2>Review and export</h2>
+        <h2>Review changes</h2>
         <p id="draft-conflict" class="notice" role="alert" hidden></p>
         <div id="draft-conflict-actions" class="button-row" hidden>
           <button id="draft-download">Download old draft</button>
@@ -122,21 +122,37 @@
         </p>
         <div id="review-files"></div>
         <ul id="review-problems" role="alert"></ul>
-        <label
-          >Author <input id="changeset-author" autocomplete="name"
-        /></label>
-        <label>Reason <input id="changeset-reason" /></label>
-        <button id="export-changeset" disabled>Export changeset</button>
-        <label class="file-button"
-          >Import changeset
-          <input
-            id="import-changeset"
-            type="file"
-            accept=".json,application/json"
-        /></label>
-        <button id="discard-changes" disabled>Discard all changes</button>
+        <div id="review-actions">
+          <button id="export-changeset" disabled>Export changeset</button>
+          <details id="review-secondary">
+            <summary>Secondary actions</summary>
+            <label class="file-button"
+              >Import changeset
+              <input
+                id="import-changeset"
+                type="file"
+                accept=".json,application/json"
+            /></label>
+            <button id="discard-changes" disabled>Discard all changes</button>
+          </details>
+        </div>
         <p id="review-message" role="status" hidden></p>
       </section>
+      <div id="export-dialog" class="overlay" hidden>
+        <div class="dialog" role="dialog" aria-labelledby="export-dialog-title">
+          <h2 id="export-dialog-title">Export changeset</h2>
+          <p class="hint">Record who made these changes and why.</p>
+          <label
+            >Author <input id="changeset-author" autocomplete="name"
+          /></label>
+          <label>Reason <input id="changeset-reason" /></label>
+          <p id="export-dialog-error" class="notice" role="alert" hidden></p>
+          <div class="button-row">
+            <button id="confirm-export" disabled>Download changeset</button>
+            <button id="cancel-export">Cancel</button>
+          </div>
+        </div>
+      </div>
     </aside>
     <main>
       <div id="map" aria-label="Source layer map"></div>

@@ -135,12 +135,12 @@ test.describe('source editing', () => {
 
   const exportChangeset = async (page, testInfo) => {
     await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    // The export dialog opens; fill author and reason
     await page.locator('#changeset-author').fill('Browser Test');
-    await openPanel(page, 'Changes');
     await page.locator('#changeset-reason').fill('Acceptance test');
     const downloadPromise = page.waitForEvent('download');
-    await openPanel(page, 'Changes');
-    await page.locator('#export-changeset').click();
+    await page.locator('#confirm-export').click();
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);
@@ -157,7 +157,7 @@ test.describe('source editing', () => {
     await openInspector(page);
     await page.locator('[name="visibilityLevel"]').selectOption('2');
     await applyAndWait(page);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
+    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
 
     const {savedPath, changeset} = await exportChangeset(page, testInfo);
     expect(Object.keys(changeset.bases)).toEqual([placesFile]);
@@ -170,12 +170,14 @@ test.describe('source editing', () => {
 
     page.once('dialog', dialog => dialog.accept());
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#discard-changes').click();
     await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#import-changeset').setInputFiles(savedPath);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
+    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
     await expect(page.locator('#review-message')).toContainText('Imported 1 changes');
   });
 
@@ -554,6 +556,7 @@ test.describe('source editing', () => {
     fileSystem.writeFileSync(refusedPath, JSON.stringify(changeset));
     await page.getByRole('button', {name: 'Changes', exact: true}).click();
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#import-changeset').setInputFiles(refusedPath);
     await expect(page.locator('#review-message')).toContainText('differs from this snapshot');
     await openPanel(page, 'Changes');

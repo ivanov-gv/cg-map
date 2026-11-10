@@ -445,3 +445,126 @@ select {
 .has-short-viewport.has-keyboard-inset .inspector-content {
   scroll-padding-block: 0;
 }
+
+/* Export dialog overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000a;
+}
+.dialog {
+  width: min(400px, 90vw);
+  padding: 20px;
+  background: #fffffb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px #0006;
+}
+.dialog h2 {
+  margin-top: 0;
+}
+.dialog .button-row {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+.dialog .notice {
+  margin-bottom: 10px;
+}
+
+/* Diff table in review panel */
+#review-files table {
+  width: 100%;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+#review-files table th,
+#review-files table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+#review-files table th {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.diff-changed td {
+  background: #fff7e6;
+}
+#review-files details[open] .diff-changed td {
+  background: transparent;
+}
+
+/* Review actions layout */
+#review-actions {
+  margin-top: 16px;
+}
+#review-actions > button {
+  margin-bottom: 10px;
+  width: 100%;
+}
+#review-secondary {
+  margin-top: 10px;
+}
+#review-secondary summary {
+  min-height: 40px;
+  padding-block: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+#review-secondary > *:not(summary) {
+  margin-top: 10px;
+}
+#review-secondary button {
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* File input button styling — the label acts as a button around the hidden input */
+.file-button {
+  display: block;
+  position: relative;
+  min-height: 42px;
+  padding: 10px;
+  background: white;
+  color: var(--green);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 10px;
+}
+.file-button input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Responsive: side-by-side diff columns on wide screens */
+@media (min-width: 721px) {
+  .dialog {
+    width: min(440px, 80vw);
+  }
+}
+@media (max-width: 720px) {
+  .overlay {
+    align-items: flex-end;
+    justify-content: stretch;
+    background: transparent;
+  }
+  .dialog {
+    width: 100%;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -4px 20px #0006;
+    max-height: 80dvh;
+    overflow: auto;
+  }
+}
