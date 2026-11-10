@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {overlayCollection, sourceFeatureForHit} from '../src/source-overlay.js';
+import {objectLabel, overlayCollection, sourceEntriesForHits, sourceFeatureForHit} from '../src/source-overlay.js';
 
 const point = {type: 'Point', coordinates: [19.2, 42.4]};
 const stop = {type: 'Feature', id: 'stop:7', properties: {name: 'Stop'}, geometry: point};
@@ -27,4 +27,22 @@ test('a missing hit or an unknown index resolves to nothing', () => {
   const outOfRangeHit = {id: 5, properties: {sourceFile: 'transport-stops.geojson'}};
   assert.equal(sourceFeatureForHit(undefined, 'transport-stops.geojson', [stop]), null);
   assert.equal(sourceFeatureForHit(outOfRangeHit, 'transport-stops.geojson', [stop]), null);
+});
+
+test('hit candidates deduplicate tile and outline hits and preserve working keys after a deletion', () => {
+  const entries = [{key: '4', feature: stop}, {key: 'local:new', feature: {...stop, id: 'stop:8'}}];
+  const hit = id => ({id, properties: {sourceFile: 'transport-stops.geojson'}});
+  const hits = [hit(1), hit(0), hit(1), hit(0), hit(-1), hit(5), hit('0'),
+    {id: 0, properties: {sourceFile: 'buildings.geojson'}}, undefined];
+  assert.deepEqual(sourceEntriesForHits(hits, 'transport-stops.geojson', entries), entries);
+  assert.deepEqual(sourceEntriesForHits([], 'transport-stops.geojson', entries), []);
+});
+
+test('object labels distinguish equal names and unnamed geometry without inventing identities', () => {
+  assert.equal(objectLabel({key: '4', feature: stop}), 'Stop · Point · feature 4');
+  assert.equal(objectLabel({key: '5', feature: stop}), 'Stop · Point · feature 5');
+  const unnamed = {...stop, properties: {}};
+  assert.equal(objectLabel({key: '6', feature: unnamed}), 'Point · Point · feature 6');
+  const address = {...stop, properties: {'addr:housenumber': '17'}};
+  assert.equal(objectLabel({key: '7', feature: address}), '17 · Point · feature 7');
 });

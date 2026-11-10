@@ -41,6 +41,8 @@
       >
         Changes
       </button>
+      <button id="open-objects" type="button" data-panel="objects-panel" disabled
+        aria-controls="objects-panel" aria-expanded="false">Objects</button>
       <button id="open-inspector" type="button" aria-controls="inspector" aria-expanded="false" hidden>Selection</button>
     </nav>
     <button
@@ -91,6 +93,15 @@
           · <a href="https://opendatacommons.org/licenses/odbl/">ODbL</a> ·
           Natural Earth. Stops: ePodgorica. Satellite: eMapa Ortofoto 2025.
         </footer>
+      </section>
+      <section id="objects-panel" class="utility-panel" aria-labelledby="objects-heading" hidden>
+        <h2 id="objects-heading">Objects in view</h2>
+        <p id="objects-status" class="hint" role="status"></p>
+        <ul id="objects-list" aria-labelledby="objects-heading"></ul>
+        <div id="objects-pages" class="button-row" hidden>
+          <button id="objects-previous" type="button">Previous objects</button>
+          <button id="objects-next" type="button">Next objects</button>
+        </div>
       </section>
       <section id="tools-panel" class="utility-panel" hidden>
         <h2>Tools</h2>

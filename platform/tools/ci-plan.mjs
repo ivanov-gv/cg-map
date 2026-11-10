@@ -111,6 +111,11 @@ export const EDITOR_BROWSER_AREAS = {
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
+  selection: {
+    specs: 'tests/e2e/selection.spec.mjs',
+    specFiles: ['selection.spec.mjs'],
+    sources: ['object-list.js']
+  },
   viewer: {
     specs: 'tests/e2e/viewer.spec.mjs',
     specFiles: ['viewer.spec.mjs'],
