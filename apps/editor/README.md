@@ -22,9 +22,14 @@ reopens it with Enter or Space. Opening or replacing a utility panel also preser
 follows the visual viewport so the active field and actions remain above the onscreen keyboard.
 
 Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
-roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding published layers
-are restored. Source overlays ignore public POI visibility thresholds. Switching modes shows a loading status until the
-new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
+roads.geojson. Only one source file is selectable at once. The active file keeps the normal map styles, names and
+category icons, using its current working features. Browse restores the reviewed release. Hollow green guides identify
+unchanged objects; amber guides identify applied local changes. A blue outer outline marks selection independently of
+that state. Tools can hide the guides without closing the inspector or discarding an edit. Guides appear from zoom 15,
+so they do not crowd the city view. At that zoom they also reveal POIs below their public threshold; with guides off,
+only the normal rendered objects can be tapped, using the public POI thresholds and label collision rules. Country
+outlines and bus stops remain read-only, with their own outlines or stop symbols and names. Switching modes shows a
+loading status until the new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
 
 ## Editing
 
@@ -67,8 +72,8 @@ stay available there.
 Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
 public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode or Browse.
 It is not an actual rebuild. Below street scale the tiles simplify geometry and drop minor roads, which the preview does
-not do, so it shows more detail there than the release will. In the rare case that an edit gives a spot a new
-combination of place levels, that marker is missing from the preview.
+not do, so it shows more detail there than the release will. Shared POI markers and their zoom bands are rebuilt from
+the working places, including new combinations of levels at one location.
 
 ### Larger datasets
 

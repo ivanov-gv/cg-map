@@ -1,4 +1,4 @@
-import {buildPlaceMarkers, markerKeys, normalizePlaces} from '@ivanov-gv/map-core';
+import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeLayers} from '@ivanov-gv/map-core';
 
 // Shows the map as a rebuild would, with every pending edit in every file applied and drawn in the public cartography.
 // It is not a rebuild: tiles simplify geometry and leave out minor roads at low zoom, which this does not, so it shows
@@ -24,8 +24,6 @@ export function previewLayers(publishedLayers, sourceName) {
 }
 
 // The markers the public map would draw for these places. Throws on a place it could not publish, as the public app does.
-// The place layers stay those built for the published places, so in the rare case that an edit puts places of a new
-// combination of levels on one spot, that marker is missing from the preview.
 function placeMarkers(features, visibilityConfig) {
   const directory = normalizePlaces(features, visibilityConfig);
   return featureCollection(buildPlaceMarkers(directory, markerKeys(directory)));
@@ -51,6 +49,13 @@ export class EditPreview {
     this.#publishedPlaces = publishedPlaces;
   }
 
+  // Only rendered normal cartography is selectable when edit guides are off. Sources replaced in place keep their layers.
+  get layerIds() {
+    const replacedSources = new Set(this.#replacedSources.keys());
+    const layers = this.#map.getStyle().layers;
+    return [...this.#addedLayerIds, ...layers.filter(layer => replacedSources.has(layer.source)).map(layer => layer.id)];
+  }
+
   get isShown() {
     return this.#isShown;
   }
@@ -64,7 +69,10 @@ export class EditPreview {
       ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
       : null;
     const publishedPlaceData = placeData ? this.#publishedData(placesSource) : null;
-    if (placeData) this.#replaceSourceData(placesSource, placeData, publishedPlaceData);
+    if (placeData) {
+      this.#replaceSourceData(placesSource, placeData, publishedPlaceData);
+      this.#installWorkingPlaceBands(workingFeaturesByFile.get(placesFile));
+    }
     for (const [filename, features] of workingFeaturesByFile) {
       if (filename === labelsFile)
         this.#replaceSourceData(labelsSource, featureCollection(features), this.#publishedData(labelsSource));
@@ -84,6 +92,21 @@ export class EditPreview {
     this.#hiddenFilters = new Map();
     this.#replacedSources = new Map();
     this.#isShown = false;
+  }
+
+  // A move or addition can create a shared marker with a level combination absent from the release. Install its bands
+  // in the public drawing order, and remove only these extra layers when restoring the published map.
+  #installWorkingPlaceBands(features) {
+    const directory = normalizePlaces(features, this.#visibilityConfig);
+    const {names, icons} = placeLayers(placeBands(directory, this.#visibilityConfig), this.#visibilityConfig);
+    let nextLayerId = 'road-labels';
+    for (const layer of [...names, ...icons].reverse()) {
+      if (!this.#map.getLayer(layer.id)) {
+        this.#map.addLayer(layer, nextLayerId);
+        this.#addedLayerIds.push(layer.id);
+      }
+      nextLayerId = layer.id;
+    }
   }
 
   #replaceSourceData(sourceId, data, publishedData) {

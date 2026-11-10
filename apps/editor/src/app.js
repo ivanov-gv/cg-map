@@ -1,6 +1,5 @@
 import {
   archiveFilenamePattern,
-  createGeoJSONOverlay,
   createMap,
   hitTest,
   installPlaces,
@@ -20,7 +19,7 @@ import {
   saveDraft
 } from './draft-store.js';
 import {downloadJSON, elementById} from './dom.js';
-import {EditPreview, hiddenLayerFilter} from './edit-preview.js';
+import {EditPreview} from './edit-preview.js';
 import {EditSession} from './edit-session.js';
 import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
@@ -29,7 +28,7 @@ import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {installInspectorViewport} from './inspector-viewport.js';
-import {overlayCollection, sourceFeatureForHit} from './source-overlay.js';
+import {createSourceOverlay, overlayCollection, sourceFeatureForHit} from './source-overlay.js';
 
 const layerNames = {
   'places.geojson': 'POIs',
@@ -67,7 +66,8 @@ let map;
 let sources;
 let overlay;
 let activeFile = null;
-let hiddenLayers = new Map();
+let activeRendering;
+let areGuidesVisible = true;
 let isSatelliteVisible = false;
 let isModeLoading = false;
 let rules;
@@ -189,28 +189,22 @@ function clearSelection() {
   setStatus(modeStatus());
 }
 
-// Hide the corresponding published geometry while the complete source is visible.
-// Filters preserve the core's independent house-number scale/visibility behavior.
-function maskPublishedLayer(filename) {
-  for (const [layerId, filter] of hiddenLayers) map.setFilter(layerId, filter);
-  hiddenLayers = new Map();
-  let layerIds = basemapLayers[filename] ?? [];
-  if (filename === 'places.geojson') {
-    layerIds = map
-      .getStyle()
-      .layers.filter(layer => layer.source === 'places')
-      .map(layer => layer.id);
-  }
-  for (const layerId of layerIds) {
-    hiddenLayers.set(layerId, map.getFilter(layerId) ?? null);
-    map.setFilter(layerId, hiddenLayerFilter);
-  }
+// The active file uses the public cartography with working geometry and properties. Guides only add editing affordances.
+function refreshOverlay() {
+  activeRendering.hide();
+  const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
+  const changedFeatures = new Set(activeFile ? session.changes(activeFile).map(change => change.after) : []);
+  const collection = overlayCollection(activeFile, features, changedFeatures);
+  if (activeFile) activeRendering.show(new Map([[activeFile, collection.features]]));
+  overlay.setData(collection);
 }
 
-// The overlay always shows the working state, so an applied move leaves no feature at its old position.
-function refreshOverlay() {
-  const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
-  overlay.setData(overlayCollection(activeFile, features));
+// Toggling presentation preserves the open edit; clicks wait until the new visibility has rendered.
+function toggleGuides() {
+  areGuidesVisible = !areGuidesVisible;
+  overlay.setGuidesVisible(areGuidesVisible);
+  elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
+  showLoadingStatus();
 }
 
 function showLoadingStatus() {
@@ -237,6 +231,7 @@ function renderCommandAvailability() {
 
 function renderAddFeature() {
   const addLabel = addFeatureLabels[activeFile];
+  elementById('edit-guides').hidden = !activeFile;
   elementById('add-feature').hidden = !addLabel;
   elementById('add-feature').textContent = addLabel ?? '';
 }
@@ -305,7 +300,6 @@ function setMode(filename) {
   if (preview.isShown) hidePreview();
   activeFile = activeFile === filename ? null : filename;
   elementById('current-layer').textContent = activeFile ? layerNames[activeFile] : 'Browse';
-  maskPublishedLayer(activeFile);
   refreshOverlay();
   clearSelection();
   showLoadingStatus();
@@ -368,7 +362,9 @@ function selectFeatureAtClick(event) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  const hit = hitTest(map, event.point, overlay.layerIds)[0];
+  const layerIds = [...activeRendering.layerIds, ...overlay.inspectionLayerIds,
+    ...(areGuidesVisible ? overlay.layerIds : [])];
+  const hit = hitTest(map, event.point, layerIds)[0];
   const entries = session.workingEntries(activeFile);
   const features = entries.map(({feature}) => feature);
   const feature = sourceFeatureForHit(hit, activeFile, features);
@@ -376,7 +372,8 @@ function selectFeatureAtClick(event) {
     clearSelection();
     return;
   }
-  showFeature(feature, entries[hit.id].key);
+  const entry = entries.find(entry => entry.feature === feature);
+  showFeature(feature, entry.key);
 }
 
 // Shows drafts that could not be resumed. They stay in their own storage slot until someone decides. A draft that could
@@ -662,7 +659,9 @@ async function start() {
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
   preview = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
-  overlay = createGeoJSONOverlay(map, 'editor-source');
+  activeRendering = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
+  overlay = createSourceOverlay(map);
+  elementById('edit-guides').onclick = toggleGuides;
   startEditing(visibilityConfig);
   map.on('click', selectFeatureAtClick);
   map.on('idle', finishModeLoading);
