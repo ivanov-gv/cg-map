@@ -309,10 +309,12 @@ test('hollow POI guides preserve public icons and labels, and hidden objects nev
       icon: map.getLayoutProperty('place-icons-4-open', 'icon-image'),
       label: map.getLayoutProperty('place-names-4-open', 'text-field'),
       fill: map.getPaintProperty('editor-source-point', 'circle-opacity'),
-      radius: map.getPaintProperty('editor-source-point', 'circle-radius')
+      radius: map.getPaintProperty('editor-source-point', 'circle-radius'),
+      selectionBehindNames: map.getStyle().layers.findIndex(layer => layer.id === 'editor-source-selection-point')
+        < map.getStyle().layers.findIndex(layer => layer.id === 'place-names-4-open')
     };
   });
-  expect(normalStyle).toEqual({icon: ['get', 'icon'], label: ['get', 'label'], fill: 0, radius: 13});
+  expect(normalStyle).toEqual({icon: ['get', 'icon'], label: ['get', 'label'], fill: 0, radius: 13, selectionBehindNames: true});
   await page.screenshot({path: testInfo.outputPath('hollow-guides.png')});
   await clickCoordinate(page, coordinate);
   await expect(page.locator('#selection-title')).toHaveText(feature.properties.name);

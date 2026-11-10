@@ -84,6 +84,7 @@ test('guides and selection have hollow interiors and independent visibility', ()
   assert.equal(layer('editor-source-selection-fill').layout.visibility, 'none');
   assert.equal(layer('editor-source-selection-point').paint['circle-radius'], 17);
   assert.ok(map.layers.indexOf(layer('editor-source-point')) < map.layers.indexOf(layer('normal-name')));
+  assert.ok(map.layers.indexOf(layer('editor-source-selection-point')) < map.layers.indexOf(layer('normal-name')));
   overlay.setGuidesVisible(false);
   assert.equal(layer('editor-source-point').layout.visibility, 'none');
   assert.notEqual(layer('editor-source-selection-point').layout?.visibility, 'none');

@@ -50,7 +50,9 @@ export function createSourceOverlay(map) {
   map.setLayerZoomRange('editor-source-point', guideMinZoom, 24);
   map.setLayerZoomRange('editor-source-line', guideMinZoom, 24);
   const firstSymbol = map.getStyle().layers.find(layer => layer.type === 'symbol').id;
-  for (const layerId of overlay.layerIds) map.moveLayer(layerId, firstSymbol);
+  const selectionLayerIds = overlay.layerIds.map(id => id.replace('editor-source-', 'editor-source-selection-'));
+  // Text halos must also sit above the outer selection outline, not just the ordinary guides.
+  for (const layerId of [...overlay.layerIds, ...selectionLayerIds]) map.moveLayer(layerId, firstSymbol);
   return {
     layerIds: overlay.layerIds.filter(id => !id.endsWith('-fill')),
     inspectionLayerIds: inspectionLayers,
