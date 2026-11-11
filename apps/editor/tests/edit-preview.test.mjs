@@ -166,3 +166,14 @@ test('a new shared-place visibility band is rendered in public order and removed
   assert.equal(map.getLayer(names.id), undefined);
   assert.deepEqual(map.layers.map(layer => layer.id), ['minor-roads', 'road-labels', 'buildings']);
 });
+
+test('active cartography reuses the guide source and leaves it installed on hide', () => {
+  const map = fakeMap();
+  map.sources['editor-source'] = {data: {type: 'FeatureCollection', features: []}};
+  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: [], sharedSource: 'editor-source'});
+  preview.show(new Map([['buildings.geojson', []]]));
+  assert.equal(map.getLayer('edit-preview-buildings').source, 'editor-source');
+  assert.equal(map.sources['edit-preview-buildings.geojson'], undefined);
+  preview.hide();
+  assert.ok(map.sources['editor-source']);
+});

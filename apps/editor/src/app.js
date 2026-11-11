@@ -195,8 +195,13 @@ function refreshOverlay() {
   const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
   const changedFeatures = new Set(activeFile ? session.changes(activeFile).map(change => change.after) : []);
   const collection = overlayCollection(activeFile, features, changedFeatures);
-  if (activeFile) activeRendering.show(new Map([[activeFile, collection.features]]));
   overlay.setData(collection);
+  if (!activeFile) return;
+  try {
+    activeRendering.show(new Map([[activeFile, collection.features]]));
+  } catch (error) {
+    showError(new Error(`Rendering ${activeFile} failed: ${error.message}`));
+  }
 }
 
 // Toggling presentation preserves the open edit; clicks wait until the new visibility has rendered.
@@ -232,6 +237,7 @@ function renderCommandAvailability() {
 function renderAddFeature() {
   const addLabel = addFeatureLabels[activeFile];
   elementById('edit-guides').hidden = !activeFile;
+  elementById('edit-guides-hint').hidden = !activeFile;
   elementById('add-feature').hidden = !addLabel;
   elementById('add-feature').textContent = addLabel ?? '';
 }
@@ -659,7 +665,9 @@ async function start() {
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
   preview = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
-  activeRendering = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
+  activeRendering = new EditPreview({
+    map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces, sharedSource: 'editor-source'
+  });
   overlay = createSourceOverlay(map);
   elementById('edit-guides').onclick = toggleGuides;
   startEditing(visibilityConfig);

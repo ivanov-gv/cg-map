@@ -447,3 +447,30 @@ test('a resumed shared-location move installs its public zoom bands with guides 
   await expect.poll(() => page.evaluate(() => Boolean(window.editorDebug.map.getLayer('place-icons-3-4')))).toBe(false);
   await expect(page.locator('#error')).toBeHidden();
 });
+
+test('a corrupt saved visibility level reports an error while the active mode remains consistent', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const [sourceResponse, manifestResponse] = await Promise.all([
+    page.request.get(new URL('sources/places.geojson', page.url()).href),
+    page.request.get(new URL('sources/manifest.json', page.url()).href)
+  ]);
+  const {features} = await sourceResponse.json();
+  const manifest = await manifestResponse.json();
+  const before = features[0];
+  const after = {...before, properties: {...before.properties, visibilityLevel: 99}};
+  const base = manifest.layers.find(layer => layer.filename === 'places.geojson').sha256;
+  const draft = {version: 1, files: {'places.geojson': {
+    base, changes: [['0', {operation: 'modify', reference: {featureIndex: 0}, before, after}]],
+    history: {undo: [], redo: []}
+  }}};
+  await page.evaluate(draft => localStorage.setItem('kompas-editor-draft-v1', JSON.stringify(draft)), draft);
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await chooseMode(page, 'places.geojson');
+  await expect(page.locator('#error')).toContainText('invalid visibilityLevel 99');
+  await expect(page.locator('[data-mode="places.geojson"]')).toHaveAttribute('aria-pressed', 'true');
+  await setView(page, before.geometry.coordinates, 17);
+  await clickCoordinate(page, before.geometry.coordinates);
+  await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 0');
+});

@@ -34,6 +34,7 @@ export class EditPreview {
   #basemapLayers;
   #visibilityConfig;
   #publishedPlaces;
+  #sharedSource;
   #hiddenFilters = new Map();
   #addedLayerIds = [];
   #addedSourceIds = [];
@@ -42,11 +43,12 @@ export class EditPreview {
 
   // basemapLayers maps a source file to the published layers that draw it from the vector archive. publishedPlaces are
   // the places as released, to put back when the preview ends.
-  constructor({map, basemapLayers, visibilityConfig, publishedPlaces}) {
+  constructor({map, basemapLayers, visibilityConfig, publishedPlaces, sharedSource = null}) {
     this.#map = map;
     this.#basemapLayers = basemapLayers;
     this.#visibilityConfig = visibilityConfig;
     this.#publishedPlaces = publishedPlaces;
+    this.#sharedSource = sharedSource;
   }
 
   // Only rendered normal cartography is selectable when edit guides are off. Sources replaced in place keep their layers.
@@ -122,9 +124,11 @@ export class EditPreview {
 
   // Each copy goes directly below its hidden original, so the drawing order stays the published one.
   #drawInsteadOfBasemap(filename, features) {
-    const sourceId = previewPrefix + filename;
-    this.#map.addSource(sourceId, {type: 'geojson', data: featureCollection(features)});
-    this.#addedSourceIds.push(sourceId);
+    const sourceId = this.#sharedSource ?? previewPrefix + filename;
+    if (!this.#sharedSource) {
+      this.#map.addSource(sourceId, {type: 'geojson', data: featureCollection(features)});
+      this.#addedSourceIds.push(sourceId);
+    }
     const layerIds = this.#basemapLayers[filename];
     const publishedLayers = this.#map.getStyle().layers.filter(layer => layerIds.includes(layer.id));
     for (const layer of previewLayers(publishedLayers, sourceId)) {
