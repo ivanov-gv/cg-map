@@ -1365,6 +1365,13 @@ test.describe('source editing', () => {
     await expect(twoPane).toBeVisible();
     await expect(twoPane.locator('.review-list-pane')).toBeVisible();
     await expect(twoPane.locator('.review-detail-pane')).toBeVisible();
+    // The panel should be wider than the default 320px utility panel
+    const panelBounds = await page.locator('#changes-panel').boundingBox();
+    expect(panelBounds.width).toBeGreaterThan(400);
+    // The comparison pane should be wide enough for a readable table (not 137px)
+    const detailPane = twoPane.locator('.review-detail-pane');
+    const detailBounds = await detailPane.boundingBox();
+    expect(detailBounds.width).toBeGreaterThan(200);
     // Clicking a list item updates the detail pane
     await expect(twoPane.locator('.change-list-selected')).toHaveCount(1);
   });
@@ -1388,5 +1395,7 @@ test.describe('source editing', () => {
     await expect(changeSummary).toHaveCount(1);
     await changeSummary.click();
     await expect(stackedList.locator('li > details')).toHaveAttribute('open', '');
+    // The accordion is exclusive: opening one closes others (verified via name attribute)
+    await expect(stackedList.locator('li > details')).toHaveAttribute('name', 'review-change');
   });
 });

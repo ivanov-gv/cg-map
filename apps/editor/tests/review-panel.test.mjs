@@ -1,29 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-// The review panel functions are tested by exercising the exported ReviewPanel class,
-// but the diff helpers are module-private. To test them, we re-implement the same
-// logic here and verify the behavior matches what the panel expects.
-
-// formatValue mirrors the implementation in review-panel.js
-function formatValue(value) {
-  if (value === undefined || value === null) return '';
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
-}
-
-// diffProperties mirrors the implementation in review-panel.js
-function diffProperties(beforeProperties, afterProperties) {
-  const allKeys = new Set([...Object.keys(beforeProperties ?? {}), ...Object.keys(afterProperties ?? {})]);
-  const changed = [];
-  const unchanged = [];
-  for (const key of [...allKeys].sort()) {
-    const beforeValue = beforeProperties?.[key];
-    const afterValue = afterProperties?.[key];
-    if (formatValue(beforeValue) !== formatValue(afterValue)) changed.push(key);
-    else unchanged.push(key);
-  }
-  return {changed, unchanged};
-}
+import {diffProperties, formatValue, geometryChanged, summarizeGeometryChange} from '../src/feature-diff.js';
 
 test('diffProperties detects changed scalar values', () => {
   const before = {name: 'Cafe', visibilityLevel: 3};
@@ -50,8 +27,6 @@ test('diffProperties detects removed keys', () => {
 });
 
 test('diffProperties compares object values by JSON not reference', () => {
-  // This is the key test: two different object references with the same content
-  // should be considered unchanged.
   const before = {addr: {city: 'Podgorica'}};
   const after = {addr: {city: 'Podgorica'}};
   const {changed, unchanged} = diffProperties(before, after);
@@ -87,7 +62,6 @@ test('diffProperties handles null and undefined', () => {
   const before = {name: 'Cafe', extra: null};
   const after = {name: 'Cafe', extra: undefined};
   const {changed, unchanged} = diffProperties(before, after);
-  // Both null and undefined format to '', so they are unchanged
   assert.deepEqual(changed, []);
   assert.deepEqual(unchanged, ['extra', 'name']);
 });
@@ -106,10 +80,12 @@ test('diffProperties sorts keys alphabetically', () => {
   assert.deepEqual(unchanged, ['m', 'z']);
 });
 
-// geometryChanged mirrors the implementation in review-panel.js
-function geometryChanged(beforeGeometry, afterGeometry) {
-  return JSON.stringify(beforeGeometry ?? {}) !== JSON.stringify(afterGeometry ?? {});
-}
+test('formatValue handles null and undefined', () => {
+  assert.equal(formatValue(null), '');
+  assert.equal(formatValue(undefined), '');
+  assert.equal(formatValue(42), '42');
+  assert.equal(formatValue({a: 1}), '{"a":1}');
+});
 
 test('geometryChanged detects moved coordinates', () => {
   const before = {type: 'Point', coordinates: [19.25, 42.44]};
@@ -126,22 +102,6 @@ test('geometryChanged handles null geometry', () => {
   assert.equal(geometryChanged(null, null), false);
   assert.equal(geometryChanged({type: 'Point', coordinates: [1, 2]}, null), true);
 });
-
-// summarizeGeometryChange mirrors the implementation in review-panel.js
-function summarizeGeometryChange(beforeGeometry, afterGeometry) {
-  if (!beforeGeometry || !afterGeometry) return 'geometry changed';
-  const beforeCoords = beforeGeometry.coordinates;
-  const afterCoords = afterGeometry.coordinates;
-  if (JSON.stringify(beforeCoords) === JSON.stringify(afterCoords)) return null;
-  function countVertices(coords) {
-    if (Array.isArray(coords[0]?.[0])) return coords.flat().length;
-    return coords.length;
-  }
-  const beforeCount = countVertices(beforeCoords);
-  const afterCount = countVertices(afterCoords);
-  if (beforeCount !== afterCount) return `vertices: ${beforeCount} → ${afterCount}`;
-  return 'moved';
-}
 
 test('summarizeGeometryChange returns moved for same vertex count', () => {
   const before = {type: 'Point', coordinates: [19.25, 42.44]};
