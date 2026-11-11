@@ -1,6 +1,5 @@
 import {
   archiveFilenamePattern,
-  createGeoJSONOverlay,
   createMap,
   hitTest,
   installPlaces,
@@ -20,7 +19,7 @@ import {
   saveDraft
 } from './draft-store.js';
 import {downloadJSON, elementById} from './dom.js';
-import {EditPreview, hiddenLayerFilter} from './edit-preview.js';
+import {EditPreview} from './edit-preview.js';
 import {EditSession} from './edit-session.js';
 import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
@@ -29,7 +28,7 @@ import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-
 import {isExportDialogVisible, ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {installInspectorViewport} from './inspector-viewport.js';
-import {objectName, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
+import {createSourceOverlay, objectName, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
 import {ObjectList} from './object-list.js';
 
 const layerNames = {
@@ -68,7 +67,8 @@ let map;
 let sources;
 let overlay;
 let activeFile = null;
-let hiddenLayers = new Map();
+let activeRendering;
+let areGuidesVisible = true;
 let isSatelliteVisible = false;
 let isModeLoading = false;
 let rules;
@@ -192,29 +192,29 @@ function clearSelection() {
   setStatus(modeStatus());
 }
 
-// Hide the corresponding published geometry while the complete source is visible.
-// Filters preserve the core's independent house-number scale/visibility behavior.
-function maskPublishedLayer(filename) {
-  for (const [layerId, filter] of hiddenLayers) map.setFilter(layerId, filter);
-  hiddenLayers = new Map();
-  let layerIds = basemapLayers[filename] ?? [];
-  if (filename === 'places.geojson') {
-    layerIds = map
-      .getStyle()
-      .layers.filter(layer => layer.source === 'places')
-      .map(layer => layer.id);
-  }
-  for (const layerId of layerIds) {
-    hiddenLayers.set(layerId, map.getFilter(layerId) ?? null);
-    map.setFilter(layerId, hiddenLayerFilter);
+// The active file uses the public cartography with working geometry and properties. Guides only add editing affordances.
+function refreshOverlay() {
+  clickCandidates = null;
+  activeRendering.hide();
+  const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
+  const changedFeatures = new Set(activeFile ? session.changes(activeFile).map(change => change.after) : []);
+  const collection = overlayCollection(activeFile, features, changedFeatures);
+  overlay.setData(collection);
+  if (!activeFile) return;
+  try {
+    activeRendering.show(new Map([[activeFile, collection.features]]));
+  } catch (error) {
+    showError(new Error(`Rendering ${activeFile} failed: ${error.message}`));
   }
 }
 
-// The overlay always shows the working state, so an applied move leaves no feature at its old position.
-function refreshOverlay() {
+// Toggling presentation preserves the open edit; clicks wait until the new visibility has rendered.
+function toggleGuides() {
+  areGuidesVisible = !areGuidesVisible;
   clickCandidates = null;
-  const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
-  overlay.setData(overlayCollection(activeFile, features));
+  overlay.setGuidesVisible(areGuidesVisible);
+  elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
+  showLoadingStatus();
 }
 
 function showLoadingStatus() {
@@ -242,6 +242,8 @@ function renderCommandAvailability() {
 
 function renderAddFeature() {
   const addLabel = addFeatureLabels[activeFile];
+  elementById('edit-guides').hidden = !activeFile;
+  elementById('edit-guides-hint').hidden = !activeFile;
   elementById('add-feature').hidden = !addLabel;
   elementById('add-feature').textContent = addLabel ?? '';
 }
@@ -308,7 +310,6 @@ function setMode(filename) {
   if (preview.isShown) hidePreview();
   activeFile = activeFile === filename ? null : filename;
   elementById('current-layer').textContent = activeFile ? layerNames[activeFile] : 'Browse';
-  maskPublishedLayer(activeFile);
   refreshOverlay();
   clearSelection();
   showLoadingStatus();
@@ -366,7 +367,13 @@ function finishModeLoading() {
   renderObjectList();
 }
 
-// Rendered overlay hits limit the directory to the current map view, without tile geometry or public visibility rules.
+// Only visible guides or normal cartography supply candidates, both for clicks and the keyboard list.
+function selectableLayerIds() {
+  return [...activeRendering.layerIds, ...overlay.inspectionLayerIds,
+    ...(areGuidesVisible ? overlay.layerIds : [])];
+}
+
+// Rendered hits limit the directory to visible objects in the current map view.
 function renderObjectList() {
   if (!objectList || elementById('objects-panel').hidden) return;
   const heading = clickCandidates ? 'Choose an object here' : 'Objects in view';
@@ -375,7 +382,7 @@ function renderObjectList() {
     objectList.render([], heading, message);
     return;
   }
-  const hits = map.queryRenderedFeatures({layers: overlay.layerIds});
+  const hits = map.queryRenderedFeatures({layers: selectableLayerIds()});
   const entries = clickCandidates ?? sourceEntriesForHits(hits, activeFile, session.workingEntries(activeFile));
   objectList.render(entries, heading, '');
 }
@@ -406,7 +413,7 @@ function selectFeatureAtClick(event) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  const hits = hitTest(map, event.point, overlay.layerIds);
+  const hits = hitTest(map, event.point, selectableLayerIds());
   const candidates = sourceEntriesForHits(hits, activeFile, session.workingEntries(activeFile));
   const hadClickCandidates = clickCandidates !== null;
   clickCandidates = null;
@@ -827,7 +834,11 @@ async function start() {
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
   preview = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
-  overlay = createGeoJSONOverlay(map, 'editor-source');
+  activeRendering = new EditPreview({
+    map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces, sharedSource: 'editor-source'
+  });
+  overlay = createSourceOverlay(map);
+  elementById('edit-guides').onclick = toggleGuides;
   startEditing(visibilityConfig);
   objectList = new ObjectList(entry => {
     const isSelected = selectObject(entry, true);

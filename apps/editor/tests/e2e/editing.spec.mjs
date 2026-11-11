@@ -980,6 +980,8 @@ test.describe('source editing', () => {
     await page.locator('#apply-edit').click();
     await expect(page.locator('#undo')).toBeEnabled();
     await openPanel(page, 'Changes');
+    // The author field lives in the export dialog, so open it first.
+    await page.locator('#export-changeset').click();
     const author = page.locator('#changeset-author');
     await author.fill('Browser Test');
     await author.press('Control+Z');
@@ -1327,7 +1329,7 @@ test.describe('source editing', () => {
     expect(operation.after.geometry.coordinates).toHaveLength(2);
   });
 
-  test('the preview shows every pending edit in the public cartography, and ends on a mode switch', async ({page}) => {
+  test('the all-edits preview ends on a mode switch, keeping that file in public cartography', async ({page}) => {
     const renderedCount = (layerId, center) =>
       page.evaluate(
         ({layerId, center}) => {
@@ -1390,7 +1392,9 @@ test.describe('source editing', () => {
     await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
     await chooseMode(page, roadsFile);
     await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'false');
-    expect(await page.evaluate(() => Boolean(window.editorDebug.map.getLayer('edit-preview-footways')))).toBe(false);
+    // An active mode now keeps its own working features in the public style after the all-file preview ends.
+    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => Boolean(window.editorDebug.map.getLayer('edit-preview-footways')))).toBe(true);
   });
 
   // A simple footprint, so that one moved corner can only produce a valid shape.

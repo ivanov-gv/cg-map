@@ -86,15 +86,16 @@ test.describe('source viewer', () => {
     expect(place).toBeTruthy();
     await centerSourceMap(page, place.geometry.coordinates, 15);
     await clickMapCenter(page, 'editor-source-point');
-    const published = await page.evaluate(() => {
+    const published = await page.evaluate(placeId => {
       const map = window.editorDebug.map;
       const layers = map.getStyle().layers.filter(layer => layer.source === 'places');
       return {
         zoom: map.getZoom(),
         minZoom: layers.find(layer => layer.id === 'place-icons-4-open').minzoom,
-        visible: map.queryRenderedFeatures({layers: layers.map(layer => layer.id)}).length
+        visible: map.queryRenderedFeatures({layers: layers.map(layer => layer.id)})
+          .filter(hit => JSON.parse(hit.properties.activeIds).includes(placeId)).length
       };
-    });
+    }, place.properties.id);
     expect(published).toEqual({zoom: 15, minZoom: 16, visible: 0});
     await expect(page.locator('#selection-title')).toHaveText(place.properties.name);
     await expect(page.locator('#selection-source')).toContainText('places.geojson · feature');
@@ -157,10 +158,10 @@ test.describe('source viewer', () => {
     const quadrilateral = buildings.features.find(feature => feature.geometry.coordinates[0].length === 5);
     const corners = quadrilateral.geometry.coordinates[0].slice(0, 4);
     await centerSourceMap(page, averageCoordinate(corners), closeZoom);
-    await clickMapCenter(page, 'editor-source-fill');
+    await clickMapCenter(page, 'edit-preview-buildings');
     await expect(page.locator('#selection-title')).toHaveText('Unnamed');
     await expect(page.locator('#selection-source')).toContainText('buildings.geojson · feature');
-    await expectRenderedSelection(page, 'editor-source-selection-fill');
+    await expectRenderedSelection(page, 'editor-source-selection-line');
 
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="roads.geojson"]').click();
@@ -243,4 +244,248 @@ test('workspace keeps the map and layer when its available space changes', {tag:
   await expect(page.locator('#map')).toHaveCSS('height', '500px');
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
   await expect(page.locator('#layers-panel').getByRole('link', {name: 'OpenStreetMap contributors'})).toBeVisible();
+});
+
+
+async function chooseMode(page, filename) {
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await page.locator(`[data-mode="${filename}"]`).click();
+  await expect(page.locator('#status')).toContainText('source features');
+}
+
+async function setView(page, center, zoom) {
+  await page.evaluate(({center, zoom}) => window.editorDebug.map.jumpTo({center, zoom}), {center, zoom});
+  await expect.poll(() => page.evaluate(() => window.editorDebug.map.loaded())).toBe(true);
+}
+
+async function toggleGuides(page) {
+  await page.getByRole('button', {name: 'Tools', exact: true}).click();
+  await page.locator('#edit-guides').click();
+  await page.getByRole('button', {name: 'Tools', exact: true}).click();
+  await expect(page.locator('#status')).toContainText('source features');
+}
+
+async function clickCoordinate(page, coordinate) {
+  const point = await page.evaluate(coordinate => {
+    const {map} = window.editorDebug;
+    const bounds = map.getCanvas().getBoundingClientRect();
+    const point = map.project(coordinate);
+    return {x: bounds.left + point.x, y: bounds.top + point.y};
+  }, coordinate);
+  await page.mouse.click(point.x, point.y);
+}
+
+// Select an isolated low-priority POI so a hidden-object tap cannot accidentally hit a neighbouring visible marker.
+async function isolatedPlace(page) {
+  const response = await page.request.get(new URL('sources/places.geojson', page.url()).href);
+  const {features} = await response.json();
+  const feature = features.find(candidate => candidate.properties.visibilityLevel === 4 && features.every(other => {
+    const distance = Math.hypot(...candidate.geometry.coordinates.map((value, axis) => value - other.geometry.coordinates[axis]));
+    return candidate === other || distance > 0.001;
+  }));
+  expect(feature).toBeTruthy();
+  return feature;
+}
+
+async function renderedPlaceIds(page) {
+  return page.evaluate(() => {
+    const {map} = window.editorDebug;
+    const layers = map.getStyle().layers.filter(layer => layer.source === 'places').map(layer => layer.id);
+    return map.queryRenderedFeatures({layers}).flatMap(hit => JSON.parse(hit.properties.activeIds));
+  });
+}
+
+test('hollow POI guides preserve public icons and labels, and hidden objects never take taps', {tag: '@phone'}, async ({page}, testInfo) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const feature = await isolatedPlace(page);
+  const coordinate = feature.geometry.coordinates;
+  await chooseMode(page, 'places.geojson');
+  await setView(page, coordinate, 16);
+  await expect.poll(() => renderedPlaceIds(page)).toContain(feature.properties.id);
+  const normalStyle = await page.evaluate(() => {
+    const {map} = window.editorDebug;
+    return {
+      icon: map.getLayoutProperty('place-icons-4-open', 'icon-image'),
+      label: map.getLayoutProperty('place-names-4-open', 'text-field'),
+      fill: map.getPaintProperty('editor-source-point', 'circle-opacity'),
+      radius: map.getPaintProperty('editor-source-point', 'circle-radius'),
+      selectionBehindNames: map.getStyle().layers.findIndex(layer => layer.id === 'editor-source-selection-point')
+        < map.getStyle().layers.findIndex(layer => layer.id === 'place-names-4-open')
+    };
+  });
+  expect(normalStyle).toEqual({icon: ['get', 'icon'], label: ['get', 'label'], fill: 0, radius: 13, selectionBehindNames: true});
+  await page.screenshot({path: testInfo.outputPath('hollow-guides.png')});
+  await clickCoordinate(page, coordinate);
+  await expect(page.locator('#selection-title')).toHaveText(feature.properties.name);
+  await page.locator('#close-inspector').click();
+  await toggleGuides(page);
+  await expect(page.locator('#edit-guides')).toHaveAttribute('aria-pressed', 'false');
+  // Selection is an independent outer ring, and the collapsed inspector remains available.
+  expect(await page.evaluate(() => window.editorDebug.map.getLayoutProperty('editor-source-selection-point', 'visibility')))
+    .not.toBe('none');
+  await expect(page.locator('#open-inspector')).toBeVisible();
+  await setView(page, coordinate, 15);
+  expect(await renderedPlaceIds(page)).not.toContain(feature.properties.id);
+  await clickCoordinate(page, coordinate);
+  await expect(page.locator('#selection-title')).toHaveText('Select an object');
+  await toggleGuides(page);
+  await clickCoordinate(page, coordinate);
+  await expect(page.locator('#selection-title')).toHaveText(feature.properties.name);
+  await page.locator('#cancel-edit').click();
+  await setView(page, coordinate, 14);
+  expect(await page.evaluate(() => window.editorDebug.map.queryRenderedFeatures({layers: ['editor-source-point']}).length))
+    .toBe(0);
+  await clickCoordinate(page, coordinate);
+  await expect(page.locator('#selection-title')).toHaveText('Select an object');
+  await expect(page.locator('#error')).toBeHidden();
+});
+
+test('applied changes use amber guides, refresh normal rendering, and undo restores green', {tag: '@phone'}, async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const feature = await isolatedPlace(page);
+  await chooseMode(page, 'places.geojson');
+  await setView(page, feature.geometry.coordinates, 17);
+  await clickCoordinate(page, feature.geometry.coordinates);
+  await page.locator('[name="name"]').fill('Amber guide test');
+  await page.locator('[name="name:en"]').fill('Amber guide test');
+  await page.locator('#apply-edit').click();
+  await expect(page.locator('#status')).toContainText('source features');
+  const changedState = () => page.evaluate(id => {
+    const {map} = window.editorDebug;
+    return {
+      guide: map.querySourceFeatures('editor-source').find(hit => hit.properties.id === id)?.properties.isChanged,
+      label: map.querySourceFeatures('places').find(hit => JSON.parse(hit.properties.activeIds).includes(id))?.properties.label
+    };
+  }, feature.properties.id);
+  await expect.poll(changedState).toEqual({guide: true, label: 'Amber guide test'});
+  expect(await page.evaluate(() => window.editorDebug.map.getPaintProperty('editor-source-point', 'circle-stroke-color')))
+    .toEqual(['case', ['get', 'isChanged'], '#a66a12', '#32634d']);
+  await page.getByRole('button', {name: 'Tools', exact: true}).click();
+  await page.locator('#undo').click();
+  await expect.poll(changedState).toEqual({guide: false, label: feature.properties['name:en'] ?? feature.properties.name});
+});
+
+test('every file keeps normal cartography and guide-off hits require rendered geometry', async ({page}, testInfo) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  for (const filename of ['buildings.geojson', 'roads.geojson', 'land.geojson', 'water.geojson', 'building-labels.geojson']) {
+    const normal = await page.evaluate(filename => {
+      const {map} = window.editorDebug;
+      const ids = {
+        'buildings.geojson': 'buildings', 'roads.geojson': 'major-roads', 'land.geojson': 'land',
+        'water.geojson': 'water', 'building-labels.geojson': 'building-numbers'
+      };
+      return map.getStyle().layers.find(layer => layer.id === ids[filename]);
+    }, filename);
+    await chooseMode(page, filename);
+    const style = await page.evaluate(id => {
+      const {map} = window.editorDebug;
+      return map.getStyle().layers.find(layer => layer.id === `edit-preview-${id}` || layer.id === id);
+    }, normal.id);
+    expect(style.paint).toEqual(normal.paint);
+    expect(style.layout).toEqual(normal.layout);
+  }
+  await setView(page, [19.2594, 42.4411], 18);
+  await page.screenshot({path: testInfo.outputPath('building-label-guides.png')});
+  await toggleGuides(page);
+  await setView(page, [19.2594, 42.4411], 12);
+  await clickCoordinate(page, [19.2594, 42.4411]);
+  await expect(page.locator('#selection-title')).toHaveText('Select an object');
+  await chooseMode(page, 'transport-stops.geojson');
+  const response = await page.request.get(new URL('sources/transport-stops.geojson', page.url()).href);
+  const {features} = await response.json();
+  const stop = features[0];
+  await setView(page, stop.geometry.coordinates, 17);
+  await clickCoordinate(page, stop.geometry.coordinates);
+  await expect(page.locator('#selection-title')).toHaveText(stop.properties.name);
+  await expect(page.locator('#lock-reason')).toContainText('transit import');
+  await expect(page.locator('#error')).toBeHidden();
+});
+
+test('a resumed shared-location move installs its public zoom bands with guides off', {tag: '@phone'}, async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const [sourceResponse, manifestResponse] = await Promise.all([
+    page.request.get(new URL('sources/places.geojson', page.url()).href),
+    page.request.get(new URL('sources/manifest.json', page.url()).href)
+  ]);
+  const {features} = await sourceResponse.json();
+  const manifest = await manifestResponse.json();
+  const index = features.findIndex(feature => feature.properties.visibilityLevel === 3);
+  const destination = features.find(feature => feature.properties.visibilityLevel === 4);
+  const before = features[index];
+  const after = {...before, geometry: destination.geometry};
+  const base = manifest.layers.find(layer => layer.filename === 'places.geojson').sha256;
+  const draft = {
+    version: 1,
+    files: {'places.geojson': {
+      base,
+      changes: [[String(index), {operation: 'modify', reference: {featureIndex: index}, before, after}]],
+      history: {undo: [], redo: []}
+    }}
+  };
+  await page.evaluate(draft => localStorage.setItem('kompas-editor-draft-v1', JSON.stringify(draft)), draft);
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await chooseMode(page, 'places.geojson');
+  await toggleGuides(page);
+  await setView(page, destination.geometry.coordinates, 15);
+  await expect.poll(() => renderedPlaceIds(page)).toContain(before.properties.id);
+  expect(await renderedPlaceIds(page)).not.toContain(destination.properties.id);
+  const band = await page.evaluate(() => window.editorDebug.map.getLayer('place-icons-3-4'));
+  expect(band).toBeTruthy();
+  await clickCoordinate(page, destination.geometry.coordinates);
+  await expect(page.locator('#selection-title')).toHaveText(before.properties.name);
+  await page.locator('#cancel-edit').click();
+  await setView(page, destination.geometry.coordinates, 16);
+  await expect.poll(() => renderedPlaceIds(page)).toContain(destination.properties.id);
+  await expect.poll(() => renderedPlaceIds(page)).toContain(before.properties.id);
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await page.locator('#browse').click();
+  await expect.poll(() => page.evaluate(() => Boolean(window.editorDebug.map.getLayer('place-icons-3-4')))).toBe(false);
+  await expect(page.locator('#error')).toBeHidden();
+});
+
+test('a corrupt saved visibility level reports an error while the active mode remains consistent', async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const [sourceResponse, manifestResponse] = await Promise.all([
+    page.request.get(new URL('sources/places.geojson', page.url()).href),
+    page.request.get(new URL('sources/manifest.json', page.url()).href)
+  ]);
+  const {features} = await sourceResponse.json();
+  const manifest = await manifestResponse.json();
+  const before = features[0];
+  const after = {...before, properties: {...before.properties, visibilityLevel: 99}};
+  const base = manifest.layers.find(layer => layer.filename === 'places.geojson').sha256;
+  const draft = {version: 1, files: {'places.geojson': {
+    base, changes: [['0', {operation: 'modify', reference: {featureIndex: 0}, before, after}]],
+    history: {undo: [], redo: []}
+  }}};
+  await page.evaluate(draft => localStorage.setItem('kompas-editor-draft-v1', JSON.stringify(draft)), draft);
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await chooseMode(page, 'places.geojson');
+  await expect(page.locator('#error')).toContainText('invalid visibilityLevel 99');
+  await expect(page.locator('[data-mode="places.geojson"]')).toHaveAttribute('aria-pressed', 'true');
+  await setView(page, before.geometry.coordinates, 17);
+  await clickCoordinate(page, before.geometry.coordinates);
+  await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 0');
+});
+
+test('Objects list follows guide visibility for below-threshold POIs', {tag: '@phone'}, async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const feature = await isolatedPlace(page);
+  await chooseMode(page, 'places.geojson');
+  await setView(page, feature.geometry.coordinates, 15);
+  await toggleGuides(page);
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-list')).not.toContainText(feature.properties.name);
+  await page.locator('#open-objects').click();
+  await toggleGuides(page);
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-list')).toContainText(feature.properties.name);
 });
