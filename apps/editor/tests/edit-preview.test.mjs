@@ -41,6 +41,7 @@ function fakeMap() {
     sources,
     filters,
     getStyle: () => ({layers, sources: Object.fromEntries(Object.entries(sources).map(([id, {data}]) => [id, {data}]))}),
+    getLayer: id => layers.find(layer => layer.id === id),
     getSource: id => ({setData: data => (sources[id].data = data)}),
     addSource: (id, specification) => (sources[id] = specification),
     removeSource: id => delete sources[id],
@@ -140,4 +141,39 @@ test('showing again replaces the previous preview instead of drawing it twice', 
   assert.equal(map.layers.filter(({id}) => id === 'edit-preview-minor-roads').length, 1);
   preview.hide();
   assert.deepEqual(map.filters.get('minor-roads'), minorRoads.filter, 'the published filter survives a second show');
+});
+
+
+test('a new shared-place visibility band is rendered in public order and removed when leaving the mode', () => {
+  const map = fakeMap();
+  const first = place('node/1', 'Neighbourhood cafe');
+  const second = place('node/2', 'Street cafe');
+  second.properties.visibilityLevel = 4;
+  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  preview.show(new Map([['places.geojson', [first, second]]]));
+  const names = map.getLayer('place-names-3-4');
+  const icons = map.getLayer('place-icons-3-4');
+  assert.equal(names.minzoom, 15);
+  assert.equal(names.maxzoom, 16);
+  assert.equal(icons.minzoom, 15);
+  assert.equal(icons.maxzoom, 16);
+  assert.deepEqual(icons.filter, ['==', ['get', 'band'], '3-4']);
+  assert.ok(map.layers.indexOf(names) < map.layers.indexOf(icons));
+  assert.ok(map.layers.indexOf(icons) < map.layers.indexOf(map.getLayer('road-labels')));
+  assert.ok(preview.layerIds.includes(icons.id));
+  preview.hide();
+  assert.equal(map.getLayer(icons.id), undefined);
+  assert.equal(map.getLayer(names.id), undefined);
+  assert.deepEqual(map.layers.map(layer => layer.id), ['minor-roads', 'road-labels', 'buildings']);
+});
+
+test('active cartography reuses the guide source and leaves it installed on hide', () => {
+  const map = fakeMap();
+  map.sources['editor-source'] = {data: {type: 'FeatureCollection', features: []}};
+  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: [], sharedSource: 'editor-source'});
+  preview.show(new Map([['buildings.geojson', []]]));
+  assert.equal(map.getLayer('edit-preview-buildings').source, 'editor-source');
+  assert.equal(map.sources['edit-preview-buildings.geojson'], undefined);
+  preview.hide();
+  assert.ok(map.sources['editor-source']);
 });
