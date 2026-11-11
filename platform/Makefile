@@ -37,8 +37,10 @@ worktree:
 
 # make -C platform browser-image [IMAGE=browser-ci:local]: build the browser test image and prove Chromium starts in it.
 IMAGE ?= browser-ci:local
+# The build's RUN steps download packages. They use the host's network because on GitHub runners the default build
+# network stopped resolving names (apt-get: "Could not resolve 'archive.ubuntu.com'") while the host still could.
 browser-image:
-	docker build --tag $(IMAGE) browser-image
+	docker build --network=host --tag $(IMAGE) browser-image
 	docker run --rm $(IMAGE) node --print "process.version"
 	docker run --rm $(IMAGE) python3 --version
 	docker run --rm $(IMAGE) node --eval "require('playwright').chromium.launch().then(browser => browser.close())"
