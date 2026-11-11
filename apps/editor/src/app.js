@@ -215,7 +215,6 @@ function toggleGuides() {
   overlay.setGuidesVisible(areGuidesVisible);
   elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
   showLoadingStatus();
-
 }
 
 function showLoadingStatus() {

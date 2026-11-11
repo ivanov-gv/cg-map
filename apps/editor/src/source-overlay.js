@@ -42,7 +42,6 @@ export function objectName(feature) {
 export function objectLabel({key, feature}) {
   const name = objectName(feature);
   return `${name} · ${feature.geometry.type} · feature ${key}`;
-
 }
 
 const guideColor = ['case', ['get', 'isChanged'], '#a66a12', '#32634d'];
