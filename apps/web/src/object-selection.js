@@ -144,12 +144,16 @@ export class ObjectSelection {
     this.anchor = [...feature.geometry.coordinates];
     this.resolveAnchor();
   }
+  // Once the selected place's position is on screen, also highlight the building it lies in, a single time.
+  // It sets the target directly because select() starts with clear(), which would drop the place marker's ring.
   resolveAnchor() {
     if (!this.anchor || this.map.getZoom() < 13) return;
     const point = this.map.project(this.anchor);
     const canvas = this.map.getCanvas();
     if (point.x < 0 || point.y < 0 || point.x > canvas.clientWidth || point.y > canvas.clientHeight) return;
     const building = this.map.queryRenderedFeatures(point, {layers: ['buildings']})[0];
-    if (building) this.select(building);
+    if (!building || !Number.isInteger(building.id)) return;
+    this.anchor = null;
+    this.setTarget({sourceLayer: 'buildings', id: building.id});
   }
 }
