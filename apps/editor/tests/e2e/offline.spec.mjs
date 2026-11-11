@@ -202,10 +202,11 @@ test.describe('offline-first install', () => {
     await page.reload();
     await expect(page.locator('#review-message')).toHaveText('Restored your saved draft.');
     await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
     await page.locator('#changeset-author').fill('Offline Test');
     await page.locator('#changeset-reason').fill('Works without a server');
     const downloadPromise = page.waitForEvent('download');
-    await page.locator('#export-changeset').click();
+    await page.locator('#confirm-export').click();
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);

@@ -85,7 +85,9 @@ draft that cannot be resumed, because it was made on another version of a source
 storage slot, where autosave cannot overwrite it, until you download or discard it. If it cannot even be moved there, it
 stays in place and autosave stays off, with a visible error, until you do. Discarding asks first, then saves at once.
 Outside a mode the map shows the reviewed release, so a pending edit appears only in its own mode. Review and export
-stay available there.
+stay available there. The Changes panel compares changed fields beside the change list on wide screens, and opens one
+change at a time on narrow screens. Export opens a dialog for the author and reason; import and discard are under
+Secondary actions.
 
 Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
 public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode or Browse.

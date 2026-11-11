@@ -156,12 +156,12 @@ test.describe('source editing', () => {
 
   const exportChangeset = async (page, testInfo) => {
     await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    // The export dialog opens; fill author and reason
     await page.locator('#changeset-author').fill('Browser Test');
-    await openPanel(page, 'Changes');
     await page.locator('#changeset-reason').fill('Acceptance test');
     const downloadPromise = page.waitForEvent('download');
-    await openPanel(page, 'Changes');
-    await page.locator('#export-changeset').click();
+    await page.locator('#confirm-export').click();
     const download = await downloadPromise;
     const savedPath = testInfo.outputPath(download.suggestedFilename());
     await download.saveAs(savedPath);
@@ -178,7 +178,7 @@ test.describe('source editing', () => {
     await openInspector(page);
     await page.locator('[name="visibilityLevel"]').selectOption('2');
     await applyAndWait(page);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
+    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
 
     const {savedPath, changeset} = await exportChangeset(page, testInfo);
     expect(Object.keys(changeset.bases)).toEqual([placesFile]);
@@ -191,12 +191,14 @@ test.describe('source editing', () => {
 
     page.once('dialog', dialog => dialog.accept());
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#discard-changes').click();
     await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#import-changeset').setInputFiles(savedPath);
-    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1`);
+    await expect(page.locator(`[data-changed-file="${placesFile}"] > h3`)).toHaveText(`${placesFile} · 1 change`);
     await expect(page.locator('#review-message')).toContainText('Imported 1 changes');
   });
 
@@ -575,6 +577,7 @@ test.describe('source editing', () => {
     fileSystem.writeFileSync(refusedPath, JSON.stringify(changeset));
     await page.getByRole('button', {name: 'Changes', exact: true}).click();
     await openPanel(page, 'Changes');
+    await page.locator('#review-secondary summary').click();
     await page.locator('#import-changeset').setInputFiles(refusedPath);
     await expect(page.locator('#review-message')).toContainText('differs from this snapshot');
     await openPanel(page, 'Changes');
@@ -977,6 +980,8 @@ test.describe('source editing', () => {
     await page.locator('#apply-edit').click();
     await expect(page.locator('#undo')).toBeEnabled();
     await openPanel(page, 'Changes');
+    // The author field lives in the export dialog, so open it first.
+    await page.locator('#export-changeset').click();
     const author = page.locator('#changeset-author');
     await author.fill('Browser Test');
     await author.press('Control+Z');
@@ -1256,7 +1261,7 @@ test.describe('source editing', () => {
     await openInspector(page);
     await page.locator('#delete-feature').click();
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-    await expect(page.locator(`[data-changed-file="${placesFile}"] summary`)).toContainText('delete');
+    await expect(page.locator(`[data-changed-file="${placesFile}"] .review-stacked-list > li > details > summary`)).toContainText('delete');
     await openPanel(page, 'Tools');
     await page.locator('#undo').click();
     await openPanel(page, 'Changes');
@@ -1561,5 +1566,110 @@ test.describe('source editing', () => {
     await expect(page.locator('#lock-reason')).toContainText('transit import');
     await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+  });
+
+  test('Escape in the export dialog closes only the dialog, not the Changes panel', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    await expect(page.locator('#export-dialog')).not.toHaveAttribute('hidden');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#export-dialog')).toHaveAttribute('hidden');
+    // The Changes panel should still be open
+    await expect(page.locator('#changes-panel')).not.toHaveAttribute('hidden');
+    // Focus returns to the export button
+    await expect(page.locator('#export-changeset')).toBeFocused();
+  });
+
+  test('export failures are shown in the dialog', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    await page.locator('#changeset-author').fill('Browser Test');
+    await page.locator('#changeset-reason').fill('Testing errors');
+    await page.evaluate(() => {
+      window.exportRejections = [];
+      window.addEventListener('unhandledrejection', event => window.exportRejections.push(event.reason.message));
+      crypto.randomUUID = () => {
+        throw new Error('forced failure');
+      };
+    });
+    await page.locator('#confirm-export').click();
+    await expect(page.locator('#export-dialog-error')).toHaveText('forced failure');
+    expect(await page.evaluate(() => window.exportRejections)).toEqual([]);
+  });
+
+  test('the Changes panel uses side-by-side layout on wide screens', async ({page}) => {
+    await page.setViewportSize({width: 1280, height: 800});
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    // On wide screens, the two-pane layout should be visible
+    const twoPane = page.locator('.review-two-pane');
+    await expect(twoPane).toBeVisible();
+    await expect(twoPane.locator('.review-list-pane')).toBeVisible();
+    await expect(twoPane.locator('.review-detail-pane')).toBeVisible();
+    // The panel should be wider than the default 320px utility panel
+    const panelBounds = await page.locator('#changes-panel').boundingBox();
+    expect(panelBounds.width).toBeGreaterThan(400);
+    // The comparison pane should be wide enough for a readable table (not 137px)
+    const detailPane = twoPane.locator('.review-detail-pane');
+    const detailBounds = await detailPane.boundingBox();
+    expect(detailBounds.width).toBeGreaterThan(200);
+    const fieldHeader = detailPane.locator('th').first();
+    const headerMetrics = await fieldHeader.evaluate((header) => {
+      const style = getComputedStyle(header);
+      return {height: header.clientHeight, lineHeight: parseFloat(style.lineHeight),
+        padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)};
+    });
+    expect(headerMetrics.height - headerMetrics.padding).toBeLessThanOrEqual(headerMetrics.lineHeight + 1);
+    // Clicking a list item updates the detail pane
+    await expect(twoPane.locator('.change-list-selected')).toHaveCount(1);
+    await page.setViewportSize({width: 900, height: 800});
+    await expect(twoPane).not.toBeVisible();
+    await expect(page.locator('.review-stacked-list')).toBeVisible();
+  });
+
+  test('the Changes panel uses stacked accordion on narrow screens', {tag: '@phone'}, async ({page}) => {
+    await page.setViewportSize({width: 360, height: 740});
+    await openEditor(page);
+    const {index, features} = await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    const secondIndex = features.findIndex((_feature, candidate) => candidate !== index && isIsolatedAt(features, candidate));
+    expect(secondIndex).toBeGreaterThanOrEqual(0);
+    await centerMapOn(page, features[secondIndex].geometry.coordinates);
+    await tapMapAt(page, features[secondIndex].geometry.coordinates);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill('Another edited place');
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    // On narrow screens, the two-pane layout is hidden by CSS media query
+    await expect(page.locator('.review-two-pane')).not.toBeVisible();
+    // The stacked list should be visible and contain the change
+    const stackedList = page.locator('.review-stacked-list');
+    await expect(stackedList).toBeVisible();
+    const changes = stackedList.locator('li > details');
+    await expect(changes).toHaveCount(2);
+    const firstSummary = changes.nth(0).locator(':scope > summary');
+    const secondSummary = changes.nth(1).locator(':scope > summary');
+    expect((await firstSummary.boundingBox()).height).toBeGreaterThanOrEqual(40);
+    await firstSummary.click();
+    await expect(changes.nth(0)).toHaveAttribute('open', '');
+    await secondSummary.click();
+    await expect(changes.nth(1)).toHaveAttribute('open', '');
+    await expect(changes.nth(0)).not.toHaveAttribute('open');
   });
 });
