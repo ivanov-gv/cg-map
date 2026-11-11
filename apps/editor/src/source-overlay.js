@@ -10,16 +10,9 @@ export function overlayCollection(filename, features) {
   return {type: 'FeatureCollection', features: displayFeatures};
 }
 
-// Returns the source feature behind a rendered hit, or null when the hit belongs to another file.
-// After a mode switch the map keeps rendering the previous file until its worker finishes, and an
-// index alone would resolve against the new file to an unrelated feature.
-export function sourceFeatureForHit(hit, filename, features) {
-  if (hit?.properties.sourceFile !== filename) return null;
-  return features[hit.id] ?? null;
-}
-
 // A feature may be hit in several tiles or both fill and outline layers. Resolve each display index once,
-// in source order, retaining working keys after deletions have changed the display indices.
+// in source order, retaining working keys after deletions have changed the display indices. After a mode switch,
+// workers may still render the previous file: its indices must never resolve against the active file.
 export function sourceEntriesForHits(hits, filename, entries) {
   const indices = new Set();
   for (const hit of hits) {
@@ -30,9 +23,14 @@ export function sourceEntriesForHits(hits, filename, entries) {
   return [...indices].sort((first, second) => first - second).map(index => entries[index]);
 }
 
+// The inspector and object list share one display name; geometry and revision keys belong in list context only.
+export function objectName(feature) {
+  const properties = feature.properties;
+  return properties.name || properties['addr:housenumber'] || 'Unnamed';
+}
+
 // Geometry and the revision-bound key distinguish unnamed objects and names shared by several sources.
 export function objectLabel({key, feature}) {
-  const properties = feature.properties;
-  const name = properties.name || properties['addr:housenumber'] || feature.geometry.type;
+  const name = objectName(feature);
   return `${name} · ${feature.geometry.type} · feature ${key}`;
 }

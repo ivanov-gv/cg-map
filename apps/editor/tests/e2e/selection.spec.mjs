@@ -144,3 +144,69 @@ test('list selection keeps original references after deletion and refreshes appl
   await page.locator('#open-objects').click();
   await expect(page.locator('#objects-list button')).toHaveText(['Renamed overlap · Point · feature 1']);
 });
+
+test('single-hit map selection preserves a utility panel on a wide window', {tag: '@phone'}, async ({page}) => {
+  await page.setViewportSize({width: 1800, height: 800});
+  await openOverlappingPlaces(page);
+  await page.evaluate(() => new Promise(resolve => {
+    const {map} = window.editorDebug;
+    map.once('idle', resolve);
+    map.jumpTo({center: [18.5, 43]});
+  }));
+  await page.getByRole('button', {name: 'Changes', exact: true}).click();
+  await tapOverlap(page);
+  await expect(page.locator('#selection-title')).toHaveText('Outside view');
+  await expect(page.locator('#changes-panel')).toBeVisible();
+  await expect(page.locator('.inspector')).toBeVisible();
+  await page.locator('#cancel-edit').click();
+  await page.locator('#open-objects').click();
+  await page.getByRole('button', {name: 'Outside view · Point · feature 2', exact: true}).click();
+  await expect(page.locator('#objects-panel')).toBeHidden();
+  await expect(page.locator('.inspector')).toBeVisible();
+});
+
+test('clicking empty map clears the previous location chooser', {tag: '@phone'}, async ({page}) => {
+  await openOverlappingPlaces(page);
+  await tapOverlap(page);
+  await expect(page.locator('#objects-heading')).toHaveText('Choose an object here');
+  const canvas = page.locator('.maplibregl-canvas');
+  const bounds = await canvas.boundingBox();
+  const emptyOffsetPixels = 60;
+  await canvas.click({position: {x: bounds.width / 2 + emptyOffsetPixels, y: bounds.height / 2}});
+  await expect(page.locator('#objects-panel')).toBeHidden();
+  await expect(page.locator('#selection-title')).toHaveText('Select an object');
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-heading')).toHaveText('Objects in view');
+  await expect(page.locator('#objects-list button')).toHaveCount(2);
+});
+
+test('opening Objects during mode loading focuses the first object once it is ready', {tag: '@phone'}, async ({page}) => {
+  await openOverlappingPlaces(page);
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await page.locator('#browse').click();
+  // Hold the completion notification while the real worker loads, so this interaction has no timing race.
+  await page.evaluate(() => {
+    const {map} = window.editorDebug;
+    const originalFire = map.fire;
+    map.fire = function(event, ...argumentsAfterEvent) {
+      const type = typeof event === 'string' ? event : event.type;
+      if (type === 'idle') return this;
+      return originalFire.call(this, event, ...argumentsAfterEvent);
+    };
+    window.releaseModeIdle = () => {
+      map.fire = originalFire;
+      map.fire('idle');
+    };
+  });
+  await page.getByRole('button', {name: 'Layers', exact: true}).click();
+  await page.locator('[data-mode="places.geojson"]').click();
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-status')).toHaveText('Loading objects…');
+  await expect(page.locator('#objects-status')).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.editorDebug.map.isSourceLoaded('editor-source'))).toBe(true);
+  await page.evaluate(() => {
+    window.releaseModeIdle();
+    delete window.releaseModeIdle;
+  });
+  await expect(page.getByRole('button', {name: 'Overlap 1 · Point · feature 0', exact: true})).toBeFocused();
+});

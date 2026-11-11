@@ -1325,10 +1325,9 @@ test.describe('source editing', () => {
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, countryPoint);
     const countryKey = land.indexOf(country);
-    if (await page.locator('#objects-panel').isVisible()) {
-      const countryChoice = `${country.properties.name} · ${country.geometry.type} · feature ${countryKey}`;
-      await page.getByRole('button', {name: countryChoice, exact: true}).click();
-    }
+    await expect(page.locator('#objects-panel')).toBeVisible();
+    const countryChoice = `${country.properties.name} · ${country.geometry.type} · feature ${countryKey}`;
+    await page.getByRole('button', {name: countryChoice, exact: true}).click();
     await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${countryKey}`);
     await expect(page.locator('#lock-reason')).toContainText('Country shapes');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');

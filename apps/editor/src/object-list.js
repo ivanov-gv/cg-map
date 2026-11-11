@@ -30,7 +30,14 @@ export class ObjectList {
   changePage(direction) {
     this.page += direction;
     this.renderPage();
-    elementById('objects-list').querySelector('button')?.focus();
+    this.focusFirst();
+  }
+
+  // A focused loading message holds the user's place until the worker supplies selectable objects.
+  focusFirst() {
+    const button = elementById('objects-list').querySelector('button');
+    const target = button ?? elementById('objects-status');
+    target.focus();
   }
 
   // Each page announces its range. No list truncation can hide an otherwise selectable object.
@@ -38,6 +45,8 @@ export class ObjectList {
     const start = this.page * pageSize;
     const entries = this.entries.slice(start, start + pageSize);
     const list = elementById('objects-list');
+    const status = elementById('objects-status');
+    const hadFocus = list.contains(document.activeElement) || document.activeElement === status;
     list.replaceChildren();
     for (const entry of entries) {
       const row = document.createElement('li');
@@ -48,10 +57,11 @@ export class ObjectList {
       list.append(row);
     }
     const end = start + entries.length;
-    elementById('objects-status').textContent = this.message ||
+    status.textContent = this.message ||
       (this.entries.length ? `${start + 1}–${end} of ${this.entries.length} objects` : 'No objects in the current view.');
     elementById('objects-previous').disabled = this.page === 0;
     elementById('objects-next').disabled = end >= this.entries.length;
     elementById('objects-pages').hidden = this.entries.length <= pageSize;
+    if (hadFocus) this.focusFirst();
   }
 }

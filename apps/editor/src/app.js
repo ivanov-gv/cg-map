@@ -29,7 +29,7 @@ import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {installInspectorViewport} from './inspector-viewport.js';
-import {overlayCollection, sourceEntriesForHits} from './source-overlay.js';
+import {objectName, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
 import {ObjectList} from './object-list.js';
 
 const layerNames = {
@@ -158,8 +158,7 @@ function showFeature(feature, index) {
   showInspector();
   const properties = feature.properties;
   const hash = sources.get(activeFile).metadata.sha256;
-  elementById('selection-title').textContent =
-    properties.name || properties['addr:housenumber'] || feature.geometry.type;
+  elementById('selection-title').textContent = objectName(feature);
   elementById('selection-source').textContent = `${activeFile} · feature ${index}`;
   elementById('identity').textContent = `Pinned source SHA-256: ${hash}. Feature indices are revision-bound.`;
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
@@ -377,18 +376,18 @@ function renderObjectList() {
   objectList.render(entries, heading, '');
 }
 
-// Pointer and keyboard selection share the same guard against discarding an unfinished edit.
+// Returns whether selection succeeded, preserving unrelated panels and any unfinished edit.
 function selectObject(entry, shouldFocus = false) {
-  if (!activeFile || isModeLoading) return;
+  if (!activeFile || isModeLoading) return false;
   if (editing.hasUnappliedEdit) {
     setStatus(applyOrCancelMessage, true);
-    return;
+    return false;
   }
   const currentEntry = session.workingEntries(activeFile).find(candidate => candidate.key === entry.key);
-  if (!currentEntry) return;
-  showPanel(null);
+  if (!currentEntry) return false;
   showFeature(currentEntry.feature, currentEntry.key);
   if (shouldFocus) elementById('close-inspector').focus();
+  return true;
 }
 
 // Clicks wait for the mode to finish loading, and a hit from another file never selects anything.
@@ -405,6 +404,9 @@ function selectFeatureAtClick(event) {
   }
   const hits = hitTest(map, event.point, overlay.layerIds);
   const candidates = sourceEntriesForHits(hits, activeFile, session.workingEntries(activeFile));
+  const hadClickCandidates = clickCandidates !== null;
+  clickCandidates = null;
+  if (hadClickCandidates && !elementById('objects-panel').hidden) showPanel(null);
   if (candidates.length === 0) {
     clearSelection();
     return;
@@ -416,7 +418,6 @@ function selectFeatureAtClick(event) {
   clickCandidates = candidates;
   showPanel('objects-panel');
   panelOpener = elementById('open-objects');
-  elementById('objects-list').querySelector('button')?.focus();
 }
 
 // Shows drafts that could not be resumed. They stay in their own storage slot until someone decides. A draft that could
@@ -578,7 +579,7 @@ function showPanel(panelId, opener = null) {
   }
   if (panelId === 'objects-panel') {
     renderObjectList();
-    elementById('objects-list').querySelector('button')?.focus();
+    objectList?.focusFirst();
   }
 }
 
@@ -709,7 +710,10 @@ async function start() {
   preview = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
   overlay = createGeoJSONOverlay(map, 'editor-source');
   startEditing(visibilityConfig);
-  objectList = new ObjectList(entry => selectObject(entry, true));
+  objectList = new ObjectList(entry => {
+    const isSelected = selectObject(entry, true);
+    if (isSelected && !elementById('objects-panel').hidden) showPanel(null);
+  });
   map.on('movestart', () => {
     clickCandidates = null;
     renderObjectList();
