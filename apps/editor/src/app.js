@@ -28,7 +28,8 @@ import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {installInspectorViewport} from './inspector-viewport.js';
-import {createSourceOverlay, overlayCollection, sourceFeatureForHit} from './source-overlay.js';
+import {createSourceOverlay, objectName, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
+import {ObjectList} from './object-list.js';
 
 const layerNames = {
   'places.geojson': 'POIs',
@@ -81,6 +82,8 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 let panelOpener = null;
+let objectList;
+let clickCandidates = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -155,8 +158,7 @@ function showFeature(feature, index) {
   showInspector();
   const properties = feature.properties;
   const hash = sources.get(activeFile).metadata.sha256;
-  elementById('selection-title').textContent =
-    properties.name || properties['addr:housenumber'] || feature.geometry.type;
+  elementById('selection-title').textContent = objectName(feature);
   elementById('selection-source').textContent = `${activeFile} · feature ${index}`;
   elementById('identity').textContent = `Pinned source SHA-256: ${hash}. Feature indices are revision-bound.`;
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
@@ -191,6 +193,7 @@ function clearSelection() {
 
 // The active file uses the public cartography with working geometry and properties. Guides only add editing affordances.
 function refreshOverlay() {
+  clickCandidates = null;
   activeRendering.hide();
   const features = activeFile ? session.workingEntries(activeFile).map(({feature}) => feature) : [];
   const changedFeatures = new Set(activeFile ? session.changes(activeFile).map(change => change.after) : []);
@@ -207,14 +210,17 @@ function refreshOverlay() {
 // Toggling presentation preserves the open edit; clicks wait until the new visibility has rendered.
 function toggleGuides() {
   areGuidesVisible = !areGuidesVisible;
+  clickCandidates = null;
   overlay.setGuidesVisible(areGuidesVisible);
   elementById('edit-guides').setAttribute('aria-pressed', String(areGuidesVisible));
   showLoadingStatus();
+
 }
 
 function showLoadingStatus() {
   isModeLoading = activeFile !== null;
   if (isModeLoading) setStatus(`Loading ${activeFile}…`, true);
+  renderObjectList();
 }
 
 function hasOnlyInMemoryChanges() {
@@ -351,9 +357,45 @@ function renderLayers() {
 
 // setData finishes in a worker. MapLibre reports idle only once the current data has rendered.
 function finishModeLoading() {
-  if (!isModeLoading) return;
-  isModeLoading = false;
-  setStatus(modeStatus());
+  if (isModeLoading) {
+    isModeLoading = false;
+    setStatus(modeStatus());
+  }
+  renderObjectList();
+}
+
+// Only visible guides or normal cartography supply candidates, both for clicks and the keyboard list.
+function selectableLayerIds() {
+  return [...activeRendering.layerIds, ...overlay.inspectionLayerIds,
+    ...(areGuidesVisible ? overlay.layerIds : [])];
+}
+
+// Rendered hits limit the directory to visible objects in the current map view.
+function renderObjectList() {
+  if (!objectList || elementById('objects-panel').hidden) return;
+  const heading = clickCandidates ? 'Choose an object here' : 'Objects in view';
+  if (!activeFile || isModeLoading || map.isMoving()) {
+    const message = activeFile ? 'Loading objects…' : 'Choose a layer to list its objects.';
+    objectList.render([], heading, message);
+    return;
+  }
+  const hits = map.queryRenderedFeatures({layers: selectableLayerIds()});
+  const entries = clickCandidates ?? sourceEntriesForHits(hits, activeFile, session.workingEntries(activeFile));
+  objectList.render(entries, heading, '');
+}
+
+// Returns whether selection succeeded, preserving unrelated panels and any unfinished edit.
+function selectObject(entry, shouldFocus = false) {
+  if (!activeFile || isModeLoading) return false;
+  if (editing.hasUnappliedEdit) {
+    setStatus(applyOrCancelMessage, true);
+    return false;
+  }
+  const currentEntry = session.workingEntries(activeFile).find(candidate => candidate.key === entry.key);
+  if (!currentEntry) return false;
+  showFeature(currentEntry.feature, currentEntry.key);
+  if (shouldFocus) elementById('close-inspector').focus();
+  return true;
 }
 
 // Clicks wait for the mode to finish loading, and a hit from another file never selects anything.
@@ -368,18 +410,22 @@ function selectFeatureAtClick(event) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  const layerIds = [...activeRendering.layerIds, ...overlay.inspectionLayerIds,
-    ...(areGuidesVisible ? overlay.layerIds : [])];
-  const hit = hitTest(map, event.point, layerIds)[0];
-  const entries = session.workingEntries(activeFile);
-  const features = entries.map(({feature}) => feature);
-  const feature = sourceFeatureForHit(hit, activeFile, features);
-  if (!feature) {
+  const hits = hitTest(map, event.point, selectableLayerIds());
+  const candidates = sourceEntriesForHits(hits, activeFile, session.workingEntries(activeFile));
+  const hadClickCandidates = clickCandidates !== null;
+  clickCandidates = null;
+  if (hadClickCandidates && !elementById('objects-panel').hidden) showPanel(null);
+  if (candidates.length === 0) {
     clearSelection();
     return;
   }
-  const entry = entries.find(entry => entry.feature === feature);
-  showFeature(feature, entry.key);
+  if (candidates.length === 1) {
+    selectObject(candidates[0]);
+    return;
+  }
+  clickCandidates = candidates;
+  showPanel('objects-panel');
+  panelOpener = elementById('open-objects');
 }
 
 // Shows drafts that could not be resumed. They stay in their own storage slot until someone decides. A draft that could
@@ -527,6 +573,7 @@ function toggleSatellite() {
 
 // Utility panels share space without changing the map or the pending edit.
 function showPanel(panelId, opener = null) {
+  if (panelId === 'objects-panel' && opener?.id === 'open-objects') clickCandidates = null;
   if (panelId) panelOpener = opener;
   for (const panel of document.querySelectorAll('.utility-panel')) {
     panel.hidden = panel.id !== panelId;
@@ -537,6 +584,10 @@ function showPanel(panelId, opener = null) {
   elementById('current-layer').setAttribute('aria-expanded', String(panelId === 'layers-panel'));
   if (panelId && sharedPanelSpace.matches && !document.querySelector('.inspector').hidden) {
     collapseInspector(false);
+  }
+  if (panelId === 'objects-panel') {
+    renderObjectList();
+    objectList?.focusFirst();
   }
 }
 
@@ -671,6 +722,14 @@ async function start() {
   overlay = createSourceOverlay(map);
   elementById('edit-guides').onclick = toggleGuides;
   startEditing(visibilityConfig);
+  objectList = new ObjectList(entry => {
+    const isSelected = selectObject(entry, true);
+    if (isSelected && !elementById('objects-panel').hidden) showPanel(null);
+  });
+  map.on('movestart', () => {
+    clickCandidates = null;
+    renderObjectList();
+  });
   map.on('click', selectFeatureAtClick);
   map.on('idle', finishModeLoading);
   renderLayers();

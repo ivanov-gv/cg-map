@@ -22,14 +22,23 @@ reopens it with Enter or Space. Opening or replacing a utility panel also preser
 follows the visual viewport so the active field and actions remain above the onscreen keyboard.
 
 Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
-roads.geojson. Only one source file is selectable at once. The active file keeps the normal map styles, names and
-category icons, using its current working features. Browse restores the reviewed release. Hollow green guides identify
-unchanged objects; amber guides identify applied local changes. A blue outer outline marks selection independently of
-that state. Tools can hide the guides without closing the inspector or discarding an edit. Guides appear from zoom 15,
-so they do not crowd the city view. At that zoom they also reveal POIs below their public threshold; with guides off,
-only the normal rendered objects can be tapped, using the public POI thresholds and label collision rules. Country
-outlines and bus stops remain read-only, with their own outlines or stop symbols and names. Switching modes shows a
-loading status until the new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
+roads.geojson. Only one source file is selectable at once. The active file keeps normal map styles, names and category
+icons using its working features. Browse restores the reviewed release. Hollow green guides identify unchanged objects;
+amber guides identify applied changes. A blue outer outline marks selection independently. Tools can hide guides without
+closing the inspector or discarding an edit. Guides appear from zoom 15 and can reveal POIs below their public
+threshold; with guides off, only normally rendered objects can be selected, using public thresholds and label collision
+rules. Country outlines and bus stops remain read-only, with their own outlines or stop symbols and names.
+
+When a click or tap hits several objects, a named chooser lets you select each one. Objects in the toolbar lists visible
+objects in the current map view, including co-located POIs; use Tab and Enter or Space to select one. Names include
+geometry and a revision-bound feature key to distinguish duplicates. Large lists have Previous / Next pages. Moving the
+map refreshes the list, and Browse clears it. Selecting from either list preserves any unapplied edit until Apply or
+Cancel. Switching modes shows a loading status until the new source has rendered, and clicks wait for it. Opening
+Objects during loading keeps keyboard focus on its status until the first object is ready. Satellite is a separate
+viewing control.
+
+Paging bounds the list's DOM work, but collecting rendered hits and comparing their labels still covers the whole view.
+A wide view of buildings or roads can involve tens of thousands of hits; zoom in to reduce that work.
 
 ## Editing
 

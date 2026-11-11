@@ -12,16 +12,37 @@ export function overlayCollection(filename, features, changedFeatures = new Set(
   return {type: 'FeatureCollection', features: displayFeatures};
 }
 
-// Returns the source feature behind a rendered hit, or null when the hit belongs to another file.
-// After a mode switch the map keeps rendering the previous file until its worker finishes, and an
-// index alone would resolve against the new file to an unrelated feature.
-export function sourceFeatureForHit(hit, filename, features) {
-  if (filename === 'places.geojson' && hit?.properties.activeIds) {
-    const visibleIds = JSON.parse(hit.properties.activeIds);
-    return features.find(feature => visibleIds.includes(feature.properties.id)) ?? null;
+// Resolve rendered hits once in source order, preserving working keys and rejecting stale file data.
+// Public POI markers carry only the IDs admitted at their current zoom, including co-located members.
+export function sourceEntriesForHits(hits, filename, entries) {
+  const indices = new Set();
+  const placeIndices = filename === 'places.geojson'
+    ? new Map(entries.map((entry, index) => [entry.feature.properties.id, index]))
+    : new Map();
+  for (const hit of hits) {
+    if (filename === 'places.geojson' && hit?.source === 'places' && hit.properties.activeIds) {
+      const visibleIndices = JSON.parse(hit.properties.activeIds).map(id => placeIndices.get(id));
+      for (const index of visibleIndices.filter(index => index !== undefined)) indices.add(index);
+      continue;
+    }
+    if (hit?.properties?.sourceFile !== filename) continue;
+    if (!Number.isInteger(hit.id) || !entries[hit.id]) continue;
+    indices.add(hit.id);
   }
-  if (hit?.properties.sourceFile !== filename) return null;
-  return features[hit.id] ?? null;
+  return [...indices].sort((first, second) => first - second).map(index => entries[index]);
+}
+
+// The inspector and object list share one display name; geometry and revision keys belong in list context only.
+export function objectName(feature) {
+  const properties = feature.properties;
+  return properties.name || properties['addr:housenumber'] || 'Unnamed';
+}
+
+// Geometry and the revision-bound key distinguish unnamed objects and names shared by several sources.
+export function objectLabel({key, feature}) {
+  const name = objectName(feature);
+  return `${name} · ${feature.geometry.type} · feature ${key}`;
+
 }
 
 const guideColor = ['case', ['get', 'isChanged'], '#a66a12', '#32634d'];

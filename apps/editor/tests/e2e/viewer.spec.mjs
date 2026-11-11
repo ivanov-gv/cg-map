@@ -159,7 +159,7 @@ test.describe('source viewer', () => {
     const corners = quadrilateral.geometry.coordinates[0].slice(0, 4);
     await centerSourceMap(page, averageCoordinate(corners), closeZoom);
     await clickMapCenter(page, 'edit-preview-buildings');
-    await expect(page.locator('#selection-title')).toHaveText('Polygon');
+    await expect(page.locator('#selection-title')).toHaveText('Unnamed');
     await expect(page.locator('#selection-source')).toContainText('buildings.geojson · feature');
     await expectRenderedSelection(page, 'editor-source-selection-line');
 
@@ -473,4 +473,19 @@ test('a corrupt saved visibility level reports an error while the active mode re
   await setView(page, before.geometry.coordinates, 17);
   await clickCoordinate(page, before.geometry.coordinates);
   await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 0');
+});
+
+test('Objects list follows guide visibility for below-threshold POIs', {tag: '@phone'}, async ({page}) => {
+  await page.goto('./');
+  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  const feature = await isolatedPlace(page);
+  await chooseMode(page, 'places.geojson');
+  await setView(page, feature.geometry.coordinates, 15);
+  await toggleGuides(page);
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-list')).not.toContainText(feature.properties.name);
+  await page.locator('#open-objects').click();
+  await toggleGuides(page);
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-list')).toContainText(feature.properties.name);
 });

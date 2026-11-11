@@ -1312,6 +1312,11 @@ test.describe('source editing', () => {
     await centerMapOn(page, parkPoint, 16);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, parkPoint);
+    await expect(page.locator('#objects-heading')).toHaveText('Choose an object here');
+    const parkKey = land.indexOf(parkCenter);
+    const parkChoice = `${parkCenter.properties.name} · Polygon · feature ${parkKey}`;
+    await page.getByRole('button', {name: parkChoice, exact: true}).click();
+    await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${parkKey}`);
     await expect(page.locator('#editor')).toBeVisible();
     await expect(page.locator('#lock-reason')).toHaveAttribute('hidden', '');
     await openInspector(page);
@@ -1321,6 +1326,11 @@ test.describe('source editing', () => {
     await centerMapOn(page, countryPoint, 8);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, countryPoint);
+    const countryKey = land.indexOf(country);
+    await expect(page.locator('#objects-panel')).toBeVisible();
+    const countryChoice = `${country.properties.name} · ${country.geometry.type} · feature ${countryKey}`;
+    await page.getByRole('button', {name: countryChoice, exact: true}).click();
+    await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${countryKey}`);
     await expect(page.locator('#lock-reason')).toContainText('Country shapes');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
