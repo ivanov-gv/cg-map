@@ -130,11 +130,6 @@ export class InspectorEditing {
     if (hadInspectorFocus) this.#context.focusStatus();
   }
 
-  #apply() {
-    const result = this.applyEdit();
-    return result;
-  }
-
   // Try to commit the current edit. Returns {success: true} or {success: false, problem}.
   applyEdit() {
     const {feature, problem} = this.#validatedFeature();
@@ -152,9 +147,6 @@ export class InspectorEditing {
     this.#finishEdit(() => this.#context.onClosed());
   }
 
-  #cancel() {
-    this.discardEdit();
-  }
 
   #deleteFeature() {
     this.#context.commands.recordEdit(this.#transaction.key, null);
@@ -201,12 +193,12 @@ export class InspectorEditing {
     onClick('tool-vertices', () => this.#update(withTool(this.#transaction, editTools.vertices)));
     onClick('vertex-insert', () => this.#changeSelectedVertex(insertVertex));
     onClick('vertex-remove', () => this.#changeSelectedVertex(removeVertex));
-    onClick('cancel-edit', () => this.#cancel());
+    onClick('cancel-edit', () => this.discardEdit());
     onClick('delete-feature', () => this.#deleteFeature());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
     elementById('property-form').onsubmit = event => {
       event.preventDefault();
-      this.#apply();
+      this.applyEdit();
     };
     this.#installGestures();
   }

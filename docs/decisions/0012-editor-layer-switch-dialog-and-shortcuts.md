@@ -18,16 +18,18 @@ redo required clicking buttons in the Tools panel, with no keyboard shortcuts.
   edit** (clear and proceed), and **Keep editing** (cancel and stay). This replaces the status-message refusal for typed
   details and the silent drop for geometry edits.
 
-- **Apply validation feedback**: If Apply is chosen and validation fails, the dialog closes and the inspector displays
-  the problem. The user stays on the current mode with the edit intact.
+- **Apply validation feedback**: If Apply is chosen and validation fails, the dialog closes, the inspector is shown
+  (opening it if collapsed), and focus moves to the problem message. The user stays on the current mode with the edit
+  intact.
 
 - **Escape priority order**: Escape follows a strict hierarchy: (1) cancel active drag gesture, (2) dismiss the layer
-  switch dialog (defaulting to "Keep editing"), (3) collapse the inspector, (4) close utility panels. The dialog's
-  `cancel` event is caught to prevent the browser from closing it without running the "Keep editing" logic.
+  switch dialog (defaulting to "Keep editing"), (3) collapse the inspector when focus is inside it, (4) close the
+  foremost utility panel, (5) collapse the inspector when focus is elsewhere. The dialog's `cancel` event is caught to
+  prevent the browser from closing it without running the "Keep editing" logic.
 
-- **Public InspectorEditing API**: The private `#apply()` and `#cancel()` methods were replaced by public `applyEdit()`
-  (returning `{success, problem?}`) and `discardEdit()`, so external callers (the dialog handlers) can trigger atomic
-  validation and inspect the result.
+- **Public InspectorEditing API**: The private `#apply()` and `#cancel()` wrapper methods were removed. The public
+  `applyEdit()` (returning `{success, problem?}`) and `discardEdit()` are called directly by the dialog handlers and the
+  inspector form submit/cancel buttons.
 
 - **Workspace undo/redo keyboard shortcuts**: `Ctrl/Cmd+Z` triggers undo, `Ctrl+Y` and `Ctrl/Cmd+Shift+Z` trigger redo.
   Shortcuts check that undo/redo is enabled (button not disabled), ignore IME composition, and do nothing when focus is

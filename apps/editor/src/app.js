@@ -81,8 +81,7 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 let panelOpener = null;
-let pendingTargetMode = null;
-let pendingPreviewAction = null;
+let pendingTransition = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -297,8 +296,7 @@ function startNewFeature() {
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
 function setMode(filename) {
   if (editing.hasUnappliedEdit) {
-    pendingTargetMode = filename;
-    pendingPreviewAction = null;
+    pendingTransition = {kind: 'mode', filename};
     showLayerSwitchDialog();
     return false;
   }
@@ -324,11 +322,10 @@ function setMode(filename) {
 // Choosing a layer closes its picker only after the mode switch succeeds.
 function chooseMode(filename) {
   if (!setMode(filename)) return;
-  showPanel(null);
-  elementById('current-layer').focus();
+  afterModeSwitch();
 }
 
-// Called after setMode succeeds (including from the dialog callback) to finish the UI transition.
+// Called after setMode succeeds to finish the UI transition.
 function afterModeSwitch() {
   showPanel(null);
   elementById('current-layer').focus();
@@ -519,18 +516,14 @@ function togglePreview() {
     return;
   }
   if (editing.hasUnappliedEdit) {
-    pendingTargetMode = null;
-    pendingPreviewAction = () => {
+    pendingTransition = {kind: 'preview', action: () => {
       setMode(null);
-      // activeFile is now null, so show preview
       showPreview();
-    };
+    }};
     showLayerSwitchDialog();
     return;
   }
   setMode(null);
-  const isModeSwitchRefused = activeFile !== null;
-  if (isModeSwitchRefused) return;
   showPreview();
 }
 
@@ -611,17 +604,18 @@ function showLayerSwitchDialog() {
 function closeLayerSwitchDialog() {
   const dialog = layerSwitchDialog();
   dialog.close();
-  pendingTargetMode = null;
-  pendingPreviewAction = null;
 }
 
 function completeLayerSwitch() {
+  // Read the pending target before clearing it.
+  const transition = pendingTransition;
+  pendingTransition = null;
   closeLayerSwitchDialog();
-  if (pendingTargetMode !== null) {
-    setMode(pendingTargetMode);
+  if (transition?.kind === 'mode') {
+    setMode(transition.filename);
     afterModeSwitch();
-  } else if (pendingPreviewAction) {
-    pendingPreviewAction();
+  } else if (transition?.kind === 'preview') {
+    transition.action();
   }
 }
 
@@ -638,9 +632,12 @@ function installInspectorToggle() {
     const result = editing.applyEdit();
     if (result.success) {
       completeLayerSwitch();
+    } else {
+      // Validation failed: close dialog, show inspector with the problem visible.
+      closeLayerSwitchDialog();
+      showInspector();
+      elementById('edit-problem').focus();
     }
-    // If validation fails, the dialog closes and the inspector shows the problem
-    closeLayerSwitchDialog();
   };
 
   elementById('layer-switch-discard').onclick = () => {
@@ -697,9 +694,9 @@ function installInspectorToggle() {
 // Show platform-specific shortcut labels (Ctrl vs Cmd) in the Tools panel.
 function updateShortcutHints() {
   const isMac = navigator.userAgent.includes('Mac');
-  const mod = isMac ? '⌘' : 'Ctrl';
+  const modifierLabel = isMac ? '⌘' : 'Ctrl';
   elementById('undo-shortcut-hint').querySelector('[data-shortcut-undo]').textContent =
-    `${mod}+Z`;
+    `${modifierLabel}+Z`;
   elementById('undo-shortcut-hint').querySelector('[data-shortcut-redo]').textContent =
     isMac ? '⌘+Shift+Z' : 'Ctrl+Shift+Z';
 }
@@ -708,9 +705,9 @@ function updateShortcutHints() {
 function installKeyboardShortcuts() {
   document.addEventListener('keydown', event => {
     const isImeKey = event.isComposing || event.keyCode === 229;
-    if (isImeKey) return;
-    const isCtrlMeta = event.ctrlKey || event.metaKey;
-    if (!isCtrlMeta) return;
+    if (isImeKey || event.altKey) return;
+    const hasCommandModifier = event.ctrlKey || event.metaKey;
+    if (!hasCommandModifier) return;
 
     // Ignore shortcuts inside text controls
     const target = event.target;
@@ -766,9 +763,6 @@ async function start() {
   window.editorDebug = {
     get map() {
       return map;
-    },
-    get editing() {
-      return editing;
     }
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
