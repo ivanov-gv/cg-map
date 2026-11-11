@@ -124,21 +124,22 @@ export const EDITOR_BROWSER_AREAS = {
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
   'dom.js',
-  'hashing.js',
-  'source-bundle.js',
   'draft-store.js',
-  'layer-rules.js',
-  'source-overlay.js',
-  'geometry-validation.js',
-  'active-file-commands.js',
-  'changeset.js',
-  'cross-file-checks.js',
   'edit-session.js',
   'edit-transaction.js',
+  'feature-diff.js',
+  'geometry-validation.js',
+  'active-file-commands.js',
+  'hashing.js',
+  'changeset.js',
+  'cross-file-checks.js',
   'inspector-editing.js',
   'inspector-viewport.js',
+  'layer-rules.js',
   'property-form.js',
-  'review-panel.js'
+  'review-panel.js',
+  'source-bundle.js',
+  'source-overlay.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
