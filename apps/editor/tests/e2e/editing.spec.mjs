@@ -1334,4 +1334,59 @@ test.describe('source editing', () => {
     await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
+
+  test('Escape in the export dialog closes only the dialog, not the Changes panel', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    await expect(page.locator('#export-dialog')).not.toHaveAttribute('hidden');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#export-dialog')).toHaveAttribute('hidden');
+    // The Changes panel should still be open
+    await expect(page.locator('#changes-panel')).not.toHaveAttribute('hidden');
+    // Focus returns to the export button
+    await expect(page.locator('#export-changeset')).toBeFocused();
+  });
+
+  test('the Changes panel uses side-by-side layout on wide screens', async ({page}) => {
+    await page.setViewportSize({width: 1800, height: 800});
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    // On wide screens, the two-pane layout should be visible
+    const twoPane = page.locator('.review-two-pane');
+    await expect(twoPane).toBeVisible();
+    await expect(twoPane.locator('.review-list-pane')).toBeVisible();
+    await expect(twoPane.locator('.review-detail-pane')).toBeVisible();
+    // Clicking a list item updates the detail pane
+    await expect(twoPane.locator('.change-list-selected')).toHaveCount(1);
+  });
+
+  test('the Changes panel uses stacked accordion on narrow screens', {tag: '@phone'}, async ({page}) => {
+    await page.setViewportSize({width: 360, height: 740});
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    // On narrow screens, the two-pane layout is hidden by CSS media query
+    await expect(page.locator('.review-two-pane')).not.toBeVisible();
+    // The stacked list should be visible and contain the change
+    const stackedList = page.locator('.review-stacked-list');
+    await expect(stackedList).toBeVisible();
+    await expect(stackedList.locator('li')).toHaveCount(1);
+    // Open the change's details and verify the diff table is shown
+    const changeSummary = stackedList.locator('li > details > summary');
+    await expect(changeSummary).toHaveCount(1);
+    await changeSummary.click();
+    await expect(stackedList.locator('li > details')).toHaveAttribute('open', '');
+  });
 });

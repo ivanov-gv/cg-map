@@ -548,7 +548,69 @@ select {
   cursor: pointer;
 }
 
-/* Responsive: side-by-side diff columns on wide screens */
+/* Side-by-side review layout on wide screens */
+.review-two-pane {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+  margin-bottom: 8px;
+}
+.review-list-pane {
+  border-right: 1px solid var(--line);
+  padding-right: 8px;
+  overflow: auto;
+  max-height: 40dvh;
+}
+.review-list-pane ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.change-list-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.change-list-item:hover {
+  background: #f0f2ec;
+}
+.change-list-selected {
+  background: #eaf1e5;
+  font-weight: 600;
+}
+.review-detail-pane {
+  padding-left: 8px;
+  overflow: auto;
+  max-height: 40dvh;
+}
+.change-detail h3 {
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+.change-detail table {
+  margin-bottom: 0;
+}
+
+/* Stacked accordion list for narrow screens */
+.review-stacked-list {
+  display: none;
+}
+
+/* On narrow screens, hide the two-pane layout and show the stacked accordion */
+@media (max-width: 720px) {
+  .review-two-pane {
+    display: none;
+  }
+  .review-stacked-list {
+    display: block;
+  }
+}
+
+/* Export dialog: centered overlay on wide screens */
 @media (min-width: 721px) {
   .dialog {
     width: min(440px, 80vw);
@@ -567,4 +629,16 @@ select {
     max-height: 80dvh;
     overflow: auto;
   }
+}
+
+/* Geometry code blocks in diff tables */
+#review-files code {
+  display: block;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 10px;
+  white-space: pre;
+  padding: 2px 4px;
+  background: #f5f6f0;
+  border-radius: 3px;
 }

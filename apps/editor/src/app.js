@@ -26,7 +26,7 @@ import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
 import {startOfflineCopy} from './offline-install.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
-import {ReviewPanel} from './review-panel.js';
+import {isExportDialogVisible, ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {installInspectorViewport} from './inspector-viewport.js';
 import {overlayCollection, sourceFeatureForHit} from './source-overlay.js';
@@ -592,6 +592,8 @@ function installInspectorToggle() {
   document.addEventListener('keydown', event => {
     const isImeKey = event.isComposing || event.keyCode === 229;
     if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
+    // Let the export dialog handle Escape itself; don't close panels while it is open.
+    if (isExportDialogVisible()) return;
     if (editing?.cancelActiveGesture()) {
       event.preventDefault();
       return;
