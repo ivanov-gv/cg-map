@@ -128,6 +128,7 @@ export const EDITOR_BROWSER_AREAS = {
 // and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
+  'feature-diff.js',
   'dom.js',
   'hashing.js',
   'source-bundle.js',

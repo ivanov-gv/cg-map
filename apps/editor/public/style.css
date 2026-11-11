@@ -475,6 +475,247 @@ select {
   margin-bottom: 0;
 }
 
+/* Export dialog overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000a;
+}
+.dialog {
+  width: min(400px, 90vw);
+  padding: 20px;
+  background: #fffffb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px #0006;
+}
+.dialog h2 {
+  margin-top: 0;
+}
+.dialog .button-row {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+.dialog .notice {
+  margin-bottom: 10px;
+}
+
+/* Diff table in review panel */
+#review-files table {
+  width: 100%;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+#review-files table th,
+#review-files table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+#review-files table th:first-child,
+#review-files table td:first-child {
+  white-space: nowrap;
+}
+#review-files table th {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.diff-changed td {
+  background: #fff7e6;
+}
+#review-files details[open] .diff-changed td {
+  background: transparent;
+}
+
+/* Review actions layout */
+#review-actions {
+  margin-top: 16px;
+}
+#review-actions > button {
+  margin-bottom: 10px;
+  width: 100%;
+}
+#review-secondary {
+  margin-top: 10px;
+}
+#review-secondary summary {
+  min-height: 40px;
+  padding-block: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+#review-secondary > *:not(summary) {
+  margin-top: 10px;
+}
+#review-secondary button {
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* File input button styling — the label acts as a button around the hidden input */
+.file-button {
+  display: block;
+  position: relative;
+  min-height: 42px;
+  padding: 10px;
+  background: white;
+  color: var(--green);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  margin-bottom: 10px;
+}
+.file-button input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Widen the Changes panel on wide screens so the side-by-side layout is usable.
+   The proposal keeps ~60% of the width for the map, so the panel takes up to 40vw. */
+@media (min-width: 1100px) {
+  #changes-panel.utility-panel {
+    width: min(760px, 40vw);
+  }
+}
+
+/* Side-by-side review layout on wide screens */
+.review-two-pane {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
+  gap: 0 12px;
+  margin-bottom: 8px;
+}
+.review-list-pane {
+  border-right: 1px solid var(--line);
+  padding-right: 8px;
+  overflow: auto;
+  max-height: 40dvh;
+}
+.review-list-pane ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* List items are <button> elements for keyboard accessibility */
+.change-list-item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.change-list-item:hover {
+  background: #f0f2ec;
+}
+.change-list-item:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+.change-list-selected {
+  background: #eaf1e5;
+  font-weight: 600;
+}
+.review-detail-pane {
+  padding-left: 8px;
+  overflow: auto;
+  max-height: 40dvh;
+}
+.change-detail h3 {
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+.change-detail table {
+  margin-bottom: 0;
+}
+
+/* Stacked accordion list for narrow screens */
+.review-stacked-list {
+  display: none;
+}
+.review-stacked-list li {
+  list-style: none;
+  padding: 0;
+}
+.review-stacked-list details {
+  padding: 4px 0;
+}
+.review-stacked-list summary {
+  min-height: 40px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.review-stacked-list summary:hover {
+  background: #f0f2ec;
+}
+
+/* Use the stacked review until there is room for a readable comparison. */
+@media (max-width: 1099px) {
+  .review-two-pane {
+    display: none;
+  }
+  .review-stacked-list {
+    display: block;
+  }
+}
+
+/* Export dialog: centered overlay on wide screens */
+@media (min-width: 721px) {
+  .dialog {
+    width: min(440px, 80vw);
+  }
+}
+@media (max-width: 720px) {
+  .overlay {
+    align-items: flex-end;
+    justify-content: stretch;
+    background: transparent;
+  }
+  .dialog {
+    width: 100%;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 -4px 20px #0006;
+    max-height: 80dvh;
+    overflow: auto;
+  }
+}
+
+/* Geometry code blocks in diff tables */
+#review-files code {
+  display: block;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 10px;
+  white-space: pre;
+  padding: 2px 4px;
+  background: #f5f6f0;
+  border-radius: 3px;
+}
+
 /* Long names wrap within the panel; every row remains a full-width touch target. */
 #objects-list {
   list-style: none;
