@@ -82,6 +82,7 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 let panelOpener = null;
+let pendingTransition = null;
 let objectList;
 let clickCandidates = null;
 
@@ -301,11 +302,9 @@ function startNewFeature() {
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
 function setMode(filename) {
-  // A geometry preview is dropped by a mode switch, but typed details must be applied or discarded explicitly.
-  if (editing.hasTypedDetails) {
-    showInspector();
-    editing.showProblem(applyOrCancelMessage);
-    setStatus(applyOrCancelMessage, true);
+  if (editing.hasUnappliedEdit) {
+    pendingTransition = {kind: 'mode', filename};
+    showLayerSwitchDialog();
     return false;
   }
   editing.close();
@@ -329,6 +328,11 @@ function setMode(filename) {
 // Choosing a layer closes its picker only after the mode switch succeeds.
 function chooseMode(filename) {
   if (!setMode(filename)) return;
+  afterModeSwitch();
+}
+
+// Called after setMode succeeds to finish the UI transition.
+function afterModeSwitch() {
   showPanel(null);
   elementById('current-layer').focus();
 }
@@ -522,6 +526,8 @@ function startEditing(visibilityConfig) {
   elementById('undo').onclick = () => travelHistory(commands.undo);
   elementById('redo').onclick = () => travelHistory(commands.redo);
   elementById('add-feature').onclick = startNewFeature;
+  installKeyboardShortcuts();
+  updateShortcutHints();
   restoreSavedDraft();
   review.render();
 }
@@ -558,9 +564,15 @@ function togglePreview() {
     setStatus(modeStatus());
     return;
   }
+  if (editing.hasUnappliedEdit) {
+    pendingTransition = {kind: 'preview', action: () => {
+      setMode(null);
+      showPreview();
+    }};
+    showLayerSwitchDialog();
+    return;
+  }
   setMode(null);
-  const isModeSwitchRefused = activeFile !== null;
-  if (isModeSwitchRefused) return;
   showPreview();
 }
 
@@ -636,6 +648,32 @@ function collapseInspector(shouldFocus = true) {
   if (shouldFocus) opener.focus();
 }
 
+const layerSwitchDialog = () => elementById('layer-switch-dialog');
+
+function showLayerSwitchDialog() {
+  const dialog = layerSwitchDialog();
+  dialog.showModal();
+}
+
+function closeLayerSwitchDialog() {
+  const dialog = layerSwitchDialog();
+  dialog.close();
+  pendingTransition = null;
+}
+
+function completeLayerSwitch() {
+  // Read the pending target before clearing it.
+  const transition = pendingTransition;
+  pendingTransition = null;
+  closeLayerSwitchDialog();
+  if (transition?.kind === 'mode') {
+    setMode(transition.filename);
+    afterModeSwitch();
+  } else if (transition?.kind === 'preview') {
+    transition.action();
+  }
+}
+
 // Native buttons provide keyboard opening and applying; Escape closes the foremost panel without discarding work.
 function installInspectorToggle() {
   elementById('close-inspector').onclick = () => collapseInspector();
@@ -643,11 +681,46 @@ function installInspectorToggle() {
     showInspector();
     elementById('close-inspector').focus();
   };
+
+  // Layer switch dialog button handlers
+  elementById('layer-switch-apply').onclick = () => {
+    const result = editing.applyEdit();
+    if (result.success) {
+      completeLayerSwitch();
+    } else {
+      // Validation failed: close dialog, show inspector with the problem visible.
+      closeLayerSwitchDialog();
+      showInspector();
+      elementById('edit-problem').focus();
+    }
+  };
+
+  elementById('layer-switch-discard').onclick = () => {
+    editing.discardEdit();
+    completeLayerSwitch();
+  };
+
+  elementById('layer-switch-keep').onclick = () => {
+    closeLayerSwitchDialog();
+  };
+
+  // Dialog cancel event (Escape key) defaults to "Keep editing"
+  layerSwitchDialog().addEventListener('cancel', event => {
+    event.preventDefault();
+    closeLayerSwitchDialog();
+  });
+
   document.addEventListener('keydown', event => {
     const isImeKey = event.isComposing || event.keyCode === 229;
     if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
     if (editing?.cancelActiveGesture()) {
       event.preventDefault();
+      return;
+    }
+    // Dialog is highest priority after active gesture
+    if (layerSwitchDialog().open) {
+      event.preventDefault();
+      closeLayerSwitchDialog();
       return;
     }
     const inspector = document.querySelector('.inspector');
@@ -669,6 +742,50 @@ function installInspectorToggle() {
     if (!inspector.hidden) {
       event.preventDefault();
       collapseInspector();
+    }
+  });
+}
+
+// Show platform-specific shortcut labels (Ctrl vs Cmd) in the Tools panel.
+function updateShortcutHints() {
+  const platform = navigator.userAgentData?.platform ?? navigator.platform;
+  const isMac = platform.includes('Mac');
+  const modifierLabel = isMac ? '⌘' : 'Ctrl';
+  elementById('undo-shortcut-hint').querySelector('[data-shortcut-undo]').textContent =
+    `${modifierLabel}+Z`;
+  elementById('undo-shortcut-hint').querySelector('[data-shortcut-redo]').textContent =
+    `${modifierLabel}+Shift+Z`;
+}
+
+// Undo/Redo keyboard shortcuts work in the workspace but not inside text controls.
+function installKeyboardShortcuts() {
+  document.addEventListener('keydown', event => {
+    const isImeKey = event.isComposing || event.keyCode === 229;
+    if (isImeKey || event.altKey) return;
+    const hasCommandModifier = event.ctrlKey || event.metaKey;
+    if (!hasCommandModifier) return;
+
+    // Ignore shortcuts inside text controls
+    const target = event.target;
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+    const key = event.key.toLowerCase();
+    const isShift = event.shiftKey;
+
+    // Undo: Ctrl/Cmd+Z
+    if (key === 'z' && !isShift) {
+      if (elementById('undo').disabled) return;
+      event.preventDefault();
+      travelHistory(commands.undo);
+      return;
+    }
+
+    // Redo: Ctrl/Cmd+Shift+Z or Ctrl+Y
+    if ((key === 'z' && isShift) || key === 'y') {
+      if (elementById('redo').disabled) return;
+      event.preventDefault();
+      travelHistory(commands.redo);
+      return;
     }
   });
 }
