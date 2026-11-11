@@ -492,7 +492,7 @@ test('same building keeps its address across zooms and with number labels hidden
   }
 });
 
-test('a place inside a building highlights its footprint across zoom and satellite changes', async ({
+test('a place inside a building keeps its marker selected and highlights its footprint across zoom and satellite changes', async ({
   page
 }) => {
   const label = JSON.parse(
@@ -503,6 +503,8 @@ test('a place inside a building highlights its footprint across zoom and satelli
   });
   const coordinates = label.geometry.coordinates;
   const footprintId = label.properties.footprintIndex;
+  // A single listing's marker key is its source id, so the marker's feature state is read under this id.
+  const placeId = 'node/selection-fixture';
   await page.route('**/data/places.geojson', route =>
     route.fulfill({
       json: {
@@ -511,7 +513,7 @@ test('a place inside a building highlights its footprint across zoom and satelli
           {
             type: 'Feature',
             geometry: {type: 'Point', coordinates},
-            properties: {id: 'node/selection-fixture', name: 'Building cafe', category: 'food', kind: 'cafe'}
+            properties: {id: placeId, name: 'Building cafe', category: 'food', kind: 'cafe'}
           }
         ]
       }
@@ -548,6 +550,14 @@ test('a place inside a building highlights its footprint across zoom and satelli
         }, footprintId)
       )
       .toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          markerKey => window.kompasDebug.map.getFeatureState({source: 'places', id: markerKey}).selected,
+          placeId
+        )
+      )
+      .toBe(true);
   }
   await expect
     .poll(() =>
@@ -569,6 +579,17 @@ test('a place inside a building highlights its footprint across zoom and satelli
         .every(layerType => layerType === 'fill' || layerType === 'line')
     )
   ).toBe(true);
+  await closeCard(page);
+  await expect
+    .poll(() =>
+      page.evaluate(markerKey => {
+        const map = window.kompasDebug.map;
+        const isMarkerSelected = !!map.getFeatureState({source: 'places', id: markerKey}).selected;
+        const hasBuildingHighlight = map.queryRenderedFeatures({layers: ['selected-buildings-fill']}).length > 0;
+        return isMarkerSelected || hasBuildingHighlight;
+      }, placeId)
+    )
+    .toBe(false);
 });
 
 test('point-only places highlight their existing markers and restore them on close', async ({page}) => {
