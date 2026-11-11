@@ -665,3 +665,79 @@ test('a camera move ending keeps keyboard focus on the same result row', async (
   await page.evaluate(() => window.kompasDebug.map.fire('moveend'));
   await expect(page.locator('.result:focus')).toHaveAttribute('data-id', rowId);
 });
+
+// Wheel events at the map centre, dispatched in one task so they arrive back to back as on a busy main thread.
+async function dispatchWheelEvents(page, wheelEvents) {
+  await page.evaluate(eventOptions => {
+    const map = window.kompasDebug.map;
+    const center = map.project(map.getCenter());
+    const canvasContainer = map.getCanvasContainer();
+    const containerBounds = canvasContainer.getBoundingClientRect();
+    const clientX = containerBounds.left + center.x;
+    const clientY = containerBounds.top + center.y;
+    for (const options of eventOptions) {
+      canvasContainer.dispatchEvent(
+        new WheelEvent('wheel', {...options, clientX, clientY, bubbles: true, cancelable: true})
+      );
+    }
+  }, wheelEvents);
+}
+
+// Each camera move re-renders search results on moveend, so one wheel gesture must be one move.
+async function countCameraMoves(page) {
+  await page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    window.wheelCameraMoves = {started: 0, ended: 0, fromInput: 0};
+    // A move with originalEvent counts as exploring, which stops the first location fix from re-centring.
+    map.on('movestart', event => {
+      window.wheelCameraMoves.started++;
+      if (event.originalEvent) window.wheelCameraMoves.fromInput++;
+    });
+    map.on('moveend', () => window.wheelCameraMoves.ended++);
+  });
+}
+
+const cameraMoves = page => page.evaluate(() => window.wheelCameraMoves);
+const currentZoom = page => page.evaluate(() => window.kompasDebug.map.getZoom());
+
+test('back-to-back mouse wheel notches zoom at mouse speed with one camera move', async ({page}) => {
+  await ready(page);
+  const startZoom = await currentZoom(page);
+  await countCameraMoves(page);
+
+  await dispatchWheelEvents(page, [{deltaY: -120}, {deltaY: -120}, {deltaY: -120}]);
+
+  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
+  // Three notches at the mouse rate zoom about 0.54 levels; the trackpad rate would give about 1.9.
+  const zoomChange = (await currentZoom(page)) - startZoom;
+  expect(zoomChange).toBeGreaterThan(0.3);
+  expect(zoomChange).toBeLessThan(0.9);
+  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
+});
+
+test('mouse wheel notches stay one camera move with reduced motion', async ({page}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await ready(page);
+  await countCameraMoves(page);
+
+  await dispatchWheelEvents(page, [{deltaY: -120}, {deltaY: -120}, {deltaY: -120}]);
+
+  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
+  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
+});
+
+test('trackpad pinch zooms smoothly with one camera move', async ({page}) => {
+  await ready(page);
+  const startZoom = await currentZoom(page);
+  await countCameraMoves(page);
+
+  // Browsers report a trackpad pinch as ctrl + wheel with small deltas.
+  await dispatchWheelEvents(page, Array.from({length: 10}, () => ({deltaY: -5, ctrlKey: true})));
+
+  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
+  // Ten 5 px events at the trackpad rate zoom about 0.36 levels.
+  const zoomChange = (await currentZoom(page)) - startZoom;
+  expect(zoomChange).toBeGreaterThan(0.2);
+  expect(zoomChange).toBeLessThan(1.0);
+  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
+});

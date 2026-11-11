@@ -119,7 +119,8 @@ controls are bound. Selection and location keep their transient state private; a
 focused row when a camera move rebuilds the list. [map-selection.js](src/map-selection.js) chooses the most specific hit
 and calls the matching selection action. [public-map-layers.js](src/public-map-layers.js) installs app-owned overlays;
 shared rendering remains in map-core. [status-messages.js](src/status-messages.js) keeps transport/location wording
-pure.
+pure. [wheel-zoom.js](src/wheel-zoom.js) replaces MapLibre scroll zoom so a mouse is never mistaken for a trackpad
+because of event timing.
 
 Nearest results from `selectNearestPlaces()` carry `feature` and `distanceKilometres`. Search normalization is
 `normalizeSearchText()`, its predicate is `matchesPlaceSearch()`, and GeoJSON construction is `featureCollection()`.

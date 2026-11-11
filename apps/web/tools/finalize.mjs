@@ -52,6 +52,7 @@ const shell = [
   'routing.js',
   'transit-routing.js',
   'route-planner.js',
+  'wheel-zoom.js',
   'style.css',
   'icon.svg',
   'icon-192.png',
