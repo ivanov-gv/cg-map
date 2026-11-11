@@ -147,6 +147,20 @@ export class ReviewPanel {
     this.#authorInput.addEventListener('keydown', (event) => this.#handleEnterKey(event));
     this.#reasonInput.addEventListener('keydown', (event) => this.#handleEnterKey(event));
 
+    // Keep keyboard focus inside the modal until it closes.
+    this.#dialog.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      const first = this.#authorInput;
+      const last = this.#cancelButton;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
     // app.js checks the dialog's hidden state before closing panels on Escape.
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !this.#dialog.hidden) {
@@ -183,7 +197,9 @@ export class ReviewPanel {
       const button = this.#changeListButton(changes[changeIndex]);
       button.dataset.index = String(changeIndex);
       button.onclick = () => this.#selectChange(twoPane, changes, changeIndex);
-      list.append(button);
+      const item = document.createElement('li');
+      item.append(button);
+      list.append(item);
     }
     listPane.append(list);
     twoPane.append(listPane);
@@ -192,7 +208,9 @@ export class ReviewPanel {
     detailPane.classList.add('review-detail-pane');
     if (changes.length > 0) {
       detailPane.append(this.#changeDetailView(changes[0]));
-      list.children[0].classList.add('change-list-selected');
+      const firstButton = list.querySelector('.change-list-item');
+      firstButton.classList.add('change-list-selected');
+      firstButton.setAttribute('aria-current', 'true');
     } else {
       detailPane.append(createElementWithText('p', 'Select a change to review.'));
     }
@@ -230,11 +248,7 @@ export class ReviewPanel {
     container.classList.add('change-detail');
     container.append(createElementWithText('h3', this.#changeTarget(change)));
 
-    if (change.operation === 'modify') {
-      container.append(this.#buildDiffTable(change));
-    } else {
-      container.append(this.#buildSingleView(change));
-    }
+    container.append(this.#changeComparison(change));
     return container;
   }
 
@@ -245,14 +259,15 @@ export class ReviewPanel {
     details.name = 'review-change';
     details.append(createElementWithText('summary', this.#changeTarget(change)));
 
-    if (change.operation === 'modify') {
-      details.append(this.#buildDiffTable(change));
-    } else {
-      details.append(this.#buildSingleView(change));
-    }
+    details.append(this.#changeComparison(change));
 
     item.append(details);
     return item;
+  }
+
+  // Render the comparison appropriate to the operation in either layout.
+  #changeComparison(change) {
+    return change.operation === 'modify' ? this.#buildDiffTable(change) : this.#buildSingleView(change);
   }
 
   #selectChange(twoPane, changes, index) {
@@ -315,12 +330,16 @@ export class ReviewPanel {
       row.classList.add('diff-changed');
       const fieldLabel = summary ? `geometry (${summary})` : 'geometry';
       row.append(createElementWithText('td', fieldLabel));
-      // Full geometry JSON is shown in monospace for readability.
-      const beforeCell = document.createElement('td');
-      beforeCell.append(createElementWithText('code', formatValue(change.before?.geometry)));
-      const afterCell = document.createElement('td');
-      afterCell.append(createElementWithText('code', formatValue(change.after?.geometry)));
-      row.append(beforeCell, afterCell);
+      const cell = document.createElement('td');
+      cell.colSpan = 2;
+      const details = document.createElement('details');
+      details.append(createElementWithText('summary', 'Full geometry'));
+      details.append(createElementWithText('p', 'Before'));
+      details.append(createElementWithText('code', formatValue(change.before?.geometry)));
+      details.append(createElementWithText('p', 'After'));
+      details.append(createElementWithText('code', formatValue(change.after?.geometry)));
+      cell.append(details);
+      row.append(cell);
       body.append(row);
     }
 
@@ -363,7 +382,15 @@ export class ReviewPanel {
     for (const [key, value] of Object.entries(feature.properties)) {
       body.append(this.#createFieldRow(key, formatValue(value)));
     }
-    body.append(this.#createFieldRow('geometry', formatValue(feature.geometry)));
+    const geometryRow = document.createElement('tr');
+    geometryRow.append(createElementWithText('td', 'geometry'));
+    const geometryCell = document.createElement('td');
+    const geometryDetails = document.createElement('details');
+    geometryDetails.append(createElementWithText('summary', feature.geometry?.type ?? 'Geometry'));
+    geometryDetails.append(createElementWithText('code', formatValue(feature.geometry)));
+    geometryCell.append(geometryDetails);
+    geometryRow.append(geometryCell);
+    body.append(geometryRow);
     table.append(body);
     return table;
   }

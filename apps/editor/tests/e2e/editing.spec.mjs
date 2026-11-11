@@ -1040,7 +1040,7 @@ test.describe('source editing', () => {
     await openInspector(page);
     await page.locator('#delete-feature').click();
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-    await expect(page.locator(`[data-changed-file="${placesFile}"] summary`)).toContainText('delete');
+    await expect(page.locator(`[data-changed-file="${placesFile}"] .review-stacked-list > li > details > summary`)).toContainText('delete');
     await openPanel(page, 'Tools');
     await page.locator('#undo').click();
     await openPanel(page, 'Changes');
@@ -1313,6 +1313,11 @@ test.describe('source editing', () => {
     await centerMapOn(page, parkPoint, 16);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, parkPoint);
+    await expect(page.locator('#objects-heading')).toHaveText('Choose an object here');
+    const parkKey = land.indexOf(parkCenter);
+    const parkChoice = `${parkCenter.properties.name} · Polygon · feature ${parkKey}`;
+    await page.getByRole('button', {name: parkChoice, exact: true}).click();
+    await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${parkKey}`);
     await expect(page.locator('#editor')).toBeVisible();
     await expect(page.locator('#lock-reason')).toHaveAttribute('hidden', '');
     await openInspector(page);
@@ -1322,6 +1327,11 @@ test.describe('source editing', () => {
     await centerMapOn(page, countryPoint, 8);
     await expect(page.locator('#status')).toContainText('source features');
     await tapMapAt(page, countryPoint);
+    const countryKey = land.indexOf(country);
+    await expect(page.locator('#objects-panel')).toBeVisible();
+    const countryChoice = `${country.properties.name} · ${country.geometry.type} · feature ${countryKey}`;
+    await page.getByRole('button', {name: countryChoice, exact: true}).click();
+    await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${countryKey}`);
     await expect(page.locator('#lock-reason')).toContainText('Country shapes');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
@@ -1352,8 +1362,30 @@ test.describe('source editing', () => {
     await expect(page.locator('#export-changeset')).toBeFocused();
   });
 
+  test('export failures are shown in the dialog', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    await openPanel(page, 'Changes');
+    await page.locator('#export-changeset').click();
+    await page.locator('#changeset-author').fill('Browser Test');
+    await page.locator('#changeset-reason').fill('Testing errors');
+    await page.evaluate(() => {
+      window.exportRejections = [];
+      window.addEventListener('unhandledrejection', event => window.exportRejections.push(event.reason.message));
+      crypto.randomUUID = () => {
+        throw new Error('forced failure');
+      };
+    });
+    await page.locator('#confirm-export').click();
+    await expect(page.locator('#export-dialog-error')).toHaveText('forced failure');
+    expect(await page.evaluate(() => window.exportRejections)).toEqual([]);
+  });
+
   test('the Changes panel uses side-by-side layout on wide screens', async ({page}) => {
-    await page.setViewportSize({width: 1800, height: 800});
+    await page.setViewportSize({width: 1280, height: 800});
     await openEditor(page);
     await selectPlace(page);
     await openInspector(page);
@@ -1372,16 +1404,33 @@ test.describe('source editing', () => {
     const detailPane = twoPane.locator('.review-detail-pane');
     const detailBounds = await detailPane.boundingBox();
     expect(detailBounds.width).toBeGreaterThan(200);
+    const fieldHeader = detailPane.locator('th').first();
+    const headerMetrics = await fieldHeader.evaluate((header) => {
+      const style = getComputedStyle(header);
+      return {height: header.clientHeight, lineHeight: parseFloat(style.lineHeight),
+        padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)};
+    });
+    expect(headerMetrics.height - headerMetrics.padding).toBeLessThanOrEqual(headerMetrics.lineHeight + 1);
     // Clicking a list item updates the detail pane
     await expect(twoPane.locator('.change-list-selected')).toHaveCount(1);
+    await page.setViewportSize({width: 900, height: 800});
+    await expect(twoPane).not.toBeVisible();
+    await expect(page.locator('.review-stacked-list')).toBeVisible();
   });
 
   test('the Changes panel uses stacked accordion on narrow screens', {tag: '@phone'}, async ({page}) => {
     await page.setViewportSize({width: 360, height: 740});
     await openEditor(page);
-    await selectPlace(page);
+    const {index, features} = await selectPlace(page);
     await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
+    await applyAndWait(page);
+    const secondIndex = features.findIndex((_feature, candidate) => candidate !== index && isIsolatedAt(features, candidate));
+    expect(secondIndex).toBeGreaterThanOrEqual(0);
+    await centerMapOn(page, features[secondIndex].geometry.coordinates);
+    await tapMapAt(page, features[secondIndex].geometry.coordinates);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill('Another edited place');
     await applyAndWait(page);
     await openPanel(page, 'Changes');
     // On narrow screens, the two-pane layout is hidden by CSS media query
@@ -1389,13 +1438,15 @@ test.describe('source editing', () => {
     // The stacked list should be visible and contain the change
     const stackedList = page.locator('.review-stacked-list');
     await expect(stackedList).toBeVisible();
-    await expect(stackedList.locator('li')).toHaveCount(1);
-    // Open the change's details and verify the diff table is shown
-    const changeSummary = stackedList.locator('li > details > summary');
-    await expect(changeSummary).toHaveCount(1);
-    await changeSummary.click();
-    await expect(stackedList.locator('li > details')).toHaveAttribute('open', '');
-    // The accordion is exclusive: opening one closes others (verified via name attribute)
-    await expect(stackedList.locator('li > details')).toHaveAttribute('name', 'review-change');
+    const changes = stackedList.locator('li > details');
+    await expect(changes).toHaveCount(2);
+    const firstSummary = changes.nth(0).locator(':scope > summary');
+    const secondSummary = changes.nth(1).locator(':scope > summary');
+    expect((await firstSummary.boundingBox()).height).toBeGreaterThanOrEqual(40);
+    await firstSummary.click();
+    await expect(changes.nth(0)).toHaveAttribute('open', '');
+    await secondSummary.click();
+    await expect(changes.nth(1)).toHaveAttribute('open', '');
+    await expect(changes.nth(0)).not.toHaveAttribute('open');
   });
 });

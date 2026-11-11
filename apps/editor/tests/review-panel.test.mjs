@@ -62,8 +62,8 @@ test('diffProperties handles null and undefined', () => {
   const before = {name: 'Cafe', extra: null};
   const after = {name: 'Cafe', extra: undefined};
   const {changed, unchanged} = diffProperties(before, after);
-  assert.deepEqual(changed, []);
-  assert.deepEqual(unchanged, ['extra', 'name']);
+  assert.deepEqual(changed, ['extra']);
+  assert.deepEqual(unchanged, ['name']);
 });
 
 test('diffProperties handles empty inputs', () => {
@@ -81,8 +81,10 @@ test('diffProperties sorts keys alphabetically', () => {
 });
 
 test('formatValue handles null and undefined', () => {
-  assert.equal(formatValue(null), '');
-  assert.equal(formatValue(undefined), '');
+  assert.equal(formatValue(null), 'null');
+  assert.equal(formatValue(undefined), '(missing)');
+  assert.equal(formatValue(''), '""');
+  assert.equal(formatValue('1'), '"1"');
   assert.equal(formatValue(42), '42');
   assert.equal(formatValue({a: 1}), '{"a":1}');
 });
@@ -122,4 +124,20 @@ test('summarizeGeometryChange returns null for unchanged coordinates', () => {
 
 test('summarizeGeometryChange handles null geometry', () => {
   assert.equal(summarizeGeometryChange(null, {type: 'Point', coordinates: [1, 2]}), 'geometry changed');
+});
+
+
+test('summarizeGeometryChange counts vertices across multipolygon rings', () => {
+  const before = {type: 'MultiPolygon', coordinates: [[[[1, 2], [3, 4], [1, 2]]]]};
+  const after = {type: 'MultiPolygon', coordinates: [[[[1, 2], [2, 3], [3, 4], [1, 2]]]]};
+  assert.equal(summarizeGeometryChange(before, after), 'vertices: 3 → 4');
+});
+
+
+test('diffProperties distinguishes types and missing keys from empty values', () => {
+  const before = {count: 1, enabled: true, removed: null};
+  const after = {count: '1', enabled: 'true', added: ''};
+  const {changed, unchanged} = diffProperties(before, after);
+  assert.deepEqual(changed, ['added', 'count', 'enabled', 'removed']);
+  assert.deepEqual(unchanged, []);
 });

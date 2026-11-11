@@ -127,6 +127,7 @@ The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner
 | editing-mobile  | editing.spec.mjs, pages-mobile           | The same                                                                |
 | offline-desktop | offline.spec.mjs, root-desktop           | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
 | offline-mobile  | offline.spec.mjs, pages-mobile           | The same                                                                |
+| selection       | selection.spec.mjs, both projects        | object-list.js                                                          |
 | viewer          | viewer.spec.mjs                          | None                                                                    |
 
 Every other editor source runs every editor area, because each test boots, selects, or edits and exports through it. So

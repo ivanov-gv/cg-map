@@ -111,6 +111,11 @@ export const EDITOR_BROWSER_AREAS = {
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
+  selection: {
+    specs: 'tests/e2e/selection.spec.mjs',
+    specFiles: ['selection.spec.mjs'],
+    sources: ['object-list.js']
+  },
   viewer: {
     specs: 'tests/e2e/viewer.spec.mjs',
     specFiles: ['viewer.spec.mjs'],
@@ -123,23 +128,23 @@ export const EDITOR_BROWSER_AREAS = {
 // and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
-  'dom.js',
-  'draft-store.js',
-  'edit-session.js',
-  'edit-transaction.js',
   'feature-diff.js',
+  'dom.js',
+  'hashing.js',
+  'source-bundle.js',
+  'draft-store.js',
+  'layer-rules.js',
+  'source-overlay.js',
   'geometry-validation.js',
   'active-file-commands.js',
-  'hashing.js',
   'changeset.js',
   'cross-file-checks.js',
+  'edit-session.js',
+  'edit-transaction.js',
   'inspector-editing.js',
   'inspector-viewport.js',
-  'layer-rules.js',
   'property-form.js',
-  'review-panel.js',
-  'source-bundle.js',
-  'source-overlay.js'
+  'review-panel.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);

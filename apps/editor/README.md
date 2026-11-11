@@ -23,8 +23,16 @@ follows the visual viewport so the active field and actions remain above the ons
 
 Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
 roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding published layers
-are restored. Source overlays ignore public POI visibility thresholds. Switching modes shows a loading status until the
-new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
+are restored. Source overlays ignore public POI visibility thresholds. When a click or tap hits several objects, a named
+chooser lets you select each one. Objects in the toolbar lists the active layer's objects in the current map view,
+including co-located POIs; use Tab and Enter or Space to select one. Names include geometry and a revision-bound feature
+key to distinguish duplicates. Large lists have Previous / Next pages. Moving the map refreshes the list, and Browse
+clears it. Selecting from either list preserves any unapplied edit until Apply or Cancel. Switching modes shows a
+loading status until the new source has rendered, and clicks wait for it. Opening Objects during loading keeps keyboard
+focus on its status until the first object is ready. Satellite is a separate viewing control.
+
+Paging bounds the list's DOM work, but collecting rendered hits and comparing their labels still covers the whole view.
+A wide view of buildings or roads can involve tens of thousands of hits; zoom in to reduce that work.
 
 ## Editing
 
@@ -62,7 +70,9 @@ draft that cannot be resumed, because it was made on another version of a source
 storage slot, where autosave cannot overwrite it, until you download or discard it. If it cannot even be moved there, it
 stays in place and autosave stays off, with a visible error, until you do. Discarding asks first, then saves at once.
 Outside a mode the map shows the reviewed release, so a pending edit appears only in its own mode. Review and export
-stay available there.
+stay available there. The Changes panel compares changed fields beside the change list on wide screens, and opens one
+change at a time on narrow screens. Export opens a dialog for the author and reason; import and discard are under
+Secondary actions.
 
 Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
 public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode or Browse.

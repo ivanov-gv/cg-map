@@ -245,6 +245,8 @@ for (const [name, files, expectedAreas] of [
   ['a shared source', ['apps/editor/src/app.js'], ALL_EDITOR_AREAS],
   ['an unmapped source', ['apps/editor/src/brand-new.js'], ALL_EDITOR_AREAS],
   ['one spec', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['viewer']],
+  ['the object list', ['apps/editor/src/object-list.js'], ['selection']],
+  ['the selection spec', ['apps/editor/tests/e2e/selection.spec.mjs'], ['selection']],
   ['a unit test', ['apps/editor/tests/offline.test.mjs'], []],
   ['the stylesheet', ['apps/editor/public/style.css'], ALL_EDITOR_AREAS],
   ['the browser config', ['apps/editor/playwright.config.mjs'], ALL_EDITOR_AREAS],

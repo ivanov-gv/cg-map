@@ -488,8 +488,13 @@ select {
   vertical-align: top;
   overflow-wrap: anywhere;
 }
+#review-files table th:first-child,
+#review-files table td:first-child {
+  white-space: nowrap;
+}
 #review-files table th {
   font-size: 10px;
+  line-height: 1.2;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -550,7 +555,7 @@ select {
 
 /* Widen the Changes panel on wide screens so the side-by-side layout is usable.
    The proposal keeps ~60% of the width for the map, so the panel takes up to 40vw. */
-@media (min-width: 721px) {
+@media (min-width: 1100px) {
   #changes-panel.utility-panel {
     width: min(760px, 40vw);
   }
@@ -559,7 +564,7 @@ select {
 /* Side-by-side review layout on wide screens */
 .review-two-pane {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
   gap: 0 12px;
   margin-bottom: 8px;
 }
@@ -626,6 +631,7 @@ select {
   padding: 4px 0;
 }
 .review-stacked-list summary {
+  min-height: 40px;
   padding: 6px 8px;
   font-size: 12px;
   cursor: pointer;
@@ -638,8 +644,8 @@ select {
   background: #f0f2ec;
 }
 
-/* On narrow screens, hide the two-pane layout and show the stacked accordion */
-@media (max-width: 720px) {
+/* Use the stacked review until there is room for a readable comparison. */
+@media (max-width: 1099px) {
   .review-two-pane {
     display: none;
   }
@@ -679,4 +685,15 @@ select {
   padding: 2px 4px;
   background: #f5f6f0;
   border-radius: 3px;
+}
+
+/* Long names wrap within the panel; every row remains a full-width touch target. */
+#objects-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#objects-list button {
+  width: 100%;
+  margin-bottom: 6px;
 }

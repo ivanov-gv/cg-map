@@ -1,12 +1,10 @@
 // Pure helpers to compare two GeoJSON features and produce a diff summary.
 // Used by the review panel and its tests; has no DOM dependencies.
 
-// Format a property value for display and comparison.
-// Objects and arrays are serialized to JSON so that equal content compares equal
-// even across different references.
+// Display JSON values with their type visible; undefined represents a missing property.
 export function formatValue(value) {
-  if (value === undefined || value === null) return '';
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (value === undefined) return '(missing)';
+  return JSON.stringify(value);
 }
 
 // Compare two property objects and return the keys that changed versus unchanged.
@@ -21,7 +19,9 @@ export function diffProperties(beforeProperties, afterProperties) {
   for (const key of [...allKeys].sort()) {
     const beforeValue = beforeProperties?.[key];
     const afterValue = afterProperties?.[key];
-    if (formatValue(beforeValue) !== formatValue(afterValue)) {
+    const hasBefore = Object.hasOwn(beforeProperties ?? {}, key);
+    const hasAfter = Object.hasOwn(afterProperties ?? {}, key);
+    if (hasBefore !== hasAfter || JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
       changed.push(key);
     } else {
       unchanged.push(key);
@@ -35,14 +35,10 @@ export function geometryChanged(beforeGeometry, afterGeometry) {
   return JSON.stringify(beforeGeometry ?? {}) !== JSON.stringify(afterGeometry ?? {});
 }
 
-// Count the vertices in a coordinates array, handling Points, LineStrings, and Polygons.
+// Count coordinate tuples at any GeoJSON nesting depth, including optional altitude.
 function countVertices(coordinates) {
-  if (Array.isArray(coordinates[0]?.[0])) {
-    // Polygon or MultiLineString: array of rings/lines, each an array of points
-    return coordinates.flat().length;
-  }
-  // Point or LineString: flat array of points
-  return coordinates.length;
+  if (typeof coordinates[0] === 'number') return 1;
+  return coordinates.reduce((count, part) => count + countVertices(part), 0);
 }
 
 // Summarize a geometry change for compact display, e.g. "moved" or "vertices: 4 → 5".
