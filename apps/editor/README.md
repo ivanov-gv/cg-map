@@ -23,8 +23,16 @@ follows the visual viewport so the active field and actions remain above the ons
 
 Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
 roads.geojson. Only one source overlay is selectable at once. Browse removes it, and the corresponding published layers
-are restored. Source overlays ignore public POI visibility thresholds. Switching modes shows a loading status until the
-new source has rendered, and clicks wait for it. Satellite is a separate viewing control.
+are restored. Source overlays ignore public POI visibility thresholds. When a click or tap hits several objects, a named
+chooser lets you select each one. Objects in the toolbar lists the active layer's objects in the current map view,
+including co-located POIs; use Tab and Enter or Space to select one. Names include geometry and a revision-bound feature
+key to distinguish duplicates. Large lists have Previous / Next pages. Moving the map refreshes the list, and Browse
+clears it. Selecting from either list preserves any unapplied edit until Apply or Cancel. Switching modes shows a
+loading status until the new source has rendered, and clicks wait for it. Opening Objects during loading keeps keyboard
+focus on its status until the first object is ready. Satellite is a separate viewing control.
+
+Paging bounds the list's DOM work, but collecting rendered hits and comparing their labels still covers the whole view.
+A wide view of buildings or roads can involve tens of thousands of hits; zoom in to reduce that work.
 
 ## Editing
 
