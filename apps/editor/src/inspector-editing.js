@@ -131,17 +131,29 @@ export class InspectorEditing {
   }
 
   #apply() {
+    const result = this.applyEdit();
+    return result;
+  }
+
+  // Try to commit the current edit. Returns {success: true} or {success: false, problem}.
+  applyEdit() {
     const {feature, problem} = this.#validatedFeature();
     if (problem) {
       this.showProblem(problem);
-      return;
+      return {success: false, problem};
     }
     this.#context.commands.recordEdit(this.#transaction.key, feature);
     this.#finishEdit(() => this.#context.onRecorded());
+    return {success: true};
+  }
+
+  // Discard the current edit without recording it.
+  discardEdit() {
+    this.#finishEdit(() => this.#context.onClosed());
   }
 
   #cancel() {
-    this.#finishEdit(() => this.#context.onClosed());
+    this.discardEdit();
   }
 
   #deleteFeature() {

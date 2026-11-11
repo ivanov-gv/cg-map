@@ -81,6 +81,8 @@ let isDraftProblemShown = false;
 let isDraftSaveFailing = false;
 let preview;
 let panelOpener = null;
+let pendingTargetMode = null;
+let pendingPreviewAction = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -294,11 +296,10 @@ function startNewFeature() {
 
 // Mode identity is the canonical filename. No object-type mode or cross-file selection exists.
 function setMode(filename) {
-  // A geometry preview is dropped by a mode switch, but typed details must be applied or discarded explicitly.
-  if (editing.hasTypedDetails) {
-    showInspector();
-    editing.showProblem(applyOrCancelMessage);
-    setStatus(applyOrCancelMessage, true);
+  if (editing.hasUnappliedEdit) {
+    pendingTargetMode = filename;
+    pendingPreviewAction = null;
+    showLayerSwitchDialog();
     return false;
   }
   editing.close();
@@ -323,6 +324,12 @@ function setMode(filename) {
 // Choosing a layer closes its picker only after the mode switch succeeds.
 function chooseMode(filename) {
   if (!setMode(filename)) return;
+  showPanel(null);
+  elementById('current-layer').focus();
+}
+
+// Called after setMode succeeds (including from the dialog callback) to finish the UI transition.
+function afterModeSwitch() {
   showPanel(null);
   elementById('current-layer').focus();
 }
@@ -473,6 +480,8 @@ function startEditing(visibilityConfig) {
   elementById('undo').onclick = () => travelHistory(commands.undo);
   elementById('redo').onclick = () => travelHistory(commands.redo);
   elementById('add-feature').onclick = startNewFeature;
+  installKeyboardShortcuts();
+  updateShortcutHints();
   restoreSavedDraft();
   review.render();
 }
@@ -507,6 +516,16 @@ function togglePreview() {
   if (preview.isShown) {
     hidePreview();
     setStatus(modeStatus());
+    return;
+  }
+  if (editing.hasUnappliedEdit) {
+    pendingTargetMode = null;
+    pendingPreviewAction = () => {
+      setMode(null);
+      // activeFile is now null, so show preview
+      showPreview();
+    };
+    showLayerSwitchDialog();
     return;
   }
   setMode(null);
@@ -582,6 +601,30 @@ function collapseInspector(shouldFocus = true) {
   if (shouldFocus) opener.focus();
 }
 
+const layerSwitchDialog = () => elementById('layer-switch-dialog');
+
+function showLayerSwitchDialog() {
+  const dialog = layerSwitchDialog();
+  dialog.showModal();
+}
+
+function closeLayerSwitchDialog() {
+  const dialog = layerSwitchDialog();
+  dialog.close();
+  pendingTargetMode = null;
+  pendingPreviewAction = null;
+}
+
+function completeLayerSwitch() {
+  closeLayerSwitchDialog();
+  if (pendingTargetMode !== null) {
+    setMode(pendingTargetMode);
+    afterModeSwitch();
+  } else if (pendingPreviewAction) {
+    pendingPreviewAction();
+  }
+}
+
 // Native buttons provide keyboard opening and applying; Escape closes the foremost panel without discarding work.
 function installInspectorToggle() {
   elementById('close-inspector').onclick = () => collapseInspector();
@@ -589,11 +632,43 @@ function installInspectorToggle() {
     showInspector();
     elementById('close-inspector').focus();
   };
+
+  // Layer switch dialog button handlers
+  elementById('layer-switch-apply').onclick = () => {
+    const result = editing.applyEdit();
+    if (result.success) {
+      completeLayerSwitch();
+    }
+    // If validation fails, the dialog closes and the inspector shows the problem
+    closeLayerSwitchDialog();
+  };
+
+  elementById('layer-switch-discard').onclick = () => {
+    editing.discardEdit();
+    completeLayerSwitch();
+  };
+
+  elementById('layer-switch-keep').onclick = () => {
+    closeLayerSwitchDialog();
+  };
+
+  // Dialog cancel event (Escape key) defaults to "Keep editing"
+  layerSwitchDialog().addEventListener('cancel', event => {
+    event.preventDefault();
+    closeLayerSwitchDialog();
+  });
+
   document.addEventListener('keydown', event => {
     const isImeKey = event.isComposing || event.keyCode === 229;
     if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
     if (editing?.cancelActiveGesture()) {
       event.preventDefault();
+      return;
+    }
+    // Dialog is highest priority after active gesture
+    if (layerSwitchDialog().open) {
+      event.preventDefault();
+      closeLayerSwitchDialog();
       return;
     }
     const inspector = document.querySelector('.inspector');
@@ -615,6 +690,49 @@ function installInspectorToggle() {
     if (!inspector.hidden) {
       event.preventDefault();
       collapseInspector();
+    }
+  });
+}
+
+// Show platform-specific shortcut labels (Ctrl vs Cmd) in the Tools panel.
+function updateShortcutHints() {
+  const isMac = navigator.userAgent.includes('Mac');
+  const mod = isMac ? '⌘' : 'Ctrl';
+  elementById('undo-shortcut-hint').querySelector('[data-shortcut-undo]').textContent =
+    `${mod}+Z`;
+  elementById('undo-shortcut-hint').querySelector('[data-shortcut-redo]').textContent =
+    isMac ? '⌘+Shift+Z' : 'Ctrl+Shift+Z';
+}
+
+// Undo/Redo keyboard shortcuts work in the workspace but not inside text controls.
+function installKeyboardShortcuts() {
+  document.addEventListener('keydown', event => {
+    const isImeKey = event.isComposing || event.keyCode === 229;
+    if (isImeKey) return;
+    const isCtrlMeta = event.ctrlKey || event.metaKey;
+    if (!isCtrlMeta) return;
+
+    // Ignore shortcuts inside text controls
+    const target = event.target;
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+    const key = event.key.toLowerCase();
+    const isShift = event.shiftKey;
+
+    // Undo: Ctrl/Cmd+Z
+    if (key === 'z' && !isShift) {
+      if (elementById('undo').disabled) return;
+      event.preventDefault();
+      travelHistory(commands.undo);
+      return;
+    }
+
+    // Redo: Ctrl/Cmd+Shift+Z or Ctrl+Y
+    if ((key === 'z' && isShift) || key === 'y') {
+      if (elementById('redo').disabled) return;
+      event.preventDefault();
+      travelHistory(commands.redo);
+      return;
     }
   });
 }
@@ -648,6 +766,9 @@ async function start() {
   window.editorDebug = {
     get map() {
       return map;
+    },
+    get editing() {
+      return editing;
     }
   };
   map.on('error', event => showError(event.error ?? new Error('Map asset failed.')));
