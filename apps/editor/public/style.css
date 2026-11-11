@@ -445,3 +445,14 @@ select {
 .has-short-viewport.has-keyboard-inset .inspector-content {
   scroll-padding-block: 0;
 }
+
+/* Long names wrap within the panel; every row remains a full-width touch target. */
+#objects-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#objects-list button {
+  width: 100%;
+  margin-bottom: 6px;
+}
