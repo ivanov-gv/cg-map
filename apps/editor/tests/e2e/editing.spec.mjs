@@ -643,6 +643,23 @@ test.describe('source editing', () => {
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
+  test('switching to Browse preserves an edit until it is discarded', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${placesFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogKeepEditing(page);
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await page.locator(`[data-mode="${placesFile}"]`).click();
+    await clickDialogDiscard(page);
+    await expect(page.locator('#status')).toContainText('Browse');
+    await openPanel(page, 'Changes');
+    await expect(page.locator('#review-empty')).toBeVisible();
+  });
+
   test('typed edit Apply from dialog commits the change and switches mode', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
@@ -676,6 +693,7 @@ test.describe('source editing', () => {
     await expectDialogClosed(page);
     await expect(page.locator(`[data-mode="${labelsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#edit-problem')).toContainText('placeholder');
+    await expect(page.locator('#edit-problem')).toBeFocused();
     await expect(page.locator('[name="addr:housenumber"]')).toHaveValue('n/a');
   });
 
@@ -875,6 +893,22 @@ test.describe('source editing', () => {
     await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
   });
 
+  test('Preview applies an unfinished geometry edit', async ({page}) => {
+    await openEditor(page);
+    const {feature} = await selectPlace(page);
+    await openInspector(page);
+    await page.locator('#tool-move').click();
+    await dragMap(page, feature.geometry.coordinates, 70, 0);
+    await openPanel(page, 'Tools');
+    await page.locator('#preview').click();
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    await expectDialogClosed(page);
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await openPanel(page, 'Changes');
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
+  });
+
   test('preview toggle with unapplied edit prompts and enters preview on Apply', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
@@ -940,10 +974,15 @@ test.describe('source editing', () => {
     await selectPlace(page);
     await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
-    // Ctrl+Z inside the input should do text undo, not workspace undo
-    await page.locator('[name="name"]').press('Control+Z');
-    // The name should be partially undone (text undo), not the whole edit
-    await expect(page.locator('#editor')).not.toHaveAttribute('hidden', '');
+    await page.locator('#apply-edit').click();
+    await expect(page.locator('#undo')).toBeEnabled();
+    await openPanel(page, 'Changes');
+    const author = page.locator('#changeset-author');
+    await author.fill('Browser Test');
+    await author.press('Control+Z');
+    await expect(page.locator('#undo')).toBeEnabled();
+    await expect(page.locator('#redo')).toBeDisabled();
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
   });
 
   test('Tools panel shows undo and redo shortcut hints', async ({page}) => {

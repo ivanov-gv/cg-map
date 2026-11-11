@@ -147,7 +147,6 @@ export class InspectorEditing {
     this.#finishEdit(() => this.#context.onClosed());
   }
 
-
   #deleteFeature() {
     this.#context.commands.recordEdit(this.#transaction.key, null);
     this.#finishEdit(() => this.#context.onRecorded());

@@ -604,6 +604,7 @@ function showLayerSwitchDialog() {
 function closeLayerSwitchDialog() {
   const dialog = layerSwitchDialog();
   dialog.close();
+  pendingTransition = null;
 }
 
 function completeLayerSwitch() {
@@ -693,12 +694,13 @@ function installInspectorToggle() {
 
 // Show platform-specific shortcut labels (Ctrl vs Cmd) in the Tools panel.
 function updateShortcutHints() {
-  const isMac = navigator.userAgent.includes('Mac');
+  const platform = navigator.userAgentData?.platform ?? navigator.platform;
+  const isMac = platform.includes('Mac');
   const modifierLabel = isMac ? '⌘' : 'Ctrl';
   elementById('undo-shortcut-hint').querySelector('[data-shortcut-undo]').textContent =
     `${modifierLabel}+Z`;
   elementById('undo-shortcut-hint').querySelector('[data-shortcut-redo]').textContent =
-    isMac ? '⌘+Shift+Z' : 'Ctrl+Shift+Z';
+    `${modifierLabel}+Shift+Z`;
 }
 
 // Undo/Redo keyboard shortcuts work in the workspace but not inside text controls.
