@@ -110,6 +110,10 @@
           <button id="undo" disabled>Undo</button>
           <button id="redo" disabled>Redo</button>
         </div>
+        <p class="hint" id="undo-shortcut-hint">
+          <span data-shortcut-undo>Ctrl+Z</span> to undo,
+          <span data-shortcut-redo>Ctrl+Shift+Z</span> to redo.
+        </p>
         <button id="satellite" aria-pressed="false" disabled>
           Satellite sample
         </button>
@@ -194,12 +198,21 @@
         </details>
       </div>
       <footer id="edit-actions" hidden>
-        <p id="edit-problem" role="alert" hidden></p>
+        <p id="edit-problem" role="alert" tabindex="-1" hidden></p>
         <div class="button-row">
           <button id="apply-edit" type="submit" form="property-form">Apply</button>
           <button id="cancel-edit">Cancel</button>
         </div>
       </footer>
     </aside>
+    <dialog id="layer-switch-dialog" aria-labelledby="layer-switch-title">
+      <h3 id="layer-switch-title">Unsaved edit</h3>
+      <p>You have an unapplied edit. What would you like to do?</p>
+      <div class="button-row">
+        <button id="layer-switch-apply">Apply</button>
+        <button id="layer-switch-discard">Discard edit</button>
+        <button id="layer-switch-keep">Keep editing</button>
+      </div>
+    </dialog>
   </body>
 </html>

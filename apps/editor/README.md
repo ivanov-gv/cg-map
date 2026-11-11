@@ -57,10 +57,19 @@ second finger or losing the window restores the position from before that gestur
 line point. Dragging a whole shape or a vertex pans nothing; with nothing to move, the map pans as usual.
 
 Cancel discards the open edit. Escape interrupts an active drag, restoring its start while keeping earlier adjustments;
-otherwise it collapses the foremost panel and returns focus to its opener. Apply is a keyboard-accessible button; Enter
-in a property field also applies the form. Apply, Cancel and Delete return keyboard focus to the status message. A mode
-switch drops a geometry preview, but typed details block it until they are applied or cancelled. Any unapplied edit
-blocks undo, redo, adding a feature, export, import and discarding.
+otherwise it dismisses the foremost surface — the layer switch dialog, then the inspector, then a utility panel — and
+returns focus to its opener. Apply is a keyboard-accessible button; Enter in a property field also applies the form.
+Apply, Cancel and Delete return keyboard focus to the status message.
+
+Switching modes, entering Browse, or toggling Preview with an unapplied edit (typed details or geometry) opens a dialog
+with three choices: **Apply** commits the edit and proceeds; if validation fails, the dialog closes and the inspector
+shows the problem. **Discard edit** clears the transaction and proceeds. **Keep editing** (or pressing Escape) closes
+the dialog and keeps the current mode and edit intact.
+
+Keyboard shortcuts work in the workspace: `Ctrl+Z` (undo) and `Ctrl+Shift+Z` or `Ctrl+Y` (redo). On macOS these use the
+`⌘` key. Shortcuts are ignored inside text inputs, textareas, and selects, and when undo/redo is disabled (Browse mode
+or an open edit). The Tools panel shows the current shortcuts. Any unapplied edit blocks undo, redo, adding a feature,
+export, import and discarding.
 
 A footprint and its label never rewrite each other. If an edit leaves a label outside its footprint, the review panel
 names it and export stays disabled until it is corrected in its own mode.
