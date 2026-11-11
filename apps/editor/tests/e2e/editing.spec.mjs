@@ -19,6 +19,27 @@ async function openInspector(page) {
   if (await button.isVisible()) await button.click();
 }
 
+// Dialog helpers: Playwright handles showModal() dialogs via getByRole('dialog').
+async function expectDialogOpen(page) {
+  await expect(page.getByRole('dialog')).toBeVisible({timeout: 10000});
+}
+
+async function expectDialogClosed(page) {
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+}
+
+async function clickDialogApply(page) {
+  await page.getByRole('button', {name: 'Apply'}).click();
+}
+
+async function clickDialogDiscard(page) {
+  await page.getByRole('button', {name: 'Discard edit'}).click();
+}
+
+async function clickDialogKeepEditing(page) {
+  await page.getByRole('button', {name: 'Keep editing'}).click();
+}
+
 // Every test edits through the real map and inspector, and asserts on what an export would contain.
 test.describe('source editing', () => {
   const placesFile = 'places.geojson';
@@ -597,24 +618,86 @@ test.describe('source editing', () => {
     await expect(page.locator('#undo')).toBeEnabled();
   });
 
-  test('typed details survive a mode switch until they are applied or discarded explicitly', async ({page}) => {
+  test('typed details open a dialog on mode switch with Apply, Discard, and Keep editing', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+
+    // Attempting a mode switch opens the dialog
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+
+    // Keep editing closes the dialog and preserves the edit
+    await clickDialogKeepEditing(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+
+    // Try again and choose Discard: clears edit and switches mode
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogDiscard(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${roadsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await openPanel(page, 'Changes');
+    await expect(page.locator('#review-empty')).toBeVisible();
+  });
+
+  test('switching to Browse preserves an edit until it is discarded', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${placesFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogKeepEditing(page);
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+    await page.locator(`[data-mode="${placesFile}"]`).click();
+    await clickDialogDiscard(page);
+    await expect(page.locator('#status')).toContainText('Browse');
+    await openPanel(page, 'Changes');
+    await expect(page.locator('#review-empty')).toBeVisible();
+  });
+
+  test('typed edit Apply from dialog commits the change and switches mode', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
     await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await openPanel(page, 'Layers');
     await page.locator(`[data-mode="${roadsFile}"]`).click();
-    await expect(page.locator('#edit-problem')).toHaveText('Apply or Cancel the current edit first.');
-    await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
-    await openPanel(page, 'Layers');
-    await page.locator('#browse').click();
-    await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
-    await openInspector(page);
-    await page.locator('#cancel-edit').click();
-    await chooseMode(page, roadsFile);
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${roadsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
     await openPanel(page, 'Changes');
-    await expect(page.locator('#review-empty')).toBeVisible();
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
+  });
+
+  test('typed edit with invalid field stays on current mode and shows problem', async ({page}) => {
+    await openEditor(page);
+    // Select a building label where "n/a" is a forbidden address value
+    const labels = await fetchFeatures(page, labelsFile);
+    await chooseMode(page, labelsFile);
+    await centerMapOn(page, labels[0].geometry.coordinates, 18);
+    await expect(page.locator('#status')).toContainText('source features');
+    await tapMapAt(page, labels[0].geometry.coordinates);
+    await openInspector(page);
+    await page.locator('[name="addr:housenumber"]').fill('n/a');
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${placesFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    // Validation fails: dialog closes, stays on current mode, inspector shows problem
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${labelsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#edit-problem')).toContainText('placeholder');
+    await expect(page.locator('#edit-problem')).toBeFocused();
+    await expect(page.locator('[name="addr:housenumber"]')).toHaveValue('n/a');
   });
 
   test('Add POI waits for typed details, and for a new feature in progress', async ({page}) => {
@@ -768,16 +851,152 @@ test.describe('source editing', () => {
     await expect(page.locator('#review-empty')).toBeVisible();
   });
 
-  test('a moving preview is dropped by a mode switch, and records nothing', async ({page}) => {
+  test('geometry edit opens dialog on mode switch with Apply, Discard, and Keep editing', async ({page}) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
     await openInspector(page);
     await page.locator('#tool-move').click();
     await dragMap(page, feature.geometry.coordinates, 70, 0);
-    await chooseMode(page, roadsFile);
-    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+
+    // Attempting a mode switch opens the dialog
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+
+    // Keep editing closes the dialog and preserves the geometry preview
+    await clickDialogKeepEditing(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#editor')).not.toHaveAttribute('hidden', '');
+
+    // Try again and choose Discard: clears edit and switches mode
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogDiscard(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${roadsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
     await openPanel(page, 'Changes');
     await expect(page.locator('#review-empty')).toBeVisible();
+  });
+
+  test('geometry edit Apply from dialog commits the change and switches mode', async ({page}) => {
+    await openEditor(page);
+    const {feature} = await selectPlace(page);
+    await openInspector(page);
+    await page.locator('#tool-move').click();
+    await dragMap(page, feature.geometry.coordinates, 70, 0);
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${roadsFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await openPanel(page, 'Changes');
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
+  });
+
+  test('Preview applies an unfinished geometry edit', async ({page}) => {
+    await openEditor(page);
+    const {feature} = await selectPlace(page);
+    await openInspector(page);
+    await page.locator('#tool-move').click();
+    await dragMap(page, feature.geometry.coordinates, 70, 0);
+    await openPanel(page, 'Tools');
+    await page.locator('#preview').click();
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    await expectDialogClosed(page);
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await openPanel(page, 'Changes');
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
+  });
+
+  test('preview toggle with unapplied edit prompts and enters preview on Apply', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Tools');
+    await page.locator('#preview').click();
+    await expectDialogOpen(page);
+    await clickDialogApply(page);
+    await expectDialogClosed(page);
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#status')).toContainText('Preview');
+  });
+
+  test('preview toggle with unapplied edit enters preview on Discard', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Tools');
+    await page.locator('#preview').click();
+    await expectDialogOpen(page);
+    await clickDialogDiscard(page);
+    await expectDialogClosed(page);
+    await expect(page.locator('#preview')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#status')).toContainText('Preview');
+  });
+
+  test('Escape dismisses dialog without dropping the edit', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await openPanel(page, 'Layers');
+    await page.locator(`[data-mode="${roadsFile}"]`).click();
+    await expectDialogOpen(page);
+    await page.keyboard.press('Escape');
+    await expectDialogClosed(page);
+    await expect(page.locator(`[data-mode="${placesFile}"]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[name="name"]')).toHaveValue(editedName);
+  });
+
+  test('undo and redo keyboard shortcuts work in the workspace', async ({page}) => {
+    await openEditor(page);
+    const {feature} = await selectPlace(page);
+    await openInspector(page);
+    await page.locator('#tool-move').click();
+    await dragMap(page, feature.geometry.coordinates, 70, 0);
+    await openInspector(page);
+    await page.locator('#apply-edit').click();
+    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+    await expect(page.locator('#undo')).toBeEnabled();
+    // Press Ctrl+Z to undo
+    await page.keyboard.press('Control+Z');
+    await expect(page.locator('#redo')).toBeEnabled();
+    // Press Ctrl+Shift+Z to redo
+    await page.keyboard.press('Control+Shift+Z');
+    await expect(page.locator('#undo')).toBeEnabled();
+  });
+
+  test('undo shortcut is ignored inside text inputs', async ({page}) => {
+    await openEditor(page);
+    await selectPlace(page);
+    await openInspector(page);
+    await page.locator('[name="name"]').fill(editedName);
+    await page.locator('#apply-edit').click();
+    await expect(page.locator('#undo')).toBeEnabled();
+    await openPanel(page, 'Changes');
+    const author = page.locator('#changeset-author');
+    await author.fill('Browser Test');
+    await author.press('Control+Z');
+    await expect(page.locator('#undo')).toBeEnabled();
+    await expect(page.locator('#redo')).toBeDisabled();
+    await expect(page.locator(`[data-changed-file="${placesFile}"]`)).toBeVisible();
+  });
+
+  test('Tools panel shows undo and redo shortcut hints', async ({page}) => {
+    await openEditor(page);
+    await openPanel(page, 'Tools');
+    const undoHint = page.locator('[data-shortcut-undo]');
+    const redoHint = page.locator('[data-shortcut-redo]');
+    await expect(undoHint).toBeVisible();
+    await expect(redoHint).toBeVisible();
+    await expect(undoHint).not.toHaveText('');
+    await expect(redoHint).not.toHaveText('');
   });
 
   test('an open edit blocks export, import and discarding until it is applied or cancelled', async ({page}) => {
