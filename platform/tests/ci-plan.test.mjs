@@ -279,11 +279,11 @@ test('every editor spec has an area, and the areas name real specs', () => {
   for (const spec of mapped) assert.ok(specs.includes(spec), `${spec} no longer exists`);
 });
 
-test('the editing spec on the desktop layout stays in two jobs', () => {
+test('the editing spec on the desktop layout stays in three jobs', () => {
   const jobs = browserMatrix(['editing-desktop'], EDITOR_BROWSER_AREAS).include;
   assert.deepEqual(
     jobs.map(job => job.area),
-    ['editing-desktop-1', 'editing-desktop-2']
+    ['editing-desktop-1', 'editing-desktop-2', 'editing-desktop-3']
   );
 });
 
