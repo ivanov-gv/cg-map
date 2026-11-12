@@ -25,4 +25,3 @@ Zoom speed no longer depends on timing, and tests can check it. The app now owns
 for free, so a MapLibre upgrade must recheck `easeId` chaining and the `essential` option. A high-resolution mouse that
 reports small pixel deltas gets the trackpad rate, consistently, as it already did in MapLibre. apps/editor and
 apps/core-demo still use MapLibre scroll zoom; moving this module into packages/map-core would need a map-core release.
-
