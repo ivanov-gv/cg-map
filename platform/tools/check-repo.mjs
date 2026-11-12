@@ -66,7 +66,8 @@ const imports = {
     './offline-controls.js',
     './status-messages.js',
     './place-selection.js',
-    './location-controls.js'
+    './location-controls.js',
+    './wheel-zoom.js'
   ],
   'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './position.js', './status-messages.js'],
   'dom.js': [],
@@ -87,7 +88,8 @@ const imports = {
   'position.js': ['./core.js'],
   'routing.js': [],
   'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js']
+  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js'],
+  'wheel-zoom.js': []
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;

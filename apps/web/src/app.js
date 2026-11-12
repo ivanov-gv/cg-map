@@ -44,6 +44,7 @@ import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
+import {installWheelZoom} from './wheel-zoom.js';
 
 // One map and the controllers installed on it.
 const mapState = {
@@ -251,6 +252,7 @@ async function start() {
       zoom: DISCOVER_ZOOM
     }
   });
+  installWheelZoom(mapState.map);
   installPublicMapDebug();
   installPositionBadge();
   mapState.map.on('load', () => installPublicLayers(placesReady, labelsReady));
