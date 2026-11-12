@@ -42,6 +42,10 @@ boundaries and offline invariants are in [apps/web/AGENTS.md](apps/web/AGENTS.md
   each.
 - Show attribution and source notes required by [data licensing](docs/map-data/data-license.md) wherever the data is
   displayed.
+- Map gestures (wheel and touchpad zoom, pinch, tap-drag, pan) are MapLibre's own; do not replace its handlers. For a
+  bug in how input feels, record real events on the reporter's device and compare MapLibre's defaults before changing
+  code; tests built from a hypothesis only confirm it. The reporter checks the fix on a dev server (LAN for phones)
+  before the PR. Why: [ADR 0015](docs/decisions/0015-maplibre-gestures-unchanged.md).
 
 ## Verification
 

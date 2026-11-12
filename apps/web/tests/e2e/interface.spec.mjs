@@ -666,78 +666,39 @@ test('a camera move ending keeps keyboard focus on the same result row', async (
   await expect(page.locator('.result:focus')).toHaveAttribute('data-id', rowId);
 });
 
-// Wheel events at the map centre, dispatched in one task so they arrive back to back as on a busy main thread.
-async function dispatchWheelEvents(page, wheelEvents) {
-  await page.evaluate(eventOptions => {
-    const map = window.kompasDebug.map;
-    const center = map.project(map.getCenter());
-    const canvasContainer = map.getCanvasContainer();
-    const containerBounds = canvasContainer.getBoundingClientRect();
-    const clientX = containerBounds.left + center.x;
-    const clientY = containerBounds.top + center.y;
-    for (const options of eventOptions) {
-      canvasContainer.dispatchEvent(
-        new WheelEvent('wheel', {...options, clientX, clientY, bubbles: true, cancelable: true})
-      );
-    }
-  }, wheelEvents);
+// A slight touchpad swipe as Chrome on Linux reports it: small deltas a few milliseconds apart. One page.evaluate sends
+// them all, so no Playwright round trip widens the gaps: MapLibre starts the move from the second event, carrying it,
+// only when that event arrives within its 40 ms first-event timer.
+async function swipeTouchpad(page, {events, deltaY, gapMilliseconds}) {
+  await page.evaluate(
+    async ({events, deltaY, gapMilliseconds}) => {
+      const map = window.kompasDebug.map;
+      const canvasContainer = map.getCanvasContainer();
+      const bounds = canvasContainer.getBoundingClientRect();
+      const options = {deltaY, clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2};
+      for (let index = 0; index < events; index++) {
+        canvasContainer.dispatchEvent(new WheelEvent('wheel', {...options, bubbles: true, cancelable: true}));
+        await new Promise(resolve => setTimeout(resolve, gapMilliseconds));
+      }
+    },
+    {events, deltaY, gapMilliseconds}
+  );
 }
 
-// Each camera move re-renders search results on moveend, so one wheel gesture must be one move.
-async function countCameraMoves(page) {
+// Zoom speed and feel are MapLibre's own (ADR 0015); this checks only what the app relies on: wheel input zooms, and
+// its movestart carries the input event, which app.js uses to stop the first location fix from re-centring.
+test('touchpad scrolling zooms the map and its move carries the wheel event', async ({page}) => {
+  await ready(page);
+  const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
   await page.evaluate(() => {
-    const map = window.kompasDebug.map;
-    window.wheelCameraMoves = {started: 0, ended: 0, fromInput: 0};
-    // A move with originalEvent counts as exploring, which stops the first location fix from re-centring.
-    map.on('movestart', event => {
-      window.wheelCameraMoves.started++;
-      if (event.originalEvent) window.wheelCameraMoves.fromInput++;
-    });
-    map.on('moveend', () => window.wheelCameraMoves.ended++);
+    window.wheelMoveStarts = [];
+    window.kompasDebug.map.on('movestart', event => window.wheelMoveStarts.push(event.originalEvent?.type ?? null));
   });
-}
 
-const cameraMoves = page => page.evaluate(() => window.wheelCameraMoves);
-const currentZoom = page => page.evaluate(() => window.kompasDebug.map.getZoom());
+  await swipeTouchpad(page, {events: 10, deltaY: -10.5, gapMilliseconds: 7});
 
-test('back-to-back mouse wheel notches zoom at mouse speed with one camera move', async ({page}) => {
-  await ready(page);
-  const startZoom = await currentZoom(page);
-  await countCameraMoves(page);
-
-  await dispatchWheelEvents(page, [{deltaY: -120}, {deltaY: -120}, {deltaY: -120}]);
-
-  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
-  // Three notches at the mouse rate zoom about 0.54 levels; the trackpad rate would give about 1.9.
-  const zoomChange = (await currentZoom(page)) - startZoom;
-  expect(zoomChange).toBeGreaterThan(0.3);
-  expect(zoomChange).toBeLessThan(0.9);
-  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
-});
-
-test('mouse wheel notches stay one camera move with reduced motion', async ({page}) => {
-  await page.emulateMedia({reducedMotion: 'reduce'});
-  await ready(page);
-  await countCameraMoves(page);
-
-  await dispatchWheelEvents(page, [{deltaY: -120}, {deltaY: -120}, {deltaY: -120}]);
-
-  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
-  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
-});
-
-test('trackpad pinch zooms smoothly with one camera move', async ({page}) => {
-  await ready(page);
-  const startZoom = await currentZoom(page);
-  await countCameraMoves(page);
-
-  // Browsers report a trackpad pinch as ctrl + wheel with small deltas.
-  await dispatchWheelEvents(page, Array.from({length: 10}, () => ({deltaY: -5, ctrlKey: true})));
-
-  await expect.poll(async () => (await cameraMoves(page)).ended).toBe(1);
-  // Ten 5 px events at the trackpad rate zoom about 0.36 levels.
-  const zoomChange = (await currentZoom(page)) - startZoom;
-  expect(zoomChange).toBeGreaterThan(0.2);
-  expect(zoomChange).toBeLessThan(1.0);
-  expect(await cameraMoves(page), 'one gesture is one camera move').toEqual({started: 1, ended: 1, fromInput: 1});
+  await expect
+    .poll(async () => (await page.evaluate(() => window.kompasDebug.map.getZoom())) - startZoom)
+    .toBeGreaterThan(0.1);
+  expect(await page.evaluate(() => window.wheelMoveStarts)).toContain('wheel');
 });
