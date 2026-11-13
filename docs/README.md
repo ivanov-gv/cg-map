@@ -9,6 +9,8 @@ This is the human entry point to project documentation. Each folder covers one c
 - [UI/UX](ui-ux/README.md): the path from user stories and journey requirements to justified interface and map features,
   and proposals for the internal editor.
 - [Verification](verification/README.md): test commands, evidence, and device-check limitations.
+- [Management](management/README.md): the milestone-driven workflow from Wiki through Epics, Features, Tasks and Bugs to
+  review and release.
 - [Engineering](engineering/README.md): language conventions and agent-instruction mechanisms.
 - [Runbooks](runbooks/README.md): operational procedures for development, data, and release.
 - [Decisions](decisions/README.md): the log of important decisions, including superseded historical choices.
