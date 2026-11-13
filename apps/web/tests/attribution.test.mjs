@@ -46,11 +46,11 @@ test('visibleSourceAttributions includes satellite attribution when visible', ()
 });
 
 test('visibleSourceAttributions collapses duplicate attributions', () => {
-  const sharedAttr = '© Shared';
+  const sharedAttribution = '© Shared';
   const style = fakeStyle(
     {
-      sourceA: {attribution: sharedAttr},
-      sourceB: {attribution: sharedAttr}
+      sourceA: {attribution: sharedAttribution},
+      sourceB: {attribution: sharedAttribution}
     },
     [
       {id: 'layerA', type: 'fill', source: 'sourceA'},
@@ -59,7 +59,7 @@ test('visibleSourceAttributions collapses duplicate attributions', () => {
   );
 
   const result = visibleSourceAttributions(style);
-  assert.deepEqual(result, [sharedAttr]);
+  assert.deepEqual(result, [sharedAttribution]);
 });
 
 test('visibleSourceAttributions skips sources with empty attribution', () => {

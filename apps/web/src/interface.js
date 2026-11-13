@@ -1,5 +1,4 @@
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
-
 export function searchBounds({height, top = 0, inset = 12}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
   return {top: top + inset + 70, maxHeight: Math.max(0, height / 2 - inset - 70)};

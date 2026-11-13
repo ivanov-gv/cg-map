@@ -436,7 +436,26 @@ function installPublicLayers(placesReady, labelsReady) {
   });
 }
 
+// Re-render attribution only when the joined text actually changes, so the call is cheap.
+let lastAttributionText = '';
+function renderMapAttributionIfNeeded(map) {
+  const container = document.getElementById('map-attribution');
+  if (!container) return;
+  const currentText = container.textContent;
+  if (currentText !== lastAttributionText) {
+    renderMapAttribution(map);
+    lastAttributionText = container.textContent;
+  }
+}
+
 function registerPublicMapEvents() {
+  // Re-render attribution when sources change (e.g. transport layer adds a source).
+  // Keep it cheap: only re-render when the attribution text actually changes.
+  mapState.map.on('sourcedata', event => {
+    if (event.sourceDataType === 'metadata' || event.isSourceAdded) {
+      renderMapAttributionIfNeeded(mapState.map);
+    }
+  });
   mapState.map.on('movestart', event => {
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
@@ -645,7 +664,6 @@ function initializeInterface() {
     }
   });
 }
-
 
 registerCategoryControls();
 registerSelectionControls();

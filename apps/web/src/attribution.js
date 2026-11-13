@@ -36,27 +36,30 @@ export function visibleSourceAttributions(style) {
 // Text nodes are copied as-is. <a> elements with an https:// href are rebuilt
 // with safe target/rel attributes. Any other element (including unsafe links)
 // is flattened to its text content.
-function sanitizeAttributionNodes(html) {
+// Accepts an optional documentObject so tests can pass a fake document;
+// defaults to the global document when omitted.
+export function attributionNodes(html, documentObject) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  const parsedDocument = documentObject ?? document;
   const nodes = [];
 
   for (const child of doc.body.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
-      nodes.push(document.createTextNode(child.textContent));
+      nodes.push(parsedDocument.createTextNode(child.textContent));
     } else if (child.tagName === 'A') {
       const href = child.getAttribute('href');
       if (href && href.startsWith('https://')) {
-        const anchor = document.createElement('a');
+        const anchor = parsedDocument.createElement('a');
         anchor.href = href;
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
         anchor.textContent = child.textContent;
         nodes.push(anchor);
       } else {
-        nodes.push(document.createTextNode(child.textContent));
+        nodes.push(parsedDocument.createTextNode(child.textContent));
       }
     } else {
-      nodes.push(document.createTextNode(child.textContent));
+      nodes.push(parsedDocument.createTextNode(child.textContent));
     }
   }
 
@@ -84,7 +87,7 @@ function buildAttributionNodes(attributions) {
     if (index > 0) {
       childNodes.push(document.createTextNode(' · '));
     }
-    childNodes.push(...sanitizeAttributionNodes(attributions[index]));
+    childNodes.push(...attributionNodes(attributions[index]));
   }
 
   return childNodes;

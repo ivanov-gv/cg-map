@@ -6,7 +6,9 @@
 // The 400 px limit on both axes excludes phones in landscape (width > 400) and portrait (height > 400).
 export const FLIP_MEDIA_QUERY = '(max-width: 400px) and (max-height: 400px)';
 
-// Mobile: phones and small tablets in portrait, excluding Flip.
+// Mobile: phones and small tablets in portrait. This query also matches Flip viewports,
+// but deviceClass() checks Flip first and excludes them from the mobile class.
+// Flip-specific CSS rules must come after the Mobile block and override it.
 export const MOBILE_MEDIA_QUERY = '(max-width: 720px)';
 
 // Desktop: the complement of the mobile query (721 = 720 + 1).
