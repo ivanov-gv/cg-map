@@ -78,6 +78,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Workflow: task, plan, PR, decisions log
 
+See [the management workflow](docs/management/management.md) for the full picture.
+
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
    history: [plan rules](docs/plans/AGENTS.md).
@@ -92,9 +94,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 - Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay
   only while enabled; route requests use external car/foot services. Never store live positions or external route
-  responses offline. Dated bus patterns may be bundled.
-- Range/archive responses stay outside the service-worker shell cache.
-- Existing verified offline downloads survive unsuccessful replacements.
-- Data producers depend on shared contracts, not web implementation.
-- Keep source provenance and licensing intact. Legacy geometry does not have reliable upstream identity.
-- Isolate simultaneous work in separate worktrees; keep secrets out of Git and artifacts.
+  responses offline. Range/archive responses stay outside the service-worker shell cache; existing verified offline
+  downloads survive unsuccessful replacements.
+- Data producers depend on shared contracts, not web implementation. Keep source provenance and licensing intact;
+  isolate simultaneous work in separate worktrees; keep secrets out of Git and artifacts.
