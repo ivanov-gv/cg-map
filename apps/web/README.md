@@ -67,8 +67,10 @@ closes it. Choosing a result in the phone dock switches to this compact view. Se
 
 Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
 recovery after an explicit location request. Route controls appear after endpoint selection; choosing From or To closes
-search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
-existing features.
+search or the dock to show them. Source notes, live-layer states, and offline safety remain part of the existing
+features. Map attribution (OSM copyright and, when visible, satellite imagery credits) lives in the left dock footer
+instead of a floating control on the map surface
+([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
 handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
