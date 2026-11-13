@@ -48,8 +48,9 @@ stable. A short interface still needs understandable symbols, accessible names, 
 ## UI-01 Opening view
 
 Show the map, one combined burger/search bar, an icon-only location button, zoom controls, a metric scale, and required
-attribution. Default geographic content remains governed by Discover; simplifying controls does not remove roads,
-buildings, addresses, terrain, or scale-appropriate places.
+attribution (placed in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)).
+Default geographic content remains governed by Discover; simplifying controls does not remove roads, buildings,
+addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -196,7 +197,8 @@ cumulative icons do not prove a production placement solution. Paid visibility i
 
 > Create a small, self-contained HTML draft of a laconic, map-first interface for Kompas. Let the person explore the map
 > immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, and required
-> attribution. Keep the dock closed.
+> attribution (in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Keep
+> the dock closed.
 >
 > Opening the burger expands a left dock around the existing header. Desktop search uses that dock too. Keep the burger
 > and search at exactly the same coordinates, dimensions, and shape across states; preserve typing and focus. Dock

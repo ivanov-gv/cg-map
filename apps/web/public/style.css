@@ -3,7 +3,10 @@
  * The @media conditions below must match the exported query strings exactly.
  *
  * Flip: max-width 400px AND max-height 400px (small cover screens, nearly square).
- * Mobile: max-width 720px (phones and small tablets in portrait).
+ *   The MOBILE_MEDIA_QUERY (max-width: 720px) also matches Flip, but deviceClass() excludes
+ *   Flip by checking it first. Flip-specific CSS rules must come after the Mobile block
+ *   and override it. No Flip @media rule exists yet.
+ * Mobile: max-width 720px (phones and small tablets in portrait; also matches Flip).
  * Desktop: everything else.
  */
 

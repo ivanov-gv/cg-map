@@ -437,6 +437,13 @@ function installPublicLayers(placesReady, labelsReady) {
 }
 
 function registerPublicMapEvents() {
+  // Re-render attribution when sources change (e.g. transport layer adds a source).
+  // renderMapAttribution skips the DOM update when nothing changed.
+  mapState.map.on('sourcedata', event => {
+    if (event.sourceDataType === 'metadata' || event.isSourceAdded) {
+      renderMapAttribution(mapState.map);
+    }
+  });
   mapState.map.on('movestart', event => {
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
@@ -645,7 +652,6 @@ function initializeInterface() {
     }
   });
 }
-
 
 registerCategoryControls();
 registerSelectionControls();

@@ -41,7 +41,8 @@ boundaries and offline invariants are in [apps/web/AGENTS.md](apps/web/AGENTS.md
 - Loading, empty, stale, offline, and error states are part of the feature. Every async action needs a visible state for
   each.
 - Show attribution and source notes required by [data licensing](docs/map-data/data-license.md) wherever the data is
-  displayed.
+  displayed. The web app keeps map attribution in the left dock footer:
+  [ADR 0016](docs/decisions/0016-map-attribution-in-the-left-dock.md).
 - Map gestures (wheel and touchpad zoom, pinch, tap-drag, pan) are MapLibre's own; do not replace its handlers. For a
   bug in how input feels, record real events on the reporter's device and compare MapLibre's defaults before changing
   code; tests built from a hypothesis only confirm it. The reporter checks the fix on a dev server (LAN for phones)
