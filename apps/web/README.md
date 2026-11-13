@@ -25,7 +25,8 @@ result lists free; avoid expensive application work during gestures.
 | File                                                                            | Read it to understand                                                                  |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
-| [style.css](public/style.css)                                                   | Desktop/mobile layout, positioning and visual states                                   |
+| [style.css](public/style.css)                                                   | Layout, positioning and visual states (device-specific @media rules)                   |
+| [device-class.js](src/device-class.js)                                          | Device classes (Flip/Mobile/Desktop): media query strings and runtime detection        |
 | [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
 | [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
@@ -66,8 +67,10 @@ closes it. Choosing a result in the phone dock switches to this compact view. Se
 
 Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
 recovery after an explicit location request. Route controls appear after endpoint selection; choosing From or To closes
-search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
-existing features.
+search or the dock to show them. Source notes, live-layer states, and offline safety remain part of the existing
+features. Map attribution lives in the left dock footer instead of a floating control on the map surface; the credits
+are read from the map's sources at runtime so they stay in sync when layers change
+([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
 handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
@@ -359,6 +362,27 @@ peek, with the selected feature kept in the remaining map area. The burger/searc
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
+
+### Device classes
+
+The app distinguishes three viewport categories. The single definition lives in
+[src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
+[style.css](public/style.css) must use the same conditions. At startup, `app.js` sets `data-device` on `<body>`
+(`"flip"`, `"mobile"`, or `"desktop"`) and keeps it updated when the viewport crosses a breakpoint.
+
+| Class   | Rule                                     | Examples                                 |
+| ------- | ---------------------------------------- | ---------------------------------------- |
+| Flip    | `width ≤ 400px` **and** `height ≤ 400px` | Galaxy Z Flip cover screen (~340–380 px) |
+| Mobile  | `width ≤ 720px` (excluding Flip)         | Phone portrait (412×840), small tablet   |
+| Desktop | Everything else                          | Laptop (1280×800), desktop (1920×1080)   |
+
+The 400 px limit on both axes separates Flip from phones: a phone in portrait (e.g. 412×840) exceeds 400 px in height,
+and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
+with a slightly larger cover screen still matches, without catching a phone in any orientation.
+
+Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
+device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
+[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
 
 ## 12. How to make common changes
 

@@ -44,6 +44,22 @@ import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
+import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
+import {renderMapAttribution} from './attribution.js';
+
+// Renders the current device class as a data attribute on <body>.
+function renderDeviceClass() {
+  document.body.dataset.device = deviceClass(matchMedia);
+}
+
+// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
+function trackDeviceClass() {
+  renderDeviceClass();
+  const flipQuery = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
+  flipQuery.addEventListener('change', renderDeviceClass);
+  mobileQuery.addEventListener('change', renderDeviceClass);
+}
 
 // One map and the controllers installed on it.
 const mapState = {
@@ -248,12 +264,16 @@ async function start() {
     assetBaseURL: location.href,
     options: {
       center: DEFAULT_CENTER,
-      zoom: DISCOVER_ZOOM
+      zoom: DISCOVER_ZOOM,
+      attributionControl: false
     }
   });
   installPublicMapDebug();
   installPositionBadge();
-  mapState.map.on('load', () => installPublicLayers(placesReady, labelsReady));
+  mapState.map.on('load', () => {
+    installPublicLayers(placesReady, labelsReady);
+    renderMapAttribution(mapState.map);
+  });
   registerPublicMapEvents();
   warnAboutSlowStartup();
 }
@@ -417,6 +437,13 @@ function installPublicLayers(placesReady, labelsReady) {
 }
 
 function registerPublicMapEvents() {
+  // Re-render attribution when sources change (e.g. transport layer adds a source).
+  // renderMapAttribution skips the DOM update when nothing changed.
+  mapState.map.on('sourcedata', event => {
+    if (event.sourceDataType === 'metadata' || event.isSourceAdded) {
+      renderMapAttribution(mapState.map);
+    }
+  });
   mapState.map.on('movestart', event => {
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
@@ -545,6 +572,7 @@ function registerLayerControls() {
     setSatelliteVisible(mapState.map, mapState.isSatelliteVisible);
     elementById('satellite-toggle').setAttribute('aria-pressed', String(mapState.isSatelliteVisible));
     elementById('satellite-note').hidden = !mapState.isSatelliteVisible;
+    renderMapAttribution(mapState.map);
     if (mapState.isSatelliteVisible) {
       placeSelection.close(false);
       mapState.hasExploredMap = true;
@@ -630,6 +658,7 @@ registerSelectionControls();
 registerLayerControls();
 registerDeviceControls();
 initializeInterface();
+trackDeviceClass();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;
