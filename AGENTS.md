@@ -36,8 +36,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
 - `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
-- `make test-<workflow>` / `make test-all-workflows`: run workflows locally with `act`, as `.github/TESTING.md` requires
-  for `.github/**` changes.
+- `make test-<workflow>` / `make test-all-workflows`: run workflows under `act`, required for `.github/**` changes.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
 - `make test-e2e`: browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
@@ -52,8 +51,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Hard rules
 
 - **No merge until local tests pass**, and `.github/**` changes pass under act: [the rule](.github/TESTING.md).
-- Never delete, skip, or loosen a failing test, check, or provenance record to get green output. Never commit with
-  `--no-verify`.
+- Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
 - Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
@@ -72,11 +70,12 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   implementation.
 - data owns editable sources, imagery, validated releases, and pipeline tools/tests. data/artifacts holds the reviewed
   snapshot so a clean checkout builds without a geography import.
-- platform owns development/release infrastructure and the agent harness; GitHub-specific configuration lives in
-  .github.
+- platform owns development/release infrastructure and the agent harness; GitHub-specific config lives in .github.
 - tests/ owns cross-component acceptance; component-specific tests live with their component.
 
 ## Workflow: task, plan, PR, decisions log
+
+Work starts in the human-written wiki: see [the workflow](docs/management/management.md).
 
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
