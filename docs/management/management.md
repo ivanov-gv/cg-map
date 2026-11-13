@@ -1,8 +1,8 @@
 # Management workflow
 
-> **Source of truth:** The [GitHub Wiki — Management page](https://github.com/ivanov-gv/cg-map/wiki/Management) is the
-> authoritative source for this workflow. This document is a repository copy for offline reference. When the two
-> disagree, the wiki wins.
+> **Source of truth:** The [wiki Management page](https://github.com/ivanov-gv/cg-map/wiki/Management) is the
+> authoritative source for this workflow. This repository copy exists so agents working in the repository follow the
+> workflow. When the two disagree, the wiki wins.
 
 This project uses a milestone-driven workflow managed through the Wiki and GitHub Issues. The flow is:
 
