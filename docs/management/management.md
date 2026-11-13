@@ -4,10 +4,10 @@
 > authoritative source for this workflow. This repository copy exists so agents working in the repository follow the
 > workflow. When the two disagree, the wiki wins.
 
-This project uses a milestone-driven workflow managed through the Wiki and GitHub Issues. The flow is:
+This is a project for testing and polishing AI-first development strategies. The workflow is:
 
 1. Edit the Wiki, add everything you want to change in the project
-2. Define Epic issues and add them to a new Milestone
+2. Define Epic tasks and add them to a new Milestone
 3. Ask your AI Agents to help with defining Features for each Epic
 4. Run your Agents to implement everything you have added
 5. Review, see the result in a staging environment, add more GitHub Issues if needed
@@ -45,8 +45,8 @@ The single source of truth about the project. The place where every idea is writ
 
 It should contain:
 
-- Home — "what is it about?"
-- Getting started — onboarding
+- Home - "what is it about?"
+- Getting started - onboarding
 - Docs — every document about the project as a whole
   - Management
   - Development
@@ -84,7 +84,8 @@ Every issue must have:
 
 See also
 [ADR 0009 — Issues are the source of truth for tasks](../decisions/0009-issues-are-the-source-of-truth-for-tasks.md) and
-[plan rules](../plans/AGENTS.md) for how issues connect to PRs and plans.
+[plan rules](../plans/AGENTS.md) for how issues connect to PRs and plans. The wiki holds what the project should be; an
+issue holds a task's scope and status.
 
 ### Epics
 
