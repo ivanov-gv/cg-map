@@ -109,8 +109,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .position-control[data-state=stale] #position-action { color: #7d8790; }
 .maplibregl-ctrl-bottom-right { right: 2px; }
 .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 10px; overflow: hidden; }
-.maplibregl-ctrl-group button { width: 44px; height: 44px; }
-.maplibregl-ctrl-attrib { font-size: 10px; background: #ffffffd9 !important; }
+/* Hide MapLibre zoom buttons: map-core creates the NavigationControl and the pinned
+ * @ivanov-gv/map-core package gives no handle to remove it. A map-core option would need a release. */
+.maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
 .place-card, .route-panel { position: absolute; z-index: 4; overflow: auto; background: #fffffc; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #243f3718; }
 .place-card { top: 94px; left: 20px; width: min(375px, calc(100% - 96px)); max-height: calc(100% - 130px); padding: 24px; scrollbar-width: none; }
