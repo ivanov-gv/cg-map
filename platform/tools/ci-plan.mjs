@@ -24,9 +24,9 @@ export const FOLDERS = [
 // Each web source file is listed once, so a new file falls through to every area until someone maps it.
 export const BROWSER_AREAS = {
   shell: {
-    specs: 'tests/e2e/shell.spec.mjs tests/e2e/updates.spec.mjs tests/e2e/attribution.spec.mjs',
-    specFiles: ['shell.spec.mjs', 'updates.spec.mjs', 'attribution.spec.mjs'],
-    sources: ['sw.js', 'offline.js', 'data-mode.js', 'app-updates.js', 'attribution.js']
+    specs: 'tests/e2e/shell.spec.mjs tests/e2e/updates.spec.mjs',
+    specFiles: ['shell.spec.mjs', 'updates.spec.mjs'],
+    sources: ['sw.js', 'offline.js', 'data-mode.js', 'app-updates.js']
   },
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',

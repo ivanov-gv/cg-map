@@ -45,7 +45,7 @@ import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
-import {renderInitialAttribution, updateDockAttribution} from './attribution.js';
+import {renderMapAttribution} from './attribution.js';
 
 // Renders the current device class as a data attribute on <body>.
 function renderDeviceClass() {
@@ -272,7 +272,7 @@ async function start() {
   installPositionBadge();
   mapState.map.on('load', () => {
     installPublicLayers(placesReady, labelsReady);
-    renderInitialAttribution();
+    renderMapAttribution(mapState.map);
   });
   registerPublicMapEvents();
   warnAboutSlowStartup();
@@ -565,7 +565,7 @@ function registerLayerControls() {
     setSatelliteVisible(mapState.map, mapState.isSatelliteVisible);
     elementById('satellite-toggle').setAttribute('aria-pressed', String(mapState.isSatelliteVisible));
     elementById('satellite-note').hidden = !mapState.isSatelliteVisible;
-    updateDockAttribution(mapState.map, mapState.isSatelliteVisible);
+    renderMapAttribution(mapState.map);
     if (mapState.isSatelliteVisible) {
       placeSelection.close(false);
       mapState.hasExploredMap = true;

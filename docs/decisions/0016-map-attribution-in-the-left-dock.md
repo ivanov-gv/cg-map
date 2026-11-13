@@ -25,10 +25,10 @@ The floating control is disabled by passing `attributionControl: false` in `apps
 `packages/map-core` package is not modified; the option override is sufficient because `createMap` spreads `options`
 last.
 
-The attribution module (`apps/web/src/attribution.js`) builds the DOM from the known source attribution strings (basemap
-and satellite) at runtime, updating when the satellite layer is toggled. The strings mirror the values in
-`map-core/src/map-style.js` and `map-core/src/satellite.js`. If those sources change, the module must be updated in
-lockstep.
+The attribution module (`apps/web/src/attribution.js`) reads the attribution strings from the map's style object at
+runtime via `map.getStyle()`. It collects the `attribution` field from every source that has at least one visible layer,
+deduplicates them, and renders the result into `#map-attribution` after sanitising the HTML. No hard-coded copies of the
+strings exist in the module — if a source's attribution changes in map-core, the display updates automatically.
 
 ## Consequences
 
@@ -37,4 +37,5 @@ lockstep.
   meeting the spec's visual goal.
 - The attribution updates when satellite is toggled on/off, showing both source credits when applicable.
 - The `packages/map-core` package remains unchanged; the change is isolated to `apps/web`.
-- If new map sources are added in the future, the attribution module must be updated to include their credits.
+- If new map sources are added in the future, their attribution appears automatically — no change to the attribution
+  module is needed.

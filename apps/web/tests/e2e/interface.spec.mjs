@@ -728,3 +728,42 @@ test('device class is set on body at flip, mobile, and desktop viewport sizes', 
   await page.setViewportSize({width: 1280, height: 800});
   await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
 });
+
+// Attribution lives in the dock footer, not as a floating control on the map.
+test('attribution appears in dock footer and updates with satellite toggle', async ({page}) => {
+  await ready(page);
+  // No floating attribution control
+  await expect(page.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
+
+  // Open menu to reveal dock footer
+  await openMenu(page);
+  const attribution = page.locator('#map-attribution');
+  await expect(attribution).toBeVisible();
+  const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
+  await expect(osmLink).toBeVisible();
+
+  // Toggle satellite on: eMapa link appears
+  await page.getByRole('button', {name: 'Satellite', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(true);
+  const emapaLink = attribution.locator('a[href="https://emapa.me/"]');
+  await expect(emapaLink).toBeVisible();
+
+  // Toggle satellite off: eMapa link disappears
+  await page.getByRole('button', {name: 'Satellite', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(false);
+  await expect(emapaLink).not.toBeVisible();
+});
+
+// Same attribution checks at Flip viewport
+test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, async ({page}) => {
+  await withFlipViewport(page, async () => {
+    await ready(page);
+    await expect(page.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
+
+    await openMenu(page);
+    const attribution = page.locator('#map-attribution');
+    await expect(attribution).toBeVisible();
+    const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
+    await expect(osmLink).toBeVisible();
+  });
+});

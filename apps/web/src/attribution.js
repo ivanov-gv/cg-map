@@ -1,79 +1,99 @@
-// Renders map source attributions in the dock footer instead of a floating control.
-// The attribution strings come from the map's own source definitions, so they stay
-// correct when sources change or the satellite layer is toggled.
+// Reads attribution strings from the map's style object at runtime and renders them
+// in the dock footer. Because it uses the style's source definitions, the display stays
+// correct when sources change or layers are toggled — no hard-coded copies to drift.
 
-// Basemap attribution text and link, matching map-core/src/map-style.js.
-const basemapAttribution = {
-  text: '© OpenStreetMap contributors · ODbL · Natural Earth',
-  linkText: 'OpenStreetMap contributors',
-  linkURL: 'https://www.openstreetmap.org/copyright'
-};
+// Returns the unique, non-empty attribution strings of sources used by at least one
+// visible layer (layout.visibility !== 'none'), in source-order. Pure function, no DOM.
+export function visibleSourceAttributions(style) {
+  const sources = style.sources;
+  const layers = style.layers;
+  const usedSourceIds = new Set();
 
-// Satellite imagery attribution, matching map-core/src/satellite.js.
-const satelliteAttribution = {
-  text: 'Imagery: eMapa · Ortofoto 2025',
-  linkText: 'eMapa',
-  linkURL: 'https://emapa.me/'
-};
-
-// Builds a <p> containing the basemap attribution with a link, using createElement
-// so no innerHTML is needed. The link opens in a new tab with safe rel attributes.
-function buildAttributionLink(text, url) {
-  const link = document.createElement('a');
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.textContent = text;
-  return link;
-}
-
-// Returns the full attribution paragraph for the given sources.
-// When satellite is visible, both attributions appear separated by a middle dot.
-function buildAttributionElement(showSatellite) {
-  const paragraph = document.createElement('p');
-  paragraph.className = 'map-attribution';
-
-  // Build "© <a>OpenStreetMap contributors</a> · ODbL · Natural Earth"
-  const copyrightSymbol = document.createTextNode('© ');
-  paragraph.appendChild(copyrightSymbol);
-
-  const osmLink = buildAttributionLink(basemapAttribution.linkText, basemapAttribution.linkURL);
-  paragraph.appendChild(osmLink);
-
-  const osmSuffix = document.createTextNode(' · ODbL · Natural Earth');
-  paragraph.appendChild(osmSuffix);
-
-  if (showSatellite) {
-    const separator = document.createTextNode(' · ');
-    paragraph.appendChild(separator);
-
-    const satelliteText = document.createTextNode('Imagery: ');
-    paragraph.appendChild(satelliteText);
-
-    const emapaLink = buildAttributionLink(satelliteAttribution.linkText, satelliteAttribution.linkURL);
-    paragraph.appendChild(emapaLink);
-
-    const satelliteSuffix = document.createTextNode(' · Ortofoto 2025');
-    paragraph.appendChild(satelliteSuffix);
+  for (const layer of layers) {
+    if (layer.layout?.visibility === 'none') continue;
+    if (layer.source && sources[layer.source]) {
+      usedSourceIds.add(layer.source);
+    }
   }
 
-  return paragraph;
+  // Preserve source order from the style object
+  const seen = new Set();
+  const result = [];
+  for (const sourceId of Object.keys(sources)) {
+    if (!usedSourceIds.has(sourceId)) continue;
+    const attribution = sources[sourceId].attribution;
+    if (attribution && !seen.has(attribution)) {
+      seen.add(attribution);
+      result.push(attribution);
+    }
+  }
+
+  return result;
 }
 
-// Updates the dock footer attribution to reflect which sources are currently visible.
-// Reads the map's source attributions at runtime so the display stays in sync with
-// the actual sources, rather than relying on a static copy.
-export function updateDockAttribution(map, showSatellite) {
+// Sanitises an HTML attribution string: keeps text nodes and rebuilds only <a> elements
+// whose href starts with https://. All other tags are dropped. Returns a flat node list.
+function sanitiseAttributionHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const nodes = [];
+  const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      addTextNode(node, nodes);
+    } else if (node.tagName === 'A') {
+      addSafeAnchor(node, nodes);
+    }
+  }
+
+  return nodes;
+}
+
+// Adds a trimmed text node to the nodes list if non-empty.
+function addTextNode(textNode, nodes) {
+  const text = textNode.textContent.trim();
+  if (!text) return;
+  nodes.push(document.createTextNode(text));
+}
+
+// Adds a new anchor to the nodes list if its href starts with https:// and has text.
+function addSafeAnchor(element, nodes) {
+  const href = element.getAttribute('href');
+  if (!href || !href.startsWith('https://')) return;
+  const anchorText = element.textContent.trim();
+  if (!anchorText) return;
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  anchor.textContent = anchorText;
+  nodes.push(anchor);
+}
+
+// Renders the current map's source attributions into #map-attribution.
+// Reads attributions from the map's style object, sanitises the HTML, and joins them
+// with a middle dot separator.
+export function renderMapAttribution(map) {
   const container = document.getElementById('map-attribution');
   if (!container) return;
 
-  container.innerHTML = '';
-  container.appendChild(buildAttributionElement(showSatellite));
+  const style = map.getStyle();
+  const attributions = visibleSourceAttributions(style);
+  const childNodes = buildAttributionNodes(attributions);
+  container.replaceChildren(...childNodes);
 }
 
-// Convenience: render the initial attribution (basemap only, no satellite).
-export function renderInitialAttribution() {
-  const container = document.getElementById('map-attribution');
-  if (!container) return;
-  container.appendChild(buildAttributionElement(false));
+// Builds a flat list of DOM nodes from attribution HTML strings, joined by ' · '.
+function buildAttributionNodes(attributions) {
+  const childNodes = [];
+
+  for (let index = 0; index < attributions.length; index++) {
+    if (index > 0) {
+      childNodes.push(document.createTextNode(' · '));
+    }
+    childNodes.push(...sanitiseAttributionHtml(attributions[index]));
+  }
+
+  return childNodes;
 }
