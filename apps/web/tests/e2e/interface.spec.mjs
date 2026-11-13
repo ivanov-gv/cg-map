@@ -34,8 +34,14 @@ test('dock expands around a stationary header and keeps layer/download options a
   const burger = await page.locator('#menu-toggle').boundingBox();
   const search = await page.locator('#search').boundingBox();
   const locate = await page.locator('#position-action').boundingBox();
-  const zoom = await page.getByRole('button', {name: 'Zoom in', exact: true}).boundingBox();
-  expect(locate.y + locate.height).toBeLessThanOrEqual(zoom.y);
+  // Zoom buttons are hidden via CSS; the position button sits alone in the bottom-right corner.
+  await expect(page.locator('.maplibregl-ctrl-zoom-in')).toBeHidden();
+  await expect(page.locator('.maplibregl-ctrl-zoom-out')).toBeHidden();
+  const viewport = page.viewportSize();
+  const rightGap = viewport.width - (locate.x + locate.width);
+  const bottomGap = viewport.height - (locate.y + locate.height);
+  expect(rightGap).toBeLessThanOrEqual(24);
+  expect(bottomGap).toBeLessThanOrEqual(24);
   await page.screenshot({path: testInfo.outputPath('opening.png')});
   await openMenu(page);
   expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
@@ -845,6 +851,58 @@ for (const {name, viewport} of deviceCases) {
     } else {
       await page.setViewportSize(viewport);
       await checkMainScreen();
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Zoom buttons removed (issue #98)
+// ---------------------------------------------------------------------------
+
+for (const {name, viewport} of deviceCases) {
+  test(`zoom buttons are hidden and position button sits alone on ${name}`, async ({page}) => {
+    async function check() {
+      await ready(page);
+      // Zoom buttons are not visible
+      await expect(page.locator('.maplibregl-ctrl-zoom-in')).toBeHidden();
+      await expect(page.locator('.maplibregl-ctrl-zoom-out')).toBeHidden();
+      // Position button is visible and close to the bottom-right corner
+      await expect(page.locator('#position-action')).toBeVisible();
+      const locate = await page.locator('#position-action').boundingBox();
+      const vp = page.viewportSize();
+      const rightGap = vp.width - (locate.x + locate.width);
+      const bottomGap = vp.height - (locate.y + locate.height);
+      expect(rightGap).toBeLessThanOrEqual(24);
+      expect(bottomGap).toBeLessThanOrEqual(24);
+    }
+
+    if (name === 'flip') {
+      await withFlipViewport(page, check);
+    } else {
+      await page.setViewportSize(viewport);
+      await check();
+    }
+  });
+}
+
+for (const {name, viewport} of deviceCases) {
+  test(`keyboard zoom still works on ${name}`, async ({page}) => {
+    async function check() {
+      await ready(page);
+      const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
+      // Focus the map canvas and press '+' to zoom in
+      await page.locator('#map canvas').focus();
+      await page.keyboard.press('+');
+      await expect
+        .poll(async () => page.evaluate(() => window.kompasDebug.map.getZoom()))
+        .toBeGreaterThan(startZoom);
+    }
+
+    if (name === 'flip') {
+      await withFlipViewport(page, check);
+    } else {
+      await page.setViewportSize(viewport);
+      await check();
     }
   });
 }

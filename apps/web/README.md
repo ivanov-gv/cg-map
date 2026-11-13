@@ -65,11 +65,12 @@ the open results. Pulling it up gives the full card and shrinks results to a str
 closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
-Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
-recovery after an explicit location request. Route controls appear after endpoint selection; choosing From or To closes
-search or the dock to show them. Source notes, live-layer states, and offline safety remain part of the existing
-features. Map attribution lives in the left dock footer instead of a floating control on the map surface; the credits
-are read from the map's sources at runtime so they stay in sync when layers change
+Location is a single icon in the bottom-right corner with accessible state and non-color badges. A usable fix recenters
+directly; failures explain recovery after an explicit location request. There are no zoom buttons on the map—wheel,
+pinch, and keyboard zoom work instead. Route controls appear after endpoint selection; choosing From or To closes search
+or the dock to show them. Source notes, live-layer states, and offline safety remain part of the existing features. Map
+attribution lives in the left dock footer instead of a floating control on the map surface; the credits are read from
+the map's sources at runtime so they stay in sync when layers change
 ([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
@@ -91,7 +92,7 @@ offline controls and app-owned map layers now have explicit modules; each applic
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
 12. It creates one MapLibre Map using mapStyle(), initially over Podgorica.
-13. It adds navigation controls and a ResizeObserver.
+13. It adds a ResizeObserver (map-core also adds a NavigationControl, but the zoom buttons are hidden via CSS).
 14. When MapLibre emits load, it installs satellite sources, place layers, the selected-place overlay and city labels.
 15. It enables the satellite button, hides the loading message and builds the result list.
 
