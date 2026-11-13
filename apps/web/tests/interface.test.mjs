@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {
   cardStateAfterSwipe,
   isInFocusZone,
@@ -11,12 +9,11 @@ import {
   uncoveredMapOffset
 } from '../src/interface.js';
 import {
+  DESKTOP_MEDIA_QUERY,
   deviceClass,
   FLIP_MEDIA_QUERY,
   MOBILE_MEDIA_QUERY
 } from '../src/device-class.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {
@@ -152,21 +149,30 @@ test('device class distinguishes flip, mobile, and desktop by viewport size', ()
   assert.equal(deviceClass(fakeMatchMedia(1920, 1080)), 'desktop');
 });
 
+test('desktop and mobile queries are complements', () => {
+  const desktopMatch = DESKTOP_MEDIA_QUERY.match(/min-width:\s*(\d+)px/);
+  const mobileMatch = MOBILE_MEDIA_QUERY.match(/max-width:\s*(\d+)px/);
+  assert.ok(desktopMatch, 'DESKTOP_MEDIA_QUERY should contain min-width');
+  assert.ok(mobileMatch, 'MOBILE_MEDIA_QUERY should contain max-width');
+  const desktopMin = Number(desktopMatch[1]);
+  const mobileMax = Number(mobileMatch[1]);
+  assert.equal(desktopMin, mobileMax + 1, 'Desktop min-width should be mobile max-width + 1');
+});
+
 test('style.css @media conditions match the exported device-class queries', () => {
-  const cssPath = path.join(__dirname, '../public/style.css');
-  const css = fs.readFileSync(cssPath, 'utf8');
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
 
   // Strip comments so the regex only sees real rules.
   const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-  // Find all @media conditions in the CSS (excluding prefers-reduced-motion and other non-device queries).
+  // Find all @media conditions in the CSS (excluding prefers-* queries).
   const mediaPattern = /@media\s+([^{]+)\{/g;
-  const deviceQueries = [FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY];
+  const deviceQueries = [FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY, DESKTOP_MEDIA_QUERY];
   let match;
   while ((match = mediaPattern.exec(cssWithoutComments)) !== null) {
     const condition = match[1].trim();
-    // Skip non-device media queries
-    if (condition.includes('prefers-reduced-motion') || condition.includes('min-width')) continue;
+    // Skip prefers-* media queries (e.g. prefers-reduced-motion, prefers-color-scheme)
+    if (condition.includes('prefers-')) continue;
     const isKnownQuery = deviceQueries.some(query => condition === query);
     assert.ok(isKnownQuery, `style.css @media condition "${condition}" does not match any exported device-class query`);
   }

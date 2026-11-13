@@ -714,21 +714,17 @@ test('device class is set on body at flip, mobile, and desktop viewport sizes', 
 
   // Mobile viewport (412×840) — default for pages-mobile project
   await page.setViewportSize({width: 412, height: 840});
-  await page.waitForTimeout(100);
   await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
 
   // Flip viewport (340×340) — withFlipViewport restores to the previous size (412×840) after
   await withFlipViewport(page, async () => {
-    await page.waitForTimeout(100);
     await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
   });
 
   // withFlipViewport restored to 412×840, so the class is mobile again
-  await page.waitForTimeout(100);
   await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
 
   // Explicitly resize to desktop to verify the transition back
   await page.setViewportSize({width: 1280, height: 800});
-  await page.waitForTimeout(100);
   await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
 });

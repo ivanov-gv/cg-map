@@ -46,6 +46,20 @@ import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 
+// Renders the current device class as a data attribute on <body>.
+function renderDeviceClass() {
+  document.body.dataset.device = deviceClass(matchMedia);
+}
+
+// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
+function trackDeviceClass() {
+  renderDeviceClass();
+  const flipQuery = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
+  flipQuery.addEventListener('change', renderDeviceClass);
+  mobileQuery.addEventListener('change', renderDeviceClass);
+}
+
 // One map and the controllers installed on it.
 const mapState = {
   map: null,
@@ -626,24 +640,13 @@ function initializeInterface() {
   });
 }
 
-// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
-function initDeviceClass() {
-  function updateDeviceAttribute() {
-    document.body.dataset.device = deviceClass(matchMedia);
-  }
-  updateDeviceAttribute();
-  const flipMql = matchMedia(FLIP_MEDIA_QUERY);
-  const mobileMql = matchMedia(MOBILE_MEDIA_QUERY);
-  flipMql.addEventListener('change', updateDeviceAttribute);
-  mobileMql.addEventListener('change', updateDeviceAttribute);
-}
 
 registerCategoryControls();
 registerSelectionControls();
 registerLayerControls();
 registerDeviceControls();
 initializeInterface();
-initDeviceClass();
+trackDeviceClass();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;

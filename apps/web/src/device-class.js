@@ -9,15 +9,18 @@ export const FLIP_MEDIA_QUERY = '(max-width: 400px) and (max-height: 400px)';
 // Mobile: phones and small tablets in portrait, excluding Flip.
 export const MOBILE_MEDIA_QUERY = '(max-width: 720px)';
 
+// Desktop: the complement of the mobile query (721 = 720 + 1).
+export const DESKTOP_MEDIA_QUERY = '(min-width: 721px)';
+
 /**
  * Returns 'flip', 'mobile', or 'desktop' for the current viewport.
  * @param {typeof window.matchMedia} matchMedia - factory for MediaQueryList objects (injectable for tests).
  * @returns {'flip' | 'mobile' | 'desktop'}
  */
 export function deviceClass(matchMedia) {
-  const flipMql = matchMedia(FLIP_MEDIA_QUERY);
-  const mobileMql = matchMedia(MOBILE_MEDIA_QUERY);
-  if (flipMql.matches) return 'flip';
-  if (mobileMql.matches) return 'mobile';
+  const flipQuery = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
+  if (flipQuery.matches) return 'flip';
+  if (mobileQuery.matches) return 'mobile';
   return 'desktop';
 }
