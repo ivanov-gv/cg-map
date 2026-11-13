@@ -104,3 +104,11 @@ See also
 
 - May only have a Feature as a parent issue
 - May only have sub-tasks as child issues
+
+## Agents and the wiki
+
+The wiki is human-written. Agents may read it freely via the web page, the raw file
+(`https://raw.githubusercontent.com/wiki/ivanov-gv/cg-map/<Page>.md`), or a clone of
+<https://github.com/ivanov-gv/cg-map.wiki.git>. They must never edit or push to it. If an agent needs to propose a
+change, it should add a comment on the relevant issue so a human can apply it. The wiki footer states this rule, but it
+is not visible when reading a raw file or a cloned repository, which is why this section repeats it here.

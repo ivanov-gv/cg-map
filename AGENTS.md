@@ -75,7 +75,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Workflow: task, plan, PR, decisions log
 
-Work starts in the human-written wiki: see [the workflow](docs/management/management.md).
+Work starts in the human-written wiki: read it, never edit it. See [the workflow](docs/management/management.md).
 
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
