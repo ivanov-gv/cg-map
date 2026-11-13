@@ -33,6 +33,7 @@ const shell = [
   'interface.js',
   'app-updates.js',
   'app.js',
+  'attribution.js',
   'dom.js',
   'place-details.js',
   'public-map-layers.js',

@@ -85,6 +85,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .download .icon { width: 18px; height: 18px; }
 .download small { font-size: 10px; }
 .dock-footer p, .connection-badge { font-size: 11px; color: var(--muted); margin: 8px 0; }
+#map-attribution { font-size: 11px; color: var(--muted); margin: 8px 0; line-height: 1.4; }
+#map-attribution a { color: var(--muted); text-decoration: none; }
+#map-attribution a:hover { text-decoration: underline; }
 .connection-badge { display: block; }
 progress { width: 100%; accent-color: var(--green); margin-top: 8px; }
 #transport-info { margin: 8px 0 14px; }
