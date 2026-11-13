@@ -66,8 +66,7 @@ const imports = {
     './offline-controls.js',
     './status-messages.js',
     './place-selection.js',
-    './location-controls.js',
-    './wheel-zoom.js'
+    './location-controls.js'
   ],
   'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './position.js', './status-messages.js'],
   'dom.js': [],
@@ -88,8 +87,7 @@ const imports = {
   'position.js': ['./core.js'],
   'routing.js': [],
   'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js'],
-  'wheel-zoom.js': []
+  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js']
 };
 for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
   if (file === 'sw.js') continue;
@@ -99,6 +97,13 @@ for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('
   for (const match of text.matchAll(moduleDependencyPattern)) {
     assert.ok(imports[file].includes(match[1]), `${file}: forbidden dependency ${match[1]}. Consume published data/contracts, not pipeline or server code.`);
   }
+}
+// ADR 0015: map gestures are MapLibre's own. A web module that reconfigures or replaces a gesture handler needs a new
+// decision first, because #78 did that from synthetic tests and broke touchpad zoom.
+const gestureHandlerPattern = /\.(?:scrollZoom|touchZoomRotate|doubleClickZoom|dragPan|dragRotate|keyboard|boxZoom|touchPitch|cooperativeGestures)\b/;
+for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
+  const text = fs.readFileSync(path.join('apps/web/src', file), 'utf8');
+  assert.ok(!gestureHandlerPattern.test(text), `${file}: map gestures stay MapLibre's own (docs/decisions/0015-maplibre-gestures-unchanged.md)`);
 }
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);

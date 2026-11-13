@@ -1,5 +1,8 @@
 # 0014: Deterministic wheel zoom
 
+> Superseded by [ADR 0015](0015-maplibre-gestures-unchanged.md): the app handler was removed after it failed on a real
+> touchpad.
+
 ## Status
 
 Accepted.
