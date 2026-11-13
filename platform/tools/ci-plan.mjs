@@ -47,7 +47,7 @@ export const BROWSER_AREAS = {
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
     specFiles: ['interface.spec.mjs'],
-    sources: ['interface.js', 'device-class.js']
+    sources: ['interface.js']
   },
   discover: {
     specs: 'tests/e2e/discover.spec.mjs',
@@ -79,7 +79,8 @@ export const SHARED_WEB_SOURCES = [
   'offline-controls.js',
   'status-messages.js',
   'place-selection.js',
-  'location-controls.js'
+  'location-controls.js',
+  'device-class.js'
 ];
 
 // Only moving geometry or previewing all edits reaches these, which the offline and viewer tests never do.
