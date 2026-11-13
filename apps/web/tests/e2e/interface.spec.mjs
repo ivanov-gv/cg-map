@@ -12,6 +12,7 @@ import {
   simulateKeyboard,
   stubRouting,
   tapRenderedPlace,
+  withFlipViewport,
   CAMERA_HOLD_MILLISECONDS,
   expectCameraToHold,
   expectToHold,
@@ -701,4 +702,29 @@ test('touchpad scrolling zooms the map and its move carries the wheel event', as
     .poll(async () => (await page.evaluate(() => window.kompasDebug.map.getZoom())) - startZoom)
     .toBeGreaterThan(0.1);
   expect(await page.evaluate(() => window.wheelMoveStarts)).toContain('wheel');
+});
+
+test('device class is set on body at flip, mobile, and desktop viewport sizes', async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+
+  // Desktop viewport (1280×800)
+  await page.setViewportSize({width: 1280, height: 800});
+  await ready(page);
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
+
+  // Mobile viewport (412×840) — default for pages-mobile project
+  await page.setViewportSize({width: 412, height: 840});
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
+
+  // Flip viewport (340×340) — withFlipViewport restores to the previous size (412×840) after
+  await withFlipViewport(page, async () => {
+    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
+  });
+
+  // withFlipViewport restored to 412×840, so the class is mobile again
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
+
+  // Explicitly resize to desktop to verify the transition back
+  await page.setViewportSize({width: 1280, height: 800});
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
 });

@@ -1,3 +1,12 @@
+/*
+ * Device classes: the JavaScript definition lives in src/device-class.js.
+ * The @media conditions below must match the exported query strings exactly.
+ *
+ * Flip: max-width 400px AND max-height 400px (small cover screens, nearly square).
+ * Mobile: max-width 720px (phones and small tablets in portrait).
+ * Desktop: everything else.
+ */
+
 :root {
   font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #243f37;

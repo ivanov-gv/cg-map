@@ -29,6 +29,7 @@ for (const name of fileSystem.readdirSync(path.join(outputDirectory, 'data')))
     fileSystem.unlinkSync(path.join(outputDirectory, 'data', name));
 const shell = [
   'index.html',
+  'device-class.js',
   'interface.js',
   'app-updates.js',
   'app.js',

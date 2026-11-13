@@ -79,7 +79,8 @@ export const SHARED_WEB_SOURCES = [
   'offline-controls.js',
   'status-messages.js',
   'place-selection.js',
-  'location-controls.js'
+  'location-controls.js',
+  'device-class.js'
 ];
 
 // Only moving geometry or previewing all edits reaches these, which the offline and viewer tests never do.

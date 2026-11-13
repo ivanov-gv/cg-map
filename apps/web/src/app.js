@@ -44,6 +44,21 @@ import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
+import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
+
+// Renders the current device class as a data attribute on <body>.
+function renderDeviceClass() {
+  document.body.dataset.device = deviceClass(matchMedia);
+}
+
+// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
+function trackDeviceClass() {
+  renderDeviceClass();
+  const flipQuery = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
+  flipQuery.addEventListener('change', renderDeviceClass);
+  mobileQuery.addEventListener('change', renderDeviceClass);
+}
 
 // One map and the controllers installed on it.
 const mapState = {
@@ -625,11 +640,13 @@ function initializeInterface() {
   });
 }
 
+
 registerCategoryControls();
 registerSelectionControls();
 registerLayerControls();
 registerDeviceControls();
 initializeInterface();
+trackDeviceClass();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;
