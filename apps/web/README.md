@@ -65,12 +65,15 @@ the open results. Pulling it up gives the full card and shrinks results to a str
 closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
-Location is a single icon in the bottom-right corner with accessible state and non-color badges. A usable fix recenters
-directly; failures explain recovery after an explicit location request. There are no zoom buttons on the map—wheel,
-pinch, and keyboard zoom work instead. Route controls appear after endpoint selection; choosing From or To closes search
-or the dock to show them. Source notes, live-layer states, and offline safety remain part of the existing features. Map
-attribution lives in the left dock footer instead of a floating control on the map surface; the credits are read from
-the map's sources at runtime so they stay in sync when layers change
+Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
+starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes arrive,
+preserving the current zoom. Following stops on a second click or when the person moves the map (detected via MapLibre's
+`movestart` event with a user gesture). The button colour changes to green while following; `aria-pressed` and
+`data-following` reflect the state. If location fails while following, following stops and the failure message shows.
+There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear after endpoint
+selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states, and offline
+safety remain part of the existing features. Map attribution lives in the left dock footer instead of a floating control
+on the map surface; the credits are read from the map's sources at runtime so they stay in sync when layers change
 ([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
@@ -113,7 +116,8 @@ transient state with the behavior that changes it:
 | `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
-| [LocationControls](src/location-controls.js) | The in-memory fix, explicit location requests and first-fix recentering                                      |
+| [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
+| [follow-camera.js](src/follow-camera.js)     | Pure function: whether a MapLibre camera event is a user gesture                                             |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
 Controllers read the map and directory through getters because those inputs finish loading independently after the

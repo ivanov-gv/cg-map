@@ -1,6 +1,7 @@
 import {mapBounds} from '@ivanov-gv/map-core';
 import {DISCOVER_ZOOM} from './core.js';
 import {elementById} from './dom.js';
+import {isUserCameraEvent} from './follow-camera.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
@@ -12,15 +13,17 @@ import {
 
 const firstFixCameraDurationMilliseconds = 600;
 const requestedFixCameraDurationMilliseconds = 500;
+const followCameraDurationMilliseconds = 400;
 
-// Owns the in-memory fix, explicit location requests and first-fix recentering. Map exploration belongs
-// to the app; its getter prevents a later fix from overriding a camera the person already moved.
+// Owns the in-memory fix, explicit location requests, first-fix recentering, and location following.
+// Map exploration belongs to the app; its getter prevents a later fix from overriding a camera the person already moved.
 export class LocationControls {
   #context;
   #snapshot = {state: 'idle', fix: null, age: null};
   #tracker = null;
   #isLocationRequested = false;
   #hasCenteredOnFix = false;
+  #isFollowing = false;
 
   constructor(context) {
     this.#context = context;
@@ -33,6 +36,9 @@ export class LocationControls {
   }
   get state() {
     return this.#snapshot.state;
+  }
+  get isFollowing() {
+    return this.#isFollowing;
   }
 
   // Location starts independently of directory data and map loading, and cannot block either.
@@ -53,9 +59,14 @@ export class LocationControls {
   render(snapshot) {
     this.#snapshot = snapshot;
     const {state, fix} = snapshot;
+    // Stop following if location becomes unavailable while following.
+    if (this.#isFollowing && FAILED_POSITION_STATES.includes(state)) {
+      this.#isFollowing = false;
+    }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
     elementById('position-badge').dataset.state = state;
-    const action = positionActionLabel(state);
+    this.#renderFollowing();
+    const action = positionActionLabel(state, this.#isFollowing);
     elementById('position-action').setAttribute(
       'aria-label',
       action + '. ' + elementById('position-status').textContent
@@ -72,6 +83,11 @@ export class LocationControls {
     }
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
+    // While following, keep the camera on every new usable fix.
+    if (this.#isFollowing && ['live', 'approximate'].includes(state) && fix) {
+      this.#moveCameraToFix(fix);
+      return;
+    }
     // Center once on the first usable fix, never after the person has started exploring.
     if (
       ['live', 'approximate'].includes(state) &&
@@ -89,6 +105,49 @@ export class LocationControls {
       });
     }
   }
+
+  // Updates the data-following attribute and aria-pressed on the position button.
+  #renderFollowing() {
+    elementById('position-badge').dataset.following = String(this.#isFollowing);
+    elementById('position-action').setAttribute('aria-pressed', String(this.#isFollowing));
+  }
+
+  // Moves the camera to keep the fix centered, preserving the current zoom and map offset.
+  #moveCameraToFix(fix) {
+    const offset = this.#interface.mapOffset();
+    this.#context.onAutomaticCameraMove();
+    this.#map.easeTo({
+      center: fix.coordinates,
+      offset,
+      duration: this.#context.prefersReducedMotion ? 0 : followCameraDurationMilliseconds
+    });
+  }
+
+  // Toggles location following on click. Starts following with a usable fix; stops if already following.
+  toggleFollowing() {
+    if (this.#isFollowing) {
+      this.#isFollowing = false;
+      this.#renderFollowing();
+      return;
+    }
+    const {state, fix} = this.#snapshot;
+    if (!['live', 'approximate'].includes(state) || !fix) return;
+    this.#interface.close();
+    this.#context.closeSelection();
+    this.#isFollowing = true;
+    this.#hasCenteredOnFix = true;
+    this.#renderFollowing();
+    this.#moveCameraToFix(fix);
+  }
+
+  // Stops following when the user moves the map. Only user gestures (with originalEvent) count.
+  onCameraEvent(event) {
+    if (this.#isFollowing && isUserCameraEvent(event)) {
+      this.#isFollowing = false;
+      this.#renderFollowing();
+    }
+  }
+
   // Only an explicit request may retry location or show recovery advice; a usable fix recenters immediately.
   requestPosition() {
     this.#interface.close();

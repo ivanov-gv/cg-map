@@ -41,6 +41,7 @@ const shell = [
   'offline-controls.js',
   'status-messages.js',
   'place-selection.js',
+  'follow-camera.js',
   'location-controls.js',
   'core.js',
   'offline.js',

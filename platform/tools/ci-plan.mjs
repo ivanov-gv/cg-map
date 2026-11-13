@@ -79,6 +79,7 @@ export const SHARED_WEB_SOURCES = [
   'offline-controls.js',
   'status-messages.js',
   'place-selection.js',
+  'follow-camera.js',
   'location-controls.js',
   'device-class.js',
   'attribution.js'
