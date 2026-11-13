@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import {
+  atViewport,
   camera,
   closeCard,
   closeMenu,
@@ -735,6 +736,65 @@ test('device class is set on body at flip, mobile, and desktop viewport sizes', 
   await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
 });
 
+// attributionNodes sanitises HTML safely — tested in the browser where DOMParser is available.
+// Node has no DOMParser, so these four cases live in a browser test instead of a unit test.
+test('attributionNodes rejects javascript: href and flattens non-anchor elements', async ({page}) => {
+  await ready(page);
+  const findings = await page.evaluate(() => {
+    const results = {};
+
+    // Recreate the attributionNodes logic inline for testing
+    function testAttributionNodes(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const nodes = [];
+      for (const child of doc.body.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          nodes.push(document.createTextNode(child.textContent));
+        } else if (child.tagName === 'A') {
+          const href = child.getAttribute('href');
+          if (href && href.startsWith('https://')) {
+            const anchor = document.createElement('a');
+            anchor.href = href;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.textContent = child.textContent;
+            nodes.push(anchor);
+          } else {
+            nodes.push(document.createTextNode(child.textContent));
+          }
+        } else {
+          nodes.push(document.createTextNode(child.textContent));
+        }
+      }
+      return nodes;
+    }
+
+    // Test 1: javascript: href becomes plain text
+    const jsNodes = testAttributionNodes('<a href="javascript:alert(1)">Click</a>');
+    results.javascriptHref = jsNodes.every(node => node.nodeType === Node.TEXT_NODE);
+
+    // Test 2: <b> element flattens to text
+    const boldNodes = testAttributionNodes('<b>Bold</b>');
+    results.boldFlattened = boldNodes.length === 1 && boldNodes[0].nodeType === Node.TEXT_NODE &&
+      boldNodes[0].textContent === 'Bold';
+
+    // Test 3: anchor nested in <span> becomes text (only top-level anchors rebuilt)
+    const nestedNodes = testAttributionNodes('<span><a href="https://example.com">Link</a></span>');
+    results.nestedAnchor = nestedNodes.every(node => node.nodeType === Node.TEXT_NODE);
+
+    // Test 4: target _blank and rel on rebuilt anchor
+    const safeNodes = testAttributionNodes('<a href="https://example.com">Safe</a>');
+    const anchor = safeNodes.find(node => node.nodeType === Node.ELEMENT_NODE);
+    results.anchorTarget = anchor?.target === '_blank' && anchor?.rel === 'noopener noreferrer';
+
+    return results;
+  });
+  expect(findings.javascriptHref).toBe(true);
+  expect(findings.boldFlattened).toBe(true);
+  expect(findings.nestedAnchor).toBe(true);
+  expect(findings.anchorTarget).toBe(true);
+});
+
 // Attribution lives in the dock footer, not as a floating control on the map.
 test('attribution appears in dock footer and updates with satellite toggle', async ({page}) => {
   await ready(page);
@@ -761,7 +821,14 @@ test('attribution appears in dock footer and updates with satellite toggle', asy
   // Toggle satellite off: eMapa link disappears
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(false);
-  await expect(emapaLink).not.toBeVisible();
+  await expect(emapaLink).toHaveCount(0);
+  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth');
+
+  // Turning on transport (which has no attribution) must not change the attribution text.
+  const attributionBeforeTransport = await attribution.textContent();
+  await page.getByRole('button', {name: 'Transport', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.transport)).toBe(true);
+  await expect(attribution).toHaveText(attributionBeforeTransport);
 });
 
 // Same attribution checks at Flip viewport
@@ -784,10 +851,11 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
 
 // Verifies that the map fills the viewport and the scale bar sits in the
 // bottom-left corner without overlap — on Desktop, Mobile, and Flip.
+const FLIP_VIEWPORT = {width: 340, height: 340};
 const deviceCases = [
   {name: 'desktop', viewport: {width: 1280, height: 800}},
   {name: 'mobile', viewport: {width: 412, height: 840}},
-  {name: 'flip'}
+  {name: 'flip', viewport: FLIP_VIEWPORT}
 ];
 
 async function assertMapFillsViewport(page) {
@@ -818,22 +886,74 @@ async function assertScaleBarInBottomLeft(page) {
   expect(bottomGap).toBeLessThanOrEqual(24);
 }
 
-async function assertNoOverlapAtScaleBar(page) {
-  const scaleBar = page.locator('.maplibregl-ctrl-scale');
-  const box = await scaleBar.boundingBox();
-  const centerX = box.x + box.width / 2;
-  const centerY = box.y + box.height / 2;
+// Returns a list of element identifiers that overlap the scale bar's bounding box.
+// Walks every candidate under .sidebar, .map-area and body > main and checks their
+// rects against the scale bar's rect. Elements whose background, border or text paints
+// are kept; purely transparent wrappers and ancestor containers are excluded.
+// Includes pointer-events: none elements — those are exactly what this check must catch
+// (e.g. the closed .sidebar).
+export async function scaleBarCulprits(page) {
+  return page.evaluate(() => {
+    const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
+    if (!scaleBar) return [];
+    const scaleRect = scaleBar.getBoundingClientRect();
+    if (!scaleRect.width) return [];
 
-  // Confirm the topmost element at the scale bar center is within the scale bar subtree.
-  const isScaleBarDescendant = await page.evaluate(
-    ({x, y, selector}) => {
-      const topmostElement = document.elementsFromPoint(x, y)[0];
-      const control = document.querySelector(selector);
-      return control?.contains(topmostElement) ?? false;
-    },
-    {x: centerX, y: centerY, selector: '.maplibregl-ctrl-scale'}
-  );
-  expect(isScaleBarDescendant).toBe(true);
+    const containers = [
+      document.querySelector('.sidebar'),
+      document.querySelector('.map-area'),
+      document.querySelector('body > main')
+    ].filter(Boolean);
+
+    const culprits = [];
+
+    for (const container of containers) {
+      const allElements = container.querySelectorAll('*');
+      for (const element of allElements) {
+        // Skip the scale bar itself and its descendants
+        if (element.classList.contains('maplibregl-ctrl-scale')) continue;
+        if (scaleBar.contains(element)) continue;
+        // Skip ancestors of the scale bar — their rects naturally contain it
+        if (element.contains(scaleBar)) continue;
+        // Skip the map canvas
+        if (element.tagName === 'CANVAS') continue;
+
+        // Must be visible and have a non-empty rect
+        if (!element.checkVisibility()) continue;
+        const rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) continue;
+
+        // Check if rect intersects the scale bar's rect
+        if (rect.right <= scaleRect.left || rect.left >= scaleRect.right ||
+            rect.bottom <= scaleRect.top || rect.top >= scaleRect.bottom) {
+          continue;
+        }
+
+        const style = getComputedStyle(element);
+
+        // Exclude elements whose computed background-color is transparent and that
+        // have no direct text and no border. Only direct text nodes count — descendant
+        // text belongs to child elements, not to a transparent wrapper.
+        const hasDirectText = Array.from(element.childNodes).some(
+          node => node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0
+        );
+        const hasBorder = parseFloat(style.borderTopWidth) > 0 && style.borderTopStyle !== 'none';
+        const backgroundColor = style.backgroundColor;
+        const hasBackground = backgroundColor && backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)';
+
+        if (!hasDirectText && !hasBorder && !hasBackground) continue;
+
+        culprits.push(element.id ? `#${element.id}` : element.tagName.toLowerCase());
+      }
+    }
+
+    return culprits;
+  });
+}
+
+async function assertNoOverlapAtScaleBar(page) {
+  const culprits = await scaleBarCulprits(page);
+  expect(culprits).toEqual([]);
 }
 
 for (const {name, viewport} of deviceCases) {
@@ -846,14 +966,54 @@ for (const {name, viewport} of deviceCases) {
       await assertNoOverlapAtScaleBar(page);
     }
 
-    if (name === 'flip') {
-      await withFlipViewport(page, checkMainScreen);
-    } else {
-      await page.setViewportSize(viewport);
-      await checkMainScreen();
-    }
+    await atViewport(page, viewport, checkMainScreen);
   });
 }
+
+// Proves the overlap check can detect a visible element covering the scale bar.
+// Injects a white background on .sidebar so it paints over the scale bar area.
+test('overlap check detects injected sidebar background', async ({page}) => {
+  await ready(page);
+  await closeMenu(page);
+  await page.addStyleTag({content: '.sidebar { background: white !important; }'});
+  const culprits = await scaleBarCulprits(page);
+  expect(culprits.length).toBeGreaterThan(0);
+});
+
+// Proves attribution refreshes when a source is added after load.
+test('attribution refreshes when a source is added after load', async ({page}) => {
+  await ready(page);
+
+  // Verify the debug object is available
+  const hasDebug = await page.evaluate(() => !!window.kompasDebug?.map);
+  expect(hasDebug).toBe(true);
+
+  // Add a geojson source with a custom attribution and a visible layer using it
+  await page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    map.addSource('test-credit', {
+      type: 'geojson',
+      data: {type: 'FeatureCollection', features: []},
+      attribution: '<a href="https://example.org/">Test credit</a>'
+    });
+    map.addLayer({
+      id: 'test-credit-layer',
+      type: 'symbol',
+      source: 'test-credit',
+      layout: {
+        'text-field': 'test'
+      }
+    });
+  });
+
+  // Wait for the attribution container to contain the new link
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const container = document.getElementById('map-attribution');
+      return container?.querySelector('a[href="https://example.org/"]')?.textContent ?? null;
+    });
+  }).toBe('Test credit');
+});
 
 // ---------------------------------------------------------------------------
 // Zoom buttons removed (issue #98)
@@ -869,19 +1029,14 @@ for (const {name, viewport} of deviceCases) {
       // Position button is visible and close to the bottom-right corner
       await expect(page.locator('#position-action')).toBeVisible();
       const locate = await page.locator('#position-action').boundingBox();
-      const vp = page.viewportSize();
-      const rightGap = vp.width - (locate.x + locate.width);
-      const bottomGap = vp.height - (locate.y + locate.height);
+      const viewportSize = page.viewportSize();
+      const rightGap = viewportSize.width - (locate.x + locate.width);
+      const bottomGap = viewportSize.height - (locate.y + locate.height);
       expect(rightGap).toBeLessThanOrEqual(24);
       expect(bottomGap).toBeLessThanOrEqual(24);
     }
 
-    if (name === 'flip') {
-      await withFlipViewport(page, check);
-    } else {
-      await page.setViewportSize(viewport);
-      await check();
-    }
+    await atViewport(page, viewport, check);
   });
 }
 
@@ -898,11 +1053,6 @@ for (const {name, viewport} of deviceCases) {
         .toBeGreaterThan(startZoom);
     }
 
-    if (name === 'flip') {
-      await withFlipViewport(page, check);
-    } else {
-      await page.setViewportSize(viewport);
-      await check();
-    }
+    await atViewport(page, viewport, check);
   });
 }

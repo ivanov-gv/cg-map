@@ -51,8 +51,9 @@ research findings or completed performance measurements.
 4. Start rendering available base information without waiting for geolocation, live transport, or external routing.
    Loading an unrelated optional service MUST NOT block Discover. A failed required layer MUST have a visible, specific
    failure/coverage state; a partly drawn map is not full Discover readiness.
-5. The map MUST remain the principal initial content on a phone. Controls and attribution MUST leave a contiguous area
-   where the person can read nearby streets, buildings, terrain, POIs, and their position together. Follow the
+5. The map MUST remain the principal initial content on a phone. Controls and attribution (in the left dock footer, per
+   [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)) MUST leave a contiguous area where the person
+   can read nearby streets, buildings, terrain, POIs, and their position together. Follow the
    [interface target](../features/interface.md#ui-01-opening-view): no initially open dock, place card, route panel, map
    key, or persistent location text banner. Make geographic encodings interpretable through recognizable symbols,
    redundant cues, and appropriate map labels; a persistent legend must not be needed to read the scene. This
