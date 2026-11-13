@@ -780,8 +780,8 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
 // bottom-left corner without overlap — on Desktop, Mobile, and Flip.
 const deviceCases = [
   {name: 'desktop', viewport: {width: 1280, height: 800}},
-  {name: 'mobile',  viewport: {width: 412, height: 840}},
-  {name: 'flip',    viewport: {width: 340, height: 340}}
+  {name: 'mobile', viewport: {width: 412, height: 840}},
+  {name: 'flip'}
 ];
 
 async function assertMapFillsViewport(page) {
@@ -818,19 +818,12 @@ async function assertNoOverlapAtScaleBar(page) {
   const centerX = box.x + box.width / 2;
   const centerY = box.y + box.height / 2;
 
-  const topmostTag = await page.evaluate(
-    ({x, y}) => document.elementsFromPoint(x, y)[0]?.tagName ?? null,
-    {x: centerX, y: centerY}
-  );
-  // The topmost element should be the scale bar's canvas or a descendant.
-  expect(topmostTag).toMatch(/^(CANVAS|DIV|SPAN|SVG)$/);
-
-  // Confirm the topmost element is within the scale bar subtree.
+  // Confirm the topmost element at the scale bar center is within the scale bar subtree.
   const isScaleBarDescendant = await page.evaluate(
     ({x, y, selector}) => {
-      const top = document.elementsFromPoint(x, y)[0];
+      const topmostElement = document.elementsFromPoint(x, y)[0];
       const control = document.querySelector(selector);
-      return control?.contains(top) ?? false;
+      return control?.contains(topmostElement) ?? false;
     },
     {x: centerX, y: centerY, selector: '.maplibregl-ctrl-scale'}
   );
@@ -839,21 +832,19 @@ async function assertNoOverlapAtScaleBar(page) {
 
 for (const {name, viewport} of deviceCases) {
   test(`map fills viewport and scale bar is in bottom-left on ${name}`, async ({page}) => {
-    if (name === 'flip') {
-      await withFlipViewport(page, async () => {
-        await ready(page);
-        await closeMenu(page);
-        await assertMapFillsViewport(page);
-        await assertScaleBarInBottomLeft(page);
-        await assertNoOverlapAtScaleBar(page);
-      });
-    } else {
-      await page.setViewportSize(viewport);
+    async function checkMainScreen() {
       await ready(page);
       await closeMenu(page);
       await assertMapFillsViewport(page);
       await assertScaleBarInBottomLeft(page);
       await assertNoOverlapAtScaleBar(page);
+    }
+
+    if (name === 'flip') {
+      await withFlipViewport(page, checkMainScreen);
+    } else {
+      await page.setViewportSize(viewport);
+      await checkMainScreen();
     }
   });
 }
