@@ -92,7 +92,7 @@ offline controls and app-owned map layers now have explicit modules; each applic
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
 12. It creates one MapLibre Map using mapStyle(), initially over Podgorica.
-13. It adds a ResizeObserver (map-core also adds a NavigationControl, but the zoom buttons are hidden via CSS).
+13. It adds a ResizeObserver. map-core also adds a NavigationControl, but the zoom buttons are hidden via CSS.
 14. When MapLibre emits load, it installs satellite sources, place layers, the selected-place overlay and city labels.
 15. It enables the satellite button, hides the loading message and builds the result list.
 
