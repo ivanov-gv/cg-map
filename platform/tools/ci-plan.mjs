@@ -93,7 +93,7 @@ export const EDITOR_BROWSER_AREAS = {
   'editing-desktop': {
     specs: 'tests/e2e/editing.spec.mjs --project=root-desktop',
     // Sized from measured test time, so that each share stays inside the job time limit.
-    jobs: 2,
+    jobs: 3,
     specFiles: ['editing.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },
