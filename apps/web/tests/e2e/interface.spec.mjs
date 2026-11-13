@@ -880,13 +880,14 @@ async function assertScaleBarInBottomLeft(page) {
   expect(bottomGap).toBeLessThanOrEqual(24);
 }
 
-// Check that no element overlaps the scale bar's bounding box.
-// elementsFromPoint can miss elements hidden by pointer-events, so this walks every
-// candidate under .sidebar, .map-area and body > main and checks their rects against
-// the scale bar's rect. Elements whose background, border or text paints are kept;
-// purely transparent wrappers, ancestor containers, and pointer-events: none elements are excluded.
-async function assertNoOverlapAtScaleBar(page) {
-  const culprits = await page.evaluate(() => {
+// Returns a list of element identifiers that overlap the scale bar's bounding box.
+// Walks every candidate under .sidebar, .map-area and body > main and checks their
+// rects against the scale bar's rect. Elements whose background, border or text paints
+// are kept; purely transparent wrappers and ancestor containers are excluded.
+// Includes pointer-events: none elements — those are exactly what this check must catch
+// (e.g. the closed .sidebar).
+export async function scaleBarCulprits(page) {
+  return page.evaluate(() => {
     const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
     if (!scaleBar) return [];
     const scaleRect = scaleBar.getBoundingClientRect();
@@ -902,18 +903,18 @@ async function assertNoOverlapAtScaleBar(page) {
 
     for (const container of containers) {
       const allElements = container.querySelectorAll('*');
-      for (const el of allElements) {
+      for (const element of allElements) {
         // Skip the scale bar itself and its descendants
-        if (el.classList.contains('maplibregl-ctrl-scale')) continue;
-        if (scaleBar.contains(el)) continue;
+        if (element.classList.contains('maplibregl-ctrl-scale')) continue;
+        if (scaleBar.contains(element)) continue;
         // Skip ancestors of the scale bar — their rects naturally contain it
-        if (el.contains(scaleBar)) continue;
+        if (element.contains(scaleBar)) continue;
         // Skip the map canvas
-        if (el.tagName === 'CANVAS') continue;
+        if (element.tagName === 'CANVAS') continue;
 
         // Must be visible and have a non-empty rect
-        if (!el.checkVisibility()) continue;
-        const rect = el.getBoundingClientRect();
+        if (!element.checkVisibility()) continue;
+        const rect = element.getBoundingClientRect();
         if (!rect.width || !rect.height) continue;
 
         // Check if rect intersects the scale bar's rect
@@ -922,27 +923,30 @@ async function assertNoOverlapAtScaleBar(page) {
           continue;
         }
 
-        // Skip elements that cannot receive pointer events — they can't truly overlap
-        const style = getComputedStyle(el);
-        if (style.pointerEvents === 'none') continue;
+        const style = getComputedStyle(element);
 
         // Exclude elements whose computed background-color is transparent and that
-        // have no text of their own and no border
-        const hasText = el.textContent.trim().length > 0;
-        const borderColor = style.borderColor || style.borderTopColor || style.borderRightColor ||
-          style.borderBottomColor || style.borderLeftColor;
-        const hasBorder = borderColor && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)';
-        const bgColor = style.backgroundColor;
-        const hasBackground = bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)';
+        // have no direct text and no border. Only direct text nodes count — descendant
+        // text belongs to child elements, not to a transparent wrapper.
+        const hasDirectText = Array.from(element.childNodes).some(
+          node => node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0
+        );
+        const hasBorder = parseFloat(style.borderTopWidth) > 0 && style.borderTopStyle !== 'none';
+        const backgroundColor = style.backgroundColor;
+        const hasBackground = backgroundColor && backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)';
 
-        if (!hasText && !hasBorder && !hasBackground) continue;
+        if (!hasDirectText && !hasBorder && !hasBackground) continue;
 
-        culprits.push(el.id ? `#${el.id}` : el.tagName.toLowerCase());
+        culprits.push(element.id ? `#${element.id}` : element.tagName.toLowerCase());
       }
     }
 
     return culprits;
   });
+}
+
+async function assertNoOverlapAtScaleBar(page) {
+  const culprits = await scaleBarCulprits(page);
   expect(culprits).toEqual([]);
 }
 
@@ -959,3 +963,48 @@ for (const {name, viewport} of deviceCases) {
     await atViewport(page, viewport, checkMainScreen);
   });
 }
+
+// Proves the overlap check can detect a visible element covering the scale bar.
+// Injects a white background on .sidebar so it paints over the scale bar area.
+test('overlap check detects injected sidebar background', async ({page}) => {
+  await ready(page);
+  await closeMenu(page);
+  await page.addStyleTag({content: '.sidebar { background: white !important; }'});
+  const culprits = await scaleBarCulprits(page);
+  expect(culprits.length).toBeGreaterThan(0);
+});
+
+// Proves attribution refreshes when a source is added after load.
+test('attribution refreshes when a source is added after load', async ({page}) => {
+  await ready(page);
+
+  // Verify the debug object is available
+  const hasDebug = await page.evaluate(() => !!window.kompasDebug?.map);
+  expect(hasDebug).toBe(true);
+
+  // Add a geojson source with a custom attribution and a visible layer using it
+  await page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    map.addSource('test-credit', {
+      type: 'geojson',
+      data: {type: 'FeatureCollection', features: []},
+      attribution: '<a href="https://example.org/">Test credit</a>'
+    });
+    map.addLayer({
+      id: 'test-credit-layer',
+      type: 'symbol',
+      source: 'test-credit',
+      layout: {
+        'text-field': 'test'
+      }
+    });
+  });
+
+  // Wait for the attribution container to contain the new link
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const container = document.getElementById('map-attribution');
+      return container?.querySelector('a[href="https://example.org/"]')?.textContent ?? null;
+    });
+  }).toBe('Test credit');
+});

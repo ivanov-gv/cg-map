@@ -66,15 +66,26 @@ export function attributionNodes(html, documentObject) {
   return nodes;
 }
 
+// Remembers the last attribution key so repeated calls are cheap.
+let renderedAttributionKey = '';
+
 // Renders the current map's source attributions into #map-attribution.
-// Reads attributions from the map's style object, parses the HTML, and joins them
-// with a middle dot separator.
+// Computes a key from visible source attributions; if the key matches the last
+// rendered key, it returns without touching the DOM. Otherwise it renders and
+// stores the new key.
 export function renderMapAttribution(map) {
   const container = document.getElementById('map-attribution');
   if (!container) return;
 
   const style = map.getStyle();
   const attributions = visibleSourceAttributions(style);
+  const key = attributions.join('\n');
+
+  if (key === renderedAttributionKey) {
+    return;
+  }
+  renderedAttributionKey = key;
+
   const childNodes = buildAttributionNodes(attributions);
   container.replaceChildren(...childNodes);
 }
