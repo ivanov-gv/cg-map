@@ -739,14 +739,18 @@ test('attribution appears in dock footer and updates with satellite toggle', asy
   await openMenu(page);
   const attribution = page.locator('#map-attribution');
   await expect(attribution).toBeVisible();
+
+  // Exact text: spaces around links preserved, each link appears once
+  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth');
   const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
-  await expect(osmLink).toBeVisible();
+  await expect(osmLink).toHaveCount(1);
 
   // Toggle satellite on: eMapa link appears
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(true);
   const emapaLink = attribution.locator('a[href="https://emapa.me/"]');
-  await expect(emapaLink).toBeVisible();
+  await expect(emapaLink).toHaveCount(1);
+  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth · Imagery: eMapa · Ortofoto 2025');
 
   // Toggle satellite off: eMapa link disappears
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();

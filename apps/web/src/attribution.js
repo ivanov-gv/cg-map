@@ -31,48 +31,40 @@ export function visibleSourceAttributions(style) {
   return result;
 }
 
-// Sanitises an HTML attribution string: keeps text nodes and rebuilds only <a> elements
-// whose href starts with https://. All other tags are dropped. Returns a flat node list.
-function sanitiseAttributionHtml(html) {
+// Parses an HTML attribution string and returns a flat list of DOM nodes.
+// Walks only the top-level children of the parsed body (no recursion).
+// Text nodes are copied as-is. <a> elements with an https:// href are rebuilt
+// with safe target/rel attributes. Any other element (including unsafe links)
+// is flattened to its text content.
+function sanitizeAttributionNodes(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const nodes = [];
-  const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
 
-  let node;
-  while ((node = walker.nextNode())) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      addTextNode(node, nodes);
-    } else if (node.tagName === 'A') {
-      addSafeAnchor(node, nodes);
+  for (const child of doc.body.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      nodes.push(document.createTextNode(child.textContent));
+    } else if (child.tagName === 'A') {
+      const href = child.getAttribute('href');
+      if (href && href.startsWith('https://')) {
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.textContent = child.textContent;
+        nodes.push(anchor);
+      } else {
+        nodes.push(document.createTextNode(child.textContent));
+      }
+    } else {
+      nodes.push(document.createTextNode(child.textContent));
     }
   }
 
   return nodes;
 }
 
-// Adds a trimmed text node to the nodes list if non-empty.
-function addTextNode(textNode, nodes) {
-  const text = textNode.textContent.trim();
-  if (!text) return;
-  nodes.push(document.createTextNode(text));
-}
-
-// Adds a new anchor to the nodes list if its href starts with https:// and has text.
-function addSafeAnchor(element, nodes) {
-  const href = element.getAttribute('href');
-  if (!href || !href.startsWith('https://')) return;
-  const anchorText = element.textContent.trim();
-  if (!anchorText) return;
-  const anchor = document.createElement('a');
-  anchor.href = href;
-  anchor.target = '_blank';
-  anchor.rel = 'noopener noreferrer';
-  anchor.textContent = anchorText;
-  nodes.push(anchor);
-}
-
 // Renders the current map's source attributions into #map-attribution.
-// Reads attributions from the map's style object, sanitises the HTML, and joins them
+// Reads attributions from the map's style object, parses the HTML, and joins them
 // with a middle dot separator.
 export function renderMapAttribution(map) {
   const container = document.getElementById('map-attribution');
@@ -92,7 +84,7 @@ function buildAttributionNodes(attributions) {
     if (index > 0) {
       childNodes.push(document.createTextNode(' · '));
     }
-    childNodes.push(...sanitiseAttributionHtml(attributions[index]));
+    childNodes.push(...sanitizeAttributionNodes(attributions[index]));
   }
 
   return childNodes;
