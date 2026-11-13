@@ -1,3 +1,21 @@
+/*
+ * Device classes: the app distinguishes three viewport categories.
+ *
+ * Flip: max-width 400px AND max-height 400px.
+ *   Galaxy Z Flip cover screens are roughly 340–380 CSS px on each side (nearly square).
+ *   The 400 px limit on both axes excludes phones in landscape (e.g. 840×412) where the
+ *   width exceeds 400 px, and phones in portrait (e.g. 412×840) where the height exceeds
+ *   400 px.  A few extra pixels above the largest known cover screen leave room for
+ *   future variants without catching a phone.
+ *
+ * Mobile: max-width 720px (the existing breakpoint).
+ *   Covers phones and small tablets in portrait.  A viewport that matches the Flip rule
+ *   above is classified as Flip, not Mobile.
+ *
+ * Desktop: everything else (width > 720px, or width ≤ 720px but height > 400px).
+ */
+@custom-media --flip-device (max-width: 400px) and (max-height: 400px);
+
 :root {
   font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #243f37;

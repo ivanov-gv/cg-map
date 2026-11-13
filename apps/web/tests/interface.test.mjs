@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cardStateAfterSwipe,
+  getDeviceClass,
   isInFocusZone,
   searchBounds,
   uncoveredMapArea,
@@ -106,4 +107,27 @@ test('swiping steps the phone card through full, peek, and closed', () => {
     {state: 'full', direction: 'down', resultsBehind: false, next: 'closed'}
   ];
   for (const {next, ...swipe} of cases) assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
+});
+
+test('device class distinguishes flip, mobile, and desktop by viewport size', () => {
+  // Flip cover screens: small and nearly square (Galaxy Z Flip ~340-380 per side)
+  assert.equal(getDeviceClass(340, 340), 'flip');
+  assert.equal(getDeviceClass(380, 380), 'flip');
+  assert.equal(getDeviceClass(400, 400), 'flip');
+  assert.equal(getDeviceClass(350, 390), 'flip');
+
+  // Phones in portrait: width ≤ 720, height > 400 → mobile
+  assert.equal(getDeviceClass(360, 640), 'mobile');
+  assert.equal(getDeviceClass(412, 840), 'mobile');
+
+  // Edge: width ≤ 720 but height > 400 → mobile, not flip
+  assert.equal(getDeviceClass(400, 401), 'mobile');
+  assert.equal(getDeviceClass(401, 400), 'mobile');
+  assert.equal(getDeviceClass(720, 800), 'mobile');
+
+  // Desktop: width > 720 (includes phones in landscape, e.g. 840×412)
+  assert.equal(getDeviceClass(721, 480), 'desktop');
+  assert.equal(getDeviceClass(840, 412), 'desktop');
+  assert.equal(getDeviceClass(1280, 800), 'desktop');
+  assert.equal(getDeviceClass(1920, 1080), 'desktop');
 });

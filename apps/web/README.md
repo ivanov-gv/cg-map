@@ -25,7 +25,7 @@ result lists free; avoid expensive application work during gestures.
 | File                                                                            | Read it to understand                                                                  |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
-| [style.css](public/style.css)                                                   | Desktop/mobile layout, positioning and visual states                                   |
+| [style.css](public/style.css)                                                   | Device classes (Flip/Mobile/Desktop), layout, positioning and visual states            |
 | [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
 | [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
@@ -359,6 +359,26 @@ peek, with the selected feature kept in the remaining map area. The burger/searc
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
+
+### Device classes
+
+The app distinguishes three viewport categories, defined once in [style.css](public/style.css) (CSS custom media
+`--flip-device`) and mirrored in [interface.js](src/interface.js) (`getDeviceClass()`):
+
+| Class   | Rule                                     | Examples                                 |
+| ------- | ---------------------------------------- | ---------------------------------------- |
+| Flip    | `width ≤ 400px` **and** `height ≤ 400px` | Galaxy Z Flip cover screen (~340–380 px) |
+| Mobile  | `width ≤ 720px` (excluding Flip)         | Phone portrait (412×840), small tablet   |
+| Desktop | Everything else                          | Laptop (1280×800), desktop (1920×1080)   |
+
+The 400 px limit on both axes separates Flip from phones: a phone in portrait (e.g. 412×840) exceeds 400 px in height,
+and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
+with a slightly larger cover screen still matches, without catching a phone in any orientation.
+
+Later UI tasks (search bar, left dock, scale bar) will use these classes to decide what to show. The CSS rule is the
+source of truth for styling; `getDeviceClass()` is the JavaScript equivalent for code that needs the class at runtime.
+Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
+[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
 
 ## 12. How to make common changes
 

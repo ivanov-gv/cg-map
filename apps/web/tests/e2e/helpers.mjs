@@ -157,3 +157,15 @@ export const simulateKeyboard = (page, height, scale = 1, offsetTop = 0) =>
     },
     {visibleHeight: height, pageScale: scale, pageOffset: offsetTop}
   );
+
+// Run a scenario at a Flip cover-screen viewport (340×340) inside the existing mobile project.
+// Returns the previous viewport size so the caller can restore it.
+export async function withFlipViewport(page, callback) {
+  const previousViewport = page.viewportSize();
+  await page.setViewportSize({width: 340, height: 340});
+  try {
+    await callback(page);
+  } finally {
+    await page.setViewportSize(previousViewport);
+  }
+}
