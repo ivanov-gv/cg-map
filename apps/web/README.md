@@ -25,7 +25,8 @@ result lists free; avoid expensive application work during gestures.
 | File                                                                            | Read it to understand                                                                  |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
-| [style.css](public/style.css)                                                   | Device classes (Flip/Mobile/Desktop), layout, positioning and visual states            |
+| [style.css](public/style.css)                                                   | Layout, positioning and visual states (device-specific @media rules)                   |
+| [device-class.js](src/device-class.js)                                          | Device classes (Flip/Mobile/Desktop): media query strings and runtime detection        |
 | [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
 | [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
@@ -362,8 +363,10 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 
 ### Device classes
 
-The app distinguishes three viewport categories, defined once in [style.css](public/style.css) (CSS custom media
-`--flip-device`) and mirrored in [interface.js](src/interface.js) (`getDeviceClass()`):
+The app distinguishes three viewport categories. The single definition lives in
+[src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
+[style.css](public/style.css) must use the same conditions. At startup, `app.js` sets `data-device` on `<body>`
+(`"flip"`, `"mobile"`, or `"desktop"`) and keeps it updated when the viewport crosses a breakpoint.
 
 | Class   | Rule                                     | Examples                                 |
 | ------- | ---------------------------------------- | ---------------------------------------- |
@@ -375,9 +378,8 @@ The 400 px limit on both axes separates Flip from phones: a phone in portrait (e
 and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
 with a slightly larger cover screen still matches, without catching a phone in any orientation.
 
-Later UI tasks (search bar, left dock, scale bar) will use these classes to decide what to show. The CSS rule is the
-source of truth for styling; `getDeviceClass()` is the JavaScript equivalent for code that needs the class at runtime.
-Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
+Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
+device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
 [tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
 
 ## 12. How to make common changes

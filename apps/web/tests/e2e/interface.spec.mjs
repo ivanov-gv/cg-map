@@ -704,31 +704,31 @@ test('touchpad scrolling zooms the map and its move carries the wheel event', as
   expect(await page.evaluate(() => window.wheelMoveStarts)).toContain('wheel');
 });
 
-test('device class is detected at flip, mobile, and desktop viewport sizes', async ({page}) => {
+test('device class is set on body at flip, mobile, and desktop viewport sizes', async ({page}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-  await ready(page);
-
-  // Register the helper so the page can call it
-  await page.evaluate(() => {
-    window.__deviceClass = (viewWidth, viewHeight) => {
-      if (viewWidth <= 400 && viewHeight <= 400) return 'flip';
-      if (viewWidth <= 720) return 'mobile';
-      return 'desktop';
-    };
-  });
-
-  // Flip viewport (340×340)
-  await withFlipViewport(page, async () => {
-    const deviceClass = await page.evaluate(() => window.__deviceClass(340, 340));
-    expect(deviceClass).toBe('flip');
-  });
-
-  // Mobile viewport (412×840) — the default for pages-mobile project
-  const mobileClass = await page.evaluate(() => window.__deviceClass(412, 840));
-  expect(mobileClass).toBe('mobile');
 
   // Desktop viewport (1280×800)
   await page.setViewportSize({width: 1280, height: 800});
-  const desktopClass = await page.evaluate(() => window.__deviceClass(1280, 800));
-  expect(desktopClass).toBe('desktop');
+  await ready(page);
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
+
+  // Mobile viewport (412×840) — default for pages-mobile project
+  await page.setViewportSize({width: 412, height: 840});
+  await page.waitForTimeout(100);
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
+
+  // Flip viewport (340×340) — withFlipViewport restores to the previous size (412×840) after
+  await withFlipViewport(page, async () => {
+    await page.waitForTimeout(100);
+    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
+  });
+
+  // withFlipViewport restored to 412×840, so the class is mobile again
+  await page.waitForTimeout(100);
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
+
+  // Explicitly resize to desktop to verify the transition back
+  await page.setViewportSize({width: 1280, height: 800});
+  await page.waitForTimeout(100);
+  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
 });

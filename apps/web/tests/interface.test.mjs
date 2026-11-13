@@ -1,13 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {
   cardStateAfterSwipe,
-  getDeviceClass,
   isInFocusZone,
   searchBounds,
   uncoveredMapArea,
   uncoveredMapOffset
 } from '../src/interface.js';
+import {
+  deviceClass,
+  FLIP_MEDIA_QUERY,
+  MOBILE_MEDIA_QUERY
+} from '../src/device-class.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {
@@ -110,24 +119,55 @@ test('swiping steps the phone card through full, peek, and closed', () => {
 });
 
 test('device class distinguishes flip, mobile, and desktop by viewport size', () => {
+  function fakeMatchMedia(width, height) {
+    return (query) => {
+      // Parse simple media queries: (max-width: Npx) and (max-height: Npx) or (max-width: Npx)
+      const maxWidthMatch = query.match(/\(max-width:\s*(\d+)px\)/);
+      const maxHeightMatch = query.match(/\(max-height:\s*(\d+)px\)/);
+      const matchesWidth = !maxWidthMatch || width <= Number(maxWidthMatch[1]);
+      const matchesHeight = !maxHeightMatch || height <= Number(maxHeightMatch[1]);
+      return {matches: matchesWidth && matchesHeight};
+    };
+  }
+
   // Flip cover screens: small and nearly square (Galaxy Z Flip ~340-380 per side)
-  assert.equal(getDeviceClass(340, 340), 'flip');
-  assert.equal(getDeviceClass(380, 380), 'flip');
-  assert.equal(getDeviceClass(400, 400), 'flip');
-  assert.equal(getDeviceClass(350, 390), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(340, 340)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(380, 380)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(400, 400)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(350, 390)), 'flip');
 
   // Phones in portrait: width ≤ 720, height > 400 → mobile
-  assert.equal(getDeviceClass(360, 640), 'mobile');
-  assert.equal(getDeviceClass(412, 840), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(360, 640)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(412, 840)), 'mobile');
 
   // Edge: width ≤ 720 but height > 400 → mobile, not flip
-  assert.equal(getDeviceClass(400, 401), 'mobile');
-  assert.equal(getDeviceClass(401, 400), 'mobile');
-  assert.equal(getDeviceClass(720, 800), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(400, 401)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(401, 400)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(720, 800)), 'mobile');
 
   // Desktop: width > 720 (includes phones in landscape, e.g. 840×412)
-  assert.equal(getDeviceClass(721, 480), 'desktop');
-  assert.equal(getDeviceClass(840, 412), 'desktop');
-  assert.equal(getDeviceClass(1280, 800), 'desktop');
-  assert.equal(getDeviceClass(1920, 1080), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(721, 480)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(840, 412)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(1280, 800)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(1920, 1080)), 'desktop');
+});
+
+test('style.css @media conditions match the exported device-class queries', () => {
+  const cssPath = path.join(__dirname, '../public/style.css');
+  const css = fs.readFileSync(cssPath, 'utf8');
+
+  // Strip comments so the regex only sees real rules.
+  const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Find all @media conditions in the CSS (excluding prefers-reduced-motion and other non-device queries).
+  const mediaPattern = /@media\s+([^{]+)\{/g;
+  const deviceQueries = [FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY];
+  let match;
+  while ((match = mediaPattern.exec(cssWithoutComments)) !== null) {
+    const condition = match[1].trim();
+    // Skip non-device media queries
+    if (condition.includes('prefers-reduced-motion') || condition.includes('min-width')) continue;
+    const isKnownQuery = deviceQueries.some(query => condition === query);
+    assert.ok(isKnownQuery, `style.css @media condition "${condition}" does not match any exported device-class query`);
+  }
 });

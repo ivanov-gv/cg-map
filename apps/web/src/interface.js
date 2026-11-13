@@ -1,25 +1,5 @@
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 
-// Device class thresholds mirror the CSS custom media in style.css.
-// Flip: width ≤ 400 AND height ≤ 400 (small cover screens, nearly square).
-// Mobile: width ≤ 720 (phones and small tablets), excluding Flip.
-// Desktop: everything else.
-const FLIP_MAX_WIDTH = 400;
-const FLIP_MAX_HEIGHT = 400;
-const MOBILE_MAX_WIDTH = 720;
-
-/**
- * Returns the current device class: "flip", "mobile", or "desktop".
- * Uses innerWidth/innerHeight so it works in both browser and test contexts.
- */
-export function getDeviceClass(width, height) {
-  const viewWidth = width ?? window.innerWidth;
-  const viewHeight = height ?? window.innerHeight;
-  if (viewWidth <= FLIP_MAX_WIDTH && viewHeight <= FLIP_MAX_HEIGHT) return 'flip';
-  if (viewWidth <= MOBILE_MAX_WIDTH) return 'mobile';
-  return 'desktop';
-}
-
 export function searchBounds({height, top = 0, inset = 12}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
   return {top: top + inset + 70, maxHeight: Math.max(0, height / 2 - inset - 70)};

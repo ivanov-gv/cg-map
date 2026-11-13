@@ -47,7 +47,7 @@ export const BROWSER_AREAS = {
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
     specFiles: ['interface.spec.mjs'],
-    sources: ['interface.js']
+    sources: ['interface.js', 'device-class.js']
   },
   discover: {
     specs: 'tests/e2e/discover.spec.mjs',

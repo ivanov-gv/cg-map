@@ -44,6 +44,7 @@ import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
+import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 
 // One map and the controllers installed on it.
 const mapState = {
@@ -625,11 +626,24 @@ function initializeInterface() {
   });
 }
 
+// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
+function initDeviceClass() {
+  function updateDeviceAttribute() {
+    document.body.dataset.device = deviceClass(matchMedia);
+  }
+  updateDeviceAttribute();
+  const flipMql = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileMql = matchMedia(MOBILE_MEDIA_QUERY);
+  flipMql.addEventListener('change', updateDeviceAttribute);
+  mobileMql.addEventListener('change', updateDeviceAttribute);
+}
+
 registerCategoryControls();
 registerSelectionControls();
 registerLayerControls();
 registerDeviceControls();
 initializeInterface();
+initDeviceClass();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;
