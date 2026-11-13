@@ -771,3 +771,89 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
     await expect(osmLink).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Full-screen map and scale bar (issue #97)
+// ---------------------------------------------------------------------------
+
+// Verifies that the map fills the viewport and the scale bar sits in the
+// bottom-left corner without overlap — on Desktop, Mobile, and Flip.
+const deviceCases = [
+  {name: 'desktop', viewport: {width: 1280, height: 800}},
+  {name: 'mobile',  viewport: {width: 412, height: 840}},
+  {name: 'flip',    viewport: {width: 340, height: 340}}
+];
+
+async function assertMapFillsViewport(page) {
+  const viewport = page.viewportSize();
+  const mapBox = await page.locator('#map').boundingBox();
+  expect(mapBox).not.toBeNull();
+  const mapWidthDiff = Math.abs(mapBox.width - viewport.width);
+  const mapHeightDiff = Math.abs(mapBox.height - viewport.height);
+  expect(mapWidthDiff).toBeLessThanOrEqual(1);
+  expect(mapHeightDiff).toBeLessThanOrEqual(1);
+
+  const canvasBox = await page.locator('#map canvas').boundingBox();
+  expect(canvasBox).not.toBeNull();
+  const canvasWidthDiff = Math.abs(canvasBox.width - viewport.width);
+  const canvasHeightDiff = Math.abs(canvasBox.height - viewport.height);
+  expect(canvasWidthDiff).toBeLessThanOrEqual(1);
+  expect(canvasHeightDiff).toBeLessThanOrEqual(1);
+}
+
+async function assertScaleBarInBottomLeft(page) {
+  const scaleBar = page.locator('.maplibregl-ctrl-scale');
+  await expect(scaleBar).toBeVisible();
+  const box = await scaleBar.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box.x).toBeLessThanOrEqual(24);
+  const viewport = page.viewportSize();
+  const bottomGap = viewport.height - (box.y + box.height);
+  expect(bottomGap).toBeLessThanOrEqual(24);
+}
+
+async function assertNoOverlapAtScaleBar(page) {
+  const scaleBar = page.locator('.maplibregl-ctrl-scale');
+  const box = await scaleBar.boundingBox();
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+
+  const topmostTag = await page.evaluate(
+    ({x, y}) => document.elementsFromPoint(x, y)[0]?.tagName ?? null,
+    {x: centerX, y: centerY}
+  );
+  // The topmost element should be the scale bar's canvas or a descendant.
+  expect(topmostTag).toMatch(/^(CANVAS|DIV|SPAN|SVG)$/);
+
+  // Confirm the topmost element is within the scale bar subtree.
+  const isScaleBarDescendant = await page.evaluate(
+    ({x, y, selector}) => {
+      const top = document.elementsFromPoint(x, y)[0];
+      const control = document.querySelector(selector);
+      return control?.contains(top) ?? false;
+    },
+    {x: centerX, y: centerY, selector: '.maplibregl-ctrl-scale'}
+  );
+  expect(isScaleBarDescendant).toBe(true);
+}
+
+for (const {name, viewport} of deviceCases) {
+  test(`map fills viewport and scale bar is in bottom-left on ${name}`, async ({page}) => {
+    if (name === 'flip') {
+      await withFlipViewport(page, async () => {
+        await ready(page);
+        await closeMenu(page);
+        await assertMapFillsViewport(page);
+        await assertScaleBarInBottomLeft(page);
+        await assertNoOverlapAtScaleBar(page);
+      });
+    } else {
+      await page.setViewportSize(viewport);
+      await ready(page);
+      await closeMenu(page);
+      await assertMapFillsViewport(page);
+      await assertScaleBarInBottomLeft(page);
+      await assertNoOverlapAtScaleBar(page);
+    }
+  });
+}
