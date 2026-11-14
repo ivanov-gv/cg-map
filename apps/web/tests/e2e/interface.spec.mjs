@@ -170,7 +170,7 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await expectCameraToHold(page, before);
 });
 
-test('choosing a result moves the map only when the result is outside the focus zone', async ({page}) => {
+test('choosing a result moves the map only when the result is outside the focus zone', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -179,8 +179,8 @@ test('choosing a result moves the map only when the result is outside the focus 
     lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + 0.02, lngLat[1] + 0.01], zoom: 16}),
     target
   );
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const row = page.locator('.result', {hasText: 'Nearby place 0'});
   const outside = await camera(page);
   await row.click();
@@ -497,14 +497,14 @@ test(
   }
 );
 
-test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page}) => {
+test('the result list keeps its order while a chosen place is open and re-sorts after', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
   const lastPlace = nearbyPlaces.features[5].geometry.coordinates;
   await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), lastPlace);
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const names = page.locator('.result strong');
   await expect(names.first()).toHaveText('Nearby place 5');
   const order = await names.allTextContents();
@@ -958,6 +958,9 @@ export async function scaleBarCulprits(page) {
         // Skip the scale bar itself and its descendants
         if (element.classList.contains('maplibregl-ctrl-scale')) continue;
         if (scaleBar.contains(element)) continue;
+        // Skip the OSM credit line — it is intentionally below the scale bar
+        if (element.classList.contains('osm-credit-line')) continue;
+        if (element.closest('.osm-credit-line')) continue;
         // Skip ancestors of the scale bar — their rects naturally contain it
         if (element.contains(scaleBar)) continue;
         // Skip the map canvas
@@ -1012,6 +1015,102 @@ for (const {name, viewport} of deviceCases) {
     }
 
     await atViewport(page, viewport, checkMainScreen);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// OSM credit line below the scale bar (issue #144)
+// ---------------------------------------------------------------------------
+
+// Verifies the on-map "OpenStreetMap" credit sits below the scale bar on
+// Desktop, Mobile, and Flip — visible, positioned, sized, and clickable.
+for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
+  ...deviceCase,
+  isMobile: deviceCase.name !== 'desktop'
+}))) {
+  const phoneTag = isMobile ? {tag: '@phone'} : {};
+
+  test(`OSM credit matches scale bar styling on ${name}`, {...phoneTag}, async ({page}) => {
+    await atViewport(page, viewport, async () => {
+      await ready(page);
+      await closeMenu(page);
+
+      // The credit inherits the same background-color, color, and font-family
+      // as the scale bar so they stay in step (wiki Web app – UI, ADR 0016).
+      const styles = await page.evaluate(() => {
+        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!scaleBar || !creditEl) return null;
+        const scaleStyle = getComputedStyle(scaleBar);
+        const creditStyle = getComputedStyle(creditEl);
+        return {
+          scaleBackground: scaleStyle.backgroundColor,
+          creditBackground: creditStyle.backgroundColor,
+          scaleColor: scaleStyle.color,
+          creditColor: creditStyle.color,
+          scaleFontFamily: scaleStyle.fontFamily,
+          creditFontFamily: creditStyle.fontFamily
+        };
+      });
+      expect(styles).not.toBeNull();
+      expect(styles.creditBackground).toBe(styles.scaleBackground);
+      expect(styles.creditColor).toBe(styles.scaleColor);
+      expect(styles.creditFontFamily).toBe(styles.scaleFontFamily);
+    });
+  });
+
+  test(`OSM credit line is visible and positioned below scale bar on ${name}`, {...phoneTag}, async ({page}) => {
+    await atViewport(page, viewport, async () => {
+      await ready(page);
+      await closeMenu(page);
+
+      // Credit is visible
+      const credit = page.locator('.osm-credit-line');
+      await expect(credit).toBeVisible();
+
+      // Link href is the OSM copyright page
+      const link = credit.locator('a');
+      await expect(link).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
+
+      // Position: credit top is within 2 px of scale bar's bottom
+      // Left edge within 2 px of scale bar's left
+      // Height is about half the scale bar's (within 2 px)
+      const measurements = await page.evaluate(() => {
+        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!scaleBar || !creditEl) return null;
+        const scaleRect = scaleBar.getBoundingClientRect();
+        const creditRect = creditEl.getBoundingClientRect();
+        return {
+          scaleBarHeight: scaleRect.height,
+          creditHeight: creditRect.height,
+          topGap: creditRect.top - scaleRect.bottom,
+          leftDiff: Math.abs(creditRect.left - scaleRect.left)
+        };
+      });
+      expect(measurements).not.toBeNull();
+      expect(measurements.topGap).toBeGreaterThanOrEqual(-2);
+      expect(measurements.topGap).toBeLessThanOrEqual(2);
+      expect(measurements.leftDiff).toBeLessThanOrEqual(2);
+      expect(measurements.creditHeight).toBeGreaterThanOrEqual(
+        measurements.scaleBarHeight / 2 - 2
+      );
+      expect(measurements.creditHeight).toBeLessThanOrEqual(
+        measurements.scaleBarHeight / 2 + 2
+      );
+
+      // elementFromPoint at the credit's centre returns the link (not covered)
+      const elementAtCenter = await page.evaluate(() => {
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!creditEl) return null;
+        const rect = creditEl.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const el = document.elementFromPoint(centerX, centerY);
+        return el?.tagName === 'A' ? el.getAttribute('href') : null;
+      });
+      expect(elementAtCenter).toBe('https://www.openstreetmap.org/copyright');
+    });
   });
 }
 
@@ -1366,17 +1465,6 @@ test.describe('Desktop search bar', () => {
     expect(Math.abs(panelBox.y - (bar.y + bar.height))).toBeLessThanOrEqual(6);
   });
 
-  test('Escape clears a non-empty query on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    await page.locator('#search').fill('test query');
-    await expect(page.locator('#clear-search')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#search')).toHaveValue('');
-    await expect(page.locator('#clear-search')).toBeHidden();
-  });
-
   test('Tab reaches menu button, input, clear button, and first category chip', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
@@ -1433,21 +1521,195 @@ test.describe('Desktop search bar', () => {
     expect(isCardVisible).toBe(true);
   });
 
-  test('with a query, only the clear button is visible in the search bar', async ({page, isMobile}) => {
+  test('with a query, the native search cancel button is hidden', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     await page.locator('#search').fill('Café');
-    // The native search cancel pseudo-element must not be displayed.
+    // Verify the CSS rule hides the native ::-webkit-search-cancel-button.
+    // getComputedStyle on pseudo-elements can be unreliable, so check the stylesheet rule.
     const nativeCancelHidden = await page.evaluate(() => {
-      // Pseudo-elements can't be read from Playwright, so verify that only one
-      // clear-related button exists in the search bar.
-      const searchBar = document.querySelector('.search-bar');
-      const buttons = Array.from(searchBar.querySelectorAll('button'));
-      const clearButtons = buttons.filter(button => /clear/i.test(button.getAttribute('aria-label') ?? ''));
-      return clearButtons.length === 1;
+      function findRule(sheets) {
+        for (const sheet of sheets) {
+          for (const rule of sheet.cssRules) {
+            if (rule.selectorText?.includes('::-webkit-search-cancel-button')) {
+              return rule.style.display === 'none';
+            }
+          }
+        }
+        return false;
+      }
+      try {
+        return findRule(document.styleSheets);
+      } catch {
+        return false;
+      }
     });
     expect(nativeCancelHidden).toBe(true);
+  });
+
+  test('place card drops below floating chips row on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Ensure dock is closed and no query.
+    await closeMenu(page);
+    await expect(page.locator('#desktop-search-panel')).toBeVisible();
+    // Tap a place on the map using the fixture coordinates.
+    const place = fixture.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    // The card's top must be at or below the bottom of the desktop-search-panel chips row.
+    const cardTop = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      return card.getBoundingClientRect().top;
+    });
+    const chipsBottom = await page.evaluate(() => {
+      const panel = document.getElementById('desktop-search-panel');
+      return panel.getBoundingClientRect().bottom;
+    });
+    const cardVisible = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      const rect = card.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const el = document.elementFromPoint(centerX, centerY);
+      return el?.closest('#place-card') !== null;
+    });
+    // Card top >= chips row bottom.
+    expect(cardTop).toBeGreaterThanOrEqual(chipsBottom - 1);
+    // The card centre must be visible (not covered by the chips row).
+    expect(cardVisible).toBe(true);
+  });
+
+  test('desktop-to-mobile resize hides floating chips, mobile-to-desktop restores them', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Start at desktop: floating chips visible.
+    const panel = page.locator('#desktop-search-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('#categories')).toBeVisible();
+    // Resize to mobile (412x840).
+    await page.setViewportSize({width: 412, height: 840});
+    await settled(page);
+    // #desktop-search-panel should be hidden.
+    await expect(panel).toBeHidden();
+    // #browse-panel should not be inside #desktop-search-panel.
+    const browsePanelParent = await page.evaluate(() => {
+      const browsePanel = document.getElementById('browse-panel');
+      return browsePanel.parentElement?.id ?? null;
+    });
+    expect(browsePanelParent).not.toBe('desktop-search-panel');
+    // Resize back to desktop (1280x800).
+    await page.setViewportSize({width: 1280, height: 800});
+    await settled(page);
+    // #desktop-search-panel should be visible with #categories inside.
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('#categories')).toBeVisible();
+  });
+
+  test('Escape clears query and focuses input on desktop; closes dock when open', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Part A: dock closed, type query, Tab to move focus off input, then Escape.
+    await page.locator('#search').fill('test query');
+    await expect(page.locator('#clear-search')).toBeVisible();
+    // Tab moves focus off the input to #clear-search.
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#clear-search')).toBeFocused();
+    // Press Escape: input should be empty and #search should be focused.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(page.locator('#search')).toBeFocused();
+    // Part B: dock open, press Escape: dock should close.
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  });
+
+  test('aria-expanded reflects results visibility when typing and clearing', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Initially no query: aria-expanded should be 'false'.
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
+    // Type a query: results become visible, aria-expanded should be 'true'.
+    await page.locator('#search').fill('museum');
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
+    // Clear the query: aria-expanded should be 'false'.
+    await page.locator('#clear-search').click();
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('card bottom stays within viewport on desktop with small height', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    // Use a short viewport so the card's max-height constraint matters.
+    // With the old CSS (max-height: calc(100% - 130px)) and card top at ~152 px,
+    // a tall card overflows the bottom when viewport height is only 560 px.
+    await page.setViewportSize({width: 1280, height: 560});
+    // Create a place with many fields so the card content is taller than the allowed max-height.
+    const tallPlace = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.264097, 42.439428]},
+        properties: {
+          id: 'node/999999999',
+          name: 'Narodna banka Crne Gore — Glavna ogranak u Podgorici',
+          'name:en': 'Central Bank of Montenegro — Main Podgorica Branch',
+          category: 'essentials',
+          kind: 'bank',
+          source: 'OpenStreetMap',
+          'addr:street': 'Bulevar Svetog Petra Cetinjskog 14',
+          'addr:housenumber': '14',
+          opening_hours: 'Mo-Fr 08:00-15:00; Sa 08:00-12:00',
+          phone: '+382 20 241 500',
+          website: 'https://www.cnb.org.me/',
+          visibilityLevel: 5
+        }
+      }]
+    };
+    await page.route('**/data/places.geojson', route => route.fulfill({json: tallPlace}));
+    await ready(page);
+    // Ensure dock is closed and no query (floating chips mode).
+    await closeMenu(page);
+    await expect(page.locator('#desktop-search-panel')).toBeVisible();
+    // Tap the place on the map.
+    const place = tallPlace.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    // Measure the card and map to verify the card does not overflow the viewport.
+    const {cardBottom, mapBottom} = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      const mapEl = document.getElementById('map');
+      const cardRect = card.getBoundingClientRect();
+      const mapRect = mapEl.getBoundingClientRect();
+      return {
+        cardBottom: cardRect.bottom,
+        mapBottom: mapRect.bottom
+      };
+    });
+    expect(cardBottom).toBeLessThanOrEqual(mapBottom + 1);
+  });
+
+  test('focusing search input does not close the card on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Type a query and choose a result so the card opens.
+    await page.locator('#search').fill('Mimoza');
+    await expect(page.locator('.result')).toHaveCount(1);
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    // Focus the search input — the card should stay visible.
+    await page.evaluate(() => document.getElementById('search').focus());
+    await expect(page.locator('#place-card')).toBeVisible();
   });
 });
 
@@ -1481,11 +1743,13 @@ test.describe('Mobile search bar', () => {
     expect(rightGap).toBeLessThanOrEqual(14);
   });
 
-  test('categories are hidden on the main screen on mobile', async ({page}) => {
+  test('categories move to dock after desktop-to-mobile resize', async ({page}) => {
+    // Start at desktop size so the floating chips are visible.
+    await page.setViewportSize({width: 1280, height: 800});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
-    await closeMenu(page);
-    // Categories are not visible on the main screen.
+    // Resize to mobile: the mobile media query hides the categories row on the main screen.
+    await page.setViewportSize({width: 412, height: 840});
     await expect(page.locator('#categories')).toBeHidden();
   });
 
@@ -1504,6 +1768,16 @@ test.describe('Mobile search bar', () => {
     const menuButton = await page.locator('#menu-toggle').boundingBox();
     expect(menuButton.width).toBeGreaterThanOrEqual(40);
     expect(menuButton.height).toBeGreaterThanOrEqual(40);
+    // Type a query so the clear button appears, then measure it.
+    await page.locator('#search').fill('test');
+    const clearButton = await page.locator('#clear-search').boundingBox();
+    expect(clearButton.width).toBeGreaterThanOrEqual(40);
+    expect(clearButton.height).toBeGreaterThanOrEqual(40);
+    // Open the dock and measure a category chip.
+    await page.locator('#menu-toggle').click();
+    const categoryChip = await page.locator('#categories button').first().boundingBox();
+    expect(categoryChip.width).toBeGreaterThanOrEqual(40);
+    expect(categoryChip.height).toBeGreaterThanOrEqual(40);
   });
 });
 
@@ -1550,6 +1824,26 @@ test.describe('Flip search bar', () => {
       await page.locator('#search').fill('Café');
       expect(await page.locator('#search').inputValue()).toBe('Café');
       await expect(page.locator('#clear-search')).toBeVisible();
+    });
+  });
+
+  test('only menu toggle is visible in search bar on flip with dock closed', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Open the menu so we can type a query.
+      await openMenu(page);
+      await page.locator('#search').fill('test');
+      // Close the menu (dock).
+      await closeMenu(page);
+      // Wait for view to settle.
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      // Only #menu-toggle should be visible in .search-bar.
+      await expect(page.locator('#menu-toggle')).toBeVisible();
+      // #search, .search-divider, and #clear-search should not be visible.
+      await expect(page.locator('#search')).toBeHidden();
+      await expect(page.locator('.search-divider')).toBeHidden();
+      await expect(page.locator('#clear-search')).toBeHidden();
     });
   });
 });
