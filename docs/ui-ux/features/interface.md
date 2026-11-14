@@ -113,15 +113,23 @@ viewport, with the map visible beside it).
 
 ### Flip minimizable footer
 
-On Flip, the dock footer is pinned at the bottom and starts minimized — only a handle row shows. The handle is a
-`<button>` (#footer-toggle) with an accessible name ("Show map options" / "Hide map options"), `aria-expanded` and
-`aria-controls`, a 40 px touch target, and a short horizontal bar drawn in CSS (like the existing
-`.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
+On Flip, the dock footer is pinned at the bottom and starts minimized — only a compact handle row (28 px) shows, with no
+separator line or empty strip below it. The handle is a `<button>` (#footer-toggle) with an accessible name ("Show map
+options" / "Hide map options"), `aria-expanded` and `aria-controls`, and a short horizontal bar drawn in CSS (like the
+existing `.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
 
 Opening the footer reveals Satellite, Transport, Download, and the attribution line; the results area hides to make room
 (the wiki's second Flip drawing shows the results hidden while the footer is open). The handle stays at the top of the
 footer. Clicking the handle again collapses the footer and restores the results. Closing the dock resets the footer to
 minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
+
+**Compact layout for real Flip screens** (issue #161): the real Flip cover screen is about 340×250 CSS px (shorter than
+the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible
+when minimized: the search bar uses an 8 px top inset (instead of 20 px), category chips are 32 px high with tight
+padding, each result row is about 40 px (24 px symbol, 13 px name, 10 px kind/distance with ellipsis), and the handle is
+28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are compact (icon and label in one
+row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution line all fit
+without scrolling. These sizes are tested at both 340×250 and 340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 

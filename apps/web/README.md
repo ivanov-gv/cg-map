@@ -83,11 +83,18 @@ the search view with the card (`placeCardOpened` in interface.js calls `setView(
 mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
 current behavior when the dock is closed.
 
-**Flip minimizable footer** (issue #155): on Flip, the dock footer is pinned at the bottom and starts minimized — only a
-handle row shows. The handle is a `<button>` (#footer-toggle) with aria-expanded and aria-controls, a 40 px touch
-target, and a short horizontal bar drawn in CSS. Clicking it expands the footer to show Satellite, Transport, Download,
-and attribution; the results area hides to make room. Clicking again collapses it. Closing the dock resets to minimized.
-The handle is hidden on Mobile and Desktop where the footer is always shown.
+**Flip minimizable footer** (issues #155, #161): on Flip, the dock footer is pinned at the bottom and starts minimized —
+only a compact handle row (28 px) shows, with no separator line or empty strip below it. The handle is a `<button>`
+(#footer-toggle) with aria-expanded and aria-controls and a short horizontal bar drawn in CSS. Clicking it expands the
+footer to show Satellite, Transport, Download, and attribution; the results area hides to make room. Clicking again
+collapses it. Closing the dock resets to minimized. The handle is hidden on Mobile and Desktop where the footer is
+always shown.
+
+When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
+visible: the search bar uses an 8 px inset, category chips are 32 px, each result row is about 40 px (24 px symbol,
+smaller fonts), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are
+compact (icon and label in one row, ~40 px) and the Download button is ~40 px so everything fits without scrolling.
+These sizes are tested at both 340×250 and 340×340.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
