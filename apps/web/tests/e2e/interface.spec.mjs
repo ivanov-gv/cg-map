@@ -162,7 +162,10 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.3, 42.5], zoom: 16}));
   const before = await camera(page);
   await page.locator('#search').click();
-  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  // On desktop the floating categories are in #desktop-categories; on mobile they are in #categories.
+  const isDesktop = (await page.locator('body').getAttribute('data-device')) === 'desktop';
+  const categoryContainer = isDesktop ? '#desktop-categories' : '#categories';
+  await page.locator(categoryContainer).getByRole('button', {name: 'Eat & drink', exact: true}).click();
   await expect(page.locator('.result')).toHaveCount(3);
   await page.locator('#search').fill('Nearby place 3');
   await expect(page.locator('.result')).toHaveCount(1);
@@ -178,7 +181,8 @@ test('choosing a result moves the map only when the result is outside the focus 
     lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + 0.02, lngLat[1] + 0.01], zoom: 16}),
     target
   );
-  await page.locator('#search').click();
+  // Open the dock to access the results list.
+  await openMenu(page);
   const row = page.locator('.result', {hasText: 'Nearby place 0'});
   const outside = await camera(page);
   await row.click();
@@ -198,7 +202,8 @@ test('a chosen result still zooms in to street level from far out', async ({page
   await ready(page);
   await settled(page);
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 11}));
-  await page.locator('#search').click();
+  // Open the dock to access the results list.
+  await openMenu(page);
   await page.locator('.result', {hasText: 'Nearby place 0'}).click();
   await expect.poll(async () => (await camera(page)).zoom).toBe(15);
 });
@@ -214,6 +219,8 @@ test('search bar focus has no ring, and categories and the place card have no sc
     'none'
   );
   expect(await barBorder()).not.toBe(resting);
+  // Open the dock to access results (desktop search panel needs a query to show results).
+  await openMenu(page);
   await page.locator('.result').first().click();
   for (const selector of ['#categories', '#place-card'])
     expect(await page.locator(selector).evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe(
@@ -221,17 +228,20 @@ test('search bar focus has no ring, and categories and the place card have no sc
     );
 });
 
-test('desktop keeps the dock and results open beside the place card', async ({page, isMobile}, testInfo) => {
+test('desktop keeps the results open beside the place card', async ({page, isMobile}, testInfo) => {
   test.skip(isMobile, 'desktop layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
-  await page.locator('#search').click();
+  // Open the dock to access the results list.
+  await openMenu(page);
   const row = page.locator('.result', {hasText: 'Nearby place 0'});
   await row.click();
   await expect(page.locator('#place-card')).toBeVisible();
+  // On desktop, the dock stays open beside the place card.
   await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
   await expect(row).toHaveAttribute('aria-current', 'true');
   await settled(page);
+  // The card should be to the right of the dock.
   const dock = await page.locator('.sidebar').boundingBox();
   const card = await page.locator('#place-card').boundingBox();
   expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
@@ -490,7 +500,8 @@ test('the result list keeps its order while a chosen place is open and re-sorts 
   await settled(page);
   const lastPlace = nearbyPlaces.features[5].geometry.coordinates;
   await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), lastPlace);
-  await page.locator('#search').click();
+  // Open the dock to access the results list.
+  await openMenu(page);
   const names = page.locator('.result strong');
   await expect(names.first()).toHaveText('Nearby place 5');
   const order = await names.allTextContents();
@@ -517,6 +528,7 @@ test('search highlights the nearest match on the map without moving it', async (
   );
   const before = await camera(page);
   await page.locator('#search').fill('Nearby');
+  // On desktop, filling the search shows the desktop panel; the highlight still works.
   await expect
     .poll(() =>
       page.evaluate(
@@ -673,7 +685,8 @@ test('a narrow desktop window narrows the card and keeps the map controls reacha
   await page.setViewportSize({width: 780, height: 700});
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
-  await page.locator('#search').click();
+  // Open the dock to access the results list.
+  await openMenu(page);
   await page.locator('.result').first().click();
   const dock = await page.locator('.sidebar').boundingBox();
   const card = await page.locator('#place-card').boundingBox();
@@ -1230,6 +1243,107 @@ test.describe('GPS follow location', () => {
       await atViewport(page, viewport, check);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Desktop search bar (issue #101)
+// ---------------------------------------------------------------------------
+
+test.describe('Desktop search bar', () => {
+  test.use({viewport: {width: 1280, height: 800}});
+
+  test('search bar is taller than 54 px on desktop', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const bar = await page.locator('.search-bar').boundingBox();
+    expect(bar.height).toBeGreaterThan(54);
+    expect(bar.height).toBe(60);
+  });
+
+  test('floating categories are visible under the bar with no query and dock closed', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await closeMenu(page);
+    const categories = page.locator('#desktop-categories');
+    await expect(categories).toBeVisible();
+    // Check that category buttons exist.
+    await expect(categories.locator('button')).toHaveCount(5);
+    // The dock should be closed.
+    await expect(page.locator('#dock-content')).toBeHidden();
+  });
+
+  test('floating categories scroll horizontally when they overflow', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await closeMenu(page);
+    const categories = page.locator('#desktop-categories');
+    // The scroll width should be greater than the visible width (categories overflow).
+    const overflow = await categories.evaluate(el => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeGreaterThan(0);
+    // Scroll horizontally by setting scrollLeft directly.
+    await categories.evaluate(el => {
+      el.scrollLeft = 50;
+    });
+    const scrolled = await categories.evaluate(el => el.scrollLeft);
+    expect(scrolled).toBeGreaterThan(0);
+  });
+
+  test('typing shows the clear button and clicking it empties the input', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const clearButton = page.locator('#clear-search');
+    // Clear button is hidden initially.
+    await expect(clearButton).toBeHidden();
+    // Type a query.
+    await page.locator('#search').fill('museum');
+    await expect(clearButton).toBeVisible();
+    // Click the clear button.
+    await clearButton.click();
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(clearButton).toBeHidden();
+  });
+
+  test('with a query, categories and results are inside one container under the bar', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Type a query that matches some places.
+    await page.locator('#search').fill('Café');
+    await expect(page.locator('#clear-search')).toBeVisible();
+    // The desktop search panel should be visible.
+    const panel = page.locator('#desktop-search-panel');
+    await expect(panel).toBeVisible();
+    // The floating categories should be hidden.
+    await expect(page.locator('#desktop-categories')).toBeHidden();
+    // The panel should contain the browse panel with categories and results.
+    await expect(panel.locator('#categories')).toBeVisible();
+    await expect(panel.locator('#results')).toBeVisible();
+  });
+
+  test('Escape clears a non-empty query on desktop', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await page.locator('#search').fill('test query');
+    await expect(page.locator('#clear-search')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(page.locator('#clear-search')).toBeHidden();
+  });
+
+  test('Tab reaches menu button, input, clear button, and category chips', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Focus the menu button.
+    await page.locator('#menu-toggle').focus();
+    await expect(page.locator('#menu-toggle')).toBeFocused();
+    // Tab to the search input.
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#search')).toBeFocused();
+    // Type something to show the clear button.
+    await page.locator('#search').fill('x');
+    // Tab to the clear button.
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#clear-search')).toBeFocused();
+  });
 });
 
 // Test e: Geolocation permission denied — click shows recovery message, data-following stays false.

@@ -69,6 +69,19 @@ Keep the dock attached to the left edge rather than presenting a floating bubble
 on phones; viewport changes may adapt dimensions, but opening alone must not change header geometry. The burger toggles
 the dock, with an accessible name and expanded state. Escape closes it and returns focus appropriately.
 
+### Desktop search bar
+
+On desktop (viewport ≥ 721 px), the search bar is 60 px tall. With no query and the dock closed, a row of floating
+category chips appears under the bar; each chip floats with its own shadow, and the row scrolls horizontally when it
+overflows. The chips reuse the same category state as the dock (one source of truth). Pressing a chip filters the map's
+places, exactly as the dock categories do.
+
+Typing a query shows a clear (×) button inside the bar at the right. Under the bar, a unified search panel appears,
+joined to the bar as one card: the categories row, then a scrollable results list. The floating chips hide when the
+panel appears. Escape clears a non-empty query, keeping the search field focused. Tab reaches the menu button, the
+input, the clear button, and the category chips. The dock remains available via the burger for layer and download
+controls.
+
 On phones, activating search instead of the burger follows the compact-search behavior below. The shared header stays in
 place in both modes; using search must not implicitly open the full dock.
 

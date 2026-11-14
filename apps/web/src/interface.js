@@ -73,6 +73,9 @@ export class MapInterface {
     this.cardHead = document.getElementById('place-head');
     this.cardBody = document.getElementById('place-body');
     this.cardHandle = document.getElementById('card-handle');
+    this.clearButton = document.getElementById('clear-search');
+    this.desktopCategories = document.getElementById('desktop-categories');
+    this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     this.menu.addEventListener('click', () => {
@@ -80,6 +83,11 @@ export class MapInterface {
       if (this.mobileLayoutQuery.matches) this.search.blur();
       this.setView(this.view === 'dock' ? 'closed' : 'dock');
       this.onViewport?.();
+    });
+    this.clearButton.addEventListener('click', () => {
+      this.search.value = '';
+      this.onSearch?.();
+      this.search.focus();
     });
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
@@ -89,6 +97,9 @@ export class MapInterface {
       this.search.addEventListener(type, () => {
         if (!this.isRestoringFocus) this.openSearch();
       });
+    this.search.addEventListener('input', () => {
+      this.syncClearButton();
+    });
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
@@ -108,10 +119,37 @@ export class MapInterface {
     this.syncViewport(false);
   }
 
+  // Show the clear button when there is a query, hide it otherwise.
+  syncClearButton() {
+    const hasQuery = this.search.value.trim().length > 0;
+    this.clearButton.hidden = !hasQuery;
+  }
+
   openSearch() {
     this.trigger = this.search;
-    // Search stays in the view it started from; only choosing a result leaves the phone dock.
-    const view = this.mobileLayoutQuery.matches && this.view !== 'dock' ? 'search' : 'dock';
+    // On desktop, search uses the desktop panel (not the dock) unless the dock is already open.
+    // On mobile, search uses the bubble when the dock is closed, or the dock when it is open.
+    if (!this.mobileLayoutQuery.matches) {
+      // Desktop: only open the dock if it was already open; otherwise use the desktop panel.
+      if (this.view !== 'dock') {
+        this.view = 'closed';
+        document.body.dataset.view = 'closed';
+        this.menu.setAttribute('aria-expanded', 'false');
+        this.menu.setAttribute('aria-label', 'Open menu');
+        this.search.setAttribute('aria-expanded', 'true');
+        this.dock.hidden = true;
+        this.syncDesktopSearchUI();
+        this.syncCardHandle();
+        this.onChange?.();
+        return;
+      }
+      // Dock is already open — keep it open.
+      this.syncDesktopSearchUI();
+      this.onChange?.();
+      return;
+    }
+    // Mobile behavior: search bubble or dock.
+    const view = this.view !== 'dock' ? 'search' : 'dock';
     const hasViewChanged = view !== this.view;
     this.setView(view);
     if (hasViewChanged) this.onSearch?.();
@@ -129,6 +167,7 @@ export class MapInterface {
     if (this.panel.parentElement !== target) target.append(this.panel);
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
+    this.syncDesktopSearchUI();
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
@@ -143,6 +182,39 @@ export class MapInterface {
     this.strip.hidden = !isSearching || !this.areResultsMinimized;
     if (!this.strip.hidden)
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
+  }
+
+  // On desktop, show floating categories when dock is closed and no query,
+  // or show the unified search panel when there is a query.
+  syncDesktopSearchUI() {
+    // Only on desktop (not mobile).
+    if (this.mobileLayoutQuery.matches) {
+      this.desktopCategories.hidden = true;
+      this.desktopSearchPanel.hidden = true;
+      return;
+    }
+    const hasQuery = this.search.value.trim().length > 0;
+    const isDockOpen = this.view === 'dock';
+
+    if (hasQuery && !isDockOpen) {
+      // Show the unified search panel with categories + results.
+      this.desktopCategories.hidden = true;
+      this.desktopSearchPanel.hidden = false;
+      // Move the browse panel into the desktop search panel.
+      const panelTarget = this.desktopSearchPanel;
+      if (this.panel.parentElement !== panelTarget) panelTarget.append(this.panel);
+    } else if (!isDockOpen) {
+      // No query, dock closed: show floating categories.
+      this.desktopCategories.hidden = false;
+      this.desktopSearchPanel.hidden = true;
+      // Keep the browse panel in its default container (dock-main).
+      const panelTarget = document.getElementById('dock-main');
+      if (this.panel.parentElement !== panelTarget) panelTarget.append(this.panel);
+    } else {
+      // Dock is open: hide desktop-only elements.
+      this.desktopCategories.hidden = true;
+      this.desktopSearchPanel.hidden = true;
+    }
   }
 
   // Call after the card's content is in place and it is no longer hidden.
@@ -313,7 +385,16 @@ export class MapInterface {
 
   close(shouldRestoreFocus = false) {
     this.setView('closed');
+    this.syncDesktopSearchUI();
     if (shouldRestoreFocus) this.restoreFocus(this.trigger);
+  }
+
+  // Clear the search query and update the UI.
+  clearQuery() {
+    this.search.value = '';
+    this.syncClearButton();
+    this.onSearch?.();
+    this.syncDesktopSearchUI();
   }
 
   keyboardOpen() {

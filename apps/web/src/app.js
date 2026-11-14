@@ -224,6 +224,9 @@ function applyPlaceSearch() {
   placeSelection.onFilterChanged();
   renderSearchResults();
   placeSelection.previewResults();
+  // Update desktop search UI after results change.
+  mapState.interface?.syncDesktopSearchUI?.();
+  mapState.interface?.syncClearButton?.();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -521,24 +524,45 @@ function warnAboutSlowStartup() {
 
 // Category toggles share the same filter and never move the camera.
 // Pressing a category selects it; pressing it again clears the filter.
+// Both the dock categories and the desktop floating chips share the same state.
 function registerCategoryControls() {
   for (const [key, label] of Object.entries(categories)) {
-    const button = createElement('button', label);
-    button.type = 'button';
-    button.dataset.category = key;
-    button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
-    button.addEventListener('click', () => {
-      directoryState.activeCategory =
-        directoryState.activeCategory === key ? null : key;
-      for (const other of elementById('categories').children) {
-        const isActiveCategory = other.dataset.category === directoryState.activeCategory;
-        other.setAttribute('aria-pressed', String(isActiveCategory));
-        if (isActiveCategory) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
-      }
-      applyPlaceSearch();
+    // Button inside the dock's #categories nav.
+    const dockButton = createElement('button', label);
+    dockButton.type = 'button';
+    dockButton.dataset.category = key;
+    dockButton.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
+    dockButton.addEventListener('click', () => {
+      handleCategoryToggle(key);
     });
-    elementById('categories').append(button);
+    elementById('categories').append(dockButton);
+
+    // Floating chip for the desktop categories row.
+    const desktopButton = createElement('button', label);
+    desktopButton.type = 'button';
+    desktopButton.dataset.category = key;
+    desktopButton.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
+    desktopButton.addEventListener('click', () => {
+      handleCategoryToggle(key);
+    });
+    elementById('desktop-categories').append(desktopButton);
   }
+}
+
+// Handle a category toggle and update all category buttons (dock + desktop).
+function handleCategoryToggle(key) {
+  directoryState.activeCategory =
+    directoryState.activeCategory === key ? null : key;
+  // Update all category buttons across both containers.
+  for (const containerId of ['categories', 'desktop-categories']) {
+    const container = elementById(containerId);
+    for (const button of container.children) {
+      const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+      button.setAttribute('aria-pressed', String(isActiveCategory));
+      if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    }
+  }
+  applyPlaceSearch();
 }
 
 // Search and selection controls operate on the existing map and details card.
@@ -559,7 +583,12 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else mapState.interface.close(true);
+      else if (elementById('search').value.trim()) {
+        // Clear the query on desktop when Escape is pressed with a non-empty query.
+        mapState.interface.clearQuery();
+      } else {
+        mapState.interface.close(true);
+      }
     }
     if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();

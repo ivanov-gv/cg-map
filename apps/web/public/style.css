@@ -145,9 +145,110 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
+/* Desktop search bar: taller, with clear button and floating categories. */
 /* The dock stays open beside a place card, so the card moves clear of it and keeps the map controls reachable. */
 @media (min-width: 721px) {
   body[data-view=dock] .place-card { top: 20px; left: calc(var(--dock-width) + 12px); width: min(375px, calc(100% - var(--dock-width) - 96px)); max-height: calc(100% - 40px); }
+
+  /* Taller search bar on desktop (60px instead of 54px). */
+  .search-bar { height: 60px; }
+  .search input { height: 54px; }
+
+  /* Clear button inside the search bar. */
+  .clear-button { margin: 0 3px; width: 40px; height: 40px; }
+  .clear-button .icon { width: 18px; height: 18px; }
+
+  /* Floating category chips under the search bar (visible when dock is closed and no query). */
+  .desktop-categories {
+    position: fixed;
+    top: calc(var(--visible-top) + var(--bar-inset) + 70px);
+    left: var(--bar-inset);
+    width: calc(var(--dock-width) - 2 * var(--bar-inset));
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    pointer-events: auto;
+    z-index: 5;
+  }
+  .desktop-categories::-webkit-scrollbar { display: none; }
+  .desktop-categories button {
+    flex-shrink: 0;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 22px;
+    padding: 7px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px #243f3710;
+    pointer-events: auto;
+  }
+  .desktop-categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+
+  /* Unified search panel: categories + results joined under the bar when there is a query. */
+  .desktop-search-panel {
+    position: fixed;
+    top: calc(var(--visible-top) + var(--bar-inset) + 66px);
+    left: var(--bar-inset);
+    width: calc(var(--dock-width) - 2 * var(--bar-inset));
+    max-height: 50dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 15px 15px;
+    background: var(--paper);
+    box-shadow: 0 8px 24px #243f3718;
+    pointer-events: auto;
+    z-index: 5;
+  }
+  /* When #browse-panel is inside the desktop search panel, style its categories compactly. */
+  .desktop-search-panel #categories {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 7px;
+    padding: 6px var(--bar-inset) 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .desktop-search-panel #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel #categories button {
+    flex-shrink: 0;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 22px;
+    padding: 6px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .desktop-search-panel #categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+  .desktop-search-panel #results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The browse panel inside the desktop search panel fills the column. */
+  .desktop-search-panel .browse-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
