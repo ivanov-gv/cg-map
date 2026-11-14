@@ -74,6 +74,28 @@ menu (hamburger) button on the main screen — the bar width is at most the menu
 and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as on mobile),
 and the search field becomes usable. Typing a query shows the clear button.
 
+**Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
+makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
+stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
+content ends above the keyboard because it uses the keyboard-aware visible viewport variables (--visible-top,
+--visible-height). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to
+the search view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on
+mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
+current behavior when the dock is closed.
+
+**Flip minimizable footer** (issues #155, #161): on Flip, the dock footer is pinned at the bottom and starts minimized —
+only a compact handle row (28 px) shows, with no separator line or empty strip below it. The handle is a `<button>`
+(#footer-toggle) with aria-expanded and aria-controls and a short horizontal bar drawn in CSS. Clicking it expands the
+footer to show Satellite, Transport, Download, and attribution; the results area hides to make room. Clicking again
+collapses it. Closing the dock resets to minimized. The handle is hidden on Mobile and Desktop where the footer is
+always shown.
+
+When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
+visible: the search bar uses an 8 px inset, category chips are 32 px, each result row is about 40 px (24 px symbol,
+smaller fonts), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are
+compact (icon and label in one row, ~40 px) and the Download button is ~40 px so everything fits without scrolling.
+These sizes are tested at both 340×250 and 340×340.
+
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a

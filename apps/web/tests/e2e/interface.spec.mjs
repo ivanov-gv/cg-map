@@ -656,6 +656,111 @@ test(
   }
 );
 
+// Categories row is a single horizontal row on desktop: floating chips, dock, and joined card.
+// Chips do not wrap to a second row; the row scrolls horizontally when it overflows.
+test.describe('categories row is a single row on desktop', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  // Use a viewport narrow enough that the category chips overflow the container.
+  const narrowDesktop = {width: 1280, height: 800};
+
+  test('floating categories row is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Dock is closed, no query: floating chips are visible in the desktop search panel.
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    // All chips should share the same top (within 1 px for sub-pixel rendering).
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+
+    // The row should be wider than its container, so horizontal scroll is possible.
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row in the dock is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await openMenu(page);
+
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row in the joined card is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Type a query to show the joined card with categories + results.
+    await page.locator('#search').fill('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row is horizontally scrollable', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Verify the row can be scrolled horizontally by setting scrollLeft directly.
+    const {canScroll, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const start = categories.scrollLeft;
+      categories.scrollLeft = start + 50;
+      const canScroll = categories.scrollLeft > start;
+      categories.scrollLeft = start; // reset
+      return {canScroll, scrollWidth: categories.scrollWidth, clientWidth: categories.clientWidth};
+    });
+    expect(canScroll).toBe(true);
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+});
+
 test(
   'one wheel gesture changes the phone card state only once',
   {tag: '@phone'},
@@ -883,6 +988,8 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
     await expect(page.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
 
     await openMenu(page);
+    // Expand the footer to reveal the attribution (minimized by default on Flip).
+    await page.locator('#footer-toggle').click();
     const attribution = page.locator('#map-attribution');
     await expect(attribution).toBeVisible();
     const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
@@ -2207,6 +2314,505 @@ test.describe('GPS follow — dismissed prompt', () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Full-screen dock on Mobile and Flip (issue #104)
+// ---------------------------------------------------------------------------
+
+// On Mobile and Flip, the open dock covers the entire layout viewport (top 0, 100dvh).
+// Desktop keeps the side dock narrower than the viewport.
+test.describe('dock fills viewport on mobile and flip', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const MOBILE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+  const DESKTOP_VIEWPORT = {width: 1280, height: 800};
+
+  // Check that the sidebar/dock covers the full viewport and that elementFromPoint
+  // at each corner and the center returns an element inside the sidebar, not the map.
+  async function assertDockCoversViewport(page) {
+    const viewport = page.viewportSize();
+    const sidebar = page.locator('.sidebar');
+    const box = await sidebar.boundingBox();
+    expect(box).not.toBeNull();
+    // Position: dock starts at or before the viewport origin
+    expect(box.x).toBeLessThanOrEqual(0.5);
+    expect(box.y).toBeLessThanOrEqual(0.5);
+    // Size: dock fills the viewport within 1 px tolerance
+    expect(Math.abs(box.width - viewport.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.height - viewport.height)).toBeLessThanOrEqual(1);
+
+    // elementFromPoint at corners and center should be inside the sidebar, not the map canvas
+    const points = [
+      {x: 1, y: 1},
+      {x: viewport.width - 1, y: 1},
+      {x: 1, y: viewport.height - 1},
+      {x: viewport.width - 1, y: viewport.height - 1},
+      {x: Math.floor(viewport.width / 2), y: Math.floor(viewport.height / 2)}
+    ];
+    for (const point of points) {
+      const result = await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return {
+          tag: el ? el.tagName.toLowerCase() : null,
+          isInsideSidebar: el && document.querySelector('.sidebar')?.contains(el)
+        };
+      }, point);
+      // The element should be inside the sidebar (aside, div, button, etc.), not the map canvas
+      expect(result.tag).not.toBe('canvas');
+      expect(result.isInsideSidebar).toBe(true);
+    }
+  }
+
+  // Check that the map is visible again after closing the dock
+  async function assertMapVisibleAfterClose(page) {
+    const viewport = page.viewportSize();
+    // Check that the center of the viewport is the map canvas
+    const tag = await page.evaluate(({x, y}) => {
+      const el = document.elementFromPoint(x, y);
+      return el ? el.tagName.toLowerCase() : null;
+    }, {x: Math.floor(viewport.width / 2), y: Math.floor(viewport.height / 2)});
+    expect(tag).toBe('canvas');
+  }
+
+  test('dock covers full viewport on mobile', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, MOBILE_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await assertDockCoversViewport(page);
+
+      // Close the dock and verify the map is visible again
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      await assertMapVisibleAfterClose(page);
+    });
+  });
+
+  test('dock covers full viewport on flip', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, FLIP_VIEWPORT_SIZE, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await assertDockCoversViewport(page);
+
+      // Close the dock and verify the map is visible again
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      await assertMapVisibleAfterClose(page);
+    });
+  });
+
+  test('dock stays narrower than viewport on desktop', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, DESKTOP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+      const viewport = page.viewportSize();
+      const sidebar = page.locator('.sidebar');
+      const box = await sidebar.boundingBox();
+      expect(box).not.toBeNull();
+      // On desktop, the dock is narrower than the viewport
+      expect(box.width).toBeLessThan(viewport.width);
+      // The map canvas should still be visible beside the dock
+      const mapTag = await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return el ? el.tagName.toLowerCase() : null;
+      }, {x: viewport.width - 1, y: Math.floor(viewport.height / 2)});
+      expect(mapTag).toBe('canvas');
+    });
+  });
+});
+
+// Creates an 8-place fixture with the given prefix for ids and names.
+function manyPlacesFixture(prefix) {
+  return {
+    type: 'FeatureCollection',
+    features: Array.from({length: 8}, (_, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
+      properties: {
+        id: prefix + '/' + index,
+        name: prefix.charAt(0).toUpperCase() + prefix.slice(1) + ' place ' + index,
+        category: index % 2 ? 'food' : 'shops',
+        kind: 'shop'
+      }
+    }))
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Flip dock: minimizable footer (issue #155, replaces issue #104 one-column scroll)
+// ---------------------------------------------------------------------------
+
+// The requirement changed: instead of a one-column scroll, Flip uses a pinned
+// footer that starts minimized (only a handle row shows). The handle is a
+// <button> with aria-expanded and aria-controls. Opening it reveals Satellite,
+// Transport, Download, and attribution. Closing the dock resets to minimized.
+// Issue #161: tests must run at both 340×250 (real Flip screen) and 340×340.
+
+test.describe('Flip dock minimizable footer', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  // Test at the real Flip screen size (374×241), the previous test size (340×250),
+  // and the original square viewport (340×340).
+  const flipViewports = [
+    {name: '374x241', viewport: {width: 374, height: 241}},
+    {name: '340x250', viewport: {width: 340, height: 250}},
+    {name: '340x340', viewport: {width: 340, height: 340}}
+  ];
+  const manyPlaces = manyPlacesFixture('flip-footer');
+
+  // Every Flip footer test runs at both viewport sizes.
+  for (const {name, viewport} of flipViewports) {
+    test(`opening the dock shows the handle and hides layer buttons and Download (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // The footer toggle handle is visible.
+        await expect(page.locator('#footer-toggle')).toBeVisible();
+
+        // Footer starts minimized: aria-expanded is false.
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+
+        // Layer buttons and Download are hidden while minimized.
+        await expect(page.locator('#satellite-toggle')).toBeHidden();
+        await expect(page.locator('#transport-toggle')).toBeHidden();
+        await expect(page.locator('#download')).toBeHidden();
+
+        // At least 3 results are visible.
+        await expect(page.locator('.result')).toHaveCount(8);
+        const visibleResults = await page.evaluate((vh) => {
+          const results = document.querySelectorAll('.result');
+          let count = 0;
+          for (const row of results) {
+            const rect = row.getBoundingClientRect();
+            if (rect.top >= 0 && rect.bottom <= vh) count++;
+          }
+          return count;
+        }, viewport.height);
+        expect(visibleResults).toBeGreaterThanOrEqual(3);
+      });
+    });
+
+    test(`clicking the handle shows all footer content and sets aria-expanded true (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Open the footer.
+        await page.locator('#footer-toggle').click();
+
+        // aria-expanded is now true.
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Layer buttons and Download are visible (not hidden by CSS).
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+        await expect(page.locator('#transport-toggle')).toBeVisible();
+        await expect(page.locator('#download')).toBeVisible();
+
+        // Attribution is also visible.
+        await expect(page.locator('#map-attribution')).toBeVisible();
+
+        // Results area is hidden while footer is expanded (wiki drawing 2).
+        await expect(page.locator('.dock-main')).toBeHidden();
+      });
+    });
+
+    test(`clicking the handle again hides the footer content (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Open then close the footer.
+        await page.locator('#footer-toggle').click();
+        await page.locator('#footer-toggle').click();
+
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.locator('#satellite-toggle')).toBeHidden();
+        await expect(page.locator('#download')).toBeHidden();
+      });
+    });
+
+    test(`the handle is reachable by Tab and toggles with Enter (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Tab to the footer toggle (it should be in the tab order).
+        await page.locator('#footer-toggle').focus();
+        await expect(page.locator('#footer-toggle')).toBeFocused();
+
+        // Press Enter to toggle open.
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Press Enter again to toggle closed.
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    test(`closing the dock resets the footer to minimized (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Open the footer.
+        await page.locator('#footer-toggle').click();
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Close the dock.
+        await closeMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+        // Reopen the dock — footer should be minimized again.
+        await openMenu(page);
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    // Issue #159, #161: at least 3 .result rows must be fully visible between
+    // #categories bottom and .dock-footer top when minimized.
+    // Each result top >= categories bottom and bottom <= footer-toggle top.
+    // The last visible row must leave at least 4 px above the handle.
+    test(`minimized: 3 results fully visible between categories and handle (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        const resultPositions = await page.evaluate(() => {
+          const categoriesBottom = document.querySelector('#categories').getBoundingClientRect().bottom;
+          const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
+          const toggleTop = document.querySelector('#footer-toggle').getBoundingClientRect().top;
+          const results = document.querySelectorAll('.result');
+          const fullyVisible = [];
+          for (const row of results) {
+            const rect = row.getBoundingClientRect();
+            if (rect.top >= categoriesBottom && rect.bottom <= toggleTop) {
+              fullyVisible.push({top: rect.top, bottom: rect.bottom});
+            }
+          }
+          const lastVisibleBottom = fullyVisible.length > 0
+            ? fullyVisible[fullyVisible.length - 1].bottom
+            : 0;
+          const spareAboveHandle = toggleTop - lastVisibleBottom;
+          return {categoriesBottom, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
+        });
+        expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
+        expect(resultPositions.spareAboveHandle, 'at least 4 px spare above handle').toBeGreaterThanOrEqual(4);
+      });
+    });
+
+    // Issue #161: nothing visible below the handle except safe-area padding.
+    test(`minimized: nothing visible below the handle except padding (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        const handleBottom = await page.evaluate((vh) => {
+          const toggle = document.querySelector('#footer-toggle');
+          const rect = toggle.getBoundingClientRect();
+          const paddingBottom = parseFloat(getComputedStyle(document.querySelector('.dock-footer')).paddingBottom);
+          return {
+            handleBottom: rect.bottom,
+            viewportHeight: vh,
+            gap: vh - rect.bottom,
+            paddingBottom
+          };
+        }, viewport.height);
+        // The handle's bottom should be within (safe-area padding + 2 px) of the visible bottom.
+        const maxGap = handleBottom.paddingBottom + 2;
+        expect(handleBottom.gap, 'gap below handle within safe-area padding + 2px')
+          .toBeLessThanOrEqual(maxGap);
+      });
+    });
+
+    // Issue #159, #161: when the footer is expanded, all footer items must be within
+    // the viewport with no scrolling (scrollHeight <= clientHeight + 1).
+    test(`expanded footer fits without scrolling (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await page.locator('#footer-toggle').click();
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        const footerFit = await page.evaluate((vh) => {
+          const footer = document.querySelector('.dock-footer');
+          const satellite = document.querySelector('#satellite-toggle');
+          const transport = document.querySelector('#transport-toggle');
+          const download = document.querySelector('#download');
+          const attribution = document.querySelector('#map-attribution');
+          return {
+            scrollHeight: footer.scrollHeight,
+            clientHeight: footer.clientHeight,
+            needsScroll: footer.scrollHeight > footer.clientHeight + 1,
+            satelliteBottom: satellite.getBoundingClientRect().bottom,
+            transportBottom: transport.getBoundingClientRect().bottom,
+            downloadBottom: download.getBoundingClientRect().bottom,
+            attributionBottom: attribution.getBoundingClientRect().bottom,
+            viewportBottom: vh,
+            allWithinViewport:
+              satellite.getBoundingClientRect().bottom <= vh &&
+              transport.getBoundingClientRect().bottom <= vh &&
+              download.getBoundingClientRect().bottom <= vh &&
+              attribution.getBoundingClientRect().bottom <= vh,
+          };
+        }, viewport.height);
+        expect(footerFit.needsScroll, 'footer should not need scrolling').toBe(false);
+        expect(footerFit.allWithinViewport, 'all footer items within viewport').toBe(true);
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Footer toggle must be hidden on Desktop and Mobile (issue #155)
+// ---------------------------------------------------------------------------
+
+// The footer toggle handle is only meant for Flip (where the footer starts
+// minimized). On Desktop and Mobile it must not render at all, so the footer
+// content (Satellite, Transport, Download) appears directly with the standard
+// 16 px top padding — the same gap that origin/feature/92-left-dock has.
+
+test.describe('footer toggle hidden on non-Flip devices', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  for (const {name, viewport} of [
+    {name: 'desktop', viewport: {width: 1280, height: 800}},
+    {name: 'mobile', viewport: {width: 412, height: 840}}
+  ]) {
+    test(`footer toggle is hidden and footer padding is 16px on ${name}`, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // #footer-toggle must not be visible on Desktop or Mobile.
+        await expect(page.locator('#footer-toggle')).toBeHidden();
+
+        // The footer's top padding must be the baseline 16 px (from .dock-footer CSS).
+        // Measure it with getComputedStyle to assert the exact value.
+        const footerTopPadding = await page.evaluate(() => {
+          const footer = document.querySelector('.dock-footer');
+          return parseInt(getComputedStyle(footer).paddingTop, 10);
+        });
+        expect(footerTopPadding).toBe(16);
+
+        // The Satellite button should be visible without needing to expand a footer.
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Flip dock: keyboard awareness, Escape, and focus (issue #146)
+// ---------------------------------------------------------------------------
+
+test.describe('Flip dock keyboard awareness', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const PHONE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+
+  const manyPlaces = manyPlacesFixture('kb');
+
+  // On both phone and Flip, opening the dock, focusing search, and simulating
+  // a keyboard should keep the last result visible above the keyboard.
+  // On Flip, .results scrolls independently inside dock-content (the footer is
+  // pinned and minimizable). On phone, .results also scrolls independently.
+  for (const {name, viewport} of [
+    {name: 'phone', viewport: PHONE_VIEWPORT},
+    {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
+  ]) {
+    test(`last result stays above keyboard on ${name}`, {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect(page.locator('.result')).toHaveCount(8);
+
+        // Focus the search field to trigger the keyboard.
+        await page.locator('#search').focus();
+        // Simulate the keyboard appearing (half the viewport height).
+        const keyboardHeight = Math.floor(viewport.height / 2);
+        await simulateKeyboard(page, keyboardHeight);
+
+        // Scroll to the bottom so the last result is at the end.
+        // On both phone and Flip, .results scrolls independently inside dock-content.
+        await page.evaluate(() => {
+          const results = document.getElementById('results');
+          results.scrollTop = results.scrollHeight;
+        });
+
+        // The last .result's bottom must be at or above the visible viewport bottom.
+        const lastResultVisible = await page.evaluate(({visibleHeight, visibleTop}) => {
+          const results = document.querySelectorAll('.result');
+          const lastResult = results[results.length - 1];
+          if (!lastResult) return false;
+          const rect = lastResult.getBoundingClientRect();
+          const viewportBottom = visibleTop + visibleHeight;
+          return rect.bottom <= viewportBottom + 1; // 1 px tolerance
+        }, {visibleHeight: viewport.height - keyboardHeight, visibleTop: 0});
+        expect(lastResultVisible).toBe(true);
+      });
+    });
+  }
+});
+
+test.describe('Escape closes dock and restores focus', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const PHONE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+
+  for (const {name, viewport} of [
+    {name: 'phone', viewport: PHONE_VIEWPORT},
+    {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
+  ]) {
+    test(`Escape with dock open gives data-view closed and focus on menu on ${name}`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // Press Escape to close the dock.
+        await page.keyboard.press('Escape');
+
+        // Dock should be closed and focus returned to the menu button.
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+        await expect(page.locator('#menu-toggle')).toBeFocused();
+      });
+    });
+  }
+});
+
 // Layer toggle while following: following should stop on the camera move.
 test.describe('GPS follow — layer toggle stops following', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
@@ -2226,6 +2832,8 @@ test.describe('GPS follow — layer toggle stops following', () => {
 
       // Open the menu to access the satellite toggle, then toggle it.
       await openMenu(page);
+      // On Flip, the footer starts minimized — expand it to reach the satellite toggle.
+      if (name === 'flip') await page.locator('#footer-toggle').click();
       await page.locator('#satellite-toggle').click();
       await settled(page);
 
@@ -2297,5 +2905,171 @@ test.describe('GPS follow — button style', () => {
     });
   }
 
+});
+
+// Left dock: vertical order, nearest-first list, category + query filtering
+test('left dock shows elements in vertical order: search, categories, results, layers, download', async ({
+  page
+}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+  await ready(page);
+  await openMenu(page);
+  await expect(page.locator('.result')).toHaveCount(3);
+
+  const searchBar = await page.locator('.search-bar').boundingBox();
+  const categories = await page.locator('#categories').boundingBox();
+  const results = await page.locator('#results').boundingBox();
+  const layerGrid = await page.locator('.layer-grid').boundingBox();
+  const download = await page.locator('#download').boundingBox();
+
+  // Assert vertical order by top Y coordinates (categories and results are adjacent, so >= is correct)
+  expect(categories.y).toBeGreaterThan(searchBar.y);
+  expect(results.y).toBeGreaterThanOrEqual(categories.y + categories.height);
+  expect(layerGrid.y).toBeGreaterThan(results.y);
+  expect(download.y).toBeGreaterThan(layerGrid.y);
+});
+
+test('panning the map changes the first result to the place nearest the new centre', async ({
+  page
+}) => {
+  // Create places at known positions so nearest ordering is deterministic.
+  const places = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.25, 42.44]},
+        properties: {id: 'near-west', name: 'West Place', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.28, 42.44]},
+        properties: {id: 'near-east', name: 'East Place', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.30, 42.44]},
+        properties: {id: 'far-east', name: 'Far East', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      }
+    ]
+  };
+  await page.route('**/data/places.geojson', route => route.fulfill({json: places}));
+  await ready(page);
+  await openMenu(page);
+
+  // Default centre is near [19.26, 42.437]; West Place (19.25) is nearest.
+  await expect(page.locator('.result').first()).toContainText('West Place');
+
+  // Pan the map east so East Place becomes nearest.
+  await page.evaluate(() => {
+    window.kompasDebug.map.jumpTo({center: [19.28, 42.44], zoom: window.kompasDebug.map.getZoom()});
+  });
+  await settled(page);
+
+  // After moveend, the list re-sorts; East Place (19.28) is now nearest.
+  await expect(page.locator('.result').first()).toContainText('East Place');
+});
+
+test('category filter then query filter narrows results to both', async ({page}) => {
+  const places = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.25, 42.44]},
+        properties: {id: 'cafe-a', name: 'Cafe Alpha', category: 'food', kind: 'cafe', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.26, 42.44]},
+        properties: {id: 'cafe-b', name: 'Cafe Beta', category: 'food', kind: 'cafe', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.27, 42.44]},
+        properties: {id: 'shop-a', name: 'Alpha Shop', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.28, 42.44]},
+        properties: {id: 'sight-a', name: 'Alpha Sight', category: 'sights', kind: 'museum', visibilityLevel: 4}
+      }
+    ]
+  };
+  await page.route('**/data/places.geojson', route => route.fulfill({json: places}));
+  await ready(page);
+  await openMenu(page);
+
+  // No filter: all 4 places shown
+  await expect(page.locator('.result')).toHaveCount(4);
+
+  // Press food category: only 2 cafes
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await expect(page.locator('.result')).toHaveCount(2);
+  // Waiting assertions avoid racing the re-render after category click
+  await expect(page.locator('.result', {hasText: 'Cafe Alpha'})).toHaveCount(1);
+  await expect(page.locator('.result', {hasText: 'Cafe Beta'})).toHaveCount(1);
+
+  // Type query within the category: only Cafe Alpha matches 'alpha' + food
+  await page.locator('#search').fill('alpha');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await expect(page.locator('.result').first()).toContainText('Cafe Alpha');
+  // Alpha Shop (shops) and Alpha Sight (sights) are excluded by category
+});
+
+// ---------------------------------------------------------------------------
+// Menu button does not stick to hover state on touch screens (issue #155)
+// ---------------------------------------------------------------------------
+
+test.describe('menu button hover state on touch screens', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  // On touch screens, :hover sticks to the last tapped element, so tapping the
+  // menu button to close the dock would leave it looking pressed. The CSS fix
+  // wraps .icon-button:hover in @media (hover: hover) so the hover background
+  // never applies on touch devices. This test verifies that behavior.
+  test('menu button does not show hover background on touch screens',
+    {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'only meaningful on touch-emulating projects');
+
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+
+    // Confirm the browser reports no hover capability (touch emulation).
+    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
+    expect(canHover, 'phone project should not support hover').toBe(false);
+
+    // Measure the computed background before any interaction.
+    const backgroundBefore = await page.locator('#menu-toggle').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
+
+    // Tap the menu button to open the dock, then tap again to close it.
+    // Do not move the pointer away — on touch screens :hover would stick.
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+    // Measure the computed background after closing, without moving the pointer.
+    const backgroundAfter = await page.locator('#menu-toggle').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
+
+    // The background must be unchanged — no hover feedback stuck on the button.
+    expect(backgroundAfter).toEqual(backgroundBefore);
+  });
+
+  // On desktop, the hover media query matches and :hover feedback is available.
+  test('hover media query matches on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'only meaningful on non-touch projects');
+
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+
+    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
+    expect(canHover, 'desktop project should support hover').toBe(true);
+  });
 });
 

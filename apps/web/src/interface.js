@@ -78,6 +78,8 @@ export class MapInterface {
     this.cardHandle = document.getElementById('card-handle');
     this.clearButton = document.getElementById('clear-search');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
+    this.footer = document.querySelector('.dock-footer');
+    this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     this.menu.addEventListener('click', () => {
@@ -90,6 +92,7 @@ export class MapInterface {
       this.clearQuery();
       this.search.focus();
     });
+    this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
@@ -180,7 +183,24 @@ export class MapInterface {
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
     this.syncSearchExpanded();
+    // Closing the dock resets the Flip footer to minimized.
+    if (view !== 'dock') this.minimizeFooter();
     this.onChange?.();
+  }
+
+  // Toggle the Flip footer between minimized (handle only) and expanded (all options).
+  toggleFooter() {
+    const isExpanded = this.footerToggle.getAttribute('aria-expanded') === 'true';
+    this.footerToggle.setAttribute('aria-expanded', String(!isExpanded));
+    this.footerToggle.setAttribute('aria-label', isExpanded ? 'Show map options' : 'Hide map options');
+    this.footer.dataset.footerExpanded = String(!isExpanded);
+  }
+
+  // Reset the Flip footer to minimized (handle only, content hidden).
+  minimizeFooter() {
+    this.footerToggle.setAttribute('aria-expanded', 'false');
+    this.footerToggle.setAttribute('aria-label', 'Show map options');
+    delete this.footer.dataset.footerExpanded;
   }
 
   syncResultsVisibility() {
@@ -421,6 +441,9 @@ export class MapInterface {
     const style = document.documentElement.style;
     style.setProperty('--visible-height', `${height}px`);
     style.setProperty('--visible-top', `${top}px`);
+    // CSS 100dvh and visualViewport can disagree on screens with camera cut-outs, which left an empty band under the
+    // dock, so the keyboard inset comes from one source: the layout viewport less the visible part.
+    style.setProperty('--keyboard-inset', `${Math.max(0, innerHeight - height - top)}px`);
     style.setProperty('--search-top', `${bounds.top}px`);
     style.setProperty('--search-max-height', `${bounds.maxHeight}px`);
     // The keyboard would cover these options and the end of the results list above them.
