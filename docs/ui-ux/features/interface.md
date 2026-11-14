@@ -85,6 +85,13 @@ controls.
 On phones, activating search instead of the burger follows the compact-search behavior below. The shared header stays in
 place in both modes; using search must not implicitly open the full dock.
 
+### Mobile search bar
+
+On phones (viewport ≤ 720 px), the search bar is 44 px tall — smaller than the 54 px base and the 60 px desktop bar. It
+spans the full screen width, with no left or right gap. The icon and font are smaller, and touch targets remain at least
+40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock and the
+search bubble.
+
 ## UI-03 Results scroll; options stay at the bottom
 
 The full dock has three areas: the shared header, a flexible scrolling area for categories/results, and a bottom area

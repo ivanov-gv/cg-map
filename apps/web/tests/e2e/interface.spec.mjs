@@ -598,6 +598,9 @@ test(
   {tag: '@phone'},
   async ({page, isMobile}) => {
     test.skip(!isMobile, 'phone layout');
+    // Use a narrow mobile viewport (360 × 740) so all five category chips overflow the strip.
+    // 360 px is still a Mobile viewport (wider than 400 or taller than 400, so not Flip).
+    await page.setViewportSize({width: 360, height: 740});
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await page.locator('#search').click();
@@ -608,6 +611,7 @@ test(
       const stripBox = await strip.boundingBox();
       return box.x >= stripBox.x - 1 && box.x + box.width <= stripBox.x + stripBox.width + 1;
     };
+    // 'Essentials' is the rightmost chip; at 360 px it starts outside the visible strip.
     expect(await chipInStrip('Essentials')).toBe(false);
     // A plain DOM click: Playwright's own click would scroll the chip into view and hide a failure.
     await chip('Essentials').evaluate(element => element.click());
@@ -1429,6 +1433,62 @@ test.describe('Desktop search bar', () => {
       return clearButtons.length === 1;
     });
     expect(nativeCancelHidden).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile search bar (issue #102)
+// ---------------------------------------------------------------------------
+
+test.describe('Mobile search bar', () => {
+  test.use({viewport: {width: 412, height: 840}});
+
+  test('search bar is smaller than desktop on mobile', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const bar = await page.locator('.search-bar').boundingBox();
+    // Desktop bar is 60px; mobile bar must be smaller.
+    expect(bar.height).toBeLessThan(54);
+    expect(bar.height).toBe(44);
+  });
+
+  test('search bar has left and right gutters on mobile', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const bar = await page.locator('.search-bar').boundingBox();
+    const viewport = page.viewportSize();
+    const leftGap = bar.x;
+    const rightGap = viewport.width - (bar.x + bar.width);
+    // The bar uses --bar-inset (12 px on mobile) on both sides.
+    expect(leftGap).toBeGreaterThanOrEqual(10);
+    expect(leftGap).toBeLessThanOrEqual(14);
+    expect(rightGap).toBeGreaterThanOrEqual(10);
+    expect(rightGap).toBeLessThanOrEqual(14);
+  });
+
+  test('categories are hidden on the main screen on mobile', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await closeMenu(page);
+    // Categories are not visible on the main screen.
+    await expect(page.locator('#categories')).toBeHidden();
+  });
+
+  test('categories are visible inside the open dock on mobile', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await openMenu(page);
+    // Categories become visible when the dock opens.
+    await expect(page.locator('#categories')).toBeVisible();
+    await expect(page.locator('#categories button')).toHaveCount(5);
+  });
+
+  test('touch targets are at least 40 px on mobile', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const menuButton = await page.locator('#menu-toggle').boundingBox();
+    expect(menuButton.width).toBeGreaterThanOrEqual(40);
+    expect(menuButton.height).toBeGreaterThanOrEqual(40);
   });
 });
 
