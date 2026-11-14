@@ -73,6 +73,13 @@ menu (hamburger) button on the main screen — the bar width is at most the menu
 and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as on mobile),
 and the search field becomes usable. Typing a query shows the clear button.
 
+**Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
+makes it cover the entire visible viewport — from the top to the bottom, full width, with no map visible around it. The
+search bar stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The
+dock respects the keyboard-aware visible viewport variables (--visible-top, --visible-height). Desktop keeps the side
+dock unchanged (narrower than the viewport). The place card and route panel keep their current behavior when the dock is
+closed.
+
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a

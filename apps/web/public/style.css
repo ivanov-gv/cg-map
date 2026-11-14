@@ -307,6 +307,16 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
   .card-handle:focus-visible { outline-offset: -3px; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
+
+  /* On Mobile, the open dock fills the entire viewport — no map is visible beside it.
+   * The sidebar becomes full width and full layout height, covering everything under it.
+   * The dock-content inside uses --visible-top and --visible-height for keyboard awareness. */
+  body[data-view=dock] .sidebar {
+    width: 100vw;
+    height: 100dvh;
+    top: 0;
+    border-right: none;
+  }
 }
 /* Flip: only the menu button on the main screen; search and categories hide until the dock opens.
  * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
@@ -317,5 +327,37 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:not([data-view=dock]) .search-bar { right: auto; }
   body:not([data-view=dock]) .search-bar .search-divider,
   body:not([data-view=dock]) .search-bar .search { display: none; }
+
+  /* On a 340 px screen there is no room for a pinned footer: the footer
+   * (Satellite, Transport, Download, attribution) would take most of the
+   * viewport, leaving only one result row visible.  Make the entire dock
+   * scroll as a single column so results get the screen first and the
+   * footer is reached by scrolling down.  Mobile and Desktop keep the
+   * pinned footer. */
+  body[data-view=dock] .dock-content {
+    bottom: 0;
+    overflow-y: auto;
+  }
+  body[data-view=dock] .dock-main {
+    overflow: visible;
+    flex: none;
+  }
+  body[data-view=dock] .browse-panel {
+    overflow: visible;
+    flex: none;
+  }
+  body[data-view=dock] .results {
+    overflow-y: visible;
+    flex: none;
+  }
+  /* Smaller result rows on Flip so at least three fit in the visible area. */
+  body[data-view=dock] .result {
+    min-height: 56px;
+    padding: 8px var(--bar-inset);
+  }
+  body[data-view=dock] .dock-footer {
+    overflow: visible;
+    padding-bottom: 4px;
+  }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }
