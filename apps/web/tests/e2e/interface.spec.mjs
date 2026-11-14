@@ -52,14 +52,13 @@ test('dock expands around a stationary header and keeps layer/download options a
   await expect(page.locator('#download-title')).toHaveText('Download for offline use');
   await expect(page.getByRole('heading', {name: /Map layers|Offline map/})).toHaveCount(0);
   await expect(page.locator('#toggle-results, #reset')).toHaveCount(0);
+  await expect(page.locator('#categories').getByRole('button', {name: 'Explore all'})).toHaveCount(0);
   const footer = await page.locator('.dock-footer').boundingBox();
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
   await expect(page.locator('.result')).toHaveCount(0);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
-  await expect(
-    page.locator('#categories').getByRole('button', {name: 'Explore all', exact: true})
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
   await expect(page.locator('.result')).toHaveCount(3);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.screenshot({path: testInfo.outputPath('dock.png')});
@@ -600,8 +599,8 @@ test(
     await chip('Essentials').evaluate(element => element.click());
     await expect.poll(() => chipInStrip('Essentials')).toBe(true);
     await chip('Essentials').evaluate(element => element.click());
-    await expect(chip('Explore all')).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => chipInStrip('Explore all')).toBe(true);
+    // Toggling off clears the category filter — no button is pressed.
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
 
     const scrolled = await strip.evaluate(element => {
       const start = element.scrollLeft;
@@ -609,6 +608,32 @@ test(
       return element.scrollLeft - start;
     });
     expect(scrolled).toBeGreaterThan(0);
+  }
+);
+
+test(
+  'category toggle cycle selects, switches, and clears the filter',
+  async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await page.locator('#search').click();
+
+    // Press 'Eat & drink': it is the only pressed button, and results are filtered to that category.
+    await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
+    await expect(page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true})).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.result')).toHaveCount(3);
+
+    // Press 'Shops': only Shops is pressed, and results switch to that category.
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
+    await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.result')).toHaveCount(3);
+
+    // Press 'Shops' again: none is pressed, and all results are shown.
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
+    await expect(page.locator('.result')).toHaveCount(6);
   }
 );
 

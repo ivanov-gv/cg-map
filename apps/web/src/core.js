@@ -1,5 +1,4 @@
 export const categories = {
-  all: 'Explore all',
   food: 'Eat & drink',
   sights: 'See & do',
   shops: 'Shops',
@@ -56,9 +55,10 @@ export const normalizeSearchText = text =>
     .replace(/[а-яјљњћџ]/g, character => cyrillicTransliteration[character] ?? character)
     .trim();
 // Search combines category eligibility with the listing's searchable text.
+// A null category matches every listing; a non-null value filters to that category.
 export function matchesPlaceSearch(feature, query, category) {
   const properties = feature.properties;
-  const matchesCategory = category === 'all' || properties.category === category;
+  const matchesCategory = category === null || properties.category === category;
   const searchableText = [
     properties.name,
     properties['name:en'],
