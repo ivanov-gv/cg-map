@@ -907,6 +907,9 @@ export async function scaleBarCulprits(page) {
         // Skip the scale bar itself and its descendants
         if (element.classList.contains('maplibregl-ctrl-scale')) continue;
         if (scaleBar.contains(element)) continue;
+        // Skip the OSM credit line — it is intentionally below the scale bar
+        if (element.classList.contains('osm-credit-line')) continue;
+        if (element.closest('.osm-credit-line')) continue;
         // Skip ancestors of the scale bar — their rects naturally contain it
         if (element.contains(scaleBar)) continue;
         // Skip the map canvas
@@ -961,6 +964,73 @@ for (const {name, viewport} of deviceCases) {
     }
 
     await atViewport(page, viewport, checkMainScreen);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// OSM credit line below the scale bar (issue #144)
+// ---------------------------------------------------------------------------
+
+// Verifies the on-map "OpenStreetMap" credit sits below the scale bar on
+// Desktop, Mobile, and Flip — visible, positioned, sized, and clickable.
+for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
+  ...deviceCase,
+  isMobile: deviceCase.name !== 'desktop'
+}))) {
+  const phoneTag = isMobile ? {tag: '@phone'} : {};
+
+  test(`OSM credit line is visible and positioned below scale bar on ${name}`, {...phoneTag}, async ({page}) => {
+    await atViewport(page, viewport, async () => {
+      await ready(page);
+      await closeMenu(page);
+
+      // Credit is visible
+      const credit = page.locator('.osm-credit-line');
+      await expect(credit).toBeVisible();
+
+      // Link href is the OSM copyright page
+      const link = credit.locator('a');
+      await expect(link).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
+
+      // Position: credit top is within 2 px of scale bar's bottom
+      // Left edge within 2 px of scale bar's left
+      // Height is about half the scale bar's (within 2 px)
+      const measurements = await page.evaluate(() => {
+        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!scaleBar || !creditEl) return null;
+        const scaleRect = scaleBar.getBoundingClientRect();
+        const creditRect = creditEl.getBoundingClientRect();
+        return {
+          scaleBarHeight: scaleRect.height,
+          creditHeight: creditRect.height,
+          topGap: creditRect.top - scaleRect.bottom,
+          leftDiff: Math.abs(creditRect.left - scaleRect.left)
+        };
+      });
+      expect(measurements).not.toBeNull();
+      expect(measurements.topGap).toBeGreaterThanOrEqual(-2);
+      expect(measurements.topGap).toBeLessThanOrEqual(2);
+      expect(measurements.leftDiff).toBeLessThanOrEqual(2);
+      expect(measurements.creditHeight).toBeGreaterThanOrEqual(
+        measurements.scaleBarHeight / 2 - 2
+      );
+      expect(measurements.creditHeight).toBeLessThanOrEqual(
+        measurements.scaleBarHeight / 2 + 2
+      );
+
+      // elementFromPoint at the credit's centre returns the link (not covered)
+      const elementAtCenter = await page.evaluate(() => {
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!creditEl) return null;
+        const rect = creditEl.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const el = document.elementFromPoint(centerX, centerY);
+        return el?.tagName === 'A' ? el.getAttribute('href') : null;
+      });
+      expect(elementAtCenter).toBe('https://www.openstreetmap.org/copyright');
+    });
   });
 }
 

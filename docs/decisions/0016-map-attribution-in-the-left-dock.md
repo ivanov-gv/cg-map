@@ -22,6 +22,12 @@ Move the attribution from the floating MapLibre control to the left dock footer 
 (no `innerHTML` with untrusted input). It links to the OSM copyright page and, when satellite is visible, to the eMapa
 source.
 
+In addition, a small on-map credit line appears below the scale bar in the bottom-left corner: an "OpenStreetMap" link
+to the OSM copyright page. It is implemented as a MapLibre `IControl` added in `apps/web/src/app.js` (not in
+`packages/map-core`). The credit matches the scale bar's background, font, and colour, with half the scale bar's height.
+This satisfies the wiki spec's requirement for an on-map OSM credit while keeping the full attribution (including
+satellite credits) in the dock footer.
+
 The floating control is disabled by passing `attributionControl: false` in `apps/web/src/app.js` to `createMap`. The
 `packages/map-core` package is not modified; the option override is sufficient because `createMap` spreads `options`
 last.
@@ -34,18 +40,18 @@ strings exist in the module; if a source's attribution changes in map-core, the 
 ## Alternatives considered
 
 - Keep the compact MapLibre control. Rejected: the wiki spec removes it.
-- Place a static credit beside the scale bar. Rejected for now: it is still a floating sign on the map.
+- Place a static credit beside the scale bar. Initially rejected as a floating sign, but later accepted (PR #124) as a
+  small on-map "OpenStreetMap" credit below the scale bar, matching the wiki spec.
 - Remove attribution entirely. Rejected: it would violate the licence.
 
 ## Consequences
 
-- The map surface no longer shows a floating attribution control on any viewport (Desktop, Mobile, or Flip).
-- Attribution remains one tap away: the user opens the dock menu to see it. The map surface no longer names its data
-  source. A user sees the credit only after opening the menu, which is weaker than the on-map attribution the OSMF
-  guideline prefers. This was accepted because the wiki spec, the product's source of truth, removes the floating sign.
-  If the owner or the OSMF guideline requires on-map attribution, the fallback is MapLibre's compact control or a small
-  static credit by the scale bar.
+- The map surface shows a small "OpenStreetMap" credit link below the scale bar on every viewport (Desktop, Mobile, and
+  Flip), matching the wiki spec.
+- Full attribution (including satellite credits) remains in the left dock footer. The user opens the dock menu to see
+  it.
+- The on-map credit improves compliance with the OSMF guideline, which prefers visible on-map attribution.
 - The attribution updates when satellite is toggled on/off, showing both source credits when applicable.
 - The `packages/map-core` package remains unchanged; the change is isolated to `apps/web`.
-- If new map sources are added in the future, their attribution appears automatically; no change to the attribution
-  module is needed.
+- If new map sources are added in the future, their attribution appears automatically in the dock; no change to the
+  attribution module is needed.
