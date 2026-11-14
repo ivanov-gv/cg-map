@@ -39,27 +39,27 @@ export function visibleSourceAttributions(style) {
 // Accepts an optional documentObject so tests can pass a fake document;
 // defaults to the global document when omitted.
 export function attributionNodes(html, documentObject) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const parsedDocument = documentObject ?? document;
+  const parsedAttribution = new DOMParser().parseFromString(html, 'text/html');
+  const targetDocument = documentObject ?? document;
   const nodes = [];
 
-  for (const child of doc.body.childNodes) {
+  for (const child of parsedAttribution.body.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
-      nodes.push(parsedDocument.createTextNode(child.textContent));
+      nodes.push(targetDocument.createTextNode(child.textContent));
     } else if (child.tagName === 'A') {
       const href = child.getAttribute('href');
       if (href && href.startsWith('https://')) {
-        const anchor = parsedDocument.createElement('a');
+        const anchor = targetDocument.createElement('a');
         anchor.href = href;
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
         anchor.textContent = child.textContent;
         nodes.push(anchor);
       } else {
-        nodes.push(parsedDocument.createTextNode(child.textContent));
+        nodes.push(targetDocument.createTextNode(child.textContent));
       }
     } else {
-      nodes.push(parsedDocument.createTextNode(child.textContent));
+      nodes.push(targetDocument.createTextNode(child.textContent));
     }
   }
 

@@ -81,9 +81,11 @@ steps back and then closes it. Choosing a result in the phone dock switches to t
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
 starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes arrive,
-preserving the current zoom. Following stops on a second click or when the person moves the map (detected via MapLibre's
-`movestart` event with a user gesture). The button colour changes to green while following; `aria-pressed` and
-`data-following` reflect the state. If location fails while following, following stops and the failure message shows.
+preserving the current zoom. Following stops on a second click, any camera move the follower did not make (user drag,
+pinch, scroll, or an app-initiated move such as choosing a search result), or location failure. The follower tags its
+own camera moves with `isLocationFollowMove` so the `movestart` handler can distinguish them. The button fills with the
+app's pressed-toggle colour (green background, white icon) while following; `aria-pressed` and `data-following` reflect
+the state. The accessible name stays constant — "Follow your location" when a fix is usable, "Locate me" otherwise.
 There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear after endpoint
 selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states, and offline
 safety remain part of the existing features. Map attribution lives in the left dock footer instead of a floating control
@@ -131,7 +133,7 @@ transient state with the behavior that changes it:
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
 | [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
-| [core.js](src/core.js)                       | Pure utilities: search, distance, scale, position helpers, and isUserCameraEvent                             |
+| [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
 Controllers read the map and directory through getters because those inputs finish loading independently after the

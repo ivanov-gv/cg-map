@@ -181,3 +181,49 @@ export async function atViewport(page, viewport, check) {
     await page.setViewportSize(previousViewport);
   }
 }
+
+// Wraps navigator.geolocation.watchPosition and getCurrentPosition so success callbacks are queued,
+// not called, until the page calls window.releaseHeldFixes(). After release, callbacks pass straight
+// through. Error callbacks pass through immediately.
+// Why: it keeps the real browser geolocation but controls when the first fix arrives, so the test
+// can click the follow button before any fix is delivered.
+export async function holdGeolocationFixes(page) {
+  await page.addInitScript(() => {
+    if (window.__geolocationFixesHeld) return; // Already installed
+    window.__geolocationFixesHeld = true;
+    window.__geolocationFixesReleased = false;
+    const successCallbacks = [];
+
+    // Shared helper: queue a success callback or deliver it immediately after release.
+    function holdSuccess(onSuccess, result) {
+      if (window.__geolocationFixesReleased) {
+        onSuccess(result);
+      } else {
+        successCallbacks.push(() => onSuccess(result));
+      }
+    }
+
+    const origWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+    navigator.geolocation.watchPosition = function (onSuccess, onError, options) {
+      return origWatchPosition(
+        result => holdSuccess(onSuccess, result),
+        onError,
+        options
+      );
+    };
+
+    const origGetCurrentPosition = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+    navigator.geolocation.getCurrentPosition = function (onSuccess, onError, options) {
+      return origGetCurrentPosition(
+        result => holdSuccess(onSuccess, result),
+        onError,
+        options
+      );
+    };
+
+    window.releaseHeldFixes = () => {
+      window.__geolocationFixesReleased = true;
+      for (const callback of successCallbacks) callback();
+    };
+  });
+}
