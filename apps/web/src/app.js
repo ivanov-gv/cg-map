@@ -124,8 +124,6 @@ const locationControls = new LocationControls({
     mapState.shouldIgnoreNextMove = true;
   },
   closeSelection: () => placeSelection.close(false),
-  focusCoordinates: (coordinates, zoom, durationMilliseconds) =>
-    placeSelection.focusCoordinates(coordinates, zoom, durationMilliseconds),
   notify,
   prefersReducedMotion
 });
@@ -445,6 +443,8 @@ function registerPublicMapEvents() {
     }
   });
   mapState.map.on('movestart', event => {
+    // noteCameraMoveStart must run before shouldIgnoreNextMove so the follower sees every movestart.
+    locationControls.noteCameraMoveStart(event);
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
       return;
@@ -454,6 +454,9 @@ function registerPublicMapEvents() {
       locationControls.refresh();
     }
   });
+  // MapLibre resize() fires synchronously: movestart, move, resize, moveend.
+  // The resize event cancels the pending foreign move so following is not stopped by a viewport change.
+  mapState.map.on('resize', () => locationControls.noteMapResize());
   // The list keeps its order while a chosen place is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
     if (!placeSelection.selectedPlace) renderSearchResults();
@@ -616,7 +619,7 @@ function registerDeviceControls() {
     elementById('error').hidden = true;
     mapState.interface.restoreFocus(elementById('search'));
   });
-  elementById('position-action').addEventListener('click', () => locationControls.requestPosition());
+  elementById('position-action').addEventListener('click', () => locationControls.toggleFollowing());
   for (const eventType of ['online', 'offline']) {
     addEventListener(eventType, () => renderConnectionBadge(Boolean(startupState.archive?.local)));
   }

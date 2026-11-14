@@ -4,6 +4,7 @@ import {elementById} from './dom.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
+  hasUsablePosition,
   positionActionLabel,
   positionIndicator,
   positionMessage,
@@ -11,16 +12,20 @@ import {
 } from './status-messages.js';
 
 const firstFixCameraDurationMilliseconds = 600;
-const requestedFixCameraDurationMilliseconds = 500;
+const followCameraDurationMilliseconds = 400;
 
-// Owns the in-memory fix, explicit location requests and first-fix recentering. Map exploration belongs
-// to the app; its getter prevents a later fix from overriding a camera the person already moved.
+// Owns the in-memory fix, explicit location requests, first-fix recentering, and location following.
+// Map exploration belongs to the app; its getter prevents a later fix from overriding a camera the person already moved.
 export class LocationControls {
   #context;
   #snapshot = {state: 'idle', fix: null, age: null};
   #tracker = null;
   #isLocationRequested = false;
   #hasCenteredOnFix = false;
+  #isFollowing = false;
+  #lastFollowedCoordinates = null;
+  // Tracks a pending foreign move so a synchronous resize can cancel it.
+  #hasPendingForeignMove = false;
 
   constructor(context) {
     this.#context = context;
@@ -33,6 +38,9 @@ export class LocationControls {
   }
   get state() {
     return this.#snapshot.state;
+  }
+  get isFollowing() {
+    return this.#isFollowing;
   }
 
   // Location starts independently of directory data and map loading, and cannot block either.
@@ -53,8 +61,13 @@ export class LocationControls {
   render(snapshot) {
     this.#snapshot = snapshot;
     const {state, fix} = snapshot;
+    // Stop following when the state makes it impossible to continue or the permission prompt was dismissed.
+    if (this.#isFollowing && this.#shouldStopFollowingFor(snapshot)) {
+      this.#stopFollowingWithMessage(snapshot);
+    }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
     elementById('position-badge').dataset.state = state;
+    this.#renderFollowing();
     const action = positionActionLabel(state);
     elementById('position-action').setAttribute(
       'aria-label',
@@ -72,9 +85,18 @@ export class LocationControls {
     }
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
+    // While following with a usable fix, keep the camera on every new fix.
+    // Always return after this branch so the centre-once and requested branches never run during following.
+    if (this.#isFollowing && hasUsablePosition(state) && fix) {
+      this.#isLocationRequested = false;
+      if (this.#isNewFollowFix(fix)) {
+        this.#moveCameraToFix(fix);
+      }
+      return;
+    }
     // Center once on the first usable fix, never after the person has started exploring.
     if (
-      ['live', 'approximate'].includes(state) &&
+      hasUsablePosition(state) &&
       ((!this.#hasCenteredOnFix && !this.#context.hasExploredMap()) || this.#isLocationRequested)
     ) {
       const offset = this.#isLocationRequested ? this.#interface.mapOffset() : [0, 0];
@@ -89,18 +111,112 @@ export class LocationControls {
       });
     }
   }
-  // Only an explicit request may retry location or show recovery advice; a usable fix recenters immediately.
+
+  // Updates the data-following attribute on the badge and aria-pressed on the button.
+  #renderFollowing() {
+    elementById('position-badge').dataset.following = String(this.#isFollowing);
+    elementById('position-action').setAttribute('aria-pressed', String(this.#isFollowing));
+  }
+
+  // Returns true when the snapshot indicates following should stop: terminal failure or dismissed prompt.
+  #shouldStopFollowingFor(snapshot) {
+    return FAILED_POSITION_STATES.includes(snapshot.state) || snapshot.isPromptDismissed;
+  }
+
+  // Stops following and notifies the user with the position message.
+  #stopFollowingWithMessage(snapshot) {
+    this.#isFollowing = false;
+    this.#isLocationRequested = false;
+    this.#context.notify(positionMessage(snapshot));
+    this.#renderFollowing();
+  }
+
+  // Returns true when the fix is different from the last one the follower moved to.
+  #isNewFollowFix(fix) {
+    if (!this.#lastFollowedCoordinates) return true;
+    return (
+      fix.coordinates[0] !== this.#lastFollowedCoordinates[0] ||
+      fix.coordinates[1] !== this.#lastFollowedCoordinates[1]
+    );
+  }
+
+  // Moves the camera to keep the fix centered, preserving the current zoom and map offset.
+  // Tags the move so stopFollowingOnForeignMove can distinguish it from other camera moves.
+  #moveCameraToFix(fix, zoom) {
+    this.#lastFollowedCoordinates = [...fix.coordinates];
+    const offset = this.#interface.mapOffset();
+    const targetZoom = zoom ?? this.#map.getZoom();
+    this.#map.easeTo(
+      {
+        center: fix.coordinates,
+        zoom: targetZoom,
+        offset,
+        duration: this.#context.prefersReducedMotion ? 0 : followCameraDurationMilliseconds
+      },
+      {isLocationFollowMove: true}
+    );
+  }
+
+  toggleFollowing() {
+    if (this.#isFollowing) {
+      this.#stopFollowing();
+      return;
+    }
+    this.#startFollowing();
+  }
+
+  // Stops following and updates the UI.
+  #stopFollowing() {
+    this.#isFollowing = false;
+    this.#isLocationRequested = false;
+    this.#lastFollowedCoordinates = null;
+    this.#renderFollowing();
+  }
+
+  // Starts following without a second camera path.
+  // Sets hasCenteredOnFix so the one-time first-fix centring never runs after following starts.
+  #startFollowing() {
+    const {fix, state} = this.#snapshot;
+    this.#isFollowing = true;
+    this.#lastFollowedCoordinates = null;
+    this.#hasCenteredOnFix = true;
+    this.#renderFollowing();
+    if (fix && hasUsablePosition(state)) {
+      // With a usable fix: close the interface and selection, then move the camera.
+      this.#interface.close();
+      this.#context.closeSelection();
+      this.#moveCameraToFix(fix, Math.max(this.#map.getZoom(), DISCOVER_ZOOM));
+    } else {
+      // No usable fix yet — request a new position (closes interface and selection).
+      this.requestPosition();
+    }
+  }
+
+  // Called on 'movestart'. If following and the move is not tagged by the follower,
+  // remembers a pending foreign move and schedules a microtask to decide.
+  // A synchronous resize event (which follows movestart) can cancel the pending move via noteMapResize().
+  // The microtask is needed because the resize event comes after movestart in the same call stack.
+  noteCameraMoveStart(event) {
+    if (!this.#isFollowing || event.isLocationFollowMove) return;
+    // Tagged moves are safe; untagged moves might be a resize.
+    this.#hasPendingForeignMove = true;
+    queueMicrotask(() => {
+      if (this.#hasPendingForeignMove) {
+        this.#hasPendingForeignMove = false;
+        this.#stopFollowing();
+      }
+    });
+  }
+
+  // Called on 'resize'. Cancels a pending foreign move so following is not stopped by a resize.
+  noteMapResize() {
+    this.#hasPendingForeignMove = false;
+  }
+
+  // An explicit request retries location or shows recovery advice when positioning fails.
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
-    if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
-      this.#context.focusCoordinates(
-        this.#snapshot.fix.coordinates,
-        DISCOVER_ZOOM,
-        requestedFixCameraDurationMilliseconds
-      );
-      return;
-    }
     this.#isLocationRequested = true;
     if (['denied', 'outside', 'insecure', 'unsupported'].includes(this.#snapshot.state)) {
       this.render(this.#snapshot);

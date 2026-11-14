@@ -47,10 +47,10 @@ stable. A short interface still needs understandable symbols, accessible names, 
 
 ## UI-01 Opening view
 
-Show the map, one combined burger/search bar, an icon-only location button, zoom controls, a metric scale, and required
-attribution (placed in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)).
-Default geographic content remains governed by Discover; simplifying controls does not remove roads, buildings,
-addresses, terrain, or scale-appropriate places.
+Show the map, one combined burger/search bar, an icon-only location button, a metric scale, and required attribution
+(placed in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Default
+geographic content remains governed by Discover; simplifying controls does not remove roads, buildings, addresses,
+terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -158,9 +158,20 @@ distinguish acquisition, a usable fix, approximate/stale data, and unavailable p
 banner. The position marker and uncertainty remain truthful under
 [Discover D-06](../user-stories/discover.md#d-06-current-position-and-honest-uncertainty).
 
-With a usable fix, activating location recenters immediately; it does not first open a “Your location” explanation or
-details panel. Without a usable fix, request/retry positioning where possible, or give concise actionable recovery after
-the request fails. Never move to a fabricated position or call the fallback camera the user's location.
+The location button is a toggle. With a usable fix, clicking it starts following: the camera moves to the fix and stays
+locked to every new fix. The button fills with the app's pressed-toggle colour (green background, white icon), and
+`aria-pressed` reflects the state. The accessible name stays constant — "Follow your location" when a fix is usable,
+"Locate me" otherwise — so the label does not change with the toggle. Following stops on:
+
+- A second click on the button;
+- Any camera move the follower did not make (user drag, pinch, scroll, or an app-initiated move such as choosing a
+  search result, toggling a layer);
+- Location failure (denied, timeout, outside the map) or when the permission prompt is dismissed.
+
+Following does not stop on a map resize (viewport change).
+
+Without a usable fix, clicking the button requests or retries positioning, or shows concise actionable recovery. Never
+move to a fabricated position or call the fallback camera the user's location.
 
 Minimal wording does not remove required attribution, sourced facts in object details, permission handling, coverage
 limits, or action-specific failures. Keep those explanations attached to the relevant feature/action. Do not replace
@@ -175,7 +186,7 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 | UI-A02 | Toggle the dock at an unchanged viewport.                                                                                              | Header/control bounding boxes, shape, and text baseline remain unchanged; query, category, focus, and selection survive.                                                                                                                                                           |
 | UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                        | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                 |
 | UI-A04 | Inspect bottom options.                                                                                                                | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                   |
-| UI-A05 | Activate location with a fresh fix, then test unavailable positioning.                                                                 | A usable fix recenters directly; unavailable positioning follows the recovery path without inventing a location.                                                                                                                                                                   |
+| UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                 | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                           |
 | UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                        | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                       |
 | UI-A07 | Use keyboard, screen reader, and touch.                                                                                                | Controls have names/states, visible focus and adequate targets; closing restores focus without reopening the dock.                                                                                                                                                                 |
 | UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                              | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                             |
@@ -186,17 +197,19 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
-selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, and
-desktop card and dock coexistence. Keyboard geometry is simulated with a smaller visual viewport; this does not
-establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability under
-[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
-[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, desktop
+card and dock coexistence, and the follow location state machine (start, new fix moves camera, second click stops, drag
+stops, search result stops, denied shows recovery, no initial fix, button style). The follow state machine is covered by
+these browser tests; there is no DOM in node, so no large fake DOM is built for unit coverage. Keyboard geometry is
+simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior.
+Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability
+checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief
 
 > Create a small, self-contained HTML draft of a laconic, map-first interface for Kompas. Let the person explore the map
-> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, and required
+> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, scale, and required
 > attribution (in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Keep
 > the dock closed.
 >

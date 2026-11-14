@@ -72,6 +72,8 @@ export function positionIndicator(state) {
   return indicators[state] ?? '!';
 }
 
+// Returns 'Follow your location' when a fix is usable, 'Locate me' otherwise.
+// aria-pressed carries the following state; the label stays constant.
 export function positionActionLabel(state) {
-  return hasUsablePosition(state) ? 'Recenter on your location' : 'Locate me';
+  return hasUsablePosition(state) ? 'Follow your location' : 'Locate me';
 }
