@@ -1,6 +1,7 @@
 # Change
 
-Closes #N, or Part of #N when this PR does only part of the issue. Every PR has an issue: open one first.
+Closes #N, or Part of #N when this PR does only part of the issue. Every PR has an issue: open one first. A Feature PR
+stays a draft until its Tasks and Bugs are merged, review findings are fixed and CI is green.
 
 ## Behavior
 
