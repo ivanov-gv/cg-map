@@ -113,9 +113,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .maplibregl-ctrl-attrib { font-size: 10px; background: #ffffffd9 !important; }
 .maplibregl-ctrl-scale { font-size: 11px; }
 /* Stack bottom-left controls vertically so the OSM credit sits below the scale bar
- * (wiki Web app – UI, ADR 0016). MapLibre inserts bottom controls at the first child,
- * so the credit (added after the scale bar) becomes the first DOM child. We use
- * flex-direction: column-reverse so the first child renders at the bottom. */
+ * (wiki Web app – UI, ADR 0016). MapLibre inserts bottom controls at the first child
+ * (map.ts: insertBefore(controlElement, positionContainer.firstChild) for bottom
+ * positions), so the credit (added after the scale bar) becomes the first DOM child.
+ * We use flex-direction: column-reverse so the first child renders at the bottom. */
 .maplibregl-ctrl-bottom-left {
   display: flex;
   flex-direction: column-reverse;
@@ -124,16 +125,19 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale {
   margin-bottom: 0;
 }
-/* OSM credit line sits below the scale bar (wiki Web app – UI, ADR 0016).
- * Matches the scale bar's background, font family and colour; height is half
- * the scale bar's (~9 px box for a 22 px bar). pointer-events restores
- * clickability since MapLibre sets pointer-events: none on its controls. */
+/* Share background, text colour and font between the scale bar and the OSM credit
+ * so they stay in step if MapLibre changes its defaults (wiki Web app – UI, ADR 0016). */
+.maplibregl-ctrl-scale,
 .osm-credit-line {
-  background: white;
+  background-color: rgb(255, 255, 255, 0.75);
+  color: #333;
+  font-family: Helvetica Neue, Arial, Helvetica, sans-serif;
+}
+/* OSM credit line sits below the scale bar (wiki Web app – UI, ADR 0016).
+ * Height is half the scale bar's (~9 px box for a 22 px bar). pointer-events
+ * restores clickability since MapLibre sets pointer-events: none on its controls. */
+.osm-credit-line {
   border-radius: 4px;
-  box-shadow: 0 4px 20px #243f3715 !important;
-  font: 11px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #243f37;
   line-height: 9px;
   padding: 0 6px;
   margin: 0 0 10px 10px;

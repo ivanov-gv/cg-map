@@ -377,8 +377,10 @@ function installPublicMapDebug() {
 }
 
 // A small "OpenStreetMap" credit link sits below the scale bar in the bottom-left corner.
-// MapLibre inserts bottom controls at the first child, so this control appears below the
-// scale bar. See wiki Web app – UI and ADR 0016.
+// MapLibre inserts bottom controls at the first child using insertBefore(el, firstChild)
+// (src/ui/map.ts line 896), so this control — added after the scale bar — becomes the
+// first DOM child. The CSS uses column-reverse so it renders at the bottom. See wiki
+// Web app – UI and ADR 0016.
 function installOsmCredit() {
   mapState.map.addControl(
     {

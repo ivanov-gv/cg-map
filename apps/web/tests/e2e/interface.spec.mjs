@@ -979,6 +979,35 @@ for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
 }))) {
   const phoneTag = isMobile ? {tag: '@phone'} : {};
 
+  test(`OSM credit matches scale bar styling on ${name}`, {...phoneTag}, async ({page}) => {
+    await atViewport(page, viewport, async () => {
+      await ready(page);
+      await closeMenu(page);
+
+      // The credit inherits the same background-color, color, and font-family
+      // as the scale bar so they stay in step (wiki Web app – UI, ADR 0016).
+      const styles = await page.evaluate(() => {
+        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
+        const creditEl = document.querySelector('.osm-credit-line');
+        if (!scaleBar || !creditEl) return null;
+        const scaleStyle = getComputedStyle(scaleBar);
+        const creditStyle = getComputedStyle(creditEl);
+        return {
+          scaleBackground: scaleStyle.backgroundColor,
+          creditBackground: creditStyle.backgroundColor,
+          scaleColor: scaleStyle.color,
+          creditColor: creditStyle.color,
+          scaleFontFamily: scaleStyle.fontFamily,
+          creditFontFamily: creditStyle.fontFamily
+        };
+      });
+      expect(styles).not.toBeNull();
+      expect(styles.creditBackground).toBe(styles.scaleBackground);
+      expect(styles.creditColor).toBe(styles.scaleColor);
+      expect(styles.creditFontFamily).toBe(styles.scaleFontFamily);
+    });
+  });
+
   test(`OSM credit line is visible and positioned below scale bar on ${name}`, {...phoneTag}, async ({page}) => {
     await atViewport(page, viewport, async () => {
       await ready(page);
