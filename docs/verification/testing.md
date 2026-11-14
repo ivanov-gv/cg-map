@@ -111,7 +111,7 @@ see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 | ----------- | ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | shell       | shell.spec.mjs, updates.spec.mjs                | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
 | journeys    | journeys.spec.mjs, in two jobs                  | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
-| interface   | interface.spec.mjs                              | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
+| interface   | interface.spec.mjs, in three jobs               | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
 | discover    | discover.spec.mjs                               | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
 | poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 | poi-mobile  | poi-visibility.spec.mjs, pages-mobile project   | POI levels, chooser                                     | data/sources/places*, contracts                                               |
