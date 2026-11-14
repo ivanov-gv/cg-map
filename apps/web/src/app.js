@@ -445,12 +445,13 @@ function registerPublicMapEvents() {
     }
   });
   mapState.map.on('movestart', event => {
+    // Stop following on any camera move the follower did not tag — before the early return,
+    // so app-initiated moves also reach this check.
+    locationControls.stopFollowingOnForeignMove(event);
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
       return;
     }
-    // Stop location following when the user moves the map.
-    locationControls.onCameraEvent(event);
     if (event.originalEvent && !mapState.hasExploredMap) {
       mapState.hasExploredMap = true;
       locationControls.refresh();
