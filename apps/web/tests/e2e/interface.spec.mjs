@@ -656,6 +656,111 @@ test(
   }
 );
 
+// Categories row is a single horizontal row on desktop: floating chips, dock, and joined card.
+// Chips do not wrap to a second row; the row scrolls horizontally when it overflows.
+test.describe('categories row is a single row on desktop', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  // Use a viewport narrow enough that the category chips overflow the container.
+  const narrowDesktop = {width: 1280, height: 800};
+
+  test('floating categories row is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Dock is closed, no query: floating chips are visible in the desktop search panel.
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    // All chips should share the same top (within 1 px for sub-pixel rendering).
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+
+    // The row should be wider than its container, so horizontal scroll is possible.
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row in the dock is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await openMenu(page);
+
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row in the joined card is a single row with horizontal scroll', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Type a query to show the joined card with categories + results.
+    await page.locator('#search').fill('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const buttons = categories.querySelectorAll('button');
+      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
+      return {
+        tops: rectTops,
+        scrollWidth: categories.scrollWidth,
+        clientWidth: categories.clientWidth
+      };
+    });
+
+    const firstTop = tops[0];
+    for (const top of tops) {
+      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
+    }
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+
+  test('categories row is horizontally scrollable', async ({page}) => {
+    await page.setViewportSize(narrowDesktop);
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    // Verify the row can be scrolled horizontally by setting scrollLeft directly.
+    const {canScroll, scrollWidth, clientWidth} = await page.evaluate(() => {
+      const categories = document.getElementById('categories');
+      const start = categories.scrollLeft;
+      categories.scrollLeft = start + 50;
+      const canScroll = categories.scrollLeft > start;
+      categories.scrollLeft = start; // reset
+      return {canScroll, scrollWidth: categories.scrollWidth, clientWidth: categories.clientWidth};
+    });
+    expect(canScroll).toBe(true);
+    expect(scrollWidth).toBeGreaterThan(clientWidth);
+  });
+});
+
 test(
   'one wheel gesture changes the phone card state only once',
   {tag: '@phone'},
