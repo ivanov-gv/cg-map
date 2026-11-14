@@ -100,6 +100,15 @@ categories are hidden to conserve space on the small display. When the user open
 full width again (as on mobile), and the search field becomes visible and usable. Typing a query shows the clear button,
 which removes the query when activated. The categories row follows the same dock-open behavior as on mobile.
 
+### Full-screen dock on Mobile and Flip
+
+On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire visible
+viewport — from the top of the visible viewport to its bottom, full width, with no map visible around it. The search bar
+row stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
+respects the keyboard-aware visible viewport variables (--visible-top, --visible-height), so it adapts when the keyboard
+is present. The place card and route panel keep their current behavior when the dock is closed. Desktop keeps the side
+dock unchanged (narrower than the viewport, with the map visible beside it).
+
 ## UI-03 Results scroll; options stay at the bottom
 
 The full dock has three areas: the shared header, a flexible scrolling area for categories/results, and a bottom area
