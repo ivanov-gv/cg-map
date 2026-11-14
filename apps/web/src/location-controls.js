@@ -137,22 +137,12 @@ export class LocationControls {
     this.#renderFollowing();
   }
 
-  // Starts following: sets the flag, renders it, then requests a position fix.
-  // If a usable fix already exists, render() moves the camera via the following branch.
-  // Without one, requestPosition retries and shows the same recovery messages as before.
+  // Starts following: sets the flag, renders it, then delegates to requestPosition.
   #startFollowing() {
-    this.#interface.close();
-    this.#context.closeSelection();
     this.#isFollowing = true;
     this.#hasCenteredOnFix = true;
-    const hasUsableFix = this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state);
-    if (!hasUsableFix) {
-      this.#isLocationRequested = true;
-    }
-    this.render(this.#snapshot);
-    if (!hasUsableFix && !['denied', 'outside', 'insecure', 'unsupported'].includes(this.#snapshot.state)) {
-      this.#tracker?.retry();
-    }
+    this.#renderFollowing();
+    this.requestPosition();
   }
 
   // Stops following when the user moves the map. Only user gestures (with originalEvent) count.
@@ -164,18 +154,15 @@ export class LocationControls {
   }
 
   // Only an explicit request may retry location or show recovery advice; a usable fix recenters immediately.
-  // When already following, the following branch in render() moves the camera, so skip the second move here.
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
     if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
-      if (!this.#isFollowing) {
-        this.#context.focusCoordinates(
-          this.#snapshot.fix.coordinates,
-          DISCOVER_ZOOM,
-          requestedFixCameraDurationMilliseconds
-        );
-      }
+      this.#context.focusCoordinates(
+        this.#snapshot.fix.coordinates,
+        DISCOVER_ZOOM,
+        requestedFixCameraDurationMilliseconds
+      );
       return;
     }
     this.#isLocationRequested = true;
