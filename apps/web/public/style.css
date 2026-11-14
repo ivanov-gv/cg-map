@@ -112,6 +112,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   background: var(--green);
   color: white;
 }
+.position-control[data-following=true] #position-action:hover {
+  filter: brightness(1.15);
+}
 .maplibregl-ctrl-bottom-right { right: 2px; }
 /* map-core adds NavigationControl with no option to omit it. */
 .maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }

@@ -1230,17 +1230,17 @@ test.describe('GPS follow location — denied', () => {
         // Simulate denied state: override permissions.query to return 'denied' for geolocation,
         // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
         await page.addInitScript(() => {
-          const origQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = async (desc) => {
-            if (desc?.name === 'geolocation') {
+          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+          navigator.permissions.query = async (permissionDescriptor) => {
+            if (permissionDescriptor?.name === 'geolocation') {
               return {state: 'denied', addEventListener: () => {}};
             }
-            return origQuery(desc);
+            return originalQuery(permissionDescriptor);
           };
-          const origWatch = navigator.geolocation.watchPosition;
+          const originalWatchPosition = navigator.geolocation.watchPosition;
           navigator.geolocation.watchPosition = function(success, error, options) {
             if (error) error({code: 1, message: 'Permission denied'});
-            return origWatch.call(this, success, error, options);
+            return originalWatchPosition.call(this, success, error, options);
           };
         });
         await ready(page);
@@ -1310,11 +1310,11 @@ test.describe('GPS follow — click before fix arrives', () => {
         // Drag the map — should stop following without re-centring.
         const canvas = page.locator('#map canvas');
         const box = await canvas.boundingBox();
-        const cx = box.x + box.width / 2;
-        const cy = box.y + box.height / 2;
-        await page.mouse.move(cx, cy);
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        await page.mouse.move(centerX, centerY);
         await page.mouse.down();
-        await page.mouse.move(cx + 100, cy + 100);
+        await page.mouse.move(centerX + 100, centerY + 100);
         await page.mouse.up();
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
@@ -1323,13 +1323,13 @@ test.describe('GPS follow — click before fix arrives', () => {
         // by the follow branch causes refresh() to re-center on the old fix).
         const afterDrag = await camera(page);
         const reCentered = await page.evaluate(
-          ({whileC}) => {
+          ({whileFollowingCenter}) => {
             return window.kompasDebug.map.getCenter().distanceTo({
-              lng: whileC[0],
-              lat: whileC[1]
+              lng: whileFollowingCenter[0],
+              lat: whileFollowingCenter[1]
             }) < 100;
           },
-          {whileC: whileFollowing.center}
+          {whileFollowingCenter: whileFollowing.center}
         );
         expect(reCentered).toBe(false);
 
@@ -1358,7 +1358,7 @@ test.describe('GPS follow — acquiring style', () => {
         await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
         // Read the not-following background first.
-        const bgNotFollowing = await page.locator('#position-action').evaluate(
+        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
           el => getComputedStyle(el).backgroundColor
         );
 
@@ -1369,11 +1369,11 @@ test.describe('GPS follow — acquiring style', () => {
         await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
         // The button background should differ from the not-following background.
-        const bgAcquiring = await page.locator('#position-action').evaluate(
+        const backgroundAcquiring = await page.locator('#position-action').evaluate(
           el => getComputedStyle(el).backgroundColor
         );
 
-        expect(bgAcquiring).not.toEqual(bgNotFollowing);
+        expect(backgroundAcquiring).not.toEqual(backgroundNotFollowing);
 
         // Verify it matches --green from the root.
         const greenColor = await page.evaluate(() =>
@@ -1383,7 +1383,7 @@ test.describe('GPS follow — acquiring style', () => {
         const green = parseInt(greenColor.slice(3, 5), 16);
         const blue = parseInt(greenColor.slice(5, 7), 16);
         const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(bgAcquiring).toBe(expectedRgb);
+        expect(backgroundAcquiring).toBe(expectedRgb);
       }
 
       await atViewport(page, viewport, check);
@@ -1430,6 +1430,188 @@ test.describe('GPS follow — search result stops following', () => {
   }
 });
 
+// Restart with the same coordinates: follow, drag (stops), click again after the fix goes stale.
+// The stale state forces #startFollowing through requestPosition(), which is where the old code
+// failed to reset #lastFollowedCoordinates and never moved the camera on the retry.
+test.describe('GPS follow — restart with same coordinates', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
+
+  for (const {name, viewport} of deviceCases) {
+    test(`restart following with same coordinates on ${name}`, async ({page, context}) => {
+      async function check() {
+        // Install the clock before the page loads so the PositionTracker's reevaluation interval
+        // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
+        // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
+        await page.clock.install();
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
+
+        // Start following.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+
+        // Drag the map to stop following.
+        const canvas = page.locator('#map canvas');
+        const box = await canvas.boundingBox();
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        await page.mouse.move(centerX, centerY);
+        await page.mouse.down();
+        await page.mouse.move(centerX + 100, centerY + 100);
+        await page.mouse.up();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+
+        // Fast-forward past the freshness limit so the fix becomes stale.
+        // This is essential: when the state is still 'live', #startFollowing moves the camera
+        // directly and the old code works. Only a stale state forces the requestPosition() path.
+        await page.clock.fastForward(31_000);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
+
+        // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
+        // The state remains 'stale' because the snapshot was already updated by the clock.
+        await page.clock.setSystemTime(new Date());
+
+        // Click again — the stale state forces a retry, which delivers the same coordinates.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+
+        // Camera should centre on the fix — this is the key assertion.
+        // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
+        // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
+        // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+              FIRST_FIX
+            )
+          )
+          .toBeLessThan(50);
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+});
+
+// Resize while following: following should not stop.
+// The old code stopped following on every movestart that wasn't tagged by the follower.
+// A viewport resize fires movestart synchronously, so following was incorrectly stopped.
+test.describe('GPS follow — resize while following', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
+
+  for (const {name, viewport} of deviceCases) {
+    test(`map resize does not stop following on ${name}`, async ({page, context}) => {
+      async function check() {
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
+
+        // Start following and wait for the camera animation to fully settle.
+        // Without this wait, the follow ease may still be running when we resize,
+        // and MapLibre fires no movestart while already moving — so the old code's
+        // stopFollowingOnForeignMove never fires and the test passes by accident.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+        await expectCameraToHold(page, await camera(page));
+
+        // Resize the viewport by a clear amount so the map container actually changes size.
+        const resizedViewport = name === 'desktop'
+          ? {width: 1000, height: 700}
+          : name === 'mobile'
+            ? {width: 390, height: 844}
+            : {width: 360, height: 360};
+        await page.setViewportSize(resizedViewport);
+        await settled(page);
+
+        // Following should still be active after resize.
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+});
+
+// Dismissed prompt: start with permission not granted, click triggers error callback.
+test.describe('GPS follow — dismissed prompt', () => {
+  for (const {name, viewport} of deviceCases) {
+    test(`dismissed permission prompt shows error on ${name}`, async ({page}) => {
+      async function check() {
+        // Simulate permission not granted: watchPosition calls error callback with code 1.
+        await page.addInitScript(() => {
+          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+          navigator.permissions.query = async (permissionDescriptor) => {
+            if (permissionDescriptor?.name === 'geolocation') {
+              return {state: 'prompt', addEventListener: () => {}};
+            }
+            return originalQuery(permissionDescriptor);
+          };
+          const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+          navigator.geolocation.watchPosition = function(success, error, options) {
+            // Simulate the error callback being called (permission dismissed).
+            if (error) error({code: 1, message: 'Permission dismissed'});
+            return originalWatchPosition(success, error, options);
+          };
+        });
+        await ready(page);
+        // State is 'prompt' after the error callback (code 1 with permission !== 'denied').
+        await expect
+          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+          .toBe('prompt');
+
+        // Click the position button — following should not start, error should be visible.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+        await expect(page.locator('#error')).toBeVisible();
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+});
+
+// Layer toggle while following: following should stop on the camera move.
+test.describe('GPS follow — layer toggle stops following', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
+
+  for (const {name, viewport} of deviceCases) {
+    test(`toggling satellite layer stops following on ${name}`, async ({page, context}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+      await page.setViewportSize(viewport);
+      await ready(page);
+      await context.setGeolocation(FIRST_FIX);
+      await waitForLiveFix(page);
+
+      // Start following.
+      await page.locator('#position-action').click();
+      await settled(page);
+      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+
+      // Open the menu to access the satellite toggle, then toggle it.
+      await openMenu(page);
+      await page.locator('#satellite-toggle').click();
+      await settled(page);
+
+      // Following should be off (the camera move from the satellite toggle stops it).
+      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+
+      // Deliver a new fix — camera should hold.
+      const afterToggle = await camera(page);
+      await context.setGeolocation(SECOND_FIX);
+      await waitForLiveFix(page);
+      await settled(page);
+      await expectCameraToHold(page, afterToggle);
+    });
+  }
+});
+
 // Defect 3: The computed background of #position-action differs between following and not following.
 test.describe('GPS follow — button style', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
@@ -1447,7 +1629,7 @@ test.describe('GPS follow — button style', () => {
         );
 
         // Not following: background is transparent (or near-transparent).
-        const bgNotFollowing = await page.locator('#position-action').evaluate(
+        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
           el => getComputedStyle(el).backgroundColor
         );
 
@@ -1457,28 +1639,28 @@ test.describe('GPS follow — button style', () => {
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
         // Following: background should match --green.
-        const bgFollowing = await page.locator('#position-action').evaluate(
+        const backgroundFollowing = await page.locator('#position-action').evaluate(
           el => getComputedStyle(el).backgroundColor
         );
 
-        expect(bgFollowing).not.toEqual(bgNotFollowing);
+        expect(backgroundFollowing).not.toEqual(backgroundNotFollowing);
         // Convert hex --green to rgb for comparison (e.g. #193f36 → rgb(25, 63, 54)).
         const red = parseInt(greenColor.slice(1, 3), 16);
         const green = parseInt(greenColor.slice(3, 5), 16);
         const blue = parseInt(greenColor.slice(5, 7), 16);
         const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(bgFollowing).toBe(expectedRgb);
+        expect(backgroundFollowing).toBe(expectedRgb);
 
         // Stop following — background should no longer be green.
         await page.locator('#position-action').click();
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        const bgAfterStop = await page.locator('#position-action').evaluate(
+        const backgroundAfterStop = await page.locator('#position-action').evaluate(
           el => getComputedStyle(el).backgroundColor
         );
 
-        expect(bgAfterStop).not.toBe(expectedRgb);
+        expect(backgroundAfterStop).not.toBe(expectedRgb);
       }
 
       await atViewport(page, viewport, check);

@@ -165,8 +165,10 @@ locked to every new fix. The button fills with the app's pressed-toggle colour (
 
 - A second click on the button;
 - Any camera move the follower did not make (user drag, pinch, scroll, or an app-initiated move such as choosing a
-  search result);
-- Location failure (denied, timeout, outside the map) or a prompt state after an explicit request.
+  search result, toggling a layer);
+- Location failure (denied, timeout, outside the map) or when the permission prompt is dismissed.
+
+Following does not stop on a map resize (viewport change).
 
 Without a usable fix, clicking the button requests or retries positioning, or shows concise actionable recovery. Never
 move to a fabricated position or call the fallback camera the user's location.
@@ -207,7 +209,7 @@ cumulative icons do not prove a production placement solution. Paid visibility i
 ## Reusable initial brief
 
 > Create a small, self-contained HTML draft of a laconic, map-first interface for Kompas. Let the person explore the map
-> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, and required
+> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, scale, and required
 > attribution (in the left dock footer, per [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Keep
 > the dock closed.
 >
