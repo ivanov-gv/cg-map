@@ -1,8 +1,9 @@
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
-  // The 16 px gap below the bar accounts for the categories row.
-  const headerBottom = inset + barHeight + 16;
+  // 16 px is the space between the bar and the panel below it.
+  const gapBelowBar = 16;
+  const headerBottom = inset + barHeight + gapBelowBar;
   return {top: top + headerBottom, maxHeight: Math.max(0, height / 2 - headerBottom)};
 }
 
@@ -403,8 +404,7 @@ export class MapInterface {
     const height = viewport?.height ?? innerHeight;
     const top = viewport?.offsetTop ?? 0;
     const inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-inset'));
-    const searchBar = document.querySelector('.search-bar');
-    const barHeight = searchBar ? searchBar.getBoundingClientRect().height : 54;
+    const barHeight = document.querySelector('.search-bar').getBoundingClientRect().height;
     const bounds = searchBounds({height, top, inset, barHeight});
     const style = document.documentElement.style;
     style.setProperty('--visible-height', `${height}px`);

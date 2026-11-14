@@ -1468,15 +1468,18 @@ test.describe('Mobile search bar', () => {
     expect(bar.height).toBe(44);
   });
 
-  test('search bar spans the full width on mobile', async ({page}) => {
+  test('search bar has left and right gutters on mobile', async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     const bar = await page.locator('.search-bar').boundingBox();
     const viewport = page.viewportSize();
     const leftGap = bar.x;
     const rightGap = viewport.width - (bar.x + bar.width);
-    expect(leftGap).toBeLessThanOrEqual(12);
-    expect(rightGap).toBeLessThanOrEqual(12);
+    // The bar uses --bar-inset (12 px on mobile) on both sides.
+    expect(leftGap).toBeGreaterThanOrEqual(10);
+    expect(leftGap).toBeLessThanOrEqual(14);
+    expect(rightGap).toBeGreaterThanOrEqual(10);
+    expect(rightGap).toBeLessThanOrEqual(14);
   });
 
   test('categories are hidden on the main screen on mobile', async ({page}) => {

@@ -268,18 +268,14 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 
   /* Mobile search bar: smaller than desktop, full screen width minus 12 px gutter. */
   .search-bar {
-    left: 0;
-    width: 100%;
+    left: var(--bar-inset);
+    right: var(--bar-inset);
+    width: auto;
     height: 44px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
   }
   .search-bar .icon-button { width: 40px; height: 40px; }
   .search-bar .icon { width: 16px; height: 16px; }
   .search { padding-left: 10px; }
-  .search .icon { width: 16px; height: 16px; }
   .search input { height: 40px; font-size: 13px; }
   .search-divider { height: 18px; }
 
@@ -293,9 +289,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   /* Dock content starts below the smaller mobile bar. */
   .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: calc(100dvh - var(--visible-height) - var(--visible-top)); }
 
-  /* Search bubble and results strip span the full width on mobile. */
-  .search-bubble { left: 0; width: 100%; border-radius: 0; border-left: none; border-right: none; }
-  .results-strip { top: var(--search-top, 56px); left: 0; width: 100%; border-radius: 0; border-left: none; border-right: none; }
+  /* Search bubble and results strip use the same gutters as the bar on mobile. */
+  .search-bubble { left: var(--bar-inset); right: var(--bar-inset); width: auto; }
+  .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
   .place-card { top: auto; bottom: calc(100dvh - var(--visible-height) - var(--visible-top) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   .place-card.dragging { cursor: grabbing; transition: none; }
