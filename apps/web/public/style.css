@@ -380,9 +380,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
    * viewport, leaving only one result row visible. Make the entire dock
    * scroll as a single column so results get the screen first and the
    * footer is reached by scrolling down. Mobile and Desktop keep the
-   * pinned footer. Removing `bottom: 0` lets the Mobile keyboard-aware
-   * bottom (`calc(100dvh - var(--visible-height) - var(--visible-top))`)
-   * apply so the content ends above the keyboard. */
+   * pinned footer. Flip keeps the Mobile keyboard-aware bottom so the
+   * column ends above the keyboard. */
   body[data-view=dock] .dock-content {
     overflow-y: auto;
   }
@@ -404,8 +403,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     padding: 8px var(--bar-inset);
   }
   /* The footer is part of the scroll column; it must not clip its content
-   * or force a fixed height. The Flip .dock-content rule above removes
-   * bottom: 0 so the footer scrolls with the rest of the dock. */
+   * or force a fixed height. The footer scrolls with the column because
+   * .dock-content scrolls (overflow-y: auto) and its children do not shrink
+   * (flex: none). */
   body[data-view=dock] .dock-footer {
     max-height: none;
     overflow: visible;

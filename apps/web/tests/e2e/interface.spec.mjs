@@ -2211,7 +2211,7 @@ test.describe('GPS follow — dismissed prompt', () => {
 // Full-screen dock on Mobile and Flip (issue #104)
 // ---------------------------------------------------------------------------
 
-// On Mobile and Flip, the open dock covers the entire visible viewport.
+// On Mobile and Flip, the open dock covers the entire layout viewport (top 0, 100dvh).
 // Desktop keeps the side dock narrower than the viewport.
 test.describe('dock fills viewport on mobile and flip', () => {
   test.beforeEach(({page}) => stubRouting(page));
@@ -2329,6 +2329,24 @@ test.describe('dock fills viewport on mobile and flip', () => {
 // viewport, leaving only one result row visible. The fix makes the
 // entire dock-content scroll as a single column on Flip so results get
 // the screen first and the footer is reached by scrolling down.
+
+// Creates an 8-place fixture with the given prefix for ids and names.
+function manyPlacesFixture(prefix) {
+  return {
+    type: 'FeatureCollection',
+    features: Array.from({length: 8}, (_, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
+      properties: {
+        id: prefix + '/' + index,
+        name: prefix.charAt(0).toUpperCase() + prefix.slice(1) + ' place ' + index,
+        category: index % 2 ? 'food' : 'shops',
+        kind: 'shop'
+      }
+    }))
+  };
+}
+
 test.describe('Flip dock scrolls as one column', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
@@ -2336,19 +2354,7 @@ test.describe('Flip dock scrolls as one column', () => {
 
   // Create a places fixture with at least 6 results so we can verify
   // that multiple rows are visible in the small viewport.
-  const manyPlaces = {
-    type: 'FeatureCollection',
-    features: Array.from({length: 8}, (_, index) => ({
-      type: 'Feature',
-      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
-      properties: {
-        id: 'flip/' + index,
-        name: 'Flip place ' + index,
-        category: index % 2 ? 'food' : 'shops',
-        kind: 'shop'
-      }
-    }))
-  };
+  const manyPlaces = manyPlacesFixture('flip');
 
   test('at least 3 result rows are visible in the viewport before scrolling',
     {tag: '@phone'}, async ({page}) => {
@@ -2437,19 +2443,7 @@ test.describe('Flip dock keyboard awareness', () => {
   const PHONE_VIEWPORT = {width: 412, height: 840};
   const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
 
-  const manyPlaces = {
-    type: 'FeatureCollection',
-    features: Array.from({length: 8}, (_, index) => ({
-      type: 'Feature',
-      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
-      properties: {
-        id: 'kb/' + index,
-        name: 'KB place ' + index,
-        category: index % 2 ? 'food' : 'shops',
-        kind: 'shop'
-      }
-    }))
-  };
+  const manyPlaces = manyPlacesFixture('kb');
 
   // On both phone and Flip, opening the dock, focusing search, and simulating
   // a keyboard should keep the last result visible above the keyboard.
@@ -2495,7 +2489,7 @@ test.describe('Flip dock keyboard awareness', () => {
           const rect = lastResult.getBoundingClientRect();
           const viewportBottom = visibleTop + visibleHeight;
           return rect.bottom <= viewportBottom + 1; // 1 px tolerance
-        }, {visibleHeight: keyboardHeight, visibleTop: 0});
+        }, {visibleHeight: viewport.height - keyboardHeight, visibleTop: 0});
         expect(lastResultVisible).toBe(true);
       });
     });
@@ -2536,19 +2530,7 @@ test.describe('Flip dock download focus stays visible', () => {
 
   const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
 
-  const manyPlaces = {
-    type: 'FeatureCollection',
-    features: Array.from({length: 8}, (_, index) => ({
-      type: 'Feature',
-      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
-      properties: {
-        id: 'focus/' + index,
-        name: 'Focus place ' + index,
-        category: index % 2 ? 'food' : 'shops',
-        kind: 'shop'
-      }
-    }))
-  };
+  const manyPlaces = manyPlacesFixture('focus');
 
   // On Flip, focusing #download (via Tab or .focus()) must leave it inside
   // the #dock-content visible rect because the footer scrolls with the content.
@@ -2566,11 +2548,13 @@ test.describe('Flip dock download focus stays visible', () => {
       await page.locator('#download').focus();
 
       // The download button must be inside the dock-content visible rect.
-      const downloadInRect = await page.evaluate((viewportHeight) => {
+      const downloadInRect = await page.evaluate(() => {
         const downloadBtn = document.getElementById('download');
-        const rect = downloadBtn.getBoundingClientRect();
-        return rect.top >= 0 && rect.bottom <= viewportHeight + 1; // 1 px tolerance
-      }, FLIP_VIEWPORT_SIZE.height);
+        const dockContent = document.getElementById('dock-content');
+        const downloadRect = downloadBtn.getBoundingClientRect();
+        const dockRect = dockContent.getBoundingClientRect();
+        return downloadRect.top >= dockRect.top && downloadRect.bottom <= dockRect.bottom + 1; // 1 px tolerance
+      });
       expect(downloadInRect).toBe(true);
     });
   });
