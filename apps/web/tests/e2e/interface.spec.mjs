@@ -1430,13 +1430,19 @@ test.describe('GPS follow — search result stops following', () => {
   }
 });
 
-// Restart with the same coordinates: follow, drag (stops), click again with the same fix.
+// Restart with the same coordinates: follow, drag (stops), click again after the fix goes stale.
+// The stale state forces #startFollowing through requestPosition(), which is where the old code
+// failed to reset #lastFollowedCoordinates and never moved the camera on the retry.
 test.describe('GPS follow — restart with same coordinates', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
   for (const {name, viewport} of deviceCases) {
     test(`restart following with same coordinates on ${name}`, async ({page, context}) => {
       async function check() {
+        // Install the clock before the page loads so the PositionTracker's reevaluation interval
+        // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
+        // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
+        await page.clock.install();
         await ready(page);
         await context.setGeolocation(FIRST_FIX);
         await waitForLiveFix(page);
@@ -1458,13 +1464,33 @@ test.describe('GPS follow — restart with same coordinates', () => {
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // Click again with the same fix — should restart following.
+        // Fast-forward past the freshness limit so the fix becomes stale.
+        // This is essential: when the state is still 'live', #startFollowing moves the camera
+        // directly and the old code works. Only a stale state forces the requestPosition() path.
+        await page.clock.fastForward(31_000);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
+
+        // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
+        // The state remains 'stale' because the snapshot was already updated by the clock.
+        await page.clock.setSystemTime(new Date());
+
+        // Click again — the stale state forces a retry, which delivers the same coordinates.
         await page.locator('#position-action').click();
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Camera should hold at the fix.
-        await expectCameraToHold(page, await camera(page));
+        // Camera should centre on the fix — this is the key assertion.
+        // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
+        // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
+        // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+              FIRST_FIX
+            )
+          )
+          .toBeLessThan(50);
       }
 
       await atViewport(page, viewport, check);
@@ -1473,6 +1499,8 @@ test.describe('GPS follow — restart with same coordinates', () => {
 });
 
 // Resize while following: following should not stop.
+// The old code stopped following on every movestart that wasn't tagged by the follower.
+// A viewport resize fires movestart synchronously, so following was incorrectly stopped.
 test.describe('GPS follow — resize while following', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
@@ -1483,14 +1511,18 @@ test.describe('GPS follow — resize while following', () => {
         await context.setGeolocation(FIRST_FIX);
         await waitForLiveFix(page);
 
-        // Start following.
+        // Start following and wait for the camera animation to fully settle.
+        // Without this wait, the follow ease may still be running when we resize,
+        // and MapLibre fires no movestart while already moving — so the old code's
+        // stopFollowingOnForeignMove never fires and the test passes by accident.
         await page.locator('#position-action').click();
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+        await expectCameraToHold(page, await camera(page));
 
-        // Resize the viewport to a different size in the same device class.
+        // Resize the viewport by a clear amount so the map container actually changes size.
         const resizedViewport = name === 'desktop'
-          ? {width: 1440, height: 900}
+          ? {width: 1000, height: 700}
           : name === 'mobile'
             ? {width: 390, height: 844}
             : {width: 360, height: 360};
