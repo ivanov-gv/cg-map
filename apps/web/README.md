@@ -54,15 +54,35 @@ viewport and starts with the dock closed. A single burger/search header keeps it
 swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
-scroll above it. Desktop search uses that dock. Mobile search started with the dock closed uses a bubble capped at half
-the visible viewport, with fixed categories above the independently scrolling list. The nearest result of an explicit
-search or category uses the `search-place` layer, so it can appear below its level's zoom. Searching and choosing
-categories do not move the camera. Choosing a place moves it only when the place is outside the focus zone, the inner
-75% of the map area left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`).
+scroll above it.
 
-A chosen place's card opens beside the desktop dock, which stays open. On phones it opens as a header-only peek under
-the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
-closes it. Choosing a result in the phone dock switches to this compact view. See
+**Desktop search bar** (issue #101): the search bar is 60 px tall (instead of 54 px). With no query and the dock closed,
+a row of floating category chips appears under the bar; each chip has its own shadow and the row scrolls horizontally
+when it overflows. Typing a query shows a clear (×) button inside the bar and replaces the floating chips with a unified
+search panel joined to the bar, containing the categories row and a scrollable results list. When the dock is open,
+Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps the search field
+focused. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available
+for the full layer/download controls.
+
+**Mobile search bar** (issue #102): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px default
+and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and font.
+Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains available
+inside the open dock and the search bubble.
+
+**Flip search bar** (issue #103): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the
+menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The search field
+and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as on mobile),
+and the search field becomes usable. Typing a query shows the clear button.
+
+Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
+above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
+layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
+place moves it only when the place is outside the focus zone, the inner 75% of the map area left uncovered by the dock,
+search panel, keyboard, and details card (`isInFocusZone`).
+
+A chosen place's card opens beside the desktop search panel or dock, which stays open. On phones it opens as a
+header-only peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down
+steps back and then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button

@@ -25,6 +25,18 @@ test('search bubble stays within half the visible viewport, including keyboard a
   }
 });
 
+test('search bounds uses barHeight to position the bubble', () => {
+  // Default barHeight is 54; with inset 12 and gapBelowBar 16, headerBottom = 82.
+  const defaultBounds = searchBounds({height: 840, top: 0});
+  assert.equal(defaultBounds.top, 82);
+  // Mobile bar is 44 px tall; headerBottom = 12 + 44 + 16 = 72.
+  const mobileBounds = searchBounds({height: 840, top: 0, barHeight: 44});
+  assert.equal(mobileBounds.top, 72);
+  // Desktop bar is 60 px tall; headerBottom = 12 + 60 + 16 = 88.
+  const desktopBounds = searchBounds({height: 840, top: 0, barHeight: 60});
+  assert.equal(desktopBounds.top, 88);
+});
+
 test('search target stays below bubble and above keyboard without changing the map container', () => {
   for (const visibleHeight of [840, 420]) {
     const bounds = searchBounds({height: visibleHeight, top: 25});

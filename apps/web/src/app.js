@@ -80,7 +80,7 @@ const directoryState = {
   allPlaces: [],
   filteredPlaces: [],
   placesById: new Map(),
-  activeCategory: 'all',
+  activeCategory: null,
   buildingAddresses: new Map(),
   loadingError: null,
   visibilityConfig: null,
@@ -222,6 +222,9 @@ function applyPlaceSearch() {
   placeSelection.onFilterChanged();
   renderSearchResults();
   placeSelection.previewResults();
+  // Update desktop search UI after results change.
+  mapState.interface.syncDesktopSearchUI();
+  mapState.interface.syncClearButton();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -547,6 +550,7 @@ function warnAboutSlowStartup() {
 }
 
 // Category toggles share the same filter and never move the camera.
+// Pressing a category selects it; pressing it again clears the filter.
 function registerCategoryControls() {
   for (const [key, label] of Object.entries(categories)) {
     const button = createElement('button', label);
@@ -554,16 +558,22 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      directoryState.activeCategory = directoryState.activeCategory === key ? 'all' : key;
-      for (const other of elementById('categories').children) {
-        const isActiveCategory = other.dataset.category === directoryState.activeCategory;
-        other.setAttribute('aria-pressed', String(isActiveCategory));
-        if (isActiveCategory) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
-      }
-      applyPlaceSearch();
+      toggleCategory(key);
     });
     elementById('categories').append(button);
   }
+}
+
+function toggleCategory(key) {
+  directoryState.activeCategory =
+    directoryState.activeCategory === key ? null : key;
+  const container = elementById('categories');
+  for (const button of container.children) {
+    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+    button.setAttribute('aria-pressed', String(isActiveCategory));
+    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  }
+  applyPlaceSearch();
 }
 
 // Search and selection controls operate on the existing map and details card.
@@ -584,7 +594,17 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else mapState.interface.close(true);
+      else if (mapState.interface.view === 'dock') {
+        // When the dock is open, Escape closes it.
+        mapState.interface.close(true);
+      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // On desktop with dock closed, Escape clears the query and refocuses the input.
+        mapState.interface.clearQuery();
+        elementById('search').focus();
+      } else if (mapState.interface.view !== 'closed') {
+        // On mobile with search view (not dock), Escape closes the search.
+        mapState.interface.close(true);
+      }
     }
     if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
@@ -673,11 +693,9 @@ function initializeInterface() {
     onCardSwipedAway: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      return query
-        ? `“${query}”`
-        : directoryState.activeCategory === 'all'
-          ? 'Results'
-          : categories[directoryState.activeCategory];
+      if (query) return `“${query}”`;
+      if (directoryState.activeCategory) return categories[directoryState.activeCategory];
+      return 'Results';
     }
   });
 }

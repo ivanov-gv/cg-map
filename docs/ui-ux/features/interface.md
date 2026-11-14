@@ -69,8 +69,36 @@ Keep the dock attached to the left edge rather than presenting a floating bubble
 on phones; viewport changes may adapt dimensions, but opening alone must not change header geometry. The burger toggles
 the dock, with an accessible name and expanded state. Escape closes it and returns focus appropriately.
 
+### Desktop search bar
+
+On desktop (viewport ≥ 721 px), the search bar is 60 px tall. With no query and the dock closed, a row of floating
+category chips appears under the bar; each chip floats with its own shadow, and the row scrolls horizontally when it
+overflows. The chips reuse the same category state as the dock (one source of truth). Pressing a chip filters the map's
+places, exactly as the dock categories do.
+
+Typing a query shows a clear (×) button inside the bar at the right. Under the bar, a unified search panel appears,
+joined to the bar as one card: the categories row, then a scrollable results list. The floating chips hide when the
+panel appears. When the dock is open, Escape closes it. When the dock is closed and there is a query, Escape clears the
+query and keeps the search field focused. Tab reaches the menu button, the input, the clear button, and the category
+chips. The dock remains available via the burger for layer and download controls.
+
 On phones, activating search instead of the burger follows the compact-search behavior below. The shared header stays in
 place in both modes; using search must not implicitly open the full dock.
+
+### Mobile search bar
+
+On phones (viewport ≤ 720 px), the search bar is 44 px tall — smaller than the 54 px base and the 60 px desktop bar. It
+spans the screen width minus 12 px gutters on each side. The icon and font are smaller, and touch targets remain at
+least 40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock
+and the search bubble.
+
+### Flip search bar
+
+On flip cover screens (viewport ≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the menu (hamburger) button
+on the main screen — the bar's bounding box is at most the menu button width plus 16 px of padding. The search field and
+categories are hidden to conserve space on the small display. When the user opens the dock, the search bar spans the
+full width again (as on mobile), and the search field becomes visible and usable. Typing a query shows the clear button,
+which removes the query when activated. The categories row follows the same dock-open behavior as on mobile.
 
 ## UI-03 Results scroll; options stay at the bottom
 

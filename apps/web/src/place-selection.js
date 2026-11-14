@@ -111,8 +111,8 @@ export class PlaceSelection {
     if (
       !this.#context.isMapReady() ||
       this.#directory.loadingError ||
-      this.#interface.view === 'closed' ||
-      !this.hasExplicitFilter()
+      !this.hasExplicitFilter() ||
+      !this.#interface.areResultsVisible()
     )
       return;
     this.#state.previewPlace =
@@ -321,6 +321,6 @@ export class PlaceSelection {
   }
 
   hasExplicitFilter() {
-    return Boolean(elementById('search').value.trim()) || this.#directory.activeCategory !== 'all';
+    return Boolean(elementById('search').value.trim()) || this.#directory.activeCategory !== null;
   }
 }
