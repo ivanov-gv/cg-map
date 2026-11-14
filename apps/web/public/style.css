@@ -305,17 +305,13 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
 }
 /* Flip: only the menu button on the main screen; search and categories hide until the dock opens.
- * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports. */
+ * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
+ * When the dock is open, the Mobile rules apply again (full-width bar with search). */
 @media (max-width: 400px) and (max-height: 400px) {
-  /* Hide the search field and divider; the menu button stays visible. */
-  .search-bar .search-divider,
-  .search-bar .search,
-  .search-bar .clear-button { display: none !important; }
-  /* The search bar still exists for the menu button; shrink it to the button size. */
-  .search-bar { width: auto; }
-
-  /* When the dock opens, restore the search bar inside it. */
-  body[data-view=dock] .search-bar .search-divider,
-  body[data-view=dock] .search-bar .search { display: flex !important; }
+  /* When the dock is closed, shrink the bar to the menu button and hide search elements.
+   * The clear button already has the hidden attribute when there is no query, so no CSS rule is needed. */
+  body:not([data-view=dock]) .search-bar { right: auto; }
+  body:not([data-view=dock]) .search-bar .search-divider,
+  body:not([data-view=dock]) .search-bar .search { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

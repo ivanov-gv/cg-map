@@ -1510,7 +1510,18 @@ test.describe('Flip search bar', () => {
     });
   });
 
-  test('search becomes visible and accepts text when dock opens on flip', async ({page}) => {
+  test('search bar shrinks to menu button size on flip with dock closed', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      const bar = await page.locator('.search-bar').boundingBox();
+      const menuButton = await page.locator('#menu-toggle').boundingBox();
+      // The bar should not stretch full-width; it should be at most the menu button width plus padding.
+      expect(bar.width).toBeLessThanOrEqual(menuButton.width + 16);
+    });
+  });
+
+  test('search becomes visible and clear button appears when typing in dock on flip', async ({page}) => {
     await withFlipViewport(page, async () => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
       await ready(page);
@@ -1518,9 +1529,12 @@ test.describe('Flip search bar', () => {
       await openMenu(page);
       // Search input is now visible inside the dock.
       await expect(page.locator('#search')).toBeVisible();
-      // Search accepts text.
+      // Clear button should be hidden when there is no query.
+      await expect(page.locator('#clear-search')).toBeHidden();
+      // Type a query — clear button should appear.
       await page.locator('#search').fill('Café');
       expect(await page.locator('#search').inputValue()).toBe('Café');
+      await expect(page.locator('#clear-search')).toBeVisible();
     });
   });
 });
