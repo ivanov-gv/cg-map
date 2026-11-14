@@ -35,19 +35,19 @@ test('selectNearestPlaces orders by distance from centre', () => {
   assert.ok(ordered[0].distanceKilometres < ordered[1].distanceKilometres);
   assert.ok(ordered[1].distanceKilometres < ordered[2].distanceKilometres);
 });
-test('category filter then query filter combines both', () => {
-  const cafeA = feature('Cafe A', 'food', [19.25, 42.44]);
-  const cafeB = feature('Cafe B', 'food', [19.26, 42.44]);
-  const shop = feature('Cafe Shop', 'shops', [19.27, 42.44]);
-  // Category narrows to food; query narrows further to those containing 'a'
-  const filtered = [cafeA, cafeB, shop].filter(place =>
-    matchesPlaceSearch(place, 'a', 'food')
+test('category and query filters both apply', () => {
+  const cafeAlpha = feature('Cafe Alpha', 'food', [19.25, 42.44]);
+  const cafeBeta = feature('Cafe Beta', 'food', [19.26, 42.44]);
+  const alphaShop = feature('Alpha Shop', 'shops', [19.27, 42.44]);
+  // Query 'alpha' with category 'food': only Cafe Alpha matches both
+  const filtered = [cafeAlpha, cafeBeta, alphaShop].filter(place =>
+    matchesPlaceSearch(place, 'alpha', 'food')
   );
-  assert.equal(filtered.length, 2, 'both cafes match category food and query "a"');
-  assert.ok(filtered.some(place => place === cafeA));
-  assert.ok(filtered.some(place => place === cafeB));
-  // The shop is excluded by category even though name contains 'a'
-  assert.equal(filtered.includes(shop), false);
+  assert.equal(filtered.length, 1, 'only Cafe Alpha matches category food and query "alpha"');
+  assert.ok(filtered.some(place => place === cafeAlpha));
+  // Cafe Beta is excluded by query; Alpha Shop is excluded by category
+  assert.equal(filtered.includes(cafeBeta), false);
+  assert.equal(filtered.includes(alphaShop), false);
 });
 test('no category filter includes all categories', () => {
   const cafe = feature('Cafe', 'food', [19.25, 42.44]);

@@ -2326,7 +2326,7 @@ test.describe('dock fills viewport on mobile and flip', () => {
 
 // On a 340 px screen there is no room for a pinned footer: the footer
 // (Satellite, Transport, Download, attribution) would take most of the
-// viewport, leaving only one result row visible.  The fix makes the
+// viewport, leaving only one result row visible. The fix makes the
 // entire dock-content scroll as a single column on Flip so results get
 // the screen first and the footer is reached by scrolling down.
 test.describe('Flip dock scrolls as one column', () => {
@@ -2390,6 +2390,16 @@ test.describe('Flip dock scrolls as one column', () => {
       // Wait for results to render.
       await expect(page.locator('.result')).toHaveCount(8);
 
+      // Before scrolling, the Download button is below the viewport.
+      // This fails when the footer is pinned (old CSS) because it would be
+      // visible without scrolling. See the Flip .dock-content rule in style.css.
+      const downloadBelowViewport = await page.evaluate((viewportHeight) => {
+        const downloadBtn = document.getElementById('download');
+        const rect = downloadBtn.getBoundingClientRect();
+        return rect.top >= viewportHeight;
+      }, FLIP_VIEWPORT.height);
+      expect(downloadBelowViewport).toBe(true);
+
       // Scroll the dock's scroll container to the bottom.
       await page.evaluate(() => {
         const dockContent = document.getElementById('dock-content');
@@ -2397,7 +2407,7 @@ test.describe('Flip dock scrolls as one column', () => {
       });
 
       // After scrolling, the Download button and attribution text should be
-      // fully inside the viewport.  Use a 1 px tolerance for sub-pixel
+      // fully inside the viewport. Use a 1 px tolerance for sub-pixel
       // rendering differences (e.g. line-height fractions).
       const downloadVisible = await page.evaluate((viewportHeight) => {
         const downloadBtn = document.getElementById('download');
@@ -2413,6 +2423,155 @@ test.describe('Flip dock scrolls as one column', () => {
 
       expect(downloadVisible).toBe(true);
       expect(attributionVisible).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Flip dock: keyboard awareness, Escape, and focus (issue #146)
+// ---------------------------------------------------------------------------
+
+test.describe('Flip dock keyboard awareness', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const PHONE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+
+  const manyPlaces = {
+    type: 'FeatureCollection',
+    features: Array.from({length: 8}, (_, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
+      properties: {
+        id: 'kb/' + index,
+        name: 'KB place ' + index,
+        category: index % 2 ? 'food' : 'shops',
+        kind: 'shop'
+      }
+    }))
+  };
+
+  // On both phone and Flip, opening the dock, focusing search, and simulating
+  // a keyboard should keep the last result visible above the keyboard.
+  // On Flip, the entire dock scrolls as one column (see the Flip .dock-content
+  // rule in style.css). On phone, .results scrolls independently inside dock-content.
+  for (const {name, viewport} of [
+    {name: 'phone', viewport: PHONE_VIEWPORT},
+    {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
+  ]) {
+    test(`last result stays above keyboard on ${name}`, {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect(page.locator('.result')).toHaveCount(8);
+
+        // Focus the search field to trigger the keyboard.
+        await page.locator('#search').focus();
+        // Simulate the keyboard appearing (half the viewport height).
+        const keyboardHeight = Math.floor(viewport.height / 2);
+        await simulateKeyboard(page, keyboardHeight);
+
+        // Scroll to the bottom so the last result is at the end.
+        // On Flip, dock-content is the scroll container (see the Flip .dock-content
+        // rule in style.css). On phone, .results scrolls independently inside dock-content.
+        await page.evaluate(() => {
+          const dockContent = document.getElementById('dock-content');
+          const results = document.getElementById('results');
+          // dock-content scrolls on Flip (overflow-y: auto); .results scrolls on phone.
+          if (dockContent.scrollHeight > dockContent.clientHeight) {
+            dockContent.scrollTop = dockContent.scrollHeight;
+          } else {
+            results.scrollTop = results.scrollHeight;
+          }
+        });
+
+        // The last .result's bottom must be at or above the visible viewport bottom.
+        const lastResultVisible = await page.evaluate(({visibleHeight, visibleTop}) => {
+          const results = document.querySelectorAll('.result');
+          const lastResult = results[results.length - 1];
+          if (!lastResult) return false;
+          const rect = lastResult.getBoundingClientRect();
+          const viewportBottom = visibleTop + visibleHeight;
+          return rect.bottom <= viewportBottom + 1; // 1 px tolerance
+        }, {visibleHeight: keyboardHeight, visibleTop: 0});
+        expect(lastResultVisible).toBe(true);
+      });
+    });
+  }
+});
+
+test.describe('Escape closes dock and restores focus', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const PHONE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+
+  for (const {name, viewport} of [
+    {name: 'phone', viewport: PHONE_VIEWPORT},
+    {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
+  ]) {
+    test(`Escape with dock open gives data-view closed and focus on menu on ${name}`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // Press Escape to close the dock.
+        await page.keyboard.press('Escape');
+
+        // Dock should be closed and focus returned to the menu button.
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+        await expect(page.locator('#menu-toggle')).toBeFocused();
+      });
+    });
+  }
+});
+
+test.describe('Flip dock download focus stays visible', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+
+  const manyPlaces = {
+    type: 'FeatureCollection',
+    features: Array.from({length: 8}, (_, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
+      properties: {
+        id: 'focus/' + index,
+        name: 'Focus place ' + index,
+        category: index % 2 ? 'food' : 'shops',
+        kind: 'shop'
+      }
+    }))
+  };
+
+  // On Flip, focusing #download (via Tab or .focus()) must leave it inside
+  // the #dock-content visible rect because the footer scrolls with the content.
+  // See the Flip .dock-content rule in style.css.
+  test('focusing download leaves it inside dock-content visible rect',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT_SIZE, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('.result')).toHaveCount(8);
+
+      // Focus the download button.
+      await page.locator('#download').focus();
+
+      // The download button must be inside the dock-content visible rect.
+      const downloadInRect = await page.evaluate((viewportHeight) => {
+        const downloadBtn = document.getElementById('download');
+        const rect = downloadBtn.getBoundingClientRect();
+        return rect.top >= 0 && rect.bottom <= viewportHeight + 1; // 1 px tolerance
+      }, FLIP_VIEWPORT_SIZE.height);
+      expect(downloadInRect).toBe(true);
     });
   });
 });

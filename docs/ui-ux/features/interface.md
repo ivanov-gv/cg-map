@@ -102,12 +102,15 @@ which removes the query when activated. The categories row follows the same dock
 
 ### Full-screen dock on Mobile and Flip
 
-On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire visible
-viewport — from the top of the visible viewport to its bottom, full width, with no map visible around it. The search bar
-row stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
-respects the keyboard-aware visible viewport variables (--visible-top, --visible-height), so it adapts when the keyboard
-is present. The place card and route panel keep their current behavior when the dock is closed. Desktop keeps the side
-dock unchanged (narrower than the viewport, with the map visible beside it).
+On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire layout
+viewport — from top 0 to 100dvh, full width, with no map visible around it. The search bar row stays at the top, full
+width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
+variables (--visible-top, --visible-height); on Flip, the `.dock-content` rule does not pin `bottom: 0` so the Mobile
+keyboard-aware bottom (`calc(100dvh - var(--visible-height) - var(--visible-top))`) applies. While the dock is open, the
+route panel is hidden under it. Opening a place from the list switches to the search view with the card
+(`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on mobile). The menu button closes
+the dock, revealing the map again. The place card and route panel keep their current behavior when the dock is closed.
+Desktop keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
 
 ## UI-03 Results scroll; options stay at the bottom
 
