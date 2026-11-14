@@ -2056,8 +2056,7 @@ test('panning the map changes the first result to the place nearest the new cent
   await openMenu(page);
 
   // Default centre is near [19.26, 42.437]; West Place (19.25) is nearest.
-  const firstResultBefore = await page.locator('.result').first().textContent();
-  expect(firstResultBefore).toContain('West Place');
+  await expect(page.locator('.result').first()).toContainText('West Place');
 
   // Pan the map east so East Place becomes nearest.
   await page.evaluate(() => {
@@ -2066,8 +2065,7 @@ test('panning the map changes the first result to the place nearest the new cent
   await settled(page);
 
   // After moveend, the list re-sorts; East Place (19.28) is now nearest.
-  const firstResultAfter = await page.locator('.result').first().textContent();
-  expect(firstResultAfter).toContain('East Place');
+  await expect(page.locator('.result').first()).toContainText('East Place');
 });
 
 test('category filter then query filter narrows results to both', async ({page}) => {
@@ -2106,16 +2104,14 @@ test('category filter then query filter narrows results to both', async ({page})
   // Press food category: only 2 cafes
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
   await expect(page.locator('.result')).toHaveCount(2);
-  // allTextContents includes symbol, name, kind, and distance — use toContain for partial match
-  const foodTexts = await page.locator('.result').allTextContents();
-  expect(foodTexts.some(t => t.includes('Cafe Alpha'))).toBe(true);
-  expect(foodTexts.some(t => t.includes('Cafe Beta'))).toBe(true);
+  // Waiting assertions avoid racing the re-render after category click
+  await expect(page.locator('.result', {hasText: 'Cafe Alpha'})).toHaveCount(1);
+  await expect(page.locator('.result', {hasText: 'Cafe Beta'})).toHaveCount(1);
 
   // Type query within the category: only Cafe Alpha matches 'alpha' + food
   await page.locator('#search').fill('alpha');
   await expect(page.locator('.result')).toHaveCount(1);
-  const filteredText = await page.locator('.result').first().textContent();
-  expect(filteredText).toContain('Cafe Alpha');
+  await expect(page.locator('.result').first()).toContainText('Cafe Alpha');
   // Alpha Shop (shops) and Alpha Sight (sights) are excluded by category
 });
 
