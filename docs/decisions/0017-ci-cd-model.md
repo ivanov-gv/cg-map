@@ -14,28 +14,30 @@ Today's implementation deviates from this model in several ways:
 
 - `ci-all` deploys Pages as a CI step, blurring the CI/CD boundary described in ADR 0005.
 - The dev site is assembled from `:main` images, which are mutable tags that change on every merge (ADR 0005).
-- Every CI job declares `environment: dev` to read variables, creating about 15 deployments per PR run (#165).
+- Almost every CI job declares `environment: dev` to read variables, creating about 15 deployments per PR run (#165).
 - The `ci-approval` environment has no required reviewers, so the gate never actually waits (#169).
 - PR runs take 4.5-10 minutes end to end, exceeding the 5-minute target.
-- ADR 0006 states "push to main updates dev," which treats the deploy as a CI consequence.
+- ADR 0006 states that "a push to main runs no checks" and only publishes, which treats the deploy as a CI consequence.
 
 These gaps need recording so the model is documented in one place and the features that implement it have a reference.
 
 ## Decision
 
-- **Pages build from source.** The dev site is built from source at the commit, with a `/version.json` carrying the SHA.
-  This replaces the `:main`-image approach: the site is no longer assembled from mutable images.
+- **Pages build from source.** CI (`ci-dev-pages`) builds the dev site from source at the commit, with a `/version.json`
+  carrying the SHA, and uploads the artifact with `upload-pages-artifact`. This replaces the `:main`-image approach: the
+  site is no longer assembled from mutable images.
 - **Pages CD trigger.** The CD workflow triggers on `page_build` if a spike confirms it fires with Pages
-  `build_type: workflow`; otherwise it triggers on `push` to main. Both are valid CD triggers under the wiki model.
+  `build_type: workflow`; otherwise it triggers on `push` to main. Both are valid CD triggers under the wiki model. CD
+  deploys that exact artifact with `deploy-pages` and never rebuilds it.
 - **Pages CD test-run twin.** The CD workflow runs everything up to `deploy-pages`. Pages has no test destination, so
   that step is the documented exception to the test-run rule.
 - **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow) and `ci-nightly` (the full run
   on main). One workflow per concern.
-- **PR time budget.** The whole run is measured from approval to `CI gate`. A job warns over 5 minutes and fails over 7.
-- **CI jobs read variables without creating deployments** (#165). CI jobs that do not deploy must not declare an
-  environment solely to read variables.
-- **Approval gate reviewers are an owner decision** (#169). The `ci-approval` environment's required reviewers are
-  configured by the repository owner, not hardcoded in the ADR.
+- **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
+  limits of ADR 0006 stay.
+- **No CI job creates a deployment record.** Jobs that read environment variables use `deployment: false` (#165).
+- **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
+  entirely.
 
 These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 [ADR 0005](0005-packages-releases-and-dev-pages.md), and the "push to main updates dev" part of
@@ -45,8 +47,15 @@ These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 
 - CI no longer deploys, matching the wiki model. The Pages deploy is a separate CD workflow.
 - The dev site carries a version that traces back to the commit, instead of a mutable `:main` image.
-- PR runs are faster because `ci-pr-checks` is diff-aware and `ci-nightly` runs separately.
+- The split separates concerns: `ci-pr-checks` handles PR checks and `ci-nightly` runs the full suite. Any speed-up
+  comes from #169's re-sharding.
 - Fewer spurious deployments are recorded, since CI jobs no longer declare `environment: dev` unnecessarily.
 - The approval gate can actually hold PRs once reviewers are configured.
 - The features that implement this decision are #164 (this ADR and actionlint), #165 (CI without deployments), #166
-  (Pages from source), #167 (Pages CD trigger), #168 (workflow split), and #169 (time budget and approval).
+  (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget and
+  approval).
+- The Pages deploy step is never exercised in a test run.
+- The `page_build` trigger depends on a spike to confirm it fires.
+- Building from source drops the image reuse that ADR 0005 relied on.
+- Pushes to main run more workflows.
+- CD on a push to main deliberately follows the wiki rule over the personal skill's no-push rule.
