@@ -170,7 +170,7 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await expectCameraToHold(page, before);
 });
 
-test('choosing a result moves the map only when the result is outside the focus zone', async ({page}) => {
+test('choosing a result moves the map only when the result is outside the focus zone', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -179,8 +179,8 @@ test('choosing a result moves the map only when the result is outside the focus 
     lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + 0.02, lngLat[1] + 0.01], zoom: 16}),
     target
   );
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const row = page.locator('.result', {hasText: 'Nearby place 0'});
   const outside = await camera(page);
   await row.click();
@@ -497,14 +497,14 @@ test(
   }
 );
 
-test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page}) => {
+test('the result list keeps its order while a chosen place is open and re-sorts after', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
   const lastPlace = nearbyPlaces.features[5].geometry.coordinates;
   await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), lastPlace);
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const names = page.locator('.result strong');
   await expect(names.first()).toHaveText('Nearby place 5');
   const order = await names.allTextContents();
@@ -1449,6 +1449,103 @@ test.describe('Desktop search bar', () => {
     });
     expect(nativeCancelHidden).toBe(true);
   });
+
+  test('place card drops below floating chips row on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Ensure dock is closed and no query.
+    await closeMenu(page);
+    await expect(page.locator('#desktop-search-panel')).toBeVisible();
+    // Tap a place on the map using the fixture coordinates.
+    const place = fixture.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    // The card's top must be at or below the bottom of the desktop-search-panel chips row.
+    const cardTop = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      return card.getBoundingClientRect().top;
+    });
+    const chipsBottom = await page.evaluate(() => {
+      const panel = document.getElementById('desktop-search-panel');
+      return panel.getBoundingClientRect().bottom;
+    });
+    const cardVisible = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      const rect = card.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const el = document.elementFromPoint(centerX, centerY);
+      return el?.closest('#place-card') !== null;
+    });
+    // Card top >= chips row bottom.
+    expect(cardTop).toBeGreaterThanOrEqual(chipsBottom - 1);
+    // The card centre must be visible (not covered by the chips row).
+    expect(cardVisible).toBe(true);
+  });
+
+  test('desktop-to-mobile resize hides floating chips, mobile-to-desktop restores them', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Start at desktop: floating chips visible.
+    const panel = page.locator('#desktop-search-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('#categories')).toBeVisible();
+    // Resize to mobile (412x840).
+    await page.setViewportSize({width: 412, height: 840});
+    await settled(page);
+    // #desktop-search-panel should be hidden.
+    await expect(panel).toBeHidden();
+    // #browse-panel should not be inside #desktop-search-panel.
+    const browsePanelParent = await page.evaluate(() => {
+      const browsePanel = document.getElementById('browse-panel');
+      return browsePanel.parentElement?.id ?? null;
+    });
+    expect(browsePanelParent).not.toBe('desktop-search-panel');
+    // Resize back to desktop (1280x800).
+    await page.setViewportSize({width: 1280, height: 800});
+    await settled(page);
+    // #desktop-search-panel should be visible with #categories inside.
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('#categories')).toBeVisible();
+  });
+
+  test('Escape clears query and focuses input on desktop; closes dock when open', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Part A: dock closed, type query, Tab to move focus off input, then Escape.
+    await page.locator('#search').fill('test query');
+    await expect(page.locator('#clear-search')).toBeVisible();
+    // Tab moves focus off the input to #clear-search.
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#clear-search')).toBeFocused();
+    // Press Escape: input should be empty and #search should be focused.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(page.locator('#search')).toBeFocused();
+    // Part B: dock open, press Escape: dock should close.
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  });
+
+  test('aria-expanded reflects results visibility when typing and clearing', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Initially no query: aria-expanded should be 'false'.
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
+    // Type a query: results become visible, aria-expanded should be 'true'.
+    await page.locator('#search').fill('museum');
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
+    // Clear the query: aria-expanded should be 'false'.
+    await page.locator('#clear-search').click();
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1481,11 +1578,13 @@ test.describe('Mobile search bar', () => {
     expect(rightGap).toBeLessThanOrEqual(14);
   });
 
-  test('categories are hidden on the main screen on mobile', async ({page}) => {
+  test('categories are hidden on mobile after desktop-to-mobile resize', async ({page}) => {
+    // Start at desktop size so the floating chips are visible.
+    await page.setViewportSize({width: 1280, height: 800});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
-    await closeMenu(page);
-    // Categories are not visible on the main screen.
+    // Resize to mobile: the mobile media query hides the categories row.
+    await page.setViewportSize({width: 412, height: 840});
     await expect(page.locator('#categories')).toBeHidden();
   });
 
@@ -1550,6 +1649,26 @@ test.describe('Flip search bar', () => {
       await page.locator('#search').fill('Café');
       expect(await page.locator('#search').inputValue()).toBe('Café');
       await expect(page.locator('#clear-search')).toBeVisible();
+    });
+  });
+
+  test('only menu toggle is visible in search bar on flip with dock closed', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Open the menu so we can type a query.
+      await openMenu(page);
+      await page.locator('#search').fill('test');
+      // Close the menu (dock).
+      await closeMenu(page);
+      // Wait for view to settle.
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      // Only #menu-toggle should be visible in .search-bar.
+      await expect(page.locator('#menu-toggle')).toBeVisible();
+      // #search, .search-divider, and #clear-search should not be visible.
+      await expect(page.locator('#search')).toBeHidden();
+      await expect(page.locator('.search-divider')).toBeHidden();
+      await expect(page.locator('#clear-search')).toBeHidden();
     });
   });
 });

@@ -104,6 +104,8 @@ export class MapInterface {
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
+      this.syncPanelPosition();
+      this.syncDesktopSearchUI();
       this.syncViewport();
     });
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
@@ -173,7 +175,7 @@ export class MapInterface {
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
-    this.search.setAttribute('aria-expanded', String(view !== 'closed'));
+    this.syncSearchExpanded();
     this.onChange?.();
   }
 
@@ -196,6 +198,12 @@ export class MapInterface {
     const isDockOpen = this.view === 'dock';
     this.desktopSearchPanel.hidden = isDockOpen;
     this.desktopSearchPanel.dataset.hasQuery = String(hasQuery);
+    this.syncSearchExpanded();
+  }
+
+  // Keep aria-expanded on the search input in sync with whether results are visible.
+  syncSearchExpanded() {
+    this.search.setAttribute('aria-expanded', String(this.areResultsVisible()));
   }
 
   // Call after the card's content is in place and it is no longer hidden.
@@ -373,6 +381,7 @@ export class MapInterface {
   clearQuery() {
     this.search.value = '';
     this.syncClearButton();
+    this.syncSearchExpanded();
     this.onSearch?.();
   }
 

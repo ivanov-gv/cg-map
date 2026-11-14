@@ -223,8 +223,8 @@ function applyPlaceSearch() {
   renderSearchResults();
   placeSelection.previewResults();
   // Update desktop search UI after results change.
-  mapState.interface?.syncDesktopSearchUI?.();
-  mapState.interface?.syncClearButton?.();
+  mapState.interface.syncDesktopSearchUI();
+  mapState.interface.syncClearButton();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -532,13 +532,13 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      handleCategoryToggle(key);
+      toggleCategory(key);
     });
     elementById('categories').append(button);
   }
 }
 
-function handleCategoryToggle(key) {
+function toggleCategory(key) {
   directoryState.activeCategory =
     directoryState.activeCategory === key ? null : key;
   const container = elementById('categories');
@@ -568,10 +568,15 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
-        // Escape only clears the query on desktop; Mobile and Flip are out of scope.
+      else if (mapState.interface.view === 'dock') {
+        // When the dock is open, Escape closes it.
+        mapState.interface.close(true);
+      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // On desktop with dock closed, Escape clears the query and refocuses the input.
         mapState.interface.clearQuery();
-      } else {
+        elementById('search').focus();
+      } else if (mapState.interface.view !== 'closed') {
+        // On mobile with search view (not dock), Escape closes the search.
         mapState.interface.close(true);
       }
     }

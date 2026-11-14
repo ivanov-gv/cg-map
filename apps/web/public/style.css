@@ -152,13 +152,21 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
-/* The dock stays open beside a place card, so the card moves clear of whichever left panel is open. */
+/* The dock stays open beside a place card, so the card moves clear of whichever left panel is open.
+ * When floating chips are shown (no query, dock closed), the card drops below the chips row. */
 @media (min-width: 721px) {
+  /* Bottom of the floating chips row: bar height (60px) + chip row height (56px) + gap (16px). */
+  body { --desktop-chips-bottom: calc(60px + 56px + 16px); }
+
   body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
     top: 20px;
     left: calc(var(--dock-width) + 12px);
     width: min(375px, calc(100% - var(--dock-width) - 96px));
     max-height: calc(100% - 40px);
+  }
+  body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
+    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
+    left: 20px;
   }
 
   /* Desktop search bar: taller, with clear button and floating categories. */
@@ -205,13 +213,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
   .desktop-search-panel[data-has-query="false"] #categories button {
     flex-shrink: 0;
-    min-height: 40px;
-    border: 1px solid var(--line);
     background: white;
-    border-radius: 22px;
-    padding: 7px 14px;
-    font-size: 12px;
-    white-space: nowrap;
+    padding-left: 14px;
+    padding-right: 14px;
     box-shadow: 0 2px 8px #243f3710;
     pointer-events: auto;
   }
@@ -240,7 +244,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
   .desktop-search-panel[data-has-query="true"] #categories button {
     flex-shrink: 0;
-    min-height: 36px;
+    min-height: 40px;
     border: 1px solid var(--line);
     background: transparent;
     border-radius: 22px;
@@ -312,10 +316,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
  * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
  * When the dock is open, the Mobile rules apply again (full-width bar with search). */
 @media (max-width: 400px) and (max-height: 400px) {
-  /* When the dock is closed, shrink the bar to the menu button and hide search elements.
-   * The clear button already has the hidden attribute when there is no query, so no CSS rule is needed. */
+  /* When the dock is closed, shrink the bar to the menu button and hide all search elements. */
   body:not([data-view=dock]) .search-bar { right: auto; }
   body:not([data-view=dock]) .search-bar .search-divider,
-  body:not([data-view=dock]) .search-bar .search { display: none; }
+  body:not([data-view=dock]) .search-bar .search,
+  body:not([data-view=dock]) .search-bar .clear-button { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }
