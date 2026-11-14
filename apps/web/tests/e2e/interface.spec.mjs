@@ -2864,3 +2864,50 @@ test('category filter then query filter narrows results to both', async ({page})
   // Alpha Shop (shops) and Alpha Sight (sights) are excluded by category
 });
 
+// ---------------------------------------------------------------------------
+// Menu button resets after mouse click (issue #155)
+// ---------------------------------------------------------------------------
+
+test.describe('menu button resets after mouse click', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  // After opening and closing the dock by mouse click, #menu-toggle's computed
+  // background should equal its value before opening. The button should not
+  // stay visually pressed.
+  for (const {name, viewport} of [
+    {name: 'desktop', viewport: {width: 1280, height: 800}},
+    {name: 'phone', viewport: {width: 412, height: 840}}
+  ]) {
+    test(`menu button background resets after open and close on ${name}`,
+      {tag: name === 'phone' ? '@phone' : undefined}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await page.setViewportSize(viewport);
+      await ready(page);
+
+      // Measure the computed background before any interaction.
+      const backgroundBefore = await page.locator('#menu-toggle').evaluate(
+        el => getComputedStyle(el).backgroundColor
+      );
+
+      // Open the dock by clicking the menu button.
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+      // Close the dock by clicking the menu button again.
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+      // Move the mouse away from the button so :hover does not affect the measurement.
+      await page.mouse.move(1, 1);
+
+      // Measure the computed background after closing.
+      const backgroundAfter = await page.locator('#menu-toggle').evaluate(
+        el => getComputedStyle(el).backgroundColor
+      );
+
+      // The background should be the same as before opening.
+      expect(backgroundAfter).toEqual(backgroundBefore);
+    });
+  }
+});
+
