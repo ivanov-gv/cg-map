@@ -14,6 +14,6 @@
 
 Use the [documentation index](README.md) to find each folder's scope and source documents. Before editing a folder, read
 its rules: [decisions](decisions/AGENTS.md), [engineering](engineering/AGENTS.md), [map data](map-data/AGENTS.md),
-[mapping research](mapping-research/AGENTS.md), [plans](plans/AGENTS.md), [runbooks](runbooks/AGENTS.md),
-[system architecture](system-architecture/AGENTS.md), [UI/UX](ui-ux/AGENTS.md) and
+[management](management/AGENTS.md), [mapping research](mapping-research/AGENTS.md), [plans](plans/AGENTS.md),
+[runbooks](runbooks/AGENTS.md), [system architecture](system-architecture/AGENTS.md), [UI/UX](ui-ux/AGENTS.md) and
 [verification](verification/AGENTS.md).
