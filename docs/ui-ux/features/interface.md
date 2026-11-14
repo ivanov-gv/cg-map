@@ -92,6 +92,13 @@ spans the full screen width, with no left or right gap. The icon and font are sm
 40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock and the
 search bubble.
 
+### Flip search bar
+
+On flip cover screens (viewport ≤ 400 px wide and ≤ 400 px tall), only the menu (hamburger) button is visible on the
+main screen. The search field and categories are hidden to conserve space on the small display. When the user opens the
+dock, the search field becomes visible and usable inside the dock, allowing place search. The categories row follows the
+same dock-open behavior as on mobile.
+
 ## UI-03 Results scroll; options stay at the bottom
 
 The full dock has three areas: the shared header, a flexible scrolling area for categories/results, and a bottom area

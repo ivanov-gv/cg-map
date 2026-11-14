@@ -68,6 +68,10 @@ and the 60 px desktop bar), spans the full screen width, and uses smaller icons 
 px. The categories row is hidden on the main screen to save space; it remains available inside the open dock and the
 search bubble.
 
+**Flip search bar** (issue #103): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), only the menu (hamburger)
+button is visible on the main screen. The search field and categories are hidden until the dock opens. When the dock
+opens, the search field becomes usable inside it, allowing the user to search for places.
+
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a

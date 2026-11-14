@@ -1492,6 +1492,39 @@ test.describe('Mobile search bar', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Flip search bar (issue #103)
+// ---------------------------------------------------------------------------
+
+test.describe('Flip search bar', () => {
+  test('only menu button is visible on the main screen on flip', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Menu button is visible.
+      await expect(page.locator('#menu-toggle')).toBeVisible();
+      // Search input is hidden on the main screen.
+      await expect(page.locator('#search')).toBeHidden();
+      // Categories are hidden on the main screen.
+      await expect(page.locator('#categories')).toBeHidden();
+    });
+  });
+
+  test('search becomes visible and accepts text when dock opens on flip', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Open the dock.
+      await openMenu(page);
+      // Search input is now visible inside the dock.
+      await expect(page.locator('#search')).toBeVisible();
+      // Search accepts text.
+      await page.locator('#search').fill('Café');
+      expect(await page.locator('#search').inputValue()).toBe('Café');
+    });
+  });
+});
+
 // Test e: Geolocation permission denied — click shows recovery message, data-following stays false.
 test.describe('GPS follow location — denied', () => {
   for (const {name, viewport} of deviceCases) {
