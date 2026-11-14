@@ -1,9 +1,10 @@
 import {mapBounds} from '@ivanov-gv/map-core';
-import {DISCOVER_ZOOM, isUserCameraEvent} from './core.js';
+import {DISCOVER_ZOOM} from './core.js';
 import {elementById} from './dom.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
+  hasUsablePosition,
   positionActionLabel,
   positionIndicator,
   positionMessage,
@@ -23,6 +24,7 @@ export class LocationControls {
   #isLocationRequested = false;
   #hasCenteredOnFix = false;
   #isFollowing = false;
+  #lastFollowedCoordinates = null;
 
   constructor(context) {
     this.#context = context;
@@ -58,14 +60,14 @@ export class LocationControls {
   render(snapshot) {
     this.#snapshot = snapshot;
     const {state, fix} = snapshot;
-    // Stop following if location becomes unavailable while following.
-    if (this.#isFollowing && FAILED_POSITION_STATES.includes(state)) {
-      this.#isFollowing = false;
+    // Stop following when the state makes it impossible to continue or the permission prompt was dismissed.
+    if (this.#isFollowing && this.#shouldStopFollowingFor(snapshot)) {
+      this.#stopFollowingWithMessage(snapshot);
     }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
     elementById('position-badge').dataset.state = state;
     this.#renderFollowing();
-    const action = positionActionLabel(state, this.#isFollowing);
+    const action = positionActionLabel(state);
     elementById('position-action').setAttribute(
       'aria-label',
       action + '. ' + elementById('position-status').textContent
@@ -83,13 +85,15 @@ export class LocationControls {
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
     // While following, keep the camera on every new usable fix.
-    if (this.#isFollowing && ['live', 'approximate'].includes(state) && fix) {
+    if (this.#isFollowing && hasUsablePosition(state) && fix && this.#isNewFollowFix(fix)) {
+      // Clear stale request flag before moving the camera.
+      this.#isLocationRequested = false;
       this.#moveCameraToFix(fix);
       return;
     }
     // Center once on the first usable fix, never after the person has started exploring.
     if (
-      ['live', 'approximate'].includes(state) &&
+      hasUsablePosition(state) &&
       ((!this.#hasCenteredOnFix && !this.#context.hasExploredMap()) || this.#isLocationRequested)
     ) {
       const offset = this.#isLocationRequested ? this.#interface.mapOffset() : [0, 0];
@@ -105,24 +109,52 @@ export class LocationControls {
     }
   }
 
-  // Updates the data-following attribute and aria-pressed on the position button.
+  // Updates the data-following attribute on the badge and aria-pressed on the button.
   #renderFollowing() {
     elementById('position-badge').dataset.following = String(this.#isFollowing);
     elementById('position-action').setAttribute('aria-pressed', String(this.#isFollowing));
   }
 
-  // Moves the camera to keep the fix centered, preserving the current zoom and map offset.
-  #moveCameraToFix(fix) {
-    const offset = this.#interface.mapOffset();
-    this.#context.onAutomaticCameraMove();
-    this.#map.easeTo({
-      center: fix.coordinates,
-      offset,
-      duration: this.#context.prefersReducedMotion ? 0 : followCameraDurationMilliseconds
-    });
+  // Returns true when the snapshot indicates following should stop: terminal failure or dismissed prompt.
+  #shouldStopFollowingFor(snapshot) {
+    return FAILED_POSITION_STATES.includes(snapshot.state) || snapshot.isPromptDismissed;
   }
 
-  // Toggles location following on click. Always sets the flag; delegates camera work.
+  // Stops following and notifies the user with the position message.
+  #stopFollowingWithMessage(snapshot) {
+    this.#isFollowing = false;
+    this.#isLocationRequested = false;
+    this.#context.notify(positionMessage(snapshot));
+    this.#renderFollowing();
+  }
+
+  // Returns true when the fix is different from the last one the follower moved to.
+  #isNewFollowFix(fix) {
+    if (!this.#lastFollowedCoordinates) return true;
+    return (
+      fix.coordinates[0] !== this.#lastFollowedCoordinates[0] ||
+      fix.coordinates[1] !== this.#lastFollowedCoordinates[1]
+    );
+  }
+
+  // Moves the camera to keep the fix centered, preserving the current zoom and map offset.
+  // Tags the move so stopFollowingOnForeignMove can distinguish it from other camera moves.
+  #moveCameraToFix(fix, zoom) {
+    this.#lastFollowedCoordinates = [...fix.coordinates];
+    const offset = this.#interface.mapOffset();
+    const targetZoom = zoom ?? this.#map.getZoom();
+    this.#map.easeTo(
+      {
+        center: fix.coordinates,
+        zoom: targetZoom,
+        offset,
+        duration: this.#context.prefersReducedMotion ? 0 : followCameraDurationMilliseconds
+      },
+      {isLocationFollowMove: true}
+    );
+  }
+
+  // Toggles location following on click.
   toggleFollowing() {
     if (this.#isFollowing) {
       this.#stopFollowing();
@@ -134,22 +166,35 @@ export class LocationControls {
   // Stops following and updates the UI.
   #stopFollowing() {
     this.#isFollowing = false;
+    this.#isLocationRequested = false;
     this.#renderFollowing();
   }
 
-  // Starts following: sets the flag, renders it, then delegates to requestPosition.
+  // Starts following without a second camera path.
+  // Sets hasCenteredOnFix so the one-time first-fix centring never runs after following starts.
   #startFollowing() {
+    const {fix, state} = this.#snapshot;
+    // Always set following flags first.
     this.#isFollowing = true;
     this.#hasCenteredOnFix = true;
     this.#renderFollowing();
-    this.requestPosition();
+    if (fix && hasUsablePosition(state)) {
+      // With a usable fix: close the interface and selection, then move the camera.
+      this.#interface.close();
+      this.#context.closeSelection();
+      this.#moveCameraToFix(fix, Math.max(this.#map.getZoom(), DISCOVER_ZOOM));
+    } else {
+      // No usable fix yet — request a new position (closes interface and selection).
+      this.requestPosition();
+    }
   }
 
-  // Stops following when the user moves the map. Only user gestures (with originalEvent) count.
-  onCameraEvent(event) {
-    if (this.#isFollowing && isUserCameraEvent(event)) {
-      this.#isFollowing = false;
-      this.#renderFollowing();
+  // Stops following on any camera move the follower did not make.
+  // MapLibre easeTo passes its second argument into the movestart event, so the follower
+  // tags its own moves with {isLocationFollowMove: true} and everything else stops it.
+  stopFollowingOnForeignMove(event) {
+    if (this.#isFollowing && !event.isLocationFollowMove) {
+      this.#stopFollowing();
     }
   }
 
@@ -157,7 +202,7 @@ export class LocationControls {
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
-    if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
+    if (this.#snapshot.fix && hasUsablePosition(this.#snapshot.state)) {
       this.#context.focusCoordinates(
         this.#snapshot.fix.coordinates,
         DISCOVER_ZOOM,

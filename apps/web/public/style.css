@@ -107,12 +107,13 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
 .position-control[data-state=approximate] #position-action { color: #1f6fd1; }
 .position-control[data-state=stale] #position-action { color: #7d8790; }
-/* Following overrides the GPS-state color: green means the camera is locked to the position. */
-.position-control[data-following=true] #position-action { color: var(--green); }
+/* Following uses the filled style the app uses for pressed toggles. */
+.position-control[data-following=true] #position-action {
+  background: var(--green);
+  color: white;
+}
 .maplibregl-ctrl-bottom-right { right: 2px; }
-.maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 10px; overflow: hidden; }
-/* Hide MapLibre zoom buttons: map-core creates the NavigationControl and the pinned
- * @ivanov-gv/map-core package gives no handle to remove it. A map-core option would need a release. */
+/* map-core adds NavigationControl with no option to omit it. */
 .maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
 .place-card, .route-panel { position: absolute; z-index: 4; overflow: auto; background: #fffffc; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #243f3718; }
