@@ -183,7 +183,11 @@ test('dismissed prompt gives isPromptDismissed true, watch resets it', async () 
   geolocation.err({code: 1});
   assert.equal(tracker.state, 'prompt');
   assert.equal(tracker.snapshot().isPromptDismissed, true);
-  // A new watch() clears the error and resets isPromptDismissed.
+  // evaluate() runs periodically; it must not corrupt the state to 'dismissed'.
+  tracker.evaluate();
+  assert.equal(tracker.state, 'prompt');
+  assert.equal(tracker.snapshot().isPromptDismissed, true);
+  // A new watch() clears the dismissal flag.
   tracker.watch();
   assert.equal(tracker.state, 'prompt');
   assert.equal(tracker.snapshot().isPromptDismissed, false);

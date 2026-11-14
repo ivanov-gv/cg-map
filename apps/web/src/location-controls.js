@@ -60,12 +60,8 @@ export class LocationControls {
   render(snapshot) {
     this.#snapshot = snapshot;
     const {state, fix} = snapshot;
-    // Stop following when the state makes it impossible to continue.
-    if (this.#isFollowing && this.#shouldStopFor(state)) {
-      this.#stopFollowingWithMessage(snapshot);
-    }
-    // A dismissed permission prompt stops following (defect 5).
-    if (this.#isFollowing && snapshot.isPromptDismissed) {
+    // Stop following when the state makes it impossible to continue or the permission prompt was dismissed.
+    if (this.#isFollowing && this.#shouldStopFollowingFor(snapshot)) {
       this.#stopFollowingWithMessage(snapshot);
     }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
@@ -119,10 +115,9 @@ export class LocationControls {
     elementById('position-action').setAttribute('aria-pressed', String(this.#isFollowing));
   }
 
-  // Returns true when the given state should stop following.
-  // Uses the same list as requestPosition so following stops on every terminal failure.
-  #shouldStopFor(state) {
-    return FAILED_POSITION_STATES.includes(state);
+  // Returns true when the snapshot indicates following should stop: terminal failure or dismissed prompt.
+  #shouldStopFollowingFor(snapshot) {
+    return FAILED_POSITION_STATES.includes(snapshot.state) || snapshot.isPromptDismissed;
   }
 
   // Stops following and notifies the user with the position message.

@@ -23,6 +23,7 @@ export class PositionTracker {
     this.permission = 'unknown';
     this.state = 'idle';
     this.error = null;
+    this.isPromptDismissed = false;
   }
   async start() {
     if (!this.secure) return this.set('insecure');
@@ -51,6 +52,7 @@ export class PositionTracker {
   watch() {
     this.stop();
     this.error = null;
+    this.isPromptDismissed = false;
     this.set(this.permission === 'prompt' ? 'prompt' : 'acquiring');
     this.watchId = this.geolocation.watchPosition(
       position => this.update(position),
@@ -87,7 +89,7 @@ export class PositionTracker {
       this.fix = null;
       // Mark a dismissed prompt so the UI can distinguish it from a pending one.
       if (this.permission !== 'denied') {
-        this.error = 'dismissed';
+        this.isPromptDismissed = true;
       }
       return this.set(this.permission === 'denied' ? 'denied' : 'prompt');
     }
@@ -97,7 +99,7 @@ export class PositionTracker {
   }
   evaluate() {
     if (this.fix) return this.set(classifyFix(this.fix, this.now(), this.bounds));
-    if (this.error) this.set(this.error);
+    if (this.error && this.error !== 'dismissed') this.set(this.error);
   }
   set(state) {
     this.state = state;
@@ -108,7 +110,7 @@ export class PositionTracker {
       state: this.state,
       fix: this.fix ? {...this.fix, coordinates: [...this.fix.coordinates]} : null,
       age: this.fix ? this.now() - this.fix.timestamp : null,
-      isPromptDismissed: this.state === 'prompt' && this.error === 'dismissed'
+      isPromptDismissed: this.isPromptDismissed
     };
   }
 }
