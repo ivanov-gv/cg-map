@@ -44,6 +44,22 @@ import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
 import {MapInterface} from './interface.js';
+import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
+import {renderMapAttribution} from './attribution.js';
+
+// Renders the current device class as a data attribute on <body>.
+function renderDeviceClass() {
+  document.body.dataset.device = deviceClass(matchMedia);
+}
+
+// Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
+function trackDeviceClass() {
+  renderDeviceClass();
+  const flipQuery = matchMedia(FLIP_MEDIA_QUERY);
+  const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
+  flipQuery.addEventListener('change', renderDeviceClass);
+  mobileQuery.addEventListener('change', renderDeviceClass);
+}
 
 // One map and the controllers installed on it.
 const mapState = {
@@ -64,7 +80,7 @@ const directoryState = {
   allPlaces: [],
   filteredPlaces: [],
   placesById: new Map(),
-  activeCategory: 'all',
+  activeCategory: null,
   buildingAddresses: new Map(),
   loadingError: null,
   visibilityConfig: null,
@@ -108,8 +124,6 @@ const locationControls = new LocationControls({
     mapState.shouldIgnoreNextMove = true;
   },
   closeSelection: () => placeSelection.close(false),
-  focusCoordinates: (coordinates, zoom, durationMilliseconds) =>
-    placeSelection.focusCoordinates(coordinates, zoom, durationMilliseconds),
   notify,
   prefersReducedMotion
 });
@@ -208,6 +222,9 @@ function applyPlaceSearch() {
   placeSelection.onFilterChanged();
   renderSearchResults();
   placeSelection.previewResults();
+  // Update desktop search UI after results change.
+  mapState.interface.syncDesktopSearchUI();
+  mapState.interface.syncClearButton();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -248,12 +265,17 @@ async function start() {
     assetBaseURL: location.href,
     options: {
       center: DEFAULT_CENTER,
-      zoom: DISCOVER_ZOOM
+      zoom: DISCOVER_ZOOM,
+      attributionControl: false
     }
   });
   installPublicMapDebug();
+  installOsmCredit();
   installPositionBadge();
-  mapState.map.on('load', () => installPublicLayers(placesReady, labelsReady));
+  mapState.map.on('load', () => {
+    installPublicLayers(placesReady, labelsReady);
+    renderMapAttribution(mapState.map);
+  });
   registerPublicMapEvents();
   warnAboutSlowStartup();
 }
@@ -355,6 +377,31 @@ function installPublicMapDebug() {
   };
 }
 
+// A small "OpenStreetMap" credit link sits below the scale bar in the bottom-left corner.
+// MapLibre inserts bottom controls at the first child using insertBefore(el, firstChild)
+// (src/ui/map.ts line 896), so this control — added after the scale bar — becomes the
+// first DOM child. The CSS uses column-reverse so it renders at the bottom. See wiki
+// Web app – UI and ADR 0016.
+function installOsmCredit() {
+  mapState.map.addControl(
+    {
+      onAdd() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'osm-credit-line';
+        const link = document.createElement('a');
+        link.href = 'https://www.openstreetmap.org/copyright';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'OpenStreetMap';
+        wrapper.appendChild(link);
+        return wrapper;
+      },
+      onRemove() {}
+    },
+    'bottom-left'
+  );
+}
+
 function installPositionBadge() {
   mapState.map.addControl(
     {
@@ -417,7 +464,16 @@ function installPublicLayers(placesReady, labelsReady) {
 }
 
 function registerPublicMapEvents() {
+  // Re-render attribution when sources change (e.g. transport layer adds a source).
+  // renderMapAttribution skips the DOM update when nothing changed.
+  mapState.map.on('sourcedata', event => {
+    if (event.sourceDataType === 'metadata' || event.isSourceAdded) {
+      renderMapAttribution(mapState.map);
+    }
+  });
   mapState.map.on('movestart', event => {
+    // noteCameraMoveStart must run before shouldIgnoreNextMove so the follower sees every movestart.
+    locationControls.noteCameraMoveStart(event);
     if (mapState.shouldIgnoreNextMove) {
       mapState.shouldIgnoreNextMove = false;
       return;
@@ -427,6 +483,9 @@ function registerPublicMapEvents() {
       locationControls.refresh();
     }
   });
+  // MapLibre resize() fires synchronously: movestart, move, resize, moveend.
+  // The resize event cancels the pending foreign move so following is not stopped by a viewport change.
+  mapState.map.on('resize', () => locationControls.noteMapResize());
   // The list keeps its order while a chosen place is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
     if (!placeSelection.selectedPlace) renderSearchResults();
@@ -491,6 +550,7 @@ function warnAboutSlowStartup() {
 }
 
 // Category toggles share the same filter and never move the camera.
+// Pressing a category selects it; pressing it again clears the filter.
 function registerCategoryControls() {
   for (const [key, label] of Object.entries(categories)) {
     const button = createElement('button', label);
@@ -498,16 +558,22 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      directoryState.activeCategory = directoryState.activeCategory === key ? 'all' : key;
-      for (const other of elementById('categories').children) {
-        const isActiveCategory = other.dataset.category === directoryState.activeCategory;
-        other.setAttribute('aria-pressed', String(isActiveCategory));
-        if (isActiveCategory) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
-      }
-      applyPlaceSearch();
+      toggleCategory(key);
     });
     elementById('categories').append(button);
   }
+}
+
+function toggleCategory(key) {
+  directoryState.activeCategory =
+    directoryState.activeCategory === key ? null : key;
+  const container = elementById('categories');
+  for (const button of container.children) {
+    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+    button.setAttribute('aria-pressed', String(isActiveCategory));
+    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  }
+  applyPlaceSearch();
 }
 
 // Search and selection controls operate on the existing map and details card.
@@ -528,7 +594,17 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else mapState.interface.close(true);
+      else if (mapState.interface.view === 'dock') {
+        // When the dock is open, Escape closes it.
+        mapState.interface.close(true);
+      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // On desktop with dock closed, Escape clears the query and refocuses the input.
+        mapState.interface.clearQuery();
+        elementById('search').focus();
+      } else if (mapState.interface.view !== 'closed') {
+        // On mobile with search view (not dock), Escape closes the search.
+        mapState.interface.close(true);
+      }
     }
     if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();
@@ -545,6 +621,7 @@ function registerLayerControls() {
     setSatelliteVisible(mapState.map, mapState.isSatelliteVisible);
     elementById('satellite-toggle').setAttribute('aria-pressed', String(mapState.isSatelliteVisible));
     elementById('satellite-note').hidden = !mapState.isSatelliteVisible;
+    renderMapAttribution(mapState.map);
     if (mapState.isSatelliteVisible) {
       placeSelection.close(false);
       mapState.hasExploredMap = true;
@@ -588,7 +665,7 @@ function registerDeviceControls() {
     elementById('error').hidden = true;
     mapState.interface.restoreFocus(elementById('search'));
   });
-  elementById('position-action').addEventListener('click', () => locationControls.requestPosition());
+  elementById('position-action').addEventListener('click', () => locationControls.toggleFollowing());
   for (const eventType of ['online', 'offline']) {
     addEventListener(eventType, () => renderConnectionBadge(Boolean(startupState.archive?.local)));
   }
@@ -616,11 +693,9 @@ function initializeInterface() {
     onCardSwipedAway: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      return query
-        ? `“${query}”`
-        : directoryState.activeCategory === 'all'
-          ? 'Results'
-          : categories[directoryState.activeCategory];
+      if (query) return `“${query}”`;
+      if (directoryState.activeCategory) return categories[directoryState.activeCategory];
+      return 'Results';
     }
   });
 }
@@ -630,6 +705,7 @@ registerSelectionControls();
 registerLayerControls();
 registerDeviceControls();
 initializeInterface();
+trackDeviceClass();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;

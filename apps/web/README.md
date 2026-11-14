@@ -25,7 +25,8 @@ result lists free; avoid expensive application work during gestures.
 | File                                                                            | Read it to understand                                                                  |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [index.html](public/index.html)                                                 | Which controls exist and their IDs                                                     |
-| [style.css](public/style.css)                                                   | Desktop/mobile layout, positioning and visual states                                   |
+| [style.css](public/style.css)                                                   | Layout, positioning and visual states (device-specific @media rules)                   |
+| [device-class.js](src/device-class.js)                                          | Device classes (Flip/Mobile/Desktop): media query strings and runtime detection        |
 | [core.js](src/core.js)                                                          | Small data functions: search, distances, categories, Discover scale and location rules |
 | [app.js](src/app.js)                                                            | Startup, directory data, controller wiring and public map events                       |
 | [data-mode.js](src/data-mode.js)                                                | Server or mock data: which basemap and vehicle URLs to use                             |
@@ -53,21 +54,72 @@ viewport and starts with the dock closed. A single burger/search header keeps it
 swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
-scroll above it. Desktop search uses that dock. Mobile search started with the dock closed uses a bubble capped at half
-the visible viewport, with fixed categories above the independently scrolling list. The nearest result of an explicit
-search or category uses the `search-place` layer, so it can appear below its level's zoom. Searching and choosing
-categories do not move the camera. Choosing a place moves it only when the place is outside the focus zone, the inner
-75% of the map area left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`).
+scroll above it.
 
-A chosen place's card opens beside the desktop dock, which stays open. On phones it opens as a header-only peek under
-the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
-closes it. Choosing a result in the phone dock switches to this compact view. See
+**Desktop search bar** (issue #101): the search bar is 60 px tall (instead of 54 px). With no query and the dock closed,
+a row of floating category chips appears under the bar; each chip has its own shadow and the row scrolls horizontally
+when it overflows. Typing a query shows a clear (×) button inside the bar and replaces the floating chips with a unified
+search panel joined to the bar, containing the categories row and a scrollable results list. When the dock is open,
+Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps the search field
+focused. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available
+for the full layer/download controls.
+
+**Mobile search bar** (issue #102): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px default
+and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and font.
+Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains available
+inside the open dock and the search bubble.
+
+**Flip search bar** (issue #103): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the
+menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The search field
+and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as on mobile),
+and the search field becomes usable. Typing a query shows the clear button.
+
+**Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
+makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
+stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
+content ends above the keyboard because it uses the keyboard-aware visible viewport variables (--visible-top,
+--visible-height). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to
+the search view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on
+mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
+current behavior when the dock is closed.
+
+**Flip minimizable footer** (issues #155, #161): on Flip, the dock footer is pinned at the bottom and starts minimized —
+only a compact handle row (28 px) shows, with no separator line or empty strip below it. The handle is a `<button>`
+(#footer-toggle) with aria-expanded and aria-controls and a short horizontal bar drawn in CSS. Clicking it expands the
+footer to show Satellite, Transport, Download, and attribution; the results area hides to make room. Clicking again
+collapses it. Closing the dock resets to minimized. The handle is hidden on Mobile and Desktop where the footer is
+always shown.
+
+When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
+visible: the search bar uses an 8 px inset, category chips are 32 px, each result row is about 40 px (24 px symbol,
+smaller fonts), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are
+compact (icon and label in one row, ~40 px) and the Download button is ~40 px so everything fits without scrolling.
+These sizes are tested at both 340×250 and 340×340.
+
+Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
+above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
+layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
+place moves it only when the place is outside the focus zone, the inner 75% of the map area left uncovered by the dock,
+search panel, keyboard, and details card (`isInFocusZone`).
+
+A chosen place's card opens beside the desktop search panel or dock, which stays open. On phones it opens as a
+header-only peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down
+steps back and then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
-Location is an icon with accessible state and non-color badges. A usable fix recenters directly; failures explain
-recovery after an explicit location request. Route controls appear after endpoint selection; choosing From or To closes
-search or the dock to show them. Source notes, attribution, live-layer states, and offline safety remain part of the
-existing features.
+Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
+starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes arrive,
+preserving the current zoom. Following stops on a second click, any camera move the follower did not make (user drag,
+pinch, scroll, or an app-initiated move such as choosing a search result), or location failure. The follower tags its
+own camera moves with `isLocationFollowMove` so the `movestart` handler can distinguish them. The button fills with the
+app's pressed-toggle colour (green background, white icon) while following; `aria-pressed` and `data-following` reflect
+the state. The accessible name stays constant — "Follow your location" when a fix is usable, "Locate me" otherwise.
+There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear after endpoint
+selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states, and offline
+safety remain part of the existing features. Map attribution lives in the left dock footer and also appears as a small
+"OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's sources at
+runtime so they stay in sync when layers change
+([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
 handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
@@ -88,7 +140,7 @@ offline controls and app-owned map layers now have explicit modules; each applic
 10. ArchiveSource.init() checks for an activated local archive in OPFS.
 11. It registers the PMTiles protocol with MapLibre.
 12. It creates one MapLibre Map using mapStyle(), initially over Podgorica.
-13. It adds navigation controls and a ResizeObserver.
+13. It adds a ResizeObserver. map-core also adds a NavigationControl, but the zoom buttons are hidden via CSS.
 14. When MapLibre emits load, it installs satellite sources, place layers, the selected-place overlay and city labels.
 15. It enables the satellite button, hides the loading message and builds the result list.
 
@@ -109,7 +161,8 @@ transient state with the behavior that changes it:
 | `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
-| [LocationControls](src/location-controls.js) | The in-memory fix, explicit location requests and first-fix recentering                                      |
+| [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
+| [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
 Controllers read the map and directory through getters because those inputs finish loading independently after the
@@ -359,6 +412,27 @@ peek, with the selected feature kept in the remaining map area. The burger/searc
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
+
+### Device classes
+
+The app distinguishes three viewport categories. The single definition lives in
+[src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
+[style.css](public/style.css) must use the same conditions. At startup, `app.js` sets `data-device` on `<body>`
+(`"flip"`, `"mobile"`, or `"desktop"`) and keeps it updated when the viewport crosses a breakpoint.
+
+| Class   | Rule                                     | Examples                                 |
+| ------- | ---------------------------------------- | ---------------------------------------- |
+| Flip    | `width ≤ 400px` **and** `height ≤ 400px` | Galaxy Z Flip cover screen (~340–380 px) |
+| Mobile  | `width ≤ 720px` (excluding Flip)         | Phone portrait (412×840), small tablet   |
+| Desktop | Everything else                          | Laptop (1280×800), desktop (1920×1080)   |
+
+The 400 px limit on both axes separates Flip from phones: a phone in portrait (e.g. 412×840) exceeds 400 px in height,
+and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
+with a slightly larger cover screen still matches, without catching a phone in any orientation.
+
+Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
+device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
+[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
 
 ## 12. How to make common changes
 

@@ -47,9 +47,10 @@ stable. A short interface still needs understandable symbols, accessible names, 
 
 ## UI-01 Opening view
 
-Show the map, one combined burger/search bar, an icon-only location button, zoom controls, a metric scale, and required
-attribution. Default geographic content remains governed by Discover; simplifying controls does not remove roads,
-buildings, addresses, terrain, or scale-appropriate places.
+Show the map, one combined burger/search bar, an icon-only location button, a metric scale, a small "OpenStreetMap"
+credit below the scale bar, and full attribution in the left dock footer (per
+[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Default geographic content remains governed by
+Discover; simplifying controls does not remove roads, buildings, addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -68,8 +69,67 @@ Keep the dock attached to the left edge rather than presenting a floating bubble
 on phones; viewport changes may adapt dimensions, but opening alone must not change header geometry. The burger toggles
 the dock, with an accessible name and expanded state. Escape closes it and returns focus appropriately.
 
+### Desktop search bar
+
+On desktop (viewport ≥ 721 px), the search bar is 60 px tall. With no query and the dock closed, a row of floating
+category chips appears under the bar; each chip floats with its own shadow, and the row scrolls horizontally when it
+overflows. The chips reuse the same category state as the dock (one source of truth). Pressing a chip filters the map's
+places, exactly as the dock categories do.
+
+Typing a query shows a clear (×) button inside the bar at the right. Under the bar, a unified search panel appears,
+joined to the bar as one card: the categories row, then a scrollable results list. The floating chips hide when the
+panel appears. When the dock is open, Escape closes it. When the dock is closed and there is a query, Escape clears the
+query and keeps the search field focused. Tab reaches the menu button, the input, the clear button, and the category
+chips. The dock remains available via the burger for layer and download controls.
+
 On phones, activating search instead of the burger follows the compact-search behavior below. The shared header stays in
 place in both modes; using search must not implicitly open the full dock.
+
+### Mobile search bar
+
+On phones (viewport ≤ 720 px), the search bar is 44 px tall — smaller than the 54 px base and the 60 px desktop bar. It
+spans the screen width minus 12 px gutters on each side. The icon and font are smaller, and touch targets remain at
+least 40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock
+and the search bubble.
+
+### Flip search bar
+
+On flip cover screens (viewport ≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the menu (hamburger) button
+on the main screen — the bar's bounding box is at most the menu button width plus 16 px of padding. The search field and
+categories are hidden to conserve space on the small display. When the user opens the dock, the search bar spans the
+full width again (as on mobile), and the search field becomes visible and usable. Typing a query shows the clear button,
+which removes the query when activated. The categories row follows the same dock-open behavior as on mobile.
+
+### Full-screen dock on Mobile and Flip
+
+On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire layout
+viewport — from top 0 to 100dvh, full width, with no map visible around it. The search bar row stays at the top, full
+width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
+variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. Opening a place
+from the list switches to the search view with the card (`placeCardOpened` in interface.js calls `setView('search')`
+when the dock is open on mobile). The menu button closes the dock, revealing the map again. The place card and route
+panel keep their current behavior when the dock is closed. Desktop keeps the side dock unchanged (narrower than the
+viewport, with the map visible beside it).
+
+### Flip minimizable footer
+
+On Flip, the dock footer is pinned at the bottom and starts minimized — only a compact handle row (28 px) shows, with no
+separator line or empty strip below it. The handle is a `<button>` (#footer-toggle) with an accessible name ("Show map
+options" / "Hide map options"), `aria-expanded` and `aria-controls`, and a short horizontal bar drawn in CSS (like the
+existing `.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
+
+Opening the footer reveals Satellite, Transport, Download, and the attribution line; the results area hides to make room
+(the wiki's second Flip drawing shows the results hidden while the footer is open). The handle stays at the top of the
+footer. Clicking the handle again collapses the footer and restores the results. Closing the dock resets the footer to
+minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
+
+**Compact layout for real Flip screens** (issue #161): the real Flip cover screen is about 340×250 CSS px (shorter than
+the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible
+when minimized: the search bar uses an 8 px top inset (instead of 20 px), category chips are 32 px high with tight
+padding, each result row is about 40 px (24 px symbol, 13 px name, 10 px kind/distance with ellipsis), and the handle is
+28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are compact (icon and label in one
+row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution line all fit
+without scrolling. These sizes are tested at both 340×250 and 340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 
@@ -157,14 +217,26 @@ distinguish acquisition, a usable fix, approximate/stale data, and unavailable p
 banner. The position marker and uncertainty remain truthful under
 [Discover D-06](../user-stories/discover.md#d-06-current-position-and-honest-uncertainty).
 
-With a usable fix, activating location recenters immediately; it does not first open a “Your location” explanation or
-details panel. Without a usable fix, request/retry positioning where possible, or give concise actionable recovery after
-the request fails. Never move to a fabricated position or call the fallback camera the user's location.
+The location button is a toggle. With a usable fix, clicking it starts following: the camera moves to the fix and stays
+locked to every new fix. The button fills with the app's pressed-toggle colour (green background, white icon), and
+`aria-pressed` reflects the state. The accessible name stays constant — "Follow your location" when a fix is usable,
+"Locate me" otherwise — so the label does not change with the toggle. Following stops on:
 
-Minimal wording does not remove required attribution, sourced facts in object details, permission handling, coverage
-limits, or action-specific failures. Keep those explanations attached to the relevant feature/action. Do not replace
-readable labels with unexplained pictograms or rely on color, hover, or a tooltip alone for essential state. Follow the
-[UI accessibility guidelines](../../engineering/ui.md) for names, focus, touch targets, and reduced motion.
+- A second click on the button;
+- Any camera move the follower did not make (user drag, pinch, scroll, or an app-initiated move such as choosing a
+  search result, toggling a layer);
+- Location failure (denied, timeout, outside the map) or when the permission prompt is dismissed.
+
+Following does not stop on a map resize (viewport change).
+
+Without a usable fix, clicking the button requests or retries positioning, or shows concise actionable recovery. Never
+move to a fabricated position or call the fallback camera the user's location.
+
+Minimal wording does not remove required attribution (on-map credit and dock footer), sourced facts in object details,
+permission handling, coverage limits, or action-specific failures. Keep those explanations attached to the relevant
+feature/action. Do not replace readable labels with unexplained pictograms or rely on color, hover, or a tooltip alone
+for essential state. Follow the [UI accessibility guidelines](../../engineering/ui.md) for names, focus, touch targets,
+and reduced motion.
 
 ## Acceptance
 
@@ -174,7 +246,7 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 | UI-A02 | Toggle the dock at an unchanged viewport.                                                                                              | Header/control bounding boxes, shape, and text baseline remain unchanged; query, category, focus, and selection survive.                                                                                                                                                           |
 | UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                        | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                 |
 | UI-A04 | Inspect bottom options.                                                                                                                | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                   |
-| UI-A05 | Activate location with a fresh fix, then test unavailable positioning.                                                                 | A usable fix recenters directly; unavailable positioning follows the recovery path without inventing a location.                                                                                                                                                                   |
+| UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                 | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                           |
 | UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                        | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                       |
 | UI-A07 | Use keyboard, screen reader, and touch.                                                                                                | Controls have names/states, visible focus and adequate targets; closing restores focus without reopening the dock.                                                                                                                                                                 |
 | UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                              | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                             |
@@ -185,18 +257,21 @@ readable labels with unexplained pictograms or rely on color, hover, or a toolti
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
-selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, and
-desktop card and dock coexistence. Keyboard geometry is simulated with a smaller visual viewport; this does not
-establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability under
-[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
-[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, desktop
+card and dock coexistence, and the follow location state machine (start, new fix moves camera, second click stops, drag
+stops, search result stops, denied shows recovery, no initial fix, button style). The follow state machine is covered by
+these browser tests; there is no DOM in node, so no large fake DOM is built for unit coverage. Keyboard geometry is
+simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior.
+Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability
+checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief
 
 > Create a small, self-contained HTML draft of a laconic, map-first interface for Kompas. Let the person explore the map
-> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, and required
-> attribution. Keep the dock closed.
+> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, scale, a small
+> "OpenStreetMap" credit below the scale bar, and full attribution in the left dock footer (per
+> [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Keep the dock closed.
 >
 > Opening the burger expands a left dock around the existing header. Desktop search uses that dock too. Keep the burger
 > and search at exactly the same coordinates, dimensions, and shape across states; preserve typing and focus. Dock
