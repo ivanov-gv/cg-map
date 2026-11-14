@@ -59,14 +59,15 @@ scroll above it.
 **Desktop search bar** (issue #101): the search bar is 60 px tall (instead of 54 px). With no query and the dock closed,
 a row of floating category chips appears under the bar; each chip has its own shadow and the row scrolls horizontally
 when it overflows. Typing a query shows a clear (×) button inside the bar and replaces the floating chips with a unified
-search panel joined to the bar, containing the categories row and a scrollable results list. Escape clears a non-empty
-query. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available for
-the full layer/download controls.
+search panel joined to the bar, containing the categories row and a scrollable results list. When the dock is open,
+Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps the search field
+focused. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available
+for the full layer/download controls.
 
 **Mobile search bar** (issue #102): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px default
-and the 60 px desktop bar), spans the full screen width, and uses smaller icons and font. Touch targets are at least 40
-px. The categories row is hidden on the main screen to save space; it remains available inside the open dock and the
-search bubble.
+and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and font.
+Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains available
+inside the open dock and the search bubble.
 
 **Flip search bar** (issue #103): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the
 menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The search field

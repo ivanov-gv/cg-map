@@ -170,7 +170,7 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await expectCameraToHold(page, before);
 });
 
-test('choosing a result moves the map only when the result is outside the focus zone', async ({page}) => {
+test('choosing a result moves the map only when the result is outside the focus zone', async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -179,8 +179,8 @@ test('choosing a result moves the map only when the result is outside the focus 
     lngLat => window.kompasDebug.map.jumpTo({center: [lngLat[0] + 0.02, lngLat[1] + 0.01], zoom: 16}),
     target
   );
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const row = page.locator('.result', {hasText: 'Nearby place 0'});
   const outside = await camera(page);
   await row.click();
@@ -497,14 +497,14 @@ test(
   }
 );
 
-test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page}) => {
+test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
   const lastPlace = nearbyPlaces.features[5].geometry.coordinates;
   await page.evaluate(lngLat => window.kompasDebug.map.jumpTo({center: lngLat, zoom: 16}), lastPlace);
-  // Open the dock to access the results list.
-  await openMenu(page);
+  if (isMobile) await page.locator('#search').click();
+  else await openMenu(page);
   const names = page.locator('.result strong');
   await expect(names.first()).toHaveText('Nearby place 5');
   const order = await names.allTextContents();
@@ -1481,11 +1481,13 @@ test.describe('Mobile search bar', () => {
     expect(rightGap).toBeLessThanOrEqual(14);
   });
 
-  test('categories are hidden on the main screen on mobile', async ({page}) => {
+  test('categories are hidden on mobile after desktop-to-mobile resize', async ({page}) => {
+    // Start at desktop size so the floating chips are visible.
+    await page.setViewportSize({width: 1280, height: 800});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
-    await closeMenu(page);
-    // Categories are not visible on the main screen.
+    // Resize to mobile: the mobile media query hides the categories row.
+    await page.setViewportSize({width: 412, height: 840});
     await expect(page.locator('#categories')).toBeHidden();
   });
 

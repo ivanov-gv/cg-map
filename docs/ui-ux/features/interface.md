@@ -78,9 +78,9 @@ places, exactly as the dock categories do.
 
 Typing a query shows a clear (×) button inside the bar at the right. Under the bar, a unified search panel appears,
 joined to the bar as one card: the categories row, then a scrollable results list. The floating chips hide when the
-panel appears. Escape clears a non-empty query, keeping the search field focused. Tab reaches the menu button, the
-input, the clear button, and the category chips. The dock remains available via the burger for layer and download
-controls.
+panel appears. When the dock is open, Escape closes it. When the dock is closed and there is a query, Escape clears the
+query and keeps the search field focused. Tab reaches the menu button, the input, the clear button, and the category
+chips. The dock remains available via the burger for layer and download controls.
 
 On phones, activating search instead of the burger follows the compact-search behavior below. The shared header stays in
 place in both modes; using search must not implicitly open the full dock.
@@ -88,9 +88,9 @@ place in both modes; using search must not implicitly open the full dock.
 ### Mobile search bar
 
 On phones (viewport ≤ 720 px), the search bar is 44 px tall — smaller than the 54 px base and the 60 px desktop bar. It
-spans the full screen width, with no left or right gap. The icon and font are smaller, and touch targets remain at least
-40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock and the
-search bubble.
+spans the screen width minus 12 px gutters on each side. The icon and font are smaller, and touch targets remain at
+least 40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock
+and the search bubble.
 
 ### Flip search bar
 

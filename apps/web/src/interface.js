@@ -104,6 +104,8 @@ export class MapInterface {
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
+      this.syncPanelPosition();
+      this.syncDesktopSearchUI();
       this.syncViewport();
     });
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
@@ -173,7 +175,7 @@ export class MapInterface {
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
-    this.search.setAttribute('aria-expanded', String(view !== 'closed'));
+    this.search.setAttribute('aria-expanded', String(this.areResultsVisible()));
     this.onChange?.();
   }
 
@@ -373,6 +375,7 @@ export class MapInterface {
   clearQuery() {
     this.search.value = '';
     this.syncClearButton();
+    this.search.setAttribute('aria-expanded', String(this.areResultsVisible()));
     this.onSearch?.();
   }
 
