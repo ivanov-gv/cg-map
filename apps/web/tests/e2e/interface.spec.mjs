@@ -2452,195 +2452,239 @@ function manyPlacesFixture(prefix) {
 // footer that starts minimized (only a handle row shows). The handle is a
 // <button> with aria-expanded and aria-controls. Opening it reveals Satellite,
 // Transport, Download, and attribution. Closing the dock resets to minimized.
+// Issue #161: tests must run at both 340×250 (real Flip screen) and 340×340.
 
 test.describe('Flip dock minimizable footer', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
-  const FLIP_VIEWPORT = {width: 340, height: 340};
+  // Test at the real Flip screen size (374×241), the previous test size (340×250),
+  // and the original square viewport (340×340).
+  const flipViewports = [
+    {name: '374x241', viewport: {width: 374, height: 241}},
+    {name: '340x250', viewport: {width: 340, height: 250}},
+    {name: '340x340', viewport: {width: 340, height: 340}}
+  ];
   const manyPlaces = manyPlacesFixture('flip-footer');
 
-  test('opening the dock shows the handle and hides layer buttons and Download',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  // Every Flip footer test runs at both viewport sizes.
+  for (const {name, viewport} of flipViewports) {
+    test(`opening the dock shows the handle and hides layer buttons and Download (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-      // The footer toggle handle is visible.
-      await expect(page.locator('#footer-toggle')).toBeVisible();
+        // The footer toggle handle is visible.
+        await expect(page.locator('#footer-toggle')).toBeVisible();
 
-      // Footer starts minimized: aria-expanded is false.
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+        // Footer starts minimized: aria-expanded is false.
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
 
-      // Layer buttons and Download are hidden while minimized.
-      await expect(page.locator('#satellite-toggle')).toBeHidden();
-      await expect(page.locator('#transport-toggle')).toBeHidden();
-      await expect(page.locator('#download')).toBeHidden();
+        // Layer buttons and Download are hidden while minimized.
+        await expect(page.locator('#satellite-toggle')).toBeHidden();
+        await expect(page.locator('#transport-toggle')).toBeHidden();
+        await expect(page.locator('#download')).toBeHidden();
 
-      // At least 3 results are visible.
-      await expect(page.locator('.result')).toHaveCount(8);
-      const visibleResults = await page.evaluate((vh) => {
-        const results = document.querySelectorAll('.result');
-        let count = 0;
-        for (const row of results) {
-          const rect = row.getBoundingClientRect();
-          if (rect.top >= 0 && rect.bottom <= vh) count++;
-        }
-        return count;
-      }, FLIP_VIEWPORT.height);
-      expect(visibleResults).toBeGreaterThanOrEqual(3);
-    });
-  });
-
-  test('clicking the handle shows all footer content and sets aria-expanded true',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-
-      // Open the footer.
-      await page.locator('#footer-toggle').click();
-
-      // aria-expanded is now true.
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-      // Layer buttons and Download are visible (not hidden by CSS).
-      await expect(page.locator('#satellite-toggle')).toBeVisible();
-      await expect(page.locator('#transport-toggle')).toBeVisible();
-      await expect(page.locator('#download')).toBeVisible();
-
-      // Attribution is also visible.
-      await expect(page.locator('#map-attribution')).toBeVisible();
-
-      // Results area is hidden while footer is expanded (wiki drawing 2).
-      await expect(page.locator('.dock-main')).toBeHidden();
-    });
-  });
-
-  test('clicking the handle again hides the footer content',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-
-      // Open then close the footer.
-      await page.locator('#footer-toggle').click();
-      await page.locator('#footer-toggle').click();
-
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-      await expect(page.locator('#satellite-toggle')).toBeHidden();
-      await expect(page.locator('#download')).toBeHidden();
-    });
-  });
-
-  test('the handle is reachable by Tab and toggles with Enter',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-
-      // Tab to the footer toggle (it should be in the tab order).
-      await page.locator('#footer-toggle').focus();
-      await expect(page.locator('#footer-toggle')).toBeFocused();
-
-      // Press Enter to toggle open.
-      await page.keyboard.press('Enter');
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-      // Press Enter again to toggle closed.
-      await page.keyboard.press('Enter');
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-    });
-  });
-
-  test('closing the dock resets the footer to minimized',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-
-      // Open the footer.
-      await page.locator('#footer-toggle').click();
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-      // Close the dock.
-      await closeMenu(page);
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
-
-      // Reopen the dock — footer should be minimized again.
-      await openMenu(page);
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-    });
-  });
-
-  // Issue #159: at least 3 .result rows must be fully visible between
-  // #categories bottom and .dock-footer top when minimized.
-  test('minimized footer leaves room for at least 3 fully visible results',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-
-      const resultPositions = await page.evaluate(() => {
-        const categoriesBottom = document.querySelector('#categories').getBoundingClientRect().bottom;
-        const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
-        const results = document.querySelectorAll('.result');
-        const fullyVisible = [];
-        for (const row of results) {
-          const rect = row.getBoundingClientRect();
-          if (rect.top >= categoriesBottom && rect.bottom <= footerTop) {
-            fullyVisible.push({top: rect.top, bottom: rect.bottom});
+        // At least 3 results are visible.
+        await expect(page.locator('.result')).toHaveCount(8);
+        const visibleResults = await page.evaluate((vh) => {
+          const results = document.querySelectorAll('.result');
+          let count = 0;
+          for (const row of results) {
+            const rect = row.getBoundingClientRect();
+            if (rect.top >= 0 && rect.bottom <= vh) count++;
           }
-        }
-        return {categoriesBottom, footerTop, count: fullyVisible.length, rows: fullyVisible};
+          return count;
+        }, viewport.height);
+        expect(visibleResults).toBeGreaterThanOrEqual(3);
       });
-      expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
     });
-  });
 
-  // Issue #159: when the footer is expanded, all footer items must be within
-  // the viewport with no scrolling (scrollHeight <= clientHeight + 1).
-  test('expanded footer fits without scrolling',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT, async () => {
-      await ready(page);
-      await openMenu(page);
-      await page.locator('#footer-toggle').click();
-      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+    test(`clicking the handle shows all footer content and sets aria-expanded true (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
 
-      const footerFit = await page.evaluate((vh) => {
-        const footer = document.querySelector('.dock-footer');
-        const satellite = document.querySelector('#satellite-toggle');
-        const transport = document.querySelector('#transport-toggle');
-        const download = document.querySelector('#download');
-        const attribution = document.querySelector('#map-attribution');
-        return {
-          scrollHeight: footer.scrollHeight,
-          clientHeight: footer.clientHeight,
-          needsScroll: footer.scrollHeight > footer.clientHeight + 1,
-          satelliteBottom: satellite.getBoundingClientRect().bottom,
-          transportBottom: transport.getBoundingClientRect().bottom,
-          downloadBottom: download.getBoundingClientRect().bottom,
-          attributionBottom: attribution.getBoundingClientRect().bottom,
-          viewportBottom: vh,
-          allWithinViewport:
-            satellite.getBoundingClientRect().bottom <= vh &&
-            transport.getBoundingClientRect().bottom <= vh &&
-            download.getBoundingClientRect().bottom <= vh &&
-            attribution.getBoundingClientRect().bottom <= vh,
-        };
-      }, FLIP_VIEWPORT.height);
-      expect(footerFit.needsScroll, 'footer should not need scrolling').toBe(false);
-      expect(footerFit.allWithinViewport, 'all footer items within viewport').toBe(true);
+        // Open the footer.
+        await page.locator('#footer-toggle').click();
+
+        // aria-expanded is now true.
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Layer buttons and Download are visible (not hidden by CSS).
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+        await expect(page.locator('#transport-toggle')).toBeVisible();
+        await expect(page.locator('#download')).toBeVisible();
+
+        // Attribution is also visible.
+        await expect(page.locator('#map-attribution')).toBeVisible();
+
+        // Results area is hidden while footer is expanded (wiki drawing 2).
+        await expect(page.locator('.dock-main')).toBeHidden();
+      });
     });
-  });
+
+    test(`clicking the handle again hides the footer content (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Open then close the footer.
+        await page.locator('#footer-toggle').click();
+        await page.locator('#footer-toggle').click();
+
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.locator('#satellite-toggle')).toBeHidden();
+        await expect(page.locator('#download')).toBeHidden();
+      });
+    });
+
+    test(`the handle is reachable by Tab and toggles with Enter (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Tab to the footer toggle (it should be in the tab order).
+        await page.locator('#footer-toggle').focus();
+        await expect(page.locator('#footer-toggle')).toBeFocused();
+
+        // Press Enter to toggle open.
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Press Enter again to toggle closed.
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    test(`closing the dock resets the footer to minimized (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        // Open the footer.
+        await page.locator('#footer-toggle').click();
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Close the dock.
+        await closeMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+        // Reopen the dock — footer should be minimized again.
+        await openMenu(page);
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    // Issue #159, #161: at least 3 .result rows must be fully visible between
+    // #categories bottom and .dock-footer top when minimized.
+    // Each result top >= categories bottom and bottom <= footer-toggle top.
+    // The last visible row must leave at least 4 px above the handle.
+    test(`minimized: 3 results fully visible between categories and handle (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        const resultPositions = await page.evaluate(() => {
+          const categoriesBottom = document.querySelector('#categories').getBoundingClientRect().bottom;
+          const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
+          const toggleTop = document.querySelector('#footer-toggle').getBoundingClientRect().top;
+          const results = document.querySelectorAll('.result');
+          const fullyVisible = [];
+          for (const row of results) {
+            const rect = row.getBoundingClientRect();
+            if (rect.top >= categoriesBottom && rect.bottom <= toggleTop) {
+              fullyVisible.push({top: rect.top, bottom: rect.bottom});
+            }
+          }
+          const lastVisibleBottom = fullyVisible.length > 0
+            ? fullyVisible[fullyVisible.length - 1].bottom
+            : 0;
+          const spareAboveHandle = toggleTop - lastVisibleBottom;
+          return {categoriesBottom, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
+        });
+        expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
+        expect(resultPositions.spareAboveHandle, 'at least 4 px spare above handle').toBeGreaterThanOrEqual(4);
+      });
+    });
+
+    // Issue #161: nothing visible below the handle except safe-area padding.
+    test(`minimized: nothing visible below the handle except padding (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        const handleBottom = await page.evaluate((vh) => {
+          const toggle = document.querySelector('#footer-toggle');
+          const rect = toggle.getBoundingClientRect();
+          const paddingBottom = parseFloat(getComputedStyle(document.querySelector('.dock-footer')).paddingBottom);
+          return {
+            handleBottom: rect.bottom,
+            viewportHeight: vh,
+            gap: vh - rect.bottom,
+            paddingBottom
+          };
+        }, viewport.height);
+        // The handle's bottom should be within (safe-area padding + 2 px) of the visible bottom.
+        const maxGap = handleBottom.paddingBottom + 2;
+        expect(handleBottom.gap, 'gap below handle within safe-area padding + 2px')
+          .toBeLessThanOrEqual(maxGap);
+      });
+    });
+
+    // Issue #159, #161: when the footer is expanded, all footer items must be within
+    // the viewport with no scrolling (scrollHeight <= clientHeight + 1).
+    test(`expanded footer fits without scrolling (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await page.locator('#footer-toggle').click();
+        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        const footerFit = await page.evaluate((vh) => {
+          const footer = document.querySelector('.dock-footer');
+          const satellite = document.querySelector('#satellite-toggle');
+          const transport = document.querySelector('#transport-toggle');
+          const download = document.querySelector('#download');
+          const attribution = document.querySelector('#map-attribution');
+          return {
+            scrollHeight: footer.scrollHeight,
+            clientHeight: footer.clientHeight,
+            needsScroll: footer.scrollHeight > footer.clientHeight + 1,
+            satelliteBottom: satellite.getBoundingClientRect().bottom,
+            transportBottom: transport.getBoundingClientRect().bottom,
+            downloadBottom: download.getBoundingClientRect().bottom,
+            attributionBottom: attribution.getBoundingClientRect().bottom,
+            viewportBottom: vh,
+            allWithinViewport:
+              satellite.getBoundingClientRect().bottom <= vh &&
+              transport.getBoundingClientRect().bottom <= vh &&
+              download.getBoundingClientRect().bottom <= vh &&
+              attribution.getBoundingClientRect().bottom <= vh,
+          };
+        }, viewport.height);
+        expect(footerFit.needsScroll, 'footer should not need scrolling').toBe(false);
+        expect(footerFit.allWithinViewport, 'all footer items within viewport').toBe(true);
+      });
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------

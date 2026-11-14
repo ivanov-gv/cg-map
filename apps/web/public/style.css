@@ -23,6 +23,8 @@
   --bar-inset: 20px;
   --visible-top: 0px;
   --visible-height: 100dvh;
+  /* How far the keyboard pushes content up from the layout bottom; set by interface.js syncViewport. */
+  --keyboard-inset: 0px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -337,13 +339,13 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body[data-view=search] #categories { display: flex; }
 
   /* Dock content starts below the smaller mobile bar. */
-  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: calc(100dvh - var(--visible-height) - var(--visible-top)); }
+  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: var(--keyboard-inset); }
 
   /* Search bubble and results strip use the same gutters as the bar on mobile. */
   .search-bubble { left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
-  .place-card { top: auto; bottom: calc(100dvh - var(--visible-height) - var(--visible-top) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
+  .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }
@@ -374,24 +376,61 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:not([data-view=dock]) .search-bar .search,
   body:not([data-view=dock]) .search-bar .clear-button { display: none; }
 
-  /* Smaller result rows on Flip so at least three fit in the visible area.
-   * Tighter padding (6 px instead of 8 px) keeps the rendered height at the
-   * 56 px min-height target so three rows fit between categories and the handle. */
-  body[data-view=dock] .result {
-    min-height: 56px;
-    padding: 6px var(--bar-inset);
+  /* Compact search bar on Flip — reduce the top inset so the bar starts sooner.
+   * The bar itself stays 44 px; the inset above it shrinks from 20 px to 8 px. */
+  body[data-view=dock] .search-bar {
+    top: calc(var(--visible-top) + 8px);
   }
-  /* Tighter category row on Flip — reduce the bottom padding so the results
-   * area starts sooner. */
+  /* Dock content starts below the compact Flip bar (8 px inset + 44 px bar = 52 px). */
+  body[data-view=dock] .dock-content {
+    top: calc(var(--visible-top) + 8px + 44px);
+  }
+  /* Compact category row on Flip — smaller chips (30 px) and tighter padding
+   * so the results area starts sooner. At 374×241 the space between categories
+   * bottom and the footer handle is only 121 px; three 40 px rows with 1 px
+   * separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
-    padding-bottom: 4px;
+    gap: 5px;
+    padding-top: 2px;
+    padding-bottom: 0;
+  }
+  body[data-view=dock] #categories button {
+    min-height: 30px;
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+  /* Compact result rows on Flip so at least three fit in the visible area.
+   * Target: 41 px per row (40 px min-height + 1 px separator, 24 px symbol,
+   * single-line name, smaller kind/distance). Three rows × 41 px = 123 px fits
+   * the measured 130 px between categories and the handle. */
+  body[data-view=dock] .result {
+    min-height: 40px;
+    padding: 3px var(--bar-inset);
+    gap: 8px;
+    border-bottom: 1px solid #eceee7;
+    align-items: center;
+  }
+  body[data-view=dock] .result .symbol {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    font-size: 10px;
+  }
+  body[data-view=dock] .result strong {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  body[data-view=dock] .result small,
+  body[data-view=dock] .result .distance {
+    font-size: 10px;
+    line-height: 1.2;
   }
   /* Flip footer is pinned at the bottom and starts minimized: only the handle row shows.
    * The handle is a button that toggles the footer content (Satellite, Transport,
    * Download, attribution). When opened, the results area shrinks to make room.
    * Closing the dock resets the footer to minimized.
    * When minimized, remove the top padding and border so the footer is only the
-   * handle (40 px) plus the safe-area bottom padding — no wasted space. */
+   * compact handle (28 px) plus the safe-area bottom padding — no separator, no strip. */
   body[data-view=dock] .dock-footer {
     position: sticky;
     bottom: 0;
@@ -409,29 +448,67 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   /* When the footer is expanded, restore the top padding and border so the
    * content has breathing room, and show the content while hiding results. */
   body[data-view=dock] .dock-footer[data-footer-expanded=true] {
-    padding-top: 16px;
+    padding-top: 12px;
     border-top: 1px solid var(--line);
   }
   body[data-view=dock] .dock-footer[data-footer-expanded=true] #dock-footer-content {
     display: block;
-    max-height: calc(100dvh - var(--visible-top) - 120px);
+    max-height: calc(100dvh - var(--visible-top) - 100px);
     overflow-y: auto;
   }
   body[data-view=dock]:has(.dock-footer[data-footer-expanded=true]) .dock-main {
     display: none;
   }
-  /* The footer toggle handle — visible only on Flip with the dock open. */
+  /* Compact layer tiles on Flip when footer is expanded — icon and label in one row,
+   * about 40 px high so they fit without scrolling at 340x250. */
+  body[data-view=dock] .layer-grid {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  body[data-view=dock] .layer-tile {
+    min-height: 40px;
+    flex-direction: row;
+    padding: 6px 10px;
+    gap: 6px;
+    align-items: center;
+  }
+  body[data-view=dock] .layer-tile .icon {
+    width: 20px;
+    height: 20px;
+  }
+  body[data-view=dock] .layer-tile span {
+    font-size: 12px;
+  }
+  /* Compact Download button on Flip — about 40 px high. */
+  body[data-view=dock] .download {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  /* Compact attribution and notes on Flip. */
+  body[data-view=dock] .dock-footer p,
+  body[data-view=dock] .connection-badge {
+    font-size: 10px;
+    margin: 4px 0;
+  }
+  body[data-view=dock] #map-attribution {
+    font-size: 10px;
+    margin: 4px 0;
+  }
+  /* The footer toggle handle — visible only on Flip with the dock open.
+   * Compact to 28 px with no separator line below it. */
   #footer-toggle {
     display: none;
   }
   body[data-view=dock] #footer-toggle {
     display: block;
     width: 100%;
-    min-height: 40px;
-    padding: 8px 0;
+    min-height: 28px;
+    height: 28px;
+    padding: 0;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--line);
     cursor: pointer;
     position: relative;
   }
