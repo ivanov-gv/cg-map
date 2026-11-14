@@ -321,6 +321,6 @@ export class PlaceSelection {
   }
 
   hasExplicitFilter() {
-    return Boolean(elementById('search').value.trim()) || this.#directory.activeCategory !== 'all';
+    return Boolean(elementById('search').value.trim()) || this.#directory.activeCategory !== null;
   }
 }

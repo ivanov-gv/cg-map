@@ -57,9 +57,7 @@ test('dock expands around a stationary header and keeps layer/download options a
   await expect(page.locator('.result')).toHaveCount(0);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
-  await expect(
-    page.locator('#categories').getByRole('button', {name: 'Explore all', exact: true})
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#categories').getByRole('button').first()).not.toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.result')).toHaveCount(3);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.screenshot({path: testInfo.outputPath('dock.png')});
@@ -600,8 +598,11 @@ test(
     await chip('Essentials').evaluate(element => element.click());
     await expect.poll(() => chipInStrip('Essentials')).toBe(true);
     await chip('Essentials').evaluate(element => element.click());
-    await expect(chip('Explore all')).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => chipInStrip('Explore all')).toBe(true);
+    // Toggling off clears the category filter — no button is pressed.
+    const noButtonPressed = await strip.evaluate(element =>
+      [...element.querySelectorAll('button')].every(btn => btn.getAttribute('aria-pressed') === 'false')
+    );
+    expect(noButtonPressed).toBe(true);
 
     const scrolled = await strip.evaluate(element => {
       const start = element.scrollLeft;

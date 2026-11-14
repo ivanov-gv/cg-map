@@ -15,7 +15,13 @@ const feature = (name, category, coordinates) => ({
 test('search handles Serbian Latin diacritics and Cyrillic', () => {
   assert.equal(normalizeSearchText('Његошева улица'), 'njegoseva ulica');
   assert.equal(normalizeSearchText('Đorđević'), 'djordjevic');
-  assert.equal(matchesPlaceSearch(feature('Никшић', 'sights', [19, 42]), 'niksic', 'all'), true);
+  assert.equal(matchesPlaceSearch(feature('Никшић', 'sights', [19, 42]), 'niksic', null), true);
+});
+test('null category matches every category', () => {
+  const cafe = feature('Cafe', 'food', [19.25, 42.44]);
+  const museum = feature('Museum', 'sights', [18.8, 42.4]);
+  assert.equal(matchesPlaceSearch(cafe, 'cafe', null), true);
+  assert.equal(matchesPlaceSearch(museum, 'museum', null), true);
 });
 test('category filter and nearest ordering operate independently', () => {
   const cafe = feature('Cafe', 'food', [19.25, 42.44]);

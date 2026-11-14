@@ -80,7 +80,7 @@ const directoryState = {
   allPlaces: [],
   filteredPlaces: [],
   placesById: new Map(),
-  activeCategory: 'all',
+  activeCategory: null,
   buildingAddresses: new Map(),
   loadingError: null,
   visibilityConfig: null,
@@ -520,6 +520,7 @@ function warnAboutSlowStartup() {
 }
 
 // Category toggles share the same filter and never move the camera.
+// Pressing a category selects it; pressing it again clears the filter.
 function registerCategoryControls() {
   for (const [key, label] of Object.entries(categories)) {
     const button = createElement('button', label);
@@ -527,7 +528,8 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      directoryState.activeCategory = directoryState.activeCategory === key ? 'all' : key;
+      directoryState.activeCategory =
+        directoryState.activeCategory === key ? null : key;
       for (const other of elementById('categories').children) {
         const isActiveCategory = other.dataset.category === directoryState.activeCategory;
         other.setAttribute('aria-pressed', String(isActiveCategory));
@@ -646,11 +648,9 @@ function initializeInterface() {
     onCardSwipedAway: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      return query
-        ? `“${query}”`
-        : directoryState.activeCategory === 'all'
-          ? 'Results'
-          : categories[directoryState.activeCategory];
+      if (query) return `"${query}"`;
+      if (directoryState.activeCategory) return categories[directoryState.activeCategory];
+      return 'Nearby places';
     }
   });
 }
