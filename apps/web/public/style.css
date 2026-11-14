@@ -23,6 +23,8 @@
   --bar-inset: 20px;
   --visible-top: 0px;
   --visible-height: 100dvh;
+  /* How far the keyboard pushes content up from the layout bottom; set by interface.js syncViewport. */
+  --keyboard-inset: 0px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -337,13 +339,13 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body[data-view=search] #categories { display: flex; }
 
   /* Dock content starts below the smaller mobile bar. */
-  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: calc(100dvh - var(--visible-height) - var(--visible-top)); }
+  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: var(--keyboard-inset); }
 
   /* Search bubble and results strip use the same gutters as the bar on mobile. */
   .search-bubble { left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
-  .place-card { top: auto; bottom: calc(100dvh - var(--visible-height) - var(--visible-top) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
+  .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }

@@ -441,6 +441,9 @@ export class MapInterface {
     const style = document.documentElement.style;
     style.setProperty('--visible-height', `${height}px`);
     style.setProperty('--visible-top', `${top}px`);
+    // CSS 100dvh and visualViewport can disagree on screens with camera cut-outs, which left an empty band under the
+    // dock, so the keyboard inset comes from one source: the layout viewport less the visible part.
+    style.setProperty('--keyboard-inset', `${Math.max(0, innerHeight - height - top)}px`);
     style.setProperty('--search-top', `${bounds.top}px`);
     style.setProperty('--search-max-height', `${bounds.maxHeight}px`);
     // The keyboard would cover these options and the end of the results list above them.
