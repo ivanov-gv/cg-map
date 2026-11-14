@@ -988,6 +988,8 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
     await expect(page.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
 
     await openMenu(page);
+    // Expand the footer to reveal the attribution (minimized by default on Flip).
+    await page.locator('#footer-toggle').click();
     const attribution = page.locator('#map-attribution');
     await expect(attribution).toBeVisible();
     const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
@@ -2681,6 +2683,8 @@ test.describe('GPS follow — layer toggle stops following', () => {
 
       // Open the menu to access the satellite toggle, then toggle it.
       await openMenu(page);
+      // On Flip, the footer starts minimized — expand it to reach the satellite toggle.
+      if (name === 'flip') await page.locator('#footer-toggle').click();
       await page.locator('#satellite-toggle').click();
       await settled(page);
 
