@@ -56,8 +56,9 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
-- Read [readability](docs/engineering/readability.md) before planning or editing code. All code must meet it: meaningful
-  whole-word names, short functions that read as steps, and comments that explain why.
+- Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
+  on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
+  and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
 - No application copies, binaries, or temporary assets in repository root.
@@ -74,8 +75,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Workflow: task, plan, PR, decisions log
 
-Work starts in the human-written wiki—read it, never edit it; propose changes as issue comments
-([the workflow](docs/management/management.md)).
+Work starts in the human-written wiki: read it, never edit it; propose changes as issue comments. See
+[the workflow and PR rules](docs/management/AGENTS.md): Feature PRs start as drafts; an Epic's Features form a stack.
 
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
@@ -85,8 +86,7 @@ Work starts in the human-written wiki—read it, never edit it; propose changes 
 5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.
 6. Report executed checks, review findings left open, and limitations.
-7. Write the PR from [the template](.github/pull_request_template.md): its issue link and Decisions section. Feature PRs
-   start as drafts; an Epic's Features form a stack ([details](docs/management/AGENTS.md#pull-request-rules)).
+7. Write the PR from [the template](.github/pull_request_template.md): its issue link and Decisions section.
 
 ## Invariants
 
