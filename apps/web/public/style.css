@@ -51,6 +51,10 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .search .icon { width: 18px; height: 18px; color: var(--muted); }
 .search input { width: 100%; min-width: 0; height: 48px; padding: 0 10px 0 0; border: 0; background: transparent; font-size: 14px; }
 .search input::placeholder { color: var(--muted); }
+/* Hide the native search cancel button so only #clear-search is visible. */
+.search input::-webkit-search-cancel-button { display: none; }
+.search input::-webkit-search-decoration { display: none; }
+.search input::-ms-clear { display: none; }
 /* The search field shows focus through its caret and the shared bar's border, not the generic ring. */
 .search input:focus-visible { outline: none; }
 .search-bar:has(input:focus) { border-color: var(--line-strong); }
@@ -148,7 +152,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 /* Desktop search bar: taller, with clear button and floating categories. */
 /* The dock stays open beside a place card, so the card moves clear of it and keeps the map controls reachable. */
 @media (min-width: 721px) {
+  /* The dock stays open beside a place card, so the card moves clear of it and keeps the map controls reachable. */
   body[data-view=dock] .place-card { top: 20px; left: calc(var(--dock-width) + 12px); width: min(375px, calc(100% - var(--dock-width) - 96px)); max-height: calc(100% - 40px); }
+
+  /* When the desktop search panel shows results, the card moves to the right of the panel the same way. */
+  body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card { top: 20px; left: calc(var(--dock-width) + 12px); width: min(375px, calc(100% - var(--dock-width) - 96px)); max-height: calc(100% - 40px); }
 
   /* Taller search bar on desktop (60px instead of 54px). */
   .search-bar { height: 60px; }

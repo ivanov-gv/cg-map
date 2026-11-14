@@ -547,12 +547,7 @@ test(
   async ({page, isMobile}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
-    if (isMobile) {
-      await page.locator('#search').click();
-    } else {
-      // On desktop, open the dock to access results and avoid the search panel overlapping the card.
-      await openMenu(page);
-    }
+    await page.locator('#search').fill('Nearby place 0');
     await page.locator('.result', {hasText: 'Nearby place 0'}).click();
     await expect(page.locator('#place-card')).toBeVisible();
     if (isMobile) await page.locator('#card-handle').click();
@@ -1382,6 +1377,58 @@ test.describe('Desktop search bar', () => {
     await page.keyboard.press('Tab');
     const firstChip = page.locator('#desktop-search-panel #categories button').first();
     await expect(firstChip).toBeFocused();
+  });
+
+  test('choosing a result from the search panel places the card to the right of the panel', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Type a query that matches a place in the fixture.
+    await page.locator('#search').fill('Mimoza');
+    await expect(page.locator('.result')).toHaveCount(1);
+    // Choose the result.
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    // Measure both the sidebar and the card using getBoundingClientRect.
+    const {sidebarRight, cardLeft, cardTop, cardWidth, cardHeight} = await page.evaluate(() => {
+      const sidebar = document.querySelector('.sidebar');
+      const card = document.getElementById('place-card');
+      return {
+        sidebarRight: sidebar.getBoundingClientRect().right,
+        cardLeft: card.getBoundingClientRect().left,
+        cardTop: card.getBoundingClientRect().top,
+        cardWidth: card.getBoundingClientRect().width,
+        cardHeight: card.getBoundingClientRect().height
+      };
+    });
+    // The card's left edge must be at or right of the sidebar's right edge.
+    expect(cardLeft).toBeGreaterThanOrEqual(sidebarRight - 1);
+    // The card centre must not be covered by another element — walk up to find #place-card.
+    const cardCentreX = cardLeft + cardWidth / 2;
+    const cardCentreY = cardTop + cardHeight / 2;
+    const isCardVisible = await page.evaluate(({x, y}) => {
+      const el = document.elementFromPoint(x, y);
+      return el?.closest('#place-card') !== null;
+    }, {x: cardCentreX, y: cardCentreY});
+    expect(isCardVisible).toBe(true);
+  });
+
+  test('with a query, only the clear button is visible in the search bar', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await page.locator('#search').fill('Café');
+    // The native search cancel pseudo-element must not be displayed.
+    const nativeCancelHidden = await page.evaluate(() => {
+      // Pseudo-elements can't be read from Playwright, so verify that only one
+      // clear-related button exists in the search bar.
+      const searchBar = document.querySelector('.search-bar');
+      const buttons = Array.from(searchBar.querySelectorAll('button'));
+      const clearButtons = buttons.filter(button => /clear/i.test(button.getAttribute('aria-label') ?? ''));
+      return clearButtons.length === 1;
+    });
+    expect(nativeCancelHidden).toBe(true);
   });
 });
 

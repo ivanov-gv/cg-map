@@ -373,6 +373,13 @@ export class MapInterface {
     this.onSearch?.();
   }
 
+  // Returns true when the desktop search panel is visible and shows results.
+  #isDesktopSearchPanelVisible() {
+    return !this.mobileLayoutQuery.matches &&
+      !this.desktopSearchPanel.hidden &&
+      this.desktopSearchPanel.dataset.hasQuery === 'true';
+  }
+
   // Returns true when the results list is visible to the user.
   areResultsVisible() {
     if (this.view === 'search' || this.view === 'dock') return true;
@@ -423,7 +430,7 @@ export class MapInterface {
       headerBottom: header.bottom - map.top,
       searchBottom: this.view === 'search' ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
       dockRight:
-        this.view === 'dock'
+        (this.view === 'dock' || this.#isDesktopSearchPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
       details: details && {top: detailsTop - map.top, right: details.right - map.left},
