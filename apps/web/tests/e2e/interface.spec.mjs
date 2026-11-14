@@ -2215,3 +2215,113 @@ test.describe('GPS follow — button style', () => {
 
 });
 
+// Left dock: vertical order, nearest-first list, category + query filtering
+test('left dock shows elements in vertical order: search, categories, results, layers, download', async ({
+  page
+}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+  await ready(page);
+  await openMenu(page);
+  await expect(page.locator('.result')).toHaveCount(3);
+
+  const searchBar = await page.locator('.search-bar').boundingBox();
+  const categories = await page.locator('#categories').boundingBox();
+  const results = await page.locator('#results').boundingBox();
+  const layerGrid = await page.locator('.layer-grid').boundingBox();
+  const download = await page.locator('#download').boundingBox();
+
+  // Assert vertical order by top Y coordinates (categories and results are adjacent, so >= is correct)
+  expect(categories.y).toBeGreaterThan(searchBar.y);
+  expect(results.y).toBeGreaterThanOrEqual(categories.y + categories.height);
+  expect(layerGrid.y).toBeGreaterThan(results.y);
+  expect(download.y).toBeGreaterThan(layerGrid.y);
+});
+
+test('panning the map changes the first result to the place nearest the new centre', async ({
+  page
+}) => {
+  // Create places at known positions so nearest ordering is deterministic.
+  const places = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.25, 42.44]},
+        properties: {id: 'near-west', name: 'West Place', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.28, 42.44]},
+        properties: {id: 'near-east', name: 'East Place', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.30, 42.44]},
+        properties: {id: 'far-east', name: 'Far East', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      }
+    ]
+  };
+  await page.route('**/data/places.geojson', route => route.fulfill({json: places}));
+  await ready(page);
+  await openMenu(page);
+
+  // Default centre is near [19.26, 42.437]; West Place (19.25) is nearest.
+  await expect(page.locator('.result').first()).toContainText('West Place');
+
+  // Pan the map east so East Place becomes nearest.
+  await page.evaluate(() => {
+    window.kompasDebug.map.jumpTo({center: [19.28, 42.44], zoom: window.kompasDebug.map.getZoom()});
+  });
+  await settled(page);
+
+  // After moveend, the list re-sorts; East Place (19.28) is now nearest.
+  await expect(page.locator('.result').first()).toContainText('East Place');
+});
+
+test('category filter then query filter narrows results to both', async ({page}) => {
+  const places = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.25, 42.44]},
+        properties: {id: 'cafe-a', name: 'Cafe Alpha', category: 'food', kind: 'cafe', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.26, 42.44]},
+        properties: {id: 'cafe-b', name: 'Cafe Beta', category: 'food', kind: 'cafe', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.27, 42.44]},
+        properties: {id: 'shop-a', name: 'Alpha Shop', category: 'shops', kind: 'shop', visibilityLevel: 4}
+      },
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.28, 42.44]},
+        properties: {id: 'sight-a', name: 'Alpha Sight', category: 'sights', kind: 'museum', visibilityLevel: 4}
+      }
+    ]
+  };
+  await page.route('**/data/places.geojson', route => route.fulfill({json: places}));
+  await ready(page);
+  await openMenu(page);
+
+  // No filter: all 4 places shown
+  await expect(page.locator('.result')).toHaveCount(4);
+
+  // Press food category: only 2 cafes
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await expect(page.locator('.result')).toHaveCount(2);
+  // Waiting assertions avoid racing the re-render after category click
+  await expect(page.locator('.result', {hasText: 'Cafe Alpha'})).toHaveCount(1);
+  await expect(page.locator('.result', {hasText: 'Cafe Beta'})).toHaveCount(1);
+
+  // Type query within the category: only Cafe Alpha matches 'alpha' + food
+  await page.locator('#search').fill('alpha');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await expect(page.locator('.result').first()).toContainText('Cafe Alpha');
+  // Alpha Shop (shops) and Alpha Sight (sights) are excluded by category
+});
+
