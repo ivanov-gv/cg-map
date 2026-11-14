@@ -396,15 +396,14 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     font-size: 11px;
   }
   /* Compact result rows on Flip so at least three fit in the visible area.
-   * Target: 40 px per row (24 px symbol, single-line name, smaller kind/distance).
-   * Remove the separator border, tighten padding to 3 px, reduce symbol to 24 px,
-   * and use a compact line-height so three rows fit in the space between categories
-   * and the handle. */
+   * Target: 41 px per row (40 px min-height + 1 px separator, 24 px symbol,
+   * single-line name, smaller kind/distance). Three rows × 41 px = 123 px fits
+   * the measured 130 px between categories and the handle. */
   body[data-view=dock] .result {
     min-height: 40px;
     padding: 3px var(--bar-inset);
     gap: 8px;
-    border-bottom: none;
+    border-bottom: 1px solid #eceee7;
     align-items: center;
   }
   body[data-view=dock] .result .symbol {
