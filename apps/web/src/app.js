@@ -269,6 +269,7 @@ async function start() {
     }
   });
   installPublicMapDebug();
+  wrapMapEaseTo();
   installPositionBadge();
   mapState.map.on('load', () => {
     installPublicLayers(placesReady, labelsReady);
@@ -337,6 +338,22 @@ async function initializeMapTransport() {
     }
   });
   await startupState.offlineControls.initialize();
+}
+
+// Tag for the movestart handler: set before a follower-initiated easeTo so
+// stopFollowingOnForeignMove can distinguish it from other camera moves.
+let pendingEaseToTags = null;
+
+// Wraps map.easeTo so the second argument (e.g. {isLocationFollowMove: true}) is attached
+// to the movestart event, allowing stopFollowingOnForeignMove to distinguish follower moves.
+function wrapMapEaseTo() {
+  const original = mapState.map.easeTo.bind(mapState.map);
+  mapState.map.easeTo = function (options, tags) {
+    if (tags) {
+      pendingEaseToTags = tags;
+    }
+    return original(options);
+  };
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
@@ -445,6 +462,11 @@ function registerPublicMapEvents() {
     }
   });
   mapState.map.on('movestart', event => {
+    // Attach tags from the wrapped easeTo call, then clear them.
+    if (pendingEaseToTags) {
+      Object.assign(event, pendingEaseToTags);
+      pendingEaseToTags = null;
+    }
     // Stop following on any camera move the follower did not tag — before the early return,
     // so app-initiated moves also reach this check.
     locationControls.stopFollowingOnForeignMove(event);

@@ -4,6 +4,7 @@ import {elementById} from './dom.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
+  hasUsablePosition,
   positionActionLabel,
   positionIndicator,
   positionMessage,
@@ -59,19 +60,9 @@ export class LocationControls {
   render(snapshot) {
     this.#snapshot = snapshot;
     const {state, fix} = snapshot;
-    // Stop following if location becomes unavailable while following.
-    if (this.#isFollowing && FAILED_POSITION_STATES.includes(state)) {
-      this.#isFollowing = false;
-      this.#isLocationRequested = false;
-      this.#context.notify(positionMessage(snapshot));
-      this.#renderFollowing();
-    }
-    // Stop following if state becomes 'prompt' after an explicit request.
-    if (this.#isFollowing && state === 'prompt' && this.#isLocationRequested) {
-      this.#isFollowing = false;
-      this.#isLocationRequested = false;
-      this.#context.notify(positionMessage(snapshot));
-      this.#renderFollowing();
+    // Stop following when the state makes it impossible to continue.
+    if (this.#isFollowing && this.#shouldStopFor(state)) {
+      this.#stopFollowingWithMessage(snapshot);
     }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
     elementById('position-badge').dataset.state = state;
@@ -91,25 +82,23 @@ export class LocationControls {
       this.#context.notify('Location is not updating. Check device location settings and try again.');
       this.#isLocationRequested = false;
     }
+    // Retry location when explicitly requested and still acquiring.
+    if (this.#isLocationRequested && state === 'acquiring') {
+      this.#isLocationRequested = false;
+      this.#tracker?.retry();
+    }
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
     // While following, keep the camera on every new usable fix.
-    if (this.#isFollowing && ['live', 'approximate'].includes(state) && fix) {
+    if (this.#isFollowing && hasUsablePosition(state) && fix && this.#isNewFollowFix(fix)) {
       // Clear stale request flag before moving the camera.
       this.#isLocationRequested = false;
-      // Skip the move when the fix has not changed since the last follow move.
-      const coordinatesChanged =
-        !this.#lastFollowedCoordinates ||
-        fix.coordinates[0] !== this.#lastFollowedCoordinates[0] ||
-        fix.coordinates[1] !== this.#lastFollowedCoordinates[1];
-      if (coordinatesChanged) {
-        this.#moveCameraToFix(fix);
-      }
+      this.#moveCameraToFix(fix);
       return;
     }
     // Center once on the first usable fix, never after the person has started exploring.
     if (
-      ['live', 'approximate'].includes(state) &&
+      hasUsablePosition(state) &&
       ((!this.#hasCenteredOnFix && !this.#context.hasExploredMap()) || this.#isLocationRequested)
     ) {
       const offset = this.#isLocationRequested ? this.#interface.mapOffset() : [0, 0];
@@ -129,6 +118,31 @@ export class LocationControls {
   #renderFollowing() {
     elementById('position-badge').dataset.following = String(this.#isFollowing);
     elementById('position-action').setAttribute('aria-pressed', String(this.#isFollowing));
+  }
+
+  // Returns true when the given state should stop following.
+  // Only permanent failures stop following: 'denied', 'outside', 'insecure', 'unsupported'.
+  // Transient errors ('unavailable', 'timeout') do not stop following, because the tracker
+  // retries automatically and a clearWatch() error can briefly set 'unavailable'.
+  #shouldStopFor(state) {
+    return ['denied', 'outside', 'insecure', 'unsupported'].includes(state);
+  }
+
+  // Stops following and notifies the user with the position message.
+  #stopFollowingWithMessage(snapshot) {
+    this.#isFollowing = false;
+    this.#isLocationRequested = false;
+    this.#context.notify(positionMessage(snapshot));
+    this.#renderFollowing();
+  }
+
+  // Returns true when the fix is different from the last one the follower moved to.
+  #isNewFollowFix(fix) {
+    if (!this.#lastFollowedCoordinates) return true;
+    return (
+      fix.coordinates[0] !== this.#lastFollowedCoordinates[0] ||
+      fix.coordinates[1] !== this.#lastFollowedCoordinates[1]
+    );
   }
 
   // Moves the camera to keep the fix centered, preserving the current zoom and map offset.
@@ -167,17 +181,26 @@ export class LocationControls {
   // Starts following without a second camera path.
   // Sets hasCenteredOnFix so the one-time first-fix centring never runs after following starts.
   #startFollowing() {
-    this.#interface.close();
-    this.#context.closeSelection();
-    this.#isFollowing = true;
-    this.#hasCenteredOnFix = true;
-    this.#renderFollowing();
     const {fix, state} = this.#snapshot;
-    if (fix && ['live', 'approximate'].includes(state)) {
+    if (fix && hasUsablePosition(state)) {
+      // With a usable fix: close the interface and selection, then move the camera.
+      this.#interface.close();
+      this.#context.closeSelection();
+      this.#isFollowing = true;
+      this.#hasCenteredOnFix = true;
+      this.#renderFollowing();
       this.#moveCameraToFix(fix, Math.max(this.#map.getZoom(), DISCOVER_ZOOM));
     } else {
-      // No usable fix yet — only retry or explain, since there is nothing to focus on.
+      // No usable fix yet — close the interface, mark following, and request a retry.
+      // Set #isLocationRequested so the next render will retry or explain.
+      // Do not call retry() directly: it stops the existing watch first, which can fire
+      // an error callback that sets a failed state and stops following before the new watch starts.
+      this.#interface.close();
+      this.#context.closeSelection();
+      this.#isFollowing = true;
+      this.#hasCenteredOnFix = true;
       this.#isLocationRequested = true;
+      this.#renderFollowing();
       this.render(this.#snapshot);
     }
   }
@@ -194,7 +217,7 @@ export class LocationControls {
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
-    if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
+    if (this.#snapshot.fix && hasUsablePosition(this.#snapshot.state)) {
       this.#context.focusCoordinates(
         this.#snapshot.fix.coordinates,
         DISCOVER_ZOOM,
