@@ -44,7 +44,12 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* This one header has identical geometry in every interface state. */
 .search-bar { position: fixed; top: calc(var(--visible-top) + var(--bar-inset)); left: var(--bar-inset); width: calc(var(--dock-width) - 2 * var(--bar-inset)); height: 54px; display: flex; align-items: center; border: 1px solid #dce0d5; border-radius: 15px; background: white; box-shadow: 0 4px 20px #243f3710; pointer-events: auto; }
 .icon-button { display: grid; place-items: center; width: 48px; height: 48px; flex: none; background: transparent; border-radius: 12px; }
-.icon-button:hover { background: #f0f3e9; }
+/* On touch screens :hover sticks to the last tapped element, so the menu button
+ * looks pressed after closing the dock. Guard hover feedback so it only applies
+ * on devices that can actually hover (issue #155). */
+@media (hover: hover) {
+  .icon-button:hover { background: #f0f3e9; }
+}
 #menu-toggle { margin: 0 3px; }
 .search-divider { height: 23px; width: 1px; flex: none; background: var(--line); }
 .search { display: flex; align-items: center; min-width: 0; flex: 1; padding-left: 14px; gap: 8px; }
@@ -67,7 +72,10 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
-.result:hover, .result[aria-current=true] { background: #edf1e4; }
+.result[aria-current=true] { background: #edf1e4; }
+@media (hover: hover) {
+  .result:hover { background: #edf1e4; }
+}
 .result .symbol { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--color) 15%, white); color: var(--color); font-weight: 700; flex: none; }
 .result .copy { min-width: 0; flex: 1; }
 .result strong, .result small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -115,8 +123,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   background: var(--green);
   color: white;
 }
-.position-control[data-following=true] #position-action:hover {
-  filter: brightness(1.15);
+@media (hover: hover) {
+  .position-control[data-following=true] #position-action:hover {
+    filter: brightness(1.15);
+  }
 }
 .maplibregl-ctrl-bottom-right { right: 2px; }
 /* map-core adds NavigationControl with no option to omit it. */

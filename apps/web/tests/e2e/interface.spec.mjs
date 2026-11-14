@@ -2869,49 +2869,58 @@ test('category filter then query filter narrows results to both', async ({page})
 });
 
 // ---------------------------------------------------------------------------
-// Menu button resets after mouse click (issue #155)
+// Menu button does not stick to hover state on touch screens (issue #155)
 // ---------------------------------------------------------------------------
 
-test.describe('menu button resets after mouse click', () => {
+test.describe('menu button hover state on touch screens', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
-  // After opening and closing the dock by mouse click, #menu-toggle's computed
-  // background should equal its value before opening. The button should not
-  // stay visually pressed.
-  for (const {name, viewport} of [
-    {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'phone', viewport: {width: 412, height: 840}}
-  ]) {
-    test(`menu button background resets after open and close on ${name}`,
-      {tag: name === 'phone' ? '@phone' : undefined}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await page.setViewportSize(viewport);
-      await ready(page);
+  // On touch screens, :hover sticks to the last tapped element, so tapping the
+  // menu button to close the dock would leave it looking pressed. The CSS fix
+  // wraps .icon-button:hover in @media (hover: hover) so the hover background
+  // never applies on touch devices. This test verifies that behavior.
+  test('menu button does not show hover background on touch screens',
+    {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'only meaningful on touch-emulating projects');
 
-      // Measure the computed background before any interaction.
-      const backgroundBefore = await page.locator('#menu-toggle').evaluate(
-        el => getComputedStyle(el).backgroundColor
-      );
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
 
-      // Open the dock by clicking the menu button.
-      await page.locator('#menu-toggle').click();
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    // Confirm the browser reports no hover capability (touch emulation).
+    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
+    expect(canHover, 'phone project should not support hover').toBe(false);
 
-      // Close the dock by clicking the menu button again.
-      await page.locator('#menu-toggle').click();
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    // Measure the computed background before any interaction.
+    const backgroundBefore = await page.locator('#menu-toggle').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-      // Move the mouse away from the button so :hover does not affect the measurement.
-      await page.mouse.move(1, 1);
+    // Tap the menu button to open the dock, then tap again to close it.
+    // Do not move the pointer away — on touch screens :hover would stick.
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-      // Measure the computed background after closing.
-      const backgroundAfter = await page.locator('#menu-toggle').evaluate(
-        el => getComputedStyle(el).backgroundColor
-      );
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
 
-      // The background should be the same as before opening.
-      expect(backgroundAfter).toEqual(backgroundBefore);
-    });
-  }
+    // Measure the computed background after closing, without moving the pointer.
+    const backgroundAfter = await page.locator('#menu-toggle').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
+
+    // The background must be unchanged — no hover feedback stuck on the button.
+    expect(backgroundAfter).toEqual(backgroundBefore);
+  });
+
+  // On desktop, the hover media query matches and :hover feedback is available.
+  test('hover media query matches on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'only meaningful on non-touch projects');
+
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+
+    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
+    expect(canHover, 'desktop project should support hover').toBe(true);
+  });
 });
 
