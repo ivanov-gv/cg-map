@@ -155,8 +155,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 /* The dock stays open beside a place card, so the card moves clear of whichever left panel is open.
  * When floating chips are shown (no query, dock closed), the card drops below the chips row. */
 @media (min-width: 721px) {
-  /* Bottom of the floating chips row: bar height (60px) + chip row height (56px) + gap (16px). */
-  body { --desktop-chips-bottom: calc(60px + 56px + 16px); }
+  /* Bottom of the floating chips row: bar (60px) + chips (48px) + gap (16px). */
+  body {
+    --desktop-bar-height: 60px;
+    --desktop-chips-bottom: calc(60px + 48px + 16px);
+  }
 
   body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
     top: 20px;
@@ -167,10 +170,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
     top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
     left: 20px;
+    max-height: calc(100% - var(--visible-top) - var(--bar-inset) - var(--desktop-chips-bottom) - 20px);
   }
 
   /* Desktop search bar: taller, with clear button and floating categories. */
-  .search-bar { height: 60px; }
+  .search-bar { height: var(--desktop-bar-height); }
   .search input { height: 54px; }
 
   /* Clear button inside the search bar. */
@@ -182,7 +186,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
    * data-has-query="true"  → joined card with categories row + scrollable results. */
   .desktop-search-panel {
     position: fixed;
-    top: calc(var(--visible-top) + var(--bar-inset) + 60px);
+    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-bar-height));
     left: var(--bar-inset);
     width: calc(var(--dock-width) - 2 * var(--bar-inset));
     max-height: 50dvh;

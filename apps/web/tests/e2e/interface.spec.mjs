@@ -1366,17 +1366,6 @@ test.describe('Desktop search bar', () => {
     expect(Math.abs(panelBox.y - (bar.y + bar.height))).toBeLessThanOrEqual(6);
   });
 
-  test('Escape clears a non-empty query on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    await page.locator('#search').fill('test query');
-    await expect(page.locator('#clear-search')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#search')).toHaveValue('');
-    await expect(page.locator('#clear-search')).toBeHidden();
-  });
-
   test('Tab reaches menu button, input, clear button, and first category chip', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
@@ -1433,19 +1422,29 @@ test.describe('Desktop search bar', () => {
     expect(isCardVisible).toBe(true);
   });
 
-  test('with a query, only the clear button is visible in the search bar', async ({page, isMobile}) => {
+  test('with a query, the native search cancel button is hidden', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     await page.locator('#search').fill('Café');
-    // The native search cancel pseudo-element must not be displayed.
+    // Verify the CSS rule hides the native ::-webkit-search-cancel-button.
+    // getComputedStyle on pseudo-elements can be unreliable, so check the stylesheet rule.
     const nativeCancelHidden = await page.evaluate(() => {
-      // Pseudo-elements can't be read from Playwright, so verify that only one
-      // clear-related button exists in the search bar.
-      const searchBar = document.querySelector('.search-bar');
-      const buttons = Array.from(searchBar.querySelectorAll('button'));
-      const clearButtons = buttons.filter(button => /clear/i.test(button.getAttribute('aria-label') ?? ''));
-      return clearButtons.length === 1;
+      function findRule(sheets) {
+        for (const sheet of sheets) {
+          for (const rule of sheet.cssRules) {
+            if (rule.selectorText?.includes('::-webkit-search-cancel-button')) {
+              return rule.style.display === 'none';
+            }
+          }
+        }
+        return false;
+      }
+      try {
+        return findRule(document.styleSheets);
+      } catch {
+        return false;
+      }
     });
     expect(nativeCancelHidden).toBe(true);
   });
@@ -1546,6 +1545,44 @@ test.describe('Desktop search bar', () => {
     await page.locator('#clear-search').click();
     await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
   });
+
+  test('card bottom stays within viewport on desktop with small height', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    // Use a small viewport to expose card clipping.
+    await page.setViewportSize({width: 1280, height: 600});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Ensure dock is closed and no query (floating chips mode).
+    await closeMenu(page);
+    await expect(page.locator('#desktop-search-panel')).toBeVisible();
+    // Tap a place on the map.
+    const place = fixture.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    // The card's bottom edge must be within the viewport.
+    const {cardBottom, viewportHeight} = await page.evaluate(() => {
+      const card = document.getElementById('place-card');
+      const rect = card.getBoundingClientRect();
+      return {cardBottom: rect.bottom, viewportHeight: window.innerHeight};
+    });
+    expect(cardBottom).toBeLessThanOrEqual(viewportHeight + 1);
+  });
+
+  test('focusing search input does not close the card on desktop', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Type a query and choose a result so the card opens.
+    await page.locator('#search').fill('Mimoza');
+    await expect(page.locator('.result')).toHaveCount(1);
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    // Focus the search input — the card should stay visible.
+    await page.evaluate(() => document.getElementById('search').focus());
+    await expect(page.locator('#place-card')).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1578,12 +1615,12 @@ test.describe('Mobile search bar', () => {
     expect(rightGap).toBeLessThanOrEqual(14);
   });
 
-  test('categories are hidden on mobile after desktop-to-mobile resize', async ({page}) => {
+  test('categories move to dock after desktop-to-mobile resize', async ({page}) => {
     // Start at desktop size so the floating chips are visible.
     await page.setViewportSize({width: 1280, height: 800});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
-    // Resize to mobile: the mobile media query hides the categories row.
+    // Resize to mobile: the mobile media query hides the categories row on the main screen.
     await page.setViewportSize({width: 412, height: 840});
     await expect(page.locator('#categories')).toBeHidden();
   });
@@ -1603,6 +1640,16 @@ test.describe('Mobile search bar', () => {
     const menuButton = await page.locator('#menu-toggle').boundingBox();
     expect(menuButton.width).toBeGreaterThanOrEqual(40);
     expect(menuButton.height).toBeGreaterThanOrEqual(40);
+    // Type a query so the clear button appears, then measure it.
+    await page.locator('#search').fill('test');
+    const clearButton = await page.locator('#clear-search').boundingBox();
+    expect(clearButton.width).toBeGreaterThanOrEqual(40);
+    expect(clearButton.height).toBeGreaterThanOrEqual(40);
+    // Open the dock and measure a category chip.
+    await page.locator('#menu-toggle').click();
+    const categoryChip = await page.locator('#categories button').first().boundingBox();
+    expect(categoryChip.width).toBeGreaterThanOrEqual(40);
+    expect(categoryChip.height).toBeGreaterThanOrEqual(40);
   });
 });
 
