@@ -12,7 +12,6 @@ import {
 } from './status-messages.js';
 
 const firstFixCameraDurationMilliseconds = 600;
-const requestedFixCameraDurationMilliseconds = 500;
 const followCameraDurationMilliseconds = 400;
 
 // Owns the in-memory fix, explicit location requests, first-fix recentering, and location following.
@@ -25,6 +24,8 @@ export class LocationControls {
   #hasCenteredOnFix = false;
   #isFollowing = false;
   #lastFollowedCoordinates = null;
+  // Tracks a pending foreign move so a synchronous resize can cancel it.
+  #hasPendingForeignMove = false;
 
   constructor(context) {
     this.#context = context;
@@ -84,11 +85,13 @@ export class LocationControls {
     }
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
-    // While following, keep the camera on every new usable fix.
-    if (this.#isFollowing && hasUsablePosition(state) && fix && this.#isNewFollowFix(fix)) {
-      // Clear stale request flag before moving the camera.
+    // While following with a usable fix, keep the camera on every new fix.
+    // Always return after this branch so the centre-once and requested branches never run during following.
+    if (this.#isFollowing && hasUsablePosition(state) && fix) {
       this.#isLocationRequested = false;
-      this.#moveCameraToFix(fix);
+      if (this.#isNewFollowFix(fix)) {
+        this.#moveCameraToFix(fix);
+      }
       return;
     }
     // Center once on the first usable fix, never after the person has started exploring.
@@ -154,7 +157,6 @@ export class LocationControls {
     );
   }
 
-  // Toggles location following on click.
   toggleFollowing() {
     if (this.#isFollowing) {
       this.#stopFollowing();
@@ -167,6 +169,7 @@ export class LocationControls {
   #stopFollowing() {
     this.#isFollowing = false;
     this.#isLocationRequested = false;
+    this.#lastFollowedCoordinates = null;
     this.#renderFollowing();
   }
 
@@ -174,8 +177,8 @@ export class LocationControls {
   // Sets hasCenteredOnFix so the one-time first-fix centring never runs after following starts.
   #startFollowing() {
     const {fix, state} = this.#snapshot;
-    // Always set following flags first.
     this.#isFollowing = true;
+    this.#lastFollowedCoordinates = null;
     this.#hasCenteredOnFix = true;
     this.#renderFollowing();
     if (fix && hasUsablePosition(state)) {
@@ -189,27 +192,31 @@ export class LocationControls {
     }
   }
 
-  // Stops following on any camera move the follower did not make.
-  // MapLibre easeTo passes its second argument into the movestart event, so the follower
-  // tags its own moves with {isLocationFollowMove: true} and everything else stops it.
-  stopFollowingOnForeignMove(event) {
-    if (this.#isFollowing && !event.isLocationFollowMove) {
-      this.#stopFollowing();
-    }
+  // Called on 'movestart'. If following and the move is not tagged by the follower,
+  // remembers a pending foreign move and schedules a microtask to decide.
+  // A synchronous resize event (which follows movestart) can cancel the pending move via noteMapResize().
+  // The microtask is needed because the resize event comes after movestart in the same call stack.
+  noteCameraMoveStart(event) {
+    if (!this.#isFollowing || event.isLocationFollowMove) return;
+    // Tagged moves are safe; untagged moves might be a resize.
+    this.#hasPendingForeignMove = true;
+    queueMicrotask(() => {
+      if (this.#hasPendingForeignMove) {
+        this.#hasPendingForeignMove = false;
+        this.#stopFollowing();
+      }
+    });
   }
 
-  // Only an explicit request may retry location or show recovery advice; a usable fix recenters immediately.
+  // Called on 'resize'. Cancels a pending foreign move so following is not stopped by a resize.
+  noteMapResize() {
+    this.#hasPendingForeignMove = false;
+  }
+
+  // An explicit request retries location or shows recovery advice when positioning fails.
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
-    if (this.#snapshot.fix && hasUsablePosition(this.#snapshot.state)) {
-      this.#context.focusCoordinates(
-        this.#snapshot.fix.coordinates,
-        DISCOVER_ZOOM,
-        requestedFixCameraDurationMilliseconds
-      );
-      return;
-    }
     this.#isLocationRequested = true;
     if (['denied', 'outside', 'insecure', 'unsupported'].includes(this.#snapshot.state)) {
       this.render(this.#snapshot);

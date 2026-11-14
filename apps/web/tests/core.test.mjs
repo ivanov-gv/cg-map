@@ -1,11 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  normalizeSearchText,
-  matchesPlaceSearch,
-  selectNearestPlaces,
-  safeWebsite
-} from '../src/core.js';
+import {normalizeSearchText, matchesPlaceSearch, selectNearestPlaces, safeWebsite} from '../src/core.js';
 const feature = (name, category, coordinates) => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates},

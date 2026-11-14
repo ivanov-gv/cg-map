@@ -223,7 +223,7 @@ export async function holdGeolocationFixes(page) {
 
     window.releaseHeldFixes = () => {
       window.__geolocationFixesReleased = true;
-      for (const cb of successCallbacks) cb();
+      for (const callback of successCallbacks) callback();
     };
   });
 }
