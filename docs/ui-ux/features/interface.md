@@ -47,9 +47,10 @@ stable. A short interface still needs understandable symbols, accessible names, 
 
 ## UI-01 Opening view
 
-Show the map, one combined burger/search bar, an icon-only location button, zoom controls, a metric scale, and required
-attribution. Default geographic content remains governed by Discover; simplifying controls does not remove roads,
-buildings, addresses, terrain, or scale-appropriate places.
+Show the map, one combined burger/search bar, an icon-only location button, zoom controls, a metric scale, a small
+"OpenStreetMap" credit below the scale bar, and full attribution in the left dock footer (per
+[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Default geographic content remains governed by
+Discover; simplifying controls does not remove roads, buildings, addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -161,10 +162,11 @@ With a usable fix, activating location recenters immediately; it does not first 
 details panel. Without a usable fix, request/retry positioning where possible, or give concise actionable recovery after
 the request fails. Never move to a fabricated position or call the fallback camera the user's location.
 
-Minimal wording does not remove required attribution, sourced facts in object details, permission handling, coverage
-limits, or action-specific failures. Keep those explanations attached to the relevant feature/action. Do not replace
-readable labels with unexplained pictograms or rely on color, hover, or a tooltip alone for essential state. Follow the
-[UI accessibility guidelines](../../engineering/ui.md) for names, focus, touch targets, and reduced motion.
+Minimal wording does not remove required attribution (on-map credit and dock footer), sourced facts in object details,
+permission handling, coverage limits, or action-specific failures. Keep those explanations attached to the relevant
+feature/action. Do not replace readable labels with unexplained pictograms or rely on color, hover, or a tooltip alone
+for essential state. Follow the [UI accessibility guidelines](../../engineering/ui.md) for names, focus, touch targets,
+and reduced motion.
 
 ## Acceptance
 
@@ -195,8 +197,9 @@ cumulative icons do not prove a production placement solution. Paid visibility i
 ## Reusable initial brief
 
 > Create a small, self-contained HTML draft of a laconic, map-first interface for Kompas. Let the person explore the map
-> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, and required
-> attribution. Keep the dock closed.
+> immediately. On opening, show only a combined burger/search bar, an icon-only locate button, zoom, scale, a small
+> "OpenStreetMap" credit below the scale bar, and full attribution in the left dock footer (per
+> [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Keep the dock closed.
 >
 > Opening the burger expands a left dock around the existing header. Desktop search uses that dock too. Keep the burger
 > and search at exactly the same coordinates, dimensions, and shape across states; preserve typing and focus. Dock
