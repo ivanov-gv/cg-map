@@ -170,7 +170,7 @@ test('opening search, typing, and choosing a category leave the map still', asyn
   await expectCameraToHold(page, before);
 });
 
-test('choosing a result moves the map only when the result is outside the focus zone', async ({page, isMobile}) => {
+test('choosing a result moves the map only when the result is outside the focus zone', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
@@ -497,7 +497,7 @@ test(
   }
 );
 
-test('the result list keeps its order while a chosen place is open and re-sorts after', async ({page, isMobile}) => {
+test('the result list keeps its order while a chosen place is open and re-sorts after', {tag: '@phone'}, async ({page, isMobile}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   await settled(page);
