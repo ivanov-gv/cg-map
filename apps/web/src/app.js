@@ -524,43 +524,27 @@ function warnAboutSlowStartup() {
 
 // Category toggles share the same filter and never move the camera.
 // Pressing a category selects it; pressing it again clears the filter.
-// Both the dock categories and the desktop floating chips share the same state.
 function registerCategoryControls() {
   for (const [key, label] of Object.entries(categories)) {
-    // Button inside the dock's #categories nav.
-    const dockButton = createElement('button', label);
-    dockButton.type = 'button';
-    dockButton.dataset.category = key;
-    dockButton.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
-    dockButton.addEventListener('click', () => {
+    const button = createElement('button', label);
+    button.type = 'button';
+    button.dataset.category = key;
+    button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
+    button.addEventListener('click', () => {
       handleCategoryToggle(key);
     });
-    elementById('categories').append(dockButton);
-
-    // Floating chip for the desktop categories row.
-    const desktopButton = createElement('button', label);
-    desktopButton.type = 'button';
-    desktopButton.dataset.category = key;
-    desktopButton.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
-    desktopButton.addEventListener('click', () => {
-      handleCategoryToggle(key);
-    });
-    elementById('desktop-categories').append(desktopButton);
+    elementById('categories').append(button);
   }
 }
 
-// Handle a category toggle and update all category buttons (dock + desktop).
 function handleCategoryToggle(key) {
   directoryState.activeCategory =
     directoryState.activeCategory === key ? null : key;
-  // Update all category buttons across both containers.
-  for (const containerId of ['categories', 'desktop-categories']) {
-    const container = elementById(containerId);
-    for (const button of container.children) {
-      const isActiveCategory = button.dataset.category === directoryState.activeCategory;
-      button.setAttribute('aria-pressed', String(isActiveCategory));
-      if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
-    }
+  const container = elementById('categories');
+  for (const button of container.children) {
+    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+    button.setAttribute('aria-pressed', String(isActiveCategory));
+    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
   applyPlaceSearch();
 }
@@ -583,8 +567,8 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else if (elementById('search').value.trim()) {
-        // Clear the query on desktop when Escape is pressed with a non-empty query.
+      else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // Escape only clears the query on desktop; Mobile and Flip are out of scope.
         mapState.interface.clearQuery();
       } else {
         mapState.interface.close(true);

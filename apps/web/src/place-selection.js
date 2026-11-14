@@ -111,14 +111,10 @@ export class PlaceSelection {
     if (
       !this.#context.isMapReady() ||
       this.#directory.loadingError ||
-      !this.hasExplicitFilter()
+      !this.hasExplicitFilter() ||
+      !this.#interface.areResultsVisible()
     )
       return;
-    // On desktop, results are visible in the search panel even when the view is 'closed'.
-    // On mobile, results are only visible when the view is 'search' or 'dock'.
-    const interfaceView = this.#interface.view;
-    const isMobile = this.#interface.mobileLayoutQuery.matches;
-    if (isMobile && interfaceView === 'closed') return;
     this.#state.previewPlace =
       selectNearestPlaces(this.#directory.filteredPlaces, this.#map.getCenter().toArray(), 1)[0]?.feature ??
       null;

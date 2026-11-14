@@ -158,23 +158,41 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .clear-button { margin: 0 3px; width: 40px; height: 40px; }
   .clear-button .icon { width: 18px; height: 18px; }
 
-  /* Floating category chips under the search bar (visible when dock is closed and no query). */
-  .desktop-categories {
+  /* Desktop search panel: always positioned under the bar.
+   * data-has-query="false" → floating category chips (no background, no border, no shadow).
+   * data-has-query="true"  → joined card with categories row + scrollable results. */
+  .desktop-search-panel {
     position: fixed;
-    top: calc(var(--visible-top) + var(--bar-inset) + 70px);
+    top: calc(var(--visible-top) + var(--bar-inset) + 60px);
     left: var(--bar-inset);
     width: calc(var(--dock-width) - 2 * var(--bar-inset));
+    max-height: 50dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    z-index: 5;
+  }
+  /* Floating mode: no query — categories float, results hidden. */
+  .desktop-search-panel[data-has-query="false"] {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    max-height: none;
+  }
+  .desktop-search-panel[data-has-query="false"] #results { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories {
     display: flex;
     flex-wrap: nowrap;
+    flex-shrink: 0;
     gap: 8px;
     padding: 4px 0;
     overflow-x: auto;
     scrollbar-width: none;
-    pointer-events: auto;
-    z-index: 5;
   }
-  .desktop-categories::-webkit-scrollbar { display: none; }
-  .desktop-categories button {
+  .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories button {
     flex-shrink: 0;
     min-height: 40px;
     border: 1px solid var(--line);
@@ -186,32 +204,20 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     box-shadow: 0 2px 8px #243f3710;
     pointer-events: auto;
   }
-  .desktop-categories button[aria-pressed=true] {
+  .desktop-search-panel[data-has-query="false"] #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
-
-  /* Unified search panel: categories + results joined under the bar when there is a query. */
-  .desktop-search-panel {
-    position: fixed;
-    top: calc(var(--visible-top) + var(--bar-inset) + 66px);
-    left: var(--bar-inset);
-    width: calc(var(--dock-width) - 2 * var(--bar-inset));
-    max-height: 50dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+  /* Joined card mode: with query — categories + results as one card. */
+  .desktop-search-panel[data-has-query="true"] {
     border: 1px solid var(--line);
     border-top: none;
     border-radius: 0 0 15px 15px;
     background: var(--paper);
     box-shadow: 0 8px 24px #243f3718;
-    pointer-events: auto;
-    z-index: 5;
   }
-  /* When #browse-panel is inside the desktop search panel, style its categories compactly. */
-  .desktop-search-panel #categories {
+  .desktop-search-panel[data-has-query="true"] #categories {
     display: flex;
     flex-wrap: nowrap;
     flex-shrink: 0;
@@ -220,8 +226,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .desktop-search-panel #categories::-webkit-scrollbar { display: none; }
-  .desktop-search-panel #categories button {
+  .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="true"] #categories button {
     flex-shrink: 0;
     min-height: 36px;
     border: 1px solid var(--line);
@@ -231,12 +237,12 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     font-size: 12px;
     white-space: nowrap;
   }
-  .desktop-search-panel #categories button[aria-pressed=true] {
+  .desktop-search-panel[data-has-query="true"] #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
-  .desktop-search-panel #results {
+  .desktop-search-panel[data-has-query="true"] #results {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
