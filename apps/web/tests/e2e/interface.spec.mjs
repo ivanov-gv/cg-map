@@ -2026,6 +2026,103 @@ test.describe('dock fills viewport on mobile and flip', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Flip dock scrolls as one column — footer is not pinned (issue #104)
+// ---------------------------------------------------------------------------
+
+// On a 340 px screen there is no room for a pinned footer: the footer
+// (Satellite, Transport, Download, attribution) would take most of the
+// viewport, leaving only one result row visible.  The fix makes the
+// entire dock-content scroll as a single column on Flip so results get
+// the screen first and the footer is reached by scrolling down.
+test.describe('Flip dock scrolls as one column', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const FLIP_VIEWPORT = {width: 340, height: 340};
+
+  // Create a places fixture with at least 6 results so we can verify
+  // that multiple rows are visible in the small viewport.
+  const manyPlaces = {
+    type: 'FeatureCollection',
+    features: Array.from({length: 8}, (_, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.004, 42.44]},
+      properties: {
+        id: 'flip/' + index,
+        name: 'Flip place ' + index,
+        category: index % 2 ? 'food' : 'shops',
+        kind: 'shop'
+      }
+    }))
+  };
+
+  test('at least 3 result rows are visible in the viewport before scrolling',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+      // Wait for results to render.
+      await expect(page.locator('.result')).toHaveCount(8);
+
+      // Check how many .result rows are fully inside the viewport.
+      const visibleResults = await page.evaluate((viewportHeight) => {
+        const results = document.querySelectorAll('.result');
+        let count = 0;
+        for (const row of results) {
+          const rect = row.getBoundingClientRect();
+          // A row is "fully inside" when its top >= 0 and bottom <= viewport height
+          if (rect.top >= 0 && rect.bottom <= viewportHeight) {
+            count++;
+          }
+        }
+        return count;
+      }, FLIP_VIEWPORT.height);
+
+      expect(visibleResults).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  test('Download button and attribution are visible after scrolling to bottom',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+      // Wait for results to render.
+      await expect(page.locator('.result')).toHaveCount(8);
+
+      // Scroll the dock's scroll container to the bottom.
+      await page.evaluate(() => {
+        const dockContent = document.getElementById('dock-content');
+        dockContent.scrollTop = dockContent.scrollHeight;
+      });
+
+      // After scrolling, the Download button and attribution text should be
+      // fully inside the viewport.  Use a 1 px tolerance for sub-pixel
+      // rendering differences (e.g. line-height fractions).
+      const downloadVisible = await page.evaluate((viewportHeight) => {
+        const downloadBtn = document.getElementById('download');
+        const rect = downloadBtn.getBoundingClientRect();
+        return rect.top >= 0 && Math.round(rect.bottom) <= viewportHeight;
+      }, FLIP_VIEWPORT.height);
+
+      const attributionVisible = await page.evaluate((viewportHeight) => {
+        const attribution = document.getElementById('map-attribution');
+        const rect = attribution.getBoundingClientRect();
+        return rect.top >= 0 && Math.round(rect.bottom) <= viewportHeight;
+      }, FLIP_VIEWPORT.height);
+
+      expect(downloadVisible).toBe(true);
+      expect(attributionVisible).toBe(true);
+    });
+  });
+});
+
 // Layer toggle while following: following should stop on the camera move.
 test.describe('GPS follow — layer toggle stops following', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});

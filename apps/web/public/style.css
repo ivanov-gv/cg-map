@@ -327,5 +327,37 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:not([data-view=dock]) .search-bar { right: auto; }
   body:not([data-view=dock]) .search-bar .search-divider,
   body:not([data-view=dock]) .search-bar .search { display: none; }
+
+  /* On a 340 px screen there is no room for a pinned footer: the footer
+   * (Satellite, Transport, Download, attribution) would take most of the
+   * viewport, leaving only one result row visible.  Make the entire dock
+   * scroll as a single column so results get the screen first and the
+   * footer is reached by scrolling down.  Mobile and Desktop keep the
+   * pinned footer. */
+  body[data-view=dock] .dock-content {
+    bottom: 0;
+    overflow-y: auto;
+  }
+  body[data-view=dock] .dock-main {
+    overflow: visible;
+    flex: none;
+  }
+  body[data-view=dock] .browse-panel {
+    overflow: visible;
+    flex: none;
+  }
+  body[data-view=dock] .results {
+    overflow-y: visible;
+    flex: none;
+  }
+  /* Smaller result rows on Flip so at least three fit in the visible area. */
+  body[data-view=dock] .result {
+    min-height: 56px;
+    padding: 8px var(--bar-inset);
+  }
+  body[data-view=dock] .dock-footer {
+    overflow: visible;
+    padding-bottom: 4px;
+  }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }
