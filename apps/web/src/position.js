@@ -99,7 +99,7 @@ export class PositionTracker {
   }
   evaluate() {
     if (this.fix) return this.set(classifyFix(this.fix, this.now(), this.bounds));
-    if (this.error && this.error !== 'dismissed') this.set(this.error);
+    if (this.error) this.set(this.error);
   }
   set(state) {
     this.state = state;

@@ -1304,7 +1304,10 @@ test.describe('GPS follow — click before fix arrives', () => {
           )
           .toBeLessThan(150);
 
-        // Drag the map — should stop following.
+        // Record camera while following (centered on FIRST_FIX).
+        const whileFollowing = await camera(page);
+
+        // Drag the map — should stop following without re-centring.
         const canvas = page.locator('#map canvas');
         const box = await canvas.boundingBox();
         const cx = box.x + box.width / 2;
@@ -1316,8 +1319,21 @@ test.describe('GPS follow — click before fix arrives', () => {
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // Deliver another fix — camera should hold.
+        // The drag must not have re-centred the camera (defect 1: #isLocationRequested not cleared
+        // by the follow branch causes refresh() to re-center on the old fix).
         const afterDrag = await camera(page);
+        const reCentered = await page.evaluate(
+          ({whileC}) => {
+            return window.kompasDebug.map.getCenter().distanceTo({
+              lng: whileC[0],
+              lat: whileC[1]
+            }) < 100;
+          },
+          {whileC: whileFollowing.center}
+        );
+        expect(reCentered).toBe(false);
+
+        // Deliver another fix — camera should hold at the dragged position.
         await context.setGeolocation(SECOND_FIX);
         await waitForLiveFix(page);
         await settled(page);

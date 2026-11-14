@@ -194,31 +194,31 @@ export async function holdGeolocationFixes(page) {
     window.__geolocationFixesReleased = false;
     const successCallbacks = [];
 
-    function wrapWatch(orig) {
-      return function (onSuccess, onError, options) {
-        return orig.call(navigator.geolocation,
-          result => {
-            if (window.__geolocationFixesReleased) {
-              onSuccess(result);
-            } else {
-              successCallbacks.push(() => onSuccess(result));
-            }
-          },
-          onError, // Error callbacks pass through immediately
-          options
-        );
-      };
+    // Shared helper: queue a success callback or deliver it immediately after release.
+    function holdSuccess(onSuccess, result) {
+      if (window.__geolocationFixesReleased) {
+        onSuccess(result);
+      } else {
+        successCallbacks.push(() => onSuccess(result));
+      }
     }
 
-    navigator.geolocation.watchPosition = wrapWatch(navigator.geolocation.watchPosition);
+    const origWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+    navigator.geolocation.watchPosition = function (onSuccess, onError, options) {
+      return origWatchPosition(
+        result => holdSuccess(onSuccess, result),
+        onError,
+        options
+      );
+    };
+
+    const origGetCurrentPosition = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
     navigator.geolocation.getCurrentPosition = function (onSuccess, onError, options) {
-      if (window.__geolocationFixesReleased) {
-        return navigator.geolocation.watchPosition.constructor.prototype.getCurrentPosition
-          ? navigator.geolocation.getCurrentPosition(onSuccess, onError, options)
-          : onSuccess({coords: {latitude: 0, longitude: 0, accuracy: 0}});
-      } else {
-        successCallbacks.push(() => onSuccess({coords: {latitude: 0, longitude: 0, accuracy: 0}}));
-      }
+      return origGetCurrentPosition(
+        result => holdSuccess(onSuccess, result),
+        onError,
+        options
+      );
     };
 
     window.releaseHeldFixes = () => {
