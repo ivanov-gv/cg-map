@@ -1,7 +1,6 @@
 import {mapBounds} from '@ivanov-gv/map-core';
-import {DISCOVER_ZOOM} from './core.js';
+import {DISCOVER_ZOOM, isUserCameraEvent} from './core.js';
 import {elementById} from './dom.js';
-import {isUserCameraEvent} from './follow-camera.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
@@ -123,21 +122,37 @@ export class LocationControls {
     });
   }
 
-  // Toggles location following on click. Starts following with a usable fix; stops if already following.
+  // Toggles location following on click. Always sets the flag; delegates camera work.
   toggleFollowing() {
     if (this.#isFollowing) {
-      this.#isFollowing = false;
-      this.#renderFollowing();
+      this.#stopFollowing();
       return;
     }
-    const {state, fix} = this.#snapshot;
-    if (!['live', 'approximate'].includes(state) || !fix) return;
+    this.#startFollowing();
+  }
+
+  // Stops following and updates the UI.
+  #stopFollowing() {
+    this.#isFollowing = false;
+    this.#renderFollowing();
+  }
+
+  // Starts following: sets the flag, renders it, then requests a position fix.
+  // If a usable fix already exists, render() moves the camera via the following branch.
+  // Without one, requestPosition retries and shows the same recovery messages as before.
+  #startFollowing() {
     this.#interface.close();
     this.#context.closeSelection();
     this.#isFollowing = true;
     this.#hasCenteredOnFix = true;
-    this.#renderFollowing();
-    this.#moveCameraToFix(fix);
+    const hasUsableFix = this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state);
+    if (!hasUsableFix) {
+      this.#isLocationRequested = true;
+    }
+    this.render(this.#snapshot);
+    if (!hasUsableFix && !['denied', 'outside', 'insecure', 'unsupported'].includes(this.#snapshot.state)) {
+      this.#tracker?.retry();
+    }
   }
 
   // Stops following when the user moves the map. Only user gestures (with originalEvent) count.
@@ -149,15 +164,18 @@ export class LocationControls {
   }
 
   // Only an explicit request may retry location or show recovery advice; a usable fix recenters immediately.
+  // When already following, the following branch in render() moves the camera, so skip the second move here.
   requestPosition() {
     this.#interface.close();
     this.#context.closeSelection();
     if (this.#snapshot.fix && ['live', 'approximate'].includes(this.#snapshot.state)) {
-      this.#context.focusCoordinates(
-        this.#snapshot.fix.coordinates,
-        DISCOVER_ZOOM,
-        requestedFixCameraDurationMilliseconds
-      );
+      if (!this.#isFollowing) {
+        this.#context.focusCoordinates(
+          this.#snapshot.fix.coordinates,
+          DISCOVER_ZOOM,
+          requestedFixCameraDurationMilliseconds
+        );
+      }
       return;
     }
     this.#isLocationRequested = true;

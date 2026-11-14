@@ -70,8 +70,7 @@ const imports = {
     './place-selection.js',
     './location-controls.js'
   ],
-  'follow-camera.js': [],
-  'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './follow-camera.js', './position.js', './status-messages.js'],
+  'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './position.js', './status-messages.js'],
   'dom.js': [],
   'place-details.js': ['@ivanov-gv/map-core', './core.js', './dom.js'],
   'public-map-layers.js': ['@ivanov-gv/map-core', './core.js'],

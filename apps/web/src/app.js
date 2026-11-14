@@ -371,9 +371,6 @@ function installPublicMapDebug() {
     },
     get explored() {
       return mapState.hasExploredMap;
-    },
-    get locationControls() {
-      return locationControls;
     }
   };
 }

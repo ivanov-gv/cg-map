@@ -117,7 +117,7 @@ transient state with the behavior that changes it:
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
 | [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
-| [follow-camera.js](src/follow-camera.js)     | Pure function: whether a MapLibre camera event is a user gesture                                             |
+| [core.js](src/core.js)                       | Pure utilities: search, distance, scale, position helpers, and isUserCameraEvent                             |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
 Controllers read the map and directory through getters because those inputs finish loading independently after the

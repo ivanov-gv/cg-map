@@ -1058,235 +1058,193 @@ for (const {name, viewport} of deviceCases) {
 }
 
 // ---------------------------------------------------------------------------
-// GPS follow location (issue #99)
+// GPS follow location (issue #99) — real geolocation
 // ---------------------------------------------------------------------------
 
-// Helper: fake a GPS fix so the position button shows a live state.
-async function fakeGpsFix(page, coordinates) {
-  await page.evaluate(
-    coords => {
-      const map = window.kompasDebug.map;
-      // Simulate a live position fix by setting the position source data directly.
-      const fix = {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[
-                [coords[0] - 0.0001, coords[1] - 0.0001],
-                [coords[0] + 0.0001, coords[1] - 0.0001],
-                [coords[0] + 0.0001, coords[1] + 0.0001],
-                [coords[0] - 0.0001, coords[1] + 0.0001],
-                [coords[0] - 0.0001, coords[1] - 0.0001]
-              ]]
-            },
-            properties: {part: 'accuracy', state: 'live'}
-          },
-          {
-            type: 'Feature',
-            geometry: {type: 'Point', coordinates: coords},
-            properties: {part: 'position', state: 'live'}
-          }
-        ]
-      };
-      if (map.getSource('position')) {
-        map.getSource('position').setData(fix);
+const FIRST_FIX = {latitude: 42.4411, longitude: 19.2627, accuracy: 18};
+const SECOND_FIX = {latitude: 42.4511, longitude: 19.2727, accuracy: 15};
+
+// Helper: wait until the position badge reaches a live state after a geolocation update.
+async function waitForLiveFix(page) {
+  await expect
+    .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+    .toBe('live');
+}
+
+test.describe('GPS follow location', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
+
+  // Test a: Click centres and sets data-following/aria-pressed true.
+  for (const {name, viewport} of deviceCases) {
+    test(`clicking position button starts following on ${name}`, async ({page, context}) => {
+      async function check() {
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
+
+        // Click the position button to start following.
+        await page.locator('#position-action').click();
+        await settled(page);
+
+        // data-following should be true.
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+        // aria-pressed should be true.
+        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
+        // Camera should centre on the fix.
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+              FIRST_FIX
+            )
+          )
+          .toBeLessThan(150);
       }
-    },
-    coordinates
-  );
-  // Set the badge state to live so the button is clickable for following.
-  await page.evaluate(() => {
-    document.getElementById('position-badge').dataset.state = 'live';
-  });
-  await settled(page);
-}
 
-// Test a: Click starts following — camera centres, data-following=true, aria-pressed=true.
-for (const {name, viewport} of deviceCases) {
-  test(`clicking position button starts following on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const fakeCoords = [19.26, 42.44];
-      await fakeGpsFix(page, fakeCoords);
+      await atViewport(page, viewport, check);
+    });
+  }
 
-      // Click the position button to start following.
-      await page.locator('#position-action').click();
-      await settled(page);
+  // Test b: A new fix moves the camera while following.
+  for (const {name, viewport} of deviceCases) {
+    test(`new GPS fix moves camera while following on ${name}`, async ({page, context}) => {
+      async function check() {
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
 
-      // data-following should be true.
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-      // aria-pressed should be true.
-      await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
-      // Camera should centre on the fake fix.
-      const cam = await camera(page);
-      expect(cam.center[0]).toBeCloseTo(fakeCoords[0], 3);
-      expect(cam.center[1]).toBeCloseTo(fakeCoords[1], 3);
-    }
+        // Start following.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-    await atViewport(page, viewport, check);
-  });
-}
+        // Simulate a new fix at a different location.
+        await context.setGeolocation(SECOND_FIX);
+        await waitForLiveFix(page);
+        await settled(page);
 
-// Test b: A new fake fix moves the camera while following.
-for (const {name, viewport} of deviceCases) {
-  test(`new GPS fix moves camera while following on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const firstCoords = [19.26, 42.44];
-      await fakeGpsFix(page, firstCoords);
+        // Camera should have moved to the new fix.
+        await expect
+          .poll(() =>
+            page.evaluate(
+              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+              SECOND_FIX
+            )
+          )
+          .toBeLessThan(150);
+      }
 
-      // Start following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+      await atViewport(page, viewport, check);
+    });
+  }
 
-      // Simulate a new fix at a different location by triggering render with new coordinates.
-      const secondCoords = [19.27, 42.45];
-      await fakeGpsFix(page, secondCoords);
-      // Trigger the location controls to re-render with the new fix.
-      await page.evaluate(coords => {
-        // Dispatch a custom event that the location tracker would emit.
-        // We simulate by calling the refresh on the location controls via the debug object.
-        const fix = {
-          type: 'FeatureCollection',
-          features: [
-            {
-              type: 'Feature',
-              geometry: {
-                type: 'Polygon',
-                coordinates: [[
-                  [coords[0] - 0.0001, coords[1] - 0.0001],
-                  [coords[0] + 0.0001, coords[1] - 0.0001],
-                  [coords[0] + 0.0001, coords[1] + 0.0001],
-                  [coords[0] - 0.0001, coords[1] + 0.0001],
-                  [coords[0] - 0.0001, coords[1] - 0.0001]
-                ]]
-              },
-              properties: {part: 'accuracy', state: 'live'}
-            },
-            {
-              type: 'Feature',
-              geometry: {type: 'Point', coordinates: coords},
-              properties: {part: 'position', state: 'live'}
+  // Test c: Second click stops following; a later fix does not move the camera.
+  for (const {name, viewport} of deviceCases) {
+    test(`second click stops following on ${name}`, async ({page, context}) => {
+      async function check() {
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
+
+        // Start following.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+
+        // Second click stops following.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+
+        // Record the camera position after stopping.
+        const stoppedCamera = await camera(page);
+
+        // A new fix should not move the camera.
+        await context.setGeolocation(SECOND_FIX);
+        await waitForLiveFix(page);
+        await settled(page);
+
+        // Camera should not have moved.
+        expect(await camera(page)).toEqual(stoppedCamera);
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+
+  // Test d: Drag the map stops following.
+  for (const {name, viewport} of deviceCases) {
+    test(`dragging map stops following on ${name}`, {tag: '@phone'}, async ({page, context}) => {
+      async function check() {
+        await ready(page);
+        await context.setGeolocation(FIRST_FIX);
+        await waitForLiveFix(page);
+
+        // Start following.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+
+        // Drag the map on the canvas (simulates user gesture with originalEvent).
+        const canvas = page.locator('#map canvas');
+        const box = await canvas.boundingBox();
+        const centerX = box.x + box.width / 2;
+        const centerY = box.y + box.height / 2;
+        await page.mouse.move(centerX, centerY);
+        await page.mouse.down();
+        await page.mouse.move(centerX + 100, centerY + 100);
+        await page.mouse.up();
+        await settled(page);
+
+        // Following should be off.
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+});
+
+// Test e: Geolocation permission denied — click shows recovery message, data-following stays false.
+test.describe('GPS follow location — denied', () => {
+  for (const {name, viewport} of deviceCases) {
+    test(`clicking position button with geolocation denied on ${name}`, async ({page}) => {
+      async function check() {
+        // Simulate denied state: override permissions.query to return 'denied' for geolocation,
+        // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
+        await page.addInitScript(() => {
+          const origQuery = navigator.permissions.query.bind(navigator.permissions);
+          navigator.permissions.query = async (desc) => {
+            if (desc?.name === 'geolocation') {
+              return {state: 'denied', addEventListener: () => {}};
             }
-          ]
-        };
-        window.kompasDebug.map.getSource('position').setData(fix);
-        // Trigger the location controls render with a live snapshot at the new coords.
-        window.kompasDebug.locationControls?.render({
-          state: 'live',
-          fix: {coordinates: coords, accuracy: 10, timestamp: Date.now()},
-          age: 0
+            return origQuery(desc);
+          };
+          const origWatch = navigator.geolocation.watchPosition;
+          navigator.geolocation.watchPosition = function(success, error, options) {
+            if (error) error({code: 1, message: 'Permission denied'});
+            return origWatch.call(this, success, error, options);
+          };
         });
-      }, secondCoords);
-      await settled(page);
+        await ready(page);
+        // The tracker sees permission 'denied' from the query, so start() sets 'denied' immediately.
+        await expect
+          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+          .toBe('denied');
 
-      // Camera should have moved to the new fix.
-      const cam = await camera(page);
-      expect(cam.center[0]).toBeCloseTo(secondCoords[0], 3);
-      expect(cam.center[1]).toBeCloseTo(secondCoords[1], 3);
-    }
+        // Click the position button — it should trigger requestPosition, which shows the recovery message.
+        await page.locator('#position-action').click();
+        await settled(page);
 
-    await atViewport(page, viewport, check);
-  });
-}
+        // data-following should remain false (render() turns it off for denied state).
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+        // The status text should mention the denied condition.
+        await expect(page.locator('#position-status')).toHaveText(/Location blocked/);
+      }
 
-// Test c: Second click stops following; later fix does not move camera.
-for (const {name, viewport} of deviceCases) {
-  test(`second click stops following on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const fakeCoords = [19.26, 42.44];
-      await fakeGpsFix(page, fakeCoords);
-
-      // Start following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-      // Second click stops following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-      await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
-
-      // Record the camera position after stopping.
-      const stoppedCamera = await camera(page);
-
-      // A new fix should not move the camera.
-      const newCoords = [19.27, 42.45];
-      await page.evaluate(coords => {
-        const fix = {
-          type: 'FeatureCollection',
-          features: [
-            {
-              type: 'Feature',
-              geometry: {
-                type: 'Polygon',
-                coordinates: [[
-                  [coords[0] - 0.0001, coords[1] - 0.0001],
-                  [coords[0] + 0.0001, coords[1] - 0.0001],
-                  [coords[0] + 0.0001, coords[1] + 0.0001],
-                  [coords[0] - 0.0001, coords[1] + 0.0001],
-                  [coords[0] - 0.0001, coords[1] - 0.0001]
-                ]]
-              },
-              properties: {part: 'accuracy', state: 'live'}
-            },
-            {
-              type: 'Feature',
-              geometry: {type: 'Point', coordinates: coords},
-              properties: {part: 'position', state: 'live'}
-            }
-          ]
-        };
-        window.kompasDebug.map.getSource('position').setData(fix);
-        window.kompasDebug.locationControls?.render({
-          state: 'live',
-          fix: {coordinates: coords, accuracy: 10, timestamp: Date.now()},
-          age: 0
-        });
-      }, newCoords);
-      await settled(page);
-
-      // Camera should not have moved.
-      expect(await camera(page)).toEqual(stoppedCamera);
-    }
-
-    await atViewport(page, viewport, check);
-  });
-}
-
-// Test d: Click to follow, then drag the map stops following.
-for (const {name, viewport} of deviceCases) {
-  test(`dragging map stops following on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const fakeCoords = [19.26, 42.44];
-      await fakeGpsFix(page, fakeCoords);
-
-      // Start following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-      // Drag the map (simulates user gesture with originalEvent).
-      const canvas = page.locator('#map canvas');
-      const box = await canvas.boundingBox();
-      await page.mouse.move(box.x + 100, box.y + 100);
-      await page.mouse.down();
-      await page.mouse.move(box.x + 200, box.y + 200);
-      await page.mouse.up();
-      await settled(page);
-
-      // Following should be off.
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-      await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
-    }
-
-    await atViewport(page, viewport, check);
-  });
-}
+      await atViewport(page, viewport, check);
+    });
+  }
+});
