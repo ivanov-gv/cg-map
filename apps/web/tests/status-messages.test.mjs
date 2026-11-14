@@ -47,7 +47,6 @@ test('position messages, symbols and actions follow the state', () => {
   assert.equal(positionIndicator('denied'), '!');
   assert.equal(positionActionLabel('approximate'), 'Follow your location');
   assert.equal(positionActionLabel('stale'), 'Locate me');
-  assert.equal(positionActionLabel('live', true), 'Stop following your location');
-  assert.equal(positionActionLabel('approximate', true), 'Stop following your location');
-  assert.equal(positionActionLabel('stale', true), 'Stop following your location');
+  assert.equal(positionActionLabel('live'), 'Follow your location');
+  assert.equal(positionActionLabel('denied'), 'Locate me');
 });
