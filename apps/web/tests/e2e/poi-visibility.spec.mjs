@@ -381,7 +381,7 @@ test(
     const coordinates = data.features[0].geometry.coordinates;
     await open(page, data, coordinates);
     await page.locator('#search').click();
-    await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'dock');
+    await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'closed');
     // Move the markers clear of the search panel, into the map area still visible beside or below it.
     await page.evaluate(
       ([x, y]) => window.kompasDebug.map.panBy([x, y], {duration: 0}),
@@ -390,7 +390,7 @@ test(
     await expectIcons(page, ['near-a', 'near-b']);
     await tap(page, coordinates);
     await expect(page.locator('#place-name')).toHaveText('2 places here');
-    await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'dock');
+    await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'closed');
     if (isMobile) await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
     const first = page.locator('.place-chooser .result').first();
     await expect(first).toBeVisible();

@@ -111,8 +111,8 @@ export class PlaceSelection {
     if (
       !this.#context.isMapReady() ||
       this.#directory.loadingError ||
-      this.#interface.view === 'closed' ||
-      !this.hasExplicitFilter()
+      !this.hasExplicitFilter() ||
+      !this.#interface.areResultsVisible()
     )
       return;
     this.#state.previewPlace =

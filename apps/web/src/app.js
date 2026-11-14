@@ -224,6 +224,9 @@ function applyPlaceSearch() {
   placeSelection.onFilterChanged();
   renderSearchResults();
   placeSelection.previewResults();
+  // Update desktop search UI after results change.
+  mapState.interface?.syncDesktopSearchUI?.();
+  mapState.interface?.syncClearButton?.();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -528,17 +531,22 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      directoryState.activeCategory =
-        directoryState.activeCategory === key ? null : key;
-      for (const other of elementById('categories').children) {
-        const isActiveCategory = other.dataset.category === directoryState.activeCategory;
-        other.setAttribute('aria-pressed', String(isActiveCategory));
-        if (isActiveCategory) other.scrollIntoView({block: 'nearest', inline: 'nearest'});
-      }
-      applyPlaceSearch();
+      handleCategoryToggle(key);
     });
     elementById('categories').append(button);
   }
+}
+
+function handleCategoryToggle(key) {
+  directoryState.activeCategory =
+    directoryState.activeCategory === key ? null : key;
+  const container = elementById('categories');
+  for (const button of container.children) {
+    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+    button.setAttribute('aria-pressed', String(isActiveCategory));
+    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  }
+  applyPlaceSearch();
 }
 
 // Search and selection controls operate on the existing map and details card.
@@ -559,7 +567,12 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else mapState.interface.close(true);
+      else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // Escape only clears the query on desktop; Mobile and Flip are out of scope.
+        mapState.interface.clearQuery();
+      } else {
+        mapState.interface.close(true);
+      }
     }
     if (event.key === '/' && document.activeElement?.tagName !== 'INPUT') {
       event.preventDefault();

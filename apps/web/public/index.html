@@ -22,6 +22,7 @@
     <symbol id="i-cup" viewBox="0 0 24 24"><path d="M5 7h11v7a5.5 5.5 0 0 1-11 0V7Zm11 1h2a3 3 0 0 1 0 6h-2M5 21h11"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 3 6 6 1-4.5 4.5 1 6.5-5.5-3-5.5 3 1-6.5L3 10l6-1 3-6Z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   </defs></svg>
 <main class="app">
   <section class="map-area" aria-label="Map of Montenegro">
@@ -40,7 +41,9 @@
       <button id="menu-toggle" class="icon-button" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="dock-content"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
       <span class="search-divider" aria-hidden="true"></span>
       <label class="search"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Search places…" autocomplete="off" aria-label="Search places" aria-expanded="false" aria-controls="browse-panel"></label>
+      <button id="clear-search" class="icon-button clear-button" type="button" aria-label="Clear search" hidden><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
+    <div id="desktop-search-panel" class="desktop-search-panel" data-has-query="false" hidden></div>
     <div id="dock-content" class="dock-content" hidden>
       <div id="dock-main" class="dock-main">
         <section id="browse-panel" class="browse-panel" aria-label="Place search">

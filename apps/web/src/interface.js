@@ -73,6 +73,8 @@ export class MapInterface {
     this.cardHead = document.getElementById('place-head');
     this.cardBody = document.getElementById('place-body');
     this.cardHandle = document.getElementById('card-handle');
+    this.clearButton = document.getElementById('clear-search');
+    this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     this.menu.addEventListener('click', () => {
@@ -80,6 +82,10 @@ export class MapInterface {
       if (this.mobileLayoutQuery.matches) this.search.blur();
       this.setView(this.view === 'dock' ? 'closed' : 'dock');
       this.onViewport?.();
+    });
+    this.clearButton.addEventListener('click', () => {
+      this.clearQuery();
+      this.search.focus();
     });
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
@@ -89,6 +95,9 @@ export class MapInterface {
       this.search.addEventListener(type, () => {
         if (!this.isRestoringFocus) this.openSearch();
       });
+    this.search.addEventListener('input', () => {
+      this.syncClearButton();
+    });
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
@@ -105,17 +114,44 @@ export class MapInterface {
     this.observer.observe(this.card);
     this.wireCardGestures();
     this.wireCategoryWheel();
+    this.syncPanelPosition();
+    this.syncDesktopSearchUI();
     this.syncViewport(false);
+  }
+
+  // Move the browse panel to the container for the current view without changing other state.
+  syncPanelPosition() {
+    const target = this.#panelTargetFor(this.view);
+    if (this.panel.parentElement !== target) target.append(this.panel);
+  }
+
+  // Show the clear button when there is a query, hide it otherwise.
+  syncClearButton() {
+    const hasQuery = this.search.value.trim().length > 0;
+    this.clearButton.hidden = !hasQuery;
   }
 
   openSearch() {
     this.trigger = this.search;
-    // Search stays in the view it started from; only choosing a result leaves the phone dock.
-    const view = this.mobileLayoutQuery.matches && this.view !== 'dock' ? 'search' : 'dock';
+    if (!this.mobileLayoutQuery.matches) {
+      // Desktop: keep the current view (dock stays open, closed stays closed).
+      this.setView(this.view);
+      this.onSearch?.();
+      return;
+    }
+    // Mobile behavior: search bubble or dock.
+    const view = this.view !== 'dock' ? 'search' : 'dock';
     const hasViewChanged = view !== this.view;
     this.setView(view);
     if (hasViewChanged) this.onSearch?.();
     else if (this.areResultsMinimized) this.setCardState('peek');
+  }
+
+  // Returns the container the browse panel should live in for the given view.
+  #panelTargetFor(view) {
+    if (view === 'search') return this.bubble;
+    if (!this.mobileLayoutQuery.matches && view === 'closed') return this.desktopSearchPanel;
+    return document.getElementById('dock-main');
   }
 
   setView(view) {
@@ -125,10 +161,11 @@ export class MapInterface {
       // A peek only makes sense above open results.
       if (this.card.dataset.state === 'peek') this.setCardState('full');
     }
-    const target = view === 'search' ? this.bubble : document.getElementById('dock-main');
+    const target = this.#panelTargetFor(view);
     if (this.panel.parentElement !== target) target.append(this.panel);
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
+    this.syncDesktopSearchUI();
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
@@ -143,6 +180,19 @@ export class MapInterface {
     this.strip.hidden = !isSearching || !this.areResultsMinimized;
     if (!this.strip.hidden)
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
+  }
+
+  // On desktop, the search panel carries the categories and results.
+  // data-has-query controls whether it looks like a floating row or a joined card.
+  syncDesktopSearchUI() {
+    if (this.mobileLayoutQuery.matches) {
+      this.desktopSearchPanel.hidden = true;
+      return;
+    }
+    const hasQuery = this.search.value.trim().length > 0;
+    const isDockOpen = this.view === 'dock';
+    this.desktopSearchPanel.hidden = isDockOpen;
+    this.desktopSearchPanel.dataset.hasQuery = String(hasQuery);
   }
 
   // Call after the card's content is in place and it is no longer hidden.
@@ -316,6 +366,28 @@ export class MapInterface {
     if (shouldRestoreFocus) this.restoreFocus(this.trigger);
   }
 
+  // Clear the search query and update the UI.
+  clearQuery() {
+    this.search.value = '';
+    this.syncClearButton();
+    this.onSearch?.();
+  }
+
+  // Returns true when the desktop search panel is visible and shows results.
+  #isDesktopSearchPanelVisible() {
+    return !this.mobileLayoutQuery.matches &&
+      !this.desktopSearchPanel.hidden &&
+      this.desktopSearchPanel.dataset.hasQuery === 'true';
+  }
+
+  // Returns true when the results list is visible to the user.
+  areResultsVisible() {
+    if (this.view === 'search' || this.view === 'dock') return true;
+    // On desktop with a query, results are visible in the search panel even when view is 'closed'.
+    if (!this.mobileLayoutQuery.matches && this.search.value.trim().length > 0) return true;
+    return false;
+  }
+
   keyboardOpen() {
     const viewport = window.visualViewport;
     // A pinch-zoomed page also shrinks the visual viewport, without any keyboard.
@@ -358,7 +430,7 @@ export class MapInterface {
       headerBottom: header.bottom - map.top,
       searchBottom: this.view === 'search' ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
       dockRight:
-        this.view === 'dock'
+        (this.view === 'dock' || this.#isDesktopSearchPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
       details: details && {top: detailsTop - map.top, right: details.right - map.left},

@@ -51,6 +51,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .search .icon { width: 18px; height: 18px; color: var(--muted); }
 .search input { width: 100%; min-width: 0; height: 48px; padding: 0 10px 0 0; border: 0; background: transparent; font-size: 14px; }
 .search input::placeholder { color: var(--muted); }
+/* Hide the native search cancel button so only #clear-search is visible. */
+.search input::-webkit-search-cancel-button { display: none; }
+.search input::-webkit-search-decoration { display: none; }
 /* The search field shows focus through its caret and the shared bar's border, not the generic ring. */
 .search input:focus-visible { outline: none; }
 .search-bar:has(input:focus) { border-color: var(--line-strong); }
@@ -145,9 +148,120 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
-/* The dock stays open beside a place card, so the card moves clear of it and keeps the map controls reachable. */
+/* The dock stays open beside a place card, so the card moves clear of whichever left panel is open. */
 @media (min-width: 721px) {
-  body[data-view=dock] .place-card { top: 20px; left: calc(var(--dock-width) + 12px); width: min(375px, calc(100% - var(--dock-width) - 96px)); max-height: calc(100% - 40px); }
+  body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
+    top: 20px;
+    left: calc(var(--dock-width) + 12px);
+    width: min(375px, calc(100% - var(--dock-width) - 96px));
+    max-height: calc(100% - 40px);
+  }
+
+  /* Desktop search bar: taller, with clear button and floating categories. */
+  .search-bar { height: 60px; }
+  .search input { height: 54px; }
+
+  /* Clear button inside the search bar. */
+  .clear-button { margin: 0 3px; width: 40px; height: 40px; }
+  .clear-button .icon { width: 18px; height: 18px; }
+
+  /* Desktop search panel: always positioned under the bar.
+   * data-has-query="false" → floating category chips (no background, no border, no shadow).
+   * data-has-query="true"  → joined card with categories row + scrollable results. */
+  .desktop-search-panel {
+    position: fixed;
+    top: calc(var(--visible-top) + var(--bar-inset) + 60px);
+    left: var(--bar-inset);
+    width: calc(var(--dock-width) - 2 * var(--bar-inset));
+    max-height: 50dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    z-index: 5;
+  }
+  /* Floating mode: no query — categories float, results hidden. */
+  .desktop-search-panel[data-has-query="false"] {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    max-height: none;
+  }
+  .desktop-search-panel[data-has-query="false"] #results { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 8px;
+    padding: 4px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories button {
+    flex-shrink: 0;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 22px;
+    padding: 7px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px #243f3710;
+    pointer-events: auto;
+  }
+  .desktop-search-panel[data-has-query="false"] #categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+  /* Joined card mode: with query — categories + results as one card. */
+  .desktop-search-panel[data-has-query="true"] {
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 15px 15px;
+    background: var(--paper);
+    box-shadow: 0 8px 24px #243f3718;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories {
+    display: flex;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 7px;
+    padding: 6px var(--bar-inset) 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="true"] #categories button {
+    flex-shrink: 0;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 22px;
+    padding: 6px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+  .desktop-search-panel[data-has-query="true"] #results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The browse panel inside the desktop search panel fills the column. */
+  .desktop-search-panel .browse-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
