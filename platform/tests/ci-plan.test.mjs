@@ -141,7 +141,11 @@ test('outputs give every folder a value and a usable matrix', () => {
   assert.ok(lines.includes('docs=false'));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
-    include: [{area: 'interface', specs: BROWSER_AREAS.interface.specs}]
+    include: [
+      {area: 'interface-1', specs: `${BROWSER_AREAS.interface.specs} --shard=1/3`},
+      {area: 'interface-2', specs: `${BROWSER_AREAS.interface.specs} --shard=2/3`},
+      {area: 'interface-3', specs: `${BROWSER_AREAS.interface.specs} --shard=3/3`}
+    ]
   });
 });
 
@@ -292,7 +296,11 @@ test('an area too slow for one job runs every share of its tests', () => {
     {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/2'},
     {area: 'journeys-2', specs: 'tests/e2e/journeys.spec.mjs --shard=2/2'}
   ]);
-  assert.deepEqual(browserMatrix(['interface']).include, [{area: 'interface', specs: 'tests/e2e/interface.spec.mjs'}]);
+  assert.deepEqual(browserMatrix(['interface']).include, [
+    {area: 'interface-1', specs: 'tests/e2e/interface.spec.mjs --shard=1/3'},
+    {area: 'interface-2', specs: 'tests/e2e/interface.spec.mjs --shard=2/3'},
+    {area: 'interface-3', specs: 'tests/e2e/interface.spec.mjs --shard=3/3'}
+  ]);
 });
 
 test('the browser image has its own pipeline, and a change to it selects no application', () => {

@@ -46,6 +46,8 @@ export const BROWSER_AREAS = {
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
+    // Shares took 92, 83, 87 seconds (E2E_WORKERS=2) against the 300-second aim.
+    jobs: 3,
     specFiles: ['interface.spec.mjs'],
     sources: ['interface.js']
   },
