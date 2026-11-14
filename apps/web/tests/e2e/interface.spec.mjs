@@ -1740,6 +1740,10 @@ test.describe('GPS follow — search result stops following', () => {
         await settled(page);
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
+        // On Flip the search field is hidden until the dock opens, so open the menu first.
+        if (await page.locator('body').getAttribute('data-device') === 'flip') {
+          await openMenu(page);
+        }
         // Search and choose a result — this moves the camera, which stops following.
         await page.locator('#search').fill('Nearby place 0');
         await expect(page.locator('.result')).toHaveCount(1);
