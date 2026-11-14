@@ -54,9 +54,14 @@ agent-rules:
 worktree:
 	$(MAKE) --no-print-directory -C platform worktree NAME="$(NAME)" BASE="$(BASE)"
 
-# Lint all workflow YAML files with actionlint, using the same pinned image as ci-workflows.
+# Lint all workflow YAML files with actionlint.
+# CI pins rhysd/actionlint:1.7.12; use the local binary when available, otherwise fall back to the container.
 lint-workflows:
+ifneq (,$(shell command -v actionlint 2>/dev/null))
+	actionlint -color
+else
 	docker run --rm -v "$$(pwd)":/repo -w /repo rhysd/actionlint:1.7.12 -color
+endif
 
 # Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
 ACT ?= gh act

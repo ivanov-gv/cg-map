@@ -1,4 +1,4 @@
-# 0016: CI/CD model: CI builds, CD deploys
+# 0017: CI/CD model: CI builds, CD deploys
 
 ## Status
 

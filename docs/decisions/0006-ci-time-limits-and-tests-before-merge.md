@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially superseded. The "push to main updates dev" part is replaced by [ADR 0016](0016-ci-cd-model.md). The
+Partially superseded. The "push to main updates dev" part is replaced by [ADR 0017](0017-ci-cd-model.md). The
 test-before-merge, time-limit, and decisions-log parts remain accepted.
 
 ## Context

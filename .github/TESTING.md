@@ -8,7 +8,7 @@ other PR needs its owning project's checks, and browser tests where it changes a
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
 [ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md),
-[ADR 0016](../docs/decisions/0016-ci-cd-model.md) and [release](../docs/runbooks/release.md).
+[ADR 0017](../docs/decisions/0017-ci-cd-model.md) and [release](../docs/runbooks/release.md).
 
 ## Order
 
