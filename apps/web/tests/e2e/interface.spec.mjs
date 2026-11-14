@@ -5,6 +5,7 @@ import {
   closeCard,
   closeMenu,
   fixture,
+  holdGeolocationFixes,
   nearbyPlaces,
   openMenu,
   pointOnMap,
@@ -1269,35 +1270,31 @@ test.describe('GPS follow location — denied', () => {
 // ---------------------------------------------------------------------------
 
 // Defect 1: Click the follow button *before* any usable fix arrives.
-// The old code called render() instead of requestPosition(), so the tracker was never retried.
-// This test starts with no geolocation set (so the tracker is in 'acquiring' state with no fix),
-// clicks the button, then sets the geolocation so the fix arrives after the click.
-test.describe('GPS follow — no initial fix', () => {
-  test.use({permissions: ['geolocation']});
+// Uses holdGeolocationFixes so the first fix is queued until after the click.
+test.describe('GPS follow — click before fix arrives', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
   for (const {name, viewport} of deviceCases) {
-    test(`start following without a fix, then receive one on ${name}`, async ({page, context}) => {
+    test(`start following before fix arrives on ${name}`, async ({page, context}) => {
       async function check() {
-        // Don't set geolocation yet — the tracker will be in 'acquiring' state with no fix.
+        await holdGeolocationFixes(page);
         await ready(page);
-        // State should be 'acquiring' (permission granted but no fix yet).
+        // State is 'acquiring' because the fix is held.
         await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Click to start following — there is no fix yet, so requestPosition is called.
+        // Click to start following — fix has not arrived yet.
         await page.locator('#position-action').click();
         await settled(page);
-        // Following is active and waiting for a fix.
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Now set the geolocation — the tracker receives the fix.
-        await context.setGeolocation(FIRST_FIX);
+        // Release the held fix — the tracker receives it.
+        await page.evaluate(() => window.releaseHeldFixes());
         await waitForLiveFix(page);
         await settled(page);
 
-        // Following should still be active after the fix arrives.
+        // Following should still be active and camera centred on the fix.
         await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-        // Camera should centre on the first fix.
         await expect
           .poll(() =>
             page.evaluate(
@@ -1325,6 +1322,52 @@ test.describe('GPS follow — no initial fix', () => {
         await waitForLiveFix(page);
         await settled(page);
         await expectCameraToHold(page, afterDrag);
+      }
+
+      await atViewport(page, viewport, check);
+    });
+  }
+});
+
+// Acquiring style: the button uses the filled toggle style while following even without a fix.
+// Uses holdGeolocationFixes so the fix is held until after the click.
+test.describe('GPS follow — acquiring style', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
+
+  for (const {name, viewport} of deviceCases) {
+    test(`position button uses filled style while acquiring on ${name}`, async ({page}) => {
+      async function check() {
+        await holdGeolocationFixes(page);
+        await ready(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+
+        // Read the not-following background first.
+        const bgNotFollowing = await page.locator('#position-action').evaluate(
+          el => getComputedStyle(el).backgroundColor
+        );
+
+        // Click to start following — state is still 'acquiring' but following is active.
+        await page.locator('#position-action').click();
+        await settled(page);
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+
+        // The button background should differ from the not-following background.
+        const bgAcquiring = await page.locator('#position-action').evaluate(
+          el => getComputedStyle(el).backgroundColor
+        );
+
+        expect(bgAcquiring).not.toEqual(bgNotFollowing);
+
+        // Verify it matches --green from the root.
+        const greenColor = await page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
+        );
+        const red = parseInt(greenColor.slice(1, 3), 16);
+        const green = parseInt(greenColor.slice(3, 5), 16);
+        const blue = parseInt(greenColor.slice(5, 7), 16);
+        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
+        expect(bgAcquiring).toBe(expectedRgb);
       }
 
       await atViewport(page, viewport, check);
@@ -1372,8 +1415,6 @@ test.describe('GPS follow — search result stops following', () => {
 });
 
 // Defect 3: The computed background of #position-action differs between following and not following.
-// Also covers the ACQUIRING state: the button should use the filled toggle style while following
-// even when the fix has not yet arrived.
 test.describe('GPS follow — button style', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
@@ -1430,49 +1471,3 @@ test.describe('GPS follow — button style', () => {
 
 });
 
-// ACQUIRING state: the button uses the filled toggle style while following even without a fix.
-// Lives in its own describe block because the parent 'button style' describe sets geolocation,
-// but acquiring tests need no geolocation so the tracker stays in 'acquiring' state.
-test.describe('GPS follow — acquiring state', () => {
-  test.use({permissions: ['geolocation']});
-
-  for (const {name, viewport} of deviceCases) {
-    test(`position button uses filled style while acquiring on ${name}`, async ({page}) => {
-      async function check() {
-        // No geolocation set — the tracker will be in 'acquiring' state with no fix.
-        await ready(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
-
-        // Read the not-following background first.
-        const bgNotFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        // Click to start following — state is still 'acquiring' but following is active.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
-
-        // The button background should differ from the not-following background.
-        const bgAcquiring = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        expect(bgAcquiring).not.toEqual(bgNotFollowing);
-
-        // Verify it matches --green from the root.
-        const greenColor = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
-        );
-        const red = parseInt(greenColor.slice(1, 3), 16);
-        const green = parseInt(greenColor.slice(3, 5), 16);
-        const blue = parseInt(greenColor.slice(5, 7), 16);
-        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(bgAcquiring).toBe(expectedRgb);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
-});

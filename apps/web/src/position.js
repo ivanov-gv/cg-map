@@ -85,6 +85,10 @@ export class PositionTracker {
     if (error.code === 1) {
       this.stop();
       this.fix = null;
+      // Mark a dismissed prompt so the UI can distinguish it from a pending one.
+      if (this.permission !== 'denied') {
+        this.error = 'dismissed';
+      }
       return this.set(this.permission === 'denied' ? 'denied' : 'prompt');
     }
     // Keep a previous fix visible but let evaluate() mark it stale; without one, name the condition.
@@ -103,7 +107,8 @@ export class PositionTracker {
     return {
       state: this.state,
       fix: this.fix ? {...this.fix, coordinates: [...this.fix.coordinates]} : null,
-      age: this.fix ? this.now() - this.fix.timestamp : null
+      age: this.fix ? this.now() - this.fix.timestamp : null,
+      isPromptDismissed: this.state === 'prompt' && this.error === 'dismissed'
     };
   }
 }

@@ -168,3 +168,23 @@ test('retrying positioning never makes the previous fix appear current', () => {
   );
   assert.deepEqual(features[1].geometry.coordinates, fix.coordinates);
 });
+
+test('dismissed prompt gives isPromptDismissed true, watch resets it', async () => {
+  const geolocation = fakeGeo();
+  const tracker = new PositionTracker({
+    bounds,
+    geolocation: geolocation,
+    permissions: permission('prompt'),
+    secure: true,
+    every: () => {}
+  });
+  await tracker.start();
+  // Simulate a dismissed permission prompt: code 1 error while permission is still 'prompt'.
+  geolocation.err({code: 1});
+  assert.equal(tracker.state, 'prompt');
+  assert.equal(tracker.snapshot().isPromptDismissed, true);
+  // A new watch() clears the error and resets isPromptDismissed.
+  tracker.watch();
+  assert.equal(tracker.state, 'prompt');
+  assert.equal(tracker.snapshot().isPromptDismissed, false);
+});

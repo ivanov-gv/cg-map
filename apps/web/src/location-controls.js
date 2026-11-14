@@ -64,6 +64,10 @@ export class LocationControls {
     if (this.#isFollowing && this.#shouldStopFor(state)) {
       this.#stopFollowingWithMessage(snapshot);
     }
+    // A dismissed permission prompt stops following (defect 5).
+    if (this.#isFollowing && snapshot.isPromptDismissed) {
+      this.#stopFollowingWithMessage(snapshot);
+    }
     elementById('position-status').textContent = positionStatusText(snapshot, this.#context.hasExploredMap());
     elementById('position-badge').dataset.state = state;
     this.#renderFollowing();
@@ -81,11 +85,6 @@ export class LocationControls {
     if (this.#isLocationRequested && state === 'stale' && this.#tracker?.error) {
       this.#context.notify('Location is not updating. Check device location settings and try again.');
       this.#isLocationRequested = false;
-    }
-    // Retry location when explicitly requested and still acquiring.
-    if (this.#isLocationRequested && state === 'acquiring') {
-      this.#isLocationRequested = false;
-      this.#tracker?.retry();
     }
     if (!this.#map?.getSource('position')) return;
     this.#map.getSource('position').setData(positionFeatures(snapshot));
@@ -121,11 +120,9 @@ export class LocationControls {
   }
 
   // Returns true when the given state should stop following.
-  // Only permanent failures stop following: 'denied', 'outside', 'insecure', 'unsupported'.
-  // Transient errors ('unavailable', 'timeout') do not stop following, because the tracker
-  // retries automatically and a clearWatch() error can briefly set 'unavailable'.
+  // Uses the same list as requestPosition so following stops on every terminal failure.
   #shouldStopFor(state) {
-    return ['denied', 'outside', 'insecure', 'unsupported'].includes(state);
+    return FAILED_POSITION_STATES.includes(state);
   }
 
   // Stops following and notifies the user with the position message.
@@ -182,31 +179,24 @@ export class LocationControls {
   // Sets hasCenteredOnFix so the one-time first-fix centring never runs after following starts.
   #startFollowing() {
     const {fix, state} = this.#snapshot;
+    // Always set following flags first.
+    this.#isFollowing = true;
+    this.#hasCenteredOnFix = true;
+    this.#renderFollowing();
     if (fix && hasUsablePosition(state)) {
       // With a usable fix: close the interface and selection, then move the camera.
       this.#interface.close();
       this.#context.closeSelection();
-      this.#isFollowing = true;
-      this.#hasCenteredOnFix = true;
-      this.#renderFollowing();
       this.#moveCameraToFix(fix, Math.max(this.#map.getZoom(), DISCOVER_ZOOM));
     } else {
-      // No usable fix yet — close the interface, mark following, and request a retry.
-      // Set #isLocationRequested so the next render will retry or explain.
-      // Do not call retry() directly: it stops the existing watch first, which can fire
-      // an error callback that sets a failed state and stops following before the new watch starts.
-      this.#interface.close();
-      this.#context.closeSelection();
-      this.#isFollowing = true;
-      this.#hasCenteredOnFix = true;
-      this.#isLocationRequested = true;
-      this.#renderFollowing();
-      this.render(this.#snapshot);
+      // No usable fix yet — request a new position (closes interface and selection).
+      this.requestPosition();
     }
   }
 
   // Stops following on any camera move the follower did not make.
-  // The follower tags its own moves with isLocationFollowMove; everything else stops it.
+  // MapLibre easeTo passes its second argument into the movestart event, so the follower
+  // tags its own moves with {isLocationFollowMove: true} and everything else stops it.
   stopFollowingOnForeignMove(event) {
     if (this.#isFollowing && !event.isLocationFollowMove) {
       this.#stopFollowing();

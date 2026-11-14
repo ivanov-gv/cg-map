@@ -181,3 +181,49 @@ export async function atViewport(page, viewport, check) {
     await page.setViewportSize(previousViewport);
   }
 }
+
+// Wraps navigator.geolocation.watchPosition and getCurrentPosition so success callbacks are queued,
+// not called, until the page calls window.releaseHeldFixes(). After release, callbacks pass straight
+// through. Error callbacks pass through immediately.
+// Why: it keeps the real browser geolocation but controls when the first fix arrives, so the test
+// can click the follow button before any fix is delivered.
+export async function holdGeolocationFixes(page) {
+  await page.addInitScript(() => {
+    if (window.__geolocationFixesHeld) return; // Already installed
+    window.__geolocationFixesHeld = true;
+    window.__geolocationFixesReleased = false;
+    const successCallbacks = [];
+
+    function wrapWatch(orig) {
+      return function (onSuccess, onError, options) {
+        return orig.call(navigator.geolocation,
+          result => {
+            if (window.__geolocationFixesReleased) {
+              onSuccess(result);
+            } else {
+              successCallbacks.push(() => onSuccess(result));
+            }
+          },
+          onError, // Error callbacks pass through immediately
+          options
+        );
+      };
+    }
+
+    navigator.geolocation.watchPosition = wrapWatch(navigator.geolocation.watchPosition);
+    navigator.geolocation.getCurrentPosition = function (onSuccess, onError, options) {
+      if (window.__geolocationFixesReleased) {
+        return navigator.geolocation.watchPosition.constructor.prototype.getCurrentPosition
+          ? navigator.geolocation.getCurrentPosition(onSuccess, onError, options)
+          : onSuccess({coords: {latitude: 0, longitude: 0, accuracy: 0}});
+      } else {
+        successCallbacks.push(() => onSuccess({coords: {latitude: 0, longitude: 0, accuracy: 0}}));
+      }
+    };
+
+    window.releaseHeldFixes = () => {
+      window.__geolocationFixesReleased = true;
+      for (const cb of successCallbacks) cb();
+    };
+  });
+}
