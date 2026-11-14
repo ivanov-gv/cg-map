@@ -2580,6 +2580,47 @@ test.describe('Flip dock minimizable footer', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Footer toggle must be hidden on Desktop and Mobile (issue #155)
+// ---------------------------------------------------------------------------
+
+// The footer toggle handle is only meant for Flip (where the footer starts
+// minimized). On Desktop and Mobile it must not render at all, so the footer
+// content (Satellite, Transport, Download) appears directly with the standard
+// 16 px top padding — the same gap that origin/feature/92-left-dock has.
+
+test.describe('footer toggle hidden on non-Flip devices', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  for (const {name, viewport} of [
+    {name: 'desktop', viewport: {width: 1280, height: 800}},
+    {name: 'mobile', viewport: {width: 412, height: 840}}
+  ]) {
+    test(`footer toggle is hidden and footer padding is 16px on ${name}`, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // #footer-toggle must not be visible on Desktop or Mobile.
+        await expect(page.locator('#footer-toggle')).toBeHidden();
+
+        // The footer's top padding must be the baseline 16 px (from .dock-footer CSS).
+        // Measure it with getComputedStyle to assert the exact value.
+        const footerTopPadding = await page.evaluate(() => {
+          const footer = document.querySelector('.dock-footer');
+          return parseInt(getComputedStyle(footer).paddingTop, 10);
+        });
+        expect(footerTopPadding).toBe(16);
+
+        // The Satellite button should be visible without needing to expand a footer.
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Flip dock: keyboard awareness, Escape, and focus (issue #146)
 // ---------------------------------------------------------------------------
 
