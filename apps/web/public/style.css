@@ -119,6 +119,45 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 /* map-core adds NavigationControl with no option to omit it. */
 .maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
+/* Stack bottom-left controls vertically so the OSM credit sits below the scale bar
+ * (wiki Web app – UI, ADR 0016). MapLibre inserts bottom controls at the first child
+ * (map.ts: insertBefore(controlElement, positionContainer.firstChild) for bottom
+ * positions), so the credit (added after the scale bar) becomes the first DOM child.
+ * We use flex-direction: column-reverse so the first child renders at the bottom. */
+.maplibregl-ctrl-bottom-left {
+  display: flex;
+  flex-direction: column-reverse;
+}
+/* Remove the scale bar's bottom margin so the credit sits directly below it. */
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale {
+  margin-bottom: 0;
+}
+/* Share background, text colour and font between the scale bar and the OSM credit
+ * so they stay in step if MapLibre changes its defaults (wiki Web app – UI, ADR 0016). */
+.maplibregl-ctrl-scale,
+.osm-credit-line {
+  background-color: rgb(255, 255, 255, 0.75);
+  color: #333;
+  font-family: Helvetica Neue, Arial, Helvetica, sans-serif;
+}
+/* OSM credit line sits below the scale bar (wiki Web app – UI, ADR 0016).
+ * Height is half the scale bar's (~9 px box for a 22 px bar). pointer-events
+ * restores clickability since MapLibre sets pointer-events: none on its controls. */
+.osm-credit-line {
+  border-radius: 4px;
+  line-height: 9px;
+  padding: 0 6px;
+  margin: 0 0 10px 10px;
+  pointer-events: auto;
+}
+.osm-credit-line a {
+  color: inherit;
+  text-decoration: none;
+  font: inherit;
+}
+.osm-credit-line a:hover {
+  text-decoration: underline;
+}
 .place-card, .route-panel { position: absolute; z-index: 4; overflow: auto; background: #fffffc; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #243f3718; }
 .place-card { top: 94px; left: 20px; width: min(375px, calc(100% - 96px)); max-height: calc(100% - 130px); padding: 24px; scrollbar-width: none; }
 .place-head { display: flow-root; }
