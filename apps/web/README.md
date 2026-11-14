@@ -63,6 +63,11 @@ search panel joined to the bar, containing the categories row and a scrollable r
 query. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available for
 the full layer/download controls.
 
+**Mobile search bar** (issue #102): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px default
+and the 60 px desktop bar), spans the full screen width, and uses smaller icons and font. Touch targets are at least 40
+px. The categories row is hidden on the main screen to save space; it remains available inside the open dock and the
+search bubble.
+
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
