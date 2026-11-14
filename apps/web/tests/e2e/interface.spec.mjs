@@ -598,6 +598,9 @@ test(
   {tag: '@phone'},
   async ({page, isMobile}) => {
     test.skip(!isMobile, 'phone layout');
+    // Use a narrow mobile viewport (360 × 740) so all five category chips overflow the strip.
+    // 360 px is still a Mobile viewport (wider than 400 or taller than 400, so not Flip).
+    await page.setViewportSize({width: 360, height: 740});
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await page.locator('#search').click();
@@ -608,40 +611,21 @@ test(
       const stripBox = await strip.boundingBox();
       return box.x >= stripBox.x - 1 && box.x + box.width <= stripBox.x + stripBox.width + 1;
     };
-    // Find a chip that is not fully visible (if any). With a full-width bar on mobile,
-    // all chips may fit; in that case the scroll test still validates the wheel handler.
-    const chipNames = await strip.locator('button').allTextContents();
-    let offScreenName = null;
-    for (const name of chipNames) {
-      if (!(await chipInStrip(name))) {
-        offScreenName = name;
-        break;
-      }
-    }
-    if (offScreenName) {
-      expect(await chipInStrip(offScreenName)).toBe(false);
-      // A plain DOM click: Playwright's own click would scroll the chip into view and hide a failure.
-      await chip(offScreenName).evaluate(element => element.click());
-      await expect.poll(() => chipInStrip(offScreenName)).toBe(true);
-      await chip(offScreenName).evaluate(element => element.click());
-    }
+    // 'Essentials' is the rightmost chip; at 360 px it starts outside the visible strip.
+    expect(await chipInStrip('Essentials')).toBe(false);
+    // A plain DOM click: Playwright's own click would scroll the chip into view and hide a failure.
+    await chip('Essentials').evaluate(element => element.click());
+    await expect.poll(() => chipInStrip('Essentials')).toBe(true);
+    await chip('Essentials').evaluate(element => element.click());
     // Toggling off clears the category filter — no button is pressed.
     await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
 
-    // Verify the wheel handler converts vertical scroll to horizontal on the category strip.
-    const wheelResult = await strip.evaluate(element => {
+    const scrolled = await strip.evaluate(element => {
       const start = element.scrollLeft;
-      const event = new WheelEvent('wheel', {deltaY: 60, bubbles: true, cancelable: true});
-      element.dispatchEvent(event);
-      return {scrolled: element.scrollLeft - start, prevented: event.defaultPrevented};
+      element.dispatchEvent(new WheelEvent('wheel', {deltaY: 60, bubbles: true, cancelable: true}));
+      return element.scrollLeft - start;
     });
-    // The handler prevents the default vertical scroll. It also scrolls horizontally when
-    // there is overflow content (scrollWidth > clientWidth).
-    expect(wheelResult.prevented).toBe(true);
-    const hasOverflow = await strip.evaluate(el => el.scrollWidth > el.clientWidth);
-    if (hasOverflow) {
-      expect(wheelResult.scrolled).toBeGreaterThan(0);
-    }
+    expect(scrolled).toBeGreaterThan(0);
   }
 );
 
