@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Superseded. The Pages-as-CI-step and `:main`-image parts are replaced by [ADR 0016](0016-ci-cd-model.md). The package
+and release parts remain accepted.
 
 ## Context
 

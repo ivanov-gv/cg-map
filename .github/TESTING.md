@@ -7,7 +7,17 @@ other PR needs its owning project's checks, and browser tests where it changes a
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
-[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md) and [release](../docs/runbooks/release.md).
+[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md),
+[ADR 0016](../docs/decisions/0016-ci-cd-model.md) and [release](../docs/runbooks/release.md).
+
+## Order
+
+Test workflows in this order, stopping at the first failure:
+
+1. **Lint** — `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
+2. **Local run** — `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
+3. **GitHub test run** — dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
+   variables, and secrets.
 
 ## Time limits
 

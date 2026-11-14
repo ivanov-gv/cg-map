@@ -1,4 +1,4 @@
-.PHONY: setup hooks check check-docs ci-plan test-all-workflows test-cd-map-core test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
+.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
 
 # Repository-wide tasks only. Every project builds, runs, lints and tests itself through its own Makefile; this file
 # may call a project's check targets but never its build or run targets. See docs/system-architecture/architecture.md.
@@ -53,6 +53,10 @@ agent-rules:
 # make worktree NAME=<branch> [BASE=main]: isolated checkout for a parallel agent session.
 worktree:
 	$(MAKE) --no-print-directory -C platform worktree NAME="$(NAME)" BASE="$(BASE)"
+
+# Lint all workflow YAML files with actionlint, using the same pinned image as ci-workflows.
+lint-workflows:
+	docker run --rm -v "$$(pwd)":/repo -w /repo rhysd/actionlint:1.7.12 -color
 
 # Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
 ACT ?= gh act
