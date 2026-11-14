@@ -307,6 +307,16 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
   .card-handle:focus-visible { outline-offset: -3px; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
+
+  /* On Mobile, the open dock fills the entire viewport — no map is visible beside it.
+   * The sidebar becomes full width and full layout height, covering everything under it.
+   * The dock-content inside uses --visible-top and --visible-height for keyboard awareness. */
+  body[data-view=dock] .sidebar {
+    width: 100vw;
+    height: 100dvh;
+    top: 0;
+    border-right: none;
+  }
 }
 /* Flip: only the menu button on the main screen; search and categories hide until the dock opens.
  * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.

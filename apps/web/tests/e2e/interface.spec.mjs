@@ -1913,6 +1913,119 @@ test.describe('GPS follow — dismissed prompt', () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Full-screen dock on Mobile and Flip (issue #104)
+// ---------------------------------------------------------------------------
+
+// On Mobile and Flip, the open dock covers the entire visible viewport.
+// Desktop keeps the side dock narrower than the viewport.
+test.describe('dock fills viewport on mobile and flip', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const MOBILE_VIEWPORT = {width: 412, height: 840};
+  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
+  const DESKTOP_VIEWPORT = {width: 1280, height: 800};
+
+  // Check that the sidebar/dock covers the full viewport and that elementFromPoint
+  // at each corner and the center returns an element inside the sidebar, not the map.
+  async function assertDockCoversViewport(page) {
+    const viewport = page.viewportSize();
+    const sidebar = page.locator('.sidebar');
+    const box = await sidebar.boundingBox();
+    expect(box).not.toBeNull();
+    // Position: dock starts at or before the viewport origin
+    expect(box.x).toBeLessThanOrEqual(0.5);
+    expect(box.y).toBeLessThanOrEqual(0.5);
+    // Size: dock fills the viewport within 1 px tolerance
+    expect(Math.abs(box.width - viewport.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.height - viewport.height)).toBeLessThanOrEqual(1);
+
+    // elementFromPoint at corners and center should be inside the sidebar, not the map canvas
+    const points = [
+      {x: 1, y: 1},
+      {x: viewport.width - 1, y: 1},
+      {x: 1, y: viewport.height - 1},
+      {x: viewport.width - 1, y: viewport.height - 1},
+      {x: Math.floor(viewport.width / 2), y: Math.floor(viewport.height / 2)}
+    ];
+    for (const point of points) {
+      const result = await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return {
+          tag: el ? el.tagName.toLowerCase() : null,
+          isInsideSidebar: el && document.querySelector('.sidebar')?.contains(el)
+        };
+      }, point);
+      // The element should be inside the sidebar (aside, div, button, etc.), not the map canvas
+      expect(result.tag).not.toBe('canvas');
+      expect(result.isInsideSidebar).toBe(true);
+    }
+  }
+
+  // Check that the map is visible again after closing the dock
+  async function assertMapVisibleAfterClose(page) {
+    const viewport = page.viewportSize();
+    // Check that the center of the viewport is the map canvas
+    const tag = await page.evaluate(({x, y}) => {
+      const el = document.elementFromPoint(x, y);
+      return el ? el.tagName.toLowerCase() : null;
+    }, {x: Math.floor(viewport.width / 2), y: Math.floor(viewport.height / 2)});
+    expect(tag).toBe('canvas');
+  }
+
+  test('dock covers full viewport on mobile', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, MOBILE_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await assertDockCoversViewport(page);
+
+      // Close the dock and verify the map is visible again
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      await assertMapVisibleAfterClose(page);
+    });
+  });
+
+  test('dock covers full viewport on flip', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, FLIP_VIEWPORT_SIZE, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await assertDockCoversViewport(page);
+
+      // Close the dock and verify the map is visible again
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      await assertMapVisibleAfterClose(page);
+    });
+  });
+
+  test('dock stays narrower than viewport on desktop', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await atViewport(page, DESKTOP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+      const viewport = page.viewportSize();
+      const sidebar = page.locator('.sidebar');
+      const box = await sidebar.boundingBox();
+      expect(box).not.toBeNull();
+      // On desktop, the dock is narrower than the viewport
+      expect(box.width).toBeLessThan(viewport.width);
+      // The map canvas should still be visible beside the dock
+      const mapTag = await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return el ? el.tagName.toLowerCase() : null;
+      }, {x: viewport.width - 1, y: Math.floor(viewport.height / 2)});
+      expect(mapTag).toBe('canvas');
+    });
+  });
+});
+
 // Layer toggle while following: following should stop on the camera move.
 test.describe('GPS follow — layer toggle stops following', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
