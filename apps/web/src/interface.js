@@ -78,6 +78,8 @@ export class MapInterface {
     this.cardHandle = document.getElementById('card-handle');
     this.clearButton = document.getElementById('clear-search');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
+    this.footer = document.querySelector('.dock-footer');
+    this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     this.menu.addEventListener('click', () => {
@@ -90,6 +92,7 @@ export class MapInterface {
       this.clearQuery();
       this.search.focus();
     });
+    this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
@@ -180,7 +183,24 @@ export class MapInterface {
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
     this.syncSearchExpanded();
+    // Closing the dock resets the Flip footer to minimized.
+    if (view !== 'dock') this.minimizeFooter();
     this.onChange?.();
+  }
+
+  // Toggle the Flip footer between minimized (handle only) and expanded (all options).
+  toggleFooter() {
+    const isExpanded = this.footerToggle.getAttribute('aria-expanded') === 'true';
+    this.footerToggle.setAttribute('aria-expanded', String(!isExpanded));
+    this.footerToggle.setAttribute('aria-label', isExpanded ? 'Show map options' : 'Hide map options');
+    this.footer.dataset.footerExpanded = String(!isExpanded);
+  }
+
+  // Reset the Flip footer to minimized (handle only, content hidden).
+  minimizeFooter() {
+    this.footerToggle.setAttribute('aria-expanded', 'false');
+    this.footerToggle.setAttribute('aria-label', 'Show map options');
+    delete this.footer.dataset.footerExpanded;
   }
 
   syncResultsVisibility() {

@@ -361,41 +361,69 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:not([data-view=dock]) .search-bar .search,
   body:not([data-view=dock]) .search-bar .clear-button { display: none; }
 
-  /* On a 340 px screen there is no room for a pinned footer: the footer
-   * (Satellite, Transport, Download, attribution) would take most of the
-   * viewport, leaving only one result row visible. Make the entire dock
-   * scroll as a single column so results get the screen first and the
-   * footer is reached by scrolling down. Mobile and Desktop keep the
-   * pinned footer. Flip keeps the Mobile keyboard-aware bottom so the
-   * column ends above the keyboard. */
-  body[data-view=dock] .dock-content {
-    overflow-y: auto;
-  }
-  body[data-view=dock] .dock-main {
-    overflow: visible;
-    flex: none;
-  }
-  body[data-view=dock] .browse-panel {
-    overflow: visible;
-    flex: none;
-  }
-  body[data-view=dock] .results {
-    overflow-y: visible;
-    flex: none;
-  }
   /* Smaller result rows on Flip so at least three fit in the visible area. */
   body[data-view=dock] .result {
     min-height: 56px;
     padding: 8px var(--bar-inset);
   }
-  /* The footer is part of the scroll column; it must not clip its content
-   * or force a fixed height. The footer scrolls with the column because
-   * .dock-content scrolls (overflow-y: auto) and its children do not shrink
-   * (flex: none). */
+  /* Flip footer is pinned at the bottom and starts minimized: only the handle row shows.
+   * The handle is a button that toggles the footer content (Satellite, Transport,
+   * Download, attribution). When opened, the results area shrinks to make room.
+   * Closing the dock resets the footer to minimized. */
   body[data-view=dock] .dock-footer {
+    position: sticky;
+    bottom: 0;
     max-height: none;
-    overflow: visible;
+    overflow: hidden;
     padding-bottom: max(4px, env(safe-area-inset-bottom));
+    flex-shrink: 0;
+  }
+  /* The footer content (layers, download, attribution) is hidden when minimized. */
+  body[data-view=dock] .dock-footer #dock-footer-content {
+    display: none;
+  }
+  /* When the footer is expanded, show the content and hide the results area
+   * so the footer fits in the small viewport (wiki Web app – UI, Flip drawing 2).
+   * The expanded footer content scrolls if it overflows. */
+  body[data-view=dock] .dock-footer[data-footer-expanded=true] #dock-footer-content {
+    display: block;
+    max-height: calc(100dvh - var(--visible-top) - 120px);
+    overflow-y: auto;
+  }
+  body[data-view=dock]:has(.dock-footer[data-footer-expanded=true]) .dock-main {
+    display: none;
+  }
+  /* The footer toggle handle — visible only on Flip with the dock open. */
+  #footer-toggle {
+    display: none;
+  }
+  body[data-view=dock] #footer-toggle {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    position: relative;
+  }
+  /* Short horizontal bar centered in the handle, like .card-handle::before. */
+  body[data-view=dock] #footer-toggle::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    margin-top: -2px;
+    border-radius: 2px;
+    background: var(--line-strong);
+  }
+  /* When expanded, rotate the bar slightly to indicate open state. */
+  body[data-view=dock] #footer-toggle[aria-expanded=true]::before {
+    transform: rotate(180deg);
   }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

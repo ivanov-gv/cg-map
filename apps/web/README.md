@@ -78,12 +78,16 @@ and the search field becomes usable. Typing a query shows the clear button.
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
 stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
 content ends above the keyboard because it uses the keyboard-aware visible viewport variables (--visible-top,
---visible-height); on Flip, the dock keeps the Mobile keyboard-aware bottom so the column ends above the keyboard; the
-footer scrolls with the column because .dock-content scrolls (overflow-y: auto) and its children do not shrink (flex:
-none). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to the search
-view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on mobile).
-Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their current
-behavior when the dock is closed.
+--visible-height). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to
+the search view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on
+mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
+current behavior when the dock is closed.
+
+**Flip minimizable footer** (issue #155): on Flip, the dock footer is pinned at the bottom and starts minimized — only a
+handle row shows. The handle is a `<button>` (#footer-toggle) with aria-expanded and aria-controls, a 40 px touch
+target, and a short horizontal bar drawn in CSS. Clicking it expands the footer to show Satellite, Transport, Download,
+and attribution; the results area hides to make room. Clicking again collapses it. Closing the dock resets to minimized.
+The handle is hidden on Mobile and Desktop where the footer is always shown.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`

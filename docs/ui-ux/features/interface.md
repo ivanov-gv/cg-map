@@ -105,12 +105,23 @@ which removes the query when activated. The categories row follows the same dock
 On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire layout
 viewport — from top 0 to 100dvh, full width, with no map visible around it. The search bar row stays at the top, full
 width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
-variables (--visible-top, --visible-height); on Flip, the `.dock-content` rule does not pin `bottom: 0` so the Mobile
-keyboard-aware bottom (`calc(100dvh - var(--visible-height) - var(--visible-top))`) applies. While the dock is open, the
-route panel is hidden under it. Opening a place from the list switches to the search view with the card
-(`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on mobile). The menu button closes
-the dock, revealing the map again. The place card and route panel keep their current behavior when the dock is closed.
-Desktop keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
+variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. Opening a place
+from the list switches to the search view with the card (`placeCardOpened` in interface.js calls `setView('search')`
+when the dock is open on mobile). The menu button closes the dock, revealing the map again. The place card and route
+panel keep their current behavior when the dock is closed. Desktop keeps the side dock unchanged (narrower than the
+viewport, with the map visible beside it).
+
+### Flip minimizable footer
+
+On Flip, the dock footer is pinned at the bottom and starts minimized — only a handle row shows. The handle is a
+`<button>` (#footer-toggle) with an accessible name ("Show map options" / "Hide map options"), `aria-expanded` and
+`aria-controls`, a 40 px touch target, and a short horizontal bar drawn in CSS (like the existing
+`.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
+
+Opening the footer reveals Satellite, Transport, Download, and the attribution line; the results area hides to make room
+(the wiki's second Flip drawing shows the results hidden while the footer is open). The handle stays at the top of the
+footer. Clicking the handle again collapses the footer and restores the results. Closing the dock resets the footer to
+minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
 
 ## UI-03 Results scroll; options stay at the bottom
 

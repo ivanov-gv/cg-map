@@ -2425,16 +2425,6 @@ test.describe('dock fills viewport on mobile and flip', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Flip dock scrolls as one column — footer is not pinned (issue #104)
-// ---------------------------------------------------------------------------
-
-// On a 340 px screen there is no room for a pinned footer: the footer
-// (Satellite, Transport, Download, attribution) would take most of the
-// viewport, leaving only one result row visible. The fix makes the
-// entire dock-content scroll as a single column on Flip so results get
-// the screen first and the footer is reached by scrolling down.
-
 // Creates an 8-place fixture with the given prefix for ids and names.
 function manyPlacesFixture(prefix) {
   return {
@@ -2452,16 +2442,22 @@ function manyPlacesFixture(prefix) {
   };
 }
 
-test.describe('Flip dock scrolls as one column', () => {
+// ---------------------------------------------------------------------------
+// Flip dock: minimizable footer (issue #155, replaces issue #104 one-column scroll)
+// ---------------------------------------------------------------------------
+
+// The requirement changed: instead of a one-column scroll, Flip uses a pinned
+// footer that starts minimized (only a handle row shows). The handle is a
+// <button> with aria-expanded and aria-controls. Opening it reveals Satellite,
+// Transport, Download, and attribution. Closing the dock resets to minimized.
+
+test.describe('Flip dock minimizable footer', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
   const FLIP_VIEWPORT = {width: 340, height: 340};
+  const manyPlaces = manyPlacesFixture('flip-footer');
 
-  // Create a places fixture with at least 6 results so we can verify
-  // that multiple rows are visible in the small viewport.
-  const manyPlaces = manyPlacesFixture('flip');
-
-  test('at least 3 result rows are visible in the viewport before scrolling',
+  test('opening the dock shows the handle and hides layer buttons and Download',
     {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
     await atViewport(page, FLIP_VIEWPORT, async () => {
@@ -2469,71 +2465,114 @@ test.describe('Flip dock scrolls as one column', () => {
       await openMenu(page);
       await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-      // Wait for results to render.
-      await expect(page.locator('.result')).toHaveCount(8);
+      // The footer toggle handle is visible.
+      await expect(page.locator('#footer-toggle')).toBeVisible();
 
-      // Check how many .result rows are fully inside the viewport.
-      const visibleResults = await page.evaluate((viewportHeight) => {
+      // Footer starts minimized: aria-expanded is false.
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+
+      // Layer buttons and Download are hidden while minimized.
+      await expect(page.locator('#satellite-toggle')).toBeHidden();
+      await expect(page.locator('#transport-toggle')).toBeHidden();
+      await expect(page.locator('#download')).toBeHidden();
+
+      // At least 3 results are visible.
+      await expect(page.locator('.result')).toHaveCount(8);
+      const visibleResults = await page.evaluate((vh) => {
         const results = document.querySelectorAll('.result');
         let count = 0;
         for (const row of results) {
           const rect = row.getBoundingClientRect();
-          // A row is "fully inside" when its top >= 0 and bottom <= viewport height
-          if (rect.top >= 0 && rect.bottom <= viewportHeight) {
-            count++;
-          }
+          if (rect.top >= 0 && rect.bottom <= vh) count++;
         }
         return count;
       }, FLIP_VIEWPORT.height);
-
       expect(visibleResults).toBeGreaterThanOrEqual(3);
     });
   });
 
-  test('Download button and attribution are visible after scrolling to bottom',
+  test('clicking the handle shows all footer content and sets aria-expanded true',
     {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
     await atViewport(page, FLIP_VIEWPORT, async () => {
       await ready(page);
       await openMenu(page);
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-      // Wait for results to render.
-      await expect(page.locator('.result')).toHaveCount(8);
+      // Open the footer.
+      await page.locator('#footer-toggle').click();
 
-      // Before scrolling, the Download button is below the viewport.
-      // This fails when the footer is pinned (old CSS) because it would be
-      // visible without scrolling. See the Flip .dock-content rule in style.css.
-      const downloadBelowViewport = await page.evaluate((viewportHeight) => {
-        const downloadBtn = document.getElementById('download');
-        const rect = downloadBtn.getBoundingClientRect();
-        return rect.top >= viewportHeight;
-      }, FLIP_VIEWPORT.height);
-      expect(downloadBelowViewport).toBe(true);
+      // aria-expanded is now true.
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
 
-      // Scroll the dock's scroll container to the bottom.
-      await page.evaluate(() => {
-        const dockContent = document.getElementById('dock-content');
-        dockContent.scrollTop = dockContent.scrollHeight;
-      });
+      // Layer buttons and Download are visible (not hidden by CSS).
+      await expect(page.locator('#satellite-toggle')).toBeVisible();
+      await expect(page.locator('#transport-toggle')).toBeVisible();
+      await expect(page.locator('#download')).toBeVisible();
 
-      // After scrolling, the Download button and attribution text should be
-      // fully inside the viewport. Use a 1 px tolerance for sub-pixel
-      // rendering differences (e.g. line-height fractions).
-      const downloadVisible = await page.evaluate((viewportHeight) => {
-        const downloadBtn = document.getElementById('download');
-        const rect = downloadBtn.getBoundingClientRect();
-        return rect.top >= 0 && Math.round(rect.bottom) <= viewportHeight;
-      }, FLIP_VIEWPORT.height);
+      // Attribution is also visible.
+      await expect(page.locator('#map-attribution')).toBeVisible();
 
-      const attributionVisible = await page.evaluate((viewportHeight) => {
-        const attribution = document.getElementById('map-attribution');
-        const rect = attribution.getBoundingClientRect();
-        return rect.top >= 0 && Math.round(rect.bottom) <= viewportHeight;
-      }, FLIP_VIEWPORT.height);
+      // Results area is hidden while footer is expanded (wiki drawing 2).
+      await expect(page.locator('.dock-main')).toBeHidden();
+    });
+  });
 
-      expect(downloadVisible).toBe(true);
-      expect(attributionVisible).toBe(true);
+  test('clicking the handle again hides the footer content',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+
+      // Open then close the footer.
+      await page.locator('#footer-toggle').click();
+      await page.locator('#footer-toggle').click();
+
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.locator('#satellite-toggle')).toBeHidden();
+      await expect(page.locator('#download')).toBeHidden();
+    });
+  });
+
+  test('the handle is reachable by Tab and toggles with Enter',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+
+      // Tab to the footer toggle (it should be in the tab order).
+      await page.locator('#footer-toggle').focus();
+      await expect(page.locator('#footer-toggle')).toBeFocused();
+
+      // Press Enter to toggle open.
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+      // Press Enter again to toggle closed.
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
+  test('closing the dock resets the footer to minimized',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+
+      // Open the footer.
+      await page.locator('#footer-toggle').click();
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+      // Close the dock.
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+      // Reopen the dock — footer should be minimized again.
+      await openMenu(page);
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
     });
   });
 });
@@ -2552,8 +2591,8 @@ test.describe('Flip dock keyboard awareness', () => {
 
   // On both phone and Flip, opening the dock, focusing search, and simulating
   // a keyboard should keep the last result visible above the keyboard.
-  // On Flip, the entire dock scrolls as one column (see the Flip .dock-content
-  // rule in style.css). On phone, .results scrolls independently inside dock-content.
+  // On Flip, .results scrolls independently inside dock-content (the footer is
+  // pinned and minimizable). On phone, .results also scrolls independently.
   for (const {name, viewport} of [
     {name: 'phone', viewport: PHONE_VIEWPORT},
     {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
@@ -2573,17 +2612,10 @@ test.describe('Flip dock keyboard awareness', () => {
         await simulateKeyboard(page, keyboardHeight);
 
         // Scroll to the bottom so the last result is at the end.
-        // On Flip, dock-content is the scroll container (see the Flip .dock-content
-        // rule in style.css). On phone, .results scrolls independently inside dock-content.
+        // On both phone and Flip, .results scrolls independently inside dock-content.
         await page.evaluate(() => {
-          const dockContent = document.getElementById('dock-content');
           const results = document.getElementById('results');
-          // dock-content scrolls on Flip (overflow-y: auto); .results scrolls on phone.
-          if (dockContent.scrollHeight > dockContent.clientHeight) {
-            dockContent.scrollTop = dockContent.scrollHeight;
-          } else {
-            results.scrollTop = results.scrollHeight;
-          }
+          results.scrollTop = results.scrollHeight;
         });
 
         // The last .result's bottom must be at or above the visible viewport bottom.
@@ -2628,41 +2660,6 @@ test.describe('Escape closes dock and restores focus', () => {
       });
     });
   }
-});
-
-test.describe('Flip dock download focus stays visible', () => {
-  test.beforeEach(({page}) => stubRouting(page));
-
-  const FLIP_VIEWPORT_SIZE = {width: 340, height: 340};
-
-  const manyPlaces = manyPlacesFixture('focus');
-
-  // On Flip, focusing #download (via Tab or .focus()) must leave it inside
-  // the #dock-content visible rect because the footer scrolls with the content.
-  // See the Flip .dock-content rule in style.css.
-  test('focusing download leaves it inside dock-content visible rect',
-    {tag: '@phone'}, async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-    await atViewport(page, FLIP_VIEWPORT_SIZE, async () => {
-      await ready(page);
-      await openMenu(page);
-      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
-      await expect(page.locator('.result')).toHaveCount(8);
-
-      // Focus the download button.
-      await page.locator('#download').focus();
-
-      // The download button must be inside the dock-content visible rect.
-      const downloadInRect = await page.evaluate(() => {
-        const downloadBtn = document.getElementById('download');
-        const dockContent = document.getElementById('dock-content');
-        const downloadRect = downloadBtn.getBoundingClientRect();
-        const dockRect = dockContent.getBoundingClientRect();
-        return downloadRect.top >= dockRect.top && downloadRect.bottom <= dockRect.bottom + 1; // 1 px tolerance
-      });
-      expect(downloadInRect).toBe(true);
-    });
-  });
 });
 
 // Layer toggle while following: following should stop on the camera move.
