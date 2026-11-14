@@ -107,6 +107,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
 .position-control[data-state=approximate] #position-action { color: #1f6fd1; }
 .position-control[data-state=stale] #position-action { color: #7d8790; }
+/* Following overrides the GPS-state color: green means the camera is locked to the position. */
+.position-control[data-following=true] #position-action { color: var(--green); }
 .maplibregl-ctrl-bottom-right { right: 2px; }
 .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 10px; overflow: hidden; }
 /* Hide MapLibre zoom buttons: map-core creates the NavigationControl and the pinned

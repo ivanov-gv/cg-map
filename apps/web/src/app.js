@@ -449,6 +449,8 @@ function registerPublicMapEvents() {
       mapState.shouldIgnoreNextMove = false;
       return;
     }
+    // Stop location following when the user moves the map.
+    locationControls.onCameraEvent(event);
     if (event.originalEvent && !mapState.hasExploredMap) {
       mapState.hasExploredMap = true;
       locationControls.refresh();
@@ -616,7 +618,7 @@ function registerDeviceControls() {
     elementById('error').hidden = true;
     mapState.interface.restoreFocus(elementById('search'));
   });
-  elementById('position-action').addEventListener('click', () => locationControls.requestPosition());
+  elementById('position-action').addEventListener('click', () => locationControls.toggleFollowing());
   for (const eventType of ['online', 'offline']) {
     addEventListener(eventType, () => renderConnectionBadge(Boolean(startupState.archive?.local)));
   }

@@ -147,3 +147,9 @@ export function formatPositionAge(milliseconds) {
   const secondsBeforeMinuteDisplay = 90;
   return seconds < secondsBeforeMinuteDisplay ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
 }
+// Determines whether a MapLibre camera event represents a user gesture.
+// Programmatic camera moves (easeTo, jumpTo, etc.) have no originalEvent;
+// user gestures (drag, pinch, wheel) always carry the input event.
+export function isUserCameraEvent(event) {
+  return event.originalEvent !== undefined;
+}

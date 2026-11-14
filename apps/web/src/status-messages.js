@@ -72,6 +72,7 @@ export function positionIndicator(state) {
   return indicators[state] ?? '!';
 }
 
-export function positionActionLabel(state) {
-  return hasUsablePosition(state) ? 'Recenter on your location' : 'Locate me';
+export function positionActionLabel(state, isFollowing = false) {
+  if (isFollowing) return 'Stop following your location';
+  return hasUsablePosition(state) ? 'Follow your location' : 'Locate me';
 }
