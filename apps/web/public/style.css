@@ -107,10 +107,17 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
 .position-control[data-state=approximate] #position-action { color: #1f6fd1; }
 .position-control[data-state=stale] #position-action { color: #7d8790; }
+/* Following uses the filled style the app uses for pressed toggles. */
+.position-control[data-following=true] #position-action {
+  background: var(--green);
+  color: white;
+}
+.position-control[data-following=true] #position-action:hover {
+  filter: brightness(1.15);
+}
 .maplibregl-ctrl-bottom-right { right: 2px; }
-.maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 10px; overflow: hidden; }
-.maplibregl-ctrl-group button { width: 44px; height: 44px; }
-.maplibregl-ctrl-attrib { font-size: 10px; background: #ffffffd9 !important; }
+/* map-core adds NavigationControl with no option to omit it. */
+.maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
 /* Stack bottom-left controls vertically so the OSM credit sits below the scale bar
  * (wiki Web app – UI, ADR 0016). MapLibre inserts bottom controls at the first child
