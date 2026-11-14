@@ -4,8 +4,8 @@
  *
  * Flip: max-width 400px AND max-height 400px (small cover screens, nearly square).
  *   The MOBILE_MEDIA_QUERY (max-width: 720px) also matches Flip, but deviceClass() excludes
- *   Flip by checking it first. Flip-specific CSS rules must come after the Mobile block
- *   and override it. No Flip @media rule exists yet.
+ *   Flip by checking it first. Flip-specific CSS rules come after the Mobile block
+ *   and override it.
  * Mobile: max-width 720px (phones and small tablets in portrait; also matches Flip).
  * Desktop: everything else.
  */
@@ -303,5 +303,15 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
   .card-handle:focus-visible { outline-offset: -3px; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
+}
+/* Flip: only the menu button on the main screen; search and categories hide until the dock opens.
+ * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
+ * When the dock is open, the Mobile rules apply again (full-width bar with search). */
+@media (max-width: 400px) and (max-height: 400px) {
+  /* When the dock is closed, shrink the bar to the menu button and hide search elements.
+   * The clear button already has the hidden attribute when there is no query, so no CSS rule is needed. */
+  body:not([data-view=dock]) .search-bar { right: auto; }
+  body:not([data-view=dock]) .search-bar .search-divider,
+  body:not([data-view=dock]) .search-bar .search { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

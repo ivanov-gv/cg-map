@@ -1492,6 +1492,53 @@ test.describe('Mobile search bar', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Flip search bar (issue #103)
+// ---------------------------------------------------------------------------
+
+test.describe('Flip search bar', () => {
+  test('only menu button is visible on the main screen on flip', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Menu button is visible.
+      await expect(page.locator('#menu-toggle')).toBeVisible();
+      // Search input is hidden on the main screen.
+      await expect(page.locator('#search')).toBeHidden();
+      // Categories are hidden on the main screen.
+      await expect(page.locator('#categories')).toBeHidden();
+    });
+  });
+
+  test('search bar shrinks to menu button size on flip with dock closed', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      const bar = await page.locator('.search-bar').boundingBox();
+      const menuButton = await page.locator('#menu-toggle').boundingBox();
+      // The bar should not stretch full-width; it should be at most the menu button width plus padding.
+      expect(bar.width).toBeLessThanOrEqual(menuButton.width + 16);
+    });
+  });
+
+  test('search becomes visible and clear button appears when typing in dock on flip', async ({page}) => {
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await ready(page);
+      // Open the dock.
+      await openMenu(page);
+      // Search input is now visible inside the dock.
+      await expect(page.locator('#search')).toBeVisible();
+      // Clear button should be hidden when there is no query.
+      await expect(page.locator('#clear-search')).toBeHidden();
+      // Type a query — clear button should appear.
+      await page.locator('#search').fill('Café');
+      expect(await page.locator('#search').inputValue()).toBe('Café');
+      await expect(page.locator('#clear-search')).toBeVisible();
+    });
+  });
+});
+
 // Test e: Geolocation permission denied — click shows recovery message, data-following stays false.
 test.describe('GPS follow location — denied', () => {
   for (const {name, viewport} of deviceCases) {
