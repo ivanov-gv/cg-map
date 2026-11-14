@@ -2457,8 +2457,10 @@ function manyPlacesFixture(prefix) {
 test.describe('Flip dock minimizable footer', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
-  // Test at both the real Flip screen height (340×250) and the original test size (340×340).
+  // Test at the real Flip screen size (374×241), the previous test size (340×250),
+  // and the original square viewport (340×340).
   const flipViewports = [
+    {name: '374x241', viewport: {width: 374, height: 241}},
     {name: '340x250', viewport: {width: 340, height: 250}},
     {name: '340x340', viewport: {width: 340, height: 340}}
   ];
@@ -2588,6 +2590,7 @@ test.describe('Flip dock minimizable footer', () => {
     // Issue #159, #161: at least 3 .result rows must be fully visible between
     // #categories bottom and .dock-footer top when minimized.
     // Each result top >= categories bottom and bottom <= footer-toggle top.
+    // The last visible row must leave at least 4 px above the handle.
     test(`minimized: 3 results fully visible between categories and handle (${name})`,
       {tag: '@phone'}, async ({page}) => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
@@ -2607,9 +2610,14 @@ test.describe('Flip dock minimizable footer', () => {
               fullyVisible.push({top: rect.top, bottom: rect.bottom});
             }
           }
-          return {categoriesBottom, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible};
+          const lastVisibleBottom = fullyVisible.length > 0
+            ? fullyVisible[fullyVisible.length - 1].bottom
+            : 0;
+          const spareAboveHandle = toggleTop - lastVisibleBottom;
+          return {categoriesBottom, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
         });
         expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
+        expect(resultPositions.spareAboveHandle, 'at least 4 px spare above handle').toBeGreaterThanOrEqual(4);
       });
     });
 

@@ -383,16 +383,18 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body[data-view=dock] .dock-content {
     top: calc(var(--visible-top) + 8px + 44px);
   }
-  /* Compact category row on Flip — smaller chips (32 px) and tighter padding
-   * so the results area starts sooner. */
+  /* Compact category row on Flip — smaller chips (30 px) and tighter padding
+   * so the results area starts sooner. At 374×241 the space between categories
+   * bottom and the footer handle is only 121 px; three 40 px rows with 1 px
+   * separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
     gap: 5px;
     padding-top: 2px;
-    padding-bottom: 2px;
+    padding-bottom: 0;
   }
   body[data-view=dock] #categories button {
-    min-height: 32px;
-    padding: 4px 10px;
+    min-height: 30px;
+    padding: 3px 10px;
     font-size: 11px;
   }
   /* Compact result rows on Flip so at least three fit in the visible area.
