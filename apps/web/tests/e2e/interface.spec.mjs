@@ -1548,25 +1548,54 @@ test.describe('Desktop search bar', () => {
 
   test('card bottom stays within viewport on desktop with small height', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
-    // Use a small viewport to expose card clipping.
-    await page.setViewportSize({width: 1280, height: 600});
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    // Use a short viewport so the card's max-height constraint matters.
+    // With the old CSS (max-height: calc(100% - 130px)) and card top at ~152 px,
+    // a tall card overflows the bottom when viewport height is only 560 px.
+    await page.setViewportSize({width: 1280, height: 560});
+    // Create a place with many fields so the card content is taller than the allowed max-height.
+    const tallPlace = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.264097, 42.439428]},
+        properties: {
+          id: 'node/999999999',
+          name: 'Narodna banka Crne Gore — Glavna ogranak u Podgorici',
+          'name:en': 'Central Bank of Montenegro — Main Podgorica Branch',
+          category: 'essentials',
+          kind: 'bank',
+          source: 'OpenStreetMap',
+          'addr:street': 'Bulevar Svetog Petra Cetinjskog 14',
+          'addr:housenumber': '14',
+          opening_hours: 'Mo-Fr 08:00-15:00; Sa 08:00-12:00',
+          phone: '+382 20 241 500',
+          website: 'https://www.cnb.org.me/',
+          visibilityLevel: 5
+        }
+      }]
+    };
+    await page.route('**/data/places.geojson', route => route.fulfill({json: tallPlace}));
     await ready(page);
     // Ensure dock is closed and no query (floating chips mode).
     await closeMenu(page);
     await expect(page.locator('#desktop-search-panel')).toBeVisible();
-    // Tap a place on the map.
-    const place = fixture.features[0];
+    // Tap the place on the map.
+    const place = tallPlace.features[0];
     await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
     await settled(page);
     await expect(page.locator('#place-card')).toBeVisible();
-    // The card's bottom edge must be within the viewport.
-    const {cardBottom, viewportHeight} = await page.evaluate(() => {
+    // Measure the card and map to verify the card does not overflow the viewport.
+    const {cardBottom, mapBottom} = await page.evaluate(() => {
       const card = document.getElementById('place-card');
-      const rect = card.getBoundingClientRect();
-      return {cardBottom: rect.bottom, viewportHeight: window.innerHeight};
+      const mapEl = document.getElementById('map');
+      const cardRect = card.getBoundingClientRect();
+      const mapRect = mapEl.getBoundingClientRect();
+      return {
+        cardBottom: cardRect.bottom,
+        mapBottom: mapRect.bottom
+      };
     });
-    expect(cardBottom).toBeLessThanOrEqual(viewportHeight + 1);
+    expect(cardBottom).toBeLessThanOrEqual(mapBottom + 1);
   });
 
   test('focusing search input does not close the card on desktop', async ({page, isMobile}) => {
