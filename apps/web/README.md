@@ -94,8 +94,9 @@ app's pressed-toggle colour (green background, white icon) while following; `ari
 the state. The accessible name stays constant — "Follow your location" when a fix is usable, "Locate me" otherwise.
 There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear after endpoint
 selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states, and offline
-safety remain part of the existing features. Map attribution lives in the left dock footer instead of a floating control
-on the map surface; the credits are read from the map's sources at runtime so they stay in sync when layers change
+safety remain part of the existing features. Map attribution lives in the left dock footer and also appears as a small
+"OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's sources at
+runtime so they stay in sync when layers change
 ([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a

@@ -270,6 +270,7 @@ async function start() {
     }
   });
   installPublicMapDebug();
+  installOsmCredit();
   installPositionBadge();
   mapState.map.on('load', () => {
     installPublicLayers(placesReady, labelsReady);
@@ -374,6 +375,31 @@ function installPublicMapDebug() {
       return mapState.hasExploredMap;
     }
   };
+}
+
+// A small "OpenStreetMap" credit link sits below the scale bar in the bottom-left corner.
+// MapLibre inserts bottom controls at the first child using insertBefore(el, firstChild)
+// (src/ui/map.ts line 896), so this control — added after the scale bar — becomes the
+// first DOM child. The CSS uses column-reverse so it renders at the bottom. See wiki
+// Web app – UI and ADR 0016.
+function installOsmCredit() {
+  mapState.map.addControl(
+    {
+      onAdd() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'osm-credit-line';
+        const link = document.createElement('a');
+        link.href = 'https://www.openstreetmap.org/copyright';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'OpenStreetMap';
+        wrapper.appendChild(link);
+        return wrapper;
+      },
+      onRemove() {}
+    },
+    'bottom-left'
+  );
 }
 
 function installPositionBadge() {
