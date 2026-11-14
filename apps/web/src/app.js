@@ -648,9 +648,9 @@ function initializeInterface() {
     onCardSwipedAway: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      if (query) return `"${query}"`;
+      if (query) return `“${query}”`;
       if (directoryState.activeCategory) return categories[directoryState.activeCategory];
-      return 'Nearby places';
+      return 'Results';
     }
   });
 }
