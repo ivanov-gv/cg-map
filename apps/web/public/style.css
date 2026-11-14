@@ -155,6 +155,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 /* The dock stays open beside a place card, so the card moves clear of whichever left panel is open.
  * When floating chips are shown (no query, dock closed), the card drops below the chips row. */
 @media (min-width: 721px) {
+  /* Bottom of the floating chips row: bar height (60px) + chip row height (56px) + gap (16px). */
+  body { --desktop-chips-bottom: calc(60px + 56px + 16px); }
+
   body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
     top: 20px;
     left: calc(var(--dock-width) + 12px);
@@ -162,7 +165,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     max-height: calc(100% - 40px);
   }
   body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
-    top: calc(var(--visible-top) + var(--bar-inset) + 60px + 56px + 16px);
+    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
     left: 20px;
   }
 
