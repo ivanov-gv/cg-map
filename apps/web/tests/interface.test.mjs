@@ -171,21 +171,86 @@ test('desktop and mobile queries are complements', () => {
   assert.equal(desktopMin, mobileMax + 1, 'Desktop min-width should be mobile max-width + 1');
 });
 
+// Interaction-only media features describe input capability, not screen size.
+// They are not breakpoints, so their @media rules are not checked against device-class queries.
+const interactionMediaFeatures = ['hover', 'any-hover', 'pointer', 'any-pointer'];
+
+// Layout media features that would turn a condition into a breakpoint.
+const layoutMediaFeatures = ['width', 'height', 'aspect-ratio', 'orientation'];
+
+/**
+ * Returns true when every media feature in the condition is an interaction feature.
+ * A condition like "(hover: hover)" returns true; "(hover: hover) and (max-width: 720px)" returns false.
+ */
+function isInteractionOnlyCondition(condition) {
+  // Split on 'and'/'or' to get individual feature parens, then extract feature names.
+  const featureTokens = condition.match(/\(\s*(\w[\w-]*)\s*[^)]*\)/g) ?? [];
+  const featureNames = featureTokens.map(token => {
+    const nameMatch = token.match(/\(\s*(\w[\w-]*)\s*:/);
+    return nameMatch ? nameMatch[1] : null;
+  }).filter(Boolean);
+
+  // Every feature must be an interaction feature; if any are missing, it's mixed.
+  const allInteraction = featureNames.length > 0 && featureNames.every(name => interactionMediaFeatures.includes(name));
+  return allInteraction;
+}
+
+/**
+ * Returns true if the condition contains any layout media feature (width, height, etc.).
+ * Used to ensure that skipped conditions do not hide breakpoints.
+ */
+function hasLayoutFeature(condition) {
+  return layoutMediaFeatures.some(feature => new RegExp(`\\b${feature}\\b`).test(condition));
+}
+
 test('style.css @media conditions match the exported device-class queries', () => {
   const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
 
   // Strip comments so the regex only sees real rules.
   const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-  // Find all @media conditions in the CSS (excluding prefers-* queries).
+  // Find all @media conditions in the CSS.
   const mediaPattern = /@media\s+([^{]+)\{/g;
   const deviceQueries = [FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY, DESKTOP_MEDIA_QUERY];
   let match;
   while ((match = mediaPattern.exec(cssWithoutComments)) !== null) {
     const condition = match[1].trim();
-    // Skip prefers-* media queries (e.g. prefers-reduced-motion, prefers-color-scheme)
-    if (condition.includes('prefers-')) continue;
+
+    // Skip prefers-* media queries (e.g. prefers-reduced-motion, prefers-color-scheme) —
+    // they describe user preferences, not screen size.
+    const isPrefersQuery = condition.includes('prefers-');
+    // Skip interaction-only queries (e.g. hover: hover) — they describe input capability,
+    // not screen size, so they are not breakpoints.
+    const isInteractionOnly = isInteractionOnlyCondition(condition);
+
+    if (isPrefersQuery || isInteractionOnly) {
+      // Guard: a skipped condition must not contain a layout feature, otherwise it could
+      // hide a real breakpoint that should be checked against device-class queries.
+      assert.ok(
+        !hasLayoutFeature(condition),
+        `Skipped @media condition "${condition}" contains a layout feature and may hide a breakpoint`
+      );
+      continue;
+    }
+
     const isKnownQuery = deviceQueries.some(query => condition === query);
     assert.ok(isKnownQuery, `style.css @media condition "${condition}" does not match any exported device-class query`);
   }
+});
+
+test('interaction-only conditions are skipped but mixed conditions are rejected', () => {
+  // Pure interaction conditions should be classified as interaction-only.
+  assert.equal(isInteractionOnlyCondition('(hover: hover)'), true);
+  assert.equal(isInteractionOnlyCondition('(any-pointer: fine)'), true);
+  assert.equal(isInteractionOnlyCondition('(hover: hover) and (pointer: fine)'), true);
+
+  // A condition that mixes interaction and layout features is NOT interaction-only.
+  assert.equal(isInteractionOnlyCondition('(hover: hover) and (max-width: 720px)'), false);
+  assert.equal(isInteractionOnlyCondition('(max-width: 720px)'), false);
+
+  // hasLayoutFeature detects layout features in a condition string.
+  assert.equal(hasLayoutFeature('(hover: hover) and (max-width: 720px)'), true);
+  assert.equal(hasLayoutFeature('(hover: hover)'), false);
+  assert.equal(hasLayoutFeature('(min-width: 721px)'), true);
+  assert.equal(hasLayoutFeature('(orientation: landscape)'), true);
 });

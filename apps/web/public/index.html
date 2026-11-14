@@ -52,6 +52,8 @@
         </section>
       </div>
       <footer class="dock-footer">
+        <button id="footer-toggle" class="footer-toggle" type="button" aria-expanded="false" aria-controls="dock-footer-content" aria-label="Show map options"><span class="sr-only">Show map options</span></button>
+        <div id="dock-footer-content">
         <div class="layer-grid" role="group" aria-label="Optional layers">
           <button id="satellite-toggle" class="layer-tile" type="button" aria-pressed="false" aria-describedby="satellite-note" disabled><svg class="icon" aria-hidden="true"><use href="#i-satellite"/></svg><span>Satellite</span></button>
           <button id="transport-toggle" class="layer-tile" type="button" aria-pressed="false" aria-controls="transport-info" disabled><svg class="icon" aria-hidden="true"><use href="#i-transport"/></svg><span>Transport</span></button>
@@ -65,6 +67,7 @@
         <span id="connection" class="connection-badge" role="status" hidden></span>
         <button id="remove-download" class="text-button" type="button" hidden>Remove offline download</button>
         <div id="map-attribution"></div>
+        </div>
       </footer>
     </div>
     <div id="search-bubble" class="search-bubble" hidden></div>
