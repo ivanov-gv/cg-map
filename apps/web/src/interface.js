@@ -104,6 +104,8 @@ export class MapInterface {
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
+      this.syncPanelPosition();
+      this.syncDesktopSearchUI();
       this.syncViewport();
     });
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
@@ -128,18 +130,22 @@ export class MapInterface {
     if (this.panel.parentElement !== target) target.append(this.panel);
   }
 
+  // Returns true when the search input has a non-empty query.
+  hasQuery() {
+    return this.search.value.trim().length > 0;
+  }
+
   // Show the clear button when there is a query, hide it otherwise.
   syncClearButton() {
-    const hasQuery = this.search.value.trim().length > 0;
-    this.clearButton.hidden = !hasQuery;
+    this.clearButton.hidden = !this.hasQuery();
   }
 
   openSearch() {
     this.trigger = this.search;
     if (!this.mobileLayoutQuery.matches) {
       // Desktop: keep the current view (dock stays open, closed stays closed).
+      // Searching runs from the debounced 'input' handler in app.js.
       this.setView(this.view);
-      this.onSearch?.();
       return;
     }
     // Mobile behavior: search bubble or dock.
@@ -173,7 +179,7 @@ export class MapInterface {
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
-    this.search.setAttribute('aria-expanded', String(view !== 'closed'));
+    this.syncSearchExpanded();
     this.onChange?.();
   }
 
@@ -192,10 +198,15 @@ export class MapInterface {
       this.desktopSearchPanel.hidden = true;
       return;
     }
-    const hasQuery = this.search.value.trim().length > 0;
     const isDockOpen = this.view === 'dock';
     this.desktopSearchPanel.hidden = isDockOpen;
-    this.desktopSearchPanel.dataset.hasQuery = String(hasQuery);
+    this.desktopSearchPanel.dataset.hasQuery = String(this.hasQuery());
+    this.syncSearchExpanded();
+  }
+
+  // Keep aria-expanded on the search input in sync with whether results are visible.
+  syncSearchExpanded() {
+    this.search.setAttribute('aria-expanded', String(this.areResultsVisible()));
   }
 
   // Call after the card's content is in place and it is no longer hidden.
@@ -373,11 +384,12 @@ export class MapInterface {
   clearQuery() {
     this.search.value = '';
     this.syncClearButton();
+    this.syncSearchExpanded();
     this.onSearch?.();
   }
 
-  // Returns true when the desktop search panel is visible and shows results.
-  #isDesktopSearchPanelVisible() {
+  // Returns true when the desktop results panel is visible and shows results.
+  #isDesktopResultsPanelVisible() {
     return !this.mobileLayoutQuery.matches &&
       !this.desktopSearchPanel.hidden &&
       this.desktopSearchPanel.dataset.hasQuery === 'true';
@@ -387,7 +399,7 @@ export class MapInterface {
   areResultsVisible() {
     if (this.view === 'search' || this.view === 'dock') return true;
     // On desktop with a query, results are visible in the search panel even when view is 'closed'.
-    if (!this.mobileLayoutQuery.matches && this.search.value.trim().length > 0) return true;
+    if (!this.mobileLayoutQuery.matches && this.hasQuery()) return true;
     return false;
   }
 
@@ -434,7 +446,7 @@ export class MapInterface {
       headerBottom: header.bottom - map.top,
       searchBottom: this.view === 'search' ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
       dockRight:
-        (this.view === 'dock' || this.#isDesktopSearchPanelVisible())
+        (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
       details: details && {top: detailsTop - map.top, right: details.right - map.left},

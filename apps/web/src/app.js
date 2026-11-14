@@ -223,8 +223,8 @@ function applyPlaceSearch() {
   renderSearchResults();
   placeSelection.previewResults();
   // Update desktop search UI after results change.
-  mapState.interface?.syncDesktopSearchUI?.();
-  mapState.interface?.syncClearButton?.();
+  mapState.interface.syncDesktopSearchUI();
+  mapState.interface.syncClearButton();
 }
 
 async function loadJSON(path, resourceLabel) {
@@ -270,6 +270,7 @@ async function start() {
     }
   });
   installPublicMapDebug();
+  installOsmCredit();
   installPositionBadge();
   mapState.map.on('load', () => {
     installPublicLayers(placesReady, labelsReady);
@@ -374,6 +375,31 @@ function installPublicMapDebug() {
       return mapState.hasExploredMap;
     }
   };
+}
+
+// A small "OpenStreetMap" credit link sits below the scale bar in the bottom-left corner.
+// MapLibre inserts bottom controls at the first child using insertBefore(el, firstChild)
+// (src/ui/map.ts line 896), so this control — added after the scale bar — becomes the
+// first DOM child. The CSS uses column-reverse so it renders at the bottom. See wiki
+// Web app – UI and ADR 0016.
+function installOsmCredit() {
+  mapState.map.addControl(
+    {
+      onAdd() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'osm-credit-line';
+        const link = document.createElement('a');
+        link.href = 'https://www.openstreetmap.org/copyright';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'OpenStreetMap';
+        wrapper.appendChild(link);
+        return wrapper;
+      },
+      onRemove() {}
+    },
+    'bottom-left'
+  );
 }
 
 function installPositionBadge() {
@@ -532,13 +558,13 @@ function registerCategoryControls() {
     button.dataset.category = key;
     button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
     button.addEventListener('click', () => {
-      handleCategoryToggle(key);
+      toggleCategory(key);
     });
     elementById('categories').append(button);
   }
 }
 
-function handleCategoryToggle(key) {
+function toggleCategory(key) {
   directoryState.activeCategory =
     directoryState.activeCategory === key ? null : key;
   const container = elementById('categories');
@@ -568,10 +594,15 @@ function registerSelectionControls() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       if (!elementById('place-card').hidden) placeSelection.close();
-      else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
-        // Escape only clears the query on desktop; Mobile and Flip are out of scope.
+      else if (mapState.interface.view === 'dock') {
+        // When the dock is open, Escape closes it.
+        mapState.interface.close(true);
+      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
+        // On desktop with dock closed, Escape clears the query and refocuses the input.
         mapState.interface.clearQuery();
-      } else {
+        elementById('search').focus();
+      } else if (mapState.interface.view !== 'closed') {
+        // On mobile with search view (not dock), Escape closes the search.
         mapState.interface.close(true);
       }
     }
