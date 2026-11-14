@@ -2032,7 +2032,7 @@ test.describe('dock fills viewport on mobile and flip', () => {
 
 // On a 340 px screen there is no room for a pinned footer: the footer
 // (Satellite, Transport, Download, attribution) would take most of the
-// viewport, leaving only one result row visible.  The fix makes the
+// viewport, leaving only one result row visible. The fix makes the
 // entire dock-content scroll as a single column on Flip so results get
 // the screen first and the footer is reached by scrolling down.
 test.describe('Flip dock scrolls as one column', () => {
@@ -2098,7 +2098,7 @@ test.describe('Flip dock scrolls as one column', () => {
 
       // Before scrolling, the Download button is below the viewport.
       // This fails when the footer is pinned (old CSS) because it would be
-      // visible without scrolling. See style.css line 337.
+      // visible without scrolling. See the Flip .dock-content rule in style.css.
       const downloadBelowViewport = await page.evaluate((viewportHeight) => {
         const downloadBtn = document.getElementById('download');
         const rect = downloadBtn.getBoundingClientRect();
@@ -2113,7 +2113,7 @@ test.describe('Flip dock scrolls as one column', () => {
       });
 
       // After scrolling, the Download button and attribution text should be
-      // fully inside the viewport.  Use a 1 px tolerance for sub-pixel
+      // fully inside the viewport. Use a 1 px tolerance for sub-pixel
       // rendering differences (e.g. line-height fractions).
       const downloadVisible = await page.evaluate((viewportHeight) => {
         const downloadBtn = document.getElementById('download');
@@ -2159,8 +2159,8 @@ test.describe('Flip dock keyboard awareness', () => {
 
   // On both phone and Flip, opening the dock, focusing search, and simulating
   // a keyboard should keep the last result visible above the keyboard.
-  // On Flip, the entire dock scrolls as one column (style.css line 337).
-  // On phone, .results scrolls independently inside dock-content.
+  // On Flip, the entire dock scrolls as one column (see the Flip .dock-content
+  // rule in style.css). On phone, .results scrolls independently inside dock-content.
   for (const {name, viewport} of [
     {name: 'phone', viewport: PHONE_VIEWPORT},
     {name: 'flip', viewport: FLIP_VIEWPORT_SIZE}
@@ -2180,8 +2180,8 @@ test.describe('Flip dock keyboard awareness', () => {
         await simulateKeyboard(page, keyboardHeight);
 
         // Scroll to the bottom so the last result is at the end.
-        // On Flip, dock-content is the scroll container (style.css line 337).
-        // On phone, .results scrolls independently inside dock-content.
+        // On Flip, dock-content is the scroll container (see the Flip .dock-content
+        // rule in style.css). On phone, .results scrolls independently inside dock-content.
         await page.evaluate(() => {
           const dockContent = document.getElementById('dock-content');
           const results = document.getElementById('results');
@@ -2258,7 +2258,7 @@ test.describe('Flip dock download focus stays visible', () => {
 
   // On Flip, focusing #download (via Tab or .focus()) must leave it inside
   // the #dock-content visible rect because the footer scrolls with the content.
-  // See style.css line 337 for the CSS rule that enables this.
+  // See the Flip .dock-content rule in style.css.
   test('focusing download leaves it inside dock-content visible rect',
     {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
