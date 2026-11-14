@@ -2577,6 +2577,70 @@ test.describe('Flip dock minimizable footer', () => {
       await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
     });
   });
+
+  // Issue #159: at least 3 .result rows must be fully visible between
+  // #categories bottom and .dock-footer top when minimized.
+  test('minimized footer leaves room for at least 3 fully visible results',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+
+      const resultPositions = await page.evaluate(() => {
+        const categoriesBottom = document.querySelector('#categories').getBoundingClientRect().bottom;
+        const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
+        const results = document.querySelectorAll('.result');
+        const fullyVisible = [];
+        for (const row of results) {
+          const rect = row.getBoundingClientRect();
+          if (rect.top >= categoriesBottom && rect.bottom <= footerTop) {
+            fullyVisible.push({top: rect.top, bottom: rect.bottom});
+          }
+        }
+        return {categoriesBottom, footerTop, count: fullyVisible.length, rows: fullyVisible};
+      });
+      expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // Issue #159: when the footer is expanded, all footer items must be within
+  // the viewport with no scrolling (scrollHeight <= clientHeight + 1).
+  test('expanded footer fits without scrolling',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, FLIP_VIEWPORT, async () => {
+      await ready(page);
+      await openMenu(page);
+      await page.locator('#footer-toggle').click();
+      await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+      const footerFit = await page.evaluate((vh) => {
+        const footer = document.querySelector('.dock-footer');
+        const satellite = document.querySelector('#satellite-toggle');
+        const transport = document.querySelector('#transport-toggle');
+        const download = document.querySelector('#download');
+        const attribution = document.querySelector('#map-attribution');
+        return {
+          scrollHeight: footer.scrollHeight,
+          clientHeight: footer.clientHeight,
+          needsScroll: footer.scrollHeight > footer.clientHeight + 1,
+          satelliteBottom: satellite.getBoundingClientRect().bottom,
+          transportBottom: transport.getBoundingClientRect().bottom,
+          downloadBottom: download.getBoundingClientRect().bottom,
+          attributionBottom: attribution.getBoundingClientRect().bottom,
+          viewportBottom: vh,
+          allWithinViewport:
+            satellite.getBoundingClientRect().bottom <= vh &&
+            transport.getBoundingClientRect().bottom <= vh &&
+            download.getBoundingClientRect().bottom <= vh &&
+            attribution.getBoundingClientRect().bottom <= vh,
+        };
+      }, FLIP_VIEWPORT.height);
+      expect(footerFit.needsScroll, 'footer should not need scrolling').toBe(false);
+      expect(footerFit.allWithinViewport, 'all footer items within viewport').toBe(true);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

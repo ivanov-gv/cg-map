@@ -374,30 +374,44 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body:not([data-view=dock]) .search-bar .search,
   body:not([data-view=dock]) .search-bar .clear-button { display: none; }
 
-  /* Smaller result rows on Flip so at least three fit in the visible area. */
+  /* Smaller result rows on Flip so at least three fit in the visible area.
+   * Tighter padding (6 px instead of 8 px) keeps the rendered height at the
+   * 56 px min-height target so three rows fit between categories and the handle. */
   body[data-view=dock] .result {
     min-height: 56px;
-    padding: 8px var(--bar-inset);
+    padding: 6px var(--bar-inset);
+  }
+  /* Tighter category row on Flip — reduce the bottom padding so the results
+   * area starts sooner. */
+  body[data-view=dock] #categories {
+    padding-bottom: 4px;
   }
   /* Flip footer is pinned at the bottom and starts minimized: only the handle row shows.
    * The handle is a button that toggles the footer content (Satellite, Transport,
    * Download, attribution). When opened, the results area shrinks to make room.
-   * Closing the dock resets the footer to minimized. */
+   * Closing the dock resets the footer to minimized.
+   * When minimized, remove the top padding and border so the footer is only the
+   * handle (40 px) plus the safe-area bottom padding — no wasted space. */
   body[data-view=dock] .dock-footer {
     position: sticky;
     bottom: 0;
     max-height: none;
     overflow: hidden;
+    padding-top: 0;
     padding-bottom: max(4px, env(safe-area-inset-bottom));
+    border-top: none;
     flex-shrink: 0;
   }
   /* The footer content (layers, download, attribution) is hidden when minimized. */
   body[data-view=dock] .dock-footer #dock-footer-content {
     display: none;
   }
-  /* When the footer is expanded, show the content and hide the results area
-   * so the footer fits in the small viewport (wiki Web app – UI, Flip drawing 2).
-   * The expanded footer content scrolls if it overflows. */
+  /* When the footer is expanded, restore the top padding and border so the
+   * content has breathing room, and show the content while hiding results. */
+  body[data-view=dock] .dock-footer[data-footer-expanded=true] {
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
   body[data-view=dock] .dock-footer[data-footer-expanded=true] #dock-footer-content {
     display: block;
     max-height: calc(100dvh - var(--visible-top) - 120px);
