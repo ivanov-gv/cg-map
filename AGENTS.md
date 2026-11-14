@@ -52,12 +52,12 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 - **No merge until local tests pass**, and `.github/**` changes pass under act: [the rule](.github/TESTING.md).
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
-- Never edit or commit in the main checkout; work in your own worktree: `make worktree NAME=<branch>`.
+- Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
+  `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
-- Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
-  on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
-  and comments that explain why. Do not match a denser surrounding style.
+- Read [readability](docs/engineering/readability.md) before planning or editing code. All code must meet it: meaningful
+  whole-word names, short functions that read as steps, and comments that explain why.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
 - No application copies, binaries, or temporary assets in repository root.
@@ -74,7 +74,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Workflow: task, plan, PR, decisions log
 
-Work starts in the human-written wiki: read it, never edit it; propose changes as issue comments
+Work starts in the human-written wiki—read it, never edit it; propose changes as issue comments
 ([the workflow](docs/management/management.md)).
 
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.

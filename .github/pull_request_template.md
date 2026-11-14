@@ -1,6 +1,7 @@
 # Change
 
-Closes #N, or Part of #N when this PR does only part of the issue. Every PR has an issue: open one first.
+Closes #N, or Part of #N when this PR does only part of the issue. Every PR has an issue: open one first. A Feature PR
+stays a draft until its Tasks and Bugs are merged, review findings are fixed and CI is green.
 
 ## Behavior
 
@@ -18,8 +19,7 @@ The record this PR adds to [the decisions log](../docs/decisions/AGENTS.md), or 
 ## Workflow changes
 
 **No merge until local tests pass** ([the rule](TESTING.md)). For changes to `.github/**`, the `make test-*` commands
-run locally and their results, plus links to the test runs on GitHub. Otherwise delete this section. Feature PRs should
-remain drafts until all Tasks and Bugs are merged and CI is green.
+run locally and their results, plus links to the test runs on GitHub. Otherwise delete this section.
 
 ## Data and release impact
 
