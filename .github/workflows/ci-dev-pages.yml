@@ -1,7 +1,6 @@
 name: ci-dev-pages
 # Pages is the dev environment: every merge to main shows main there. This workflow builds the site from source
-# (not from images), uploads the artifact, and deploys it in a temporary deploy job until #168 moves deployment
-# to a CD workflow. See ADR 0017.
+# and uploads the artifact. cd-dev-pages deploys it. See ADR 0017.
 on:
   push:
     branches: [main]
@@ -39,8 +38,6 @@ jobs:
     permissions: &build-permissions
       contents: read
       packages: read
-    outputs: &build-outputs
-      is_newest: ${{ steps.newest.outputs.is_newest }}
     env: &build-env
       REGISTRY_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -74,16 +71,6 @@ jobs:
         run: |
           count=$(find site -type f | wc -l)
           echo "Files in the site: $count" | tee -a "$GITHUB_STEP_SUMMARY"
-      # main's runs do not queue behind each other, so a slow older run could otherwise replace a newer site.
-      - id: newest
-        name: Check this is still main's newest commit
-        shell: bash
-        run: |
-          main_head=$(curl --fail --silent --show-error --location --header "Authorization: Bearer $REGISTRY_TOKEN" \
-            --header "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPO/commits/main" | jq -r .sha)
-          is_newest=$([ "$main_head" = "$GITHUB_SHA" ] && echo true || echo false)
-          echo "is_newest=$is_newest" >> "$GITHUB_OUTPUT"
-          echo "main is at $main_head, this run is $GITHUB_SHA: deploying is $is_newest" | tee -a "$GITHUB_STEP_SUMMARY"
       # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -96,27 +83,5 @@ jobs:
     timeout-minutes: 7
     environment: test-run
     permissions: *build-permissions
-    outputs: *build-outputs
     env: *build-env
     steps: *build-steps
-  # Temporary: this deploy job will move to a CD workflow (#168). Kept here so the dev site still updates on push.
-  # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination.
-  deploy:
-    name: Deploy dev site
-    needs: build
-    if: ${{ !cancelled() && needs.build.outputs.is_newest == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: dev-pages
-      cancel-in-progress: false
-    steps:
-      - uses: actions/configure-pages@v6
-      - id: deployment
-        uses: actions/deploy-pages@v5
