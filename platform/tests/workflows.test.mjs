@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import os from 'node:os';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
 import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
 import {repoRoot} from '../agents/lib.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
@@ -269,6 +274,240 @@ test('a pull request runs nothing until it is approved', () => {
     return [jobs[name].needs ?? []].flat().some(reachesApproval);
   };
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
+});
+
+// dev-pages must not deploy when any publish job fails. Each pair (X, X-test-run) must both
+// succeed or be skipped; one failing blocks deployment. The select job must also succeed.
+const PUBLISH_PAIRS = [
+  ['image', 'image-test-run'],
+  ['package', 'package-test-run'],
+  ['browser-image', 'browser-image-test-run'],
+];
+
+// Evaluate the dev-pages `if` condition with substituted job results and !cancelled()=true.
+function evaluateDevPagesCondition(condition, results) {
+  let expr = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
+  for (const [name, result] of Object.entries(results)) {
+    expr = expr.replace(new RegExp(`needs\\.${name}\\.result`, 'g'), `'${result}'`);
+  }
+  expr = expr.replace(/!cancelled\(\)/g, 'true');
+  return new Function(`return (${expr})`)();
+}
+
+// Build a results map with all jobs skipped by default, select succeeded.
+function devPagesResults(overrides = {}) {
+  return {
+    select: 'success',
+    image: 'skipped',
+    'image-test-run': 'skipped',
+    package: 'skipped',
+    'package-test-run': 'skipped',
+    'browser-image': 'skipped',
+    'browser-image-test-run': 'skipped',
+    ...overrides,
+  };
+}
+
+test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
+  const {jobs} = load('ci-publish.yml');
+  const devPages = jobs['dev-pages'];
+  const condition = String(devPages.if);
+  const needs = [devPages.needs].flat();
+
+  // dev-pages must depend on select and every publish pair
+  assert.ok(needs.includes('select'), 'dev-pages must need select');
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(needs.includes(prod), `dev-pages must need ${prod}`);
+    assert.ok(needs.includes(testRun), `dev-pages must need ${testRun}`);
+  }
+
+  // All succeed — dev-pages should run
+  assert.ok(
+    evaluateDevPagesCondition(condition, devPagesResults({image: 'success', package: 'success', 'browser-image': 'success'})),
+    'dev-pages should run when all pairs succeed or are skipped'
+  );
+
+  // A failure in either twin of any pair blocks dev-pages
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[prod]: 'failure'})),
+      `dev-pages must be blocked when ${prod} fails`
+    );
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[testRun]: 'failure'})),
+      `dev-pages must be blocked when ${testRun} fails`
+    );
+  }
+
+  // A failed select blocks dev-pages
+  assert.ok(
+    !evaluateDevPagesCondition(condition, devPagesResults({select: 'failure'})),
+    'dev-pages must be blocked when select fails'
+  );
+});
+
+// ci-workflows test-run-evidence must require a ci-publish test run when publish-related files change.
+// Run the real step script with a fake `gh` stub (platform/tests/fixtures/fake-gh.sh).
+const ciWorkflowsScript = load('ci-workflows.yml').jobs['test-run-evidence'].steps[0].run;
+const fakeGhPath = path.join(repoRoot, 'platform/tests/fixtures/fake-gh.sh');
+
+// Set up a temporary directory with the fake gh stub and run the test-run-evidence script.
+// Returns {code, stdout, stderr} from executing the script.
+async function runEvidenceTest(prFiles, stubFiles) {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
+  const stubDir = path.join(tmpDir, 'stub');
+  await fs.promises.mkdir(stubDir);
+  await fs.promises.writeFile(path.join(stubDir, 'pr-files'), prFiles.join('\n'));
+  for (const [name, content] of Object.entries(stubFiles)) {
+    await fs.promises.writeFile(path.join(stubDir, name), content);
+  }
+  const ghPath = path.join(tmpDir, 'gh');
+  await fs.promises.copyFile(fakeGhPath, ghPath);
+  await fs.promises.chmod(ghPath, 0o755);
+
+  const env = {
+    PATH: tmpDir + ':' + process.env.PATH,
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+    HEAD_SHA: 'abc123',
+    PR_NUMBER: '42',
+    BRANCH: 'feature-branch',
+    GITHUB_STEP_SUMMARY: path.join(tmpDir, 'summary'),
+    FAKE_GH_DIR: stubDir,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', ciWorkflowsScript], {env, cwd: tmpDir});
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
+  } finally {
+    await fs.promises.rm(tmpDir, {recursive: true, force: true});
+  }
+}
+
+test('ci-workflows: ci-publish.yml changed, no qualifying run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'ci-publish.yml changed without qualifying run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: ci-publish.yml changed, with qualifying run must pass', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-publish.yml changed with qualifying run must exit 0');
+});
+
+test('ci-workflows: setup-web changed, no ci-publish run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/actions/setup-web/action.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'setup-web changed without ci-publish run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-apps-web.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-apps-web.yml changed does not require ci-publish run');
+});
+
+test('ci-workflows: ci-publish.yml not on main is exempt from test-run requirement', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'HTTP 404 NOT FOUND',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-publish.yml not on main is exempt');
+});
+
+test('ci-workflows: a workflow on main without workflow_dispatch is exempt', async () => {
+  // Simulate ci-publish.yml on main with only workflow_call (no workflow_dispatch).
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'workflow without workflow_dispatch on main is exempt');
+  assert.match(result.stdout, /no workflow_dispatch trigger/, 'must explain the exemption');
+});
+
+test('ci-workflows: a workflow on main with workflow_dispatch but no run still fails', async () => {
+  // Simulate ci-publish.yml on main with workflow_dispatch, but no qualifying run.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n  workflow_dispatch:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'workflow with workflow_dispatch but no qualifying run must fail');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: an API failure while reading main triggers fails the check', async () => {
+  // Simulate ci-publish.yml existing on main (lookup succeeds) but the --jq .content call failing.
+  // The check must fail, not exempt the workflow.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'error',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'API failure reading workflow_dispatch must fail the check, not exempt');
+  assert.match(
+    result.stdout,
+    /Failed to check workflow_dispatch for ci-publish\.yml/,
+    'must report the API failure'
+  );
 });
 
 test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {

@@ -99,15 +99,18 @@ A workflow can be dispatched only once it exists on `main`. After that, dispatch
 
 ```sh
 gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
+gh workflow run ci-publish.yml --ref <branch> -f test_run=true
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
 `ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful test run of
 `ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
-and a `cd-browser-image` one when that workflow or its actions changed. A workflow not yet on `main` cannot be
-dispatched, so it is exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours
-in the PR template.
+a `cd-browser-image` one when that workflow or its actions changed, and a `ci-publish` test run when `ci-publish.yml`,
+`ci-dev-pages.yml`, or the publish-related actions (`plan`, `publish-image`, `publish-dev-package`,
+`publish-browser-image`, `setup-web`, `run-check`) changed. A workflow not yet on `main` cannot be dispatched, so it is
+exempt. The same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After
+those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
 After merging `ci-pr-checks.yml` or `ci-nightly.yml`, they cannot be dispatched until the merge lands on `main`. Test
 them locally first with `make test-ci-pr-checks` and `make test-ci-nightly`; the test-run-evidence check exempts

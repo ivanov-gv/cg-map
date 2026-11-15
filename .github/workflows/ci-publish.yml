@@ -209,8 +209,8 @@ jobs:
   # the production vs test-run split itself.
   dev-pages:
     name: dev-pages
-    needs: [switch, image, image-test-run, package, package-test-run, browser-image, browser-image-test-run]
-    if: ${{ !cancelled() && (needs.image.result == 'success' || needs.image.result == 'skipped' || needs.image-test-run.result == 'success' || needs.image-test-run.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped' || needs.package-test-run.result == 'success' || needs.package-test-run.result == 'skipped') && (needs.browser-image.result == 'success' || needs.browser-image.result == 'skipped' || needs.browser-image-test-run.result == 'success' || needs.browser-image-test-run.result == 'skipped') }}
+    needs: [switch, select, image, image-test-run, package, package-test-run, browser-image, browser-image-test-run]
+    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') && (needs.image-test-run.result == 'success' || needs.image-test-run.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.package-test-run.result == 'success' || needs.package-test-run.result == 'skipped') && (needs.browser-image.result == 'success' || needs.browser-image.result == 'skipped') && (needs.browser-image-test-run.result == 'success' || needs.browser-image-test-run.result == 'skipped') }}
     uses: ./.github/workflows/ci-dev-pages.yml
     permissions:
       contents: read
