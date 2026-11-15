@@ -56,11 +56,11 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
-- Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
-  on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
-  and comments that explain why. Do not match a denser surrounding style.
+- Read [readability](docs/engineering/readability.md) before any code change: meaningful whole-word names, short
+  functions that read as steps, and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
+- When a rule blocks a design, follow [the seven steps](docs/decisions/AGENTS.md#when-a-rule-seems-to-block-a-design).
 - No application copies, binaries, or temporary assets in repository root.
 
 ## Ownership and generated output
