@@ -92,6 +92,9 @@ jobs:
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
       editor_browser_matrix: ${{ steps.plan.outputs.editor_browser_matrix }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+    env: &plan-env
+      PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+      RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
     steps: &plan-steps
       - uses: actions/checkout@v7
         with:
@@ -99,8 +102,8 @@ jobs:
       - id: plan
         uses: ./.github/actions/plan
         with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
-          run_all: ${{ github.event_name == 'workflow_call' || inputs.run_all == true || inputs.run_all == 'true' }}
+          base: ${{ env.PLAN_BASE }}
+          run_all: ${{ env.RUN_ALL }}
   plan-test-run:
     name: (test-run) Plan
     needs: switch
@@ -109,6 +112,7 @@ jobs:
     timeout-minutes: 5
     environment: test-run
     outputs: *plan-outputs
+    env: *plan-env
     steps: *plan-steps
 
   docs:

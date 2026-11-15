@@ -18,10 +18,8 @@ on:
 permissions:
   contents: read
   packages: read
-concurrency:
-  # One run per push to main. A new push replaces the waiting run.
-  group: ci-publish-${{ github.run_id }}
-  cancel-in-progress: false
+# No concurrency group: a later merge must not be cancelled or queued behind an earlier publish.
+# Deploys stay ordered by ci-dev-pages' `dev-pages` group and its newest-commit check.
 jobs:
   switch:
     name: Test-run switch
@@ -49,6 +47,9 @@ jobs:
       map-core: ${{ steps.plan.outputs.map-core }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+    env: &plan-env
+      PLAN_BASE: ${{ github.event.before || 'origin/main' }}
+      RUN_ALL: ${{ github.event_name == 'workflow_dispatch' }}
     steps: &plan-steps
       - uses: actions/checkout@v7
         with:
@@ -56,8 +57,8 @@ jobs:
       - id: plan
         uses: ./.github/actions/plan
         with:
-          base: ${{ github.event.before || 'origin/main' }}
-          run_all: ${{ github.event_name == 'workflow_dispatch' }}
+          base: ${{ env.PLAN_BASE }}
+          run_all: ${{ env.RUN_ALL }}
   plan-test-run:
     name: (test-run) Plan
     needs: switch
@@ -69,6 +70,7 @@ jobs:
       map-core: ${{ steps.plan.outputs.map-core }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+    env: *plan-env
     steps: *plan-steps
 
   # No test-run twin: it only passes through the planner's image_matrix output.
