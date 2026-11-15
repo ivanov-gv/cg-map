@@ -35,10 +35,11 @@ These gaps need recording so the model is documented in one place and the featur
   on main). One workflow per concern.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
-- **No CI job creates a deployment record.** CI jobs reference no environment; each job sets its non-secret values
-  (image registry, artifact name and retention, publish flags) in its own job `env:`, and test-run twins set the
-  test-run values (#165). Only CD jobs use environments. `deployment: false` would also work on GitHub, but act does not
-  accept it yet (nektos/act#6243).
+- **Environments only where they are read.** GitHub environments are named sets of variables and secrets; `dev` and
+  `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
+  production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
+  environment, and every test-run twin uses `test-run`. GitHub records a deployment for each job that references an
+  environment, so these records are expected and are not deploys (#165).
 - **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
   entirely.
 
@@ -52,8 +53,7 @@ These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 - The dev site carries a version that traces back to the commit, instead of a mutable `:main` image.
 - The split separates concerns: `ci-pr-checks` handles PR checks and `ci-nightly` runs the full suite. Any speed-up
   comes from #169's re-sharding.
-- No deployment records come from CI, since CI jobs reference no environment.
-- Environment-specific values live in the workflow files, so changing one is a reviewed commit, not a settings change.
+- Deployment records come only from jobs that read an environment, instead of from almost every CI job.
 - The approval gate can actually hold PRs once reviewers are configured.
 - The features that implement this decision are #164 (this ADR and actionlint), #165 (CI without deployments), #166
   (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget and
