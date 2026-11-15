@@ -415,6 +415,23 @@ test('ci-workflows: ci-dev-pages.yml changed, with qualifying run must pass', as
   assert.equal(result.code, 0, 'ci-dev-pages.yml changed with qualifying run must exit 0');
 });
 
+test('ci-workflows: setup-web changed requires ci-dev-pages run', async () => {
+  const result = await runEvidenceTest(
+    ['.github/actions/setup-web/action.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'setup-web changed without ci-dev-pages run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
+    'error must name the ci-dev-pages dispatch command'
+  );
+});
+
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
     ['.github/workflows/ci-apps-web.yml'],
@@ -491,6 +508,33 @@ test('ci-workflows: an API failure on the contents lookup fails the check', asyn
     /Could not look up ci-publish\.yml/,
     'must report the API failure on stderr'
   );
+});
+
+// Every workflow that has_qualifying_run asks for must define a run-name
+// whose workflow_dispatch branch formats test_run={0} from inputs.test_run,
+// so a real dispatch title contains the search string the evidence check looks for.
+test('every workflow checked by has_qualifying_run defines a run-name with test_run', () => {
+  // Parse the ci-workflows script for all has_qualifying_run calls.
+  const calls = ciWorkflowsScript.matchAll(/has_qualifying_run\s+(\S+)\s+'([^']+)'/g);
+  const workflowFiles = [...calls].map(([, file]) => file);
+  assert.ok(workflowFiles.length > 0, 'has_qualifying_run must be called at least once');
+  for (const file of workflowFiles) {
+    const workflow = load(file);
+    assert.ok(workflow['run-name'], `${file} must define run-name for has_qualifying_run to match`);
+    const runName = String(workflow['run-name']);
+    assert.ok(
+      runName.includes('workflow_dispatch'),
+      `${file} run-name must branch on workflow_dispatch`
+    );
+    assert.ok(
+      runName.includes('test_run='),
+      `${file} run-name must format test_run= for dispatch runs`
+    );
+    assert.ok(
+      runName.includes('inputs.test_run'),
+      `${file} run-name must include inputs.test_run value`
+    );
+  }
 });
 
 test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {

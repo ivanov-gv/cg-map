@@ -2,6 +2,10 @@ name: ci-dev-pages
 # Pages is the dev environment: every merge to main shows main there. This workflow builds the site from source
 # (not from images), uploads the artifact, and deploys it in a temporary deploy job until #168 moves deployment
 # to a CD workflow. See ADR 0017.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('ci-dev-pages test_run={0}', inputs.test_run)
+  || format('ci-dev-pages {0}', github.sha) }}
 on:
   push:
     branches: [main]

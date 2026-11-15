@@ -107,7 +107,7 @@ jobs:
             echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."
             missing=1
           fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-dev-pages\.yml$' \
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-dev-pages\.yml$\|^\.github/actions/\(setup-web\|install-dependencies\|test_run\)/' \
             && ! has_qualifying_run ci-dev-pages.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run ci-dev-pages.yml --ref $BRANCH -f test_run=true, then re-run this check."
             missing=1
