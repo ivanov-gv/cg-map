@@ -1,66 +1,100 @@
 name: ci-publish
 # Builds what a merge changed and pushes it to the dev registries. It runs no tests: the PR run already tested this exact
 # content, and the nightly run tests main. See docs/decisions/0006-ci-time-limits-and-tests-before-merge.md.
+# Triggered on every push to main (after the merge is tested by the PR run). Also callable manually.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('ci-publish test_run={0}', inputs.test_run)
+  || format('ci-publish {0}', github.sha) }}
 on:
-  workflow_call:
-    inputs:
-      test_run:
-        type: boolean
-        required: true
-      image_matrix:
-        description: The apps whose images to publish, from the planner.
-        type: string
-        required: true
-      publish_package:
-        description: Publish the map-core dev package, for a release to promote.
-        type: boolean
-        required: true
-      publish_browser_image:
-        description: Publish the browser test image, for a release to promote.
-        type: boolean
-        required: true
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
-      image_matrix:
-        description: The apps whose images to publish.
-        type: string
-        default: '{"include":[{"app":"web"},{"app":"editor"},{"app":"core-demo"}]}'
-      publish_package:
-        description: Publish the map-core dev package, for a release to promote.
-        type: boolean
-        default: true
-      publish_browser_image:
-        description: Publish the browser test image, for a release to promote.
-        type: boolean
-        default: true
 permissions:
   contents: read
   packages: read
+# No concurrency group: a later merge must not be cancelled or queued behind an earlier publish.
+# Deploys stay ordered by ci-dev-pages' `dev-pages` group and its newest-commit check.
 jobs:
-  # No test-run twin: it only passes on its input. act gives a called workflow this JSON input empty, as ci-apps-web's verify
-  # job also handles. GitHub always passes it, so only a local run takes every image.
+  switch:
+    name: Test-run switch
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+
+  plan:
+    name: Plan
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      map-core: ${{ steps.plan.outputs.map-core }}
+      browser-image: ${{ steps.plan.outputs.browser-image }}
+      image_matrix: ${{ steps.plan.outputs.image_matrix }}
+    env: &plan-env
+      PLAN_BASE: ${{ github.event.before || 'origin/main' }}
+      RUN_ALL: ${{ github.event_name == 'workflow_dispatch' }}
+    steps: &plan-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: plan
+        uses: ./.github/actions/plan
+        with:
+          base: ${{ env.PLAN_BASE }}
+          run_all: ${{ env.RUN_ALL }}
+  plan-test-run:
+    name: (test-run) Plan
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    outputs:
+      map-core: ${{ steps.plan.outputs.map-core }}
+      browser-image: ${{ steps.plan.outputs.browser-image }}
+      image_matrix: ${{ steps.plan.outputs.image_matrix }}
+    env: *plan-env
+    steps: *plan-steps
+
+  # No test-run twin: it only passes through the planner's image_matrix output.
   select:
     name: Select images
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && (needs.plan.result == 'success' || needs.plan-test-run.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     outputs:
       image_matrix: ${{ steps.images.outputs.image_matrix }}
     env:
-      IMAGE_MATRIX: ${{ inputs.image_matrix }}
+      IMAGE_MATRIX: ${{ needs.plan.outputs.image_matrix || needs.plan-test-run.outputs.image_matrix }}
       EVERY_IMAGE: '{"include":[{"app":"web"},{"app":"editor"},{"app":"core-demo"}]}'
     steps:
       - id: images
         run: echo "image_matrix=${IMAGE_MATRIX:-$EVERY_IMAGE}" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+
   # Only the jobs here can write packages, and only main can run them for real.
   image:
     name: Publish ${{ matrix.app }} image
-    needs: select
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && needs.select.outputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
+    needs: [switch, select]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && needs.select.outputs.image_matrix != '{"include":[]}' && github.ref == 'refs/heads/main' }}
     # Pinned: the build needs the same tools as the app's own checks.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -89,8 +123,8 @@ jobs:
           token: ${{ github.token }}
   image-test-run:
     name: (test-run) Publish ${{ matrix.app }} image
-    needs: select
-    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && needs.select.outputs.image_matrix != '{"include":[]}' }}
+    needs: [switch, select]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && needs.select.outputs.image_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: test-run
@@ -105,7 +139,8 @@ jobs:
   # A release promotes what this publishes.
   package:
     name: Publish dev package
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && (inputs.publish_package == true || inputs.publish_package == 'true') && github.ref == 'refs/heads/main' }}
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: dev
@@ -125,7 +160,8 @@ jobs:
           token: ${{ github.token }}
   package-test-run:
     name: (test-run) Publish dev package
-    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && (inputs.publish_package == true || inputs.publish_package == 'true') }}
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: test-run
@@ -137,7 +173,8 @@ jobs:
   # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
   browser-image:
     name: Publish browser image
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') && github.ref == 'refs/heads/main' }}
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     environment: dev
@@ -156,7 +193,8 @@ jobs:
           token: ${{ github.token }}
   browser-image-test-run:
     name: (test-run) Publish browser image
-    if: ${{ (inputs.test_run == true || inputs.test_run == 'true') && (inputs.publish_browser_image == true || inputs.publish_browser_image == 'true') }}
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     environment: test-run
@@ -165,3 +203,21 @@ jobs:
       packages: read
     env: *browser-image-env
     steps: *browser-image-steps
+
+  # Temporary: after publishing, update the dev site so it reflects what was just published.
+  # This is temporary because #167/#168 will replace the dev site with a build-from-source approach
+  # that does not depend on these images. Until then, ci-publish keeps the dev site in sync.
+  # No test-run twin: it only passes the test_run flag through to ci-dev-pages, which handles
+  # the production vs test-run split itself.
+  dev-pages:
+    name: dev-pages
+    needs: [switch, select, image, image-test-run, package, package-test-run, browser-image, browser-image-test-run]
+    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') && (needs.image-test-run.result == 'success' || needs.image-test-run.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.package-test-run.result == 'success' || needs.package-test-run.result == 'skipped') && (needs.browser-image.result == 'success' || needs.browser-image.result == 'skipped') && (needs.browser-image-test-run.result == 'success' || needs.browser-image-test-run.result == 'skipped') }}
+    uses: ./.github/workflows/ci-dev-pages.yml
+    permissions:
+      contents: read
+      packages: read
+      pages: write
+      id-token: write
+    with:
+      test_run: ${{ needs.switch.outputs.test_run == 'true' }}

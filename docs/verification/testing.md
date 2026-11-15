@@ -56,9 +56,14 @@ authoritative for this layout.
 
 ## What runs in CI
 
-[ci-all](../../.github/workflows/ci-all.yml) calls one workflow per project, chosen from the diff by
+[ci-pr-checks](../../.github/workflows/ci-pr-checks.yml) calls one workflow per project, chosen from the diff by
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
-everything.
+everything. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
+test-run switch and planner (shared with ci-pr-checks through a composite action), building and pushing images and
+packages — it runs no tests as the PR run already tested the content. After publishing, it calls
+[ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) (temporarily, until the dev site is replaced with a
+build-from-source approach). [ci-nightly](../../.github/workflows/ci-nightly.yml) runs every night by calling
+ci-pr-checks with `run_all: true`.
 
 | Changed                                                     | Runs                                                                                        |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |

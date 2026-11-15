@@ -1,0 +1,89 @@
+name: Plan
+description: >-
+  Runs the CI planner (platform/tools/ci-plan.mjs) and outputs which folder pipelines
+  and browser areas a change needs. Inputs control the base ref and whether to run
+  everything. Used by ci-pr-checks and ci-publish so the planner logic is not duplicated.
+inputs:
+  base:
+    description: 'Base ref for diff comparison (default: origin/main).'
+    required: false
+    default: 'origin/main'
+  run_all:
+    description: 'true to run every folder and browser area regardless of diff.'
+    required: false
+    default: 'false'
+outputs:
+  docs:
+    description: Run the docs pipeline.
+    value: ${{ steps.plan.outputs.docs }}
+  workflows:
+    description: Run the workflows pipeline.
+    value: ${{ steps.plan.outputs.workflows }}
+  platform:
+    description: Run the platform pipeline.
+    value: ${{ steps.plan.outputs.platform }}
+  contracts:
+    description: Run the contracts pipeline.
+    value: ${{ steps.plan.outputs.contracts }}
+  browser-image:
+    description: Run the browser-image pipeline.
+    value: ${{ steps.plan.outputs.browser-image }}
+  data:
+    description: Run the data pipeline.
+    value: ${{ steps.plan.outputs.data }}
+  backend:
+    description: Run the backend pipeline.
+    value: ${{ steps.plan.outputs.backend }}
+  transit-relay:
+    description: Run the transit-relay pipeline.
+    value: ${{ steps.plan.outputs.transit-relay }}
+  tests:
+    description: Run the tests pipeline.
+    value: ${{ steps.plan.outputs.tests }}
+  map-core:
+    description: Run the map-core pipeline.
+    value: ${{ steps.plan.outputs.map-core }}
+  apps-web:
+    description: Run the apps-web pipeline.
+    value: ${{ steps.plan.outputs.apps-web }}
+  apps-editor:
+    description: Run the apps-editor pipeline.
+    value: ${{ steps.plan.outputs.apps-editor }}
+  apps-core-demo:
+    description: Run the apps-core-demo pipeline.
+    value: ${{ steps.plan.outputs.apps-core-demo }}
+  browser_matrix:
+    description: Browser test matrix for apps-web.
+    value: ${{ steps.plan.outputs.browser_matrix }}
+  editor_browser_matrix:
+    description: Browser test matrix for apps-editor.
+    value: ${{ steps.plan.outputs.editor_browser_matrix }}
+  image_matrix:
+    description: Image build matrix for publishing.
+    value: ${{ steps.plan.outputs.image_matrix }}
+runs:
+  using: composite
+  steps:
+    # The job already checked out the working tree. This second checkout fetches full history (fetch-depth: 0)
+    # so the planner can diff against the base ref.
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+        # Full history without file contents: enough to diff names, and cheap despite the map archive.
+        fetch-depth: 0
+        filter: blob:none
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+        package-manager-cache: false
+    - id: plan
+      shell: bash
+      env:
+        PLAN_BASE: ${{ inputs.base }}
+        RUN_ALL: ${{ inputs.run_all }}
+      run: |
+        if [ "$RUN_ALL" = true ]; then
+          node platform/tools/ci-plan.mjs --all
+        else
+          node platform/tools/ci-plan.mjs --base "$PLAN_BASE"
+        fi

@@ -93,7 +93,10 @@ jobs:
     environment: dev
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix) }}
+      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
+      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
+      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
+      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}') }}
     env: &browser-env
       # Each job has its own 4 CPUs, and one worker left the slowest area at the job time limit.
       E2E_WORKERS: 2
@@ -136,6 +139,9 @@ jobs:
     environment: test-run
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix) }}
+      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
+      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
+      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
+      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || '{"include":[]}') }}
     env: *browser-env
     steps: *browser-steps

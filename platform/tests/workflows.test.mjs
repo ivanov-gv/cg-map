@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import os from 'node:os';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
 import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
 import {repoRoot} from '../agents/lib.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
@@ -12,12 +17,13 @@ const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'ut
 
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-all.yml': ['approval', 'switch', 'gate', 'publish', 'dev-pages', 'job-times', ...FOLDERS],
+  'ci-pr-checks.yml': ['approval', 'switch', 'gate', 'job-times', ...FOLDERS],
+  'ci-nightly.yml': ['run'],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'ci-dev-pages.yml': ['deploy'],
-  'ci-publish.yml': ['select']
+  'ci-publish.yml': ['switch', 'select', 'dev-pages']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -41,7 +47,12 @@ for (const file of newWorkflowFiles) {
     const {jobs} = load(file);
     const standalone = NO_TWIN[file] ?? [];
     const production = Object.keys(jobs).filter(job => !job.endsWith('-test-run') && !standalone.includes(job));
-    assert.ok(production.length > 0);
+    // ci-nightly only calls ci-pr-checks; it has no production jobs of its own to twin.
+    if (file === 'ci-nightly.yml') {
+      assert.equal(production.length, 0, 'ci-nightly should have no production jobs');
+      return;
+    }
+    assert.ok(production.length > 0, `${file} should have at least one production job`);
     for (const job of production) {
       const twin = jobs[`${job}-test-run`];
       assert.ok(twin, `${job} needs a ${job}-test-run twin`);
@@ -87,7 +98,7 @@ for (const file of newWorkflowFiles) {
 }
 
 // Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-all.yml': ['dev-pages']};
+const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-publish.yml': ['dev-pages']};
 
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
@@ -143,7 +154,7 @@ test('a deploy always takes every app, because it replaces the whole site', () =
 });
 
 test('jobs below the optional approval survive it being skipped', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   const statusFunction = /\b(always|cancelled|failure|success)\(\)/;
   for (const [name, job] of Object.entries(jobs)) {
     // A skipped ancestor skips any job whose condition has no status function, on every run but a pull request.
@@ -152,17 +163,38 @@ test('jobs below the optional approval survive it being skipped', () => {
   }
 });
 
+// Permission levels for comparing grants against requests; write covers read.
+const PERMISSION_LEVELS = {none: 0, read: 1, write: 2};
+
+// Check that a called workflow's permissions are covered by what the caller grants.
+// GitHub forbids cycles in reusable workflow calls, so no visited set is needed.
+function checkCalledWorkflow(callerFile, callerJobName, callerJob, callerDefaults) {
+  const calledFile = callerJob.uses.replace('./.github/workflows/', '');
+  const granted = callerJob.permissions ?? callerDefaults;
+  const called = load(calledFile);
+  const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
+  for (const request of requests.filter(Boolean)) {
+    for (const [permission, level] of Object.entries(request)) {
+      const allows = PERMISSION_LEVELS[granted?.[permission] ?? 'none'] >= PERMISSION_LEVELS[level];
+      assert.ok(
+        allows,
+        `${callerFile} ${callerJobName} grants ${granted?.[permission] ?? 'none'} for ${permission}, but ${calledFile} needs ${level}`
+      );
+    }
+  }
+  for (const [nestedJobName, nestedJob] of Object.entries(called.jobs)) {
+    if (nestedJob.uses?.startsWith('./.github/workflows/')) {
+      checkCalledWorkflow(calledFile, nestedJobName, nestedJob, called.permissions);
+    }
+  }
+}
+
 test('a called workflow asks for no more than its caller grants, or the whole run fails to start', () => {
-  const {jobs, permissions: defaults} = load('ci-all.yml');
-  const levels = {none: 0, read: 1, write: 2};
-  const allows = (granted, name, level) => levels[granted?.[name] ?? 'none'] >= levels[level];
-  for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
-    const granted = job.permissions ?? defaults;
-    const called = load(job.uses.replace('./.github/workflows/', ''));
-    const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
-    for (const request of requests.filter(Boolean)) {
-      for (const [permission, level] of Object.entries(request)) {
-        assert.ok(allows(granted, permission, level), `${name} asks for ${permission}: ${level}, beyond its caller`);
+  for (const file of newWorkflowFiles) {
+    const {jobs, permissions: defaults} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      if (job.uses?.startsWith('./.github/workflows/')) {
+        checkCalledWorkflow(file, name, job, defaults);
       }
     }
   }
@@ -176,7 +208,7 @@ test('only the publish workflow writes packages, and only from main unless it is
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
     assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
   }
-  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && !['ci-publish.yml', 'ci-all.yml'].includes(file));
+  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && file !== 'ci-publish.yml');
   for (const file of others) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
       assert.notEqual(job.permissions?.packages, 'write', `${file} ${name} must leave publishing to ci-publish`);
@@ -184,7 +216,7 @@ test('only the publish workflow writes packages, and only from main unless it is
   }
 });
 
-// The aim is 5 minutes, which the job-times job in ci-all warns about. 7 is the limit: see ADR 0006.
+// The aim is 5 minutes, which the job-times job in ci-pr-checks warns about. 7 is the limit: see ADR 0006.
 const JOB_TIME_LIMIT_MINUTES = 7;
 
 test('every job that runs has a time limit of at most 7 minutes', () => {
@@ -198,9 +230,9 @@ test('every job that runs has a time limit of at most 7 minutes', () => {
 });
 
 test('job times are checked after everything else, and can only warn', () => {
-  const job = load('ci-all.yml').jobs['job-times'];
+  const job = load('ci-pr-checks.yml').jobs['job-times'];
   assert.equal(job.if, 'always()');
-  assert.deepEqual(new Set(job.needs), new Set(['gate', 'publish', 'dev-pages']));
+  assert.deepEqual(new Set(job.needs), new Set(['gate']));
   assert.deepEqual(job.permissions, {actions: 'read'});
   assert.doesNotMatch(job.steps[0].run, /exit 1|::error::/);
 });
@@ -233,7 +265,7 @@ test('CD refuses a commit that is not on main', () => {
 });
 
 test('a pull request runs nothing until it is approved', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   assert.equal(jobs.approval.environment, 'ci-approval');
   assert.match(jobs.approval.if, /pull_request/);
   assert.deepEqual([jobs.switch.needs].flat(), ['approval']);
@@ -244,32 +276,275 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-test('images and dev packages come only from pushes to main or test runs, never from a pull request', () => {
-  const {jobs} = load('ci-all.yml');
-  assert.equal(jobs.publish.uses, './.github/workflows/ci-publish.yml');
-  assert.match(jobs.publish.if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
-  assert.match(jobs.publish.if, /needs\.gate\.result == 'success'/);
-  assert.match(jobs['dev-pages'].if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
-  assert.match(jobs['dev-pages'].if, /needs\.gate\.result == 'success'/);
-  assert.match(jobs['dev-pages'].if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'skipped'/);
+// dev-pages must not deploy when any publish job fails. Each pair (X, X-test-run) must both
+// succeed or be skipped; one failing blocks deployment. The select job must also succeed.
+const PUBLISH_PAIRS = [
+  ['image', 'image-test-run'],
+  ['package', 'package-test-run'],
+  ['browser-image', 'browser-image-test-run'],
+];
+
+// Evaluate the dev-pages `if` condition with substituted job results and !cancelled()=true.
+function evaluateDevPagesCondition(condition, results) {
+  let expression = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
+  for (const [name, result] of Object.entries(results)) {
+    expression = expression.replace(new RegExp(`needs\\.${name}\\.result`, 'g'), `'${result}'`);
+  }
+  expression = expression.replace(/!cancelled\(\)/g, 'true');
+  return new Function(`return (${expression})`)();
+}
+
+// Build a results map with all jobs skipped by default, select succeeded.
+function devPagesResults(overrides = {}) {
+  return {
+    select: 'success',
+    image: 'skipped',
+    'image-test-run': 'skipped',
+    package: 'skipped',
+    'package-test-run': 'skipped',
+    'browser-image': 'skipped',
+    'browser-image-test-run': 'skipped',
+    ...overrides,
+  };
+}
+
+test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
+  const {jobs} = load('ci-publish.yml');
+  const devPages = jobs['dev-pages'];
+  const condition = String(devPages.if);
+  const needs = [devPages.needs].flat();
+
+  // dev-pages must depend on select and every publish pair
+  assert.ok(needs.includes('select'), 'dev-pages must need select');
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(needs.includes(prod), `dev-pages must need ${prod}`);
+    assert.ok(needs.includes(testRun), `dev-pages must need ${testRun}`);
+  }
+
+  // All succeed — dev-pages should run
+  assert.ok(
+    evaluateDevPagesCondition(condition, devPagesResults({image: 'success', package: 'success', 'browser-image': 'success'})),
+    'dev-pages should run when all pairs succeed or are skipped'
+  );
+
+  // A failure in either twin of any pair blocks dev-pages
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[prod]: 'failure'})),
+      `dev-pages must be blocked when ${prod} fails`
+    );
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[testRun]: 'failure'})),
+      `dev-pages must be blocked when ${testRun} fails`
+    );
+  }
+
+  // A failed select blocks dev-pages
+  assert.ok(
+    !evaluateDevPagesCondition(condition, devPagesResults({select: 'failure'})),
+    'dev-pages must be blocked when select fails'
+  );
 });
 
-test('a push to main runs no checks, while PRs and the nightly run do', () => {
-  const {jobs, on} = load('ci-all.yml');
-  for (const folder of FOLDERS) assert.match(jobs[folder].if, /github\.event_name != 'push'/, `${folder} runs on main`);
-  assert.ok(on.schedule.length > 0, 'without the nightly run, nothing checks main itself');
-  assert.match(jobs.plan.env.RUN_ALL, /github\.event_name == 'schedule'/, 'the nightly run must check everything');
+// ci-workflows test-run-evidence must require a ci-publish test run when publish-related files change.
+// Run the real step script with a fake `gh` stub (platform/tests/fixtures/fake-gh.sh).
+const ciWorkflowsScript = load('ci-workflows.yml').jobs['test-run-evidence'].steps[0].run;
+const fakeGhPath = path.join(repoRoot, 'platform/tests/fixtures/fake-gh.sh');
+
+// Set up a temporary directory with the fake gh stub and run the test-run-evidence script.
+// Returns {code, stdout, stderr} from executing the script.
+async function runEvidenceTest(prFiles, stubFiles) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
+  const stubDirectory = path.join(temporaryDirectory, 'stub');
+  await fs.promises.mkdir(stubDirectory);
+  await fs.promises.writeFile(path.join(stubDirectory, 'pr-files'), prFiles.join('\n'));
+  for (const [name, content] of Object.entries(stubFiles)) {
+    await fs.promises.writeFile(path.join(stubDirectory, name), content);
+  }
+  const ghPath = path.join(temporaryDirectory, 'gh');
+  await fs.promises.copyFile(fakeGhPath, ghPath);
+  await fs.promises.chmod(ghPath, 0o755);
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+    HEAD_SHA: 'abc123',
+    PR_NUMBER: '42',
+    BRANCH: 'feature-branch',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    FAKE_GH_DIR: stubDirectory,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', ciWorkflowsScript], {env, cwd: temporaryDirectory});
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('ci-workflows: ci-publish.yml changed, no qualifying run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'ci-publish.yml changed without qualifying run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: ci-publish.yml changed, with qualifying run must pass', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-publish.yml changed with qualifying run must exit 0');
+});
+
+test('ci-workflows: setup-web changed, no ci-publish run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/actions/setup-web/action.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'setup-web changed without ci-publish run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-apps-web.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-apps-web.yml changed does not require ci-publish run');
+});
+
+test('ci-workflows: ci-publish.yml not on main is exempt from test-run requirement', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'HTTP 404 NOT FOUND',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-publish.yml not on main is exempt');
+});
+
+test('ci-workflows: a workflow on main without workflow_dispatch is exempt', async () => {
+  // Simulate ci-publish.yml on main with only workflow_call (no workflow_dispatch).
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'workflow without workflow_dispatch on main is exempt');
+  assert.match(result.stdout, /no workflow_dispatch trigger/, 'must explain the exemption');
+});
+
+test('ci-workflows: a workflow on main with workflow_dispatch but no run still fails', async () => {
+  // Simulate ci-publish.yml on main with workflow_dispatch, but no qualifying run.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n  workflow_dispatch:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'workflow with workflow_dispatch but no qualifying run must fail');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
+test('ci-workflows: an API failure on the contents lookup fails the check', async () => {
+  // Simulate an HTTP 500 on the metadata lookup (the single --jq .content call).
+  // The check must fail, not exempt the workflow.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'error',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'API failure on contents lookup must fail the check, not exempt');
+  assert.match(
+    result.stderr,
+    /Could not look up ci-publish\.yml/,
+    'must report the API failure on stderr'
+  );
+});
+
+test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
+  const {on} = load('ci-pr-checks.yml');
+  assert.equal(on.push, undefined, 'ci-pr-checks must not trigger on push');
+  assert.equal(on.schedule, undefined, 'ci-pr-checks must not have a schedule trigger');
+});
+
+test('ci-nightly calls ci-pr-checks with run_all and phone_tests set to all', () => {
+  const {jobs} = load('ci-nightly.yml');
+  const runJob = jobs.run;
+  assert.equal(runJob.uses, './.github/workflows/ci-pr-checks.yml', 'ci-nightly must call ci-pr-checks');
+  assert.equal(runJob.with.run_all, true, 'ci-nightly must pass run_all: true');
+  assert.equal(runJob.with.phone_tests, 'all', 'ci-nightly must pass phone_tests: all');
+});
+
+test('ci-publish triggers on push to main and workflow dispatch', () => {
+  const {on} = load('ci-publish.yml');
+  assert.deepEqual(Object.keys(on).sort(), ['push', 'workflow_dispatch'], 'ci-publish trigger set');
+  assert.deepEqual(on.push.branches, ['main'], 'ci-publish must only trigger on main');
+});
+
+test('ci-nightly triggers on schedule and workflow dispatch', () => {
+  const {on} = load('ci-nightly.yml');
+  assert.deepEqual(Object.keys(on).sort(), ['schedule', 'workflow_dispatch'], 'ci-nightly trigger set');
+  assert.ok(on.schedule.length > 0, 'ci-nightly must have a schedule trigger');
 });
 
 test('runs on main never share a concurrency group', () => {
   assert.match(
-    load('ci-all.yml').concurrency.group,
+    load('ci-pr-checks.yml').concurrency.group,
     /github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id/
   );
 });
 
-test('ci-all calls every folder workflow, and the gate needs all of them', () => {
-  const {jobs} = load('ci-all.yml');
+test('ci-pr-checks calls every folder workflow, and the gate needs all of them', () => {
+  const {jobs} = load('ci-pr-checks.yml');
   for (const folder of FOLDERS) {
     assert.equal(jobs[folder]?.uses, `./.github/workflows/ci-${folder}.yml`, `${folder} needs a pipeline`);
     assert.ok(fs.existsSync(path.join(workflowDir, `ci-${folder}.yml`)));
@@ -284,15 +559,17 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
   const {gate} = jobs;
   assert.equal(gate.name, 'CI gate', 'the ruleset requires this exact name');
   assert.equal(gate.if, 'always()');
-  const jobsAfterGate = ['gate', 'publish', 'dev-pages', 'job-times'];
+  const jobsAfterGate = ['gate', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
   assert.deepEqual(gate.permissions, {});
 });
 
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
-  assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && !name.startsWith('cd-'))) {
+  assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
+  // ci-publish runs on push to main and workflow_dispatch; ci-dev-pages on workflow_call and workflow_dispatch;
+  // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -300,14 +577,14 @@ test('only the new pipelines run on the repository', () => {
     );
   }
   assert.equal(
-    load('ci-all.yml').on.pull_request,
+    load('ci-pr-checks.yml').on.pull_request,
     null,
     'a filter on a required workflow would leave its check pending forever'
   );
 });
 
 test('browser jobs run only the planned areas, and none when there are none', () => {
-  const allJobs = load('ci-all.yml').jobs;
+  const allJobs = load('ci-pr-checks.yml').jobs;
   const plannedMatrixByApp = {'apps-web': 'browser_matrix', 'apps-editor': 'editor_browser_matrix'};
   for (const [app, output] of Object.entries(plannedMatrixByApp)) {
     assert.equal(
@@ -321,7 +598,7 @@ test('browser jobs run only the planned areas, and none when there are none', ()
 });
 
 test('the planner has an output on the plan job for every folder', () => {
-  const {plan} = load('ci-all.yml').jobs;
+  const {plan} = load('ci-pr-checks.yml').jobs;
   assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'editor_browser_matrix', 'image_matrix']));
 });
 
@@ -356,9 +633,9 @@ test('browser jobs and local runs pin one image, whose version matches the repos
 });
 
 test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   for (const app of ['apps-web', 'apps-editor']) {
-    assert.equal(jobs[app].with.phone_tests, "${{ github.event_name == 'schedule' && 'all' || 'tagged' }}");
+    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
     const {browser} = load(`ci-${app}.yml`).jobs;
     assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
     const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');
@@ -377,7 +654,7 @@ test('the browser image runs the Node version the repository pins', () => {
 // Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
 // publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
 const ENV_EXCEPTIONS = {
-  'ci-all.yml': ['approval'],
+  'ci-pr-checks.yml': ['approval'],
   'ci-dev-pages.yml': ['deploy'],
 };
 

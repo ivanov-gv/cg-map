@@ -52,9 +52,9 @@ Rules:
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
 register it: `PROJECTS` and `test-ci-*` in the root Makefile, `components` in platform/tools/verify.mjs, `FOLDERS` and a
-rule in platform/tools/ci-plan.mjs, a job and gate entry in ci-all.yml, and platform/tools/check-repo.mjs. A browser app
-also joins `BROWSER_PROJECTS`, and the app lists in platform/tools/serve.py and dev-port.mjs. It never gets a slot in an
-existing project's Makefile, tests or pipeline.
+rule in platform/tools/ci-plan.mjs, a job and gate entry in ci-pr-checks.yml, and platform/tools/check-repo.mjs. A
+browser app also joins `BROWSER_PROJECTS`, and the app lists in platform/tools/serve.py and dev-port.mjs. It never gets
+a slot in an existing project's Makefile, tests or pipeline.
 
 ## Implemented stack
 
