@@ -1,4 +1,4 @@
-.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
+.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-cd-dev-pages test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
 
 # Repository-wide tasks only. Every project builds, runs, lints and tests itself through its own Makefile; this file
 # may call a project's check targets but never its build or run targets. See docs/system-architecture/architecture.md.
@@ -85,7 +85,7 @@ test-ci-pr-checks: ACT_JOBS = 1
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --container-options "$(ACT_CONTAINER_OPTIONS)" $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
-test-all-workflows: test-cd-map-core test-cd-browser-image test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
+test-all-workflows: test-cd-map-core test-cd-dev-pages test-cd-browser-image test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
 
 test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image: test-%: act-image
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
@@ -103,3 +103,9 @@ act-image:
 test-cd-browser-image: act-image
 	$(if $(or $(VERSION),$(findstring -n,$(ACT))),,$(error Set VERSION and COMMIT: make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA>))
 	$(ACT) workflow_dispatch -W .github/workflows/cd-browser-image.yml $(ACT_RUN) --input version=$(VERSION) --input commit=$(COMMIT)
+
+# Needs a recent main SHA with a successful ci-dev-pages run: make test-cd-dev-pages COMMIT=<full SHA>
+# Find one with: gh run list --workflow ci-dev-pages.yml --branch main --status success
+test-cd-dev-pages: act-image
+	$(if $(or $(COMMIT),$(findstring -n,$(ACT))),,$(error Set COMMIT: make test-cd-dev-pages COMMIT=<full SHA on main>))
+	$(ACT) workflow_dispatch -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) --input commit=$(COMMIT)
