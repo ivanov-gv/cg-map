@@ -82,7 +82,7 @@ jobs:
   deploy:
     name: Deploy dev site
     needs: find
-    if: ${{ !cancelled() && needs.find.outputs.is_newest == 'true' }}
+    if: ${{ !cancelled() && needs.find.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.find.outputs.is_newest == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:

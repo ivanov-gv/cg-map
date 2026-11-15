@@ -33,6 +33,11 @@ runs:
         GH_REPO: ${{ github.repository }}
       run: |
         commit="${INPUT_COMMIT:-$EVENT_SHA}"
+        # Validate the commit is a full 40-character SHA.
+        if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::commit must be a full 40-character SHA, got: $commit"
+          exit 1
+        fi
         # Verify the commit is on main using the compare API.
         relation=$(curl --fail --silent --show-error --location \
           --header "Authorization: Bearer $GH_TOKEN" \
@@ -62,45 +67,64 @@ runs:
         }
 
         # Poll for a ci-dev-pages workflow run that matches our commit SHA.
-        # Bounded poll: check every 10 seconds, up to 5 minutes (30 attempts).
+        # Bounded poll: check every 10 seconds, up to 7 minutes (42 attempts) to match ci-dev-pages timeout.
+        # MAX_ATTEMPTS and POLL_DELAY can be overridden by the environment for testing.
+        # Among all runs for the SHA, prefer a push-triggered run over others.
+        # If any completed run succeeded, use it; only fail when all completed runs failed.
         attempt=0
-        max_attempts=30
+        max_attempts="${MAX_ATTEMPTS:-42}"
+        poll_delay="${POLL_DELAY:-10}"
         while [ $attempt -lt $max_attempts ]; do
           attempt=$((attempt + 1))
           echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
 
-          # Find the most recent ci-dev-pages run for this commit on the main branch.
-          run_id=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main") | .id' | head -1)
+          # Fetch all ci-dev-pages runs for this commit on main.
+          runs_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
+            jq '[.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main")]')
 
-          if [ -z "$run_id" ]; then
+          run_count=$(echo "$runs_json" | jq 'length')
+          if [ "$run_count" = "0" ]; then
             echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
-            sleep 10
+            sleep "$poll_delay"
             continue
           fi
 
-          echo "Found ci-dev-pages run $run_id for $COMMIT"
+          # Check for a successful completed run, preferring push-triggered runs.
+          # First look for a successful push run.
+          run_id=$(echo "$runs_json" | \
+            jq -r '.[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .id' | head -1)
 
-          # Single API call: read both status and conclusion from the same response.
-          run_detail=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs/$run_id")
-          status=$(echo "$run_detail" | jq -r .status)
-          conclusion=$(echo "$run_detail" | jq -r .conclusion)
-
-          if [ "$status" = "completed" ]; then
-            if [ "$conclusion" = "success" ]; then
-              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-              echo "ci-dev-pages run $run_id completed successfully" | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
-            else
-              echo "::error::ci-dev-pages run $run_id completed with conclusion: $conclusion"
-              echo "Run details: https://github.com/$GH_REPO/actions/runs/$run_id" | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
+          # If no successful push run, look for any successful run.
+          if [ -z "$run_id" ]; then
+            run_id=$(echo "$runs_json" | \
+              jq -r '.[] | select(.status == "completed" and .conclusion == "success") | .id' | head -1)
           fi
 
-          # Still in progress, wait and retry.
-          echo "Run $run_id status: $status. Waiting..."
-          sleep 10
+          if [ -n "$run_id" ]; then
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+            echo "ci-dev-pages run $run_id completed successfully" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # No successful run yet. Check if all runs are completed (meaning all failed).
+          all_completed=$(echo "$runs_json" | jq '[.[] | select(.status != "completed")] | length')
+          if [ "$all_completed" = "0" ]; then
+            # All runs are completed but none succeeded — report the first push failure, or any failure.
+            failed_id=$(echo "$runs_json" | \
+              jq -r '.[] | select(.event == "push") | .id' | head -1)
+            if [ -z "$failed_id" ]; then
+              failed_id=$(echo "$runs_json" | jq -r '.[0].id')
+            fi
+            failed_conclusion=$(echo "$runs_json" | \
+              jq -r ".[] | select(.id == $failed_id) | .conclusion")
+            echo "::error::ci-dev-pages run $failed_id completed with conclusion: $failed_conclusion"
+            echo "Run details: https://github.com/$GH_REPO/actions/runs/$failed_id" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Some runs are still in progress; wait and retry.
+          echo "Runs in progress for $COMMIT. Waiting..."
+          sleep "$poll_delay"
         done
 
         echo "::error::Timeout waiting for ci-dev-pages run at $COMMIT after $max_attempts attempts"

@@ -34,7 +34,7 @@ Projects depend on each other only through these concrete contracts:
 | Editor source bundle                          | data               | apps/editor, tests                                        |
 | Place test fixture                            | data               | apps/web browser tests                                    |
 | Built web artifact, dist/web                  | apps/web           | platform hosting tests, tests                             |
-| App images in GHCR                            | each map app       | the dev Pages site                                        |
+| Built web artifact, dist/web                  | apps/web           | the dev Pages site                                        |
 | Go host `run` target                          | services/backend   | apps/web `dev`                                            |
 | Static host and per-worktree ports            | platform           | apps/web, apps/editor, apps/core-demo                     |
 
@@ -69,7 +69,7 @@ a slot in an existing project's Makefile, tests or pipeline.
 | Offline         | Service worker/Cache Storage for shell; OPFS for verified archive                                                                                                                                                                                    |
 | Data pipeline   | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely                                                                                                                                                                     |
 | Backend         | Independent Go module with ConnectRPC and protobuf transport definitions: static artifact host, map layers API (TileJSON + vector tiles from the release archive), live ePodgorica vehicles API with movement directions, web config (`config.json`) |
-| Delivery        | GitHub Actions builds app images and deploys them to Pages, the dev environment: [release](../runbooks/release.md)                                                                                                                                   |
+| Delivery        | GitHub Actions builds the dev site from source (ci-dev-pages) and deploys it to Pages (cd-dev-pages): [release](../runbooks/release.md)                                                                                                              |
 | Verification    | ESLint, markdownlint/Prettier, Node tests, Python unittest, Playwright; separate Go vet/lint/test/build                                                                                                                                              |
 
 The Go server is optional. When the app is served by it, `config.json` selects server mode and the app reads layers and
@@ -106,8 +106,9 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    generates offline manifests there.
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
-5. A merge to main rebuilds the same content into an image, and the Pages step publishes every app's image, each under
-   its own path. Source files, docs, datasets used for generation, and backend code are excluded.
+5. A merge to main triggers ci-dev-pages, which builds all three apps from source, writes version.json with the commit
+   SHA, and uploads the artifact. cd-dev-pages then deploys it to GitHub Pages. Source files, docs, datasets used for
+   generation, and backend code are excluded.
 
 The web app runs at /cg-map/web/, and owns only that path's worker. No deployment redirect or web asset tree is
 committed in repository root.
