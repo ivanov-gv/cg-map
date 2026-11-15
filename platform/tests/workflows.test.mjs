@@ -301,6 +301,13 @@ test('job times are checked after everything else, and can only warn', () => {
   assert.doesNotMatch(job.steps[0].run, /exit 1|::error::/);
 });
 
+test('gate approval job name env matches the approval job name', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  const approvalJobName = jobs.approval.name;
+  const gateEnv = jobs.gate.env;
+  assert.equal(gateEnv.APPROVAL_JOB_NAME, approvalJobName, 'gate APPROVAL_JOB_NAME must match approval job name');
+});
+
 test('the editor browser jobs cover every spec in both projects', () => {
   const matrix = browserMatrix(Object.keys(EDITOR_BROWSER_AREAS), EDITOR_BROWSER_AREAS);
   const specFiles = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
@@ -445,22 +452,23 @@ test('cd-dev-pages find if: only push+main+success runs, everything else skips',
   }
 });
 
+
 // Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
 // The deploy must only run on workflow_run when is_newest (so older runs don't overwrite newer sites),
 // and must always run on workflow_dispatch when find succeeds (for rollback).
 // It must not run when find is skipped (test-run) or fails.
-function evaluateDeployIf(expression, context) {
+function evaluateDeployIf(expressionText, context) {
   // Replace GitHub Actions expression syntax with JavaScript equivalents.
-  let expr = expression
+  let expression = expressionText
     .replace(/\$\{\{\s*/g, '')
     .replace(/\s*\}\}/g, '')
     .trim();
   for (const [key, value] of Object.entries(context)) {
-    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+    expression = expression.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
   }
   // Handle !cancelled() -> context.cancelled
-  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
-  return Function('context_cancelled', 'return ' + expr + ';')();
+  expression = expression.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expression + ';')();
 }
 
 test('cd-dev-pages deploy gating: find-success deploys, find-fail and find-skipped skip', () => {
@@ -473,16 +481,16 @@ test('cd-dev-pages deploy gating: find-success deploys, find-fail and find-skipp
     {event: 'workflow_dispatch', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
   ];
 
-  for (const tc of cases) {
+  for (const testCase of cases) {
     const got = evaluateDeployIf(deployIf, {
-      'github.event_name': tc.event,
-      "needs.find.result": tc.findResult,
+      'github.event_name': testCase.event,
+      "needs.find.result": testCase.findResult,
     });
     const deployed = got === true;
     assert.equal(
       deployed,
-      tc.wantDeploy,
-      `${tc.label}: want deploy=${tc.wantDeploy}, got ${deployed} (if: ${deployIf})`
+      testCase.wantDeploy,
+      `${testCase.label}: want deploy=${testCase.wantDeploy}, got ${deployed} (if: ${deployIf})`
     );
   }
 });
@@ -585,8 +593,7 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
   );
 });
 
-// ci-dev-pages.yml was removed (its pages build moved into ci-publish).
-// setup-web is now checked by the ci-publish evidence check, not ci-dev-pages.
+// setup-web is checked by the ci-publish test-run-evidence check because ci-publish builds the site.
 
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
@@ -753,8 +760,167 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
   assert.equal(gate.if, 'always()');
   const jobsAfterGate = ['gate', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
-  assert.deepEqual(gate.permissions, {});
+  // Gate needs actions:read to fetch jobs for the run budget check.
+  assert.deepEqual(gate.permissions, {actions: 'read'}, 'gate permissions must be exactly actions:read');
 });
+
+test('CI gate checks run budget with aim and limit env vars', () => {
+  const {gate} = load('ci-pr-checks.yml').jobs;
+  const stepsText = JSON.stringify(gate.steps);
+  assert.match(stepsText, /Check run budget/, 'gate must have a run budget step');
+  assert.equal(gate.env.RUN_AIM_SECONDS, 300, 'gate must define RUN_AIM_SECONDS');
+  assert.equal(gate.env.RUN_LIMIT_SECONDS, 420, 'gate must define RUN_LIMIT_SECONDS');
+  assert.match(stepsText, /run-budget\.mjs/, 'run budget step must use run-budget.mjs');
+});
+
+// Behavior tests for the real "Check run budget" step.
+// Extract the gate's run script, run it with `bash -e` (as GitHub does), with a fake `gh`
+// that returns jobs JSON whose approval job completed at a controlled time.
+const {gate: gateJob} = load('ci-pr-checks.yml').jobs;
+const runBudgetStep = gateJob.steps.find(step => step.name === 'Check run budget');
+const runBudgetScript = runBudgetStep.run;
+
+// Build a jobs JSON response with the approval job completed at a given offset (seconds ago).
+function makeJobsJson(secondsAgo) {
+  const completedAt = new Date(Date.now() - secondsAgo * 1000).toISOString();
+  return JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: completedAt, started_at: completedAt}
+    ]
+  });
+}
+
+// Run the "Check run budget" step script in a temp dir with a fake `gh` and the real run-budget.mjs.
+// The fake gh serves both the attempt endpoint (for run_started_at) and the jobs endpoint.
+// Returns {code, stdout, stderr}.
+async function runBudgetBehaviorTest(jobsJson, shouldFailGh, attemptJson) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-behavior-'));
+
+  // Create the fake gh script that distinguishes between the attempt and jobs endpoints.
+  const jobsEscaped = jobsJson.replace(/'/g, "'\\''");
+  const attemptEscaped = (attemptJson ?? '{}').replace(/'/g, "'\\''");
+  const ghScript = `#!/usr/bin/env bash
+if [ "${shouldFailGh}" = "true" ]; then
+  echo "API error" >&2
+  exit 1
+fi
+case "$@" in
+  *'/attempts/'*/jobs*)
+    echo '${jobsEscaped}'
+    ;;
+  *'/attempts/'*)
+    echo '${attemptEscaped}'
+    ;;
+  *)
+    echo '${jobsEscaped}'
+    ;;
+esac
+`;
+  const ghPath = path.join(temporaryDirectory, 'gh');
+  await fs.promises.writeFile(ghPath, ghScript);
+  await fs.promises.chmod(ghPath, 0o755);
+
+  // Copy the run-budget.mjs script into the temp dir under platform/tools
+  const toolsDirectory = path.join(temporaryDirectory, 'platform', 'tools');
+  await fs.promises.mkdir(toolsDirectory, {recursive: true});
+  const runBudgetSource = path.join(repoRoot, 'platform', 'tools', 'run-budget.mjs');
+  await fs.promises.copyFile(runBudgetSource, path.join(toolsDirectory, 'run-budget.mjs'));
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+    RUN_ID: '123',
+    RUN_ATTEMPT: '1',
+    EVENT_NAME: 'pull_request',
+    RUN_AIM_SECONDS: '300',
+    RUN_LIMIT_SECONDS: '420',
+    APPROVAL_JOB_NAME: 'Approve CI run',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-e', '-c', runBudgetScript], {env, cwd: temporaryDirectory});
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout || '', stderr: err.stderr || ''};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('run budget: over the limit exits 1 with ::error::', async () => {
+  // 500s ago — over the 420s limit.
+  const result = await runBudgetBehaviorTest(makeJobsJson(500), false);
+  assert.equal(result.code, 1, 'over the limit must exit 1');
+  assert.match(result.stdout, /::error::/, 'over the limit must emit ::error::');
+});
+
+test('run budget: between aim and limit exits 0 with ::warning::', async () => {
+  // 360s ago — between 300s aim and 420s limit.
+  const result = await runBudgetBehaviorTest(makeJobsJson(360), false);
+  assert.equal(result.code, 0, 'between aim and limit must exit 0');
+  assert.match(result.stdout, /::warning::/, 'between aim and limit must emit ::warning::');
+});
+
+test('run budget: under the aim exits 0 with no warning', async () => {
+  // 200s ago — under the 300s aim.
+  const result = await runBudgetBehaviorTest(makeJobsJson(200), false);
+  assert.equal(result.code, 0, 'under the aim must exit 0');
+  assert.doesNotMatch(result.stdout, /::warning::/, 'under the aim must not warn');
+  assert.doesNotMatch(result.stdout, /::error::/, 'under the aim must not error');
+});
+
+test('run budget: gh fails exits 0 with ::warning::', async () => {
+  const result = await runBudgetBehaviorTest('', true);
+  assert.equal(result.code, 0, 'gh failure must exit 0');
+  assert.match(result.stdout, /::warning::/, 'gh failure must emit ::warning::');
+});
+
+test('run budget: script crashes exits 0 with ::warning::', async () => {
+  // Point the script at a missing file by using a bad script path.
+  // We simulate this by having the fake gh succeed but providing invalid JSON.
+  const result = await runBudgetBehaviorTest('not-valid-json', false);
+  assert.equal(result.code, 0, 'script crash must exit 0');
+  // The script outputs "unreadable" verdict, which the step treats as a warning.
+  assert.match(result.stdout, /::warning::/, 'script crash must emit ::warning::');
+});
+
+// Real data: run 43710253591, attempt 2
+// Approval completed at 11:43:04Z, attempt started at 12:15:04Z, gate at 12:15:17Z.
+// Without run_started_at: 1933s from approval → fail. With run_started_at: 13s → ok.
+test('run budget: rerun with run_started_at uses attempt start, not approval (run 43710253591)', async () => {
+  // Simulate a rerun: approval was long ago, but the attempt just started.
+  // The attempt endpoint returns a recent run_started_at.
+  const approvalCompleted = new Date(Date.now() - 1933_000).toISOString();
+  const runStartedAt = new Date(Date.now() - 13_000).toISOString();
+  const jobsJson = JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
+    ]
+  });
+  const attemptJson = JSON.stringify({run_started_at: runStartedAt});
+  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  assert.equal(result.code, 0, 'rerun with run_started_at must exit 0 (ok)');
+  assert.doesNotMatch(result.stdout, /::error::/, 'rerun must not error');
+  assert.match(result.stdout, /13s elapsed/, 'elapsed must be 13s from attempt start');
+});
+
+test('run budget: first run with run_started_at earlier than approval uses approval', async () => {
+  // On a first run, run_started_at is before the approval. The effective start is the approval.
+  const approvalCompleted = new Date(Date.now() - 200_000).toISOString();
+  const runStartedAt = new Date(Date.now() - 300_000).toISOString();
+  const jobsJson = JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
+    ]
+  });
+  const attemptJson = JSON.stringify({run_started_at: runStartedAt});
+  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  assert.equal(result.code, 0, 'first run must exit 0');
+  assert.match(result.stdout, /200s elapsed/, 'elapsed must be 200s from approval, not run_started_at');
+});
+
 
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
@@ -877,6 +1043,64 @@ test('ci-* test-run twins always reference test-run', () => {
       assert.equal(environment, 'test-run', `${file} ${name} must reference test-run`);
     }
   }
+});
+
+// sparse-checkout must list one pattern per line; a space-separated list is one pattern that matches nothing.
+// act cannot catch this because it copies the worktree instead of performing a sparse checkout.
+function checkSparseCheckoutSteps(steps, relativePath, entryName) {
+  for (const step of steps ?? []) {
+    if (step.with?.['sparse-checkout'] !== undefined) {
+      const value = step.with['sparse-checkout'];
+      assert.equal(
+        typeof value,
+        'string',
+        `${relativePath} ${entryName}: sparse-checkout must be a string`
+      );
+      const patterns = value.split('\n').map(pattern => pattern.trim()).filter(pattern => pattern.length > 0);
+      for (const pattern of patterns) {
+        assert.doesNotMatch(
+          pattern,
+          /\s/,
+          `${relativePath} ${entryName}: sparse-checkout pattern must not contain spaces: "${pattern}"`
+        );
+      }
+    }
+  }
+}
+
+test('sparse-checkout inputs split into newline-separated patterns with no spaces', () => {
+  const actionsDirectory = path.join(repoRoot, '.github/actions');
+  const actionFiles = fs.readdirSync(actionsDirectory)
+    .map(actionDirectory => path.join('.github/actions', actionDirectory, 'action.yml'));
+  const allYamlPaths = [...newWorkflowFiles.map(file => path.join(workflowDir, file)), ...actionFiles.map(file => path.join(repoRoot, file))];
+  for (const yamlPath of allYamlPaths) {
+    const raw = fs.readFileSync(yamlPath, 'utf8');
+    const parsed = parseYaml(raw);
+    const relativePath = path.relative(repoRoot, yamlPath);
+    // Workflows have jobs; composite actions have runs.steps — check both.
+    const jobs = parsed.jobs ?? {};
+    for (const [name, job] of Object.entries(jobs)) {
+      checkSparseCheckoutSteps(job.steps, relativePath, name);
+    }
+    const actionRuns = parsed.runs;
+    if (actionRuns?.steps) {
+      checkSparseCheckoutSteps(actionRuns.steps, relativePath, 'runs');
+    }
+  }
+});
+
+test('ci-pr-checks gate sparse-checkout includes both required files', () => {
+  const {gate} = load('ci-pr-checks.yml').jobs;
+  const checkoutStep = gate.steps.find(
+    step => step.uses?.startsWith('actions/checkout') && step.with?.['sparse-checkout']
+  );
+  assert.ok(checkoutStep, 'gate must have a checkout with sparse-checkout');
+  const patterns = checkoutStep.with['sparse-checkout']
+    .split('\n')
+    .map(pattern => pattern.trim())
+    .filter(pattern => pattern.length > 0);
+  assert.ok(patterns.includes('.node-version'), 'gate sparse-checkout must include .node-version');
+  assert.ok(patterns.includes('platform/tools/run-budget.mjs'), 'gate sparse-checkout must include platform/tools/run-budget.mjs');
 });
 
 test('cd-dev-pages extracts /site/ contents, not /usr/share/nginx/html', () => {

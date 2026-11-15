@@ -115,8 +115,8 @@ see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 | Area        | Specs in apps/web/tests/e2e                     | Covers                                                  | Code it depends on most                                                       |
 | ----------- | ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | shell       | shell.spec.mjs, updates.spec.mjs                | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
-| journeys    | journeys.spec.mjs, in two jobs                  | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
-| interface   | interface.spec.mjs, in three jobs               | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
+| journeys    | journeys.spec.mjs, in three jobs                | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
+| interface   | interface.spec.mjs, in eight jobs               | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
 | discover    | discover.spec.mjs                               | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
 | poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs | POI levels, chooser                                     | data/sources/places*, contracts                                               |
 | poi-mobile  | poi-visibility.spec.mjs, pages-mobile project   | POI levels, chooser                                     | data/sources/places*, contracts                                               |
@@ -126,14 +126,14 @@ every area, because every browser test boots them.
 
 The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner:
 
-| Area            | Specs in apps/editor/tests/e2e             | Code only it depends on                                                 |
-| --------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
-| editing-desktop | editing.spec.mjs, root-desktop, three jobs | drag-gestures.js, geometry-editing.js, handle-layer.js, edit-preview.js |
-| editing-mobile  | editing.spec.mjs, pages-mobile             | The same                                                                |
-| offline-desktop | offline.spec.mjs, root-desktop             | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
-| offline-mobile  | offline.spec.mjs, pages-mobile             | The same                                                                |
-| selection       | selection.spec.mjs, both projects          | object-list.js                                                          |
-| viewer          | viewer.spec.mjs                            | None                                                                    |
+| Area            | Specs in apps/editor/tests/e2e            | Code only it depends on                                                 |
+| --------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
+| editing-desktop | editing.spec.mjs, root-desktop, five jobs | drag-gestures.js, geometry-editing.js, handle-layer.js, edit-preview.js |
+| editing-mobile  | editing.spec.mjs, pages-mobile, two jobs  | The same                                                                |
+| offline-desktop | offline.spec.mjs, root-desktop, two jobs  | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
+| offline-mobile  | offline.spec.mjs, pages-mobile            | The same                                                                |
+| selection       | selection.spec.mjs, both projects         | object-list.js                                                          |
+| viewer          | viewer.spec.mjs, three jobs               | None                                                                    |
 
 Every other editor source runs every editor area, because each test boots, selects, or edits and exports through it. So
 do public/, build tools, anything unmapped, and a change from outside the editor that selects it, such as its source

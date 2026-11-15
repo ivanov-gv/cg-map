@@ -2,8 +2,8 @@
 
 **No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
 passed under `act`. After a fix, rerun the workflow you changed and what `make ci-plan` selects. A run on GitHub does
-not replace this. If a local run cannot pass, fix the local setup. Do not report it as a limit and merge anyway. Any
-other PR needs its owning project's checks, and browser tests where it changes a browser project.
+not replace a local run, except when the local setup fails — see the [Order](#order) section for the fallback. Any other
+PR needs its owning project's checks, and browser tests where it changes a browser project.
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
@@ -15,16 +15,30 @@ on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-p
 Test workflows in this order, stopping at the first failure:
 
 1. **Lint:** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
-2. **Local run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
-3. **GitHub test run:** dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
-   variables, and secrets. A workflow not yet on `main` cannot be dispatched; see the [On GitHub](#on-github) section
-   for the exemption.
+2. **Local dry run:** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without executing steps.
+3. **Local test run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
+4. **GitHub test run:** `gh workflow run <file> --ref <branch> -f test_run=true` dispatches the workflow on GitHub
+   before merge, verifying environment settings, variables, and secrets.
+
+If the local setup fails — OOM, no Docker — step 3 may be replaced by the GitHub run, which usually takes much longer. A
+workflow can be dispatched on a branch once GitHub has registered it, that is, once it has run at least once (for
+example from a pull request). Dispatch it by numeric id when the file name returns 404. A schedule- or dispatch-only
+workflow that has never run (such as a new ci-nightly) cannot be dispatched until it lands on main. Dispatch the
+workflows it calls, with the same inputs, instead.
 
 ## Time limits
 
 A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 or less, and `platform/tests/workflows`
 checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
 `ci-apps-editor` splits its browser tests; do not raise the limit.
+
+The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
+`CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
+`GET repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT`) for `run_started_at`, then fetches the jobs JSON. The
+effective start is the later of the approval job's completion and the attempt's `run_started_at` — this correctly
+handles reruns, where the attempt starts after the original approval. If `run_started_at` is unreadable, it falls back
+to the approval time; if neither is available, it uses the earliest job start. Non-PR events (schedule, manual dispatch)
+are exempt. Unreadable timings only warn — they do not fail the gate.
 
 ## Test-run mode
 
@@ -57,8 +71,9 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
-use `environment: test-run`. The exception is the approval gate (`ci-approval`, which waits for manual approval). The
-Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it is a CD workflow, not CI.
+use `environment: test-run`. The exception is the approval gate (`ci-approval`, which passes automatically until the
+owner adds required reviewers). The Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it
+is a CD workflow, not CI.
 
 ## Locally with act
 
@@ -138,20 +153,22 @@ publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publis
 `workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the failed check. CI cannot see local runs,
 so record yours in the PR template.
 
-`ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
-them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
-check exempts workflows not yet on `main` automatically.
+`ci-pr-checks.yml`, `ci-nightly.yml`, `ci-publish.yml` and `cd-dev-pages.yml` cannot be dispatched until they land on
+main; until then, test them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and
+`make test-cd-dev-pages COMMIT=<full SHA>`. The test-run-evidence check exempts workflows not yet on `main`
+automatically.
 
 ## Through a real PR
 
-`ci-pr-checks` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from
-the diff. A push to main triggers `ci-publish` independently — it builds and pushes images, packages, and the dev site
-image (it runs no checks because the PR run already tested the content). `ci-publish` has its own test-run switch and
-planner (shared with `ci-pr-checks` through a composite action at `.github/actions/plan`). The `pages` job in
-`ci-publish` builds the dev site from source and pushes `$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes
-successfully on `main`, `cd-dev-pages` is triggered via `workflow_run` — it pulls the image by commit SHA, extracts the
-site, and deploys it to GitHub Pages. The nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with
-`run_all: true`. To see what a branch would select:
+`ci-pr-checks` starts on every PR. The `ci-approval` environment gate passes automatically until the owner adds required
+reviewers; adding a reviewer later needs no workflow change. Then the run selects pipelines from the diff. A push to
+main triggers `ci-publish` independently — it builds and pushes images, packages, and the dev site image (it runs no
+checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
+`ci-pr-checks` through a composite action at `.github/actions/plan`). The `pages` job in `ci-publish` builds the dev
+site from source and pushes `$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes successfully on `main`,
+`cd-dev-pages` is triggered via `workflow_run` — it pulls the image by commit SHA, extracts the site, and deploys it to
+GitHub Pages. The nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`. To see
+what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main

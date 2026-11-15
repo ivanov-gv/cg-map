@@ -47,8 +47,9 @@ To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:mai
 
 ## Pull requests
 
-A PR run waits on the `ci-approval` environment before anything runs, using no minutes while it waits. A new push
-replaces the waiting run. Approve it in the run's page on GitHub, or:
+A PR run starts with the `ci-approval` environment gate, which passes automatically until the owner adds required
+reviewers; adding a reviewer later needs no workflow change. While the gate waits, it uses no minutes, and a new push
+replaces the waiting run. To approve a run that requires approval, use the run's page on GitHub, or:
 
 ```sh
 gh api repos/ivanov-gv/cg-map/actions/runs/<run ID>/pending_deployments \

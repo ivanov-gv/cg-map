@@ -62,9 +62,6 @@ case "$cmd" in
       *contents*ci-pr-checks*)
         serve_contents "ci-pr-checks.yml" "$jq_argument"
         ;;
-      *contents*ci-dev-pages*)
-        serve_contents "ci-dev-pages.yml" "$jq_argument"
-        ;;
       *contents*cd-*)
         serve_contents "cd.yml" "$jq_argument"
         ;;

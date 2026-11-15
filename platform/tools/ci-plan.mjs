@@ -30,8 +30,8 @@ export const BROWSER_AREAS = {
   },
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',
-    // One job took 313 seconds against the 300-second aim.
-    jobs: 2,
+    // 3 shards: journeys-1 took 191 s, journeys-2 took 148 s with 2 shards; 3 keep each under ~120 s.
+    jobs: 3,
     specFiles: ['journeys.spec.mjs'],
     sources: [
       'routing.js',
@@ -46,8 +46,8 @@ export const BROWSER_AREAS = {
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
-    // Shares took 92, 83, 87 seconds (E2E_WORKERS=2) against the 300-second aim.
-    jobs: 3,
+    // 8 shards: interface-1..3 averaged 271, 249, 202 s (max 349 s) with 3 shards; 8 keep each under ~180 s (measured 177 s max).
+    jobs: 8,
     specFiles: ['interface.spec.mjs'],
     sources: ['interface.js']
   },
@@ -95,18 +95,22 @@ const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'upd
 export const EDITOR_BROWSER_AREAS = {
   'editing-desktop': {
     specs: 'tests/e2e/editing.spec.mjs --project=root-desktop',
-    // Sized from measured test time, so that each share stays inside the job time limit.
-    jobs: 3,
+    // 5 shards: editing-desktop-1..3 averaged 193, 189, 270 s with 3 shards; 5 keep each under ~170 s (measured 166 s max).
+    jobs: 5,
     specFiles: ['editing.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },
   'editing-mobile': {
     specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
+    // 2 shards: editing-mobile took 327 s with every phone test (nightly); 2 split to 31+31 tests keeps each under ~165 s.
+    jobs: 2,
     specFiles: ['editing.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },
   'offline-desktop': {
     specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
+    // 2 shards: offline-desktop took 209 s with 1 shard; 2 split to 8+7 tests keeps each under ~150 s.
+    jobs: 2,
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
@@ -122,6 +126,8 @@ export const EDITOR_BROWSER_AREAS = {
   },
   viewer: {
     specs: 'tests/e2e/viewer.spec.mjs',
+    // 3 shards: viewer took 220 s with 1 shard; 3 split to 7+7+6 tests keeps each under ~90 s.
+    jobs: 3,
     specFiles: ['viewer.spec.mjs'],
     sources: []
   }
