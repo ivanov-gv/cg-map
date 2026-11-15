@@ -135,9 +135,10 @@ publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publis
 same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs
 pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
-`ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
-them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
-check exempts workflows not yet on `main` automatically.
+`ci-pr-checks.yml`, `ci-nightly.yml`, `ci-publish.yml` and `cd-dev-pages.yml` cannot be dispatched until they land on
+main; until then, test them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and
+`make test-cd-dev-pages COMMIT=<full SHA>`. The test-run-evidence check exempts workflows not yet on `main`
+automatically.
 
 ## Through a real PR
 

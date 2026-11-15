@@ -46,7 +46,7 @@ export const BROWSER_AREAS = {
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
-    // 8 shards: with 3, interface-1..3 took 233/223/202 s on GitHub; 8 keep each under ~180 s (measured 177 s max).
+    // 8 shards: interface-1..3 averaged 271, 249, 202 s (max 349 s) with 3 shards; 8 keep each under ~180 s (measured 177 s max).
     jobs: 8,
     specFiles: ['interface.spec.mjs'],
     sources: ['interface.js']

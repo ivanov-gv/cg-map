@@ -59,10 +59,10 @@ function parseTimestamp(isoString) {
 }
 
 function computeElapsedSeconds(startIso, endIso) {
-  const startMs = parseTimestamp(startIso);
-  const endMs = parseTimestamp(endIso);
-  if (startMs === null || endMs === null) return null;
-  return (endMs - startMs) / 1000;
+  const startMilliseconds = parseTimestamp(startIso);
+  const endMilliseconds = parseTimestamp(endIso);
+  if (startMilliseconds === null || endMilliseconds === null) return null;
+  return (endMilliseconds - startMilliseconds) / 1000;
 }
 
 // Non-PR events (schedule, workflow_dispatch, workflow_call) are exempt from the budget:
