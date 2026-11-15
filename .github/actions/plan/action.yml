@@ -64,6 +64,8 @@ outputs:
 runs:
   using: composite
   steps:
+    # The job already checked out the working tree. This second checkout fetches full history (fetch-depth: 0)
+    # so the planner can diff against the base ref.
     - uses: actions/checkout@v7
       with:
         persist-credentials: false

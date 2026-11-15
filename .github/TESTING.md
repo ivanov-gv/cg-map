@@ -29,10 +29,11 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
-jobs, `select` and `dev-pages` (which pass the test_run flag through to a called workflow), `Check job times`, and the
-check for test runs below. The twins use the `test-run` environment, whose variables send everything to a test
-destination. Local runs always use it, and manual runs default to it. `CI gate` and `approval` have no twin, and neither
-does the Pages deploy, because Pages can only publish to this repository: a test run stops at the assembled site.
+jobs, `select` and `dev-pages` (which pass the test_run flag through to a called workflow), `run` in ci-nightly (which
+only calls ci-pr-checks), `Check job times`, and the check for test runs below. The twins use the `test-run`
+environment, whose variables send everything to a test destination. Local runs always use it, and manual runs default to
+it. `CI gate` and `approval` have no twin, and neither does the Pages deploy, because Pages can only publish to this
+repository: a test run stops at the assembled site.
 
 The `dev` and `test-run` environments define these variables:
 
@@ -62,7 +63,7 @@ rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 
 ```sh
 make test-ci-docs                       # one workflow
-make test-ci-pr-checks                  # everything CI runs
+make test-ci-pr-checks                  # every PR check
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
 make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
 make test-all-workflows ACT="gh act -n" # dry run of every target
@@ -112,9 +113,9 @@ a `cd-browser-image` one when that workflow or its actions changed, and a `ci-pu
 exempt. The same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After
 those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
-After merging `ci-pr-checks.yml` or `ci-nightly.yml`, they cannot be dispatched until the merge lands on `main`. Test
-them locally first with `make test-ci-pr-checks` and `make test-ci-nightly`; the test-run-evidence check exempts
-workflows not yet on `main` automatically.
+After merging `ci-pr-checks.yml`, `ci-nightly.yml`, or `ci-publish.yml`, they cannot be dispatched until they land on
+`main`. Test them locally first with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`; the
+test-run-evidence check exempts workflows not yet on `main` automatically.
 
 ## Through a real PR
 
