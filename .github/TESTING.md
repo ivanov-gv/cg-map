@@ -2,8 +2,8 @@
 
 **No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
 passed under `act`. After a fix, rerun the workflow you changed and what `make ci-plan` selects. A run on GitHub does
-not replace this. If a local run cannot pass, fix the local setup. Do not report it as a limit and merge anyway. Any
-other PR needs its owning project's checks, and browser tests where it changes a browser project.
+not replace a local run, except when the local setup fails — see the [Order](#order) section for the fallback. Any other
+PR needs its owning project's checks, and browser tests where it changes a browser project.
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
@@ -15,10 +15,16 @@ on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-p
 Test workflows in this order, stopping at the first failure:
 
 1. **Lint:** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
-2. **Local run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
-3. **GitHub test run:** dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
-   variables, and secrets. A workflow not yet on `main` cannot be dispatched; see the [On GitHub](#on-github) section
-   for the exemption.
+2. **Local dry run:** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without executing steps.
+3. **Local test run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
+4. **GitHub test run:** `gh workflow run <file> --ref <branch> -f test_run=true` dispatches the workflow on GitHub
+   before merge, verifying environment settings, variables, and secrets.
+
+If the local setup fails — OOM, no Docker — step 3 may be replaced by the GitHub run, which usually takes much longer. A
+workflow can be dispatched on a branch once GitHub has registered it, that is, once it has run at least once (for
+example from a pull request). Dispatch it by numeric id when the file name returns 404. A schedule- or dispatch-only
+workflow that has never run (such as a new ci-nightly) cannot be dispatched until it lands on main. Dispatch the
+workflows it calls, with the same inputs, instead.
 
 ## Time limits
 
