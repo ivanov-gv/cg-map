@@ -40,10 +40,10 @@ gh workflow run cd-dev-pages.yml --ref main -f test_run=false -f commit=<full SH
 ```
 
 The commit must be on main and have a `<PAGES_ARTIFACT_PREFIX>-<commit>` artifact (default `dev-pages-<commit>`) that
-has not expired (retention is `PAGES_ARTIFACT_RETENTION_DAYS`, default 90 days — the rollback window and GitHub's
-maximum for this repository). A dispatched deploy always uses the chosen commit, even when it is no longer main's newest
-commit. On a push to main, only the newest commit deploys — an older push will not overwrite a newer site. Find a
-qualifying commit with
+has not expired (retention is `PAGES_ARTIFACT_RETENTION_DAYS`, default 3 days — the rollback window). A dispatched
+deploy redeploys a version within that window. After the artifact expires, rebuild it first with ci-dev-pages' `commit`
+input, then dispatch cd-dev-pages. On a push to main, only the newest commit deploys — an older push will not overwrite
+a newer site. Find a qualifying commit with
 `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.

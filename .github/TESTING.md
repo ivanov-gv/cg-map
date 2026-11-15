@@ -47,7 +47,7 @@ The `dev` and `test-run` environments define these variables:
 | `WEB_ARTIFACT_RETENTION_DAYS`   | `30`                       | `1`                       |
 | `PACKAGE_PUBLISH_FLAGS`         | unset                      | `--dry-run`               |
 | `PAGES_ARTIFACT_PREFIX`         | `dev-pages`                | `dev-pages-test-run`      |
-| `PAGES_ARTIFACT_RETENTION_DAYS` | `90`                       | `1`                       |
+| `PAGES_ARTIFACT_RETENTION_DAYS` | `3`                        | `1`                       |
 
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
