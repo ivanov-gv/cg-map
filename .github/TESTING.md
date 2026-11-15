@@ -120,10 +120,11 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 `ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
 a `cd-browser-image` one when that workflow or its actions changed, a `ci-publish` test run when `ci-publish.yml` or the
 publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publish-browser-image`, `setup-web`,
-`run-check`) changed, a `ci-dev-pages` test run when `ci-dev-pages.yml` changed, and a `cd-dev-pages` test run when
-`cd-dev-pages.yml` or `find-pages-artifact` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt.
-The same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those
-runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
+`run-check`) changed, a `ci-dev-pages` test run when `ci-dev-pages.yml` or the actions it uses (`setup-web`,
+`install-dependencies`, `test_run`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml` or
+`find-pages-artifact` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The same exemption
+applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the
+failed check. CI cannot see local runs, so record yours in the PR template.
 
 `ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
 them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
