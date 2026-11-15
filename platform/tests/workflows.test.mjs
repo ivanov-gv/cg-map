@@ -368,7 +368,7 @@ test('browser jobs and local runs pin one image, whose version matches the repos
 test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
   const {jobs} = load('ci-pr-checks.yml');
   for (const app of ['apps-web', 'apps-editor']) {
-    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests }}');
+    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
     const {browser} = load(`ci-${app}.yml`).jobs;
     assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
     const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');

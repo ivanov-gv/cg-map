@@ -193,7 +193,8 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
-      phone_tests: ${{ inputs.phone_tests }}
+      # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
+      phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-editor:
     name: apps-editor
     needs: [switch, plan, plan-test-run]
@@ -202,7 +203,8 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
-      phone_tests: ${{ inputs.phone_tests }}
+      # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
+      phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-core-demo:
     name: apps-core-demo
     needs: [switch, plan, plan-test-run]
