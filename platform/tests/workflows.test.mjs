@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import os from 'node:os';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
 import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
 import {repoRoot} from '../agents/lib.mjs';
+
+const execFileAsync = promisify(execFile);
 
 const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
@@ -273,187 +278,237 @@ test('a pull request runs nothing until it is approved', () => {
 
 // dev-pages must not deploy when any publish job fails. Each pair (X, X-test-run) must both
 // succeed or be skipped; one failing blocks deployment. The select job must also succeed.
-test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
-  const {jobs} = load('ci-publish.yml');
-  const devPages = jobs['dev-pages'];
-  const condition = String(devPages.if);
+const PUBLISH_PAIRS = [
+  ['image', 'image-test-run'],
+  ['package', 'package-test-run'],
+  ['browser-image', 'browser-image-test-run'],
+];
 
-  // Must depend on select
-  assert.ok(
-    [devPages.needs].flat().includes('select'),
-    'dev-pages must need select'
-  );
-  assert.match(
-    condition,
-    /needs\.select\.result == 'success'/,
-    'dev-pages must require select to succeed'
-  );
-
-  // Must keep !cancelled()
-  assert.match(condition, /!cancelled\(\)/, 'dev-pages must check !cancelled()');
-
-  // For each publish pair, both twins must be required with AND (not OR between pairs).
-  // The pattern is: (needs.X.result == 'success' || needs.X.result == 'skipped')
-  //   && (needs.X-test-run.result == 'success' || needs.X-test-run.result == 'skipped')
-  const pairs = [
-    ['image', 'image-test-run'],
-    ['package', 'package-test-run'],
-    ['browser-image', 'browser-image-test-run'],
-  ];
-
-  for (const [prod, testRun] of pairs) {
-    const prodSuccess = `needs.${prod}.result == 'success'`;
-    const prodSkipped = `needs.${prod}.result == 'skipped'`;
-    const testRunSuccess = `needs.${testRun}.result == 'success'`;
-    const testRunSkipped = `needs.${testRun}.result == 'skipped'`;
-
-    // Each job in the pair must appear in needs
-    assert.ok(
-      [devPages.needs].flat().includes(prod),
-      `dev-pages must need ${prod}`
-    );
-    assert.ok(
-      [devPages.needs].flat().includes(testRun),
-      `dev-pages must need ${testRun}`
-    );
-
-    // The condition must require both the production job AND its test-run twin
-    // to be success or skipped. We check that the AND pattern exists for each pair.
-    const hasProdClause = condition.includes(prodSuccess) && condition.includes(prodSkipped);
-    const hasTestRunClause = condition.includes(testRunSuccess) && condition.includes(testRunSkipped);
-    assert.ok(
-      hasProdClause,
-      `dev-pages must check ${prod} result is success or skipped`
-    );
-    assert.ok(
-      hasTestRunClause,
-      `dev-pages must check ${testRun} result is success or skipped`
-    );
-
-    // The two clauses for a pair must be ANDed together, not ORed with other pairs.
-    // We verify by checking that the pair's clauses are grouped: the production clause
-    // and its test-run clause are adjacent (separated by &&), forming a unit that is
-    // ANDed with other pairs. The key is that a failure of either twin blocks dev-pages.
-    // We test this with a simple evaluator below.
+// Evaluate the dev-pages `if` condition with substituted job results and !cancelled()=true.
+function evaluateDevPagesCondition(condition, results) {
+  let expr = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
+  for (const [name, result] of Object.entries(results)) {
+    expr = expr.replace(new RegExp(`needs\\.${name}\\.result`, 'g'), `'${result}'`);
   }
+  expr = expr.replace(/!cancelled\(\)/g, 'true');
+  return new Function(`return (${expr})`)();
+}
 
-  // Evaluate the condition with a minimal expression evaluator to prove that
-  // a failure in either twin of any pair blocks dev-pages.
-  const evaluateCondition = (results) => {
-    // Strip the ${{ }} wrapper from GitHub Actions expressions
-    let expr = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
-    // Replace needs.X.result references with actual values
-    for (const [name, result] of Object.entries(results)) {
-      const regex = new RegExp(`needs\\.${name}\\.result`, 'g');
-      expr = expr.replace(regex, `'${result}'`);
-    }
-    // Replace !cancelled() with true (we're testing result gating, not cancellation)
-    expr = expr.replace(/!cancelled\(\)/g, 'true');
-    // Evaluate the expression safely
-    return new Function(`return (${expr})`)();
-  };
-
-  // Base: all jobs succeed — dev-pages should run
-  const allSuccess = {
+// Build a results map with all jobs skipped by default, select succeeded.
+function devPagesResults(overrides = {}) {
+  return {
     select: 'success',
-    image: 'success',
-    'image-test-run': 'skipped',
-    package: 'success',
-    'package-test-run': 'skipped',
-    'browser-image': 'success',
-    'browser-image-test-run': 'skipped',
-  };
-  assert.ok(
-    evaluateCondition(allSuccess),
-    'dev-pages should run when all pairs succeed or are skipped'
-  );
-
-  // A failed production job blocks dev-pages
-  for (const [prod, testRun] of pairs) {
-    const failedProd = {
-      select: 'success',
-      image: 'skipped',
-      'image-test-run': 'skipped',
-      package: 'skipped',
-      'package-test-run': 'skipped',
-      'browser-image': 'skipped',
-      'browser-image-test-run': 'skipped',
-      [prod]: 'failure',
-      [testRun]: 'skipped',
-    };
-    assert.ok(
-      !evaluateCondition(failedProd),
-      `dev-pages must be blocked when ${prod} fails`
-    );
-
-    const failedTestRun = {
-      select: 'success',
-      image: 'skipped',
-      'image-test-run': 'skipped',
-      package: 'skipped',
-      'package-test-run': 'skipped',
-      'browser-image': 'skipped',
-      'browser-image-test-run': 'skipped',
-      [prod]: 'skipped',
-      [testRun]: 'failure',
-    };
-    assert.ok(
-      !evaluateCondition(failedTestRun),
-      `dev-pages must be blocked when ${testRun} fails`
-    );
-  }
-
-  // A failed select blocks dev-pages
-  const failedSelect = {
-    select: 'failure',
     image: 'skipped',
     'image-test-run': 'skipped',
     package: 'skipped',
     'package-test-run': 'skipped',
     'browser-image': 'skipped',
     'browser-image-test-run': 'skipped',
+    ...overrides,
   };
+}
+
+test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
+  const {jobs} = load('ci-publish.yml');
+  const devPages = jobs['dev-pages'];
+  const condition = String(devPages.if);
+  const needs = [devPages.needs].flat();
+
+  // dev-pages must depend on select and every publish pair
+  assert.ok(needs.includes('select'), 'dev-pages must need select');
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(needs.includes(prod), `dev-pages must need ${prod}`);
+    assert.ok(needs.includes(testRun), `dev-pages must need ${testRun}`);
+  }
+
+  // All succeed — dev-pages should run
   assert.ok(
-    !evaluateCondition(failedSelect),
+    evaluateDevPagesCondition(condition, devPagesResults({image: 'success', package: 'success', 'browser-image': 'success'})),
+    'dev-pages should run when all pairs succeed or are skipped'
+  );
+
+  // A failure in either twin of any pair blocks dev-pages
+  for (const [prod, testRun] of PUBLISH_PAIRS) {
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[prod]: 'failure'})),
+      `dev-pages must be blocked when ${prod} fails`
+    );
+    assert.ok(
+      !evaluateDevPagesCondition(condition, devPagesResults({[testRun]: 'failure'})),
+      `dev-pages must be blocked when ${testRun} fails`
+    );
+  }
+
+  // A failed select blocks dev-pages
+  assert.ok(
+    !evaluateDevPagesCondition(condition, devPagesResults({select: 'failure'})),
     'dev-pages must be blocked when select fails'
   );
 });
 
 // ci-workflows test-run-evidence must require a ci-publish test run when publish-related files change.
-test('ci-workflows requires ci-publish test run when publish files change', () => {
-  const ciWorkflows = fs.readFileSync(path.join(workflowDir, 'ci-workflows.yml'), 'utf8');
+// Instead of regexes that match anywhere in the file, run the real step script with a fake `gh` stub.
+test('ci-workflows requires ci-publish test run when publish files change', async () => {
+  const ciWorkflows = load('ci-workflows.yml');
+  const step = ciWorkflows.jobs['test-run-evidence'].steps[0];
+  const script = step.run;
 
-  // The script must check for ci-publish.yml when ci-publish.yml, ci-dev-pages.yml, or publish actions change.
-  // It must use the same has_qualifying_run pattern as ci-pr-checks and cd-map-core.
-  // The grep patterns in the shell script escape dots with backslashes, so we match the literal text.
+  // The fake `gh` stub reads config from files in FAKE_GH_DIR:
+  //   pr-files       — newline-separated filenames for the PR files endpoint
+  //   contents-*.yml — "404" to simulate not-on-main, or any other content
+  //   runs-*.yml     — JSON array of {displayTitle} objects for run listings
+  const ghStub = [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    'D="${FAKE_GH_DIR:-.}"',
+    'cmd="$1"; shift',
+    'case "$cmd" in',
+    '  api)',
+    '    args=()',
+    '    while [[ $# -gt 0 ]]; do',
+    '      case "$1" in',
+    '        --paginate|--silent) shift ;;',
+    '        --jq) shift; shift ;;',
+    '        *) args+=("$1"); shift ;;',
+    '      esac',
+    '    done',
+    '    ep="${args[0]:-}"',
+    '    case "$ep" in',
+    '      *contents*ci-publish*)',
+    '        if [ -f "$D/contents-ci-publish.yml" ]; then',
+    '          content=$(cat "$D/contents-ci-publish.yml")',
+    '          if echo "$content" | grep -q "HTTP 404"; then',
+    '            echo "$content"',
+    '            exit 1',
+    '          fi',
+    '          echo "$content"',
+    '        else',
+    '          echo \'{"name":"ci-publish.yml"}\'',
+    '        fi',
+    '        ;;',
+    '      *contents*ci-pr-checks*) echo \'{"name":"ci-pr-checks.yml"}\' ;;',
+    '      *contents*cd-*) echo \'{"name":"cd.yml"}\' ;;',
+    '      *pulls/*/files*) [ -f "$D/pr-files" ] && cat "$D/pr-files" ;;',
+    '      *) echo "{}" ;;',
+    '    esac ;;',
+    '  run)',
+    '    wf=""',
+    '    jq_filter=""',
+    '    while [[ $# -gt 0 ]]; do',
+    '      case "$1" in',
+    '        --workflow) wf="$2"; shift 2 ;;',
+    '        --commit|--event|--status|--json) shift 2 ;;',
+    '        --jq) jq_filter="$2"; shift 2 ;;',
+    '        -*) shift ;;',
+    '        *) shift ;;',
+    '      esac',
+    '    done',
+    '    run_file="$D/runs-$wf"',
+    '    data=$( [ -f "$run_file" ] && cat "$run_file" || echo \'[]\' )',
+    '    if [ -n "$jq_filter" ]; then',
+    '      echo "$data" | jq "$jq_filter"',
+    '    else',
+    '      echo "$data"',
+    '    fi',
+    '    ;;',
+    'esac',
+    '',
+  ].join('\n');
+
+  async function runScript(prFiles, stubFiles) {
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
+    const stubDir = path.join(tmpDir, 'stub');
+    await fs.promises.mkdir(stubDir);
+    await fs.promises.writeFile(path.join(stubDir, 'pr-files'), prFiles.join('\n'));
+    for (const [name, content] of Object.entries(stubFiles)) {
+      await fs.promises.writeFile(path.join(stubDir, name), content);
+    }
+    const ghPath = path.join(tmpDir, 'gh');
+    await fs.promises.writeFile(ghPath, ghStub, {mode: 0o755});
+
+    const env = {
+      PATH: tmpDir + ':' + process.env.PATH,
+      GH_TOKEN: 'fake-token',
+      GH_REPO: 'owner/repo',
+      HEAD_SHA: 'abc123',
+      PR_NUMBER: '42',
+      BRANCH: 'feature-branch',
+      GITHUB_STEP_SUMMARY: path.join(tmpDir, 'summary'),
+      FAKE_GH_DIR: stubDir,
+    };
+
+    try {
+      const result = await execFileAsync('bash', ['-c', script], {env, cwd: tmpDir});
+      return {code: 0, stdout: result.stdout, stderr: result.stderr};
+    } catch (err) {
+      return {code: err.code, stdout: err.stdout, stderr: err.stderr};
+    } finally {
+      await fs.promises.rm(tmpDir, {recursive: true, force: true});
+    }
+  }
+
+  // Case 1: ci-publish.yml changed, no qualifying run → exit 1, stdout names the dispatch command
+  const case1 = await runScript(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(case1.code, 1, 'ci-publish.yml changed without qualifying run must exit 1');
   assert.match(
-    ciWorkflows,
-    /ci-publish[\\.]?yml.*test_run=true/,
-    'ci-workflows must require ci-publish test run when publish files change'
+    case1.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
   );
 
-  // The script must grep for publish-related paths to decide when ci-publish is required.
-  // The shell grep patterns escape dots, so we match the unescaped names which still appear.
-  const hasCiPublishYml = /ci-publish/.test(ciWorkflows) && /has_qualifying_run ci-publish/.test(ciWorkflows);
-  const hasCiDevPagesYml = /ci-dev-pages/.test(ciWorkflows);
-  const hasPublishActions = /publish-image/.test(ciWorkflows) && /publish-dev-package/.test(ciWorkflows) && /publish-browser-image/.test(ciWorkflows);
-  const hasSetupWeb = /setup-web/.test(ciWorkflows);
-  const hasRunCheck = /run-check/.test(ciWorkflows);
-  const hasPlan = /plan/.test(ciWorkflows);
-
-  assert.ok(hasCiPublishYml, 'ci-workflows must check ci-publish.yml with has_qualifying_run');
-  assert.ok(hasCiDevPagesYml, 'ci-workflows must check ci-dev-pages.yml path');
-  assert.ok(hasPublishActions, 'ci-workflows must check publish action paths');
-  assert.ok(hasSetupWeb, 'ci-workflows must check setup-web action path');
-  assert.ok(hasRunCheck, 'ci-workflows must check run-check action path');
-  assert.ok(hasPlan, 'ci-workflows must check plan action path');
-
-  // The error message must name the exact command to run.
-  assert.match(
-    ciWorkflows,
-    /gh workflow run ci-publish[\\.]?yml --ref.*-f test_run=true/,
-    'ci-workflows error must name the ci-publish dispatch command'
+  // Case 2: ci-publish.yml changed, with qualifying run → exit 0
+  const case2 = await runScript(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
   );
+  assert.equal(case2.code, 0, 'ci-publish.yml changed with qualifying run must exit 0');
+
+  // Case 3: setup-web action changed → ci-publish run required
+  // (setup-web is under .github/actions/ which also triggers cd-map-core check)
+  const case3 = await runScript(
+    ['.github/actions/setup-web/action.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    }
+  );
+  assert.equal(case3.code, 0, 'setup-web changed with qualifying run must exit 0');
+
+  // Case 4: only ci-apps-web.yml changed → no ci-publish run required
+  const case4 = await runScript(
+    ['.github/workflows/ci-apps-web.yml'],
+    {
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(case4.code, 0, 'ci-apps-web.yml changed does not require ci-publish run');
+
+  // Case 5: ci-publish.yml changed but not on main (404) → exempt
+  const case5 = await runScript(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'HTTP 404 NOT FOUND',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(case5.code, 0, 'ci-publish.yml not on main is exempt');
 });
 
 test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
