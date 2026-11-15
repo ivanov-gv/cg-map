@@ -62,42 +62,24 @@ jobs:
             exit 0
           fi
 
-          has_workflow_dispatch_on_main() { # <workflow file>
-            # Fetch the workflow YAML from main, decode base64 content, and check for workflow_dispatch trigger.
-            # Prints "yes" or "no" to stdout. Returns 0 on success, 1 only on a lookup failure.
-            base64=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --jq .content 2>&1) || {
-              echo "::error::Could not fetch $1 from main to check for workflow_dispatch."
-              return 1
-            }
-            content=$(echo "$base64" | base64 -d 2>/dev/null) || {
-              echo "::error::Could not decode $1 content from main."
-              return 1
-            }
-            if echo "$content" | grep -q 'workflow_dispatch:'; then
-              echo "yes"
-            else
-              echo "no"
-            fi
-            return 0
-          }
-
           has_qualifying_run() { # <workflow file> <required run-name text>
             # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
             # Only a 404 means that: any other API failure must not pass this check.
-            if ! lookup=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --silent 2>&1); then
-              if ! echo "$lookup" | grep -q 'HTTP 404'; then
-                echo "::error::Could not look up $1: $lookup"
+            # Fetch the contents endpoint once with --jq .content to get the base64 payload in one call.
+            if ! base64_content=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --jq .content 2>&1); then
+              if ! echo "$base64_content" | grep -q 'HTTP 404'; then
+                echo "::error::Could not look up $1: $base64_content" >&2
                 return 1
               fi
               echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
               return 0
             fi
-            # If the workflow on main has no workflow_dispatch trigger, it cannot be dispatched yet.
-            dispatch_result=$(has_workflow_dispatch_on_main "$1") || {
-              echo "::error::Failed to check workflow_dispatch for $1."
+            # Decode the workflow YAML and check for workflow_dispatch.
+            content=$(echo "$base64_content" | base64 -d 2>/dev/null) || {
+              echo "::error::Could not decode $1 content from main." >&2
               return 1
             }
-            if [ "$dispatch_result" = "no" ]; then
+            if ! echo "$content" | grep -q 'workflow_dispatch:'; then
               echo "::notice::$1 on main has no workflow_dispatch trigger, so it cannot be dispatched yet."
               return 0
             fi

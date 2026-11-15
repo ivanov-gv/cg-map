@@ -29,11 +29,13 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
-jobs, `select` (which passes the test_run flag through to downstream jobs), `run` in ci-nightly (which only calls
-ci-pr-checks), `Check job times`, and the check for test runs below. The twins use the `test-run` environment, whose
-variables send everything to a test destination. Local runs always use it, and manual runs default to it. `CI gate` and
-`approval` have no twin, and neither does the Pages deploy, because Pages can only publish to this repository: a test
-run stops at the assembled site.
+jobs, `select` (which only passes the planner's image matrix on), `run` in ci-nightly (which only calls ci-pr-checks),
+`Check job times`, the check for test runs below, `CI gate`, `approval`, the Pages deploy (because Pages can only
+publish to this repository: a test run stops at the assembled site), and the folder jobs in ci-pr-checks (`docs`,
+`workflows`, `platform`, `contracts`, `browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`,
+`apps-web`, `apps-editor`, `apps-core-demo`) which call each folder's workflow with `test_run` passed through. The twins
+use the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and
+manual runs default to it.
 
 The `dev` and `test-run` environments define these variables:
 
@@ -115,10 +117,9 @@ be dispatched, so it is exempt. The same exemption applies when a workflow on `m
 cannot be dispatched. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the
 PR template.
 
-After merging `ci-pr-checks.yml`, `ci-nightly.yml`, `ci-publish.yml`, or `ci-dev-pages.yml`, they cannot be dispatched
-until they land on `main`. Test them locally first with `make test-ci-pr-checks`, `make test-ci-nightly`,
-`make test-ci-publish`, and `make test-ci-dev-pages`; the test-run-evidence check exempts workflows not yet on `main`
-automatically.
+`ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
+them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
+check exempts workflows not yet on `main` automatically.
 
 ## Through a real PR
 

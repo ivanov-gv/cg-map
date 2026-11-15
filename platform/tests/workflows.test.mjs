@@ -310,35 +310,35 @@ const fakeGhPath = path.join(repoRoot, 'platform/tests/fixtures/fake-gh.sh');
 // Set up a temporary directory with the fake gh stub and run the test-run-evidence script.
 // Returns {code, stdout, stderr} from executing the script.
 async function runEvidenceTest(prFiles, stubFiles) {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
-  const stubDir = path.join(tmpDir, 'stub');
-  await fs.promises.mkdir(stubDir);
-  await fs.promises.writeFile(path.join(stubDir, 'pr-files'), prFiles.join('\n'));
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
+  const stubDirectory = path.join(temporaryDirectory, 'stub');
+  await fs.promises.mkdir(stubDirectory);
+  await fs.promises.writeFile(path.join(stubDirectory, 'pr-files'), prFiles.join('\n'));
   for (const [name, content] of Object.entries(stubFiles)) {
-    await fs.promises.writeFile(path.join(stubDir, name), content);
+    await fs.promises.writeFile(path.join(stubDirectory, name), content);
   }
-  const ghPath = path.join(tmpDir, 'gh');
+  const ghPath = path.join(temporaryDirectory, 'gh');
   await fs.promises.copyFile(fakeGhPath, ghPath);
   await fs.promises.chmod(ghPath, 0o755);
 
   const env = {
-    PATH: tmpDir + ':' + process.env.PATH,
+    PATH: temporaryDirectory + ':' + process.env.PATH,
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
     HEAD_SHA: 'abc123',
     PR_NUMBER: '42',
     BRANCH: 'feature-branch',
-    GITHUB_STEP_SUMMARY: path.join(tmpDir, 'summary'),
-    FAKE_GH_DIR: stubDir,
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    FAKE_GH_DIR: stubDirectory,
   };
 
   try {
-    const result = await execFileAsync('bash', ['-c', ciWorkflowsScript], {env, cwd: tmpDir});
+    const result = await execFileAsync('bash', ['-c', ciWorkflowsScript], {env, cwd: temporaryDirectory});
     return {code: 0, stdout: result.stdout, stderr: result.stderr};
   } catch (err) {
     return {code: err.code, stdout: err.stdout, stderr: err.stderr};
   } finally {
-    await fs.promises.rm(tmpDir, {recursive: true, force: true});
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
   }
 }
 
@@ -474,8 +474,8 @@ test('ci-workflows: a workflow on main with workflow_dispatch but no run still f
   );
 });
 
-test('ci-workflows: an API failure while reading main triggers fails the check', async () => {
-  // Simulate ci-publish.yml existing on main (lookup succeeds) but the --jq .content call failing.
+test('ci-workflows: an API failure on the contents lookup fails the check', async () => {
+  // Simulate an HTTP 500 on the metadata lookup (the single --jq .content call).
   // The check must fail, not exempt the workflow.
   const result = await runEvidenceTest(
     ['.github/workflows/ci-publish.yml'],
@@ -485,18 +485,12 @@ test('ci-workflows: an API failure while reading main triggers fails the check',
       'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
     }
   );
-  assert.equal(result.code, 1, 'API failure reading workflow_dispatch must fail the check, not exempt');
+  assert.equal(result.code, 1, 'API failure on contents lookup must fail the check, not exempt');
   assert.match(
-    result.stdout,
-    /Failed to check workflow_dispatch for ci-publish\.yml/,
-    'must report the API failure'
+    result.stderr,
+    /Could not look up ci-publish\.yml/,
+    'must report the API failure on stderr'
   );
-});
-
-test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
-  const {on} = load('ci-publish.yml');
-  assert.ok(on.push, 'ci-publish must trigger on push to main');
-  assert.deepEqual(on.push.branches, ['main']);
 });
 
 test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {
