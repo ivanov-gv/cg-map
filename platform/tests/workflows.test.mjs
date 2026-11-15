@@ -522,8 +522,23 @@ test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', 
   assert.equal(on.schedule, undefined, 'ci-pr-checks must not have a schedule trigger');
 });
 
-test('ci-nightly has a schedule trigger so main is checked', () => {
+test('ci-nightly calls ci-pr-checks with run_all and phone_tests set to all', () => {
+  const {jobs} = load('ci-nightly.yml');
+  const runJob = jobs.run;
+  assert.equal(runJob.uses, './.github/workflows/ci-pr-checks.yml', 'ci-nightly must call ci-pr-checks');
+  assert.equal(runJob.with.run_all, true, 'ci-nightly must pass run_all: true');
+  assert.equal(runJob.with.phone_tests, 'all', 'ci-nightly must pass phone_tests: all');
+});
+
+test('ci-publish triggers on push to main and workflow dispatch', () => {
+  const {on} = load('ci-publish.yml');
+  assert.deepEqual(Object.keys(on).sort(), ['push', 'workflow_dispatch'], 'ci-publish trigger set');
+  assert.deepEqual(on.push.branches, ['main'], 'ci-publish must only trigger on main');
+});
+
+test('ci-nightly triggers on schedule and workflow dispatch', () => {
   const {on} = load('ci-nightly.yml');
+  assert.deepEqual(Object.keys(on).sort(), ['schedule', 'workflow_dispatch'], 'ci-nightly trigger set');
   assert.ok(on.schedule.length > 0, 'ci-nightly must have a schedule trigger');
 });
 
