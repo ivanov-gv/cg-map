@@ -8,6 +8,7 @@ import {promisify} from 'node:util';
 import {
   getApprovalCompletedAt,
   getEarliestStartedAt,
+  laterOf,
   getEffectiveStart,
   parseTimestamp,
   computeElapsedSeconds,
@@ -51,16 +52,94 @@ test('getApprovalCompletedAt returns null when no approval job', () => {
   assert.equal(getApprovalCompletedAt(jobs, APPROVAL_NAME), null);
 });
 
-// --- getEffectiveStart ---
+// --- laterOf ---
 
-test('getEffectiveStart uses approval completed_at when present', () => {
-  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
-  assert.equal(getEffectiveStart(jobs, APPROVAL_NAME), '2024-06-01T10:05:00Z');
+test('laterOf returns the later of two timestamps', () => {
+  assert.equal(
+    laterOf('2024-06-01T10:00:00Z', '2024-06-01T10:05:00Z'),
+    '2024-06-01T10:05:00Z'
+  );
 });
 
-test('getEffectiveStart falls back to earliest job started_at when no approval job', () => {
+test('laterOf returns the first when equal', () => {
+  assert.equal(
+    laterOf('2024-06-01T10:00:00Z', '2024-06-01T10:00:00Z'),
+    '2024-06-01T10:00:00Z'
+  );
+});
+
+test('laterOf returns the non-null value when one is null', () => {
+  assert.equal(laterOf(null, '2024-06-01T10:05:00Z'), '2024-06-01T10:05:00Z');
+  assert.equal(laterOf('2024-06-01T10:05:00Z', null), '2024-06-01T10:05:00Z');
+});
+
+test('laterOf returns null when both are null', () => {
+  assert.equal(laterOf(null, null), null);
+});
+
+// --- getEffectiveStart ---
+
+test('getEffectiveStart uses approval completed_at when present (no runStartedAt)', () => {
+  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
+  assert.equal(getEffectiveStart(jobs, APPROVAL_NAME, undefined), '2024-06-01T10:05:00Z');
+});
+
+test('getEffectiveStart falls back to earliest job started_at when no approval job (no runStartedAt)', () => {
   const jobs = makeJobsWithoutApproval();
-  assert.equal(getEffectiveStart(jobs, APPROVAL_NAME), '2024-01-01T00:00:30Z');
+  assert.equal(getEffectiveStart(jobs, APPROVAL_NAME, undefined), '2024-01-01T00:00:30Z');
+});
+
+test('getEffectiveStart uses the later of approval and runStartedAt', () => {
+  // On a rerun: runStartedAt is after the original approval.
+  const jobs = makeJobsWithApproval('2024-06-01T11:43:04Z');
+  const runStartedAt = '2024-06-01T12:15:04Z';
+  assert.equal(
+    getEffectiveStart(jobs, APPROVAL_NAME, runStartedAt),
+    '2024-06-01T12:15:04Z',
+    'rerun: runStartedAt (12:15:04) is later than approval (11:43:04)'
+  );
+});
+
+test('getEffectiveStart uses approval when it is later than runStartedAt', () => {
+  // On a first run: approval is after the run started.
+  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
+  const runStartedAt = '2024-06-01T10:00:00Z';
+  assert.equal(
+    getEffectiveStart(jobs, APPROVAL_NAME, runStartedAt),
+    '2024-06-01T10:05:00Z',
+    'first run: approval (10:05:00) is later than runStartedAt (10:00:00)'
+  );
+});
+
+test('getEffectiveStart falls back to approval when runStartedAt is invalid', () => {
+  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
+  assert.equal(
+    getEffectiveStart(jobs, APPROVAL_NAME, 'not-a-date'),
+    '2024-06-01T10:05:00Z',
+    'invalid runStartedAt falls back to approval'
+  );
+});
+
+test('getEffectiveStart falls back to earliest job start when runStartedAt is invalid and no approval', () => {
+  const jobs = makeJobsWithoutApproval();
+  assert.equal(
+    getEffectiveStart(jobs, APPROVAL_NAME, 'not-a-date'),
+    '2024-01-01T00:00:30Z',
+    'invalid runStartedAt with no approval falls back to earliest job start'
+  );
+});
+
+// Real data: run 43710253591, attempt 2
+// Approval completed at 11:43:04Z, attempt started at 12:15:04Z, gate ran at 12:15:17Z.
+// Elapsed from attempt start to gate: 13 seconds — must be ok, not fail.
+test('getEffectiveStart: real data from run 43710253591 attempt 2', () => {
+  const jobs = makeJobsWithApproval('2024-06-01T11:43:04Z');
+  const runStartedAt = '2024-06-01T12:15:04Z';
+  assert.equal(
+    getEffectiveStart(jobs, APPROVAL_NAME, runStartedAt),
+    '2024-06-01T12:15:04Z',
+    'run 43710253591 attempt 2: runStartedAt is the effective start'
+  );
 });
 
 // --- getEarliestStartedAt ---
@@ -216,13 +295,54 @@ test('evaluateRunBudget: accepts JSON string input', () => {
   assert.equal(result.verdict, 'ok');
 });
 
+// Real data: run 43710253591, attempt 2
+// Approval completed at 11:43:04Z, attempt started at 12:15:04Z, gate ran at 12:15:17Z.
+// Without runStartedAt: elapsed from approval = 32 min 13 s → fail (over 420s limit).
+// With runStartedAt: elapsed from attempt start = 13 s → ok.
+test('evaluateRunBudget: run 43710253591 attempt 2 — with runStartedAt, elapsed is 13s (ok)', () => {
+  const now = '2024-06-01T12:15:17Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T11:43:04Z'));
+  const runStartedAt = '2024-06-01T12:15:04Z';
+  const result = evaluateRunBudget(apiResponse, APPROVAL_NAME, 'pull_request', AIM, LIMIT, now, runStartedAt);
+  assert.equal(result.verdict, 'ok', 'rerun with runStartedAt must be ok (13s elapsed)');
+  assert.equal(result.elapsedSeconds, 13, 'elapsed must be 13s from attempt start to gate');
+});
+
+test('evaluateRunBudget: run 43710253591 attempt 2 — without runStartedAt, elapsed is 1933s (fail)', () => {
+  const now = '2024-06-01T12:15:17Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T11:43:04Z'));
+  const result = evaluateRunBudget(apiResponse, APPROVAL_NAME, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'fail', 'without runStartedAt, elapsed from approval is 1933s → fail');
+  assert.equal(result.elapsedSeconds, 1933, 'elapsed must be 1933s from approval to gate');
+});
+
+test('evaluateRunBudget: runStartedAt is later than approval on a rerun', () => {
+  const now = '2024-06-01T12:20:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T11:43:04Z'));
+  const runStartedAt = '2024-06-01T12:15:04Z';
+  const result = evaluateRunBudget(apiResponse, APPROVAL_NAME, 'pull_request', AIM, LIMIT, now, runStartedAt);
+  assert.equal(result.verdict, 'ok', 'rerun: start is runStartedAt, not approval');
+  // 12:20:00 - 12:15:04 = 296s, under 300s aim
+  assert.equal(result.elapsedSeconds, 296);
+});
+
+test('evaluateRunBudget: runStartedAt earlier than approval on first run', () => {
+  const now = '2024-06-01T10:04:30Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T10:00:00Z'));
+  const runStartedAt = '2024-06-01T09:55:00Z';
+  const result = evaluateRunBudget(apiResponse, APPROVAL_NAME, 'pull_request', AIM, LIMIT, now, runStartedAt);
+  assert.equal(result.verdict, 'ok');
+  // Start is approval (10:00:00), not runStartedAt (09:55:00) — 270s elapsed
+  assert.equal(result.elapsedSeconds, 270);
+});
+
 // --- CLI exit codes ---
 // The script must always exit 0. A non-zero exit means only that the script itself crashed.
 // The workflow step reads the verdict and decides whether to fail the gate.
 
 async function runCli(jobs, approvalName, eventName, aim, limit) {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-cli-'));
-  const jobsFile = path.join(tmpDir, 'jobs.json');
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-cli-'));
+  const jobsFile = path.join(temporaryDirectory, 'jobs.json');
   await fs.promises.writeFile(jobsFile, JSON.stringify(makeApiResponse(jobs)));
   try {
     const result = await execFileAsync('node', [
@@ -232,7 +352,7 @@ async function runCli(jobs, approvalName, eventName, aim, limit) {
   } catch (err) {
     return {code: err.code, stdout: err.stdout, stderr: err.stderr};
   } finally {
-    await fs.promises.rm(tmpDir, {recursive: true, force: true});
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
   }
 }
 

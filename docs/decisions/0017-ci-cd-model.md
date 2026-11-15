@@ -15,8 +15,7 @@ Today's implementation deviates from this model in several ways:
 - `ci-all` deploys Pages as a CI step, blurring the CI/CD boundary described in ADR 0005.
 - The dev site is assembled from `:main` images, which are mutable tags that change on every merge (ADR 0005).
 - Almost every CI job declares `environment: dev` to read variables, creating about 15 deployments per PR run (#165).
-- The `ci-approval` environment has no required reviewers, so the gate passes automatically; the owner can add reviewers
-  later without any workflow change (#169).
+- The `ci-approval` environment has no required reviewers, so the gate never actually waits (#169).
 - PR runs take 4.5-10 minutes end to end, exceeding the 5-minute target.
 - ADR 0006 states that "a push to main runs no checks" and only publishes, which treats the deploy as a CI consequence.
 
@@ -32,24 +31,29 @@ These gaps need recording so the model is documented in one place and the featur
   deploys that exact artifact with `deploy-pages` and never rebuilds it.
 - **Pages CD test-run twin.** The CD workflow runs everything up to `deploy-pages`. Pages has no test destination, so
   that step is the documented exception to the test-run rule.
-- **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow), `ci-nightly` (the full run on
-  main), and `ci-publish` (pushes to main that build and publish images and packages). One workflow per concern.
-- **Publishing flow.** A push to main triggers ci-publish (builds and publishes images and packages) and ci-dev-pages
-  (builds the dev site from source) independently. ci-dev-pages no longer depends on ci-publish.
+- **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow) and `ci-nightly` (the full run
+  on main). One workflow per concern.
+
+  **Outcome (#166, 2026-11-15):** `ci-publish` was added as a third workflow for pushes to main that build and publish
+  images and packages. ci-dev-pages no longer depends on ci-publish.
+
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
-  limits of ADR 0006 stay. The budget is enforced in the `CI gate` job itself via `platform/tools/run-budget.mjs`: it
-  fetches the jobs JSON for the current run attempt, computes elapsed time from the approval job's completion (or run
-  start if no approval), and returns a verdict — ok, warn, fail, or unreadable. Only "fail" fails the gate; "warn" and
-  "unreadable" emit warnings. Non-PR events are exempt. The gate's environment defines `RUN_AIM_SECONDS` (300) and
-  `RUN_LIMIT_SECONDS` (420).
+  limits of ADR 0006 stay.
+
+  **Outcome (#221, 2026-11-15):** the budget is enforced in the `CI gate` job via `platform/tools/run-budget.mjs`, which
+  fetches the jobs JSON for the current run attempt and computes elapsed time from the approval job's completion (or the
+  run start if no approval). See `.github/TESTING.md` for details.
+
 - **Environments only where they are read** (#165). GitHub environments are named sets of variables and secrets; `dev`
   and `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
   production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
   environment, and every test-run twin uses `test-run`. GitHub records a deployment for each job that references an
   environment, so these records are expected and are not deploys.
-- **Approval gate** (#169). The `ci-approval` environment gate passes automatically until the owner adds required
-  reviewers; adding a reviewer later needs no workflow change. The decision records the plain string form
-  (`environment: dev`), because act rejects `deployment: false`.
+- **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
+  entirely. The decision records the plain string form (`environment: dev`), because act rejects `deployment: false`.
+
+  **Outcome (#169, 2026-11-15):** the gate passes automatically until the owner adds required reviewers; adding a
+  reviewer later needs no workflow change.
 
 These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 [ADR 0005](0005-packages-releases-and-dev-pages.md), and the "push to main updates dev" part of
