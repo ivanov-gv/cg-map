@@ -47,7 +47,6 @@ jobs:
     steps: &build-steps
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-web
       - name: Build each app
