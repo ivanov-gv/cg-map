@@ -951,10 +951,138 @@ test('ci-publish pages job uses publish-image action with skip_main_tag', () => 
   assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile');
 });
 
+// Read the publish-image action definition to know which inputs are required.
+const publishImageAction = parseYaml(
+  fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8')
+);
+const publishImageRequiredInputs = Object.entries(publishImageAction.inputs ?? {})
+  .filter(([, input]) => input.required)
+  .map(([name]) => name);
+
+test('every publish-image caller passes all required inputs', () => {
+  // Find all steps across all workflows that use the publish-image action.
+  for (const file of newWorkflowFiles) {
+    const {jobs} = load(file);
+    for (const [jobName, job] of Object.entries(jobs)) {
+      for (const step of job.steps ?? []) {
+        if (!step.uses?.includes('publish-image')) continue;
+        for (const requiredInput of publishImageRequiredInputs) {
+          assert.ok(
+            step.with?.[requiredInput] !== undefined,
+            `${file} ${jobName} publish-image step must pass required input ${requiredInput}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test('ci-publish pages job passes dev-pages name and commit from env', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must pass the dev-pages image name');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit from env, not github.sha');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.token, '${{ github.token }}', 'must pass token');
+});
+
 test('ci-publish image job uses publish-image action without skip_main_tag', () => {
   const {jobs} = load('ci-publish.yml');
   const publishStep = jobs.image.steps.find(s => s.uses?.includes('publish-image'));
   assert.ok(publishStep, 'image must use publish-image action');
   assert.equal(publishStep.with.name, '${{ env.APP }}');
   assert.equal(publishStep.with.skip_main_tag, undefined, 'app images should not skip main tag');
+});
+
+// Run the publish-image action script with a stub docker to verify tag construction.
+// The stub records docker build/push arguments for inspection.
+const publishImageScript = publishImageAction.runs.steps[0].run;
+
+async function runPublishImageAction(envVars) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'publish-image-test-'));
+  const logFile = path.join(temporaryDirectory, 'docker-calls.log');
+
+  // Create a stub docker that records its arguments.
+  const stubDocker = `#!/bin/bash
+echo "$@" >> '${logFile}'
+`;
+  await fs.promises.writeFile(path.join(temporaryDirectory, 'docker'), stubDocker);
+  await fs.promises.chmod(path.join(temporaryDirectory, 'docker'), 0o755);
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    HOME: temporaryDirectory,
+    GITHUB_ACTOR: 'test-actor',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    ...envVars,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', publishImageScript], {env, cwd: temporaryDirectory});
+    const calls = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean);
+    return {code: 0, stdout: result.stdout, stderr: result.stderr, calls};
+  } catch (err) {
+    const calls = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean) : [];
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr, calls};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('publish-image action tags dev-pages with the commit SHA, not github.sha', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  // Find the docker build call and verify the tag.
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'build tag must be repository/dev-pages:COMMIT_SHA'
+  );
+  // Should not have a :main tag when skip_main_tag is true.
+  assert.doesNotMatch(buildCall, /:main/, 'should not tag as main when skip_main_tag is true');
+
+  // Verify the push call uses the same tag.
+  const pushCall = result.calls.find(c => c.startsWith('push'));
+  assert.ok(pushCall, 'should have a docker push call');
+  assert.match(
+    pushCall,
+    /ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'push must use the commit-tagged image'
+  );
+});
+
+test('publish-image action tags app images with both commit SHA and main', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'web',
+    IMAGE_REPOSITORY: 'ghcr.io/ivanov-gv/cg-map',
+    DOCKERFILE: '',
+    COMMIT_SHA: 'abc123def456',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'false',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:abc123def456/,
+    'build must include commit tag'
+  );
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:main/,
+    'build must include main tag for app images'
+  );
 });
