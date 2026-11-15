@@ -2,7 +2,8 @@
 # Fake `gh` CLI for ci-workflows test-run-evidence tests.
 # Reads configuration from files in FAKE_GH_DIR:
 #   pr-files          — newline-separated filenames for the PR files endpoint
-#   contents-*.yml    — "404" to simulate not-on-main, or raw YAML that gets base64-encoded when --jq .content is used
+#   contents-*.yml    — "404" to simulate not-on-main, "error" to simulate API failure on --jq .content,
+#                       or raw YAML that gets base64-encoded when --jq .content is used
 #   runs-*.yml        — JSON array of {displayTitle} objects for run listings
 set -euo pipefail
 D="${FAKE_GH_DIR:-.}"
@@ -28,7 +29,12 @@ case "$cmd" in
             exit 1
           fi
           # When --jq .content is used, return base64-encoded YAML; otherwise return the JSON metadata.
+          # A stub value of "error" simulates an API failure only for the --jq .content call.
           if [ "$jq_arg" = ".content" ]; then
+            if [ "$content" = "error" ]; then
+              echo "API error"
+              exit 1
+            fi
             echo "$content" | base64 -w 0
           else
             echo '{"name":"ci-publish.yml"}'
@@ -50,6 +56,10 @@ case "$cmd" in
             exit 1
           fi
           if [ "$jq_arg" = ".content" ]; then
+            if [ "$content" = "error" ]; then
+              echo "API error"
+              exit 1
+            fi
             echo "$content" | base64 -w 0
           else
             echo '{"name":"ci-pr-checks.yml"}'
@@ -71,6 +81,10 @@ case "$cmd" in
             exit 1
           fi
           if [ "$jq_arg" = ".content" ]; then
+            if [ "$content" = "error" ]; then
+              echo "API error"
+              exit 1
+            fi
             echo "$content" | base64 -w 0
           else
             echo '{"name":"cd.yml"}'

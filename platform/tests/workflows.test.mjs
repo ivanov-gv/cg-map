@@ -491,6 +491,25 @@ test('ci-workflows: a workflow on main with workflow_dispatch but no run still f
   );
 });
 
+test('ci-workflows: an API failure while reading main triggers fails the check', async () => {
+  // Simulate ci-publish.yml existing on main (lookup succeeds) but the --jq .content call failing.
+  // The check must fail, not exempt the workflow.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'error',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'API failure reading workflow_dispatch must fail the check, not exempt');
+  assert.match(
+    result.stdout,
+    /Failed to check workflow_dispatch for ci-publish\.yml/,
+    'must report the API failure'
+  );
+});
+
 test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
   const {on} = load('ci-publish.yml');
   assert.ok(on.push, 'ci-publish must trigger on push to main');
