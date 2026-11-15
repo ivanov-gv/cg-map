@@ -76,12 +76,11 @@ matrix jobs run in parallel and would share a port on the host network, so targe
 needs `.github/act/secret.env`, which Git ignores, because installing dependencies reads GitHub Packages: see
 `secret.env.example` beside it.
 
-Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
-repository inside the container, and `ci-docs` and `ci-platform` fail. Set the clone's `origin` to the GitHub URL,
-because `act` takes the repository name from it. Run workflows one at a time on a machine short of disk or CPU:
-`ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with `context deadline exceeded` while `act`
-removes containers, the run stopped before its browser jobs and gate, so it does not count: check `docker ps`, then run
-it again with a lower `ACT_JOBS`.
+act targets mount the git common directory so they work from worktrees as well as the main clone. Set the clone's
+`origin` to the GitHub URL, because `act` takes the repository name from it. Run workflows one at a time on a machine
+short of disk or CPU: `ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with
+`context deadline exceeded` while `act` removes containers, the run stopped before its browser jobs and gate, so it does
+not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
 ## On GitHub
 

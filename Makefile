@@ -71,11 +71,18 @@ ACT ?= gh act
 ACT_IMAGE := ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
 # Browser jobs render on the GPU where there is one. Too many at once time out tests: four did, with or without a GPU.
 # A job's own container takes its options from the workflow, not from act's flag, so both are needed.
-ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--container-options "--device /dev/dri" --var BROWSER_CONTAINER_OPTIONS="--device /dev/dri" --env E2E_ANGLE=gl-egl)
+ACT_GPU_OPTIONS := $(if $(wildcard /dev/dri/renderD128),--device /dev/dri)
+ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--var BROWSER_CONTAINER_OPTIONS="--device /dev/dri" --env E2E_ANGLE=gl-egl)
+# In a worktree, .git is a file pointing to the main checkout's .git/worktrees/<name>.
+# act copies the working tree but not the main checkout's .git, so git commands fail inside containers.
+# Mounting the git common directory (the main .git) at the same absolute path fixes it.
+# In the main checkout the common dir is ./.git, so the mount is harmless there too.
+GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir))
+ACT_CONTAINER_OPTIONS := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR) $(ACT_GPU_OPTIONS)
 ACT_JOBS ?= 2
 # The limit applies to each called workflow, and ci-all calls many at once.
 test-ci-all: ACT_JOBS = 1
-ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
+ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --container-options "$(ACT_CONTAINER_OPTIONS)" $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
 test-all-workflows: test-cd-map-core test-cd-browser-image test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
