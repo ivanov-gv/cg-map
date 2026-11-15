@@ -58,7 +58,11 @@ authoritative for this layout.
 
 [ci-all](../../.github/workflows/ci-all.yml) calls one workflow per project, chosen from the diff by
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
-everything.
+everything. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
+test-run switch and planner (shared with ci-all through a composite action), building and pushing images and packages —
+it runs no tests as the PR run already tested the content. After publishing, it calls
+[ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) (temporarily, until the dev site is replaced with a
+build-from-source approach).
 
 | Changed                                                     | Runs                                                                                        |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
