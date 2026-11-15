@@ -1,0 +1,23 @@
+name: ci-nightly
+# Nightly full run: catches planning mistakes and PRs that pass alone but break together.
+# Reuses ci-pr-checks so there is only one job list to maintain — no copies, no drift.
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      test_run:
+        description: Test run
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  packages: read
+jobs:
+  run:
+    name: Run all checks
+    uses: ./.github/workflows/ci-pr-checks.yml
+    with:
+      test_run: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
+      run_all: true
+      phone_tests: all

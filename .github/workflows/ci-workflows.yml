@@ -78,8 +78,8 @@ jobs:
             [ "$matches" -gt 0 ]
           }
           missing=0
-          if ! has_qualifying_run ci-all.yml 'test_run=true run_all=true'; then
-            echo "::error::Run: gh workflow run ci-all.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
+          if ! has_qualifying_run ci-pr-checks.yml 'test_run=true run_all=true'; then
+            echo "::error::Run: gh workflow run ci-pr-checks.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
             missing=1
           fi
           if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-browser-image\.yml$\|^\.github/actions/\(promote-browser-image\|resolve-release\)/' \

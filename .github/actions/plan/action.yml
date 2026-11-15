@@ -2,7 +2,7 @@ name: Plan
 description: >-
   Runs the CI planner (platform/tools/ci-plan.mjs) and outputs which folder pipelines
   and browser areas a change needs. Inputs control the base ref and whether to run
-  everything. Used by ci-all and ci-publish so the planner logic is not duplicated.
+  everything. Used by ci-pr-checks and ci-publish so the planner logic is not duplicated.
 inputs:
   base:
     description: 'Base ref for diff comparison (default: origin/main).'

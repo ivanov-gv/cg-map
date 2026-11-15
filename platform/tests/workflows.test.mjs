@@ -12,7 +12,8 @@ const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'ut
 
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-all.yml': ['approval', 'switch', 'gate', 'job-times', ...FOLDERS],
+  'ci-pr-checks.yml': ['approval', 'switch', 'gate', 'job-times', ...FOLDERS],
+  'ci-nightly.yml': ['run'],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
@@ -41,7 +42,12 @@ for (const file of newWorkflowFiles) {
     const {jobs} = load(file);
     const standalone = NO_TWIN[file] ?? [];
     const production = Object.keys(jobs).filter(job => !job.endsWith('-test-run') && !standalone.includes(job));
-    assert.ok(production.length > 0);
+    // ci-nightly only calls ci-pr-checks; it has no production jobs of its own to twin.
+    if (file === 'ci-nightly.yml') {
+      assert.equal(production.length, 0, 'ci-nightly should have no production jobs');
+      return;
+    }
+    assert.ok(production.length > 0, `${file} should have at least one production job`);
     for (const job of production) {
       const twin = jobs[`${job}-test-run`];
       assert.ok(twin, `${job} needs a ${job}-test-run twin`);
@@ -143,7 +149,7 @@ test('a deploy always takes every app, because it replaces the whole site', () =
 });
 
 test('jobs below the optional approval survive it being skipped', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   const statusFunction = /\b(always|cancelled|failure|success)\(\)/;
   for (const [name, job] of Object.entries(jobs)) {
     // A skipped ancestor skips any job whose condition has no status function, on every run but a pull request.
@@ -155,7 +161,7 @@ test('jobs below the optional approval survive it being skipped', () => {
 test('a called workflow asks for no more than its caller grants, or the whole run fails to start', () => {
   const levels = {none: 0, read: 1, write: 2};
   const allows = (granted, name, level) => levels[granted?.[name] ?? 'none'] >= levels[level];
-  for (const file of ['ci-all.yml', 'ci-publish.yml']) {
+  for (const file of ['ci-pr-checks.yml', 'ci-publish.yml']) {
     const {jobs, permissions: defaults} = load(file);
     for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
       const granted = job.permissions ?? defaults;
@@ -186,7 +192,7 @@ test('only the publish workflow writes packages, and only from main unless it is
   }
 });
 
-// The aim is 5 minutes, which the job-times job in ci-all warns about. 7 is the limit: see ADR 0006.
+// The aim is 5 minutes, which the job-times job in ci-pr-checks warns about. 7 is the limit: see ADR 0006.
 const JOB_TIME_LIMIT_MINUTES = 7;
 
 test('every job that runs has a time limit of at most 7 minutes', () => {
@@ -200,7 +206,7 @@ test('every job that runs has a time limit of at most 7 minutes', () => {
 });
 
 test('job times are checked after everything else, and can only warn', () => {
-  const job = load('ci-all.yml').jobs['job-times'];
+  const job = load('ci-pr-checks.yml').jobs['job-times'];
   assert.equal(job.if, 'always()');
   assert.deepEqual(new Set(job.needs), new Set(['gate']));
   assert.deepEqual(job.permissions, {actions: 'read'});
@@ -235,7 +241,7 @@ test('CD refuses a commit that is not on main', () => {
 });
 
 test('a pull request runs nothing until it is approved', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   assert.equal(jobs.approval.environment, 'ci-approval');
   assert.match(jobs.approval.if, /pull_request/);
   assert.deepEqual([jobs.switch.needs].flat(), ['approval']);
@@ -246,27 +252,32 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-test('ci-publish is triggered on pushes to main, not from ci-all', () => {
+test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
   const {on} = load('ci-publish.yml');
   assert.ok(on.push, 'ci-publish must trigger on push to main');
   assert.deepEqual(on.push.branches, ['main']);
 });
 
-test('ci-all has no push trigger, so only PRs and the nightly run check', () => {
-  const {on} = load('ci-all.yml');
-  assert.equal(on.push, undefined, 'ci-all must not trigger on push');
-  assert.ok(on.schedule.length > 0, 'without the nightly run, nothing checks main itself');
+test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
+  const {on} = load('ci-pr-checks.yml');
+  assert.equal(on.push, undefined, 'ci-pr-checks must not trigger on push');
+  assert.equal(on.schedule, undefined, 'ci-pr-checks must not have a schedule trigger');
+});
+
+test('ci-nightly has a schedule trigger so main is checked', () => {
+  const {on} = load('ci-nightly.yml');
+  assert.ok(on.schedule.length > 0, 'ci-nightly must have a schedule trigger');
 });
 
 test('runs on main never share a concurrency group', () => {
   assert.match(
-    load('ci-all.yml').concurrency.group,
+    load('ci-pr-checks.yml').concurrency.group,
     /github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id/
   );
 });
 
-test('ci-all calls every folder workflow, and the gate needs all of them', () => {
-  const {jobs} = load('ci-all.yml');
+test('ci-pr-checks calls every folder workflow, and the gate needs all of them', () => {
+  const {jobs} = load('ci-pr-checks.yml');
   for (const folder of FOLDERS) {
     assert.equal(jobs[folder]?.uses, `./.github/workflows/ci-${folder}.yml`, `${folder} needs a pipeline`);
     assert.ok(fs.existsSync(path.join(workflowDir, `ci-${folder}.yml`)));
@@ -288,10 +299,10 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
 
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
-  assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
+  assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
   // ci-publish runs on push to main and workflow_dispatch; ci-dev-pages on workflow_call and workflow_dispatch;
-  // all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'ci-publish.yml' && !name.startsWith('cd-'))) {
+  // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -299,14 +310,14 @@ test('only the new pipelines run on the repository', () => {
     );
   }
   assert.equal(
-    load('ci-all.yml').on.pull_request,
+    load('ci-pr-checks.yml').on.pull_request,
     null,
     'a filter on a required workflow would leave its check pending forever'
   );
 });
 
 test('browser jobs run only the planned areas, and none when there are none', () => {
-  const allJobs = load('ci-all.yml').jobs;
+  const allJobs = load('ci-pr-checks.yml').jobs;
   const plannedMatrixByApp = {'apps-web': 'browser_matrix', 'apps-editor': 'editor_browser_matrix'};
   for (const [app, output] of Object.entries(plannedMatrixByApp)) {
     assert.equal(
@@ -320,7 +331,7 @@ test('browser jobs run only the planned areas, and none when there are none', ()
 });
 
 test('the planner has an output on the plan job for every folder', () => {
-  const {plan} = load('ci-all.yml').jobs;
+  const {plan} = load('ci-pr-checks.yml').jobs;
   assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'editor_browser_matrix', 'image_matrix']));
 });
 
@@ -355,9 +366,9 @@ test('browser jobs and local runs pin one image, whose version matches the repos
 });
 
 test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
-  const {jobs} = load('ci-all.yml');
+  const {jobs} = load('ci-pr-checks.yml');
   for (const app of ['apps-web', 'apps-editor']) {
-    assert.equal(jobs[app].with.phone_tests, "${{ github.event_name == 'schedule' && 'all' || 'tagged' }}");
+    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
     const {browser} = load(`ci-${app}.yml`).jobs;
     assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
     const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');
@@ -376,7 +387,7 @@ test('the browser image runs the Node version the repository pins', () => {
 // Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
 // publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
 const ENV_EXCEPTIONS = {
-  'ci-all.yml': ['approval'],
+  'ci-pr-checks.yml': ['approval'],
   'ci-dev-pages.yml': ['deploy'],
 };
 

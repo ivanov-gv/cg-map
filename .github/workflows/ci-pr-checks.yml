@@ -1,17 +1,27 @@
-name: ci-all
+name: ci-pr-checks
 # The top-level CI pipeline: plans what a change needs, calls each folder's workflow, and reports one CI gate.
 # A PR run waits for approval on the ci-approval environment before anything runs: see .github/TESTING.md.
-# Publishing is handled by ci-publish on pushes to main. The nightly run checks everything: see
-# docs/decisions/0006-ci-time-limits-and-tests-before-merge.md.
+# Publishing is handled by ci-publish on pushes to main. The nightly run is ci-nightly, which reuses this workflow.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-  && format('ci-all test_run={0} run_all={1}', inputs.test_run, inputs.run_all)
-  || format('ci-all {0}', github.event.pull_request.title || github.sha) }}
+  && format('ci-pr-checks test_run={0} run_all={1}', inputs.test_run, inputs.run_all)
+  || format('ci-pr-checks {0}', github.event.pull_request.title || github.sha) }}
 on:
   pull_request:
-  schedule:
-    # Nightly full run: catches planning mistakes and PRs that pass alone but break together.
-    - cron: '0 3 * * *'
+  workflow_call:
+    inputs:
+      test_run:
+        type: boolean
+        required: false
+        default: true
+      run_all:
+        type: boolean
+        required: false
+        default: true
+      phone_tests:
+        type: string
+        required: false
+        default: 'tagged'
   workflow_dispatch:
     inputs:
       test_run:
@@ -28,7 +38,7 @@ permissions:
 concurrency:
   # Only PRs share a group. GitHub keeps one pending run per group, so a shared group on main could drop a web merge's
   # run in favor of a later docs merge, whose diff would not select the web image.
-  group: ci-all-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: ci-pr-checks-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # Waiting uses no minutes, and a new push replaces the waiting run. Keep every other job behind this one.
@@ -90,7 +100,7 @@ jobs:
         uses: ./.github/actions/plan
         with:
           base: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
-          run_all: ${{ github.event_name == 'schedule' || inputs.run_all == true || inputs.run_all == 'true' }}
+          run_all: ${{ github.event_name == 'workflow_call' || inputs.run_all == true || inputs.run_all == 'true' }}
   plan-test-run:
     name: (test-run) Plan
     needs: switch
@@ -183,7 +193,8 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
-      phone_tests: ${{ github.event_name == 'schedule' && 'all' || 'tagged' }}
+      # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
+      phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-editor:
     name: apps-editor
     needs: [switch, plan, plan-test-run]
@@ -192,7 +203,8 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
-      phone_tests: ${{ github.event_name == 'schedule' && 'all' || 'tagged' }}
+      # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
+      phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-core-demo:
     name: apps-core-demo
     needs: [switch, plan, plan-test-run]
