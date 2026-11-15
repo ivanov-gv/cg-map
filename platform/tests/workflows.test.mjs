@@ -141,6 +141,25 @@ test('only the dev Pages deploy holds Pages permissions, and a test run cannot r
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
 });
 
+// GitHub Packages requires a token even for public packages, so npm ci needs the packages permission.
+test('jobs that use setup-web or install-dependencies have packages permission', () => {
+  for (const file of newWorkflowFiles) {
+    const {jobs, permissions: workflowPermissions} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      const stepsText = JSON.stringify(job.steps ?? []);
+      const usesPackageActions =
+        stepsText.includes('setup-web') || stepsText.includes('install-dependencies');
+      if (!usesPackageActions) continue;
+      const effectivePermissions = job.permissions ?? workflowPermissions ?? {};
+      const hasPackagesRead = ['read', 'write'].includes(effectivePermissions.packages);
+      assert.ok(
+        hasPackagesRead,
+        `${file} ${name} uses setup-web or install-dependencies but lacks packages: read`
+      );
+    }
+  }
+});
+
 test('build always takes every app, because it replaces the whole site', () => {
   const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
   assert.match(stepsText, /for app in web editor core-demo/);

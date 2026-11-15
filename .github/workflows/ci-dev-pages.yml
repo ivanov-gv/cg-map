@@ -1,6 +1,7 @@
 name: ci-dev-pages
 # Pages is the dev environment: every merge to main shows main there. This workflow builds the site from source
-# (not from images) and uploads the artifact. A separate CD workflow deploys it. See ADR 0017.
+# (not from images), uploads the artifact, and deploys it in a temporary deploy job until #168 moves deployment
+# to a CD workflow. See ADR 0017.
 on:
   push:
     branches: [main]
@@ -12,10 +13,6 @@ on:
         default: true
 permissions:
   contents: read
-concurrency:
-  # New pushes cancel waiting builds, but never cancel a deploy in progress.
-  group: ci-dev-pages-${{ github.run_id }}
-  cancel-in-progress: true
 jobs:
   switch:
     name: Test-run switch
@@ -39,9 +36,10 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    permissions:
+    permissions: &build-permissions
       contents: read
-    outputs:
+      packages: read
+    outputs: &build-outputs
       is_newest: ${{ steps.newest.outputs.is_newest }}
     env: &build-env
       REGISTRY_TOKEN: ${{ github.token }}
@@ -98,10 +96,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     environment: test-run
-    permissions:
-      contents: read
-    outputs:
-      is_newest: ${{ steps.newest.outputs.is_newest }}
+    permissions: *build-permissions
+    outputs: *build-outputs
     env: *build-env
     steps: *build-steps
   # Temporary: this deploy job will move to a CD workflow (#168). Kept here so the dev site still updates on push.
