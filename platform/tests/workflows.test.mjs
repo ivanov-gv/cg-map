@@ -271,6 +271,191 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
+// dev-pages must not deploy when any publish job fails. Each pair (X, X-test-run) must both
+// succeed or be skipped; one failing blocks deployment. The select job must also succeed.
+test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
+  const {jobs} = load('ci-publish.yml');
+  const devPages = jobs['dev-pages'];
+  const condition = String(devPages.if);
+
+  // Must depend on select
+  assert.ok(
+    [devPages.needs].flat().includes('select'),
+    'dev-pages must need select'
+  );
+  assert.match(
+    condition,
+    /needs\.select\.result == 'success'/,
+    'dev-pages must require select to succeed'
+  );
+
+  // Must keep !cancelled()
+  assert.match(condition, /!cancelled\(\)/, 'dev-pages must check !cancelled()');
+
+  // For each publish pair, both twins must be required with AND (not OR between pairs).
+  // The pattern is: (needs.X.result == 'success' || needs.X.result == 'skipped')
+  //   && (needs.X-test-run.result == 'success' || needs.X-test-run.result == 'skipped')
+  const pairs = [
+    ['image', 'image-test-run'],
+    ['package', 'package-test-run'],
+    ['browser-image', 'browser-image-test-run'],
+  ];
+
+  for (const [prod, testRun] of pairs) {
+    const prodSuccess = `needs.${prod}.result == 'success'`;
+    const prodSkipped = `needs.${prod}.result == 'skipped'`;
+    const testRunSuccess = `needs.${testRun}.result == 'success'`;
+    const testRunSkipped = `needs.${testRun}.result == 'skipped'`;
+
+    // Each job in the pair must appear in needs
+    assert.ok(
+      [devPages.needs].flat().includes(prod),
+      `dev-pages must need ${prod}`
+    );
+    assert.ok(
+      [devPages.needs].flat().includes(testRun),
+      `dev-pages must need ${testRun}`
+    );
+
+    // The condition must require both the production job AND its test-run twin
+    // to be success or skipped. We check that the AND pattern exists for each pair.
+    const hasProdClause = condition.includes(prodSuccess) && condition.includes(prodSkipped);
+    const hasTestRunClause = condition.includes(testRunSuccess) && condition.includes(testRunSkipped);
+    assert.ok(
+      hasProdClause,
+      `dev-pages must check ${prod} result is success or skipped`
+    );
+    assert.ok(
+      hasTestRunClause,
+      `dev-pages must check ${testRun} result is success or skipped`
+    );
+
+    // The two clauses for a pair must be ANDed together, not ORed with other pairs.
+    // We verify by checking that the pair's clauses are grouped: the production clause
+    // and its test-run clause are adjacent (separated by &&), forming a unit that is
+    // ANDed with other pairs. The key is that a failure of either twin blocks dev-pages.
+    // We test this with a simple evaluator below.
+  }
+
+  // Evaluate the condition with a minimal expression evaluator to prove that
+  // a failure in either twin of any pair blocks dev-pages.
+  const evaluateCondition = (results) => {
+    // Strip the ${{ }} wrapper from GitHub Actions expressions
+    let expr = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
+    // Replace needs.X.result references with actual values
+    for (const [name, result] of Object.entries(results)) {
+      const regex = new RegExp(`needs\\.${name}\\.result`, 'g');
+      expr = expr.replace(regex, `'${result}'`);
+    }
+    // Replace !cancelled() with true (we're testing result gating, not cancellation)
+    expr = expr.replace(/!cancelled\(\)/g, 'true');
+    // Evaluate the expression safely
+    return new Function(`return (${expr})`)();
+  };
+
+  // Base: all jobs succeed — dev-pages should run
+  const allSuccess = {
+    select: 'success',
+    image: 'success',
+    'image-test-run': 'skipped',
+    package: 'success',
+    'package-test-run': 'skipped',
+    'browser-image': 'success',
+    'browser-image-test-run': 'skipped',
+  };
+  assert.ok(
+    evaluateCondition(allSuccess),
+    'dev-pages should run when all pairs succeed or are skipped'
+  );
+
+  // A failed production job blocks dev-pages
+  for (const [prod, testRun] of pairs) {
+    const failedProd = {
+      select: 'success',
+      image: 'skipped',
+      'image-test-run': 'skipped',
+      package: 'skipped',
+      'package-test-run': 'skipped',
+      'browser-image': 'skipped',
+      'browser-image-test-run': 'skipped',
+      [prod]: 'failure',
+      [testRun]: 'skipped',
+    };
+    assert.ok(
+      !evaluateCondition(failedProd),
+      `dev-pages must be blocked when ${prod} fails`
+    );
+
+    const failedTestRun = {
+      select: 'success',
+      image: 'skipped',
+      'image-test-run': 'skipped',
+      package: 'skipped',
+      'package-test-run': 'skipped',
+      'browser-image': 'skipped',
+      'browser-image-test-run': 'skipped',
+      [prod]: 'skipped',
+      [testRun]: 'failure',
+    };
+    assert.ok(
+      !evaluateCondition(failedTestRun),
+      `dev-pages must be blocked when ${testRun} fails`
+    );
+  }
+
+  // A failed select blocks dev-pages
+  const failedSelect = {
+    select: 'failure',
+    image: 'skipped',
+    'image-test-run': 'skipped',
+    package: 'skipped',
+    'package-test-run': 'skipped',
+    'browser-image': 'skipped',
+    'browser-image-test-run': 'skipped',
+  };
+  assert.ok(
+    !evaluateCondition(failedSelect),
+    'dev-pages must be blocked when select fails'
+  );
+});
+
+// ci-workflows test-run-evidence must require a ci-publish test run when publish-related files change.
+test('ci-workflows requires ci-publish test run when publish files change', () => {
+  const ciWorkflows = fs.readFileSync(path.join(workflowDir, 'ci-workflows.yml'), 'utf8');
+
+  // The script must check for ci-publish.yml when ci-publish.yml, ci-dev-pages.yml, or publish actions change.
+  // It must use the same has_qualifying_run pattern as ci-pr-checks and cd-map-core.
+  // The grep patterns in the shell script escape dots with backslashes, so we match the literal text.
+  assert.match(
+    ciWorkflows,
+    /ci-publish[\\.]?yml.*test_run=true/,
+    'ci-workflows must require ci-publish test run when publish files change'
+  );
+
+  // The script must grep for publish-related paths to decide when ci-publish is required.
+  // The shell grep patterns escape dots, so we match the unescaped names which still appear.
+  const hasCiPublishYml = /ci-publish/.test(ciWorkflows) && /has_qualifying_run ci-publish/.test(ciWorkflows);
+  const hasCiDevPagesYml = /ci-dev-pages/.test(ciWorkflows);
+  const hasPublishActions = /publish-image/.test(ciWorkflows) && /publish-dev-package/.test(ciWorkflows) && /publish-browser-image/.test(ciWorkflows);
+  const hasSetupWeb = /setup-web/.test(ciWorkflows);
+  const hasRunCheck = /run-check/.test(ciWorkflows);
+  const hasPlan = /plan/.test(ciWorkflows);
+
+  assert.ok(hasCiPublishYml, 'ci-workflows must check ci-publish.yml with has_qualifying_run');
+  assert.ok(hasCiDevPagesYml, 'ci-workflows must check ci-dev-pages.yml path');
+  assert.ok(hasPublishActions, 'ci-workflows must check publish action paths');
+  assert.ok(hasSetupWeb, 'ci-workflows must check setup-web action path');
+  assert.ok(hasRunCheck, 'ci-workflows must check run-check action path');
+  assert.ok(hasPlan, 'ci-workflows must check plan action path');
+
+  // The error message must name the exact command to run.
+  assert.match(
+    ciWorkflows,
+    /gh workflow run ci-publish[\\.]?yml --ref.*-f test_run=true/,
+    'ci-workflows error must name the ci-publish dispatch command'
+  );
+});
+
 test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
   const {on} = load('ci-publish.yml');
   assert.ok(on.push, 'ci-publish must trigger on push to main');
