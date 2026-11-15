@@ -276,6 +276,13 @@ test('job times are checked after everything else, and can only warn', () => {
   assert.doesNotMatch(job.steps[0].run, /exit 1|::error::/);
 });
 
+test('gate approval job name env matches the approval job name', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  const approvalJobName = jobs.approval.name;
+  const gateEnv = jobs.gate.env;
+  assert.equal(gateEnv.APPROVAL_JOB_NAME, approvalJobName, 'gate APPROVAL_JOB_NAME must match approval job name');
+});
+
 test('the editor browser jobs cover every spec in both projects', () => {
   const matrix = browserMatrix(Object.keys(EDITOR_BROWSER_AREAS), EDITOR_BROWSER_AREAS);
   const specFiles = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
