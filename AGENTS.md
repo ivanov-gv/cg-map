@@ -36,7 +36,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
 - `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
-- `make test-<workflow>` / `make test-all-workflows`: run workflows under `act`, required for `.github/**` changes.
+- `make lint-workflows` lints workflows; `make test-<workflow>` / `make test-all-workflows` runs them under `act`.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
 - `make test-e2e`: browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
