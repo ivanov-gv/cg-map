@@ -87,6 +87,12 @@ short of disk or CPU: `ci-apps-web` alone can use several gigabytes. If `make te
 `context deadline exceeded` while `act` removes containers, the run stopped before its browser jobs and gate, so it does
 not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
+**Matrix in called workflows:** `act` evaluates `matrix: ${{ fromJSON(needs.*.outputs.*) }}` before `needs` outputs
+exist when the workflow is triggered by `workflow_call` (nektos/act#2313, #927), producing a literal string that fails
+JSON parsing and creates a phantom failing job. Browser workflows (`ci-apps-web`, `ci-apps-editor`) work around this
+with a fallback — `fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` — so act can always parse the
+matrix. The job's `if` guard still skips execution when the matrix is empty, so GitHub behavior is unchanged.
+
 ## On GitHub
 
 A workflow can be dispatched only once it exists on `main`. After that, dispatching runs your branch's version:
