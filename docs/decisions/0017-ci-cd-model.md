@@ -37,7 +37,11 @@ These gaps need recording so the model is documented in one place and the featur
 - **Publishing flow.** A push to main triggers ci-publish (builds and publishes images and packages) and ci-dev-pages
   (builds the dev site from source) independently. ci-dev-pages no longer depends on ci-publish.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
-  limits of ADR 0006 stay.
+  limits of ADR 0006 stay. The budget is enforced in the `CI gate` job itself via `platform/tools/run-budget.mjs`: it
+  fetches the jobs JSON for the current run attempt, computes elapsed time from the approval job's completion (or run
+  start if no approval), and returns a verdict — ok, warn, fail, or unreadable. Only "fail" fails the gate; "warn" and
+  "unreadable" emit warnings. Non-PR events are exempt. The gate's environment defines `RUN_AIM_SECONDS` (300) and
+  `RUN_LIMIT_SECONDS` (420).
 - **Environments only where they are read** (#165). GitHub environments are named sets of variables and secrets; `dev`
   and `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
   production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
