@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Partially superseded. The "push to main updates dev" part is replaced by [ADR 0017](0017-ci-cd-model.md). All other
+parts remain accepted.
 
 ## Context
 

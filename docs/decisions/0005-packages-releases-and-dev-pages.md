@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Partially superseded. The Pages-as-CI-step and `:main`-image parts are replaced by [ADR 0017](0017-ci-cd-model.md). All
+other parts remain accepted.
 
 ## Context
 

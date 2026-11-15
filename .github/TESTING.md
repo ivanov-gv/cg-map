@@ -7,7 +7,18 @@ other PR needs its owning project's checks, and browser tests where it changes a
 
 Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
 on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
-[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md) and [release](../docs/runbooks/release.md).
+[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md),
+[ADR 0017](../docs/decisions/0017-ci-cd-model.md) and [release](../docs/runbooks/release.md).
+
+## Order
+
+Test workflows in this order, stopping at the first failure:
+
+1. **Lint:** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
+2. **Local run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
+3. **GitHub test run:** dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
+   variables, and secrets. A workflow not yet on `main` cannot be dispatched; see the [On GitHub](#on-github) section
+   for the exemption.
 
 ## Time limits
 
@@ -65,12 +76,11 @@ matrix jobs run in parallel and would share a port on the host network, so targe
 needs `.github/act/secret.env`, which Git ignores, because installing dependencies reads GitHub Packages: see
 `secret.env.example` beside it.
 
-Run these from a clone, not a worktree. A worktree's `.git` file points at a host path, so `git ls-files` finds no
-repository inside the container, and `ci-docs` and `ci-platform` fail. Set the clone's `origin` to the GitHub URL,
-because `act` takes the repository name from it. Run workflows one at a time on a machine short of disk or CPU:
-`ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with `context deadline exceeded` while `act`
-removes containers, the run stopped before its browser jobs and gate, so it does not count: check `docker ps`, then run
-it again with a lower `ACT_JOBS`.
+act targets mount the git common directory so they work from worktrees as well as the main clone. Set the clone's
+`origin` to the GitHub URL, because `act` takes the repository name from it. Run workflows one at a time on a machine
+short of disk or CPU: `ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with
+`context deadline exceeded` while `act` removes containers, the run stopped before its browser jobs and gate, so it does
+not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
 ## On GitHub
 
