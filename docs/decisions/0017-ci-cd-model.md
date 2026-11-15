@@ -26,9 +26,10 @@ These gaps need recording so the model is documented in one place and the featur
 - **Pages build from source.** CI (`ci-dev-pages`) builds the dev site from source on every commit to main, with a
   `/version.json` carrying the SHA, and uploads the artifact with `upload-pages-artifact`. This replaces the
   `:main`-image approach: the site is no longer assembled from mutable images.
-- **Pages CD trigger.** The CD workflow triggers on `page_build` if a spike confirms it fires with Pages
-  `build_type: workflow`; otherwise it triggers on `push` to main. Both are valid CD triggers under the wiki model. CD
-  deploys that exact artifact with `deploy-pages` and never rebuilds it.
+- **Pages CD trigger.** With `build_type: workflow` there is no publishing branch, so no page builds are recorded and
+  `page_build` never fires. The CD workflow (`cd-dev-pages`) triggers on `push` to main instead. It also accepts
+  `workflow_dispatch` with an optional `commit` input for manual deploys. CD deploys that exact artifact with
+  `deploy-pages` and never rebuilds it.
 - **Pages CD test-run twin.** The CD workflow runs everything up to `deploy-pages`. Pages has no test destination, so
   that step is the documented exception to the test-run rule.
 - **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow) and `ci-nightly` (the full run
@@ -65,7 +66,8 @@ site that should update automatically when code lands.
   read), #166 (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget
   and approval).
 - The Pages deploy step is never exercised in a test run.
-- The `page_build` trigger depends on a spike to confirm it fires.
+- The `page_build` trigger was rejected by the spike: with `build_type: workflow` there is no publishing branch, so no
+  page builds are recorded and `page_build` never fires. The `cd-dev-pages` workflow uses `push` to main instead.
 - Building from source drops the image reuse that ADR 0005 relied on.
 - Pushes to main run more workflows.
 - CD on a push to main deliberately follows the wiki rule over the personal skill's no-push rule.

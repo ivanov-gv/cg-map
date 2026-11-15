@@ -1,0 +1,150 @@
+name: Find Pages artifact
+description: >-
+  Resolves a commit SHA, verifies it is on main, waits for that SHA's ci-dev-pages run to complete,
+  downloads the github-pages artifact, and extracts it for re-upload.
+inputs:
+  commit:
+    description: The full commit SHA to find the artifact for.
+    required: true
+  token:
+    description: Token for the GitHub API.
+    required: true
+  artifact_destination:
+    description: Directory to extract the downloaded artifact into.
+    required: false
+    default: pages-dist
+outputs:
+  commit:
+    description: The resolved commit SHA.
+    value: ${{ steps.resolve.outputs.commit }}
+  is_newest:
+    description: true if the commit is still main's newest commit.
+    value: ${{ steps.newest.outputs.is_newest }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      name: Resolve commit
+      shell: bash
+      env:
+        INPUT_COMMIT: ${{ inputs.commit }}
+        EVENT_SHA: ${{ github.sha }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        commit="${INPUT_COMMIT:-$EVENT_SHA}"
+        # Verify the commit is on main using the compare API.
+        relation=$(curl --fail --silent --show-error --location \
+          --header "Authorization: Bearer $GH_TOKEN" \
+          --header "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/$GH_REPO/compare/main...$commit" | jq -r .status)
+        if [ "$relation" != "behind" ] && [ "$relation" != "identical" ]; then
+          echo "::error::$commit is not on main ($relation). CD deploys only commits that CI built on main."
+          exit 1
+        fi
+        echo "commit=$commit" >> "$GITHUB_OUTPUT"
+        echo "Resolved commit: $commit (relation to main: $relation)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - id: wait
+      name: Wait for ci-dev-pages run
+      shell: bash
+      env:
+        COMMIT: ${{ steps.resolve.outputs.commit }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        # Repeated curl options for the GitHub API.
+        gh_api() {
+          curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            "$1"
+        }
+
+        # Poll for a ci-dev-pages workflow run that matches our commit SHA.
+        # Bounded poll: check every 10 seconds, up to 5 minutes (30 attempts).
+        attempt=0
+        max_attempts=30
+        while [ $attempt -lt $max_attempts ]; do
+          attempt=$((attempt + 1))
+          echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
+
+          # Find the most recent ci-dev-pages run for this commit on the main branch.
+          run_id=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
+            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main") | .id' | head -1)
+
+          if [ -z "$run_id" ]; then
+            echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
+            sleep 10
+            continue
+          fi
+
+          echo "Found ci-dev-pages run $run_id for $COMMIT"
+
+          # Single API call: read both status and conclusion from the same response.
+          run_detail=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs/$run_id")
+          status=$(echo "$run_detail" | jq -r .status)
+          conclusion=$(echo "$run_detail" | jq -r .conclusion)
+
+          if [ "$status" = "completed" ]; then
+            if [ "$conclusion" = "success" ]; then
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              echo "ci-dev-pages run $run_id completed successfully" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            else
+              echo "::error::ci-dev-pages run $run_id completed with conclusion: $conclusion"
+              echo "Run details: https://github.com/$GH_REPO/actions/runs/$run_id" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
+
+          # Still in progress, wait and retry.
+          echo "Run $run_id status: $status. Waiting..."
+          sleep 10
+        done
+
+        echo "::error::Timeout waiting for ci-dev-pages run at $COMMIT after $max_attempts attempts"
+        exit 1
+
+    - id: download
+      name: Download github-pages artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: github-pages
+        run-id: ${{ steps.wait.outputs.run_id }}
+        path: ${{ inputs.artifact_destination }}
+        github-token: ${{ inputs.token }}
+        repository: ${{ github.repository }}
+
+    - id: extract
+      name: Extract artifact
+      shell: bash
+      env:
+        ARTIFACT_DEST: ${{ inputs.artifact_destination }}
+        RUN_ID: ${{ steps.wait.outputs.run_id }}
+      run: |
+        # The downloaded artifact contains artifact.tar; extract it to the destination directory.
+        if [ ! -f "$ARTIFACT_DEST/artifact.tar" ]; then
+          echo "::error::artifact.tar not found in $ARTIFACT_DEST (run $RUN_ID). Cannot extract."
+          exit 1
+        fi
+        tar xf "$ARTIFACT_DEST/artifact.tar" -C "$ARTIFACT_DEST"
+        rm "$ARTIFACT_DEST/artifact.tar"
+        file_count=$(find "$ARTIFACT_DEST" -type f | wc -l)
+        echo "Extracted $file_count files from ci-dev-pages run $RUN_ID to $ARTIFACT_DEST" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - id: newest
+      name: Check this is still main's newest commit
+      shell: bash
+      env:
+        COMMIT: ${{ steps.resolve.outputs.commit }}
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        main_head=$(curl --fail --silent --show-error --location \
+          --header "Authorization: Bearer $GH_TOKEN" \
+          --header "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/$GH_REPO/commits/main" | jq -r .sha)
+        is_newest=$([ "$main_head" = "$COMMIT" ] && echo true || echo false)
+        echo "is_newest=$is_newest" >> "$GITHUB_OUTPUT"
+        echo "main is at $main_head, this commit is $COMMIT: deploy=$is_newest" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -17,6 +17,7 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
+  'cd-dev-pages.yml': ['switch', 'deploy'],
   'ci-dev-pages.yml': ['switch', 'deploy'],
   'ci-publish.yml': ['switch', 'select']
 };
@@ -265,6 +266,35 @@ test('CD refuses a commit that is not on main', () => {
   assert.match(action, /compare\/main\.\.\./);
 });
 
+test('cd-dev-pages triggers on push to main and workflow_dispatch with commit input', () => {
+  const {on} = load('cd-dev-pages.yml');
+  assert.ok(on.push, 'cd-dev-pages must trigger on push to main');
+  assert.deepEqual(on.push.branches, ['main']);
+  assert.ok(on.workflow_dispatch, 'cd-dev-pages must accept workflow_dispatch');
+  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
+  assert.equal(on.workflow_dispatch.inputs.test_run.default, true);
+});
+
+test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
+  assert.match(jobs.deploy.if, /needs\.find\.outputs\.is_newest/);
+  assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
+  // find and find-test-run must not have pages permissions
+  for (const job of ['find', 'find-test-run']) {
+    assert.equal(jobs[job]?.permissions?.pages, undefined, `${job} must not request pages`);
+  }
+});
+
+test('cd-dev-pages find job uses the find-pages-artifact composite action', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /find-pages-artifact/);
+});
+
+test('cd-dev-pages has no workflow_call trigger', () => {
+  assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
+});
+
 test('a pull request runs nothing until it is approved', () => {
   const {jobs} = load('ci-pr-checks.yml');
   assert.equal(jobs.approval.environment, 'ci-approval');
@@ -337,9 +367,9 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
+  // ci-publish, ci-dev-pages and cd-dev-pages run on push to main and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
