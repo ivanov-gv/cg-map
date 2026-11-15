@@ -49,8 +49,8 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
-use `environment: test-run`. The two exceptions are the approval gate (`ci-approval`, which waits for manual approval)
-and the Pages deploy (`github-pages`, which publishes to the repository site).
+use `environment: test-run`. The exception is the approval gate (`ci-approval`, which waits for manual approval). The
+Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it is a CD workflow, not CI.
 
 ## Locally with act
 
@@ -113,9 +113,9 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 
 `ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful test run of
 `ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
-and a `cd-browser-image` one when that workflow or its actions changed. A workflow not yet on `main` cannot be
-dispatched, so it is exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours
-in the PR template.
+a `cd-browser-image` test run when that workflow or its actions changed, and a `cd-dev-pages` test run when
+`cd-dev-pages.yml` or `find-pages-artifact` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt.
+After those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
 After merging `ci-pr-checks.yml` or `ci-nightly.yml`, they cannot be dispatched until the merge lands on `main`. Test
 them locally first with `make test-ci-pr-checks` and `make test-ci-nightly`; the test-run-evidence check exempts

@@ -92,6 +92,11 @@ jobs:
             echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
             missing=1
           fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-dev-pages\.yml$\|^\.github/actions/find-pages-artifact/' \
+            && ! has_qualifying_run cd-dev-pages.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run cd-dev-pages.yml --ref $BRANCH -f test_run=true -f commit=<SHA on main with a ci-dev-pages run>, then re-run this check."
+            missing=1
+          fi
           result="Test-run evidence for $HEAD_SHA: $([ "$missing" -eq 0 ] && echo found || echo missing)"
           echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
           exit "$missing"

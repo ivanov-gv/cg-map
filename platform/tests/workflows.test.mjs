@@ -18,7 +18,7 @@ const NO_TWIN = {
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'cd-dev-pages.yml': ['switch', 'deploy'],
-  'ci-dev-pages.yml': ['switch', 'deploy'],
+  'ci-dev-pages.yml': ['switch'],
   'ci-publish.yml': ['switch', 'select']
 };
 
@@ -93,13 +93,9 @@ for (const file of newWorkflowFiles) {
   });
 }
 
-// Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy']};
-
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
-      if (DEV_PAGES_JOBS[file]?.includes(name)) continue;
       const environment = job.environment;
       const allowedEnvironments = ['dev', 'test-run', 'ci-approval'];
       if (environment) assert.ok(allowedEnvironments.includes(environment), `${file} ${name} uses ${environment}`);
@@ -133,13 +129,29 @@ for (const [file, tagPrefix] of Object.entries(CD_TAGS))
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
 });
 
-test('only the dev Pages deploy holds Pages permissions, and a test run cannot reach it', () => {
-  const {jobs} = load('ci-dev-pages.yml');
-  assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy only runs after the production build (not build-test-run), so test runs never reach it.
-  assert.match(jobs.deploy.if, /needs\.build\.outputs\.is_newest/);
-  for (const job of ['build', 'build-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
-  assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
+test('only cd-dev-pages deploy uses actions/deploy-pages, and no ci-* workflow does', () => {
+  for (const file of newWorkflowFiles) {
+    const {jobs} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      const stepsText = JSON.stringify(job.steps ?? []);
+      if (file.startsWith('ci-')) {
+        assert.doesNotMatch(
+          stepsText,
+          /actions\/deploy-pages/,
+          `${file} ${name} must not use actions/deploy-pages`
+        );
+      }
+    }
+  }
+  // cd-dev-pages deploy is the only job that uses deploy-pages.
+  const {jobs: cdJobs} = load('cd-dev-pages.yml');
+  const cdStepsText = JSON.stringify(cdJobs.deploy.steps);
+  assert.match(cdStepsText, /actions\/deploy-pages/, 'cd-dev-pages deploy must use actions/deploy-pages');
+  for (const [name, job] of Object.entries(cdJobs)) {
+    if (name === 'deploy') continue;
+    const stepsText = JSON.stringify(job.steps ?? []);
+    assert.doesNotMatch(stepsText, /actions\/deploy-pages/, `cd-dev-pages ${name} must not use actions/deploy-pages`);
+  }
 });
 
 // GitHub Packages requires a token even for public packages, so npm ci needs the packages permission.
@@ -451,11 +463,9 @@ test('the browser image runs the Node version the repository pins', () => {
 
 // Jobs reference an environment only when they read its variables or secrets.
 // GitHub records a deployment for every job that references an environment, so unnecessary references create noise.
-// Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
-// publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
+// Exception: the approval gate (ci-approval) waits for manual approval.
 const ENV_EXCEPTIONS = {
   'ci-pr-checks.yml': ['approval'],
-  'ci-dev-pages.yml': ['deploy'],
 };
 
 test('ci-* production jobs reference dev only when they read vars.* or secrets.*', () => {

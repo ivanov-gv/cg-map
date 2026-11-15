@@ -51,12 +51,13 @@ These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 ## Skill deviation
 
 `agents:cicd-general` "CD workflows" rules 2 and 3 require CD to trigger on a release or manual trigger, and forbid push
-triggers. This project's Pages CD triggers on `page_build` or a push to main instead, because Pages is a development
-site that should update automatically when code lands.
+triggers. This project's Pages CD triggers on a push to main instead, because Pages is a development site that should
+update automatically when code lands.
 
 ## Consequences
 
-- CI no longer deploys, matching the wiki model. The Pages deploy is a separate CD workflow.
+- CI no longer deploys, matching the wiki model. The temporary deploy job in `ci-dev-pages` is removed; `cd-dev-pages`
+  is the only workflow that deploys to Pages.
 - The dev site carries a version that traces back to the commit, instead of a mutable `:main` image.
 - The split separates concerns: `ci-pr-checks` handles PR checks and `ci-nightly` runs the full suite. Any speed-up
   comes from #169's re-sharding.
