@@ -30,8 +30,8 @@ export const BROWSER_AREAS = {
   },
   journeys: {
     specs: 'tests/e2e/journeys.spec.mjs',
-    // One job took 313 seconds against the 300-second aim.
-    jobs: 2,
+    // Resharded from 2 to 3 shards: journeys-1 took 191 s, journeys-2 took 148 s; target ~120 s per shard.
+    jobs: 3,
     specFiles: ['journeys.spec.mjs'],
     sources: [
       'routing.js',
@@ -46,8 +46,8 @@ export const BROWSER_AREAS = {
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs',
-    // Shares took 92, 83, 87 seconds (E2E_WORKERS=2) against the 300-second aim.
-    jobs: 3,
+    // Resharded from 5 to 8 shards: interface-1..3 took 233/223/202 s, interface-4/5 took 146/125 s; target ~120 s per shard.
+    jobs: 8,
     specFiles: ['interface.spec.mjs'],
     sources: ['interface.js']
   },
@@ -95,8 +95,8 @@ const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'upd
 export const EDITOR_BROWSER_AREAS = {
   'editing-desktop': {
     specs: 'tests/e2e/editing.spec.mjs --project=root-desktop',
-    // Sized from measured test time, so that each share stays inside the job time limit.
-    jobs: 3,
+    // Resharded from 3 to 5 shards: editing-desktop-1..3 averaged 193, 189, 270 seconds; target ~150s per shard.
+    jobs: 5,
     specFiles: ['editing.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },
@@ -107,6 +107,8 @@ export const EDITOR_BROWSER_AREAS = {
   },
   'offline-desktop': {
     specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
+    // Resharded from 1 to 2 shards: offline-desktop averaged 208 seconds; target ~150s per shard.
+    jobs: 2,
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
@@ -122,6 +124,8 @@ export const EDITOR_BROWSER_AREAS = {
   },
   viewer: {
     specs: 'tests/e2e/viewer.spec.mjs',
+    // Resharded from 2 to 3 shards: viewer-1 took 180 s, viewer-2 took 90 s; target ~90 s per shard.
+    jobs: 3,
     specFiles: ['viewer.spec.mjs'],
     sources: []
   }

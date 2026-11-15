@@ -142,9 +142,14 @@ test('outputs give every folder a value and a usable matrix', () => {
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
     include: [
-      {area: 'interface-1', specs: `${BROWSER_AREAS.interface.specs} --shard=1/3`},
-      {area: 'interface-2', specs: `${BROWSER_AREAS.interface.specs} --shard=2/3`},
-      {area: 'interface-3', specs: `${BROWSER_AREAS.interface.specs} --shard=3/3`}
+      {area: 'interface-1', specs: `${BROWSER_AREAS.interface.specs} --shard=1/8`},
+      {area: 'interface-2', specs: `${BROWSER_AREAS.interface.specs} --shard=2/8`},
+      {area: 'interface-3', specs: `${BROWSER_AREAS.interface.specs} --shard=3/8`},
+      {area: 'interface-4', specs: `${BROWSER_AREAS.interface.specs} --shard=4/8`},
+      {area: 'interface-5', specs: `${BROWSER_AREAS.interface.specs} --shard=5/8`},
+      {area: 'interface-6', specs: `${BROWSER_AREAS.interface.specs} --shard=6/8`},
+      {area: 'interface-7', specs: `${BROWSER_AREAS.interface.specs} --shard=7/8`},
+      {area: 'interface-8', specs: `${BROWSER_AREAS.interface.specs} --shard=8/8`}
     ]
   });
 });
@@ -283,23 +288,29 @@ test('every editor spec has an area, and the areas name real specs', () => {
   for (const spec of mapped) assert.ok(specs.includes(spec), `${spec} no longer exists`);
 });
 
-test('the editing spec on the desktop layout stays in three jobs', () => {
+test('the editing spec on the desktop layout runs in five jobs', () => {
   const jobs = browserMatrix(['editing-desktop'], EDITOR_BROWSER_AREAS).include;
   assert.deepEqual(
     jobs.map(job => job.area),
-    ['editing-desktop-1', 'editing-desktop-2', 'editing-desktop-3']
+    ['editing-desktop-1', 'editing-desktop-2', 'editing-desktop-3', 'editing-desktop-4', 'editing-desktop-5']
   );
 });
 
 test('an area too slow for one job runs every share of its tests', () => {
   assert.deepEqual(browserMatrix(['journeys']).include, [
-    {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/2'},
-    {area: 'journeys-2', specs: 'tests/e2e/journeys.spec.mjs --shard=2/2'}
+    {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/3'},
+    {area: 'journeys-2', specs: 'tests/e2e/journeys.spec.mjs --shard=2/3'},
+    {area: 'journeys-3', specs: 'tests/e2e/journeys.spec.mjs --shard=3/3'}
   ]);
   assert.deepEqual(browserMatrix(['interface']).include, [
-    {area: 'interface-1', specs: 'tests/e2e/interface.spec.mjs --shard=1/3'},
-    {area: 'interface-2', specs: 'tests/e2e/interface.spec.mjs --shard=2/3'},
-    {area: 'interface-3', specs: 'tests/e2e/interface.spec.mjs --shard=3/3'}
+    {area: 'interface-1', specs: 'tests/e2e/interface.spec.mjs --shard=1/8'},
+    {area: 'interface-2', specs: 'tests/e2e/interface.spec.mjs --shard=2/8'},
+    {area: 'interface-3', specs: 'tests/e2e/interface.spec.mjs --shard=3/8'},
+    {area: 'interface-4', specs: 'tests/e2e/interface.spec.mjs --shard=4/8'},
+    {area: 'interface-5', specs: 'tests/e2e/interface.spec.mjs --shard=5/8'},
+    {area: 'interface-6', specs: 'tests/e2e/interface.spec.mjs --shard=6/8'},
+    {area: 'interface-7', specs: 'tests/e2e/interface.spec.mjs --shard=7/8'},
+    {area: 'interface-8', specs: 'tests/e2e/interface.spec.mjs --shard=8/8'}
   ]);
 });
 
