@@ -24,11 +24,10 @@ Every merge to main updates it, with no tags or releases:
 2. A push to main also starts [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) independently, which builds the
    dev site from source and deploys it. A deploy replaces the whole site, so it always takes all three.
 
-To put back an older build of an app, retag its image from the commit you want as `main`, then run
-`gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
-affect `CI gate`, so check it after merging. To republish after a failed merge run, use "Re-run failed jobs" on that
-run: a manual ci-publish would replace `main` for every app it lists, and a dev package version can be published only
-once.
+To put back an older build, push a revert commit to main so ci-dev-pages rebuilds from that point. The old image-based
+rollback (retag an image, then run ci-dev-pages) is out of date: ci-dev-pages now builds from source, not from images.
+Issue #168 will replace this with a cd-dev-pages procedure. A failed deploy does not affect `CI gate`, so check it after
+merging. To republish after a failed merge run, use "Re-run failed jobs" on that run.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 
