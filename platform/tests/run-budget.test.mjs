@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {
   getApprovalCompletedAt,
   getEarliestStartedAt,
@@ -10,6 +15,9 @@ import {
   buildSummary,
   evaluateRunBudget
 } from '../tools/run-budget.mjs';
+
+const execFileAsync = promisify(execFile);
+const scriptPath = path.join(new URL('.', import.meta.url).pathname, '../tools/run-budget.mjs');
 
 const APPROVAL_NAME = 'Approve CI run';
 
@@ -206,4 +214,80 @@ test('evaluateRunBudget: accepts JSON string input', () => {
   const jsonString = JSON.stringify(apiResponse);
   const result = evaluateRunBudget(jsonString, APPROVAL_NAME, 'pull_request', AIM, LIMIT, now);
   assert.equal(result.verdict, 'ok');
+});
+
+// --- CLI exit codes ---
+// The script must always exit 0. A non-zero exit means only that the script itself crashed.
+// The workflow step reads the verdict and decides whether to fail the gate.
+
+async function runCli(jobs, approvalName, eventName, aim, limit) {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-cli-'));
+  const jobsFile = path.join(tmpDir, 'jobs.json');
+  await fs.promises.writeFile(jobsFile, JSON.stringify(makeApiResponse(jobs)));
+  try {
+    const result = await execFileAsync('node', [
+      scriptPath, jobsFile, approvalName, eventName, String(aim), String(limit)
+    ]);
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
+  } finally {
+    await fs.promises.rm(tmpDir, {recursive: true, force: true});
+  }
+}
+
+test('CLI exits 0 and prints ok when under the aim', async () => {
+  // Use a fixed "now" by setting the approval completed_at so elapsed is 270s (under 300s aim).
+  // The CLI uses Date.now(), so we make the approval recent enough.
+  const recent = new Date(Date.now() - 270_000).toISOString();
+  const {code, stdout} = await runCli(
+    [{name: APPROVAL_NAME, completed_at: recent}],
+    APPROVAL_NAME,
+    'pull_request',
+    AIM,
+    LIMIT
+  );
+  assert.equal(code, 0, 'CLI must exit 0 for ok verdict');
+  assert.match(stdout, /ok/);
+});
+
+test('CLI exits 0 and prints warn between aim and limit', async () => {
+  // 360s ago — between aim (300) and limit (420).
+  const past = new Date(Date.now() - 360_000).toISOString();
+  const {code, stdout} = await runCli(
+    [{name: APPROVAL_NAME, completed_at: past}],
+    APPROVAL_NAME,
+    'pull_request',
+    AIM,
+    LIMIT
+  );
+  assert.equal(code, 0, 'CLI must exit 0 for warn verdict');
+  assert.match(stdout, /warn/);
+});
+
+test('CLI exits 0 and prints fail when over the limit', async () => {
+  // 500s ago — over the limit (420).
+  const past = new Date(Date.now() - 500_000).toISOString();
+  const {code, stdout} = await runCli(
+    [{name: APPROVAL_NAME, completed_at: past}],
+    APPROVAL_NAME,
+    'pull_request',
+    AIM,
+    LIMIT
+  );
+  assert.equal(code, 0, 'CLI must exit 0 for fail verdict');
+  assert.match(stdout, /fail/);
+});
+
+test('CLI exits 0 for non-PR events (exempt)', async () => {
+  const past = new Date(Date.now() - 9999_000).toISOString();
+  const {code, stdout} = await runCli(
+    [{name: APPROVAL_NAME, completed_at: past}],
+    APPROVAL_NAME,
+    'schedule',
+    AIM,
+    LIMIT
+  );
+  assert.equal(code, 0, 'CLI must exit 0 for exempt events');
+  assert.match(stdout, /exempt/);
 });

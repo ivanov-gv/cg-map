@@ -124,10 +124,8 @@ if (process.argv[1] && process.argv[1].endsWith('run-budget.mjs')) {
   }
 
   console.log(verdict);
-
-  if (verdict === 'fail') {
-    process.exit(1);
-  }
+  // Always exit 0 — a non-zero exit means only that the script itself crashed.
+  // The workflow step reads the verdict and decides whether to fail the gate.
 }
 
 export {getApprovalCompletedAt, getEarliestStartedAt, getEffectiveStart, parseTimestamp, computeElapsedSeconds, getVerdict, buildSummary, evaluateRunBudget};

@@ -618,6 +618,107 @@ test('CI gate checks run budget with aim and limit env vars', () => {
   assert.match(stepsText, /run-budget\.mjs/, 'run budget step must use run-budget.mjs');
 });
 
+// Behavior tests for the real "Check run budget" step.
+// Extract the gate's run script, run it with `bash -e` (as GitHub does), with a fake `gh`
+// that returns jobs JSON whose approval job completed at a controlled time.
+const {gate: gateJob} = load('ci-pr-checks.yml').jobs;
+const runBudgetStep = gateJob.steps.find(s => s.name === 'Check run budget');
+assert.ok(runBudgetStep, 'Check run budget step must exist');
+const runBudgetScript = runBudgetStep.run;
+
+// Build a jobs JSON response with the approval job completed at a given offset (seconds ago).
+function makeJobsJson(secondsAgo) {
+  const completedAt = new Date(Date.now() - secondsAgo * 1000).toISOString();
+  return JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: completedAt, started_at: completedAt}
+    ]
+  });
+}
+
+// Run the "Check run budget" step script in a temp dir with a fake `gh` and the real run-budget.mjs.
+// Returns {code, stdout, stderr}.
+async function runBudgetBehaviorTest(jobsJson, shouldFailGh) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-behavior-'));
+
+  // Create the fake gh script
+  const ghScript = `#!/usr/bin/env bash
+if [ "${shouldFailGh}" = "true" ]; then
+  echo "API error" >&2
+  exit 1
+fi
+echo '${jobsJson.replace(/'/g, "'\\''")}'
+`;
+  const ghPath = path.join(temporaryDirectory, 'gh');
+  await fs.promises.writeFile(ghPath, ghScript);
+  await fs.promises.chmod(ghPath, 0o755);
+
+  // Copy the run-budget.mjs script into the temp dir under platform/tools
+  const toolsDir = path.join(temporaryDirectory, 'platform', 'tools');
+  await fs.promises.mkdir(toolsDir, {recursive: true});
+  const runBudgetSrc = path.join(repoRoot, 'platform', 'tools', 'run-budget.mjs');
+  await fs.promises.copyFile(runBudgetSrc, path.join(toolsDir, 'run-budget.mjs'));
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+    RUN_ID: '123',
+    RUN_ATTEMPT: '1',
+    EVENT_NAME: 'pull_request',
+    RUN_AIM_SECONDS: '300',
+    RUN_LIMIT_SECONDS: '420',
+    APPROVAL_JOB_NAME: 'Approve CI run',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-e', '-c', runBudgetScript], {env, cwd: temporaryDirectory});
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout || '', stderr: err.stderr || ''};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('run budget: over the limit exits 1 with ::error::', async () => {
+  // 500s ago — over the 420s limit.
+  const result = await runBudgetBehaviorTest(makeJobsJson(500), false);
+  assert.equal(result.code, 1, 'over the limit must exit 1');
+  assert.match(result.stdout, /::error::/, 'over the limit must emit ::error::');
+});
+
+test('run budget: between aim and limit exits 0 with ::warning::', async () => {
+  // 360s ago — between 300s aim and 420s limit.
+  const result = await runBudgetBehaviorTest(makeJobsJson(360), false);
+  assert.equal(result.code, 0, 'between aim and limit must exit 0');
+  assert.match(result.stdout, /::warning::/, 'between aim and limit must emit ::warning::');
+});
+
+test('run budget: under the aim exits 0 with no warning', async () => {
+  // 200s ago — under the 300s aim.
+  const result = await runBudgetBehaviorTest(makeJobsJson(200), false);
+  assert.equal(result.code, 0, 'under the aim must exit 0');
+  assert.doesNotMatch(result.stdout, /::warning::/, 'under the aim must not warn');
+  assert.doesNotMatch(result.stdout, /::error::/, 'under the aim must not error');
+});
+
+test('run budget: gh fails exits 0 with ::warning::', async () => {
+  const result = await runBudgetBehaviorTest('', true);
+  assert.equal(result.code, 0, 'gh failure must exit 0');
+  assert.match(result.stdout, /::warning::/, 'gh failure must emit ::warning::');
+});
+
+test('run budget: script crashes exits 0 with ::warning::', async () => {
+  // Point the script at a missing file by using a bad script path.
+  // We simulate this by having the fake gh succeed but providing invalid JSON.
+  const result = await runBudgetBehaviorTest('not-valid-json', false);
+  assert.equal(result.code, 0, 'script crash must exit 0');
+  // The script outputs "unreadable" verdict, which the step treats as a warning.
+  assert.match(result.stdout, /::warning::/, 'script crash must emit ::warning::');
+});
+
 test('ci-nightly grants cover the gate actions:read permission', () => {
   // ci-nightly calls ci-pr-checks via workflow_call; the recursive grant test above
   // checks that called workflows ask for no more than their caller grants.

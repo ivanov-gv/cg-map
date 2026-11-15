@@ -275,8 +275,7 @@ jobs:
             echo "Run budget: unreadable — could not fetch jobs" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" 2>&1)
-          exit_status=$?
+          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" 2>&1) && exit_status=0 || exit_status=$?
           echo "$output" | tee -a "$GITHUB_STEP_SUMMARY"
           verdict=$(echo "$output" | tail -1)
           if [ "$exit_status" -ne 0 ]; then
