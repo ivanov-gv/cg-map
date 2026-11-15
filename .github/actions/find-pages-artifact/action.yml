@@ -33,6 +33,11 @@ runs:
         GH_REPO: ${{ github.repository }}
       run: |
         commit="${INPUT_COMMIT:-$EVENT_SHA}"
+        # Validate the commit is a full 40-character SHA.
+        if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::commit must be a full 40-character SHA, got: $commit"
+          exit 1
+        fi
         # Verify the commit is on main using the compare API.
         relation=$(curl --fail --silent --show-error --location \
           --header "Authorization: Bearer $GH_TOKEN" \
@@ -62,20 +67,29 @@ runs:
         }
 
         # Poll for a ci-dev-pages workflow run that matches our commit SHA.
-        # Bounded poll: check every 10 seconds, up to 5 minutes (30 attempts).
+        # Bounded poll: check every 10 seconds, up to 7 minutes (42 attempts) to match ci-dev-pages timeout.
+        # MAX_ATTEMPTS and POLL_DELAY can be overridden by the environment for testing.
         attempt=0
-        max_attempts=30
+        max_attempts="${MAX_ATTEMPTS:-42}"
+        poll_delay="${POLL_DELAY:-10}"
         while [ $attempt -lt $max_attempts ]; do
           attempt=$((attempt + 1))
           echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
 
           # Find the most recent ci-dev-pages run for this commit on the main branch.
+          # Prefer a push-triggered run; fall back to any successful run.
           run_id=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main") | .id' | head -1)
+            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main" and .event == "push") | .id' | head -1)
+
+          # If no push run, take any ci-dev-pages run.
+          if [ -z "$run_id" ]; then
+            run_id=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
+              jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main") | .id' | head -1)
+          fi
 
           if [ -z "$run_id" ]; then
             echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
-            sleep 10
+            sleep "$poll_delay"
             continue
           fi
 
@@ -100,7 +114,7 @@ runs:
 
           # Still in progress, wait and retry.
           echo "Run $run_id status: $status. Waiting..."
-          sleep 10
+          sleep "$poll_delay"
         done
 
         echo "::error::Timeout waiting for ci-dev-pages run at $COMMIT after $max_attempts attempts"

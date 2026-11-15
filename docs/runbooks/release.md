@@ -30,6 +30,15 @@ the new artifact. The old image-based rollback (retag an image, then run ci-dev-
 builds from source, not from images. A failed deploy does not affect `CI gate`, so check it after merging. To republish
 after a failed merge run, use "Re-run failed jobs" on that run.
 
+To manually deploy a specific commit (rollback or promotion), dispatch cd-dev-pages with that commit:
+
+```sh
+gh workflow run cd-dev-pages.yml --ref main -f test_run=false -f commit=<full SHA on main>
+```
+
+The commit must be on main and have a successful ci-dev-pages run with a `github-pages` artifact. Find one with
+`gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
+
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 
 ## Pull requests

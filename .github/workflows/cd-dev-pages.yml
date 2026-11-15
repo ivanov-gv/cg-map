@@ -82,7 +82,7 @@ jobs:
   deploy:
     name: Deploy dev site
     needs: find
-    if: ${{ !cancelled() && needs.find.outputs.is_newest == 'true' }}
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.find.outputs.is_newest == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:

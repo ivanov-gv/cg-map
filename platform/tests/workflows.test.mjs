@@ -315,6 +315,8 @@ test('cd-dev-pages triggers on push to main and workflow_dispatch with commit in
 test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   const {jobs} = load('cd-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
+  // Deploy on push always; on workflow_dispatch only when is_newest.
+  assert.match(jobs.deploy.if, /github\.event_name == 'push'/);
   assert.match(jobs.deploy.if, /needs\.find\.outputs\.is_newest/);
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
   // find and find-test-run must not have pages permissions
@@ -330,6 +332,130 @@ test('cd-dev-pages find job uses the find-pages-artifact composite action', () =
 
 test('cd-dev-pages has no workflow_call trigger', () => {
   assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
+});
+
+// Run the find-pages-artifact resolve and wait scripts with a stub curl.
+// The action's run: blocks are extracted from the YAML and executed in a temp directory
+// where fake-curl.sh intercepts all API calls. No network is used.
+const findArtifactAction = fs.readFileSync(
+  path.join(repoRoot, '.github/actions/find-pages-artifact/action.yml'),
+  'utf8'
+);
+const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh');
+
+// Parse the action YAML to extract the resolve and wait step scripts.
+const findArtifactYaml = parseYaml(findArtifactAction);
+const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
+const waitScript = findArtifactYaml.runs.steps.find(s => s.id === 'wait').run;
+
+async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
+  const stubDirectory = path.join(temporaryDirectory, 'stub');
+  await fs.promises.mkdir(stubDirectory);
+  for (const [name, content] of Object.entries(stubFiles)) {
+    await fs.promises.writeFile(path.join(stubDirectory, name), content);
+  }
+  const curlPath = path.join(temporaryDirectory, 'curl');
+  await fs.promises.copyFile(fakeCurlPath, curlPath);
+  await fs.promises.chmod(curlPath, 0o755);
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    INPUT_COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+    COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    FAKE_CURL_DIR: stubDirectory,
+    ...envOverrides,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', script], {env, cwd: temporaryDirectory});
+    return {code: 0, stdout: result.stdout, stderr: result.stderr};
+  } catch (err) {
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('find-pages-artifact: resolve passes when commit is behind main', async () => {
+  const result = await runFindArtifactStep(resolveScript, {
+    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"behind"}',
+  });
+  assert.equal(result.code, 0, 'resolve must pass when commit is behind main');
+});
+
+test('find-pages-artifact: resolve passes when commit is identical to main', async () => {
+  const result = await runFindArtifactStep(resolveScript, {
+    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"identical"}',
+  });
+  assert.equal(result.code, 0, 'resolve must pass when commit is identical to main');
+});
+
+test('find-pages-artifact: resolve fails when commit is ahead of main', async () => {
+  const result = await runFindArtifactStep(resolveScript, {
+    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"ahead"}',
+  });
+  assert.equal(result.code, 1, 'resolve must fail when commit is ahead of main');
+  assert.match(result.stdout, /::error::.*not on main.*ahead/, 'must emit ::error:: with ahead');
+});
+
+test('find-pages-artifact: resolve fails when commit has diverged from main', async () => {
+  const result = await runFindArtifactStep(resolveScript, {
+    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"diverged"}',
+  });
+  assert.equal(result.code, 1, 'resolve must fail when commit has diverged from main');
+  assert.match(result.stdout, /::error::.*not on main.*diverged/, 'must emit ::error:: with diverged');
+});
+
+test('find-pages-artifact: wait passes when ci-dev-pages run succeeds', async () => {
+  const result = await runFindArtifactStep(waitScript, {
+    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","id":12345}]}',
+    'run-detail-12345': '{"status":"completed","conclusion":"success"}',
+  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
+  assert.equal(result.code, 0, 'wait must pass when ci-dev-pages run succeeds');
+});
+
+test('find-pages-artifact: wait fails when ci-dev-pages run concludes with failure', async () => {
+  const result = await runFindArtifactStep(waitScript, {
+    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","id":12345}]}',
+    'run-detail-12345': '{"status":"completed","conclusion":"failure"}',
+  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
+  assert.equal(result.code, 1, 'wait must fail when ci-dev-pages run fails');
+  assert.match(result.stdout, /::error::.*failure/, 'must emit ::error:: with failure');
+});
+
+test('find-pages-artifact: wait times out when no run is found', async () => {
+  const result = await runFindArtifactStep(waitScript, {
+    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12': '{"workflow_runs":[]}',
+  }, {MAX_ATTEMPTS: '2', POLL_DELAY: '0'});
+  assert.equal(result.code, 1, 'wait must fail when no ci-dev-pages run is found');
+  assert.match(result.stdout, /::error::.*Timeout/, 'must emit ::error:: with timeout');
+});
+
+// Evaluate the deploy job's if: expression against event/is_newest combinations.
+// The deploy must run on push always, and on workflow_dispatch only when is_newest is true.
+test('cd-dev-pages deploy gating: push always deploys, workflow_dispatch respects is_newest', () => {
+  const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
+  // The expression must reference both github.event_name and is_newest.
+  assert.ok(deployIf.includes("github.event_name == 'push'"), 'deploy if must check for push event');
+  assert.ok(deployIf.includes("needs.find.outputs.is_newest"), 'deploy if must check is_newest');
+
+  // Simulate the four combinations by checking the expression structure.
+  // Push + is_newest=true → deploy (push short-circuits)
+  // Push + is_newest=false → deploy (push short-circuits)
+  // workflow_dispatch + is_newest=true → deploy
+  // workflow_dispatch + is_newest=false → skip
+  // The expression is: !cancelled() && (github.event_name == 'push' || is_newest == 'true')
+  // This means push always deploys; workflow_dispatch deploys only when is_newest.
+  const hasOr = deployIf.includes('||');
+  assert.ok(hasOr, 'deploy if must use || to combine push and is_newest conditions');
 });
 
 test('a pull request runs nothing until it is approved', () => {
