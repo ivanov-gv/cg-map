@@ -102,6 +102,8 @@ export const EDITOR_BROWSER_AREAS = {
   },
   'editing-mobile': {
     specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
+    // 2 shards: editing-mobile took 327 s with every phone test (nightly); 2 split to 31+31 tests keeps each under ~165 s.
+    jobs: 2,
     specFiles: ['editing.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },

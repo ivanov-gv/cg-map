@@ -296,6 +296,14 @@ test('the editing spec on the desktop layout runs in five jobs', () => {
   );
 });
 
+test('the editing spec on the mobile layout runs in two jobs', () => {
+  const jobs = browserMatrix(['editing-mobile'], EDITOR_BROWSER_AREAS).include;
+  assert.deepEqual(
+    jobs.map(job => job.area),
+    ['editing-mobile-1', 'editing-mobile-2']
+  );
+});
+
 test('an area too slow for one job runs every share of its tests', () => {
   assert.deepEqual(browserMatrix(['journeys']).include, [
     {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/3'},
