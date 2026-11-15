@@ -158,19 +158,38 @@ test('jobs below the optional approval survive it being skipped', () => {
   }
 });
 
+// Permission levels for comparing grants against requests; write covers read.
+const PERMISSION_LEVELS = {none: 0, read: 1, write: 2};
+
+// Check that a called workflow's permissions are covered by what the caller grants.
+// GitHub forbids cycles in reusable workflow calls, so no visited set is needed.
+function checkCalledWorkflow(callerFile, callerJobName, callerJob, callerDefaults) {
+  const calledFile = callerJob.uses.replace('./.github/workflows/', '');
+  const granted = callerJob.permissions ?? callerDefaults;
+  const called = load(calledFile);
+  const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
+  for (const request of requests.filter(Boolean)) {
+    for (const [permission, level] of Object.entries(request)) {
+      const allows = PERMISSION_LEVELS[granted?.[permission] ?? 'none'] >= PERMISSION_LEVELS[level];
+      assert.ok(
+        allows,
+        `${callerFile} ${callerJobName} grants ${granted?.[permission] ?? 'none'} for ${permission}, but ${calledFile} needs ${level}`
+      );
+    }
+  }
+  for (const [nestedJobName, nestedJob] of Object.entries(called.jobs)) {
+    if (nestedJob.uses?.startsWith('./.github/workflows/')) {
+      checkCalledWorkflow(calledFile, nestedJobName, nestedJob, called.permissions);
+    }
+  }
+}
+
 test('a called workflow asks for no more than its caller grants, or the whole run fails to start', () => {
-  const levels = {none: 0, read: 1, write: 2};
-  const allows = (granted, name, level) => levels[granted?.[name] ?? 'none'] >= levels[level];
-  for (const file of ['ci-pr-checks.yml', 'ci-publish.yml']) {
+  for (const file of newWorkflowFiles) {
     const {jobs, permissions: defaults} = load(file);
-    for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
-      const granted = job.permissions ?? defaults;
-      const called = load(job.uses.replace('./.github/workflows/', ''));
-      const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
-      for (const request of requests.filter(Boolean)) {
-        for (const [permission, level] of Object.entries(request)) {
-          assert.ok(allows(granted, permission, level), `${file} ${name} asks for ${permission}: ${level}, beyond its caller`);
-        }
+    for (const [name, job] of Object.entries(jobs)) {
+      if (job.uses?.startsWith('./.github/workflows/')) {
+        checkCalledWorkflow(file, name, job, defaults);
       }
     }
   }
