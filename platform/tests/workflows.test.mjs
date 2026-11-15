@@ -374,9 +374,10 @@ test('the browser image runs the Node version the repository pins', () => {
 
 // Jobs reference an environment only when they read its variables or secrets.
 // GitHub records a deployment for every job that references an environment, so unnecessary references create noise.
-// Exceptions: the approval gate (ci-approval) and the Pages deploy (github-pages) are not ci-* production jobs.
+// Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
+// publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
 const ENV_EXCEPTIONS = {
-  'ci-all.yml': ['approval', 'dev-pages'],
+  'ci-all.yml': ['approval'],
   'ci-dev-pages.yml': ['deploy'],
 };
 
@@ -388,12 +389,12 @@ test('ci-* production jobs reference dev only when they read vars.* or secrets.*
       // Skip test-run twins, exceptions, and jobs that call other workflows
       if (name.endsWith('-test-run') || exceptions.includes(name) || job.uses) continue;
       const jobText = JSON.stringify(job);
-      const readsVarsOrSecrets = /\$\{\{\s*vars\./.test(jobText) || /\$\{\{\s*secrets\./.test(jobText);
+      const readsVarsOrSecrets = /\$\{\{[^}]*\bvars\./.test(jobText) || /\$\{\{[^}]*\bsecrets\./.test(jobText);
       const environment = typeof job.environment === 'string' ? job.environment : job.environment?.name;
       if (readsVarsOrSecrets) {
         assert.equal(environment, 'dev', `${file} ${name} reads vars/secrets but does not reference dev`);
       } else {
-        assert.notEqual(environment, 'dev', `${file} ${name} references dev but reads no vars or secrets`);
+        assert.equal(environment, undefined, `${file} ${name} should not reference an environment but has ${environment}`);
       }
     }
   }
