@@ -46,14 +46,11 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
-    permissions:
+    permissions: &find-permissions
       actions: read
       contents: read
-    outputs:
+    outputs: &find-outputs
       is_newest: ${{ steps.find_artifact.outputs.is_newest }}
-    env: &find-env
-      GH_REPO: ${{ github.repository }}
-      REGISTRY_TOKEN: ${{ github.token }}
     steps: &find-steps
       - uses: actions/checkout@v7
         with:
@@ -77,10 +74,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     environment: test-run
-    permissions:
-      actions: read
-      contents: read
-    env: *find-env
+    permissions: *find-permissions
+    outputs: *find-outputs
     steps: *find-steps
   # No test-run twin: Pages can only publish to this repository, so there is no test destination.
   # The test run stops after the find-test-run job, which exercises the artifact resolution logic.

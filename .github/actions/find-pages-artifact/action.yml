@@ -53,6 +53,14 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
+        # Repeated curl options for the GitHub API.
+        gh_api() {
+          curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            "$1"
+        }
+
         # Poll for a ci-dev-pages workflow run that matches our commit SHA.
         # Bounded poll: check every 10 seconds, up to 5 minutes (30 attempts).
         attempt=0
@@ -61,12 +69,9 @@ runs:
           attempt=$((attempt + 1))
           echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
 
-          # Find the most recent ci-dev-pages run for this commit.
-          run_id=$(curl --fail --silent --show-error --location \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages") | .id' | head -1)
+          # Find the most recent ci-dev-pages run for this commit on the main branch.
+          run_id=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
+            jq -r '.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main") | .id' | head -1)
 
           if [ -z "$run_id" ]; then
             echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
@@ -76,16 +81,10 @@ runs:
 
           echo "Found ci-dev-pages run $run_id for $COMMIT"
 
-          # Check the run status.
-          status=$(curl --fail --silent --show-error --location \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GH_REPO/actions/runs/$run_id" | jq -r .status)
-
-          conclusion=$(curl --fail --silent --show-error --location \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GH_REPO/actions/runs/$run_id" | jq -r .conclusion)
+          # Single API call: read both status and conclusion from the same response.
+          run_detail=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs/$run_id")
+          status=$(echo "$run_detail" | jq -r .status)
+          conclusion=$(echo "$run_detail" | jq -r .conclusion)
 
           if [ "$status" = "completed" ]; then
             if [ "$conclusion" = "success" ]; then
@@ -109,27 +108,30 @@ runs:
 
     - id: download
       name: Download github-pages artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: github-pages
         run-id: ${{ steps.wait.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
-      continue-on-error: false
+        github-token: ${{ inputs.token }}
+        repository: ${{ github.repository }}
 
     - id: extract
       name: Extract artifact
       shell: bash
       env:
         ARTIFACT_DEST: ${{ inputs.artifact_destination }}
+        RUN_ID: ${{ steps.wait.outputs.run_id }}
       run: |
         # The downloaded artifact contains artifact.tar; extract it to the destination directory.
-        if [ -f "$ARTIFACT_DEST/artifact.tar" ]; then
-          tar xf "$ARTIFACT_DEST/artifact.tar" -C "$ARTIFACT_DEST"
-          echo "Extracted artifact.tar to $ARTIFACT_DEST" | tee -a "$GITHUB_STEP_SUMMARY"
-        else
-          # If artifact.tar is not found, the content may already be extracted.
-          echo "artifact.tar not found; content may already be extracted" | tee -a "$GITHUB_STEP_SUMMARY"
+        if [ ! -f "$ARTIFACT_DEST/artifact.tar" ]; then
+          echo "::error::artifact.tar not found in $ARTIFACT_DEST (run $RUN_ID). Cannot extract."
+          exit 1
         fi
+        tar xf "$ARTIFACT_DEST/artifact.tar" -C "$ARTIFACT_DEST"
+        rm "$ARTIFACT_DEST/artifact.tar"
+        file_count=$(find "$ARTIFACT_DEST" -type f | wc -l)
+        echo "Extracted $file_count files from ci-dev-pages run $RUN_ID to $ARTIFACT_DEST" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: newest
       name: Check this is still main's newest commit
