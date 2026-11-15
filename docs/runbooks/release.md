@@ -22,8 +22,10 @@ Every merge to main updates it, with no tags or releases:
    the PR run already tested this content. The nightly run of [ci-nightly](../../.github/workflows/ci-nightly.yml) tests
    main.
 2. A push to main also starts [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) independently, which builds the
-   dev site from source and uploads the artifact. Then [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) deploys
-   it to GitHub Pages. A deploy replaces the whole site, so it always takes all three.
+   dev site from source and uploads the artifact. When ci-dev-pages completes successfully,
+   [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via `workflow_run` — it receives the CI run ID
+   from the event and downloads the artifact directly (no polling). A deploy replaces the whole site, so it always takes
+   all three.
 
 To put back an older build, push a revert commit to main so ci-dev-pages rebuilds from source and cd-dev-pages deploys
 the new artifact. The old image-based rollback (retag an image, then run ci-dev-pages) is out of date: ci-dev-pages now

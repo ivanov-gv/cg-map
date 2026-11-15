@@ -33,9 +33,10 @@ jobs, `select` (which only passes the planner's image matrix on), `run` in ci-ni
 `Check job times`, the check for test runs below, `CI gate`, `approval`, the Pages deploy in cd-dev-pages (because Pages
 can only publish to this repository: a test run stops after the find job), and the folder jobs in ci-pr-checks (`docs`,
 `workflows`, `platform`, `contracts`, `browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`,
-`apps-web`, `apps-editor`, `apps-core-demo`) which call each folder's workflow with `test_run` passed through. The twins
-use the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and
-manual runs default to it.
+`apps-web`, `apps-editor`, `apps-core-demo`) which call each folder's workflow with `test_run` passed through. The
+`find` job in cd-dev-pages gates on CI conclusion in its `if:` — no separate gate job. The twins use the `test-run`
+environment, whose variables send everything to a test destination. Local runs always use it, and manual runs default to
+it.
 
 The `dev` and `test-run` environments define these variables:
 
@@ -80,15 +81,15 @@ because a version never changes there either.
 
 - **workflow_run path** (default, no arguments): simulates the `workflow_run` trigger using
   `.github/act/event-workflow-run.json`, which contains a real `ci-dev-pages` run (ID 43708216403) on `main`. The find
-  step downloads the artifact from that real run, proving the cross-run download works. Run it with
-  `make test-cd-dev-pages`.
+  step downloads the artifact from that run directly using its ID (no polling). Run it with `make test-cd-dev-pages`.
 - **workflow_dispatch path** (with `COMMIT=`): simulates a manual dispatch. Pass a commit on `main` that has a
-  successful `ci-dev-pages` run with a `github-pages` artifact. Find one with
-  `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it
-  with `make test-cd-dev-pages COMMIT=<full SHA>`.
+  successful `ci-dev-pages` run with a `github-pages` artifact. The find step performs a single lookup for the run. Find
+  one with `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
+  Run it with `make test-cd-dev-pages COMMIT=<full SHA>`.
 
 Under `act`, the GitHub run/artifact APIs need a real token and a real `ci-dev-pages` run, so both paths download from
-an actual CI run.
+an actual CI run. The action never polls — it uses the run ID from the event (workflow_run) or a single lookup
+(workflow_dispatch).
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
@@ -145,9 +146,9 @@ the diff. A push to main triggers `ci-publish` independently — it builds and p
 checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
 `ci-pr-checks` through a composite action at `.github/actions/plan`). A push to main also triggers `ci-dev-pages`
 independently — it builds the dev site from source and uploads the artifact. When `ci-dev-pages` completes successfully
-on `main`, `cd-dev-pages` is triggered via `workflow_run` — it finds that artifact and deploys it to GitHub Pages. The
-nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`. To see what a branch would
-select:
+on `main`, `cd-dev-pages` is triggered via `workflow_run` — it receives the CI run ID from the event and deploys the
+artifact to GitHub Pages without polling. The nightly run of `ci-nightly` checks everything by calling `ci-pr-checks`
+with `run_all: true`. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main

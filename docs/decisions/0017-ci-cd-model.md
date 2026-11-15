@@ -76,6 +76,9 @@ site that should update automatically when code lands.
 on push to main and polls for its SHA's ci-dev-pages run, so CI never triggers CD.
 
 **Outcome (#237, 2026-11-15):** cd-dev-pages no longer triggers on push; it triggers on `workflow_run` when ci-dev-pages
-completes. A gate job checks the CI conclusion before the find job runs. The deploy `if:` requires find success and
-either `workflow_dispatch` (for manual rollback) or `is_newest` (for automatic deploys). The Makefile target supports
-both `workflow_run` (default, via event payload) and `workflow_dispatch` (with `COMMIT=`) paths under act.
+completes. The CI run ID is passed from the event to the find-pages-artifact action, which downloads directly without
+polling. On `workflow_dispatch`, the action performs a single lookup (no retries). The find job's `if:` gates on
+`workflow_dispatch` or successful CI conclusion — no separate gate job. The deploy `if:` requires find success and
+either `workflow_dispatch` (for manual rollback) or `is_newest` (for automatic deploys). The `workflow_run` trigger is
+scoped to `branches: [main]`. The Makefile target supports both `workflow_run` (default, via event payload) and
+`workflow_dispatch` (with `COMMIT=`) paths under act.

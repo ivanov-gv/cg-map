@@ -1,11 +1,16 @@
 name: Find Pages artifact
 description: >-
-  Resolves a commit SHA, verifies it is on main, waits for that SHA's ci-dev-pages run to complete,
+  Resolves a commit SHA, verifies it is on main, locates the ci-dev-pages run that built it,
   downloads the github-pages artifact, and extracts it for re-upload.
+  When a run ID is supplied (from workflow_run), it downloads directly without any lookup.
+  When no run ID is supplied (workflow_dispatch), it performs a single lookup for a successful run.
 inputs:
   commit:
     description: The full commit SHA to find the artifact for.
     required: true
+  run_id:
+    description: Optional ci-dev-pages run ID. When provided, downloads directly without lookup.
+    required: false
   token:
     description: Token for the GitHub API.
     required: true
@@ -17,6 +22,9 @@ outputs:
   commit:
     description: The resolved commit SHA.
     value: ${{ steps.resolve.outputs.commit }}
+  run_id:
+    description: The ci-dev-pages run ID used for the artifact.
+    value: ${{ steps.resolve_run.outputs.run_id }}
   is_newest:
     description: true if the commit is still main's newest commit.
     value: ${{ steps.newest.outputs.is_newest }}
@@ -50,15 +58,24 @@ runs:
         echo "commit=$commit" >> "$GITHUB_OUTPUT"
         echo "Resolved commit: $commit (relation to main: $relation)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-    - id: wait
-      name: Wait for ci-dev-pages run
+    - id: resolve_run
+      name: Resolve ci-dev-pages run
       shell: bash
       env:
         COMMIT: ${{ steps.resolve.outputs.commit }}
+        INPUT_RUN_ID: ${{ inputs.run_id }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
-        # Repeated curl options for the GitHub API.
+        # If a run ID was provided (from workflow_run), use it directly.
+        if [ -n "$INPUT_RUN_ID" ]; then
+          echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Using provided ci-dev-pages run $INPUT_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+
+        # No run ID: perform a single lookup for a successful ci-dev-pages run at this commit.
+        # Prefer a push-triggered run, then fall back to any successful run.
         gh_api() {
           curl --fail --silent --show-error --location \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -66,76 +83,44 @@ runs:
             "$1"
         }
 
-        # Poll for a ci-dev-pages workflow run that matches our commit SHA.
-        # Bounded poll: check every 10 seconds, up to 7 minutes (42 attempts) to match ci-dev-pages timeout.
-        # MAX_ATTEMPTS and POLL_DELAY can be overridden by the environment for testing.
-        # Among all runs for the SHA, prefer a push-triggered run over others.
-        # If any completed run succeeded, use it; only fail when all completed runs failed.
-        attempt=0
-        max_attempts="${MAX_ATTEMPTS:-42}"
-        poll_delay="${POLL_DELAY:-10}"
-        while [ $attempt -lt $max_attempts ]; do
-          attempt=$((attempt + 1))
-          echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
+        runs_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
+          jq '[.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main")]')
 
-          # Fetch all ci-dev-pages runs for this commit on main.
-          runs_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-            jq '[.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main")]')
+        run_count=$(echo "$runs_json" | jq 'length')
+        if [ "$run_count" = "0" ]; then
+          echo "::error::No ci-dev-pages run found for commit $COMMIT"
+          exit 1
+        fi
 
-          run_count=$(echo "$runs_json" | jq 'length')
-          if [ "$run_count" = "0" ]; then
-            echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
-            sleep "$poll_delay"
-            continue
-          fi
+        # Prefer a push-triggered successful run.
+        run_id=$(echo "$runs_json" | \
+          jq -r '.[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .id' | head -1)
 
-          # Check for a successful completed run, preferring push-triggered runs.
-          # First look for a successful push run.
+        # Fall back to any successful run.
+        if [ -z "$run_id" ]; then
           run_id=$(echo "$runs_json" | \
-            jq -r '.[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .id' | head -1)
+            jq -r '.[] | select(.status == "completed" and .conclusion == "success") | .id' | head -1)
+        fi
 
-          # If no successful push run, look for any successful run.
-          if [ -z "$run_id" ]; then
-            run_id=$(echo "$runs_json" | \
-              jq -r '.[] | select(.status == "completed" and .conclusion == "success") | .id' | head -1)
-          fi
+        if [ -z "$run_id" ]; then
+          # Report the first failed run for context.
+          failed_id=$(echo "$runs_json" | jq -r '.[0].id')
+          failed_conclusion=$(echo "$runs_json" | \
+            jq -r ".[] | select(.id == $failed_id) | .conclusion")
+          echo "::error::No successful ci-dev-pages run for $COMMIT (run $failed_id: $failed_conclusion)"
+          echo "Run details: https://github.com/$GH_REPO/actions/runs/$failed_id" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
 
-          if [ -n "$run_id" ]; then
-            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-            echo "ci-dev-pages run $run_id completed successfully" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          # No successful run yet. Check if all runs are completed (meaning all failed).
-          all_completed=$(echo "$runs_json" | jq '[.[] | select(.status != "completed")] | length')
-          if [ "$all_completed" = "0" ]; then
-            # All runs are completed but none succeeded — report the first push failure, or any failure.
-            failed_id=$(echo "$runs_json" | \
-              jq -r '.[] | select(.event == "push") | .id' | head -1)
-            if [ -z "$failed_id" ]; then
-              failed_id=$(echo "$runs_json" | jq -r '.[0].id')
-            fi
-            failed_conclusion=$(echo "$runs_json" | \
-              jq -r ".[] | select(.id == $failed_id) | .conclusion")
-            echo "::error::ci-dev-pages run $failed_id completed with conclusion: $failed_conclusion"
-            echo "Run details: https://github.com/$GH_REPO/actions/runs/$failed_id" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          # Some runs are still in progress; wait and retry.
-          echo "Runs in progress for $COMMIT. Waiting..."
-          sleep "$poll_delay"
-        done
-
-        echo "::error::Timeout waiting for ci-dev-pages run at $COMMIT after $max_attempts attempts"
-        exit 1
+        echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+        echo "Found ci-dev-pages run $run_id for commit $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: download
       name: Download github-pages artifact
       uses: actions/download-artifact@v8
       with:
         name: github-pages
-        run-id: ${{ steps.wait.outputs.run_id }}
+        run-id: ${{ steps.resolve_run.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
         github-token: ${{ inputs.token }}
         repository: ${{ github.repository }}
@@ -145,7 +130,7 @@ runs:
       shell: bash
       env:
         ARTIFACT_DEST: ${{ inputs.artifact_destination }}
-        RUN_ID: ${{ steps.wait.outputs.run_id }}
+        RUN_ID: ${{ steps.resolve_run.outputs.run_id }}
       run: |
         # The downloaded artifact contains artifact.tar; extract it to the destination directory.
         if [ ! -f "$ARTIFACT_DEST/artifact.tar" ]; then
