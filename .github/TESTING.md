@@ -58,8 +58,9 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
-use `environment: test-run`. The exception is the approval gate (`ci-approval`, which waits for manual approval). The
-Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it is a CD workflow, not CI.
+use `environment: test-run`. The exception is the approval gate (`ci-approval`, which passes automatically until the
+owner adds required reviewers). The Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it
+is a CD workflow, not CI.
 
 ## Locally with act
 
@@ -137,13 +138,14 @@ check exempts workflows not yet on `main` automatically.
 
 ## Through a real PR
 
-`ci-pr-checks` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from
-the diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no
-checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
-`ci-pr-checks` through a composite action at `.github/actions/plan`). A push to main also triggers `ci-dev-pages`
-independently — it builds the dev site from source and uploads the artifact. A push to main also triggers `cd-dev-pages`
-independently — it finds that artifact and deploys it to GitHub Pages. The nightly run of `ci-nightly` checks everything
-by calling `ci-pr-checks` with `run_all: true`. To see what a branch would select:
+`ci-pr-checks` starts on every PR. The `ci-approval` environment gate passes automatically until the owner adds required
+reviewers; adding a reviewer later needs no workflow change. Then the run selects pipelines from the diff. A push to
+main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no checks because the PR
+run already tested the content). `ci-publish` has its own test-run switch and planner (shared with `ci-pr-checks`
+through a composite action at `.github/actions/plan`). A push to main also triggers `ci-dev-pages` independently — it
+builds the dev site from source and uploads the artifact. A push to main also triggers `cd-dev-pages` independently — it
+finds that artifact and deploys it to GitHub Pages. The nightly run of `ci-nightly` checks everything by calling
+`ci-pr-checks` with `run_all: true`. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main

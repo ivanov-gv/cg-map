@@ -15,7 +15,8 @@ Today's implementation deviates from this model in several ways:
 - `ci-all` deploys Pages as a CI step, blurring the CI/CD boundary described in ADR 0005.
 - The dev site is assembled from `:main` images, which are mutable tags that change on every merge (ADR 0005).
 - Almost every CI job declares `environment: dev` to read variables, creating about 15 deployments per PR run (#165).
-- The `ci-approval` environment has no required reviewers, so the gate never actually waits (#169).
+- The `ci-approval` environment has no required reviewers, so the gate passes automatically; the owner can add reviewers
+  later without any workflow change (#169).
 - PR runs take 4.5-10 minutes end to end, exceeding the 5-minute target.
 - ADR 0006 states that "a push to main runs no checks" and only publishes, which treats the deploy as a CI consequence.
 
@@ -47,8 +48,9 @@ These gaps need recording so the model is documented in one place and the featur
   production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
   environment, and every test-run twin uses `test-run`. GitHub records a deployment for each job that references an
   environment, so these records are expected and are not deploys.
-- **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
-  entirely. The decision records the plain string form (`environment: dev`), because act rejects `deployment: false`.
+- **Approval gate** (#169). The `ci-approval` environment gate passes automatically until the owner adds required
+  reviewers; adding a reviewer later needs no workflow change. The decision records the plain string form
+  (`environment: dev`), because act rejects `deployment: false`.
 
 These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 [ADR 0005](0005-packages-releases-and-dev-pages.md), and the "push to main updates dev" part of
