@@ -27,10 +27,12 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 `ci-apps-editor` splits its browser tests; do not raise the limit.
 
 The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
-`CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the jobs JSON for the current
-run attempt, computes the elapsed time (from the approval job's completion, or the run start if no approval), and emits
-a verdict. Under the aim is ok; between aim and limit emits a warning; over the limit fails the gate. Non-PR events
-(schedule, manual dispatch) are exempt. Unreadable timings only warn — they do not fail the gate.
+`CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
+`GET repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT`) for `run_started_at`, then fetches the jobs JSON. The
+effective start is the later of the approval job's completion and the attempt's `run_started_at` — this correctly
+handles reruns, where the attempt starts after the original approval. If `run_started_at` is unreadable, it falls back
+to the approval time; if neither is available, it uses the earliest job start. Non-PR events (schedule, manual dispatch)
+are exempt. Unreadable timings only warn — they do not fail the gate.
 
 ## Test-run mode
 

@@ -841,17 +841,30 @@ function makeJobsJson(secondsAgo) {
 }
 
 // Run the "Check run budget" step script in a temp dir with a fake `gh` and the real run-budget.mjs.
+// The fake gh serves both the attempt endpoint (for run_started_at) and the jobs endpoint.
 // Returns {code, stdout, stderr}.
-async function runBudgetBehaviorTest(jobsJson, shouldFailGh) {
+async function runBudgetBehaviorTest(jobsJson, shouldFailGh, attemptJson) {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-behavior-'));
 
-  // Create the fake gh script
+  // Create the fake gh script that distinguishes between the attempt and jobs endpoints.
+  const jobsEscaped = jobsJson.replace(/'/g, "'\\''");
+  const attemptEscaped = (attemptJson ?? '{}').replace(/'/g, "'\\''");
   const ghScript = `#!/usr/bin/env bash
 if [ "${shouldFailGh}" = "true" ]; then
   echo "API error" >&2
   exit 1
 fi
-echo '${jobsJson.replace(/'/g, "'\\''")}'
+case "$@" in
+  *'/attempts/'*/jobs*)
+    echo '${jobsEscaped}'
+    ;;
+  *'/attempts/'*)
+    echo '${attemptEscaped}'
+    ;;
+  *)
+    echo '${jobsEscaped}'
+    ;;
+esac
 `;
   const ghPath = path.join(temporaryDirectory, 'gh');
   await fs.promises.writeFile(ghPath, ghScript);
@@ -921,6 +934,41 @@ test('run budget: script crashes exits 0 with ::warning::', async () => {
   assert.equal(result.code, 0, 'script crash must exit 0');
   // The script outputs "unreadable" verdict, which the step treats as a warning.
   assert.match(result.stdout, /::warning::/, 'script crash must emit ::warning::');
+});
+
+// Real data: run 43710253591, attempt 2
+// Approval completed at 11:43:04Z, attempt started at 12:15:04Z, gate at 12:15:17Z.
+// Without run_started_at: 1933s from approval → fail. With run_started_at: 13s → ok.
+test('run budget: rerun with run_started_at uses attempt start, not approval (run 43710253591)', async () => {
+  // Simulate a rerun: approval was long ago, but the attempt just started.
+  // The attempt endpoint returns a recent run_started_at.
+  const approvalCompleted = new Date(Date.now() - 1933_000).toISOString();
+  const runStartedAt = new Date(Date.now() - 13_000).toISOString();
+  const jobsJson = JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
+    ]
+  });
+  const attemptJson = JSON.stringify({run_started_at: runStartedAt});
+  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  assert.equal(result.code, 0, 'rerun with run_started_at must exit 0 (ok)');
+  assert.doesNotMatch(result.stdout, /::error::/, 'rerun must not error');
+  assert.match(result.stdout, /13s elapsed/, 'elapsed must be 13s from attempt start');
+});
+
+test('run budget: first run with run_started_at earlier than approval uses approval', async () => {
+  // On a first run, run_started_at is before the approval. The effective start is the approval.
+  const approvalCompleted = new Date(Date.now() - 200_000).toISOString();
+  const runStartedAt = new Date(Date.now() - 300_000).toISOString();
+  const jobsJson = JSON.stringify({
+    jobs: [
+      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
+    ]
+  });
+  const attemptJson = JSON.stringify({run_started_at: runStartedAt});
+  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  assert.equal(result.code, 0, 'first run must exit 0');
+  assert.match(result.stdout, /200s elapsed/, 'elapsed must be 200s from approval, not run_started_at');
 });
 
 test('ci-nightly grants cover the gate actions:read permission', () => {

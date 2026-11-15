@@ -267,19 +267,25 @@ jobs:
           node-version-file: .node-version
       - name: Check run budget
         run: |
-          # Fetch the jobs JSON for this run attempt and evaluate the time budget.
-          # Start = approval job's completed_at if present, else earliest job started_at.
-          # There is no run-start input because the GitHub run context has no run start timestamp.
+          # Fetch the run attempt metadata for run_started_at, then the jobs JSON.
+          # Start = the later of the approval job's completed_at and the run attempt's run_started_at.
+          # On a rerun, run_started_at is after the original approval, so it becomes the true start.
+          # If run_started_at is unreadable, fall back to the approval time, else the earliest job start.
           # End = now (the gate step's time).
           # Verdict: ok (under aim), warn (between aim and limit), fail (over limit), unreadable (bad input).
           # Only "fail" causes the gate to fail; "warn" and "unreadable" emit warnings (timings are advisory).
+          run_started_at=""
+          attempt_file=$(mktemp)
+          if gh api "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" > "$attempt_file" 2>/dev/null; then
+            run_started_at=$(jq -r '.run_started_at // empty' "$attempt_file" 2>/dev/null || true)
+          fi
           jobs_file=$(mktemp)
           if ! gh api "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs" --paginate > "$jobs_file" 2>&1; then
             echo "::warning::Could not fetch jobs for run budget check"
             echo "Run budget: unreadable — could not fetch jobs" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" 2>&1) && exit_status=0 || exit_status=$?
+          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" "$run_started_at" 2>&1) && exit_status=0 || exit_status=$?
           echo "$output" | tee -a "$GITHUB_STEP_SUMMARY"
           verdict=$(echo "$output" | tail -1)
           if [ "$exit_status" -ne 0 ]; then
