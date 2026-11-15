@@ -14,10 +14,9 @@ on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-p
 
 Test workflows in this order, stopping at the first failure:
 
-1. **Lint** — `make lint-workflows` runs actionlint locally, catching syntax errors before any run. (This is the
-   repository-wide command; it could not fit in root AGENTS.md without exceeding its 100-line limit.)
-2. **Local run** — `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
-3. **GitHub test run** — dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
+1. **Lint:** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
+2. **Local run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
+3. **GitHub test run:** dispatch the workflow with `workflow_dispatch` on GitHub, verifying environment settings,
    variables, and secrets. A workflow not yet on `main` cannot be dispatched; see the [On GitHub](#on-github) section
    for the exemption.
 

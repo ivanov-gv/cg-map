@@ -23,9 +23,9 @@ These gaps need recording so the model is documented in one place and the featur
 
 ## Decision
 
-- **Pages build from source.** CI (`ci-dev-pages`) builds the dev site from source at the commit, with a `/version.json`
-  carrying the SHA, and uploads the artifact with `upload-pages-artifact`. This replaces the `:main`-image approach: the
-  site is no longer assembled from mutable images.
+- **Pages build from source.** CI (`ci-dev-pages`) builds the dev site from source on every commit to main, with a
+  `/version.json` carrying the SHA, and uploads the artifact with `upload-pages-artifact`. This replaces the
+  `:main`-image approach: the site is no longer assembled from mutable images.
 - **Pages CD trigger.** The CD workflow triggers on `page_build` if a spike confirms it fires with Pages
   `build_type: workflow`; otherwise it triggers on `push` to main. Both are valid CD triggers under the wiki model. CD
   deploys that exact artifact with `deploy-pages` and never rebuilds it.
@@ -35,17 +35,23 @@ These gaps need recording so the model is documented in one place and the featur
   on main). One workflow per concern.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
-- **Environments only where they are read.** GitHub environments are named sets of variables and secrets; `dev` and
-  `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
+- **Environments only where they are read** (#165). GitHub environments are named sets of variables and secrets; `dev`
+  and `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
   production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
   environment, and every test-run twin uses `test-run`. GitHub records a deployment for each job that references an
-  environment, so these records are expected and are not deploys (#165).
+  environment, so these records are expected and are not deploys.
 - **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
-  entirely.
+  entirely. The decision records the plain string form (`environment: dev`), because act rejects `deployment: false`.
 
 These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 [ADR 0005](0005-packages-releases-and-dev-pages.md), and the "push to main updates dev" part of
 [ADR 0006](0006-ci-time-limits-and-tests-before-merge.md).
+
+## Skill deviation
+
+`agents:cicd-general` "CD workflows" rules 2 and 3 require CD to trigger on a release or manual trigger, and forbid push
+triggers. This project's Pages CD triggers on `page_build` or a push to main instead, because Pages is a development
+site that should update automatically when code lands.
 
 ## Consequences
 
@@ -55,9 +61,9 @@ These decisions supersede the Pages-as-CI-step and `:main`-image parts of
   comes from #169's re-sharding.
 - Deployment records come only from jobs that read an environment, instead of from almost every CI job.
 - The approval gate can actually hold PRs once reviewers are configured.
-- The features that implement this decision are #164 (this ADR and actionlint), #165 (CI without deployments), #166
-  (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget and
-  approval).
+- The features that implement this decision are #164 (this ADR and actionlint), #165 (environments only where they are
+  read), #166 (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget
+  and approval).
 - The Pages deploy step is never exercised in a test run.
 - The `page_build` trigger depends on a spike to confirm it fires.
 - Building from source drops the image reuse that ADR 0005 relied on.

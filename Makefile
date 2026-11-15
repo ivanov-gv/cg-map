@@ -55,9 +55,11 @@ worktree:
 	$(MAKE) --no-print-directory -C platform worktree NAME="$(NAME)" BASE="$(BASE)"
 
 # Lint all workflow YAML files with actionlint.
-# CI pins rhysd/actionlint:1.7.12; use the local binary only when it reports 1.7.12, otherwise the pinned image.
+# CI pins rhysd/actionlint:1.7.12, which also runs shellcheck. Use the local binary only when it is 1.7.12 and
+# shellcheck is installed; otherwise use the pinned image.
 lint-workflows:
-	@if command -v actionlint >/dev/null 2>&1 && [ "$$(actionlint -version 2>&1 | head -1)" = "v1.7.12" ]; then \
+	@if command -v actionlint >/dev/null 2>&1 && command -v shellcheck >/dev/null 2>&1 && \
+	   [ "$$(actionlint -version 2>&1 | head -1 | sed 's/^v//')" = "1.7.12" ]; then \
 		actionlint -color; \
 	else \
 		docker run --rm -v "$$(pwd)":/repo -w /repo rhysd/actionlint:1.7.12 -color; \
