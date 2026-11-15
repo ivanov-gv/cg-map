@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Fake `curl` for find-pages-artifact tests.
 # Reads configuration from files in FAKE_CURL_DIR:
-#   compare-main-<sha>   — JSON response for compare/main...<sha> (status field)
-#   runs-head-sha-<sha>  — JSON response for actions/runs?head_sha=<sha>
-#   run-detail-<id>      — JSON response for actions/runs/<id>
-#   commit-main          — JSON response for commits/main (sha field)
+#   compare-main-<sha>        — JSON response for compare/main...<sha> (status field)
+#   artifacts-name-<name>     — JSON response for actions/artifacts?name=<name>
+#   commit-main               — JSON response for commits/main (sha field)
 #
 # Usage: fake-curl.sh [options] URL
 # Options: --fail --silent --show-error --location --header ... are ignored.
@@ -31,24 +30,15 @@ if [[ "$url" == */compare/main\...* ]]; then
   else
     echo '{"status":"behind"}'
   fi
-elif [[ "$url" == */actions/runs\?head_sha=* ]]; then
-  # Extract the SHA from the query string, stripping any trailing query params.
-  commit="${url##*head_sha=}"
-  commit="${commit%%&*}"
-  stub="$StubDirectory/runs-head-sha-$commit"
+elif [[ "$url" == */actions/artifacts\?name=* ]]; then
+  # Extract the artifact name from the query string.
+  name="${url##*name=}"
+  name="${name%%&*}"
+  stub="$StubDirectory/artifacts-name-$name"
   if [ -f "$stub" ]; then
     cat "$stub"
   else
-    echo '{"workflow_runs":[]}'
-  fi
-elif [[ "$url" == */actions/runs/* ]]; then
-  # Extract the run ID.
-  run_id="${url##*/actions/runs/}"
-  stub="$StubDirectory/run-detail-$run_id"
-  if [ -f "$stub" ]; then
-    cat "$stub"
-  else
-    echo '{"status":"completed","conclusion":"success"}'
+    echo '{"artifacts":[]}'
   fi
 elif [[ "$url" == */commits/main ]]; then
   stub="$StubDirectory/commit-main"

@@ -54,8 +54,6 @@ jobs:
     permissions: &find-permissions
       actions: read
       contents: read
-    env:
-      CI_RUN_ID: ${{ github.event.workflow_run.id }}
     outputs: &find-outputs
       is_newest: ${{ steps.find_artifact.outputs.is_newest }}
     steps: &find-steps
@@ -68,9 +66,9 @@ jobs:
         uses: ./.github/actions/find-pages-artifact
         with:
           commit: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
-          run_id: ${{ env.CI_RUN_ID }}
           token: ${{ github.token }}
           artifact_destination: pages-dist
+          retention_days: '90'
       # Re-upload the extracted content as this workflow's Pages artifact for the deploy job.
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -83,8 +81,6 @@ jobs:
     timeout-minutes: 7
     environment: test-run
     permissions: *find-permissions
-    env:
-      CI_RUN_ID: ${{ github.event.workflow_run.id }}
     outputs: *find-outputs
     steps: *find-steps
   # No test-run twin: Pages can only publish to this repository, so there is no test destination.

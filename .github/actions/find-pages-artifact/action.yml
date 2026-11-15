@@ -1,17 +1,12 @@
 name: Find Pages artifact
 description: >-
-  Resolves a commit SHA, verifies it is on main, locates the ci-dev-pages run that built it,
-  downloads the dev-pages-&lt;commit&gt; artifact by name, verifies version.json matches,
-  and extracts it for re-upload.
-  When a run ID is supplied (from workflow_run), it downloads directly without any lookup.
-  When no run ID is supplied (workflow_dispatch), it finds the artifact by name (newest non-expired).
+  Resolves a commit SHA, verifies it is on main, finds the dev-pages-&lt;commit&gt; artifact by name
+  (newest non-expired), downloads it, verifies version.json matches, and extracts it for re-upload.
+  CD is independent of CI's runs: it only needs the artifact name.
 inputs:
   commit:
     description: The full commit SHA to find the artifact for.
     required: true
-  run_id:
-    description: Optional ci-dev-pages run ID. When provided, downloads directly without lookup.
-    required: false
   token:
     description: Token for the GitHub API.
     required: true
@@ -19,13 +14,17 @@ inputs:
     description: Directory to extract the downloaded artifact into.
     required: false
     default: pages-dist
+  retention_days:
+    description: Artifact retention days (for error messages).
+    required: false
+    default: '90'
 outputs:
   commit:
     description: The resolved commit SHA.
     value: ${{ steps.resolve.outputs.commit }}
   run_id:
-    description: The ci-dev-pages run ID used for the artifact.
-    value: ${{ steps.resolve_run.outputs.run_id }}
+    description: The workflow run ID that produced the artifact.
+    value: ${{ steps.resolve_artifact.outputs.run_id }}
   is_newest:
     description: true if the commit is still main's newest commit.
     value: ${{ steps.newest.outputs.is_newest }}
@@ -59,24 +58,17 @@ runs:
         echo "commit=$commit" >> "$GITHUB_OUTPUT"
         echo "Resolved commit: $commit (relation to main: $relation)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-    - id: resolve_run
-      name: Resolve ci-dev-pages run
+    - id: resolve_artifact
+      name: Find artifact by name
       shell: bash
       env:
         COMMIT: ${{ steps.resolve.outputs.commit }}
-        INPUT_RUN_ID: ${{ inputs.run_id }}
+        RETENTION_DAYS: ${{ inputs.retention_days }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
-        # If a run ID was provided (from workflow_run), use it directly.
-        if [ -n "$INPUT_RUN_ID" ]; then
-          echo "run_id=$INPUT_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "Using provided ci-dev-pages run $INPUT_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 0
-        fi
+        artifact_name="dev-pages-$COMMIT"
 
-        # No run ID: perform a single lookup for a successful ci-dev-pages run at this commit.
-        # Prefer a push-triggered run, then fall back to any successful run.
         gh_api() {
           curl --fail --silent --show-error --location \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -84,44 +76,32 @@ runs:
             "$1"
         }
 
-        runs_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-          jq '[.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main")]')
+        # List all artifacts with this name; take the newest non-expired one.
+        artifacts_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/artifacts?name=$artifact_name&per_page=100")
 
-        run_count=$(echo "$runs_json" | jq 'length')
-        if [ "$run_count" = "0" ]; then
-          echo "::error::No ci-dev-pages run found for commit $COMMIT"
+        # Filter to non-expired artifacts and sort by created_at descending.
+        non_expired=$(echo "$artifacts_json" | jq '[.artifacts[] | select(.expired == false)]')
+        count=$(echo "$non_expired" | jq 'length')
+
+        if [ "$count" = "0" ]; then
+          echo "::error::No artifact $artifact_name: it was never built on main, or it expired after its retention of $RETENTION_DAYS days"
           exit 1
         fi
 
-        # Prefer a push-triggered successful run.
-        run_id=$(echo "$runs_json" | \
-          jq -r '.[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .id' | head -1)
-
-        # Fall back to any successful run.
-        if [ -z "$run_id" ]; then
-          run_id=$(echo "$runs_json" | \
-            jq -r '.[] | select(.status == "completed" and .conclusion == "success") | .id' | head -1)
-        fi
-
-        if [ -z "$run_id" ]; then
-          # Report the first failed run for context.
-          failed_id=$(echo "$runs_json" | jq -r '.[0].id')
-          failed_conclusion=$(echo "$runs_json" | \
-            jq -r ".[] | select(.id == $failed_id) | .conclusion")
-          echo "::error::No successful ci-dev-pages run for $COMMIT (run $failed_id: $failed_conclusion)"
-          echo "Run details: https://github.com/$GH_REPO/actions/runs/$failed_id" | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
-        fi
+        # Take the newest (first in the list, which is sorted by created_at descending by default).
+        newest=$(echo "$non_expired" | jq '.[0]')
+        run_id=$(echo "$newest" | jq -r '.workflow_run.id')
+        artifact_id=$(echo "$newest" | jq -r '.id')
 
         echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-        echo "Found ci-dev-pages run $run_id for commit $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+        echo "Found artifact $artifact_name (id=$artifact_id, run_id=$run_id)" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: download
       name: Download Pages artifact by name
       uses: actions/download-artifact@v8
       with:
         name: dev-pages-${{ steps.resolve.outputs.commit }}
-        run-id: ${{ steps.resolve_run.outputs.run_id }}
+        run-id: ${{ steps.resolve_artifact.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
         github-token: ${{ inputs.token }}
         repository: ${{ github.repository }}
@@ -131,7 +111,7 @@ runs:
       shell: bash
       env:
         ARTIFACT_DEST: ${{ inputs.artifact_destination }}
-        RUN_ID: ${{ steps.resolve_run.outputs.run_id }}
+        RUN_ID: ${{ steps.resolve_artifact.outputs.run_id }}
       run: |
         # The downloaded artifact contains artifact.tar; extract it to the destination directory.
         if [ ! -f "$ARTIFACT_DEST/artifact.tar" ]; then

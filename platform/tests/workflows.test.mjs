@@ -357,7 +357,7 @@ test('cd-dev-pages has no workflow_call trigger', () => {
   assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
 });
 
-// Run the find-pages-artifact resolve and resolve_run scripts with a stub curl.
+// Run the find-pages-artifact resolve and resolve_artifact scripts with a stub curl.
 // The action's run: blocks are extracted from the YAML and executed in a temp directory
 // where fake-curl.sh intercepts all API calls. No network is used.
 const findArtifactAction = fs.readFileSync(
@@ -366,10 +366,10 @@ const findArtifactAction = fs.readFileSync(
 );
 const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh');
 
-// Parse the action YAML to extract the resolve and resolve_run step scripts.
+// Parse the action YAML to extract the resolve and resolve_artifact step scripts.
 const findArtifactYaml = parseYaml(findArtifactAction);
 const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
-const resolveRunScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve_run').run;
+const resolveArtifactScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve_artifact').run;
 
 async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
@@ -387,11 +387,11 @@ async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
     GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
     GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
     INPUT_COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
-    INPUT_RUN_ID: '',
     EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
     COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    RETENTION_DAYS: '90',
     FAKE_CURL_DIR: stubDirectory,
     ...envOverrides,
   };
@@ -436,46 +436,51 @@ test('find-pages-artifact: resolve fails when commit has diverged from main', as
   assert.match(result.stdout, /::error::.*not on main.*diverged/, 'must emit ::error:: with diverged');
 });
 
-test('find-pages-artifact: resolve_run uses provided run_id without any lookup', async () => {
-  const result = await runFindArtifactStep(resolveRunScript, {}, {INPUT_RUN_ID: '99999'});
-  assert.equal(result.code, 0, 'resolve_run must pass when run_id is provided');
-  // Verify no curl was called (no stub files needed, no API calls made).
-  assert.match(result.stdout, /Using provided ci-dev-pages run 99999/);
+test('find-pages-artifact: resolve_artifact finds artifact by name', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 0, 'resolve_artifact must pass when artifact is found');
+  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /run_id=12345/);
 });
 
-test('find-pages-artifact: resolve_run performs single lookup when no run_id', async () => {
-  const result = await runFindArtifactStep(resolveRunScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"success"}]}',
-  }, {INPUT_RUN_ID: ''});
-  assert.equal(result.code, 0, 'resolve_run must pass when a successful run is found');
-  assert.match(result.stdout, /Found ci-dev-pages run 12345/);
+test('find-pages-artifact: resolve_artifact errors when no artifact found', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
+  });
+  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 90 days/);
 });
 
-test('find-pages-artifact: resolve_run fails with ::error:: when no successful run', async () => {
-  const result = await runFindArtifactStep(resolveRunScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"failure"}]}',
-  }, {INPUT_RUN_ID: ''});
-  assert.equal(result.code, 1, 'resolve_run must fail when no successful run exists');
-  assert.match(result.stdout, /::error::.*No successful ci-dev-pages run/);
+test('find-pages-artifact: resolve_artifact errors when all artifacts are expired', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":12345},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 1, 'resolve_artifact must fail when all artifacts are expired');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 90 days/);
 });
 
-test('find-pages-artifact: resolve_run fails when no runs found at all', async () => {
-  const result = await runFindArtifactStep(resolveRunScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12': '{"workflow_runs":[]}',
-  }, {INPUT_RUN_ID: ''});
-  assert.equal(result.code, 1, 'resolve_run must fail when no runs are found');
-  assert.match(result.stdout, /::error::.*No ci-dev-pages run found/);
+test('find-pages-artifact: resolve_artifact chooses newest non-expired among several', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":200,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":99999},"created_at":"2026-11-16T12:00:00Z"},{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 0, 'resolve_artifact must pass when at least one non-expired artifact exists');
+  assert.match(result.stdout, /run_id=99999/, 'must select the newest non-expired artifact');
 });
 
-test('find-pages-artifact: resolve_run prefers push over other events', async () => {
-  const result = await runFindArtifactStep(resolveRunScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"workflow_dispatch","id":11111,"status":"completed","conclusion":"success"},{"name":"ci-dev-pages","head_branch":"main","event":"push","id":22222,"status":"completed","conclusion":"success"}]}',
-  }, {INPUT_RUN_ID: ''});
+test('find-pages-artifact: resolve_artifact skips expired and picks non-expired', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /run 22222/, 'must select the push-triggered run');
+  assert.match(result.stdout, /run_id=12345/, 'must select the non-expired artifact');
 });
 
 test('find-pages-artifact: action contains no retry loop', () => {

@@ -39,12 +39,11 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    environment: dev
     permissions: &build-permissions
       contents: read
       packages: read
     env:
-      DEV_PAGES_RETENTION_DAYS: ${{ vars.DEV_PAGES_RETENTION_DAYS || '30' }}
+      DEV_PAGES_RETENTION_DAYS: 90
     steps: &build-steps
       - uses: actions/checkout@v7
         with:
@@ -77,7 +76,7 @@ jobs:
           echo "Files in the site: $count" | tee -a "$GITHUB_STEP_SUMMARY"
       # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
       # The artifact name carries the commit SHA so CD can find it by name without asking CI.
-      # Retention comes from the job env DEV_PAGES_RETENTION_DAYS (mapped from vars, default 30 days).
+      # Retention is 90 days — the rollback window and GitHub's maximum for this repository.
       - uses: actions/upload-pages-artifact@v4
         with:
           name: dev-pages-${{ github.sha }}
@@ -92,5 +91,5 @@ jobs:
     environment: test-run
     permissions: *build-permissions
     env:
-      DEV_PAGES_RETENTION_DAYS: ${{ vars.DEV_PAGES_RETENTION_DAYS || '30' }}
+      DEV_PAGES_RETENTION_DAYS: 90
     steps: *build-steps
