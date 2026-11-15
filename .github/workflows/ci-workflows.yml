@@ -62,6 +62,17 @@ jobs:
             exit 0
           fi
 
+          has_workflow_dispatch_on_main() { # <workflow file>
+            # Fetch the workflow YAML from main, decode base64 content, and check for workflow_dispatch trigger.
+            # Any API failure (other than 404, which is handled above) must not pass this check.
+            base64=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --jq .content 2>&1) || {
+              echo "::error::Could not fetch $1 from main to check for workflow_dispatch."
+              return 1
+            }
+            content=$(echo "$base64" | base64 -d 2>/dev/null) || return 1
+            echo "$content" | grep -q 'workflow_dispatch:'
+          }
+
           has_qualifying_run() { # <workflow file> <required run-name text>
             # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
             # Only a 404 means that: any other API failure must not pass this check.
@@ -71,6 +82,11 @@ jobs:
                 return 1
               fi
               echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
+              return 0
+            fi
+            # If the workflow on main has no workflow_dispatch trigger, it cannot be dispatched yet.
+            if ! has_workflow_dispatch_on_main "$1"; then
+              echo "::notice::$1 on main has no workflow_dispatch trigger, so it cannot be dispatched yet."
               return 0
             fi
             matches=$(gh run list --workflow "$1" --event workflow_dispatch --commit "$HEAD_SHA" --status success \

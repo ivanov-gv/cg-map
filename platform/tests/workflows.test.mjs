@@ -457,6 +457,40 @@ test('ci-workflows: ci-publish.yml not on main is exempt from test-run requireme
   assert.equal(result.code, 0, 'ci-publish.yml not on main is exempt');
 });
 
+test('ci-workflows: a workflow on main without workflow_dispatch is exempt', async () => {
+  // Simulate ci-publish.yml on main with only workflow_call (no workflow_dispatch).
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[]',
+    }
+  );
+  assert.equal(result.code, 0, 'workflow without workflow_dispatch on main is exempt');
+  assert.match(result.stdout, /no workflow_dispatch trigger/, 'must explain the exemption');
+});
+
+test('ci-workflows: a workflow on main with workflow_dispatch but no run still fails', async () => {
+  // Simulate ci-publish.yml on main with workflow_dispatch, but no qualifying run.
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-publish.yml'],
+    {
+      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n  workflow_dispatch:\n    inputs:\n      test_run:\n        type: boolean\n',
+      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'workflow with workflow_dispatch but no qualifying run must fail');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
+    'error must name the ci-publish dispatch command'
+  );
+});
+
 test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
   const {on} = load('ci-publish.yml');
   assert.ok(on.push, 'ci-publish must trigger on push to main');

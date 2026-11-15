@@ -109,7 +109,8 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 a `cd-browser-image` one when that workflow or its actions changed, and a `ci-publish` test run when `ci-publish.yml`,
 `ci-dev-pages.yml`, or the publish-related actions (`plan`, `publish-image`, `publish-dev-package`,
 `publish-browser-image`, `setup-web`, `run-check`) changed. A workflow not yet on `main` cannot be dispatched, so it is
-exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
+exempt. The same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After
+those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
 After merging `ci-pr-checks.yml` or `ci-nightly.yml`, they cannot be dispatched until the merge lands on `main`. Test
 them locally first with `make test-ci-pr-checks` and `make test-ci-nightly`; the test-run-evidence check exempts
