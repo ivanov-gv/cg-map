@@ -18,10 +18,8 @@ on:
 permissions:
   contents: read
   packages: read
-concurrency:
-  # Group is unique per run (github.run_id), so nothing is ever cancelled — it only serialises overlapping pushes.
-  group: ci-publish-${{ github.run_id }}
-  cancel-in-progress: false
+# No concurrency group: a later merge must not be cancelled or queued behind an earlier publish.
+# Deploys stay ordered by ci-dev-pages' `dev-pages` group and its newest-commit check.
 jobs:
   switch:
     name: Test-run switch
