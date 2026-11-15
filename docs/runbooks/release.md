@@ -21,13 +21,27 @@ Every merge to main updates it, with no tags or releases:
    into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. It runs no tests, because
    the PR run already tested this content. The nightly run of [ci-nightly](../../.github/workflows/ci-nightly.yml) tests
    main.
-2. A push to main also starts [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) independently, which builds the
-   dev site from source and deploys it. A deploy replaces the whole site, so it always takes all three.
+2. The `pages` job in ci-publish builds the dev site from source (all three apps) and pushes the image
+   `$IMAGE_REPOSITORY/dev-pages:<sha>`. When ci-publish completes successfully on main,
+   [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via `workflow_run` — it pulls the image by
+   commit SHA, extracts the site, and deploys. CD only runs for a successful push build on main, never for a CI test run
+   or any other run. A deploy replaces the whole site, so it always takes all three.
 
-To put back an older build, push a revert commit to main so ci-dev-pages rebuilds from that point. The old image-based
-rollback (retag an image, then run ci-dev-pages) is out of date: ci-dev-pages now builds from source, not from images.
-Issue #168 will replace this with a cd-dev-pages procedure. A failed deploy does not affect `CI gate`, so check it after
-merging. To republish after a failed merge run, use "Re-run failed jobs" on that run.
+To put back an older build, dispatch cd-dev-pages with the commit to roll back to (within the last 10 builds — the
+rollback window). A failed deploy does not affect `CI gate`, so check it after merging. To republish after a failed
+merge run, use "Re-run failed jobs" on that run.
+
+To manually deploy a specific commit (rollback or promotion), dispatch cd-dev-pages with that commit:
+
+```sh
+gh workflow run cd-dev-pages.yml --ref main -f test_run=false -f commit=<full SHA on main>
+```
+
+The commit must be on main and have a `dev-pages:<commit>` image that has not been cleaned up (ci-publish keeps the last
+10 versions — the rollback window). After an image is cleaned up, rebuild it first with ci-publish's `commit` input,
+then dispatch cd-dev-pages. Every commit deploys its own version; an older push does not overwrite a newer site. Find a
+qualifying commit with
+`gh run list --workflow ci-publish.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 

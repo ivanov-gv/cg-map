@@ -144,3 +144,15 @@ test('every local workflow run uses the published image', () => {
   assert.match(makefile, /--var BROWSER_CONTAINER_OPTIONS="--device \/dev\/dri"/, 'a job container needs the GPU passed itself');
   assert.match(makefile, /^test-cd-browser-image: act-image$/m);
 });
+
+test('test-all-workflows dry run does not require COMMIT', () => {
+  // Targets that need COMMIT must allow dry run without it, using the pattern from test-cd-map-core.
+  const result = spawnSync('make', ['-n', 'test-all-workflows', 'ACT=gh act -n'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {...process.env, COMMIT: ''}
+  });
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.equal(result.status, 0, `dry run must not fail for missing COMMIT: ${output}`);
+  assert.doesNotMatch(output, /Set COMMIT/, 'dry run must not require COMMIT');
+});

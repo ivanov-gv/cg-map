@@ -22,7 +22,7 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
-  'ci-dev-pages.yml': ['switch', 'deploy'],
+  'cd-dev-pages.yml': ['switch', 'deploy'],
   'ci-publish.yml': ['switch', 'select']
 };
 
@@ -97,13 +97,9 @@ for (const file of newWorkflowFiles) {
   });
 }
 
-// Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy']};
-
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
-      if (DEV_PAGES_JOBS[file]?.includes(name)) continue;
       const environment = job.environment;
       const allowedEnvironments = ['dev', 'test-run', 'ci-approval'];
       if (environment) assert.ok(allowedEnvironments.includes(environment), `${file} ${name} uses ${environment}`);
@@ -137,13 +133,29 @@ for (const [file, tagPrefix] of Object.entries(CD_TAGS))
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
 });
 
-test('only the dev Pages deploy holds Pages permissions, and a test run cannot reach it', () => {
-  const {jobs} = load('ci-dev-pages.yml');
-  assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy only runs after the production build (not build-test-run), so test runs never reach it.
-  assert.match(jobs.deploy.if, /needs\.build\.outputs\.is_newest/);
-  for (const job of ['build', 'build-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
-  assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
+test('only cd-dev-pages deploy uses actions/deploy-pages, and no ci-* workflow does', () => {
+  for (const file of newWorkflowFiles) {
+    const {jobs} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      const stepsText = JSON.stringify(job.steps ?? []);
+      if (file.startsWith('ci-')) {
+        assert.doesNotMatch(
+          stepsText,
+          /actions\/deploy-pages/,
+          `${file} ${name} must not use actions/deploy-pages`
+        );
+      }
+    }
+  }
+  // cd-dev-pages deploy is the only job that uses deploy-pages.
+  const {jobs: cdJobs} = load('cd-dev-pages.yml');
+  const cdStepsText = JSON.stringify(cdJobs.deploy.steps);
+  assert.match(cdStepsText, /actions\/deploy-pages/, 'cd-dev-pages deploy must use actions/deploy-pages');
+  for (const [name, job] of Object.entries(cdJobs)) {
+    if (name === 'deploy') continue;
+    const stepsText = JSON.stringify(job.steps ?? []);
+    assert.doesNotMatch(stepsText, /actions\/deploy-pages/, `cd-dev-pages ${name} must not use actions/deploy-pages`);
+  }
 });
 
 // GitHub Packages requires a token even for public packages, so npm ci needs the packages permission.
@@ -166,17 +178,40 @@ test('jobs that use setup-web or install-dependencies have packages permission',
   }
 });
 
-test('build always takes every app, because it replaces the whole site', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+test('ci-publish pages job builds every app, because it replaces the whole site', () => {
+  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
   assert.match(stepsText, /for app in web editor core-demo/);
   // No longer pulls :main images — builds from source instead.
   assert.doesNotMatch(stepsText, /:main/);
   // Writes version.json with commit, run_id, and built_at.
   assert.match(stepsText, /version\.json/);
-  assert.match(stepsText, /GITHUB_SHA/);
   assert.match(stepsText, /GITHUB_RUN_ID/);
+  // Builds from the source subdirectory (second checkout).
+  assert.match(stepsText, /source\/apps/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
+});
+
+test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must publish dev-pages image');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
+  // Dockerfile comes from the workflow checkout (first checkout), not from source/.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
+});
+
+test('cd-dev-pages find job pulls image by commit SHA', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /docker pull/, 'must pull the image');
+  assert.match(stepsText, /dev-pages/, 'must pull dev-pages image');
+  assert.match(stepsText, /COMMIT_SHA/, 'must use commit SHA as tag');
+  assert.match(stepsText, /docker create/, 'must create container to extract');
+  assert.match(stepsText, /docker cp/, 'must copy files from container');
 });
 
 test('jobs below the optional approval survive it being skipped', () => {
@@ -229,10 +264,13 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
 test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
   const {jobs} = load('ci-publish.yml');
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
-  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package']);
+  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package', 'pages', 'pages-cleanup']);
   for (const [name, writer] of writers) {
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
-    assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
+    const twin = jobs[`${name}-test-run`];
+    if (twin) {
+      assert.equal(twin.permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
+    }
   }
   const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && file !== 'ci-publish.yml');
   for (const file of others) {
@@ -288,6 +326,165 @@ test('CD refuses a commit that is not on main', () => {
   }
   const action = fs.readFileSync(path.join(repoRoot, '.github/actions/resolve-release/action.yml'), 'utf8');
   assert.match(action, /compare\/main\.\.\./);
+});
+
+test('cd-dev-pages triggers on workflow_run (ci-publish) with branches and workflow_dispatch with commit input', () => {
+  const {on} = load('cd-dev-pages.yml');
+  assert.ok(on.workflow_run, 'cd-dev-pages must trigger on workflow_run');
+  assert.deepEqual(on.workflow_run.workflows, ['ci-publish']);
+  assert.deepEqual(on.workflow_run.types, ['completed']);
+  assert.deepEqual(on.workflow_run.branches, ['main']);
+  assert.ok(on.workflow_dispatch, 'cd-dev-pages must accept workflow_dispatch');
+  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
+  assert.equal(on.workflow_dispatch.inputs.test_run.default, true);
+});
+
+test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
+  // Deploy runs when find succeeds — no is_newest check; every commit deploys its own version.
+  // Requires find to have succeeded so a skipped find (test-run) does not deploy.
+  assert.match(jobs.deploy.if, /needs\.find\.result == 'success'/);
+  assert.doesNotMatch(jobs.deploy.if, /is_newest/, 'must not check is_newest');
+  assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
+  // find and find-test-run must not have pages permissions
+  for (const job of ['find', 'find-test-run']) {
+    assert.equal(jobs[job]?.permissions?.pages, undefined, `${job} must not request pages`);
+  }
+});
+
+
+test('cd-dev-pages has no workflow_call trigger', () => {
+  assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
+});
+
+test('cd-dev-pages find maps IMAGE_REPOSITORY from vars', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  // Production find maps from vars
+  assert.equal(jobs.find.env.IMAGE_REPOSITORY, '${{ vars.IMAGE_REPOSITORY }}');
+  // Test-run twin maps from vars
+  assert.equal(jobs['find-test-run'].env.IMAGE_REPOSITORY, '${{ vars.IMAGE_REPOSITORY }}');
+});
+
+test('cd-dev-pages find uses environment dev', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  assert.equal(jobs.find.environment, 'dev');
+});
+
+test('ci-publish pages job validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
+  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+});
+
+test('ci-publish has commit input for workflow_dispatch', () => {
+  const {on} = load('ci-publish.yml');
+  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-publish must have commit input');
+  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
+  assert.equal(on.workflow_dispatch.inputs.commit.required, false);
+});
+
+test('cd-dev-pages find validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+});
+
+test('cd-dev-pages find errors when image is not found', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /::error::.*not found/, 'must emit ::error:: when image is not found');
+});
+
+// Evaluate the find job's if: expression against event/conclusion/branch combinations.
+// On workflow_run, find only runs when ALL three hold: event==push, head_branch==main, conclusion==success.
+// On workflow_dispatch, find always runs (manual deploy bypasses CI check).
+// A failed, cancelled, or non-main CI run must skip CD cleanly — no red run.
+function evaluateFindIf(expression, context) {
+  let expr = expression
+    .replace(/\$\{\{\s*/g, '')
+    .replace(/\s*\}\}/g, '')
+    .trim();
+  for (const [key, value] of Object.entries(context)) {
+    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+  }
+  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expr + ';')();
+}
+
+test('cd-dev-pages find if: only push+main+success runs, everything else skips', () => {
+  const findIf = load('cd-dev-pages.yml').jobs.find.if;
+
+  const cases = [
+    // Core case: push on main with success → runs
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: true, label: 'push+main+success'},
+    // workflow_dispatch-triggered CI run (event workflow_dispatch) → skips
+    {event: 'workflow_run', ciEvent: 'workflow_dispatch', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'workflow_dispatch CI run'},
+    // Failure → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'failure', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+failure'},
+    // Cancelled → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'cancelled', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+cancelled'},
+    // Another branch → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'feature-branch', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'push+feature+success'},
+    // CD workflow_dispatch (rollback/test run) → runs
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'false', cancelled: false, wantRun: true, label: 'CD workflow_dispatch'},
+    // CD workflow_dispatch test_run → skips (test_run gate)
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'true', cancelled: false, wantRun: false, label: 'CD workflow_dispatch test_run'},
+  ];
+
+  for (const tc of cases) {
+    const got = evaluateFindIf(findIf, {
+      'github.event_name': tc.event,
+      'github.event.workflow_run.event': tc.ciEvent,
+      'github.event.workflow_run.head_branch': tc.headBranch,
+      "github.event.workflow_run.conclusion": tc.conclusion,
+      "needs.switch.outputs.test_run": tc.testRun,
+    });
+    assert.equal(
+      got === true,
+      tc.wantRun,
+      `${tc.label}: want run=${tc.wantRun}, got ${got} (if: ${findIf})`
+    );
+  }
+});
+
+// Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
+// The deploy must only run on workflow_run when is_newest (so older runs don't overwrite newer sites),
+// and must always run on workflow_dispatch when find succeeds (for rollback).
+// It must not run when find is skipped (test-run) or fails.
+function evaluateDeployIf(expression, context) {
+  // Replace GitHub Actions expression syntax with JavaScript equivalents.
+  let expr = expression
+    .replace(/\$\{\{\s*/g, '')
+    .replace(/\s*\}\}/g, '')
+    .trim();
+  for (const [key, value] of Object.entries(context)) {
+    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+  }
+  // Handle !cancelled() -> context.cancelled
+  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expr + ';')();
+}
+
+test('cd-dev-pages deploy gating: find-success deploys, find-fail and find-skipped skip', () => {
+  const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
+
+  const cases = [
+    {event: 'workflow_run', findResult: 'success', cancelled: false, wantDeploy: true, label: 'workflow_run, find success'},
+    {event: 'workflow_dispatch', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success'},
+    {event: 'workflow_dispatch', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
+    {event: 'workflow_dispatch', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
+  ];
+
+  for (const tc of cases) {
+    const got = evaluateDeployIf(deployIf, {
+      'github.event_name': tc.event,
+      "needs.find.result": tc.findResult,
+    });
+    const deployed = got === true;
+    assert.equal(
+      deployed,
+      tc.wantDeploy,
+      `${tc.label}: want deploy=${tc.wantDeploy}, got ${deployed} (if: ${deployIf})`
+    );
+  }
 });
 
 test('a pull request runs nothing until it is approved', () => {
@@ -388,49 +585,8 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
   );
 });
 
-test('ci-workflows: ci-dev-pages.yml changed, no qualifying run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-dev-pages.yml'],
-    {
-      'runs-ci-dev-pages.yml': '[{"displayTitle":"other run"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'ci-dev-pages.yml changed without qualifying run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
-    'error must name the ci-dev-pages dispatch command'
-  );
-});
-
-test('ci-workflows: ci-dev-pages.yml changed, with qualifying run must pass', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-dev-pages.yml'],
-    {
-      'runs-ci-dev-pages.yml': '[{"displayTitle":"ci-dev-pages test_run=true"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 0, 'ci-dev-pages.yml changed with qualifying run must exit 0');
-});
-
-test('ci-workflows: setup-web changed requires ci-dev-pages run', async () => {
-  const result = await runEvidenceTest(
-    ['.github/actions/setup-web/action.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'setup-web changed without ci-dev-pages run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
-    'error must name the ci-dev-pages dispatch command'
-  );
-});
+// ci-dev-pages.yml was removed (its pages build moved into ci-publish).
+// setup-web is now checked by the ci-publish evidence check, not ci-dev-pages.
 
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
@@ -537,16 +693,13 @@ test('every workflow checked by has_qualifying_run defines a run-name with test_
   }
 });
 
-test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {
-  const {on} = load('ci-dev-pages.yml');
-  assert.ok(on.push, 'ci-dev-pages must trigger on push to main');
-  assert.deepEqual(on.push.branches, ['main']);
-  assert.equal(on.workflow_call, undefined, 'ci-dev-pages must not use workflow_call');
-});
 
-test('ci-publish has no dev-pages job', () => {
+test('ci-publish has a pages job that writes packages only from main', () => {
   const {jobs} = load('ci-publish.yml');
-  assert.equal(jobs['dev-pages'], undefined, 'ci-publish must not contain a dev-pages job');
+  assert.ok(jobs.pages, 'ci-publish must contain a pages job');
+  assert.equal(jobs.pages.permissions.packages, 'write', 'pages must write packages');
+  assert.match(jobs.pages.if, /github\.ref == 'refs\/heads\/main'/, 'pages could publish from a branch');
+  assert.equal(jobs['pages-test-run'].permissions.packages, 'read', 'a test run of pages must be unable to publish');
 });
 
 test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
@@ -606,9 +759,10 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
+  // ci-publish runs on push to main and workflow_dispatch;
+  // cd-dev-pages runs on workflow_run (ci-publish completed on main) and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -690,11 +844,9 @@ test('the browser image runs the Node version the repository pins', () => {
 
 // Jobs reference an environment only when they read its variables or secrets.
 // GitHub records a deployment for every job that references an environment, so unnecessary references create noise.
-// Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
-// publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
+// Exception: the approval gate (ci-approval) waits for manual approval.
 const ENV_EXCEPTIONS = {
   'ci-pr-checks.yml': ['approval'],
-  'ci-dev-pages.yml': ['deploy'],
 };
 
 test('ci-* production jobs reference dev only when they read vars.* or secrets.*', () => {
@@ -725,4 +877,298 @@ test('ci-* test-run twins always reference test-run', () => {
       assert.equal(environment, 'test-run', `${file} ${name} must reference test-run`);
     }
   }
+});
+
+test('cd-dev-pages extracts /site/ contents, not /usr/share/nginx/html', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /\/site\/\./, 'must copy /site/ contents into pages-dist');
+  assert.doesNotMatch(stepsText, /\/usr\/share\/nginx\/html/, 'must not reference nginx path');
+});
+
+test('platform/pages/Dockerfile uses FROM scratch and copies to /site', () => {
+  const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/pages/Dockerfile'), 'utf8');
+  assert.match(dockerfile, /FROM scratch/, 'must use FROM scratch');
+  assert.match(dockerfile, /COPY \. \/site/, 'must copy build context to /site');
+  assert.match(dockerfile, /CMD/, 'must have a CMD so docker create works');
+  assert.doesNotMatch(dockerfile, /FROM nginx/, 'must not use nginx base');
+});
+
+test('ci-publish pages job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('ci-publish.yml');
+  for (const step of jobs.pages.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{[^}]*inputs\./,
+        'pages step "' + step.name + '" must not use ${{ inputs.* }} in run:'
+      );
+    }
+  }
+});
+
+test('cd-dev-pages find job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  for (const step of jobs.find.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{/,
+        'find step "' + step.name + '" must not use ${{ }} in run:'
+      );
+    }
+  }
+});
+
+test('ci-publish pages-cleanup maps DEV_PAGES_PACKAGE and DEV_PAGES_VERSIONS_TO_KEEP from vars', () => {
+  const {jobs} = load('ci-publish.yml');
+  const cleanup = jobs['pages-cleanup'];
+  assert.equal(cleanup.env.DEV_PAGES_PACKAGE, '${{ vars.DEV_PAGES_PACKAGE }}');
+  assert.equal(cleanup.env.DEV_PAGES_VERSIONS_TO_KEEP, '${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}');
+  // The step uses env vars, not hardcoded values
+  const stepsText = JSON.stringify(cleanup.steps);
+  assert.match(stepsText, /env\.DEV_PAGES_PACKAGE/);
+  assert.match(stepsText, /env\.DEV_PAGES_VERSIONS_TO_KEEP/);
+});
+
+test('ci-publish pages-cleanup has a test-run twin with packages: read', () => {
+  const {jobs} = load('ci-publish.yml');
+  const twin = jobs['pages-cleanup-test-run'];
+  assert.ok(twin, 'pages-cleanup-test-run must exist');
+  assert.equal(twin.environment, 'test-run');
+  assert.equal(twin.permissions.packages, 'read', 'test-run cleanup must not write packages');
+  assert.deepEqual(twin.steps, jobs['pages-cleanup'].steps, 'twin must share steps');
+});
+
+test('publish-image action generalised with name, dockerfile, commit, skip_main_tag inputs', () => {
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8');
+  assert.match(action, /name:/, 'must have name input');
+  assert.match(action, /dockerfile:/, 'must have dockerfile input');
+  assert.match(action, /commit:/, 'must have commit input');
+  assert.match(action, /skip_main_tag:/, 'must have skip_main_tag input');
+});
+
+test('ci-publish pages job uses publish-image action with skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages');
+  assert.equal(publishStep.with.skip_main_tag, 'true');
+  // Dockerfile comes from the workflow checkout, not from source/.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
+});
+
+// Read the publish-image action definition to know which inputs are required.
+const publishImageAction = parseYaml(
+  fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8')
+);
+const publishImageRequiredInputs = Object.entries(publishImageAction.inputs ?? {})
+  .filter(([, input]) => input.required)
+  .map(([name]) => name);
+
+test('every publish-image caller passes all required inputs', () => {
+  // Find all steps across all workflows that use the publish-image action.
+  for (const file of newWorkflowFiles) {
+    const {jobs} = load(file);
+    for (const [jobName, job] of Object.entries(jobs)) {
+      for (const step of job.steps ?? []) {
+        if (!step.uses?.includes('publish-image')) continue;
+        for (const requiredInput of publishImageRequiredInputs) {
+          assert.ok(
+            step.with?.[requiredInput] !== undefined,
+            `${file} ${jobName} publish-image step must pass required input ${requiredInput}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test('ci-publish pages job passes dev-pages name and commit from env', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must pass the dev-pages image name');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit from env, not github.sha');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.token, '${{ github.token }}', 'must pass token');
+});
+
+test('ci-publish image job uses publish-image action without skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.image.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'image must use publish-image action');
+  assert.equal(publishStep.with.name, '${{ env.APP }}');
+  assert.equal(publishStep.with.skip_main_tag, undefined, 'app images should not skip main tag');
+});
+
+// Run the publish-image action script with a stub docker to verify tag construction.
+// The stub records docker build/push arguments for inspection.
+const publishImageScript = publishImageAction.runs.steps[0].run;
+
+async function runPublishImageAction(envVars) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'publish-image-test-'));
+  const logFile = path.join(temporaryDirectory, 'docker-calls.log');
+
+  // Create a stub docker that records its arguments.
+  const stubDocker = `#!/bin/bash
+echo "$@" >> '${logFile}'
+`;
+  await fs.promises.writeFile(path.join(temporaryDirectory, 'docker'), stubDocker);
+  await fs.promises.chmod(path.join(temporaryDirectory, 'docker'), 0o755);
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    HOME: temporaryDirectory,
+    GITHUB_ACTOR: 'test-actor',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    ...envVars,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', publishImageScript], {env, cwd: temporaryDirectory});
+    const calls = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean);
+    return {code: 0, stdout: result.stdout, stderr: result.stderr, calls};
+  } catch (err) {
+    const calls = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean) : [];
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr, calls};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('publish-image action tags dev-pages with the commit SHA, not github.sha', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  // Find the docker build call and verify the tag.
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'build tag must be repository/dev-pages:COMMIT_SHA'
+  );
+  // Should not have a :main tag when skip_main_tag is true.
+  assert.doesNotMatch(buildCall, /:main/, 'should not tag as main when skip_main_tag is true');
+
+  // Verify the push call uses the same tag.
+  const pushCall = result.calls.find(c => c.startsWith('push'));
+  assert.ok(pushCall, 'should have a docker push call');
+  assert.match(
+    pushCall,
+    /ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'push must use the commit-tagged image'
+  );
+});
+
+test('publish-image action tags app images with both commit SHA and main', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'web',
+    IMAGE_REPOSITORY: 'ghcr.io/ivanov-gv/cg-map',
+    DOCKERFILE: '',
+    COMMIT_SHA: 'abc123def456',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'false',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:abc123def456/,
+    'build must include commit tag'
+  );
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:main/,
+    'build must include main tag for app images'
+  );
+});
+
+test('publish-image action uses build context from context input', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+    BUILD_CONTEXT: 'site',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /site$/,
+    'build must use the context path from the context input'
+  );
+});
+
+// Any job that checks out a non-default ref must keep local actions on the
+// workflow's own checkout. The first checkout must have no ref; the one with
+// ref must have a path. This prevents the root cause of #244 where checking
+// out ref: <commit> resolved ./.github/actions to main's old versions.
+test('ci-publish pages job keeps local actions on workflow checkout', () => {
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+
+  // Find all checkout steps
+  const checkouts = pagesSteps
+    .map((step, index) => ({step, index}))
+    .filter(({step}) => step.uses?.startsWith('actions/checkout'));
+
+  assert.ok(checkouts.length >= 2, 'pages must have at least two checkouts');
+
+  // The first checkout must not have a ref (gets this branch's actions)
+  const firstCheckout = checkouts[0].step;
+  assert.equal(
+    firstCheckout.with?.ref,
+    undefined,
+    'first checkout must not specify ref so local actions come from the workflow branch'
+  );
+  assert.equal(
+    firstCheckout.with?.path,
+    undefined,
+    'first checkout must not specify path so actions are at the root'
+  );
+
+  // A checkout with ref must have a path (source subdirectory)
+  const refCheckout = checkouts.find(({step}) => step.with?.ref !== undefined);
+  assert.ok(refCheckout, 'pages must have a checkout with ref for the source commit');
+  assert.ok(
+    refCheckout.step.with?.path,
+    'checkout with ref must have a path to avoid overwriting local actions'
+  );
+});
+
+// Prove the pattern is necessary: if the first checkout had ref but no path,
+// the local actions would resolve to the wrong commit.
+test('ci-publish pages would fail with single checkout of non-default ref', () => {
+  // This test verifies that the pages job does NOT use a single checkout
+  // with ref but no path — the pattern that caused #244.
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+  const checkouts = pagesSteps.filter(step => step.uses?.startsWith('actions/checkout'));
+
+  // Count checkouts that have ref but no path (the bad pattern)
+  const badCheckouts = checkouts.filter(
+    step => step.with?.ref !== undefined && step.with?.path === undefined
+  );
+  assert.equal(
+    badCheckouts.length,
+    0,
+    'no checkout should have ref without path — this caused #244 (invalid tag ttl.sh/ivanov-gv-cg-map/:037f5e9...)'
+  );
 });

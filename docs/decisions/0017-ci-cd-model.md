@@ -31,8 +31,9 @@ These gaps need recording so the model is documented in one place and the featur
   deploys that exact artifact with `deploy-pages` and never rebuilds it.
 - **Pages CD test-run twin.** The CD workflow runs everything up to `deploy-pages`. Pages has no test destination, so
   that step is the documented exception to the test-run rule.
-- **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow), `ci-nightly` (the full run on
-  main), and `ci-publish` (pushes to main that build and publish images and packages). One workflow per concern.
+- **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow) and `ci-nightly` (the full run
+  on main). One workflow per concern.
+- `ci-publish` was added to build and publish images and packages on pushes to main.
 - **Publishing flow.** A push to main triggers ci-publish (builds and publishes images and packages) and ci-dev-pages
   (builds the dev site from source) independently. ci-dev-pages no longer depends on ci-publish.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
@@ -71,3 +72,23 @@ site that should update automatically when code lands.
 - Building from source drops the image reuse that ADR 0005 relied on.
 - Pushes to main run more workflows.
 - CD on a push to main deliberately follows the wiki rule over the personal skill's no-push rule.
+
+**Outcome (#168, 2026-11-15):** the spike found page_build never fires with build_type workflow; cd-dev-pages triggers
+on push to main and polls for its SHA's ci-dev-pages run, so CI never triggers CD.
+
+**Outcome (owner, 2026-11-15, #230/#237):** page_build never fires here (webhook spike, #168), and polling was rejected.
+The wiki's model stands: CI builds the artifact, CD acknowledges the new version and deploys it. GitHub offers no other
+way to acknowledge a version change, so cd-dev-pages starts on ci-dev-pages' completion (`workflow_run`), and only for a
+successful push build on main, never for a CI test run or any other run. This is an exception that follows the rule: CI
+never calls or knows about CD, and CD only acknowledges new versions. The CI→CD contract is the artifact
+`dev-pages-<sha>` with `version.json` inside — CD needs nothing from CI but a version. CD finds the artifact by name
+using the GitHub Artifacts API (`GET repos/$GH_REPO/actions/artifacts?name=dev-pages-<commit>`), takes the newest
+non-expired entry, reads its `workflow_run.id`, and downloads with that run ID. CD is fully independent of CI's runs: it
+never looks up runs by commit. Retention is 3 days — the rollback window. Rollback works for any commit whose artifact
+is still within that 3-day window.
+
+**Outcome (owner, 2026-11-15, #244):** ci-dev-pages is removed; its pages build moves into ci-publish as the `pages`
+job. The CI→CD contract is now the Docker image `dev-pages:<sha>` — CD pulls it by commit SHA, extracts the site, and
+deploys it. No artifact API, no lookup logic, no newest check. ci-publish keeps the last 10 dev-pages versions (the
+rollback window); ttl.sh test-run images expire on their own. find-pages-artifact is deleted. CD is fully independent of
+CI's runs: it only needs the image tag.

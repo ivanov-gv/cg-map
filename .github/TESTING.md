@@ -30,12 +30,13 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
 jobs, `select` (which only passes the planner's image matrix on), `run` in ci-nightly (which only calls ci-pr-checks),
-`Check job times`, the check for test runs below, `CI gate`, `approval`, the Pages deploy (because Pages can only
-publish to this repository: a test run stops at the assembled site), and the folder jobs in ci-pr-checks (`docs`,
-`workflows`, `platform`, `contracts`, `browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`,
-`apps-web`, `apps-editor`, `apps-core-demo`) which call each folder's workflow with `test_run` passed through. The twins
-use the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and
-manual runs default to it.
+`pages-cleanup` in ci-publish (which only runs in production), `Check job times`, the check for test runs below,
+`CI gate`, `approval`, the Pages deploy in cd-dev-pages (because Pages can only publish to this repository: a test run
+stops after the find job), and the folder jobs in ci-pr-checks (`docs`, `workflows`, `platform`, `contracts`,
+`browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`, `apps-web`, `apps-editor`, `apps-core-demo`)
+which call each folder's workflow with `test_run` passed through. The `find` job in cd-dev-pages gates on CI conclusion
+in its `if:` — no separate gate job. The twins use the `test-run` environment, whose variables send everything to a test
+destination. Local runs always use it, and manual runs default to it.
 
 The `dev` and `test-run` environments define these variables:
 
@@ -45,6 +46,10 @@ The `dev` and `test-run` environments define these variables:
 | `WEB_ARTIFACT_NAME`           | `web-artifact`             | `web-artifact-test-run`   |
 | `WEB_ARTIFACT_RETENTION_DAYS` | `30`                       | `1`                       |
 | `PACKAGE_PUBLISH_FLAGS`       | unset                      | `--dry-run`               |
+| `DEV_PAGES_PACKAGE`           | `cg-map/dev-pages`         | `cg-map/web`              |
+| `DEV_PAGES_VERSIONS_TO_KEEP`  | `10`                       | `100000`                  |
+
+The `test-run` values list an existing package and delete nothing.
 
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
@@ -52,8 +57,8 @@ A test run really pushes images, to a temporary public registry, and really runs
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
-use `environment: test-run`. The two exceptions are the approval gate (`ci-approval`, which waits for manual approval)
-and the Pages deploy (`github-pages`, which publishes to the repository site).
+use `environment: test-run`. The exception is the approval gate (`ci-approval`, which waits for manual approval). The
+Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it is a CD workflow, not CI.
 
 ## Locally with act
 
@@ -67,6 +72,7 @@ rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 make test-ci-docs                       # one workflow
 make test-ci-pr-checks                  # every PR check
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
+make test-cd-dev-pages COMMIT=<full SHA on main> # needs a ci-publish dev-pages image; see below
 make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
 make test-all-workflows ACT="gh act -n" # dry run of every target
 ```
@@ -74,6 +80,20 @@ make test-all-workflows ACT="gh act -n" # dry run of every target
 `test-cd-browser-image` promotes an image from the test registry, tagged with a commit on `main`, so push one first with
 `docker tag <image> ttl.sh/ivanov-gv-cg-map/browser-ci:<SHA>`, then `docker push`. Use a new revision on each try,
 because a version never changes there either.
+
+`test-cd-dev-pages` requires `COMMIT=` and generates a dynamic event payload simulating the `workflow_run` trigger from
+ci-publish: the find step pulls `$IMAGE_REPOSITORY/dev-pages:<commit>` and extracts the site. CD only runs for a
+successful push build on main — never for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch
+but main. Run it with `make test-cd-dev-pages COMMIT=<full SHA>`.
+
+`test-cd-dev-pages-dispatch` simulates a manual dispatch via `workflow_dispatch`. Pass a commit on `main` that has a
+`dev-pages:<commit>` image. Find one with
+`gh run list --workflow ci-publish.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it with
+`make test-cd-dev-pages-dispatch COMMIT=<full SHA>`.
+
+Under `act`, the image pull needs a real token and a real `ci-publish` run, so both paths pull from an actual CI run.
+Under `act`, `IMAGE_REPOSITORY` is `ttl.sh/ivanov-gv-cg-map` (from `var.env`), so the test run of `ci-publish` must have
+pushed the image first.
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
@@ -103,8 +123,9 @@ A workflow can be dispatched only once it exists on `main`. After that, dispatch
 ```sh
 gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run ci-publish.yml --ref <branch> -f test_run=true
-gh workflow run ci-dev-pages.yml --ref <branch> -f test_run=true
+gh workflow run ci-publish.yml --ref <branch> -f test_run=true -f commit=<full SHA>
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
+gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA on main>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
@@ -112,10 +133,10 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 `ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
 a `cd-browser-image` one when that workflow or its actions changed, a `ci-publish` test run when `ci-publish.yml` or the
 publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publish-browser-image`, `setup-web`,
-`run-check`) changed, and a `ci-dev-pages` test run when `ci-dev-pages.yml` or the actions it uses (`setup-web`,
-`install-dependencies`, `test_run`) changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The
-same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs
-pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
+`run-check`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml` or `test_run` changed. A workflow not yet on
+`main` cannot be dispatched, so it is exempt. The same exemption applies when a workflow on `main` lacks
+`workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the failed check. CI cannot see local runs,
+so record yours in the PR template.
 
 `ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
 them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
@@ -124,14 +145,30 @@ check exempts workflows not yet on `main` automatically.
 ## Through a real PR
 
 `ci-pr-checks` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from
-the diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no
-checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
-`ci-pr-checks` through a composite action at `.github/actions/plan`). A push to main also triggers `ci-dev-pages`
-independently — it builds the dev site from source and uploads the artifact. The nightly run of `ci-nightly` checks
-everything by calling `ci-pr-checks` with `run_all: true`. To see what a branch would select:
+the diff. A push to main triggers `ci-publish` independently — it builds and pushes images, packages, and the dev site
+image (it runs no checks because the PR run already tested the content). `ci-publish` has its own test-run switch and
+planner (shared with `ci-pr-checks` through a composite action at `.github/actions/plan`). The `pages` job in
+`ci-publish` builds the dev site from source and pushes `$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes
+successfully on `main`, `cd-dev-pages` is triggered via `workflow_run` — it pulls the image by commit SHA, extracts the
+site, and deploys it to GitHub Pages. The nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with
+`run_all: true`. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main
 ```
 
 Pushing images, deploying Pages and publishing dev packages run only from `main`, so only a real merge proves them.
+
+## Workflows must be tested before release
+
+If a path cannot be tested yet, make it testable (inputs, `workflow_dispatch`, environment variables with test-run
+values). Every workflow change must run for real under `act` and on GitHub before merge.
+
+### Pages path recipe
+
+Test the full Pages CI/CD path before merging a change to `ci-publish`, or `cd-dev-pages`:
+
+1. Dispatch `ci-publish` on the branch with `test_run=true` and `commit=<main SHA>` to push a test-run image.
+2. Run `make test-cd-dev-pages COMMIT=<main SHA>` (workflow_run path) for real under `act`.
+3. Run `make test-cd-dev-pages-dispatch COMMIT=<main SHA>` (dispatch path) for real under `act`.
+4. After the stack lands, the first push to `main` runs it end to end.

@@ -60,10 +60,10 @@ authoritative for this layout.
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
 everything. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
 test-run switch and planner (shared with ci-pr-checks through a composite action), building and pushing images and
-packages — it runs no tests as the PR run already tested the content.
-[ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) also runs independently on every push to main, building the dev
-site from source and deploying it. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs every night by calling
-ci-pr-checks with `run_all: true`.
+packages — it runs no tests as the PR run already tested the content. The `pages` job in ci-publish builds the dev site
+from source and pushes the image. [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) pulls that image and deploys
+it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs every night by calling ci-pr-checks with
+`run_all: true`.
 
 | Changed                                                     | Runs                                                                                        |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
