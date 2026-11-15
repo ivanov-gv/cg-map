@@ -354,8 +354,8 @@ const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh')
 
 // Parse the action YAML to extract the resolve and wait step scripts.
 const findArtifactYaml = parseYaml(findArtifactAction);
-const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
-const waitScript = findArtifactYaml.runs.steps.find(s => s.id === 'wait').run;
+const resolveScript = findArtifactYaml.runs.steps.find(step => step.id === 'resolve').run;
+const waitScript = findArtifactYaml.runs.steps.find(step => step.id === 'wait').run;
 
 async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
