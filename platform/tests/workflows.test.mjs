@@ -22,8 +22,8 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
-  'ci-dev-pages.yml': ['deploy'],
-  'ci-publish.yml': ['switch', 'select', 'dev-pages']
+  'ci-dev-pages.yml': ['switch', 'deploy'],
+  'ci-publish.yml': ['switch', 'select']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -98,7 +98,7 @@ for (const file of newWorkflowFiles) {
 }
 
 // Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-publish.yml': ['dev-pages']};
+const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy']};
 
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
@@ -140,15 +140,41 @@ for (const [file, tagPrefix] of Object.entries(CD_TAGS))
 test('only the dev Pages deploy holds Pages permissions, and a test run cannot reach it', () => {
   const {jobs} = load('ci-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  assert.match(jobs.deploy.if, /inputs\.test_run != true/);
-  for (const job of ['assemble', 'assemble-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
+  // Deploy only runs after the production build (not build-test-run), so test runs never reach it.
+  assert.match(jobs.deploy.if, /needs\.build\.outputs\.is_newest/);
+  for (const job of ['build', 'build-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
 });
 
-test('a deploy always takes every app, because it replaces the whole site', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.assemble.steps);
+// GitHub Packages requires a token even for public packages, so npm ci needs the packages permission.
+test('jobs that use setup-web or install-dependencies have packages permission', () => {
+  for (const file of newWorkflowFiles) {
+    const {jobs, permissions: workflowPermissions} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      // Only check uses: fields, not run: text (which may mention actions in grep patterns).
+      const usesPackageActions = (job.steps ?? []).some(
+        step => step.uses?.includes('setup-web') || step.uses?.includes('install-dependencies')
+      );
+      if (!usesPackageActions) continue;
+      const effectivePermissions = job.permissions ?? workflowPermissions ?? {};
+      const hasPackagesRead = ['read', 'write'].includes(effectivePermissions.packages);
+      assert.ok(
+        hasPackagesRead,
+        `${file} ${name} uses setup-web or install-dependencies but lacks packages: read`
+      );
+    }
+  }
+});
+
+test('build always takes every app, because it replaces the whole site', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
   assert.match(stepsText, /for app in web editor core-demo/);
-  assert.match(stepsText, /:main/);
+  // No longer pulls :main images — builds from source instead.
+  assert.doesNotMatch(stepsText, /:main/);
+  // Writes version.json with commit, run_id, and built_at.
+  assert.match(stepsText, /version\.json/);
+  assert.match(stepsText, /GITHUB_SHA/);
+  assert.match(stepsText, /GITHUB_RUN_ID/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
@@ -276,77 +302,7 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-// dev-pages must not deploy when any publish job fails. Each pair (X, X-test-run) must both
-// succeed or be skipped; one failing blocks deployment. The select job must also succeed.
-const PUBLISH_PAIRS = [
-  ['image', 'image-test-run'],
-  ['package', 'package-test-run'],
-  ['browser-image', 'browser-image-test-run'],
-];
-
-// Evaluate the dev-pages `if` condition with substituted job results and !cancelled()=true.
-function evaluateDevPagesCondition(condition, results) {
-  let expression = condition.replace(/\$\{\{\s*/, '').replace(/\s*\}\}/, '').trim();
-  for (const [name, result] of Object.entries(results)) {
-    expression = expression.replace(new RegExp(`needs\\.${name}\\.result`, 'g'), `'${result}'`);
-  }
-  expression = expression.replace(/!cancelled\(\)/g, 'true');
-  return new Function(`return (${expression})`)();
-}
-
-// Build a results map with all jobs skipped by default, select succeeded.
-function devPagesResults(overrides = {}) {
-  return {
-    select: 'success',
-    image: 'skipped',
-    'image-test-run': 'skipped',
-    package: 'skipped',
-    'package-test-run': 'skipped',
-    'browser-image': 'skipped',
-    'browser-image-test-run': 'skipped',
-    ...overrides,
-  };
-}
-
-test('ci-publish dev-pages requires every publish pair and select to succeed or be skipped', () => {
-  const {jobs} = load('ci-publish.yml');
-  const devPages = jobs['dev-pages'];
-  const condition = String(devPages.if);
-  const needs = [devPages.needs].flat();
-
-  // dev-pages must depend on select and every publish pair
-  assert.ok(needs.includes('select'), 'dev-pages must need select');
-  for (const [prod, testRun] of PUBLISH_PAIRS) {
-    assert.ok(needs.includes(prod), `dev-pages must need ${prod}`);
-    assert.ok(needs.includes(testRun), `dev-pages must need ${testRun}`);
-  }
-
-  // All succeed — dev-pages should run
-  assert.ok(
-    evaluateDevPagesCondition(condition, devPagesResults({image: 'success', package: 'success', 'browser-image': 'success'})),
-    'dev-pages should run when all pairs succeed or are skipped'
-  );
-
-  // A failure in either twin of any pair blocks dev-pages
-  for (const [prod, testRun] of PUBLISH_PAIRS) {
-    assert.ok(
-      !evaluateDevPagesCondition(condition, devPagesResults({[prod]: 'failure'})),
-      `dev-pages must be blocked when ${prod} fails`
-    );
-    assert.ok(
-      !evaluateDevPagesCondition(condition, devPagesResults({[testRun]: 'failure'})),
-      `dev-pages must be blocked when ${testRun} fails`
-    );
-  }
-
-  // A failed select blocks dev-pages
-  assert.ok(
-    !evaluateDevPagesCondition(condition, devPagesResults({select: 'failure'})),
-    'dev-pages must be blocked when select fails'
-  );
-});
-
-// ci-workflows test-run-evidence must require a ci-publish test run when publish-related files change.
+// ci-workflows test-run-evidence must require a qualifying test run when workflow files change.
 // Run the real step script with a fake `gh` stub (platform/tests/fixtures/fake-gh.sh).
 const ciWorkflowsScript = load('ci-workflows.yml').jobs['test-run-evidence'].steps[0].run;
 const fakeGhPath = path.join(repoRoot, 'platform/tests/fixtures/fake-gh.sh');
@@ -432,6 +388,50 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
   );
 });
 
+test('ci-workflows: ci-dev-pages.yml changed, no qualifying run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-dev-pages.yml'],
+    {
+      'runs-ci-dev-pages.yml': '[{"displayTitle":"other run"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'ci-dev-pages.yml changed without qualifying run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
+    'error must name the ci-dev-pages dispatch command'
+  );
+});
+
+test('ci-workflows: ci-dev-pages.yml changed, with qualifying run must pass', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/ci-dev-pages.yml'],
+    {
+      'runs-ci-dev-pages.yml': '[{"displayTitle":"ci-dev-pages test_run=true"}]',
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    }
+  );
+  assert.equal(result.code, 0, 'ci-dev-pages.yml changed with qualifying run must exit 0');
+});
+
+test('ci-workflows: setup-web changed requires ci-dev-pages run', async () => {
+  const result = await runEvidenceTest(
+    ['.github/actions/setup-web/action.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-browser-image.yml': '[]',
+      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'setup-web changed without ci-dev-pages run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
+    'error must name the ci-dev-pages dispatch command'
+  );
+});
+
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
     ['.github/workflows/ci-apps-web.yml'],
@@ -510,6 +510,45 @@ test('ci-workflows: an API failure on the contents lookup fails the check', asyn
   );
 });
 
+// Every workflow that has_qualifying_run asks for must define a run-name
+// whose workflow_dispatch branch formats test_run={0} from inputs.test_run,
+// so a real dispatch title contains the search string the evidence check looks for.
+test('every workflow checked by has_qualifying_run defines a run-name with test_run', () => {
+  // Parse the ci-workflows script for all has_qualifying_run calls.
+  const calls = ciWorkflowsScript.matchAll(/has_qualifying_run\s+(\S+)\s+'([^']+)'/g);
+  const workflowFiles = [...calls].map(([, file]) => file);
+  assert.ok(workflowFiles.length > 0, 'has_qualifying_run must be called at least once');
+  for (const file of workflowFiles) {
+    const workflow = load(file);
+    assert.ok(workflow['run-name'], `${file} must define run-name for has_qualifying_run to match`);
+    const runName = String(workflow['run-name']);
+    assert.ok(
+      runName.includes('workflow_dispatch'),
+      `${file} run-name must branch on workflow_dispatch`
+    );
+    assert.ok(
+      runName.includes('test_run='),
+      `${file} run-name must format test_run= for dispatch runs`
+    );
+    assert.ok(
+      runName.includes('inputs.test_run'),
+      `${file} run-name must include inputs.test_run value`
+    );
+  }
+});
+
+test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {
+  const {on} = load('ci-dev-pages.yml');
+  assert.ok(on.push, 'ci-dev-pages must trigger on push to main');
+  assert.deepEqual(on.push.branches, ['main']);
+  assert.equal(on.workflow_call, undefined, 'ci-dev-pages must not use workflow_call');
+});
+
+test('ci-publish has no dev-pages job', () => {
+  const {jobs} = load('ci-publish.yml');
+  assert.equal(jobs['dev-pages'], undefined, 'ci-publish must not contain a dev-pages job');
+});
+
 test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
   const {on} = load('ci-pr-checks.yml');
   assert.equal(on.push, undefined, 'ci-pr-checks must not trigger on push');
@@ -567,9 +606,9 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish runs on push to main and workflow_dispatch; ci-dev-pages on workflow_call and workflow_dispatch;
+  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],

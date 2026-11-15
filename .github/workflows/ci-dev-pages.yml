@@ -1,12 +1,14 @@
 name: ci-dev-pages
-# Pages is the dev environment: every merge to main shows main there. A deploy replaces the whole site, so this always takes
-# the main image of every app. CI only: there are no tags or releases, and images are never rebuilt here.
+# Pages is the dev environment: every merge to main shows main there. This workflow builds the site from source
+# (not from images), uploads the artifact, and deploys it in a temporary deploy job until #168 moves deployment
+# to a CD workflow. See ADR 0017.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('ci-dev-pages test_run={0}', inputs.test_run)
+  || format('ci-dev-pages {0}', github.sha) }}
 on:
-  workflow_call:
-    inputs:
-      test_run:
-        type: boolean
-        required: true
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       test_run:
@@ -16,44 +18,66 @@ on:
 permissions:
   contents: read
 jobs:
-  assemble:
-    name: Assemble dev site
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
+  switch:
+    name: Test-run switch
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 7
-    environment: dev
-    permissions: &assemble-permissions
-      contents: read
-      packages: read
-    outputs: &assemble-outputs
-      is_newest: ${{ steps.newest.outputs.is_newest }}
-    env: &assemble-env
-      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
-      REGISTRY_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps: &assemble-steps
+    timeout-minutes: 5
+    outputs:
+      test_run: ${{ steps.test_run.outputs.test_run }}
+    steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Extract each app from its main image
+      - id: test_run
+        uses: ./.github/actions/test_run
+        with:
+          test_run: ${{ inputs.test_run }}
+
+  build:
+    name: Build dev site
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions: &build-permissions
+      contents: read
+      packages: read
+    outputs: &build-outputs
+      is_newest: ${{ steps.newest.outputs.is_newest }}
+    env: &build-env
+      REGISTRY_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps: &build-steps
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-web
+      - name: Build each app
         run: |
-          case "$IMAGE_REPOSITORY" in
-            ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
-          esac
           mkdir site
           cp platform/pages/index.html site/index.html
           for app in web editor core-demo; do
-            image="$IMAGE_REPOSITORY/$app:main"
-            if ! docker pull --quiet "$image"; then
-              echo "::error::No image $image. Merge a change to apps/$app, or run ci-publish, to create it."
-              exit 1
-            fi
-            container="$(docker create "$image")"
-            docker cp "$container:/app/dist/$app" "site/$app"
-            docker rm "$container" > /dev/null
-            echo "$app: $(docker inspect --format '{{.Id}}' "$image")" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::group::Build $app"
+            start=$SECONDS
+            make -C "apps/$app" build
+            echo "::endgroup::"
+            duration=$((SECONDS - start))
+            echo "$app: built in ${duration}s" | tee -a "$GITHUB_STEP_SUMMARY"
+            cp -r "dist/$app" "site/$app"
           done
-          find site -type f | wc -l | xargs echo "Files in the site:" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Write version.json
+        run: |
+          built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat > site/version.json <<EOF
+          {"commit":"${GITHUB_SHA}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
+          EOF
+          echo "version.json:" | tee -a "$GITHUB_STEP_SUMMARY"
+          cat site/version.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Site file count
+        run: |
+          count=$(find site -type f | wc -l)
+          echo "Files in the site: $count" | tee -a "$GITHUB_STEP_SUMMARY"
       # main's runs do not queue behind each other, so a slow older run could otherwise replace a newer site.
       - id: newest
         name: Check this is still main's newest commit
@@ -68,22 +92,23 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site
-  assemble-test-run:
-    name: (test-run) Assemble dev site
-    if: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
-    runs-on: ubuntu-latest
+  build-test-run:
+    name: (test-run) Build dev site
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 7
     environment: test-run
-    permissions: *assemble-permissions
-    outputs: *assemble-outputs
-    env: *assemble-env
-    steps: *assemble-steps
-  # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination. A test run
-  # stops at the assembled site above.
+    permissions: *build-permissions
+    outputs: *build-outputs
+    env: *build-env
+    steps: *build-steps
+  # Temporary: this deploy job will move to a CD workflow (#168). Kept here so the dev site still updates on push.
+  # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination.
   deploy:
     name: Deploy dev site
-    needs: assemble
-    if: ${{ inputs.test_run != true && inputs.test_run != 'true' && needs.assemble.outputs.is_newest == 'true' }}
+    needs: build
+    if: ${{ !cancelled() && needs.build.outputs.is_newest == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:

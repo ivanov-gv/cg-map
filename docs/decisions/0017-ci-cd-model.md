@@ -33,8 +33,8 @@ These gaps need recording so the model is documented in one place and the featur
   that step is the documented exception to the test-run rule.
 - **Workflow naming.** `ci-all` is split into `ci-pr-checks` (the diff-aware PR workflow), `ci-nightly` (the full run on
   main), and `ci-publish` (pushes to main that build and publish images and packages). One workflow per concern.
-- **Publishing flow.** A push to main triggers ci-publish, which calls ci-dev-pages to update the dev site (temporarily,
-  until #167/#168 replace it with a build-from-source approach).
+- **Publishing flow.** A push to main triggers ci-publish (builds and publishes images and packages) and ci-dev-pages
+  (builds the dev site from source) independently. ci-dev-pages no longer depends on ci-publish.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
 - **Environments only where they are read** (#165). GitHub environments are named sets of variables and secrets; `dev`

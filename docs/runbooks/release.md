@@ -21,15 +21,13 @@ Every merge to main updates it, with no tags or releases:
    into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. It runs no tests, because
    the PR run already tested this content. The nightly run of [ci-nightly](../../.github/workflows/ci-nightly.yml) tests
    main.
-2. After publishing, ci-publish calls [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) (temporarily, until
-   #167/#168), which extracts the `main` image of all three apps into one site and deploys it. A deploy replaces the
-   whole site, so it always takes all three.
+2. A push to main also starts [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) independently, which builds the
+   dev site from source and deploys it. A deploy replaces the whole site, so it always takes all three.
 
-To put back an older build of an app, retag its image from the commit you want as `main`, then run
-`gh workflow run ci-dev-pages.yml --ref main -f test_run=false`. Images are never deleted. A failed deploy does not
-affect `CI gate`, so check it after merging. To republish after a failed merge run, use "Re-run failed jobs" on that
-run: a manual ci-publish would replace `main` for every app it lists, and a dev package version can be published only
-once.
+To put back an older build, push a revert commit to main so ci-dev-pages rebuilds from that point. The old image-based
+rollback (retag an image, then run ci-dev-pages) is out of date: ci-dev-pages now builds from source, not from images.
+Issue #168 will replace this with a cd-dev-pages procedure. A failed deploy does not affect `CI gate`, so check it after
+merging. To republish after a failed merge run, use "Re-run failed jobs" on that run.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.
 

@@ -204,20 +204,3 @@ jobs:
     env: *browser-image-env
     steps: *browser-image-steps
 
-  # Temporary: after publishing, update the dev site so it reflects what was just published.
-  # This is temporary because #167/#168 will replace the dev site with a build-from-source approach
-  # that does not depend on these images. Until then, ci-publish keeps the dev site in sync.
-  # No test-run twin: it only passes the test_run flag through to ci-dev-pages, which handles
-  # the production vs test-run split itself.
-  dev-pages:
-    name: dev-pages
-    needs: [switch, select, image, image-test-run, package, package-test-run, browser-image, browser-image-test-run]
-    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.image.result == 'success' || needs.image.result == 'skipped') && (needs.image-test-run.result == 'success' || needs.image-test-run.result == 'skipped') && (needs.package.result == 'success' || needs.package.result == 'skipped') && (needs.package-test-run.result == 'success' || needs.package-test-run.result == 'skipped') && (needs.browser-image.result == 'success' || needs.browser-image.result == 'skipped') && (needs.browser-image-test-run.result == 'success' || needs.browser-image-test-run.result == 'skipped') }}
-    uses: ./.github/workflows/ci-dev-pages.yml
-    permissions:
-      contents: read
-      packages: read
-      pages: write
-      id-token: write
-    with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}

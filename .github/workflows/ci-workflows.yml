@@ -102,9 +102,14 @@ jobs:
             echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
             missing=1
           fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/workflows/ci-dev-pages\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\)/' \
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\)/' \
             && ! has_qualifying_run ci-publish.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."
+            missing=1
+          fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-dev-pages\.yml$\|^\.github/actions/\(setup-web\|install-dependencies\|test_run\)/' \
+            && ! has_qualifying_run ci-dev-pages.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run ci-dev-pages.yml --ref $BRANCH -f test_run=true, then re-run this check."
             missing=1
           fi
           result="Test-run evidence for $HEAD_SHA: $([ "$missing" -eq 0 ] && echo found || echo missing)"
