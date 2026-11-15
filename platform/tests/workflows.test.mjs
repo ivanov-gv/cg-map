@@ -354,8 +354,8 @@ const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh')
 
 // Parse the action YAML to extract the resolve and wait step scripts.
 const findArtifactYaml = parseYaml(findArtifactAction);
-const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
-const waitScript = findArtifactYaml.runs.steps.find(s => s.id === 'wait').run;
+const resolveScript = findArtifactYaml.runs.steps.find(step => step.id === 'resolve').run;
+const waitScript = findArtifactYaml.runs.steps.find(step => step.id === 'wait').run;
 
 async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
@@ -455,22 +455,56 @@ test('find-pages-artifact: wait prefers a successful run when a failed run also 
   assert.match(result.stdout, /run 22222 completed successfully/, 'must select the successful run');
 });
 
+test('find-pages-artifact: resolve fails on short SHA with full-SHA error', async () => {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-short-sha-'));
+  const curlPath = path.join(temporaryDirectory, 'curl');
+  await fs.promises.copyFile(fakeCurlPath, curlPath);
+  await fs.promises.chmod(curlPath, 0o755);
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    INPUT_COMMIT: 'abcdef1',
+    EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
+    GH_TOKEN: 'fake-token',
+    GH_REPO: 'owner/repo',
+  };
+  try {
+    const result = await execFileAsync('bash', ['-c', resolveScript], {env, cwd: temporaryDirectory});
+    assert.fail('should have exited 1 for short SHA', result.stdout);
+  } catch (err) {
+    assert.equal(err.code, 1, 'resolve must fail on short SHA');
+    assert.match(err.stdout, /::error::.*full 40-character SHA/, 'must emit ::error:: about full SHA');
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+});
+
+test('find-pages-artifact: wait prefers push run over dispatched run when both succeed', async () => {
+  const result = await runFindArtifactStep(waitScript, {
+    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"workflow_dispatch","id":22222,"status":"completed","conclusion":"success"},{"name":"ci-dev-pages","head_branch":"main","event":"push","id":11111,"status":"completed","conclusion":"success"}]}',
+  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
+  assert.equal(result.code, 0, 'wait must pass when both push and dispatched runs succeed');
+  assert.match(result.stdout, /run 11111 completed successfully/, 'must select the push run');
+});
+
 // Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
 // The deploy must only run on push when is_newest (so older pushes don't overwrite newer sites),
 // and must always run on workflow_dispatch when find succeeds (for rollback).
 // It must not run when find is skipped (test-run) or fails.
-function evaluateDeployIf(expression, context) {
+function evaluateDeployIf(expressionText, context) {
   // Replace GitHub Actions expression syntax with JavaScript equivalents.
-  let expr = expression
+  let expression = expressionText
     .replace(/\$\{\{\s*/g, '')
     .replace(/\s*\}\}/g, '')
     .trim();
   for (const [key, value] of Object.entries(context)) {
-    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+    expression = expression.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
   }
   // Handle !cancelled() -> context.cancelled
-  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
-  return Function('context_cancelled', 'return ' + expr + ';')();
+  expression = expression.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expression + ';')();
 }
 
 test('cd-dev-pages deploy gating: push only deploys when newest, workflow_dispatch deploys for rollback', () => {
@@ -484,17 +518,17 @@ test('cd-dev-pages deploy gating: push only deploys when newest, workflow_dispat
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
   ];
 
-  for (const tc of cases) {
+  for (const testCase of cases) {
     const got = evaluateDeployIf(deployIf, {
-      'github.event_name': tc.event,
-      "needs.find.outputs.is_newest": tc.isNewest,
-      "needs.find.result": tc.findResult,
+      'github.event_name': testCase.event,
+      "needs.find.outputs.is_newest": testCase.isNewest,
+      "needs.find.result": testCase.findResult,
     });
     const deployed = got === true;
     assert.equal(
       deployed,
-      tc.wantDeploy,
-      `${tc.label}: want deploy=${tc.wantDeploy}, got ${deployed} (if: ${deployIf})`
+      testCase.wantDeploy,
+      `${testCase.label}: want deploy=${testCase.wantDeploy}, got ${deployed} (if: ${deployIf})`
     );
   }
 });
@@ -1119,7 +1153,7 @@ function checkSparseCheckoutSteps(steps, relativePath, entryName) {
 test('sparse-checkout inputs split into newline-separated patterns with no spaces', () => {
   const actionsDirectory = path.join(repoRoot, '.github/actions');
   const actionFiles = fs.readdirSync(actionsDirectory)
-    .map(actionDir => path.join('.github/actions', actionDir, 'action.yml'));
+    .map(actionDirectory => path.join('.github/actions', actionDirectory, 'action.yml'));
   const allYamlPaths = [...newWorkflowFiles.map(file => path.join(workflowDir, file)), ...actionFiles.map(file => path.join(repoRoot, file))];
   for (const yamlPath of allYamlPaths) {
     const raw = fs.readFileSync(yamlPath, 'utf8');
@@ -1145,8 +1179,8 @@ test('ci-pr-checks gate sparse-checkout includes both required files', () => {
   assert.ok(checkoutStep, 'gate must have a checkout with sparse-checkout');
   const patterns = checkoutStep.with['sparse-checkout']
     .split('\n')
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
+    .map(pattern => pattern.trim())
+    .filter(pattern => pattern.length > 0);
   assert.ok(patterns.includes('.node-version'), 'gate sparse-checkout must include .node-version');
   assert.ok(patterns.includes('platform/tools/run-budget.mjs'), 'gate sparse-checkout must include platform/tools/run-budget.mjs');
 });

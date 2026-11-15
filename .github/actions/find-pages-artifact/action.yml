@@ -67,12 +67,12 @@ runs:
         }
 
         # Poll for a ci-dev-pages workflow run that matches our commit SHA.
-        # Bounded poll: check every 10 seconds, up to 7 minutes (42 attempts) to match ci-dev-pages timeout.
+        # Bounded poll: check every 10 seconds, up to 6 minutes (36 attempts) to fit inside the find job's 7-minute timeout.
         # MAX_ATTEMPTS and POLL_DELAY can be overridden by the environment for testing.
         # Among all runs for the SHA, prefer a push-triggered run over others.
         # If any completed run succeeded, use it; only fail when all completed runs failed.
         attempt=0
-        max_attempts="${MAX_ATTEMPTS:-42}"
+        max_attempts="${MAX_ATTEMPTS:-36}"
         poll_delay="${POLL_DELAY:-10}"
         while [ $attempt -lt $max_attempts ]; do
           attempt=$((attempt + 1))

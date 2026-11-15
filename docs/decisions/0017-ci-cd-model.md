@@ -40,9 +40,8 @@ These gaps need recording so the model is documented in one place and the featur
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
 
-  **Outcome (#221, 2026-11-15):** the budget is enforced in the `CI gate` job via `platform/tools/run-budget.mjs`, which
-  fetches the jobs JSON for the current run attempt and computes elapsed time from the approval job's completion (or the
-  run start if no approval). See `.github/TESTING.md` for details.
+  **Outcome (#169, 2026-11-15):** enforced by `CI gate`; the clock starts at the later of the approval and the run
+  attempt's start, so re-runs keep their budget. Details: .github/TESTING.md.
 
 - **Environments only where they are read** (#165). GitHub environments are named sets of variables and secrets; `dev`
   and `test-run` define the same names, and test-run twins read safe values from `test-run` (the test-run model). A
