@@ -267,6 +267,8 @@ jobs:
           skip_main_tag: 'true'
   # Keep only the last N dev-pages versions — the rollback window.
   # Package name and versions-to-keep come from environment vars so test-run can override them.
+  # The test-run value names an existing package (cg-map/web) because cg-map/dev-pages does not exist in GHCR
+  # until the first production push, so a test-run cleanup that lists it would fail.
   pages-cleanup:
     name: Clean old dev site images
     needs: [switch, pages]
