@@ -854,3 +854,52 @@ test('ci-* test-run twins always reference test-run', () => {
     }
   }
 });
+
+// sparse-checkout must list one pattern per line; a space-separated list is one pattern that matches nothing.
+// act cannot catch this because it copies the worktree instead of performing a sparse checkout.
+test('sparse-checkout inputs split into newline-separated patterns with no spaces', () => {
+  const actionsDir = path.join(repoRoot, '.github/actions');
+  const actionFiles = fs.readdirSync(actionsDir)
+    .map(dir => path.join('.github/actions', dir, 'action.yml'));
+  const allYamlPaths = [...newWorkflowFiles.map(f => path.join(workflowDir, f)), ...actionFiles.map(f => path.join(repoRoot, f))];
+  for (const yamlPath of allYamlPaths) {
+    const raw = fs.readFileSync(yamlPath, 'utf8');
+    const parsed = parseYaml(raw);
+    const jobs = parsed.jobs ?? {};
+    const relativePath = path.relative(repoRoot, yamlPath);
+    for (const [name, job] of Object.entries(jobs)) {
+      for (const step of job.steps ?? []) {
+        if (step.with?.['sparse-checkout'] !== undefined) {
+          const value = step.with['sparse-checkout'];
+          assert.equal(
+            typeof value,
+            'string',
+            `${relativePath} ${name}: sparse-checkout must be a string`
+          );
+          const patterns = value.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+          for (const pattern of patterns) {
+            assert.doesNotMatch(
+              pattern,
+              /\s/,
+              `${relativePath} ${name}: sparse-checkout pattern must not contain spaces: "${pattern}"`
+            );
+          }
+        }
+      }
+    }
+  }
+});
+
+test('ci-pr-checks gate sparse-checkout includes both required files', () => {
+  const {gate} = load('ci-pr-checks.yml').jobs;
+  const checkoutStep = gate.steps.find(
+    step => step.uses?.startsWith('actions/checkout') && step.with?.['sparse-checkout']
+  );
+  assert.ok(checkoutStep, 'gate must have a checkout with sparse-checkout');
+  const patterns = checkoutStep.with['sparse-checkout']
+    .split('\n')
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+  assert.ok(patterns.includes('.node-version'), 'gate sparse-checkout must include .node-version');
+  assert.ok(patterns.includes('platform/tools/run-budget.mjs'), 'gate sparse-checkout must include platform/tools/run-budget.mjs');
+});

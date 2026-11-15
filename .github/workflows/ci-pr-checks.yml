@@ -253,10 +253,14 @@ jobs:
             exit 1
           fi
           echo "CI gate passed." | tee -a "$GITHUB_STEP_SUMMARY"
+      # act copies the worktree instead of performing a sparse checkout, so it cannot catch mistakes here.
+      # Each pattern must be on its own line; a space-separated list is treated as one pattern that matches nothing.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          sparse-checkout: .node-version platform/tools/run-budget.mjs
+          sparse-checkout: |
+            .node-version
+            platform/tools/run-budget.mjs
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v7
         with:
