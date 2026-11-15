@@ -9,7 +9,7 @@ This is a project for testing and polishing AI-first development strategies. The
 1. Edit the Wiki, add everything you want to change in the project
 2. Define Epic tasks and add them to a new Milestone
 3. Ask your AI Agents to help with defining Features for each Epic
-4. Run your Agents to implement everything you have added
+4. Run your Agents to implement everything you have added through creating Tasks and Bugs
 5. Review, see the result in a staging environment, add more GitHub Issues if needed
 6. When everything is done, make a Release, close the Milestone
 
@@ -105,6 +105,12 @@ issue holds a task's scope and status.
 
 - May only have a Feature as a parent issue
 - May only have sub-tasks as child issues
+
+## Pull requests
+
+- Each Feature has its own pull request
+- Pull request must be marked as draft if not ready for review
+- Several Features under one Epic should be combined in a stack to be merged together
 
 ## Agents and the wiki
 
