@@ -2,8 +2,8 @@
 
 ## Status
 
-Partially superseded. The Pages-as-CI-step and `:main`-image parts are replaced by [ADR 0017](0017-ci-cd-model.md). All
-other parts remain accepted.
+Partially superseded. The Pages-as-CI-step and `:main`-image parts are replaced by [ADR 0017](0017-ci-cd-model.md),
+which also covers the approval gate. All other parts remain accepted.
 
 ## Context
 
@@ -23,9 +23,8 @@ has no users yet, so the process can be set up properly before it has to protect
   `/core-demo/`, `/editor/` and `/web/`, with a chooser at the root. There are no pre or prod environments yet.
 - **Artifacts are images.** CI builds each app into an image in GHCR, tagged by commit SHA and `main`. The Pages step
   takes the `main` image of all three, because a deploy replaces the whole site.
-- **PR checks wait for approval.** A PR run starts by waiting on the `ci-approval` environment. The gate passes
-  automatically until the owner adds required reviewers to that environment; adding a reviewer later needs no workflow
-  change. A waiting job uses no minutes, and a new push replaces the waiting run. `CI gate` stays required.
+- **PR checks wait for approval.** A PR run starts by waiting on the `ci-approval` environment. The owner or the bot
+  approves it. A waiting job uses no minutes, and a new push replaces the waiting run. `CI gate` stays required.
 
 These replace the earlier exceptions that deployed Pages on every merge through CD and ran PR checks automatically.
 
