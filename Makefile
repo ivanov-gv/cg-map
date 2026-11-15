@@ -107,6 +107,10 @@ test-cd-browser-image: act-image
 
 # Needs a recent main SHA with a successful ci-dev-pages run: make test-cd-dev-pages COMMIT=<full SHA>
 # Find one with: gh run list --workflow ci-dev-pages.yml --branch main --status success
+# Or test the workflow_run path (uses .github/act/event-workflow-run.json): make test-cd-dev-pages
 test-cd-dev-pages: act-image
-	$(if $(or $(COMMIT),$(findstring -n,$(ACT))),,$(error Set COMMIT: make test-cd-dev-pages COMMIT=<full SHA on main>))
+ifneq ($(COMMIT),)
 	$(ACT) workflow_dispatch -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) --input commit=$(COMMIT)
+else
+	$(ACT) workflow_run -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) -e .github/act/event-workflow-run.json
+endif

@@ -74,3 +74,8 @@ site that should update automatically when code lands.
 
 **Outcome (#168, 2026-11-15):** the spike found page_build never fires with build_type workflow; cd-dev-pages triggers
 on push to main and polls for its SHA's ci-dev-pages run, so CI never triggers CD.
+
+**Outcome (#237, 2026-11-15):** cd-dev-pages no longer triggers on push; it triggers on `workflow_run` when ci-dev-pages
+completes. A gate job checks the CI conclusion before the find job runs. The deploy `if:` requires find success and
+either `workflow_dispatch` (for manual rollback) or `is_newest` (for automatic deploys). The Makefile target supports
+both `workflow_run` (default, via event payload) and `workflow_dispatch` (with `COMMIT=`) paths under act.

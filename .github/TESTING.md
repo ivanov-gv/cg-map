@@ -76,11 +76,19 @@ make test-all-workflows ACT="gh act -n" # dry run of every target
 `docker tag <image> ttl.sh/ivanov-gv-cg-map/browser-ci:<SHA>`, then `docker push`. Use a new revision on each try,
 because a version never changes there either.
 
-`test-cd-dev-pages` needs a commit on `main` that has a successful `ci-dev-pages` run with a `github-pages` artifact.
-Find one with
-`gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Under
-`act`, the GitHub run/artifact APIs need a real token and a real `ci-dev-pages` run, so the target passes `COMMIT=` a
-recent main SHA the way `test-cd-map-core` passes its inputs.
+`test-cd-dev-pages` supports two paths under `act`:
+
+- **workflow_run path** (default, no arguments): simulates the `workflow_run` trigger using
+  `.github/act/event-workflow-run.json`, which contains a real `ci-dev-pages` run (ID 43708216403) on `main`. The find
+  step downloads the artifact from that real run, proving the cross-run download works. Run it with
+  `make test-cd-dev-pages`.
+- **workflow_dispatch path** (with `COMMIT=`): simulates a manual dispatch. Pass a commit on `main` that has a
+  successful `ci-dev-pages` run with a `github-pages` artifact. Find one with
+  `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it
+  with `make test-cd-dev-pages COMMIT=<full SHA>`.
+
+Under `act`, the GitHub run/artifact APIs need a real token and a real `ci-dev-pages` run, so both paths download from
+an actual CI run.
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
@@ -112,7 +120,7 @@ gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run ci-publish.yml --ref <branch> -f test_run=true
 gh workflow run ci-dev-pages.yml --ref <branch> -f test_run=true
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
-gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA>
+gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA on main>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
@@ -136,9 +144,10 @@ check exempts workflows not yet on `main` automatically.
 the diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no
 checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
 `ci-pr-checks` through a composite action at `.github/actions/plan`). A push to main also triggers `ci-dev-pages`
-independently — it builds the dev site from source and uploads the artifact. A push to main also triggers `cd-dev-pages`
-independently — it finds that artifact and deploys it to GitHub Pages. The nightly run of `ci-nightly` checks everything
-by calling `ci-pr-checks` with `run_all: true`. To see what a branch would select:
+independently — it builds the dev site from source and uploads the artifact. When `ci-dev-pages` completes successfully
+on `main`, `cd-dev-pages` is triggered via `workflow_run` — it finds that artifact and deploys it to GitHub Pages. The
+nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`. To see what a branch would
+select:
 
 ```sh
 make ci-plan BASE=origin/main

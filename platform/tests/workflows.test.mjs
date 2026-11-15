@@ -22,7 +22,7 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
-  'cd-dev-pages.yml': ['switch', 'deploy'],
+  'cd-dev-pages.yml': ['switch', 'gate', 'deploy'],
   'ci-dev-pages.yml': ['switch'],
   'ci-publish.yml': ['switch', 'select']
 };
@@ -303,10 +303,11 @@ test('CD refuses a commit that is not on main', () => {
   assert.match(action, /compare\/main\.\.\./);
 });
 
-test('cd-dev-pages triggers on push to main and workflow_dispatch with commit input', () => {
+test('cd-dev-pages triggers on workflow_run and workflow_dispatch with commit input', () => {
   const {on} = load('cd-dev-pages.yml');
-  assert.ok(on.push, 'cd-dev-pages must trigger on push to main');
-  assert.deepEqual(on.push.branches, ['main']);
+  assert.ok(on.workflow_run, 'cd-dev-pages must trigger on workflow_run');
+  assert.deepEqual(on.workflow_run.workflows, ['ci-dev-pages']);
+  assert.deepEqual(on.workflow_run.types, ['completed']);
   assert.ok(on.workflow_dispatch, 'cd-dev-pages must accept workflow_dispatch');
   assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
   assert.equal(on.workflow_dispatch.inputs.test_run.default, true);
@@ -315,7 +316,7 @@ test('cd-dev-pages triggers on push to main and workflow_dispatch with commit in
 test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   const {jobs} = load('cd-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy on push only when is_newest; on workflow_dispatch always (for rollback).
+  // Deploy on workflow_run only when is_newest; on workflow_dispatch always (for rollback).
   // Requires find to have succeeded so a skipped find (test-run) does not deploy.
   assert.match(jobs.deploy.if, /needs\.find\.result == 'success'/);
   assert.match(jobs.deploy.if, /github\.event_name == 'workflow_dispatch'/);
@@ -466,12 +467,12 @@ function evaluateDeployIf(expression, context) {
   return Function('context_cancelled', 'return ' + expr + ';')();
 }
 
-test('cd-dev-pages deploy gating: push only deploys when newest, workflow_dispatch deploys for rollback', () => {
+test('cd-dev-pages deploy gating: workflow_run deploys when newest, workflow_dispatch deploys for rollback', () => {
   const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
 
   const cases = [
-    {event: 'push', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'push, newest'},
-    {event: 'push', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'push, not newest'},
+    {event: 'workflow_run', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'workflow_run, newest'},
+    {event: 'workflow_run', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'workflow_run, not newest'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success, not newest'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
@@ -808,7 +809,8 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish, ci-dev-pages and cd-dev-pages run on push to main and workflow_dispatch;
+  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
+  // cd-dev-pages runs on workflow_run (ci-dev-pages completed) and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
   for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(

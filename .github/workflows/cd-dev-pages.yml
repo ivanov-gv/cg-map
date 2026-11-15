@@ -1,15 +1,17 @@
 name: cd-dev-pages
 # Deploys the dev site from the ci-dev-pages artifact. CI builds the site and uploads the artifact;
 # this CD workflow finds that artifact for a given commit and deploys it to GitHub Pages.
+# Triggered by workflow_run when ci-dev-pages finishes on main, or by workflow_dispatch for manual deploys.
 # The find job and its test-run twin share steps via a composite action.
 # The deploy job has no test-run twin: Pages can only publish to this repository, so there is no test destination.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
   && format('cd-dev-pages test_run={0} {1}', inputs.test_run, inputs.commit)
-  || format('cd-dev-pages {0}', inputs.commit || github.sha) }}
+  || format('cd-dev-pages {0}', github.event.workflow_run.head_sha || inputs.commit || github.sha) }}
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [ci-dev-pages]
+    types: [completed]
   workflow_dispatch:
     inputs:
       commit:
@@ -39,10 +41,29 @@ jobs:
         uses: ./.github/actions/test_run
         with:
           test_run: ${{ inputs.test_run }}
+  # On workflow_run, the ci-dev-pages conclusion determines whether to proceed.
+  # A failed ci-dev-pages run should not trigger a deploy attempt.
+  # On workflow_dispatch this job is a no-op: manual deploys bypass the CI gate.
+  gate:
+    name: Gate workflow_run conclusion
+    needs: switch
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check ci-dev-pages conclusion
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          conclusion="${{ github.event.workflow_run.conclusion }}"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::ci-dev-pages concluded with '$conclusion', not deploying"
+            exit 1
+          fi
+          echo "ci-dev-pages succeeded on ${{ github.event.workflow_run.head_branch }} at ${{ github.event.workflow_run.head_sha }}"
 
   find:
     name: Find Pages artifact
-    needs: switch
+    needs: [switch, gate]
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
@@ -60,7 +81,7 @@ jobs:
       - id: find_artifact
         uses: ./.github/actions/find-pages-artifact
         with:
-          commit: ${{ inputs.commit || github.sha }}
+          commit: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
           token: ${{ github.token }}
           artifact_destination: pages-dist
       # Re-upload the extracted content as this workflow's Pages artifact for the deploy job.
@@ -69,7 +90,7 @@ jobs:
           path: pages-dist
   find-test-run:
     name: (test-run) Find Pages artifact
-    needs: switch
+    needs: [switch, gate]
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
@@ -81,7 +102,7 @@ jobs:
   # The test run stops after the find-test-run job, which exercises the artifact resolution logic.
   deploy:
     name: Deploy dev site
-    needs: find
+    needs: [find, gate]
     if: ${{ !cancelled() && needs.find.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.find.outputs.is_newest == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
