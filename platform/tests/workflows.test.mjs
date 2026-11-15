@@ -17,8 +17,8 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
-  'ci-dev-pages.yml': ['deploy'],
-  'ci-publish.yml': ['switch', 'select', 'dev-pages']
+  'ci-dev-pages.yml': ['switch', 'deploy'],
+  'ci-publish.yml': ['switch', 'select']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -93,7 +93,7 @@ for (const file of newWorkflowFiles) {
 }
 
 // Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-publish.yml': ['dev-pages']};
+const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy']};
 
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
@@ -135,15 +135,40 @@ for (const [file, tagPrefix] of Object.entries(CD_TAGS))
 test('only the dev Pages deploy holds Pages permissions, and a test run cannot reach it', () => {
   const {jobs} = load('ci-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  assert.match(jobs.deploy.if, /inputs\.test_run != true/);
-  for (const job of ['assemble', 'assemble-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
+  // Deploy only runs after the production build (not build-test-run), so test runs never reach it.
+  assert.match(jobs.deploy.if, /needs\.build\.outputs\.is_newest/);
+  for (const job of ['build', 'build-test-run']) assert.equal(jobs[job].permissions.pages, undefined);
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
 });
 
-test('a deploy always takes every app, because it replaces the whole site', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.assemble.steps);
+// GitHub Packages requires a token even for public packages, so npm ci needs the packages permission.
+test('jobs that use setup-web or install-dependencies have packages permission', () => {
+  for (const file of newWorkflowFiles) {
+    const {jobs, permissions: workflowPermissions} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      const stepsText = JSON.stringify(job.steps ?? []);
+      const usesPackageActions =
+        stepsText.includes('setup-web') || stepsText.includes('install-dependencies');
+      if (!usesPackageActions) continue;
+      const effectivePermissions = job.permissions ?? workflowPermissions ?? {};
+      const hasPackagesRead = ['read', 'write'].includes(effectivePermissions.packages);
+      assert.ok(
+        hasPackagesRead,
+        `${file} ${name} uses setup-web or install-dependencies but lacks packages: read`
+      );
+    }
+  }
+});
+
+test('build always takes every app, because it replaces the whole site', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
   assert.match(stepsText, /for app in web editor core-demo/);
-  assert.match(stepsText, /:main/);
+  // No longer pulls :main images — builds from source instead.
+  assert.doesNotMatch(stepsText, /:main/);
+  // Writes version.json with commit, run_id, and built_at.
+  assert.match(stepsText, /version\.json/);
+  assert.match(stepsText, /GITHUB_SHA/);
+  assert.match(stepsText, /GITHUB_RUN_ID/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
@@ -258,6 +283,18 @@ test('ci-publish is triggered on pushes to main, not from ci-pr-checks', () => {
   assert.deepEqual(on.push.branches, ['main']);
 });
 
+test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {
+  const {on} = load('ci-dev-pages.yml');
+  assert.ok(on.push, 'ci-dev-pages must trigger on push to main');
+  assert.deepEqual(on.push.branches, ['main']);
+  assert.equal(on.workflow_call, undefined, 'ci-dev-pages must not use workflow_call');
+});
+
+test('ci-publish has no dev-pages job', () => {
+  const {jobs} = load('ci-publish.yml');
+  assert.equal(jobs['dev-pages'], undefined, 'ci-publish must not contain a dev-pages job');
+});
+
 test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
   const {on} = load('ci-pr-checks.yml');
   assert.equal(on.push, undefined, 'ci-pr-checks must not trigger on push');
@@ -300,9 +337,9 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish runs on push to main and workflow_dispatch; ci-dev-pages on workflow_call and workflow_dispatch;
+  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
