@@ -29,10 +29,10 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
-jobs, `ci-all`'s jobs that call another workflow, `Check job times`, and the check for test runs below. The twins use
-the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and manual
-runs default to it. `CI gate` and `approval` have no twin, and neither does the Pages deploy, because Pages can only
-publish to this repository: a test run stops at the assembled site.
+jobs, `select` and `dev-pages` (which pass the test_run flag through to a called workflow), `Check job times`, and the
+check for test runs below. The twins use the `test-run` environment, whose variables send everything to a test
+destination. Local runs always use it, and manual runs default to it. `CI gate` and `approval` have no twin, and neither
+does the Pages deploy, because Pages can only publish to this repository: a test run stops at the assembled site.
 
 The `dev` and `test-run` environments define these variables:
 
@@ -112,8 +112,11 @@ template.
 ## Through a real PR
 
 `ci-all` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from the
-diff. A push to main runs no checks and only publishes, and the nightly run checks everything. To see what a branch
-would select:
+diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no checks
+because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
+`ci-all` through a composite action at `.github/actions/plan`). After publishing, `ci-publish` calls `ci-dev-pages`
+(temporarily, until #167/#168 replace the dev site with a build-from-source approach). The nightly run of `ci-all`
+checks everything. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main
