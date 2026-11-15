@@ -130,7 +130,7 @@ The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner
 | Area            | Specs in apps/editor/tests/e2e            | Code only it depends on                                                 |
 | --------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
 | editing-desktop | editing.spec.mjs, root-desktop, five jobs | drag-gestures.js, geometry-editing.js, handle-layer.js, edit-preview.js |
-| editing-mobile  | editing.spec.mjs, pages-mobile            | The same                                                                |
+| editing-mobile  | editing.spec.mjs, pages-mobile, two jobs  | The same                                                                |
 | offline-desktop | offline.spec.mjs, root-desktop, two jobs  | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
 | offline-mobile  | offline.spec.mjs, pages-mobile            | The same                                                                |
 | selection       | selection.spec.mjs, both projects         | object-list.js                                                          |
