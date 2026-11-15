@@ -17,9 +17,10 @@ GitHub Pages is the dev environment, and there are no pre or prod environments y
 
 Every merge to main updates it, with no tags or releases:
 
-1. [ci-all](../../.github/workflows/ci-all.yml) runs no tests, because the PR run already tested this content. It calls
-   [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects into an image in GHCR,
-   tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. The nightly run tests main.
+1. [ci-pr-checks](../../.github/workflows/ci-pr-checks.yml) runs no tests, because the PR run already tested this
+   content. It calls [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects into
+   an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. The nightly run of
+   [ci-nightly](../../.github/workflows/ci-nightly.yml) tests main.
 2. [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) extracts the `main` image of all three apps into one site
    and deploys it. A deploy replaces the whole site, so it always takes all three.
 

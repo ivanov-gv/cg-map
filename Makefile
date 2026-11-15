@@ -1,4 +1,4 @@
-.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
+.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
 
 # Repository-wide tasks only. Every project builds, runs, lints and tests itself through its own Makefile; this file
 # may call a project's check targets but never its build or run targets. See docs/system-architecture/architecture.md.
@@ -80,14 +80,14 @@ ACT_GPU := $(if $(wildcard /dev/dri/renderD128),--var BROWSER_CONTAINER_OPTIONS=
 GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir))
 ACT_CONTAINER_OPTIONS := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR) $(ACT_GPU_OPTIONS)
 ACT_JOBS ?= 2
-# The limit applies to each called workflow, and ci-all calls many at once.
-test-ci-all: ACT_JOBS = 1
+# The limit applies to each called workflow, and ci-pr-checks calls many at once.
+test-ci-pr-checks: ACT_JOBS = 1
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --container-options "$(ACT_CONTAINER_OPTIONS)" $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
-test-all-workflows: test-cd-map-core test-cd-browser-image test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
+test-all-workflows: test-cd-map-core test-cd-browser-image test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
 
-test-ci-all test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image: test-%: act-image
+test-ci-pr-checks test-ci-nightly test-ci-dev-pages test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image: test-%: act-image
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
 
 # Needs a dev package CI published from main: make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA>

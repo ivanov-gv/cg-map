@@ -62,7 +62,7 @@ rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 
 ```sh
 make test-ci-docs                       # one workflow
-make test-ci-all                        # everything CI runs
+make test-ci-pr-checks                  # everything CI runs
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
 make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
 make test-all-workflows ACT="gh act -n" # dry run of every target
@@ -83,7 +83,7 @@ needs `.github/act/secret.env`, which Git ignores, because installing dependenci
 
 act targets mount the git common directory so they work from worktrees as well as the main clone. Set the clone's
 `origin` to the GitHub URL, because `act` takes the repository name from it. Run workflows one at a time on a machine
-short of disk or CPU: `ci-apps-web` alone can use several gigabytes. If `make test-ci-all` ends with
+short of disk or CPU: `ci-apps-web` alone can use several gigabytes. If `make test-ci-pr-checks` ends with
 `context deadline exceeded` while `act` removes containers, the run stopped before its browser jobs and gate, so it does
 not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
@@ -98,25 +98,29 @@ matrix. The job's `if` guard still skips execution when the matrix is empty, so 
 A workflow can be dispatched only once it exists on `main`. After that, dispatching runs your branch's version:
 
 ```sh
-gh workflow run ci-all.yml --ref <branch> -f test_run=true -f run_all=true
+gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
-`ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful `ci-all` test
-run exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed, and a
-`cd-browser-image` one when that workflow or its actions changed. A workflow not yet on `main` cannot be dispatched, so
-it is exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours in the PR
-template.
+`ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful test run of
+`ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
+and a `cd-browser-image` one when that workflow or its actions changed. A workflow not yet on `main` cannot be
+dispatched, so it is exempt. After those runs pass, re-run the failed check. CI cannot see local runs, so record yours
+in the PR template.
+
+After merging `ci-pr-checks.yml` or `ci-nightly.yml`, they cannot be dispatched until the merge lands on `main`. Test
+them locally first with `make test-ci-pr-checks` and `make test-ci-nightly`; the test-run-evidence check exempts
+workflows not yet on `main` automatically.
 
 ## Through a real PR
 
-`ci-all` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from the
-diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no checks
-because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
-`ci-all` through a composite action at `.github/actions/plan`). After publishing, `ci-publish` calls `ci-dev-pages`
-(temporarily, until #167/#168 replace the dev site with a build-from-source approach). The nightly run of `ci-all`
-checks everything. To see what a branch would select:
+`ci-pr-checks` starts on every PR, waits for approval on the `ci-approval` environment, and then selects pipelines from
+the diff. A push to main triggers `ci-publish` independently — it builds and pushes images and packages (it runs no
+checks because the PR run already tested the content). `ci-publish` has its own test-run switch and planner (shared with
+`ci-pr-checks` through a composite action at `.github/actions/plan`). After publishing, `ci-publish` calls
+`ci-dev-pages` (temporarily, until #167/#168 replace the dev site with a build-from-source approach). The nightly run of
+`ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main
