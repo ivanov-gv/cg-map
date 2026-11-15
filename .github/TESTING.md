@@ -40,13 +40,16 @@ destination. Local runs always use it, and manual runs default to it.
 
 The `dev` and `test-run` environments define these variables:
 
-| Variable                        | `dev`                      | `test-run`                |
-| ------------------------------- | -------------------------- | ------------------------- |
-| `IMAGE_REPOSITORY`              | `ghcr.io/ivanov-gv/cg-map` | `ttl.sh/ivanov-gv-cg-map` |
-| `WEB_ARTIFACT_NAME`             | `web-artifact`             | `web-artifact-test-run`   |
-| `WEB_ARTIFACT_RETENTION_DAYS`   | `30`                       | `1`                       |
-| `PACKAGE_PUBLISH_FLAGS`         | unset                      | `--dry-run`               |
-| `PAGES_ARTIFACT_RETENTION_DAYS` | `3`                        | `1`                       |
+| Variable                      | `dev`                      | `test-run`                |
+| ----------------------------- | -------------------------- | ------------------------- |
+| `IMAGE_REPOSITORY`            | `ghcr.io/ivanov-gv/cg-map` | `ttl.sh/ivanov-gv-cg-map` |
+| `WEB_ARTIFACT_NAME`           | `web-artifact`             | `web-artifact-test-run`   |
+| `WEB_ARTIFACT_RETENTION_DAYS` | `30`                       | `1`                       |
+| `PACKAGE_PUBLISH_FLAGS`       | unset                      | `--dry-run`               |
+| `DEV_PAGES_PACKAGE`           | `cg-map/dev-pages`         | `cg-map/web`              |
+| `DEV_PAGES_VERSIONS_TO_KEEP`  | `10`                       | `100000`                  |
+
+The `test-run` values list an existing package and delete nothing.
 
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
