@@ -266,12 +266,14 @@ jobs:
           EOF
           echo "version.json:" | tee -a "$GITHUB_STEP_SUMMARY"
           cat site/version.json | tee -a "$GITHUB_STEP_SUMMARY"
+      # The Dockerfile lives in the workflow checkout (first checkout), not in source/.
+      # The build context is the workspace root where site/ is assembled.
       - uses: ./.github/actions/publish-image
         with:
           name: dev-pages
           repository: ${{ env.IMAGE_REPOSITORY }}
-          dockerfile: source/platform/pages/Dockerfile
-          context: source
+          dockerfile: platform/pages/Dockerfile
+          context: '.'
           commit: ${{ env.COMMIT }}
           token: ${{ github.token }}
           skip_main_tag: 'true'

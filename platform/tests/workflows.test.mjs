@@ -199,6 +199,10 @@ test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
   assert.equal(publishStep.with.name, 'dev-pages', 'must publish dev-pages image');
   assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
   assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
+  // Dockerfile comes from the workflow checkout (first checkout), not from source/.
+  // Build context is the workspace root where site/ is assembled.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, '.', 'must use workspace root as build context');
 });
 
 test('cd-dev-pages find job pulls image by commit SHA', () => {
@@ -949,8 +953,10 @@ test('ci-publish pages job uses publish-image action with skip_main_tag', () => 
   assert.ok(publishStep, 'pages must use publish-image action');
   assert.equal(publishStep.with.name, 'dev-pages');
   assert.equal(publishStep.with.skip_main_tag, 'true');
-  assert.equal(publishStep.with.dockerfile, 'source/platform/pages/Dockerfile');
-  assert.equal(publishStep.with.context, 'source', 'must pass source as build context');
+  // Dockerfile comes from the workflow checkout, not from source/.
+  // Build context is the workspace root where site/ is assembled.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, '.', 'must use workspace root as build context');
 });
 
 // Read the publish-image action definition to know which inputs are required.
@@ -1097,7 +1103,7 @@ test('publish-image action uses build context from context input', async () => {
     COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
     REGISTRY_TOKEN: 'fake-token',
     SKIP_MAIN_TAG: 'true',
-    BUILD_CONTEXT: 'source',
+    BUILD_CONTEXT: '.',
   });
   assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
 
@@ -1105,7 +1111,7 @@ test('publish-image action uses build context from context input', async () => {
   assert.ok(buildCall, 'should have a docker build call');
   assert.match(
     buildCall,
-    /source$/,
+    /\.$/,
     'build must use the context path from the context input'
   );
 });
