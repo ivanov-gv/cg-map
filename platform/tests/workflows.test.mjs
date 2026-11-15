@@ -23,7 +23,7 @@ const NO_TWIN = {
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'cd-dev-pages.yml': ['switch', 'deploy'],
-  'ci-publish.yml': ['switch', 'select', 'pages-cleanup']
+  'ci-publish.yml': ['switch', 'select']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -192,12 +192,12 @@ test('ci-publish pages job builds every app, because it replaces the whole site'
 });
 
 test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
-  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
-  assert.match(stepsText, /IMAGE_REPOSITORY/, 'must use IMAGE_REPOSITORY');
-  assert.match(stepsText, /dev-pages/, 'must publish dev-pages image');
-  assert.match(stepsText, /COMMIT_SHA/, 'must tag by commit SHA');
-  assert.match(stepsText, /docker build/, 'must build the image');
-  assert.match(stepsText, /docker push/, 'must push the image');
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must publish dev-pages image');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
 });
 
 test('cd-dev-pages find job pulls image by commit SHA', () => {
@@ -872,4 +872,89 @@ test('ci-* test-run twins always reference test-run', () => {
       assert.equal(environment, 'test-run', `${file} ${name} must reference test-run`);
     }
   }
+});
+
+test('cd-dev-pages extracts /site/ contents, not /usr/share/nginx/html', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /\/site\/\./, 'must copy /site/ contents into pages-dist');
+  assert.doesNotMatch(stepsText, /\/usr\/share\/nginx\/html/, 'must not reference nginx path');
+});
+
+test('platform/pages/Dockerfile uses FROM scratch and copies to /site', () => {
+  const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/pages/Dockerfile'), 'utf8');
+  assert.match(dockerfile, /FROM scratch/, 'must use FROM scratch');
+  assert.match(dockerfile, /COPY site \/site/, 'must copy to /site');
+  assert.match(dockerfile, /CMD/, 'must have a CMD so docker create works');
+  assert.doesNotMatch(dockerfile, /FROM nginx/, 'must not use nginx base');
+});
+
+test('ci-publish pages job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('ci-publish.yml');
+  for (const step of jobs.pages.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{[^}]*inputs\./,
+        'pages step "' + step.name + '" must not use ${{ inputs.* }} in run:'
+      );
+    }
+  }
+});
+
+test('cd-dev-pages find job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  for (const step of jobs.find.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{/,
+        'find step "' + step.name + '" must not use ${{ }} in run:'
+      );
+    }
+  }
+});
+
+test('ci-publish pages-cleanup maps DEV_PAGES_PACKAGE and DEV_PAGES_VERSIONS_TO_KEEP from vars', () => {
+  const {jobs} = load('ci-publish.yml');
+  const cleanup = jobs['pages-cleanup'];
+  assert.equal(cleanup.env.DEV_PAGES_PACKAGE, '${{ vars.DEV_PAGES_PACKAGE }}');
+  assert.equal(cleanup.env.DEV_PAGES_VERSIONS_TO_KEEP, '${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}');
+  // The step uses env vars, not hardcoded values
+  const stepsText = JSON.stringify(cleanup.steps);
+  assert.match(stepsText, /env\.DEV_PAGES_PACKAGE/);
+  assert.match(stepsText, /env\.DEV_PAGES_VERSIONS_TO_KEEP/);
+});
+
+test('ci-publish pages-cleanup has a test-run twin with packages: read', () => {
+  const {jobs} = load('ci-publish.yml');
+  const twin = jobs['pages-cleanup-test-run'];
+  assert.ok(twin, 'pages-cleanup-test-run must exist');
+  assert.equal(twin.environment, 'test-run');
+  assert.equal(twin.permissions.packages, 'read', 'test-run cleanup must not write packages');
+  assert.deepEqual(twin.steps, jobs['pages-cleanup'].steps, 'twin must share steps');
+});
+
+test('publish-image action generalised with name, dockerfile, commit, skip_main_tag inputs', () => {
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8');
+  assert.match(action, /name:/, 'must have name input');
+  assert.match(action, /dockerfile:/, 'must have dockerfile input');
+  assert.match(action, /commit:/, 'must have commit input');
+  assert.match(action, /skip_main_tag:/, 'must have skip_main_tag input');
+});
+
+test('ci-publish pages job uses publish-image action with skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages');
+  assert.equal(publishStep.with.skip_main_tag, 'true');
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile');
+});
+
+test('ci-publish image job uses publish-image action without skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.image.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'image must use publish-image action');
+  assert.equal(publishStep.with.name, '${{ env.APP }}');
+  assert.equal(publishStep.with.skip_main_tag, undefined, 'app images should not skip main tag');
 });

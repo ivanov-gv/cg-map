@@ -1,30 +1,51 @@
-name: Publish app image
-description: Build one app's image from its built artifact, and push it tagged by commit and as main.
+name: Publish image
+description: Build a Docker image and push it tagged by commit, and optionally as main.
 inputs:
-  app:
-    description: The folder under apps/.
+  name:
+    description: The image name suffix (e.g. "web", "dev-pages").
     required: true
   repository:
-    description: Where to push, without the app name. A test run resolves this to a temporary registry.
+    description: Where to push, without the image name. A test run resolves this to a temporary registry.
     required: true
+  dockerfile:
+    description: 'Path to the Dockerfile (default: apps/<name>/Dockerfile for backward compat).'
+    required: false
+    default: ''
+  commit:
+    description: 'The commit SHA to tag with (default: github.sha).'
+    required: false
+    default: ''
   token:
     description: Token for ghcr.io. Other registries need none.
     required: true
+  skip_main_tag:
+    description: Set to "true" to skip pushing the :main tag (dev-pages is addressed by SHA only).
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
     - shell: bash
       env:
-        APP: ${{ inputs.app }}
+        IMAGE_NAME: ${{ inputs.name }}
         IMAGE_REPOSITORY: ${{ inputs.repository }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        COMMIT_SHA: ${{ inputs.commit || github.sha }}
         REGISTRY_TOKEN: ${{ inputs.token }}
-        COMMIT_SHA: ${{ github.sha }}
+        SKIP_MAIN_TAG: ${{ inputs.skip_main_tag }}
       run: |
-        image="$IMAGE_REPOSITORY/$APP"
+        image="$IMAGE_REPOSITORY/$IMAGE_NAME"
+        dockerfile="${DOCKERFILE:-apps/$IMAGE_NAME/Dockerfile}"
         case "$IMAGE_REPOSITORY" in
           ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
         esac
-        docker build --file "apps/$APP/Dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" .
-        docker push "$image:$COMMIT_SHA"
-        docker push "$image:main"
-        echo "Published $image at $COMMIT_SHA and main" | tee -a "$GITHUB_STEP_SUMMARY"
+        if [ "$SKIP_MAIN_TAG" = "true" ]; then
+          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" .
+          docker push "$image:$COMMIT_SHA"
+          echo "Published $image at $COMMIT_SHA (no main tag)" | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" .
+          docker push "$image:$COMMIT_SHA"
+          docker push "$image:main"
+          echo "Published $image at $COMMIT_SHA and main" | tee -a "$GITHUB_STEP_SUMMARY"
+        fi

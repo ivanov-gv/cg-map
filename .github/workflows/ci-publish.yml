@@ -122,7 +122,7 @@ jobs:
           command: make -C "apps/$APP" build
       - uses: ./.github/actions/publish-image
         with:
-          app: ${{ env.APP }}
+          name: ${{ env.APP }}
           repository: ${{ env.IMAGE_REPOSITORY }}
           token: ${{ github.token }}
   image-test-run:
@@ -221,17 +221,18 @@ jobs:
       packages: write
     env: &pages-env
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ inputs.commit || github.sha }}
     steps: &pages-steps
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-          ref: ${{ inputs.commit || github.sha }}
+          ref: ${{ env.COMMIT }}
       - name: Validate commit input
         if: ${{ inputs.commit != '' }}
         shell: bash
         run: |
-          if [[ ! "${{ inputs.commit }}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: ${{ inputs.commit }}"
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
             exit 1
           fi
       - uses: ./.github/actions/setup-web
@@ -251,42 +252,54 @@ jobs:
       - name: Write version.json
         run: |
           built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          commit="${{ inputs.commit || github.sha }}"
           cat > site/version.json <<EOF
-          {"commit":"${commit}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
+          {"commit":"${COMMIT}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
           EOF
           echo "version.json:" | tee -a "$GITHUB_STEP_SUMMARY"
           cat site/version.json | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Publish dev site image
-        env:
-          COMMIT_SHA: ${{ inputs.commit || github.sha }}
-          REGISTRY_TOKEN: ${{ github.token }}
-        run: |
-          image="$IMAGE_REPOSITORY/dev-pages"
-          case "$IMAGE_REPOSITORY" in
-            ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
-          esac
-          docker build --file platform/pages/Dockerfile --tag "$image:$COMMIT_SHA" .
-          docker push "$image:$COMMIT_SHA"
-          echo "Published $image:$COMMIT_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
-  # Keep only the last 10 dev-pages versions — the rollback window.
-  # Test-run uses ttl.sh, which expires on its own, so no cleanup twin is needed.
+      - uses: ./.github/actions/publish-image
+        with:
+          name: dev-pages
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          dockerfile: platform/pages/Dockerfile
+          commit: ${{ env.COMMIT }}
+          token: ${{ github.token }}
+          skip_main_tag: 'true'
+  # Keep only the last N dev-pages versions — the rollback window.
+  # Package name and versions-to-keep come from environment vars so test-run can override them.
   pages-cleanup:
     name: Clean old dev site images
     needs: [switch, pages]
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && needs.pages.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: dev
     permissions:
       packages: write
-    steps:
+    env:
+      DEV_PAGES_PACKAGE: ${{ vars.DEV_PAGES_PACKAGE }}
+      DEV_PAGES_VERSIONS_TO_KEEP: ${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}
+    steps: &pages-cleanup-steps
       - name: Delete old versions
         uses: actions/delete-package-versions@v5
         with:
-          package-name: dev-pages
+          package-name: ${{ env.DEV_PAGES_PACKAGE }}
           package-type: container
-          min-versions-to-keep: 10
+          min-versions-to-keep: ${{ env.DEV_PAGES_VERSIONS_TO_KEEP }}
           token: ${{ github.token }}
+  pages-cleanup-test-run:
+    name: (test-run) Clean old dev site images
+    needs: [switch, pages-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && needs.pages-test-run.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      packages: read
+    env:
+      DEV_PAGES_PACKAGE: ${{ vars.DEV_PAGES_PACKAGE }}
+      DEV_PAGES_VERSIONS_TO_KEEP: ${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}
+    steps: *pages-cleanup-steps
   pages-test-run:
     name: (test-run) Build dev site image
     needs: switch

@@ -57,22 +57,20 @@ jobs:
       packages: read
     env:
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
     outputs: &find-outputs
       commit: ${{ steps.resolve.outputs.commit }}
     steps: &find-steps
       - name: Resolve commit
         id: resolve
         shell: bash
-        env:
-          EVENT_SHA: ${{ github.sha }}
         run: |
-          commit="${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}"
-          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: $commit"
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
             exit 1
           fi
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "Resolved commit: $commit" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Resolved commit: $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Pull dev site image
         env:
           COMMIT_SHA: ${{ steps.resolve.outputs.commit }}
@@ -94,7 +92,9 @@ jobs:
           image="$IMAGE_REPOSITORY/dev-pages:$COMMIT_SHA"
           container=$(docker create "$image")
           mkdir -p pages-dist
-          docker cp "$container":/usr/share/nginx/html pages-dist
+          # Copy /site/ contents into pages-dist/ so the site is at pages-dist/index.html,
+          # not pages-dist/site/index.html or pages-dist/html/index.html.
+          docker cp "$container":/site/. pages-dist/
           docker rm "$container" > /dev/null
           file_count=$(find pages-dist -type f | wc -l)
           echo "Extracted $file_count files from $image" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -112,6 +112,7 @@ jobs:
     permissions: *find-permissions
     env:
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
     outputs: *find-outputs
     steps: *find-steps
   # No test-run twin: Pages can only publish to this repository, so there is no test destination.
