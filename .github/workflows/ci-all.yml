@@ -67,7 +67,6 @@ jobs:
     if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: dev
     outputs: &plan-outputs
       docs: ${{ steps.plan.outputs.docs }}
       workflows: ${{ steps.plan.outputs.workflows }}
