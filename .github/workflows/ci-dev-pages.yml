@@ -45,6 +45,9 @@ jobs:
       packages: read
     outputs: &build-outputs
       is_newest: ${{ steps.newest.outputs.is_newest }}
+    env: &build-env
+      REGISTRY_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps: &build-steps
       - uses: actions/checkout@v7
         with:
@@ -78,12 +81,10 @@ jobs:
       # main's runs do not queue behind each other, so a slow older run could otherwise replace a newer site.
       - id: newest
         name: Check this is still main's newest commit
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          main_head=$(curl --fail --silent --show-error --location --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header "Accept: application/vnd.github+json" "https://api.github.com/repos/${{ github.repository }}/commits/main" | jq -r .sha)
+          main_head=$(curl --fail --silent --show-error --location --header "Authorization: Bearer $REGISTRY_TOKEN" \
+            --header "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPO/commits/main" | jq -r .sha)
           is_newest=$([ "$main_head" = "$GITHUB_SHA" ] && echo true || echo false)
           echo "is_newest=$is_newest" >> "$GITHUB_OUTPUT"
           echo "main is at $main_head, this run is $GITHUB_SHA: deploying is $is_newest" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -100,6 +101,7 @@ jobs:
     environment: test-run
     permissions: *build-permissions
     outputs: *build-outputs
+    env: *build-env
     steps: *build-steps
   # Temporary: this deploy job will move to a CD workflow (#168). Kept here so the dev site still updates on push.
   # No test-run twin: deploy-pages can only publish to this repository, so Pages has no test-run destination.
