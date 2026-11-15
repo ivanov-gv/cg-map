@@ -3,7 +3,7 @@ name: ci-dev-pages
 # and uploads the artifact. cd-dev-pages deploys it. See ADR 0017.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-  && format('ci-dev-pages test_run={0}', inputs.test_run)
+  && format('ci-dev-pages test_run={0} {1}', inputs.test_run, inputs.commit || github.sha)
   || format('ci-dev-pages {0}', github.sha) }}
 on:
   push:
@@ -14,6 +14,10 @@ on:
         description: Test run
         type: boolean
         default: true
+      commit:
+        description: The full commit SHA to build (empty = github.sha)
+        type: string
+        required: false
 permissions:
   contents: read
 jobs:
@@ -39,13 +43,26 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
+    environment: dev
     permissions: &build-permissions
       contents: read
       packages: read
+    env:
+      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
+      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
     steps: &build-steps
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Validate commit input
+        if: ${{ inputs.commit != '' }}
+        shell: bash
+        run: |
+          if [[ ! "${{ inputs.commit }}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character SHA, got: ${{ inputs.commit }}"
+            exit 1
+          fi
       - uses: ./.github/actions/setup-web
       - name: Build each app
         run: |
@@ -63,8 +80,9 @@ jobs:
       - name: Write version.json
         run: |
           built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          commit="${{ inputs.commit || github.sha }}"
           cat > site/version.json <<EOF
-          {"commit":"${GITHUB_SHA}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
+          {"commit":"${commit}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
           EOF
           echo "version.json:" | tee -a "$GITHUB_STEP_SUMMARY"
           cat site/version.json | tee -a "$GITHUB_STEP_SUMMARY"
@@ -73,9 +91,13 @@ jobs:
           count=$(find site -type f | wc -l)
           echo "Files in the site: $count" | tee -a "$GITHUB_STEP_SUMMARY"
       # Not v5: act's artifact server rejects what it uploads, and this job must also run locally.
+      # The artifact name carries the commit SHA so CD can find it by name without asking CI.
+      # Retention comes from the environment variable PAGES_ARTIFACT_RETENTION_DAYS.
       - uses: actions/upload-pages-artifact@v4
         with:
+          name: ${{ env.PAGES_ARTIFACT_PREFIX }}-${{ inputs.commit || github.sha }}
           path: site
+          retention-days: ${{ env.PAGES_ARTIFACT_RETENTION_DAYS }}
   build-test-run:
     name: (test-run) Build dev site
     needs: switch
@@ -84,4 +106,7 @@ jobs:
     timeout-minutes: 7
     environment: test-run
     permissions: *build-permissions
+    env:
+      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
+      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
     steps: *build-steps
