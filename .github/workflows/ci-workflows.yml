@@ -65,12 +65,22 @@ jobs:
           has_qualifying_run() { # <workflow file> <required run-name text>
             # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
             # Only a 404 means that: any other API failure must not pass this check.
-            if ! lookup=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --silent 2>&1); then
-              if ! echo "$lookup" | grep -q 'HTTP 404'; then
-                echo "::error::Could not look up $1: $lookup"
+            # Fetch the contents endpoint once with --jq .content to get the base64 payload in one call.
+            if ! base64_content=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --jq .content 2>&1); then
+              if ! echo "$base64_content" | grep -q 'HTTP 404'; then
+                echo "::error::Could not look up $1: $base64_content" >&2
                 return 1
               fi
               echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
+              return 0
+            fi
+            # Decode the workflow YAML and check for workflow_dispatch.
+            content=$(echo "$base64_content" | base64 -d 2>/dev/null) || {
+              echo "::error::Could not decode $1 content from main." >&2
+              return 1
+            }
+            if ! echo "$content" | grep -q 'workflow_dispatch:'; then
+              echo "::notice::$1 on main has no workflow_dispatch trigger, so it cannot be dispatched yet."
               return 0
             fi
             matches=$(gh run list --workflow "$1" --event workflow_dispatch --commit "$HEAD_SHA" --status success \
@@ -90,6 +100,16 @@ jobs:
           if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-core\.yml$\|^\.github/actions/' \
             && ! has_qualifying_run cd-map-core.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
+            missing=1
+          fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\)/' \
+            && ! has_qualifying_run ci-publish.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."
+            missing=1
+          fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-dev-pages\.yml$' \
+            && ! has_qualifying_run ci-dev-pages.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run ci-dev-pages.yml --ref $BRANCH -f test_run=true, then re-run this check."
             missing=1
           fi
           if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-dev-pages\.yml$\|^\.github/actions/find-pages-artifact/' \

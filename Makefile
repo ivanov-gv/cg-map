@@ -81,7 +81,8 @@ GIT_COMMON_DIR := $(abspath $(shell git rev-parse --git-common-dir))
 ACT_CONTAINER_OPTIONS := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR) $(ACT_GPU_OPTIONS)
 ACT_JOBS ?= 2
 # The limit applies to each called workflow, and ci-pr-checks calls many at once.
-test-ci-pr-checks: ACT_JOBS = 1
+# ci-nightly calls ci-pr-checks, which calls many workflows at once.
+test-ci-pr-checks test-ci-nightly: ACT_JOBS = 1
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --container-options "$(ACT_CONTAINER_OPTIONS)" $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
