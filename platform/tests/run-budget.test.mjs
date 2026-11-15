@@ -1,0 +1,226 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  getApprovalCompletedAt,
+  getEarliestStartedAt,
+  getEffectiveStart,
+  parseTimestamp,
+  computeElapsedSeconds,
+  getVerdict,
+  buildSummary,
+  evaluateRunBudget
+} from '../tools/run-budget.mjs';
+
+// Helper: build a minimal jobs array with an approval job
+function makeJobsWithApproval(completedAt) {
+  return [{name: 'Approve CI run', completed_at: completedAt}];
+}
+
+// Helper: build a jobs array without an approval job
+function makeJobsWithoutApproval() {
+  return [{name: 'Some other job', started_at: '2024-01-01T00:00:30Z', completed_at: '2024-01-01T00:01:00Z'}];
+}
+
+// Helper: build a full API response object
+function makeApiResponse(jobs) {
+  return {jobs};
+}
+
+const AIM = 300;
+const LIMIT = 420;
+
+// --- getApprovalCompletedAt ---
+
+test('getApprovalCompletedAt returns the approval job timestamp', () => {
+  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
+  assert.equal(getApprovalCompletedAt(jobs), '2024-06-01T10:05:00Z');
+});
+
+test('getApprovalCompletedAt returns null when no approval job', () => {
+  const jobs = makeJobsWithoutApproval();
+  assert.equal(getApprovalCompletedAt(jobs), null);
+});
+
+// --- getEffectiveStart ---
+
+test('getEffectiveStart uses approval completed_at when present', () => {
+  const jobs = makeJobsWithApproval('2024-06-01T10:05:00Z');
+  assert.equal(getEffectiveStart(jobs, '2024-06-01T10:00:00Z'), '2024-06-01T10:05:00Z');
+});
+
+test('getEffectiveStart falls back to run started_at when no approval job', () => {
+  const jobs = makeJobsWithoutApproval();
+  assert.equal(getEffectiveStart(jobs, '2024-06-01T10:00:00Z'), '2024-06-01T10:00:00Z');
+});
+
+test('getEffectiveStart falls back to earliest job started_at when no approval and no run start', () => {
+  const jobs = makeJobsWithoutApproval();
+  assert.equal(getEffectiveStart(jobs, ''), '2024-01-01T00:00:30Z');
+});
+
+// --- getEarliestStartedAt ---
+
+test('getEarliestStartedAt returns the earliest started_at from jobs', () => {
+  const jobs = [
+    {name: 'A', started_at: '2024-01-01T00:02:00Z'},
+    {name: 'B', started_at: '2024-01-01T00:00:00Z'},
+    {name: 'C', started_at: '2024-01-01T00:01:00Z'}
+  ];
+  assert.equal(getEarliestStartedAt(jobs), '2024-01-01T00:00:00Z');
+});
+
+test('getEarliestStartedAt returns null when no jobs have started_at', () => {
+  const jobs = [{name: 'A', completed_at: '2024-01-01T00:01:00Z'}];
+  assert.equal(getEarliestStartedAt(jobs), null);
+});
+
+// --- parseTimestamp ---
+
+test('parseTimestamp converts valid ISO to milliseconds', () => {
+  assert.equal(parseTimestamp('2024-01-01T00:00:00Z'), Date.parse('2024-01-01T00:00:00Z'));
+});
+
+test('parseTimestamp returns null for invalid input', () => {
+  assert.equal(parseTimestamp(null), null);
+  assert.equal(parseTimestamp(''), null);
+  assert.equal(parseTimestamp('not-a-date'), null);
+  assert.equal(parseTimestamp(123), null);
+});
+
+// --- computeElapsedSeconds ---
+
+test('computeElapsedSeconds returns seconds between two timestamps', () => {
+  const start = '2024-01-01T00:00:00Z';
+  const end = '2024-01-01T00:05:00Z';
+  assert.equal(computeElapsedSeconds(start, end), 300);
+});
+
+test('computeElapsedSeconds returns null for invalid timestamps', () => {
+  assert.equal(computeElapsedSeconds(null, '2024-01-01T00:05:00Z'), null);
+  assert.equal(computeElapsedSeconds('2024-01-01T00:00:00Z', 'bad'), null);
+});
+
+// --- getVerdict ---
+
+test('getVerdict returns ok when under the aim', () => {
+  assert.equal(getVerdict(200, AIM, LIMIT, 'pull_request'), 'ok');
+});
+
+test('getVerdict returns ok at exactly the aim', () => {
+  assert.equal(getVerdict(AIM, AIM, LIMIT, 'pull_request'), 'ok');
+});
+
+test('getVerdict returns warn between aim and limit', () => {
+  assert.equal(getVerdict(360, AIM, LIMIT, 'pull_request'), 'warn');
+});
+
+test('getVerdict returns warn at exactly the limit', () => {
+  assert.equal(getVerdict(LIMIT, AIM, LIMIT, 'pull_request'), 'warn');
+});
+
+test('getVerdict returns fail when over the limit', () => {
+  assert.equal(getVerdict(500, AIM, LIMIT, 'pull_request'), 'fail');
+});
+
+test('getVerdict returns unreadable when elapsed is null', () => {
+  assert.equal(getVerdict(null, AIM, LIMIT, 'pull_request'), 'unreadable');
+});
+
+test('getVerdict returns ok for non-pull_request events (exempt)', () => {
+  assert.equal(getVerdict(9999, AIM, LIMIT, 'schedule'), 'ok');
+  assert.equal(getVerdict(9999, AIM, LIMIT, 'workflow_dispatch'), 'ok');
+  assert.equal(getVerdict(9999, AIM, LIMIT, 'workflow_call'), 'ok');
+});
+
+// --- buildSummary ---
+
+test('buildSummary shows exempt for non-PR events', () => {
+  const summary = buildSummary('ok', 100, AIM, LIMIT, 'schedule');
+  assert.match(summary, /exempt/);
+  assert.match(summary, /schedule/);
+});
+
+test('buildSummary shows unreadable when elapsed is null', () => {
+  const summary = buildSummary('unreadable', null, AIM, LIMIT, 'pull_request');
+  assert.match(summary, /unreadable/);
+});
+
+test('buildSummary shows elapsed and verdict for PR events', () => {
+  const summary = buildSummary('warn', 360, AIM, LIMIT, 'pull_request');
+  assert.match(summary, /360s elapsed/);
+  assert.match(summary, /warn/);
+});
+
+// --- evaluateRunBudget (integration) ---
+
+test('evaluateRunBudget: under the aim returns ok', () => {
+  // Approval completed 4 minutes ago; now is 5 minutes after run start.
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:04:30Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T10:00:30Z'));
+  const result = evaluateRunBudget(apiResponse, runStarted, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'ok');
+  assert.ok(result.elapsedSeconds >= 0);
+});
+
+test('evaluateRunBudget: between aim and limit returns warn', () => {
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:06:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T10:00:00Z'));
+  const result = evaluateRunBudget(apiResponse, runStarted, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'warn');
+});
+
+test('evaluateRunBudget: over the limit returns fail', () => {
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:08:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T10:00:00Z'));
+  const result = evaluateRunBudget(apiResponse, runStarted, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'fail');
+});
+
+test('evaluateRunBudget: unreadable or missing timings returns warn-level (unreadable verdict)', () => {
+  const result = evaluateRunBudget('not-json', '2024-06-01T10:00:00Z', 'pull_request', AIM, LIMIT);
+  assert.equal(result.verdict, 'unreadable');
+});
+
+test('evaluateRunBudget: missing jobs array returns unreadable', () => {
+  const result = evaluateRunBudget({noJobs: true}, '2024-06-01T10:00:00Z', 'pull_request', AIM, LIMIT);
+  assert.equal(result.verdict, 'unreadable');
+});
+
+test('evaluateRunBudget: no approval job uses run start', () => {
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:04:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithoutApproval());
+  const result = evaluateRunBudget(apiResponse, runStarted, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'ok');
+  assert.equal(result.elapsedSeconds, 240);
+});
+
+test('evaluateRunBudget: no approval job and no run start uses earliest job started_at', () => {
+  const now = '2024-01-01T00:04:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithoutApproval());
+  const result = evaluateRunBudget(apiResponse, '', 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'ok');
+  // Earliest started_at is 2024-01-01T00:00:30Z, so elapsed is 210s.
+  assert.equal(result.elapsedSeconds, 210);
+});
+
+test('evaluateRunBudget: non-pull_request event is exempt (ok)', () => {
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:30:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithoutApproval());
+  const result = evaluateRunBudget(apiResponse, runStarted, 'schedule', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'ok');
+  assert.match(result.summary, /exempt/);
+});
+
+test('evaluateRunBudget: accepts JSON string input', () => {
+  const runStarted = '2024-06-01T10:00:00Z';
+  const now = '2024-06-01T10:04:00Z';
+  const apiResponse = makeApiResponse(makeJobsWithApproval('2024-06-01T10:00:00Z'));
+  const jsonString = JSON.stringify(apiResponse);
+  const result = evaluateRunBudget(jsonString, runStarted, 'pull_request', AIM, LIMIT, now);
+  assert.equal(result.verdict, 'ok');
+});

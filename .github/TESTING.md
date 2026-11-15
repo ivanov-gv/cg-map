@@ -26,6 +26,12 @@ A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 o
 checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
 `ci-apps-editor` splits its browser tests; do not raise the limit.
 
+The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
+`CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the jobs JSON for the current
+run attempt, computes the elapsed time (from the approval job's completion, or the run start if no approval), and emits
+a verdict. Under the aim is ok; between aim and limit emits a warning; over the limit fails the gate. Non-PR events
+(schedule, manual dispatch) are exempt. Unreadable timings only warn — they do not fail the gate.
+
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`

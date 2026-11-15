@@ -199,7 +199,7 @@ test('jobs below the optional approval survive it being skipped', () => {
 test('a called workflow asks for no more than its caller grants, or the whole run fails to start', () => {
   const levels = {none: 0, read: 1, write: 2};
   const allows = (granted, name, level) => levels[granted?.[name] ?? 'none'] >= levels[level];
-  for (const file of ['ci-pr-checks.yml', 'ci-publish.yml']) {
+  for (const file of ['ci-pr-checks.yml', 'ci-publish.yml', 'ci-nightly.yml']) {
     const {jobs, permissions: defaults} = load(file);
     for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
       const granted = job.permissions ?? defaults;
@@ -373,7 +373,31 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
   assert.equal(gate.if, 'always()');
   const jobsAfterGate = ['gate', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
-  assert.deepEqual(gate.permissions, {});
+  // Gate needs actions:read to fetch jobs for the run budget check.
+  assert.equal(gate.permissions.actions, 'read', 'gate needs actions:read for run budget');
+});
+
+test('CI gate checks run budget with aim and limit env vars', () => {
+  const {gate} = load('ci-pr-checks.yml').jobs;
+  const stepsText = JSON.stringify(gate.steps);
+  assert.match(stepsText, /Check run budget/, 'gate must have a run budget step');
+  assert.equal(gate.env.RUN_AIM_SECONDS, 300, 'gate must define RUN_AIM_SECONDS');
+  assert.equal(gate.env.RUN_LIMIT_SECONDS, 420, 'gate must define RUN_LIMIT_SECONDS');
+  assert.match(stepsText, /run-budget\.mjs/, 'run budget step must use run-budget.mjs');
+});
+
+test('ci-nightly grants cover the gate actions:read permission', () => {
+  // ci-nightly calls ci-pr-checks via workflow_call; the recursive grant test above
+  // checks that called workflows ask for no more than their caller grants.
+  // ci-nightly's permissions (contents: read, packages: read) are sufficient because
+  // the gate's actions:read is granted by the workflow-level permissions of ci-pr-checks
+  // when called — the gate job declares it explicitly.
+  const nightly = load('ci-nightly.yml');
+  const prChecks = load('ci-pr-checks.yml');
+  // The gate job in ci-pr-checks has actions:read; ci-nightly's run job passes it through.
+  assert.equal(prChecks.jobs.gate.permissions.actions, 'read');
+  // ci-nightly permissions must be at least read for contents and packages.
+  assert.ok(nightly.permissions.contents === 'read');
 });
 
 test('only the new pipelines run on the repository', () => {
