@@ -20,7 +20,6 @@ jobs:
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: dev
     steps: &lint-steps
       - uses: actions/checkout@v7
         with:

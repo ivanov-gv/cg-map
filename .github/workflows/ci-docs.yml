@@ -21,7 +21,6 @@ jobs:
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
     steps: &check-docs-steps
       - uses: actions/checkout@v7
         with:

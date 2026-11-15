@@ -46,6 +46,11 @@ The `dev` and `test-run` environments define these variables:
 
 A test run really pushes images, to a temporary public registry, and really runs npm publish, as a dry run.
 
+Jobs reference an environment only when they read its variables or secrets. GitHub records a deployment for every job
+that references an environment, so unnecessary references create noise in the deployment history. The `dev` and
+`test-run` variable table above stays the same: production jobs that need those variables keep `environment: dev`, and
+test-run twins always use `environment: test-run`.
+
 ## Locally with act
 
 Needs Docker and `gh extension install nektos/gh-act`. The image is private, so a new machine needs
