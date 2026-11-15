@@ -30,8 +30,8 @@ checks that. `Check job times` warns about any job over 5 minutes. When a job ge
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
 jobs, `select` (which only passes the planner's image matrix on), `run` in ci-nightly (which only calls ci-pr-checks),
-`Check job times`, the check for test runs below, `CI gate`, `approval`, the Pages deploy (because Pages can only
-publish to this repository: a test run stops at the assembled site), and the folder jobs in ci-pr-checks (`docs`,
+`Check job times`, the check for test runs below, `CI gate`, `approval`, the Pages deploy in cd-dev-pages (because Pages
+can only publish to this repository: a test run stops after the find job), and the folder jobs in ci-pr-checks (`docs`,
 `workflows`, `platform`, `contracts`, `browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`,
 `apps-web`, `apps-editor`, `apps-core-demo`) which call each folder's workflow with `test_run` passed through. The twins
 use the `test-run` environment, whose variables send everything to a test destination. Local runs always use it, and
@@ -121,10 +121,10 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 a `cd-browser-image` one when that workflow or its actions changed, a `ci-publish` test run when `ci-publish.yml` or the
 publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publish-browser-image`, `setup-web`,
 `run-check`) changed, a `ci-dev-pages` test run when `ci-dev-pages.yml` or the actions it uses (`setup-web`,
-`install-dependencies`, `test_run`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml` or
-`find-pages-artifact` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The same exemption
-applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the
-failed check. CI cannot see local runs, so record yours in the PR template.
+`install-dependencies`, `test_run`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml`,
+`find-pages-artifact` or `test_run` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The
+same exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs
+pass, re-run the failed check. CI cannot see local runs, so record yours in the PR template.
 
 `ci-pr-checks.yml`, `ci-nightly.yml` and `ci-publish.yml` cannot be dispatched until they land on main; until then, test
 them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, and `make test-ci-publish`. The test-run-evidence
