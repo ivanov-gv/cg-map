@@ -1,7 +1,8 @@
 name: Find Pages artifact
 description: >-
-  Resolves a commit SHA, verifies it is on main, waits for that SHA's ci-dev-pages run to complete,
-  downloads the github-pages artifact, and extracts it for re-upload.
+  Resolves a commit SHA, verifies it is on main, finds the &lt;prefix&gt;-&lt;commit&gt; artifact by name
+  (newest non-expired), downloads it, verifies version.json matches, and extracts it for re-upload.
+  CD is independent of CI's runs: it only needs the artifact name.
 inputs:
   commit:
     description: The full commit SHA to find the artifact for.
@@ -13,10 +14,20 @@ inputs:
     description: Directory to extract the downloaded artifact into.
     required: false
     default: pages-dist
+  artifact_prefix:
+    description: The prefix for the artifact name (e.g. dev-pages). Must be set explicitly.
+    required: true
+  retention_days:
+    description: Artifact retention days (for error messages).
+    required: false
+    default: '90'
 outputs:
   commit:
     description: The resolved commit SHA.
     value: ${{ steps.resolve.outputs.commit }}
+  run_id:
+    description: The workflow run ID that produced the artifact.
+    value: ${{ steps.resolve_artifact.outputs.run_id }}
   is_newest:
     description: true if the commit is still main's newest commit.
     value: ${{ steps.newest.outputs.is_newest }}
@@ -28,10 +39,16 @@ runs:
       shell: bash
       env:
         INPUT_COMMIT: ${{ inputs.commit }}
+        INPUT_ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
         EVENT_SHA: ${{ github.sha }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
+        # artifact_prefix is required — fail early if it is empty.
+        if [ -z "$INPUT_ARTIFACT_PREFIX" ]; then
+          echo "::error::artifact_prefix is required and must not be empty"
+          exit 1
+        fi
         commit="${INPUT_COMMIT:-$EVENT_SHA}"
         # Validate the commit is a full 40-character SHA.
         if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
@@ -50,15 +67,18 @@ runs:
         echo "commit=$commit" >> "$GITHUB_OUTPUT"
         echo "Resolved commit: $commit (relation to main: $relation)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-    - id: wait
-      name: Wait for ci-dev-pages run
+    - id: resolve_artifact
+      name: Find artifact by name
       shell: bash
       env:
         COMMIT: ${{ steps.resolve.outputs.commit }}
+        ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
+        RETENTION_DAYS: ${{ inputs.retention_days }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
-        # Repeated curl options for the GitHub API.
+        artifact_name="$ARTIFACT_PREFIX-$COMMIT"
+
         gh_api() {
           curl --fail --silent --show-error --location \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -66,76 +86,32 @@ runs:
             "$1"
         }
 
-        # Poll for a ci-dev-pages workflow run that matches our commit SHA.
-        # Bounded poll: check every 10 seconds, up to 6 minutes (36 attempts) to fit inside the find job's 7-minute timeout.
-        # MAX_ATTEMPTS and POLL_DELAY can be overridden by the environment for testing.
-        # Among all runs for the SHA, prefer a push-triggered run over others.
-        # If any completed run succeeded, use it; only fail when all completed runs failed.
-        attempt=0
-        max_attempts="${MAX_ATTEMPTS:-36}"
-        poll_delay="${POLL_DELAY:-10}"
-        while [ $attempt -lt $max_attempts ]; do
-          attempt=$((attempt + 1))
-          echo "Poll attempt $attempt/$max_attempts for ci-dev-pages run at $COMMIT..."
+        # List all artifacts with this name; take the newest non-expired one.
+        artifacts_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/artifacts?name=$artifact_name&per_page=100")
 
-          # Fetch all ci-dev-pages runs for this commit on main.
-          runs_json=$(gh_api "https://api.github.com/repos/$GH_REPO/actions/runs?head_sha=$COMMIT&per_page=100" | \
-            jq '[.workflow_runs[] | select(.name == "ci-dev-pages" and .head_branch == "main")]')
+        # Filter to non-expired artifacts and sort by created_at descending.
+        non_expired=$(echo "$artifacts_json" | jq '[.artifacts[] | select(.expired == false)]')
+        count=$(echo "$non_expired" | jq 'length')
 
-          run_count=$(echo "$runs_json" | jq 'length')
-          if [ "$run_count" = "0" ]; then
-            echo "No ci-dev-pages run found yet for $COMMIT. Waiting..."
-            sleep "$poll_delay"
-            continue
-          fi
+        if [ "$count" = "0" ]; then
+          echo "::error::No artifact $artifact_name: it was never built on main, or it expired after its retention of $RETENTION_DAYS days"
+          exit 1
+        fi
 
-          # Check for a successful completed run, preferring push-triggered runs.
-          # First look for a successful push run.
-          run_id=$(echo "$runs_json" | \
-            jq -r '.[] | select(.event == "push" and .status == "completed" and .conclusion == "success") | .id' | head -1)
+        # Take the newest (first in the list, which is sorted by created_at descending by default).
+        newest=$(echo "$non_expired" | jq '.[0]')
+        run_id=$(echo "$newest" | jq -r '.workflow_run.id')
+        artifact_id=$(echo "$newest" | jq -r '.id')
 
-          # If no successful push run, look for any successful run.
-          if [ -z "$run_id" ]; then
-            run_id=$(echo "$runs_json" | \
-              jq -r '.[] | select(.status == "completed" and .conclusion == "success") | .id' | head -1)
-          fi
-
-          if [ -n "$run_id" ]; then
-            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-            echo "ci-dev-pages run $run_id completed successfully" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          # No successful run yet. Check if all runs are completed (meaning all failed).
-          all_completed=$(echo "$runs_json" | jq '[.[] | select(.status != "completed")] | length')
-          if [ "$all_completed" = "0" ]; then
-            # All runs are completed but none succeeded — report the first push failure, or any failure.
-            failed_id=$(echo "$runs_json" | \
-              jq -r '.[] | select(.event == "push") | .id' | head -1)
-            if [ -z "$failed_id" ]; then
-              failed_id=$(echo "$runs_json" | jq -r '.[0].id')
-            fi
-            failed_conclusion=$(echo "$runs_json" | \
-              jq -r ".[] | select(.id == $failed_id) | .conclusion")
-            echo "::error::ci-dev-pages run $failed_id completed with conclusion: $failed_conclusion"
-            echo "Run details: https://github.com/$GH_REPO/actions/runs/$failed_id" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          # Some runs are still in progress; wait and retry.
-          echo "Runs in progress for $COMMIT. Waiting..."
-          sleep "$poll_delay"
-        done
-
-        echo "::error::Timeout waiting for ci-dev-pages run at $COMMIT after $max_attempts attempts"
-        exit 1
+        echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+        echo "Found artifact $artifact_name (id=$artifact_id, run_id=$run_id)" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: download
-      name: Download github-pages artifact
+      name: Download Pages artifact by name
       uses: actions/download-artifact@v8
       with:
-        name: github-pages
-        run-id: ${{ steps.wait.outputs.run_id }}
+        name: ${{ inputs.artifact_prefix }}-${{ steps.resolve.outputs.commit }}
+        run-id: ${{ steps.resolve_artifact.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
         github-token: ${{ inputs.token }}
         repository: ${{ github.repository }}
@@ -145,7 +121,7 @@ runs:
       shell: bash
       env:
         ARTIFACT_DEST: ${{ inputs.artifact_destination }}
-        RUN_ID: ${{ steps.wait.outputs.run_id }}
+        RUN_ID: ${{ steps.resolve_artifact.outputs.run_id }}
       run: |
         # The downloaded artifact contains artifact.tar; extract it to the destination directory.
         if [ ! -f "$ARTIFACT_DEST/artifact.tar" ]; then
@@ -156,6 +132,25 @@ runs:
         rm "$ARTIFACT_DEST/artifact.tar"
         file_count=$(find "$ARTIFACT_DEST" -type f | wc -l)
         echo "Extracted $file_count files from ci-dev-pages run $RUN_ID to $ARTIFACT_DEST" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - id: verify_version
+      name: Verify version.json matches expected commit
+      shell: bash
+      env:
+        ARTIFACT_DEST: ${{ inputs.artifact_destination }}
+        EXPECTED_COMMIT: ${{ steps.resolve.outputs.commit }}
+      run: |
+        version_file="$ARTIFACT_DEST/version.json"
+        if [ ! -f "$version_file" ]; then
+          echo "::error::version.json not found in extracted artifact at $version_file"
+          exit 1
+        fi
+        actual_commit=$(jq -r '.commit' "$version_file")
+        if [ "$actual_commit" != "$EXPECTED_COMMIT" ]; then
+          echo "::error::version.json commit mismatch: expected $EXPECTED_COMMIT, got $actual_commit"
+          exit 1
+        fi
+        echo "version.json commit verified: $actual_commit" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: newest
       name: Check this is still main's newest commit

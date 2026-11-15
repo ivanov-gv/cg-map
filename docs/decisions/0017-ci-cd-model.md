@@ -83,3 +83,14 @@ site that should update automatically when code lands.
 
 **Outcome (#168, 2026-11-15):** the spike found page_build never fires with build_type workflow; cd-dev-pages triggers
 on push to main and polls for its SHA's ci-dev-pages run, so CI never triggers CD.
+
+**Outcome (owner, 2026-11-15, #230/#237):** page_build never fires here (webhook spike, #168), and polling was rejected.
+The wiki's model stands: CI builds the artifact, CD acknowledges the new version and deploys it. GitHub offers no other
+way to acknowledge a version change, so cd-dev-pages starts on ci-dev-pages' completion (`workflow_run`), and only for a
+successful push build on main, never for a CI test run or any other run. This is an exception that follows the rule: CI
+never calls or knows about CD, and CD only acknowledges new versions. The CI→CD contract is the artifact
+`dev-pages-<sha>` with `version.json` inside — CD needs nothing from CI but a version. CD finds the artifact by name
+using the GitHub Artifacts API (`GET repos/$GH_REPO/actions/artifacts?name=dev-pages-<commit>`), takes the newest
+non-expired entry, reads its `workflow_run.id`, and downloads with that run ID. CD is fully independent of CI's runs: it
+never looks up runs by commit. Retention is 90 days — the rollback window and GitHub's maximum for this repository.
+Rollback works for any commit whose artifact is still within that 90-day window.

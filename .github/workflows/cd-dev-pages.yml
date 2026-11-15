@@ -1,14 +1,20 @@
 name: cd-dev-pages
 # Deploys the dev site from the ci-dev-pages artifact. CI builds the site and uploads the artifact;
 # this CD workflow finds that artifact for a given commit and deploys it to GitHub Pages.
+# Triggered by workflow_run when ci-dev-pages finishes on main, or by workflow_dispatch for manual deploys.
+# CD runs only for a successful push build on main — never for a CI test run, a dispatched CI run,
+# a failed or cancelled run, or any branch but main. This is an exception that follows the rule:
+# CI never calls or knows about CD, and CD only acknowledges new versions.
 # The find job and its test-run twin share steps via a composite action.
 # The deploy job has no test-run twin: Pages can only publish to this repository, so there is no test destination.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
   && format('cd-dev-pages test_run={0} {1}', inputs.test_run, inputs.commit)
-  || format('cd-dev-pages {0}', inputs.commit || github.sha) }}
+  || format('cd-dev-pages {0}', github.event.workflow_run.head_sha || inputs.commit || github.sha) }}
 on:
-  push:
+  workflow_run:
+    workflows: [ci-dev-pages]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -39,16 +45,19 @@ jobs:
         uses: ./.github/actions/test_run
         with:
           test_run: ${{ inputs.test_run }}
-
   find:
     name: Find Pages artifact
     needs: switch
-    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' }}
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
+    environment: dev
     permissions: &find-permissions
       actions: read
       contents: read
+    env:
+      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
+      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
     outputs: &find-outputs
       is_newest: ${{ steps.find_artifact.outputs.is_newest }}
     steps: &find-steps
@@ -60,9 +69,11 @@ jobs:
       - id: find_artifact
         uses: ./.github/actions/find-pages-artifact
         with:
-          commit: ${{ inputs.commit || github.sha }}
+          commit: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
           token: ${{ github.token }}
           artifact_destination: pages-dist
+          artifact_prefix: ${{ env.PAGES_ARTIFACT_PREFIX }}
+          retention_days: ${{ env.PAGES_ARTIFACT_RETENTION_DAYS }}
       # Re-upload the extracted content as this workflow's Pages artifact for the deploy job.
       - uses: actions/upload-pages-artifact@v4
         with:
@@ -70,11 +81,14 @@ jobs:
   find-test-run:
     name: (test-run) Find Pages artifact
     needs: switch
-    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' }}
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
     environment: test-run
     permissions: *find-permissions
+    env:
+      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
+      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
     outputs: *find-outputs
     steps: *find-steps
   # No test-run twin: Pages can only publish to this repository, so there is no test destination.

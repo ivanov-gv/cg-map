@@ -186,10 +186,32 @@ test('build always takes every app, because it replaces the whole site', () => {
   assert.doesNotMatch(stepsText, /:main/);
   // Writes version.json with commit, run_id, and built_at.
   assert.match(stepsText, /version\.json/);
-  assert.match(stepsText, /GITHUB_SHA/);
+  assert.match(stepsText, /inputs\.commit/);
   assert.match(stepsText, /GITHUB_RUN_ID/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
+});
+
+test('ci-dev-pages uploads artifact with PAGES_ARTIFACT_PREFIX-<sha>', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+  assert.match(stepsText, /PAGES_ARTIFACT_PREFIX/, 'must use PAGES_ARTIFACT_PREFIX in artifact name');
+  assert.match(stepsText, /inputs\.commit/, 'must support commit input for artifact name');
+  assert.match(stepsText, /retention-days/, 'must set retention-days');
+  assert.match(stepsText, /PAGES_ARTIFACT_RETENTION_DAYS/, 'must use PAGES_ARTIFACT_RETENTION_DAYS');
+});
+
+test('find-pages-artifact downloads by artifact_prefix-<commit>', () => {
+  const stepsText = JSON.stringify(findArtifactYaml.runs.steps);
+  assert.match(stepsText, /inputs\.artifact_prefix/, 'must use artifact_prefix input');
+  assert.match(stepsText, /steps\.resolve\.outputs\.commit/, 'must use resolved commit');
+  assert.doesNotMatch(stepsText, /name:\s*github-pages/, 'must not use the default github-pages name');
+});
+
+test('find-pages-artifact verifies version.json after extraction', () => {
+  const verifyStep = findArtifactYaml.runs.steps.find(s => s.id === 'verify_version');
+  assert.ok(verifyStep, 'must have a verify_version step');
+  assert.match(verifyStep.run, /version\.json/, 'must check version.json');
+  assert.match(verifyStep.run, /mismatch/, 'must report mismatch');
 });
 
 test('jobs below the optional approval survive it being skipped', () => {
@@ -310,10 +332,12 @@ test('CD refuses a commit that is not on main', () => {
   assert.match(action, /compare\/main\.\.\./);
 });
 
-test('cd-dev-pages triggers on push to main and workflow_dispatch with commit input', () => {
+test('cd-dev-pages triggers on workflow_run with branches and workflow_dispatch with commit input', () => {
   const {on} = load('cd-dev-pages.yml');
-  assert.ok(on.push, 'cd-dev-pages must trigger on push to main');
-  assert.deepEqual(on.push.branches, ['main']);
+  assert.ok(on.workflow_run, 'cd-dev-pages must trigger on workflow_run');
+  assert.deepEqual(on.workflow_run.workflows, ['ci-dev-pages']);
+  assert.deepEqual(on.workflow_run.types, ['completed']);
+  assert.deepEqual(on.workflow_run.branches, ['main']);
   assert.ok(on.workflow_dispatch, 'cd-dev-pages must accept workflow_dispatch');
   assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
   assert.equal(on.workflow_dispatch.inputs.test_run.default, true);
@@ -322,7 +346,7 @@ test('cd-dev-pages triggers on push to main and workflow_dispatch with commit in
 test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   const {jobs} = load('cd-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy on push only when is_newest; on workflow_dispatch always (for rollback).
+  // Deploy on workflow_run only when is_newest; on workflow_dispatch always (for rollback).
   // Requires find to have succeeded so a skipped find (test-run) does not deploy.
   assert.match(jobs.deploy.if, /needs\.find\.result == 'success'/);
   assert.match(jobs.deploy.if, /github\.event_name == 'workflow_dispatch'/);
@@ -343,7 +367,7 @@ test('cd-dev-pages has no workflow_call trigger', () => {
   assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
 });
 
-// Run the find-pages-artifact resolve and wait scripts with a stub curl.
+// Run the find-pages-artifact resolve and resolve_artifact scripts with a stub curl.
 // The action's run: blocks are extracted from the YAML and executed in a temp directory
 // where fake-curl.sh intercepts all API calls. No network is used.
 const findArtifactAction = fs.readFileSync(
@@ -352,10 +376,10 @@ const findArtifactAction = fs.readFileSync(
 );
 const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh');
 
-// Parse the action YAML to extract the resolve and wait step scripts.
+// Parse the action YAML to extract the resolve and resolve_artifact step scripts.
 const findArtifactYaml = parseYaml(findArtifactAction);
-const resolveScript = findArtifactYaml.runs.steps.find(step => step.id === 'resolve').run;
-const waitScript = findArtifactYaml.runs.steps.find(step => step.id === 'wait').run;
+const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
+const resolveArtifactScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve_artifact').run;
 
 async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
@@ -373,10 +397,13 @@ async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
     GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
     GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
     INPUT_COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    INPUT_ARTIFACT_PREFIX: 'dev-pages',
     EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
     COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    ARTIFACT_PREFIX: 'dev-pages',
+    RETENTION_DAYS: '90',
     FAKE_CURL_DIR: stubDirectory,
     ...envOverrides,
   };
@@ -421,38 +448,198 @@ test('find-pages-artifact: resolve fails when commit has diverged from main', as
   assert.match(result.stdout, /::error::.*not on main.*diverged/, 'must emit ::error:: with diverged');
 });
 
-test('find-pages-artifact: wait passes when ci-dev-pages run succeeds', async () => {
-  const result = await runFindArtifactStep(waitScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"success"}]}',
-  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
-  assert.equal(result.code, 0, 'wait must pass when ci-dev-pages run succeeds');
+test('find-pages-artifact: resolve_artifact finds artifact by name', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 0, 'resolve_artifact must pass when artifact is found');
+  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /run_id=12345/);
 });
 
-test('find-pages-artifact: wait fails when ci-dev-pages run concludes with failure', async () => {
-  const result = await runFindArtifactStep(waitScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"failure"}]}',
-  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
-  assert.equal(result.code, 1, 'wait must fail when ci-dev-pages run fails');
-  assert.match(result.stdout, /::error::.*failure/, 'must emit ::error:: with failure');
+test('find-pages-artifact: resolve_artifact errors when no artifact found', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
+  });
+  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 90 days/);
 });
 
-test('find-pages-artifact: wait times out when no run is found', async () => {
-  const result = await runFindArtifactStep(waitScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12': '{"workflow_runs":[]}',
-  }, {MAX_ATTEMPTS: '2', POLL_DELAY: '0'});
-  assert.equal(result.code, 1, 'wait must fail when no ci-dev-pages run is found');
-  assert.match(result.stdout, /::error::.*Timeout/, 'must emit ::error:: with timeout');
+test('find-pages-artifact: resolve_artifact errors when all artifacts are expired', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":12345},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 1, 'resolve_artifact must fail when all artifacts are expired');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 90 days/);
 });
 
-test('find-pages-artifact: wait prefers a successful run when a failed run also exists', async () => {
-  const result = await runFindArtifactStep(waitScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":11111,"status":"completed","conclusion":"failure"},{"name":"ci-dev-pages","head_branch":"main","event":"workflow_dispatch","id":22222,"status":"completed","conclusion":"success"}]}',
-  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
-  assert.equal(result.code, 0, 'wait must pass when a successful run exists alongside a failed run');
-  assert.match(result.stdout, /run 22222 completed successfully/, 'must select the successful run');
+test('find-pages-artifact: resolve_artifact chooses newest non-expired among several', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":200,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":99999},"created_at":"2026-11-16T12:00:00Z"},{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 0, 'resolve_artifact must pass when at least one non-expired artifact exists');
+  assert.match(result.stdout, /run_id=99999/, 'must select the newest non-expired artifact');
+});
+
+test('find-pages-artifact: resolve_artifact skips expired and picks non-expired', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
+  });
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /run_id=12345/, 'must select the non-expired artifact');
+});
+
+test('find-pages-artifact: action contains no retry loop', () => {
+  // The action must not contain sleep, MAX_ATTEMPTS, or POLL_DELAY.
+  assert.doesNotMatch(findArtifactAction, /sleep/, 'action must not contain sleep');
+  assert.doesNotMatch(findArtifactAction, /MAX_ATTEMPTS/, 'action must not contain MAX_ATTEMPTS');
+  assert.doesNotMatch(findArtifactAction, /POLL_DELAY/, 'action must not contain POLL_DELAY');
+});
+
+test('find-pages-artifact: resolve_artifact uses artifact_prefix in name', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages'});
+  assert.equal(result.code, 0, 'resolve_artifact must pass with default prefix');
+  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+});
+
+test('find-pages-artifact: resolve_artifact uses custom prefix', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages-test-run'});
+  assert.equal(result.code, 0, 'resolve_artifact must pass with custom prefix');
+  assert.match(result.stdout, /Found artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
+});
+
+test('ci-dev-pages maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
+  const {jobs} = load('ci-dev-pages.yml');
+  // Production build maps from vars
+  assert.equal(jobs.build.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs.build.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+  // Test-run twin maps from vars
+  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+});
+
+test('cd-dev-pages find maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  // Production find maps from vars
+  assert.equal(jobs.find.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs.find.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+  // Test-run twin maps from vars
+  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+});
+
+test('ci-dev-pages build uses environment dev', () => {
+  const {jobs} = load('ci-dev-pages.yml');
+  assert.equal(jobs.build.environment, 'dev');
+});
+
+test('cd-dev-pages find uses environment dev', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  assert.equal(jobs.find.environment, 'dev');
+});
+
+test('ci-dev-pages has commit input for workflow_dispatch', () => {
+  const {on} = load('ci-dev-pages.yml');
+  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-dev-pages must have commit input');
+  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
+  assert.equal(on.workflow_dispatch.inputs.commit.required, false);
+});
+
+test('ci-dev-pages validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+});
+
+test('cd-dev-pages find passes artifact_prefix to find-pages-artifact', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /artifact_prefix.*PAGES_ARTIFACT_PREFIX/, 'must pass artifact_prefix');
+  assert.match(stepsText, /retention_days.*PAGES_ARTIFACT_RETENTION_DAYS/, 'must pass retention_days');
+});
+
+test('find-pages-artifact action requires artifact_prefix input with no default', () => {
+  const inputs = findArtifactYaml.inputs;
+  assert.ok(inputs.artifact_prefix, 'must have artifact_prefix input');
+  assert.equal(inputs.artifact_prefix.required, true, 'artifact_prefix must be required');
+  assert.equal(inputs.artifact_prefix.default, undefined, 'artifact_prefix must have no default');
+});
+
+test('find-pages-artifact: resolve fails when artifact_prefix is empty', async () => {
+  const result = await runFindArtifactStep(resolveScript, {}, {INPUT_ARTIFACT_PREFIX: ''});
+  assert.equal(result.code, 1, 'resolve must fail when artifact_prefix is empty');
+  assert.match(result.stdout, /::error::.*artifact_prefix.*required/, 'must emit ::error:: for empty artifact_prefix');
+});
+
+test('find-pages-artifact: resolve_artifact errors with custom prefix when not found', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages-test-run', RETENTION_DAYS: '1'});
+  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 1 days/);
+});
+
+// Evaluate the find job's if: expression against event/conclusion/branch combinations.
+// On workflow_run, find only runs when ALL three hold: event==push, head_branch==main, conclusion==success.
+// On workflow_dispatch, find always runs (manual deploy bypasses CI check).
+// A failed, cancelled, or non-main CI run must skip CD cleanly — no red run.
+function evaluateFindIf(expression, context) {
+  let expr = expression
+    .replace(/\$\{\{\s*/g, '')
+    .replace(/\s*\}\}/g, '')
+    .trim();
+  for (const [key, value] of Object.entries(context)) {
+    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+  }
+  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expr + ';')();
+}
+
+test('cd-dev-pages find if: only push+main+success runs, everything else skips', () => {
+  const findIf = load('cd-dev-pages.yml').jobs.find.if;
+
+  const cases = [
+    // Core case: push on main with success → runs
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: true, label: 'push+main+success'},
+    // workflow_dispatch-triggered CI run (event workflow_dispatch) → skips
+    {event: 'workflow_run', ciEvent: 'workflow_dispatch', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'workflow_dispatch CI run'},
+    // Failure → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'failure', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+failure'},
+    // Cancelled → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'cancelled', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+cancelled'},
+    // Another branch → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'feature-branch', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'push+feature+success'},
+    // CD workflow_dispatch (rollback/test run) → runs
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'false', cancelled: false, wantRun: true, label: 'CD workflow_dispatch'},
+    // CD workflow_dispatch test_run → skips (test_run gate)
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'true', cancelled: false, wantRun: false, label: 'CD workflow_dispatch test_run'},
+  ];
+
+  for (const tc of cases) {
+    const got = evaluateFindIf(findIf, {
+      'github.event_name': tc.event,
+      'github.event.workflow_run.event': tc.ciEvent,
+      'github.event.workflow_run.head_branch': tc.headBranch,
+      "github.event.workflow_run.conclusion": tc.conclusion,
+      "needs.switch.outputs.test_run": tc.testRun,
+    });
+    assert.equal(
+      got === true,
+      tc.wantRun,
+      `${tc.label}: want run=${tc.wantRun}, got ${got} (if: ${findIf})`
+    );
+  }
 });
 
 test('find-pages-artifact: resolve fails on short SHA with full-SHA error', async () => {
@@ -465,6 +652,7 @@ test('find-pages-artifact: resolve fails on short SHA with full-SHA error', asyn
     GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
     GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
     INPUT_COMMIT: 'abcdef1',
+    INPUT_ARTIFACT_PREFIX: 'dev-pages',
     EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
@@ -480,17 +668,8 @@ test('find-pages-artifact: resolve fails on short SHA with full-SHA error', asyn
   }
 });
 
-test('find-pages-artifact: wait prefers push run over dispatched run when both succeed', async () => {
-  const result = await runFindArtifactStep(waitScript, {
-    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"workflow_dispatch","id":22222,"status":"completed","conclusion":"success"},{"name":"ci-dev-pages","head_branch":"main","event":"push","id":11111,"status":"completed","conclusion":"success"}]}',
-  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
-  assert.equal(result.code, 0, 'wait must pass when both push and dispatched runs succeed');
-  assert.match(result.stdout, /run 11111 completed successfully/, 'must select the push run');
-});
-
 // Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
-// The deploy must only run on push when is_newest (so older pushes don't overwrite newer sites),
+// The deploy must only run on workflow_run when is_newest (so older runs don't overwrite newer sites),
 // and must always run on workflow_dispatch when find succeeds (for rollback).
 // It must not run when find is skipped (test-run) or fails.
 function evaluateDeployIf(expressionText, context) {
@@ -507,12 +686,12 @@ function evaluateDeployIf(expressionText, context) {
   return Function('context_cancelled', 'return ' + expression + ';')();
 }
 
-test('cd-dev-pages deploy gating: push only deploys when newest, workflow_dispatch deploys for rollback', () => {
+test('cd-dev-pages deploy gating: workflow_run newest deploys, dispatch deploys, test-run and find-fail skip', () => {
   const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
 
   const cases = [
-    {event: 'push', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'push, newest'},
-    {event: 'push', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'push, not newest'},
+    {event: 'workflow_run', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'workflow_run, newest'},
+    {event: 'workflow_run', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'workflow_run, not newest'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success, not newest'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
     {event: 'workflow_dispatch', isNewest: 'false', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
@@ -1008,7 +1187,8 @@ test('run budget: first run with run_started_at earlier than approval uses appro
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish, ci-dev-pages and cd-dev-pages run on push to main and workflow_dispatch;
+  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
+  // cd-dev-pages runs on workflow_run (ci-dev-pages completed on main) and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
   for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
