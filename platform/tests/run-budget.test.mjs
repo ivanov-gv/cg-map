@@ -341,8 +341,8 @@ test('evaluateRunBudget: runStartedAt earlier than approval on first run', () =>
 // The workflow step reads the verdict and decides whether to fail the gate.
 
 async function runCli(jobs, approvalName, eventName, aim, limit) {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-cli-'));
-  const jobsFile = path.join(tmpDir, 'jobs.json');
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-cli-'));
+  const jobsFile = path.join(temporaryDirectory, 'jobs.json');
   await fs.promises.writeFile(jobsFile, JSON.stringify(makeApiResponse(jobs)));
   try {
     const result = await execFileAsync('node', [
@@ -352,7 +352,7 @@ async function runCli(jobs, approvalName, eventName, aim, limit) {
   } catch (err) {
     return {code: err.code, stdout: err.stdout, stderr: err.stderr};
   } finally {
-    await fs.promises.rm(tmpDir, {recursive: true, force: true});
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
   }
 }
 

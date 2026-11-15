@@ -810,7 +810,7 @@ test('ci-pr-checks calls every folder workflow, and the gate needs all of them',
   const jobsAfterGate = ['gate', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
   // Gate needs actions:read to fetch jobs for the run budget check.
-  assert.equal(gate.permissions.actions, 'read', 'gate needs actions:read for run budget');
+  assert.deepEqual(gate.permissions, {actions: 'read'}, 'gate permissions must be exactly actions:read');
 });
 
 test('CI gate checks run budget with aim and limit env vars', () => {
@@ -826,8 +826,7 @@ test('CI gate checks run budget with aim and limit env vars', () => {
 // Extract the gate's run script, run it with `bash -e` (as GitHub does), with a fake `gh`
 // that returns jobs JSON whose approval job completed at a controlled time.
 const {gate: gateJob} = load('ci-pr-checks.yml').jobs;
-const runBudgetStep = gateJob.steps.find(s => s.name === 'Check run budget');
-assert.ok(runBudgetStep, 'Check run budget step must exist');
+const runBudgetStep = gateJob.steps.find(step => step.name === 'Check run budget');
 const runBudgetScript = runBudgetStep.run;
 
 // Build a jobs JSON response with the approval job completed at a given offset (seconds ago).
@@ -871,10 +870,10 @@ esac
   await fs.promises.chmod(ghPath, 0o755);
 
   // Copy the run-budget.mjs script into the temp dir under platform/tools
-  const toolsDir = path.join(temporaryDirectory, 'platform', 'tools');
-  await fs.promises.mkdir(toolsDir, {recursive: true});
-  const runBudgetSrc = path.join(repoRoot, 'platform', 'tools', 'run-budget.mjs');
-  await fs.promises.copyFile(runBudgetSrc, path.join(toolsDir, 'run-budget.mjs'));
+  const toolsDirectory = path.join(temporaryDirectory, 'platform', 'tools');
+  await fs.promises.mkdir(toolsDirectory, {recursive: true});
+  const runBudgetSource = path.join(repoRoot, 'platform', 'tools', 'run-budget.mjs');
+  await fs.promises.copyFile(runBudgetSource, path.join(toolsDirectory, 'run-budget.mjs'));
 
   const env = {
     PATH: temporaryDirectory + ':' + process.env.PATH,
@@ -971,19 +970,6 @@ test('run budget: first run with run_started_at earlier than approval uses appro
   assert.match(result.stdout, /200s elapsed/, 'elapsed must be 200s from approval, not run_started_at');
 });
 
-test('ci-nightly grants cover the gate actions:read permission', () => {
-  // ci-nightly calls ci-pr-checks via workflow_call; the recursive grant test above
-  // checks that called workflows ask for no more than their caller grants.
-  // ci-nightly's permissions (contents: read, packages: read) are sufficient because
-  // the gate's actions:read is granted by the workflow-level permissions of ci-pr-checks
-  // when called — the gate job declares it explicitly.
-  const nightly = load('ci-nightly.yml');
-  const prChecks = load('ci-pr-checks.yml');
-  // The gate job in ci-pr-checks has actions:read; ci-nightly's run job passes it through.
-  assert.equal(prChecks.jobs.gate.permissions.actions, 'read');
-  // ci-nightly permissions must be at least read for contents and packages.
-  assert.ok(nightly.permissions.contents === 'read');
-});
 
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
@@ -1109,35 +1095,44 @@ test('ci-* test-run twins always reference test-run', () => {
 
 // sparse-checkout must list one pattern per line; a space-separated list is one pattern that matches nothing.
 // act cannot catch this because it copies the worktree instead of performing a sparse checkout.
+function checkSparseCheckoutSteps(steps, relativePath, entryName) {
+  for (const step of steps ?? []) {
+    if (step.with?.['sparse-checkout'] !== undefined) {
+      const value = step.with['sparse-checkout'];
+      assert.equal(
+        typeof value,
+        'string',
+        `${relativePath} ${entryName}: sparse-checkout must be a string`
+      );
+      const patterns = value.split('\n').map(pattern => pattern.trim()).filter(pattern => pattern.length > 0);
+      for (const pattern of patterns) {
+        assert.doesNotMatch(
+          pattern,
+          /\s/,
+          `${relativePath} ${entryName}: sparse-checkout pattern must not contain spaces: "${pattern}"`
+        );
+      }
+    }
+  }
+}
+
 test('sparse-checkout inputs split into newline-separated patterns with no spaces', () => {
-  const actionsDir = path.join(repoRoot, '.github/actions');
-  const actionFiles = fs.readdirSync(actionsDir)
-    .map(dir => path.join('.github/actions', dir, 'action.yml'));
-  const allYamlPaths = [...newWorkflowFiles.map(f => path.join(workflowDir, f)), ...actionFiles.map(f => path.join(repoRoot, f))];
+  const actionsDirectory = path.join(repoRoot, '.github/actions');
+  const actionFiles = fs.readdirSync(actionsDirectory)
+    .map(actionDir => path.join('.github/actions', actionDir, 'action.yml'));
+  const allYamlPaths = [...newWorkflowFiles.map(file => path.join(workflowDir, file)), ...actionFiles.map(file => path.join(repoRoot, file))];
   for (const yamlPath of allYamlPaths) {
     const raw = fs.readFileSync(yamlPath, 'utf8');
     const parsed = parseYaml(raw);
-    const jobs = parsed.jobs ?? {};
     const relativePath = path.relative(repoRoot, yamlPath);
+    // Workflows have jobs; composite actions have runs.steps — check both.
+    const jobs = parsed.jobs ?? {};
     for (const [name, job] of Object.entries(jobs)) {
-      for (const step of job.steps ?? []) {
-        if (step.with?.['sparse-checkout'] !== undefined) {
-          const value = step.with['sparse-checkout'];
-          assert.equal(
-            typeof value,
-            'string',
-            `${relativePath} ${name}: sparse-checkout must be a string`
-          );
-          const patterns = value.split('\n').map(p => p.trim()).filter(p => p.length > 0);
-          for (const pattern of patterns) {
-            assert.doesNotMatch(
-              pattern,
-              /\s/,
-              `${relativePath} ${name}: sparse-checkout pattern must not contain spaces: "${pattern}"`
-            );
-          }
-        }
-      }
+      checkSparseCheckoutSteps(job.steps, relativePath, name);
+    }
+    const actionRuns = parsed.runs;
+    if (actionRuns?.steps) {
+      checkSparseCheckoutSteps(actionRuns.steps, relativePath, 'runs');
     }
   }
 });

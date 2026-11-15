@@ -65,7 +65,8 @@ function computeElapsedSeconds(startIso, endIso) {
   return (endMs - startMs) / 1000;
 }
 
-// Non-PR events (schedule, workflow_dispatch on main, etc.) are exempt.
+// Non-PR events (schedule, workflow_dispatch, workflow_call) are exempt from the budget:
+// nightly and dispatched runs already check everything, so there is no budget to enforce.
 function getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName) {
   if (eventName !== 'pull_request') return 'ok';
   if (elapsedSeconds === null) return 'unreadable';
