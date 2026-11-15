@@ -15,9 +15,8 @@ inputs:
     required: false
     default: pages-dist
   artifact_prefix:
-    description: The prefix for the artifact name (e.g. dev-pages).
-    required: false
-    default: dev-pages
+    description: The prefix for the artifact name (e.g. dev-pages). Must be set explicitly.
+    required: true
   retention_days:
     description: Artifact retention days (for error messages).
     required: false
@@ -40,10 +39,16 @@ runs:
       shell: bash
       env:
         INPUT_COMMIT: ${{ inputs.commit }}
+        INPUT_ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
         EVENT_SHA: ${{ github.sha }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
+        # artifact_prefix is required — fail early if it is empty.
+        if [ -z "$INPUT_ARTIFACT_PREFIX" ]; then
+          echo "::error::artifact_prefix is required and must not be empty"
+          exit 1
+        fi
         commit="${INPUT_COMMIT:-$EVENT_SHA}"
         # Validate the commit is a full 40-character SHA.
         if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then

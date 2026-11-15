@@ -92,12 +92,10 @@ test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platfor
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
 
 # Pass COMMIT input when provided: make test-ci-dev-pages COMMIT=<full SHA>
+# In a dry run without COMMIT, use a placeholder SHA so the workflow still lints.
 test-ci-dev-pages: act-image
-ifneq ($(COMMIT),)
-	$(ACT) workflow_dispatch -W .github/workflows/ci-dev-pages.yml $(ACT_RUN) --input commit=$(COMMIT)
-else
-	$(ACT) workflow_dispatch -W .github/workflows/ci-dev-pages.yml $(ACT_RUN)
-endif
+	$(if $(or $(COMMIT),$(findstring -n,$(ACT))),,$(error Set COMMIT: make test-ci-dev-pages COMMIT=<full SHA>))
+	$(ACT) workflow_dispatch -W .github/workflows/ci-dev-pages.yml $(ACT_RUN) --input commit=$(or $(COMMIT),0000000000000000000000000000000000000000)
 
 # Needs a dev package CI published from main: make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA>
 test-cd-map-core: act-image
@@ -115,14 +113,15 @@ test-cd-browser-image: act-image
 
 # Needs a recent main SHA with a successful ci-dev-pages run: make test-cd-dev-pages COMMIT=<full SHA>
 # Find one with: gh run list --workflow ci-dev-pages.yml --branch main --status success
-# Or test the workflow_run path (generates a dynamic event payload): make test-cd-dev-pages COMMIT=<full SHA>
+# In a dry run without COMMIT, use a placeholder SHA so the workflow still lints.
 test-cd-dev-pages: act-image
-	$(if $(COMMIT),,$(error Set COMMIT: make test-cd-dev-pages COMMIT=<full SHA>))
+	$(if $(or $(COMMIT),$(findstring -n,$(ACT))),,$(error Set COMMIT: make test-cd-dev-pages COMMIT=<full SHA>))
 	@mkdir -p .build
-	@echo '{"action":"completed","workflow_run":{"id":43708216403,"name":"ci-dev-pages","head_sha":"'$(COMMIT)'","head_branch":"main","conclusion":"success","status":"completed","event":"push","created_at":"2026-11-15T12:00:00Z","updated_at":"2026-11-15T12:05:00Z"},"workflow":{"path":".github/workflows/ci-dev-pages.yml","name":"ci-dev-pages"}}' > .build/event-workflow-run.json
+	@echo '{"action":"completed","workflow_run":{"id":43708216403,"name":"ci-dev-pages","head_sha":"'$(or $(COMMIT),0000000000000000000000000000000000000000)'","head_branch":"main","conclusion":"success","status":"completed","event":"push","created_at":"2026-11-15T12:00:00Z","updated_at":"2026-11-15T12:05:00Z"},"workflow":{"path":".github/workflows/ci-dev-pages.yml","name":"ci-dev-pages"}}' > .build/event-workflow-run.json
 	$(ACT) workflow_run -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) -e .build/event-workflow-run.json
 
 # Test cd-dev-pages via workflow_dispatch: make test-cd-dev-pages-dispatch COMMIT=<full SHA>
+# In a dry run without COMMIT, use a placeholder SHA so the workflow still lints.
 test-cd-dev-pages-dispatch: act-image
-	$(if $(COMMIT),,$(error Set COMMIT: make test-cd-dev-pages-dispatch COMMIT=<full SHA>))
-	$(ACT) workflow_dispatch -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) --input commit=$(COMMIT)
+	$(if $(or $(COMMIT),$(findstring -n,$(ACT))),,$(error Set COMMIT: make test-cd-dev-pages-dispatch COMMIT=<full SHA>))
+	$(ACT) workflow_dispatch -W .github/workflows/cd-dev-pages.yml $(ACT_RUN) --input commit=$(or $(COMMIT),0000000000000000000000000000000000000000)

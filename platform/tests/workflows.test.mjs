@@ -390,6 +390,7 @@ async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
     GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
     GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
     INPUT_COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    INPUT_ARTIFACT_PREFIX: 'dev-pages',
     EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
@@ -560,10 +561,17 @@ test('cd-dev-pages find passes artifact_prefix to find-pages-artifact', () => {
   assert.match(stepsText, /retention_days.*PAGES_ARTIFACT_RETENTION_DAYS/, 'must pass retention_days');
 });
 
-test('find-pages-artifact action has artifact_prefix input with default dev-pages', () => {
+test('find-pages-artifact action requires artifact_prefix input with no default', () => {
   const inputs = findArtifactYaml.inputs;
   assert.ok(inputs.artifact_prefix, 'must have artifact_prefix input');
-  assert.equal(inputs.artifact_prefix.default, 'dev-pages');
+  assert.equal(inputs.artifact_prefix.required, true, 'artifact_prefix must be required');
+  assert.equal(inputs.artifact_prefix.default, undefined, 'artifact_prefix must have no default');
+});
+
+test('find-pages-artifact: resolve fails when artifact_prefix is empty', async () => {
+  const result = await runFindArtifactStep(resolveScript, {}, {INPUT_ARTIFACT_PREFIX: ''});
+  assert.equal(result.code, 1, 'resolve must fail when artifact_prefix is empty');
+  assert.match(result.stdout, /::error::.*artifact_prefix.*required/, 'must emit ::error:: for empty artifact_prefix');
 });
 
 test('find-pages-artifact: resolve_artifact errors with custom prefix when not found', async () => {
