@@ -1,19 +1,19 @@
 name: cd-dev-pages
-# Deploys the dev site from the ci-dev-pages artifact. CI builds the site and uploads the artifact;
-# this CD workflow finds that artifact for a given commit and deploys it to GitHub Pages.
-# Triggered by workflow_run when ci-dev-pages finishes on main, or by workflow_dispatch for manual deploys.
+# Deploys the dev site from the ci-publish dev-pages image. CI builds the site image tagged by commit SHA;
+# this CD workflow pulls that image, extracts the site, and deploys it to GitHub Pages.
+# Triggered by workflow_run when ci-publish finishes on main, or by workflow_dispatch for rollback.
 # CD runs only for a successful push build on main — never for a CI test run, a dispatched CI run,
 # a failed or cancelled run, or any branch but main. This is an exception that follows the rule:
 # CI never calls or knows about CD, and CD only acknowledges new versions.
-# The find job and its test-run twin share steps via a composite action.
-# The deploy job has no test-run twin: Pages can only publish to this repository, so there is no test destination.
+# The find job pulls the image by commit SHA — no scripts, no lookup logic, no newest check.
+# The deploy job has no test-run twin: Pages can only publish to this repository.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
   && format('cd-dev-pages test_run={0} {1}', inputs.test_run, inputs.commit)
   || format('cd-dev-pages {0}', github.event.workflow_run.head_sha || inputs.commit || github.sha) }}
 on:
   workflow_run:
-    workflows: [ci-dev-pages]
+    workflows: [ci-publish]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -46,40 +46,64 @@ jobs:
         with:
           test_run: ${{ inputs.test_run }}
   find:
-    name: Find Pages artifact
+    name: Pull dev site image
     needs: switch
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
     environment: dev
     permissions: &find-permissions
-      actions: read
       contents: read
+      packages: read
     env:
-      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
-      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
     outputs: &find-outputs
-      is_newest: ${{ steps.find_artifact.outputs.is_newest }}
+      commit: ${{ steps.resolve.outputs.commit }}
     steps: &find-steps
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          sparse-checkout: .github/actions
-          sparse-checkout-cone-mode: false
-      - id: find_artifact
-        uses: ./.github/actions/find-pages-artifact
-        with:
-          commit: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
-          token: ${{ github.token }}
-          artifact_destination: pages-dist
-          artifact_prefix: ${{ env.PAGES_ARTIFACT_PREFIX }}
-          retention_days: ${{ env.PAGES_ARTIFACT_RETENTION_DAYS }}
-      # Re-upload the extracted content as this workflow's Pages artifact for the deploy job.
-      - uses: actions/upload-pages-artifact@v4
+      - name: Resolve commit
+        id: resolve
+        shell: bash
+        run: |
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Resolved commit: $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Pull dev site image
+        env:
+          COMMIT_SHA: ${{ steps.resolve.outputs.commit }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          image="$IMAGE_REPOSITORY/dev-pages:$COMMIT_SHA"
+          case "$IMAGE_REPOSITORY" in
+            ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
+          esac
+          if ! docker pull "$image"; then
+            echo "::error::Image $image not found: the version was never built or was cleaned up after the last 10"
+            exit 1
+          fi
+          echo "Pulled $image" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Extract site from image
+        env:
+          COMMIT_SHA: ${{ steps.resolve.outputs.commit }}
+        run: |
+          image="$IMAGE_REPOSITORY/dev-pages:$COMMIT_SHA"
+          container=$(docker create "$image")
+          mkdir -p pages-dist
+          # Copy /site/ contents into pages-dist/ so the site is at pages-dist/index.html,
+          # not pages-dist/site/index.html or pages-dist/html/index.html.
+          docker cp "$container":/site/. pages-dist/
+          docker rm "$container" > /dev/null
+          file_count=$(find pages-dist -type f | wc -l)
+          echo "Extracted $file_count files from $image" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
         with:
           path: pages-dist
   find-test-run:
-    name: (test-run) Find Pages artifact
+    name: (test-run) Pull dev site image
     needs: switch
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
@@ -87,16 +111,16 @@ jobs:
     environment: test-run
     permissions: *find-permissions
     env:
-      PAGES_ARTIFACT_PREFIX: ${{ vars.PAGES_ARTIFACT_PREFIX }}
-      PAGES_ARTIFACT_RETENTION_DAYS: ${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit || github.sha }}
     outputs: *find-outputs
     steps: *find-steps
   # No test-run twin: Pages can only publish to this repository, so there is no test destination.
-  # The test run stops after the find-test-run job, which exercises the artifact resolution logic.
+  # The test run stops after the find-test-run job, which exercises the image pull and extract logic.
   deploy:
     name: Deploy dev site
     needs: find
-    if: ${{ !cancelled() && needs.find.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.find.outputs.is_newest == 'true') }}
+    if: ${{ !cancelled() && needs.find.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:

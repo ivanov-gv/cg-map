@@ -2,9 +2,10 @@ name: ci-publish
 # Builds what a merge changed and pushes it to the dev registries. It runs no tests: the PR run already tested this exact
 # content, and the nightly run tests main. See docs/decisions/0006-ci-time-limits-and-tests-before-merge.md.
 # Triggered on every push to main (after the merge is tested by the PR run). Also callable manually.
+# The pages job runs on every push to main (not gated by the planner) because every commit gets a version.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-  && format('ci-publish test_run={0}', inputs.test_run)
+  && format('ci-publish test_run={0} {1}', inputs.test_run, inputs.commit || github.sha)
   || format('ci-publish {0}', github.sha) }}
 on:
   push:
@@ -15,11 +16,14 @@ on:
         description: Test run
         type: boolean
         default: true
+      commit:
+        description: The full commit SHA to build (empty = github.sha)
+        type: string
+        required: false
 permissions:
   contents: read
   packages: read
 # No concurrency group: a later merge must not be cancelled or queued behind an earlier publish.
-# Deploys stay ordered by ci-dev-pages' `dev-pages` group and its newest-commit check.
 jobs:
   switch:
     name: Test-run switch
@@ -118,7 +122,7 @@ jobs:
           command: make -C "apps/$APP" build
       - uses: ./.github/actions/publish-image
         with:
-          app: ${{ env.APP }}
+          name: ${{ env.APP }}
           repository: ${{ env.IMAGE_REPOSITORY }}
           token: ${{ github.token }}
   image-test-run:
@@ -203,4 +207,124 @@ jobs:
       packages: read
     env: *browser-image-env
     steps: *browser-image-steps
+
+  # Pages runs on every push to main, not gated by the planner: every commit gets a version.
+  pages:
+    name: Build dev site image
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &pages-env
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+      COMMIT: ${{ inputs.commit || github.sha }}
+    steps: &pages-steps
+      # Two checkouts: the first gets this branch's local actions (setup-web, publish-image).
+      # The second checks out the source commit into a subdirectory so we build from it.
+      # Without the first checkout, ref: $COMMIT would resolve to main's old actions,
+      # causing publish-image to receive empty name/commit inputs.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ env.COMMIT }}
+          path: source
+      - name: Validate commit input
+        if: ${{ inputs.commit != '' }}
+        shell: bash
+        run: |
+          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
+            exit 1
+          fi
+      - uses: ./source/.github/actions/setup-web
+      - name: Build each app
+        run: |
+          mkdir site
+          cp source/platform/pages/index.html site/index.html
+          for app in web editor core-demo; do
+            echo "::group::Build $app"
+            start=$SECONDS
+            make -C "source/apps/$app" build
+            echo "::endgroup::"
+            duration=$((SECONDS - start))
+            echo "$app: built in ${duration}s" | tee -a "$GITHUB_STEP_SUMMARY"
+            cp -r "source/dist/$app" "site/$app"
+          done
+      - name: Write version.json
+        run: |
+          built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat > site/version.json <<EOF
+          {"commit":"${COMMIT}","run_id":"${GITHUB_RUN_ID}","built_at":"${built_at}"}
+          EOF
+          echo "version.json:" | tee -a "$GITHUB_STEP_SUMMARY"
+          cat site/version.json | tee -a "$GITHUB_STEP_SUMMARY"
+      # The Dockerfile lives in the workflow checkout (first checkout), not in source/.
+      # The build context is the site/ directory assembled above, because the root .dockerignore
+      # excludes everything but dist/ and platform/tools/serve.py.
+      - uses: ./.github/actions/publish-image
+        with:
+          name: dev-pages
+          repository: ${{ env.IMAGE_REPOSITORY }}
+          dockerfile: platform/pages/Dockerfile
+          context: 'site'
+          commit: ${{ env.COMMIT }}
+          token: ${{ github.token }}
+          skip_main_tag: 'true'
+  # Keep only the last N dev-pages versions — the rollback window.
+  # Package name and versions-to-keep come from environment vars so test-run can override them.
+  # The test-run value names an existing package (cg-map/web) because cg-map/dev-pages does not exist in GHCR
+  # until the first production push, so a test-run cleanup that lists it would fail.
+  pages-cleanup:
+    name: Clean old dev site images
+    needs: [switch, pages]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && needs.pages.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      packages: write
+    env:
+      DEV_PAGES_PACKAGE: ${{ vars.DEV_PAGES_PACKAGE }}
+      DEV_PAGES_VERSIONS_TO_KEEP: ${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}
+    steps: &pages-cleanup-steps
+      - name: Delete old versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ env.DEV_PAGES_PACKAGE }}
+          package-type: container
+          min-versions-to-keep: ${{ env.DEV_PAGES_VERSIONS_TO_KEEP }}
+          token: ${{ github.token }}
+  pages-cleanup-test-run:
+    name: (test-run) Clean old dev site images
+    needs: [switch, pages-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && needs.pages-test-run.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      packages: read
+    env:
+      DEV_PAGES_PACKAGE: ${{ vars.DEV_PAGES_PACKAGE }}
+      DEV_PAGES_VERSIONS_TO_KEEP: ${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}
+    steps: *pages-cleanup-steps
+  pages-test-run:
+    name: (test-run) Build dev site image
+    needs: switch
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *pages-env
+    steps: *pages-steps
 

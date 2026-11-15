@@ -23,7 +23,6 @@ const NO_TWIN = {
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'cd-dev-pages.yml': ['switch', 'deploy'],
-  'ci-dev-pages.yml': ['switch'],
   'ci-publish.yml': ['switch', 'select']
 };
 
@@ -179,45 +178,40 @@ test('jobs that use setup-web or install-dependencies have packages permission',
   }
 });
 
-test('build always takes every app, because it replaces the whole site', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+test('ci-publish pages job builds every app, because it replaces the whole site', () => {
+  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
   assert.match(stepsText, /for app in web editor core-demo/);
   // No longer pulls :main images — builds from source instead.
   assert.doesNotMatch(stepsText, /:main/);
   // Writes version.json with commit, run_id, and built_at.
   assert.match(stepsText, /version\.json/);
-  assert.match(stepsText, /inputs\.commit/);
   assert.match(stepsText, /GITHUB_RUN_ID/);
+  // Builds from the source subdirectory (second checkout).
+  assert.match(stepsText, /source\/apps/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
 
-test('ci-dev-pages uploads artifact with PAGES_ARTIFACT_PREFIX-<sha>', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
-  assert.match(stepsText, /PAGES_ARTIFACT_PREFIX/, 'must use PAGES_ARTIFACT_PREFIX in artifact name');
-  assert.match(stepsText, /inputs\.commit/, 'must support commit input for artifact name');
-  assert.match(stepsText, /retention-days/, 'must set retention-days');
-  assert.match(stepsText, /PAGES_ARTIFACT_RETENTION_DAYS/, 'must use PAGES_ARTIFACT_RETENTION_DAYS');
+test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must publish dev-pages image');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
+  // Dockerfile comes from the workflow checkout (first checkout), not from source/.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
 });
 
-test('find-pages-artifact downloads by artifact_prefix-<commit>', () => {
-  const stepsText = JSON.stringify(findArtifactYaml.runs.steps);
-  assert.match(stepsText, /inputs\.artifact_prefix/, 'must use artifact_prefix input');
-  assert.match(stepsText, /steps\.resolve\.outputs\.commit/, 'must use resolved commit');
-  assert.doesNotMatch(stepsText, /name:\s*github-pages/, 'must not use the default github-pages name');
-});
-
-test('find-pages-artifact: retention_days is required with no default', () => {
-  const inputs = findArtifactYaml.inputs;
-  assert.equal(inputs.retention_days.required, true, 'retention_days must be required');
-  assert.equal(inputs.retention_days.default, undefined, 'retention_days must not have a default');
-});
-
-test('find-pages-artifact verifies version.json after extraction', () => {
-  const verifyStep = findArtifactYaml.runs.steps.find(s => s.id === 'verify_version');
-  assert.ok(verifyStep, 'must have a verify_version step');
-  assert.match(verifyStep.run, /version\.json/, 'must check version.json');
-  assert.match(verifyStep.run, /mismatch/, 'must report mismatch');
+test('cd-dev-pages find job pulls image by commit SHA', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /docker pull/, 'must pull the image');
+  assert.match(stepsText, /dev-pages/, 'must pull dev-pages image');
+  assert.match(stepsText, /COMMIT_SHA/, 'must use commit SHA as tag');
+  assert.match(stepsText, /docker create/, 'must create container to extract');
+  assert.match(stepsText, /docker cp/, 'must copy files from container');
 });
 
 test('jobs below the optional approval survive it being skipped', () => {
@@ -270,10 +264,13 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
 test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
   const {jobs} = load('ci-publish.yml');
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
-  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package']);
+  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package', 'pages', 'pages-cleanup']);
   for (const [name, writer] of writers) {
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
-    assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
+    const twin = jobs[`${name}-test-run`];
+    if (twin) {
+      assert.equal(twin.permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
+    }
   }
   const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && file !== 'ci-publish.yml');
   for (const file of others) {
@@ -338,10 +335,10 @@ test('CD refuses a commit that is not on main', () => {
   assert.match(action, /compare\/main\.\.\./);
 });
 
-test('cd-dev-pages triggers on workflow_run with branches and workflow_dispatch with commit input', () => {
+test('cd-dev-pages triggers on workflow_run (ci-publish) with branches and workflow_dispatch with commit input', () => {
   const {on} = load('cd-dev-pages.yml');
   assert.ok(on.workflow_run, 'cd-dev-pages must trigger on workflow_run');
-  assert.deepEqual(on.workflow_run.workflows, ['ci-dev-pages']);
+  assert.deepEqual(on.workflow_run.workflows, ['ci-publish']);
   assert.deepEqual(on.workflow_run.types, ['completed']);
   assert.deepEqual(on.workflow_run.branches, ['main']);
   assert.ok(on.workflow_dispatch, 'cd-dev-pages must accept workflow_dispatch');
@@ -352,11 +349,10 @@ test('cd-dev-pages triggers on workflow_run with branches and workflow_dispatch 
 test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   const {jobs} = load('cd-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy on workflow_run only when is_newest; on workflow_dispatch always (for rollback).
+  // Deploy runs when find succeeds — no is_newest check; every commit deploys its own version.
   // Requires find to have succeeded so a skipped find (test-run) does not deploy.
   assert.match(jobs.deploy.if, /needs\.find\.result == 'success'/);
-  assert.match(jobs.deploy.if, /github\.event_name == 'workflow_dispatch'/);
-  assert.match(jobs.deploy.if, /needs\.find\.outputs\.is_newest/);
+  assert.doesNotMatch(jobs.deploy.if, /is_newest/, 'must not check is_newest');
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
   // find and find-test-run must not have pages permissions
   for (const job of ['find', 'find-test-run']) {
@@ -364,191 +360,17 @@ test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   }
 });
 
-test('cd-dev-pages find job uses the find-pages-artifact composite action', () => {
-  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
-  assert.match(stepsText, /find-pages-artifact/);
-});
 
 test('cd-dev-pages has no workflow_call trigger', () => {
   assert.equal(load('cd-dev-pages.yml').on.workflow_call, undefined, 'cd-dev-pages must not use workflow_call');
 });
 
-// Run the find-pages-artifact resolve and resolve_artifact scripts with a stub curl.
-// The action's run: blocks are extracted from the YAML and executed in a temp directory
-// where fake-curl.sh intercepts all API calls. No network is used.
-const findArtifactAction = fs.readFileSync(
-  path.join(repoRoot, '.github/actions/find-pages-artifact/action.yml'),
-  'utf8'
-);
-const fakeCurlPath = path.join(repoRoot, 'platform/tests/fixtures/fake-curl.sh');
-
-// Parse the action YAML to extract the resolve and resolve_artifact step scripts.
-const findArtifactYaml = parseYaml(findArtifactAction);
-const resolveScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve').run;
-const resolveArtifactScript = findArtifactYaml.runs.steps.find(s => s.id === 'resolve_artifact').run;
-
-async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
-  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-test-'));
-  const stubDirectory = path.join(temporaryDirectory, 'stub');
-  await fs.promises.mkdir(stubDirectory);
-  for (const [name, content] of Object.entries(stubFiles)) {
-    await fs.promises.writeFile(path.join(stubDirectory, name), content);
-  }
-  const curlPath = path.join(temporaryDirectory, 'curl');
-  await fs.promises.copyFile(fakeCurlPath, curlPath);
-  await fs.promises.chmod(curlPath, 0o755);
-
-  const env = {
-    PATH: temporaryDirectory + ':' + process.env.PATH,
-    GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
-    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
-    INPUT_COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
-    INPUT_ARTIFACT_PREFIX: 'dev-pages',
-    EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
-    GH_TOKEN: 'fake-token',
-    GH_REPO: 'owner/repo',
-    COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
-    ARTIFACT_PREFIX: 'dev-pages',
-    RETENTION_DAYS: '3',
-    FAKE_CURL_DIR: stubDirectory,
-    ...envOverrides,
-  };
-
-  try {
-    const result = await execFileAsync('bash', ['-c', script], {env, cwd: temporaryDirectory});
-    return {code: 0, stdout: result.stdout, stderr: result.stderr};
-  } catch (err) {
-    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
-  } finally {
-    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
-  }
-}
-
-test('find-pages-artifact: resolve passes when commit is behind main', async () => {
-  const result = await runFindArtifactStep(resolveScript, {
-    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"behind"}',
-  });
-  assert.equal(result.code, 0, 'resolve must pass when commit is behind main');
-});
-
-test('find-pages-artifact: resolve passes when commit is identical to main', async () => {
-  const result = await runFindArtifactStep(resolveScript, {
-    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"identical"}',
-  });
-  assert.equal(result.code, 0, 'resolve must pass when commit is identical to main');
-});
-
-test('find-pages-artifact: resolve fails when commit is ahead of main', async () => {
-  const result = await runFindArtifactStep(resolveScript, {
-    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"ahead"}',
-  });
-  assert.equal(result.code, 1, 'resolve must fail when commit is ahead of main');
-  assert.match(result.stdout, /::error::.*not on main.*ahead/, 'must emit ::error:: with ahead');
-});
-
-test('find-pages-artifact: resolve fails when commit has diverged from main', async () => {
-  const result = await runFindArtifactStep(resolveScript, {
-    'compare-main-abcdef1234567890abcdef1234567890abcdef12': '{"status":"diverged"}',
-  });
-  assert.equal(result.code, 1, 'resolve must fail when commit has diverged from main');
-  assert.match(result.stdout, /::error::.*not on main.*diverged/, 'must emit ::error:: with diverged');
-});
-
-test('find-pages-artifact: resolve_artifact finds artifact by name', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
-  });
-  assert.equal(result.code, 0, 'resolve_artifact must pass when artifact is found');
-  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /run_id=12345/);
-});
-
-test('find-pages-artifact: resolve_artifact errors when no artifact found', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
-  });
-  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
-  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /expired after its retention of 3 days/);
-});
-
-test('find-pages-artifact: resolve_artifact errors when all artifacts are expired', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":12345},"created_at":"2026-08-01T12:00:00Z"}]}',
-  });
-  assert.equal(result.code, 1, 'resolve_artifact must fail when all artifacts are expired');
-  assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /expired after its retention of 3 days/);
-});
-
-test('find-pages-artifact: resolve_artifact chooses newest non-expired among several', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":200,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":99999},"created_at":"2026-11-16T12:00:00Z"},{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
-  });
-  assert.equal(result.code, 0, 'resolve_artifact must pass when at least one non-expired artifact exists');
-  assert.match(result.stdout, /run_id=99999/, 'must select the newest non-expired artifact');
-});
-
-test('find-pages-artifact: resolve_artifact skips expired and picks non-expired', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"},{"id":50,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":true,"workflow_run":{"id":11111},"created_at":"2026-08-01T12:00:00Z"}]}',
-  });
-  assert.equal(result.code, 0);
-  assert.match(result.stdout, /run_id=12345/, 'must select the non-expired artifact');
-});
-
-test('find-pages-artifact: action contains no retry loop', () => {
-  // The action must not contain sleep, MAX_ATTEMPTS, or POLL_DELAY.
-  assert.doesNotMatch(findArtifactAction, /sleep/, 'action must not contain sleep');
-  assert.doesNotMatch(findArtifactAction, /MAX_ATTEMPTS/, 'action must not contain MAX_ATTEMPTS');
-  assert.doesNotMatch(findArtifactAction, /POLL_DELAY/, 'action must not contain POLL_DELAY');
-});
-
-test('find-pages-artifact: resolve_artifact uses artifact_prefix in name', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
-  }, {ARTIFACT_PREFIX: 'dev-pages'});
-  assert.equal(result.code, 0, 'resolve_artifact must pass with default prefix');
-  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-});
-
-test('find-pages-artifact: resolve_artifact uses custom prefix', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12':
-      '{"artifacts":[{"id":100,"name":"dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
-  }, {ARTIFACT_PREFIX: 'dev-pages-test-run'});
-  assert.equal(result.code, 0, 'resolve_artifact must pass with custom prefix');
-  assert.match(result.stdout, /Found artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
-});
-
-test('ci-dev-pages maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
-  const {jobs} = load('ci-dev-pages.yml');
-  // Production build maps from vars
-  assert.equal(jobs.build.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
-  assert.equal(jobs.build.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
-  // Test-run twin maps from vars
-  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
-  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
-});
-
-test('cd-dev-pages find maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
+test('cd-dev-pages find maps IMAGE_REPOSITORY from vars', () => {
   const {jobs} = load('cd-dev-pages.yml');
   // Production find maps from vars
-  assert.equal(jobs.find.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
-  assert.equal(jobs.find.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+  assert.equal(jobs.find.env.IMAGE_REPOSITORY, '${{ vars.IMAGE_REPOSITORY }}');
   // Test-run twin maps from vars
-  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
-  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
-});
-
-test('ci-dev-pages build uses environment dev', () => {
-  const {jobs} = load('ci-dev-pages.yml');
-  assert.equal(jobs.build.environment, 'dev');
+  assert.equal(jobs['find-test-run'].env.IMAGE_REPOSITORY, '${{ vars.IMAGE_REPOSITORY }}');
 });
 
 test('cd-dev-pages find uses environment dev', () => {
@@ -556,44 +378,26 @@ test('cd-dev-pages find uses environment dev', () => {
   assert.equal(jobs.find.environment, 'dev');
 });
 
-test('ci-dev-pages has commit input for workflow_dispatch', () => {
-  const {on} = load('ci-dev-pages.yml');
-  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-dev-pages must have commit input');
+test('ci-publish pages job validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
+  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+});
+
+test('ci-publish has commit input for workflow_dispatch', () => {
+  const {on} = load('ci-publish.yml');
+  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-publish must have commit input');
   assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
   assert.equal(on.workflow_dispatch.inputs.commit.required, false);
 });
 
-test('ci-dev-pages validates commit as 40-character SHA', () => {
-  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+test('cd-dev-pages find validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
   assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
 });
 
-test('cd-dev-pages find passes artifact_prefix to find-pages-artifact', () => {
+test('cd-dev-pages find errors when image is not found', () => {
   const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
-  assert.match(stepsText, /artifact_prefix.*PAGES_ARTIFACT_PREFIX/, 'must pass artifact_prefix');
-  assert.match(stepsText, /retention_days.*PAGES_ARTIFACT_RETENTION_DAYS/, 'must pass retention_days');
-});
-
-test('find-pages-artifact action requires artifact_prefix input with no default', () => {
-  const inputs = findArtifactYaml.inputs;
-  assert.ok(inputs.artifact_prefix, 'must have artifact_prefix input');
-  assert.equal(inputs.artifact_prefix.required, true, 'artifact_prefix must be required');
-  assert.equal(inputs.artifact_prefix.default, undefined, 'artifact_prefix must have no default');
-});
-
-test('find-pages-artifact: resolve fails when artifact_prefix is empty', async () => {
-  const result = await runFindArtifactStep(resolveScript, {}, {INPUT_ARTIFACT_PREFIX: ''});
-  assert.equal(result.code, 1, 'resolve must fail when artifact_prefix is empty');
-  assert.match(result.stdout, /::error::.*artifact_prefix.*required/, 'must emit ::error:: for empty artifact_prefix');
-});
-
-test('find-pages-artifact: resolve_artifact errors with custom prefix when not found', async () => {
-  const result = await runFindArtifactStep(resolveArtifactScript, {
-    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
-  }, {ARTIFACT_PREFIX: 'dev-pages-test-run', RETENTION_DAYS: '1'});
-  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
-  assert.match(result.stdout, /::error::.*No artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /expired after its retention of 1 days/);
+  assert.match(stepsText, /::error::.*not found/, 'must emit ::error:: when image is not found');
 });
 
 // Evaluate the find job's if: expression against event/conclusion/branch combinations.
@@ -648,31 +452,6 @@ test('cd-dev-pages find if: only push+main+success runs, everything else skips',
   }
 });
 
-test('find-pages-artifact: resolve fails on short SHA with full-SHA error', async () => {
-  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'find-artifact-short-sha-'));
-  const curlPath = path.join(temporaryDirectory, 'curl');
-  await fs.promises.copyFile(fakeCurlPath, curlPath);
-  await fs.promises.chmod(curlPath, 0o755);
-  const env = {
-    PATH: temporaryDirectory + ':' + process.env.PATH,
-    GITHUB_OUTPUT: path.join(temporaryDirectory, 'output'),
-    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
-    INPUT_COMMIT: 'abcdef1',
-    INPUT_ARTIFACT_PREFIX: 'dev-pages',
-    EVENT_SHA: 'abcdef1234567890abcdef1234567890abcdef12',
-    GH_TOKEN: 'fake-token',
-    GH_REPO: 'owner/repo',
-  };
-  try {
-    const result = await execFileAsync('bash', ['-c', resolveScript], {env, cwd: temporaryDirectory});
-    assert.fail('should have exited 1 for short SHA', result.stdout);
-  } catch (err) {
-    assert.equal(err.code, 1, 'resolve must fail on short SHA');
-    assert.match(err.stdout, /::error::.*full 40-character SHA/, 'must emit ::error:: about full SHA');
-  } finally {
-    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
-  }
-});
 
 // Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
 // The deploy must only run on workflow_run when is_newest (so older runs don't overwrite newer sites),
@@ -692,21 +471,19 @@ function evaluateDeployIf(expressionText, context) {
   return Function('context_cancelled', 'return ' + expression + ';')();
 }
 
-test('cd-dev-pages deploy gating: workflow_run newest deploys, dispatch deploys, test-run and find-fail skip', () => {
+test('cd-dev-pages deploy gating: find-success deploys, find-fail and find-skipped skip', () => {
   const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
 
   const cases = [
-    {event: 'workflow_run', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'workflow_run, newest'},
-    {event: 'workflow_run', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'workflow_run, not newest'},
-    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success, not newest'},
-    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
-    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
+    {event: 'workflow_run', findResult: 'success', cancelled: false, wantDeploy: true, label: 'workflow_run, find success'},
+    {event: 'workflow_dispatch', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success'},
+    {event: 'workflow_dispatch', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
+    {event: 'workflow_dispatch', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
   ];
 
   for (const testCase of cases) {
     const got = evaluateDeployIf(deployIf, {
       'github.event_name': testCase.event,
-      "needs.find.outputs.is_newest": testCase.isNewest,
       "needs.find.result": testCase.findResult,
     });
     const deployed = got === true;
@@ -816,49 +593,7 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
   );
 });
 
-test('ci-workflows: ci-dev-pages.yml changed, no qualifying run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-dev-pages.yml'],
-    {
-      'runs-ci-dev-pages.yml': '[{"displayTitle":"other run"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'ci-dev-pages.yml changed without qualifying run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
-    'error must name the ci-dev-pages dispatch command'
-  );
-});
-
-test('ci-workflows: ci-dev-pages.yml changed, with qualifying run must pass', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-dev-pages.yml'],
-    {
-      'runs-ci-dev-pages.yml': '[{"displayTitle":"ci-dev-pages test_run=true"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 0, 'ci-dev-pages.yml changed with qualifying run must exit 0');
-});
-
-test('ci-workflows: setup-web changed requires ci-dev-pages run', async () => {
-  const result = await runEvidenceTest(
-    ['.github/actions/setup-web/action.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'setup-web changed without ci-dev-pages run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-dev-pages\.yml --ref.*-f test_run=true/,
-    'error must name the ci-dev-pages dispatch command'
-  );
-});
+// setup-web is checked by the ci-publish test-run-evidence check because ci-publish builds the site.
 
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
@@ -965,16 +700,13 @@ test('every workflow checked by has_qualifying_run defines a run-name with test_
   }
 });
 
-test('ci-dev-pages is triggered on pushes to main, not via workflow_call', () => {
-  const {on} = load('ci-dev-pages.yml');
-  assert.ok(on.push, 'ci-dev-pages must trigger on push to main');
-  assert.deepEqual(on.push.branches, ['main']);
-  assert.equal(on.workflow_call, undefined, 'ci-dev-pages must not use workflow_call');
-});
 
-test('ci-publish has no dev-pages job', () => {
+test('ci-publish has a pages job that writes packages only from main', () => {
   const {jobs} = load('ci-publish.yml');
-  assert.equal(jobs['dev-pages'], undefined, 'ci-publish must not contain a dev-pages job');
+  assert.ok(jobs.pages, 'ci-publish must contain a pages job');
+  assert.equal(jobs.pages.permissions.packages, 'write', 'pages must write packages');
+  assert.match(jobs.pages.if, /github\.ref == 'refs\/heads\/main'/, 'pages could publish from a branch');
+  assert.equal(jobs['pages-test-run'].permissions.packages, 'read', 'a test run of pages must be unable to publish');
 });
 
 test('ci-pr-checks has no push trigger, so only PRs and the nightly run check', () => {
@@ -1193,10 +925,10 @@ test('run budget: first run with run_started_at earlier than approval uses appro
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
-  // ci-publish and ci-dev-pages run on push to main and workflow_dispatch;
-  // cd-dev-pages runs on workflow_run (ci-dev-pages completed on main) and workflow_dispatch;
+  // ci-publish runs on push to main and workflow_dispatch;
+  // cd-dev-pages runs on workflow_run (ci-publish completed on main) and workflow_dispatch;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-dev-pages.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -1369,4 +1101,298 @@ test('ci-pr-checks gate sparse-checkout includes both required files', () => {
     .filter(pattern => pattern.length > 0);
   assert.ok(patterns.includes('.node-version'), 'gate sparse-checkout must include .node-version');
   assert.ok(patterns.includes('platform/tools/run-budget.mjs'), 'gate sparse-checkout must include platform/tools/run-budget.mjs');
+});
+
+test('cd-dev-pages extracts /site/ contents, not /usr/share/nginx/html', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /\/site\/\./, 'must copy /site/ contents into pages-dist');
+  assert.doesNotMatch(stepsText, /\/usr\/share\/nginx\/html/, 'must not reference nginx path');
+});
+
+test('platform/pages/Dockerfile uses FROM scratch and copies to /site', () => {
+  const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/pages/Dockerfile'), 'utf8');
+  assert.match(dockerfile, /FROM scratch/, 'must use FROM scratch');
+  assert.match(dockerfile, /COPY \. \/site/, 'must copy build context to /site');
+  assert.match(dockerfile, /CMD/, 'must have a CMD so docker create works');
+  assert.doesNotMatch(dockerfile, /FROM nginx/, 'must not use nginx base');
+});
+
+test('ci-publish pages job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('ci-publish.yml');
+  for (const step of jobs.pages.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{[^}]*inputs\./,
+        'pages step "' + step.name + '" must not use ${{ inputs.* }} in run:'
+      );
+    }
+  }
+});
+
+test('cd-dev-pages find job does not use ${{ }} in run: blocks', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  for (const step of jobs.find.steps ?? []) {
+    if (step.run) {
+      assert.doesNotMatch(
+        step.run,
+        /\$\{\{/,
+        'find step "' + step.name + '" must not use ${{ }} in run:'
+      );
+    }
+  }
+});
+
+test('ci-publish pages-cleanup maps DEV_PAGES_PACKAGE and DEV_PAGES_VERSIONS_TO_KEEP from vars', () => {
+  const {jobs} = load('ci-publish.yml');
+  const cleanup = jobs['pages-cleanup'];
+  assert.equal(cleanup.env.DEV_PAGES_PACKAGE, '${{ vars.DEV_PAGES_PACKAGE }}');
+  assert.equal(cleanup.env.DEV_PAGES_VERSIONS_TO_KEEP, '${{ vars.DEV_PAGES_VERSIONS_TO_KEEP }}');
+  // The step uses env vars, not hardcoded values
+  const stepsText = JSON.stringify(cleanup.steps);
+  assert.match(stepsText, /env\.DEV_PAGES_PACKAGE/);
+  assert.match(stepsText, /env\.DEV_PAGES_VERSIONS_TO_KEEP/);
+});
+
+test('ci-publish pages-cleanup has a test-run twin with packages: read', () => {
+  const {jobs} = load('ci-publish.yml');
+  const twin = jobs['pages-cleanup-test-run'];
+  assert.ok(twin, 'pages-cleanup-test-run must exist');
+  assert.equal(twin.environment, 'test-run');
+  assert.equal(twin.permissions.packages, 'read', 'test-run cleanup must not write packages');
+  assert.deepEqual(twin.steps, jobs['pages-cleanup'].steps, 'twin must share steps');
+});
+
+test('publish-image action generalised with name, dockerfile, commit, skip_main_tag inputs', () => {
+  const action = fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8');
+  assert.match(action, /name:/, 'must have name input');
+  assert.match(action, /dockerfile:/, 'must have dockerfile input');
+  assert.match(action, /commit:/, 'must have commit input');
+  assert.match(action, /skip_main_tag:/, 'must have skip_main_tag input');
+});
+
+test('ci-publish pages job uses publish-image action with skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages');
+  assert.equal(publishStep.with.skip_main_tag, 'true');
+  // Dockerfile comes from the workflow checkout, not from source/.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
+  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
+});
+
+// Read the publish-image action definition to know which inputs are required.
+const publishImageAction = parseYaml(
+  fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8')
+);
+const publishImageRequiredInputs = Object.entries(publishImageAction.inputs ?? {})
+  .filter(([, input]) => input.required)
+  .map(([name]) => name);
+
+test('every publish-image caller passes all required inputs', () => {
+  // Find all steps across all workflows that use the publish-image action.
+  for (const file of newWorkflowFiles) {
+    const {jobs} = load(file);
+    for (const [jobName, job] of Object.entries(jobs)) {
+      for (const step of job.steps ?? []) {
+        if (!step.uses?.includes('publish-image')) continue;
+        for (const requiredInput of publishImageRequiredInputs) {
+          assert.ok(
+            step.with?.[requiredInput] !== undefined,
+            `${file} ${jobName} publish-image step must pass required input ${requiredInput}`
+          );
+        }
+      }
+    }
+  }
+});
+
+test('ci-publish pages job passes dev-pages name and commit from env', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'pages must use publish-image action');
+  assert.equal(publishStep.with.name, 'dev-pages', 'must pass the dev-pages image name');
+  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit from env, not github.sha');
+  assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
+  assert.equal(publishStep.with.token, '${{ github.token }}', 'must pass token');
+});
+
+test('ci-publish image job uses publish-image action without skip_main_tag', () => {
+  const {jobs} = load('ci-publish.yml');
+  const publishStep = jobs.image.steps.find(s => s.uses?.includes('publish-image'));
+  assert.ok(publishStep, 'image must use publish-image action');
+  assert.equal(publishStep.with.name, '${{ env.APP }}');
+  assert.equal(publishStep.with.skip_main_tag, undefined, 'app images should not skip main tag');
+});
+
+// Run the publish-image action script with a stub docker to verify tag construction.
+// The stub records docker build/push arguments for inspection.
+const publishImageScript = publishImageAction.runs.steps[0].run;
+
+async function runPublishImageAction(envVars) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'publish-image-test-'));
+  const logFile = path.join(temporaryDirectory, 'docker-calls.log');
+
+  // Create a stub docker that records its arguments.
+  const stubDocker = `#!/bin/bash
+echo "$@" >> '${logFile}'
+`;
+  await fs.promises.writeFile(path.join(temporaryDirectory, 'docker'), stubDocker);
+  await fs.promises.chmod(path.join(temporaryDirectory, 'docker'), 0o755);
+
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    HOME: temporaryDirectory,
+    GITHUB_ACTOR: 'test-actor',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    ...envVars,
+  };
+
+  try {
+    const result = await execFileAsync('bash', ['-c', publishImageScript], {env, cwd: temporaryDirectory});
+    const calls = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean);
+    return {code: 0, stdout: result.stdout, stderr: result.stderr, calls};
+  } catch (err) {
+    const calls = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean) : [];
+    return {code: err.code, stdout: err.stdout, stderr: err.stderr, calls};
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('publish-image action tags dev-pages with the commit SHA, not github.sha', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  // Find the docker build call and verify the tag.
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'build tag must be repository/dev-pages:COMMIT_SHA'
+  );
+  // Should not have a :main tag when skip_main_tag is true.
+  assert.doesNotMatch(buildCall, /:main/, 'should not tag as main when skip_main_tag is true');
+
+  // Verify the push call uses the same tag.
+  const pushCall = result.calls.find(c => c.startsWith('push'));
+  assert.ok(pushCall, 'should have a docker push call');
+  assert.match(
+    pushCall,
+    /ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
+    'push must use the commit-tagged image'
+  );
+});
+
+test('publish-image action tags app images with both commit SHA and main', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'web',
+    IMAGE_REPOSITORY: 'ghcr.io/ivanov-gv/cg-map',
+    DOCKERFILE: '',
+    COMMIT_SHA: 'abc123def456',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'false',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:abc123def456/,
+    'build must include commit tag'
+  );
+  assert.match(
+    buildCall,
+    /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:main/,
+    'build must include main tag for app images'
+  );
+});
+
+test('publish-image action uses build context from context input', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+    BUILD_CONTEXT: 'site',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /site$/,
+    'build must use the context path from the context input'
+  );
+});
+
+// Any job that checks out a non-default ref must keep local actions on the
+// workflow's own checkout. The first checkout must have no ref; the one with
+// ref must have a path. This prevents the root cause of #244 where checking
+// out ref: <commit> resolved ./.github/actions to main's old versions.
+test('ci-publish pages job keeps local actions on workflow checkout', () => {
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+
+  // Find all checkout steps
+  const checkouts = pagesSteps
+    .map((step, index) => ({step, index}))
+    .filter(({step}) => step.uses?.startsWith('actions/checkout'));
+
+  assert.ok(checkouts.length >= 2, 'pages must have at least two checkouts');
+
+  // The first checkout must not have a ref (gets this branch's actions)
+  const firstCheckout = checkouts[0].step;
+  assert.equal(
+    firstCheckout.with?.ref,
+    undefined,
+    'first checkout must not specify ref so local actions come from the workflow branch'
+  );
+  assert.equal(
+    firstCheckout.with?.path,
+    undefined,
+    'first checkout must not specify path so actions are at the root'
+  );
+
+  // A checkout with ref must have a path (source subdirectory)
+  const refCheckout = checkouts.find(({step}) => step.with?.ref !== undefined);
+  assert.ok(refCheckout, 'pages must have a checkout with ref for the source commit');
+  assert.ok(
+    refCheckout.step.with?.path,
+    'checkout with ref must have a path to avoid overwriting local actions'
+  );
+});
+
+// Prove the pattern is necessary: if the first checkout had ref but no path,
+// the local actions would resolve to the wrong commit.
+test('ci-publish pages would fail with single checkout of non-default ref', () => {
+  // This test verifies that the pages job does NOT use a single checkout
+  // with ref but no path — the pattern that caused #244.
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+  const checkouts = pagesSteps.filter(step => step.uses?.startsWith('actions/checkout'));
+
+  // Count checkouts that have ref but no path (the bad pattern)
+  const badCheckouts = checkouts.filter(
+    step => step.with?.ref !== undefined && step.with?.path === undefined
+  );
+  assert.equal(
+    badCheckouts.length,
+    0,
+    'no checkout should have ref without path — this caused #244 (invalid tag ttl.sh/ivanov-gv-cg-map/:037f5e9...)'
+  );
 });

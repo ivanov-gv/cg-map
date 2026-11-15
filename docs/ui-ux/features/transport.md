@@ -67,8 +67,8 @@ actual upstream bus positions with public read CORS. A Chromium fetch from <http
 HTTP 200 with 16 positions and stale=false. Desktop/mobile browser tests use deterministic intercepted feed responses;
 that is separate from live relay verification.
 
-The GitHub Pages client calls the public hosted endpoint. On every push to main, ci-dev-pages builds the site from
-source and uploads the artifact, then cd-dev-pages deploys it to GitHub Pages.
+The GitHub Pages client calls the public hosted endpoint. On every push to main, ci-publish builds the dev site image
+`dev-pages:<sha>` from source, and cd-dev-pages deploys it to GitHub Pages.
 
 Hosting identity and source version are in [deployment.json](../../../services/transit-relay/deployment.json). The
 service implementation and update procedure are in [its README](../../../services/transit-relay/README.md).

@@ -96,3 +96,9 @@ using the GitHub Artifacts API (`GET repos/$GH_REPO/actions/artifacts?name=dev-p
 non-expired entry, reads its `workflow_run.id`, and downloads with that run ID. CD is fully independent of CI's runs: it
 never looks up runs by commit. Retention is 3 days — the rollback window. Rollback works for any commit whose artifact
 is still within that 3-day window.
+
+**Outcome (owner, 2026-11-15, #244):** ci-dev-pages is removed; its pages build moves into ci-publish as the `pages`
+job. The CI→CD contract is now the Docker image `dev-pages:<sha>` — CD pulls it by commit SHA, extracts the site, and
+deploys it. No artifact API, no lookup logic, no newest check. ci-publish keeps the last 10 dev-pages versions (the
+rollback window); ttl.sh test-run images expire on their own. find-pages-artifact is deleted. CD is fully independent of
+CI's runs: it only needs the image tag.
