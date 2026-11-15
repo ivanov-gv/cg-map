@@ -42,7 +42,12 @@ for (const file of newWorkflowFiles) {
     const {jobs} = load(file);
     const standalone = NO_TWIN[file] ?? [];
     const production = Object.keys(jobs).filter(job => !job.endsWith('-test-run') && !standalone.includes(job));
-    if (production.length === 0) return;
+    // ci-nightly only calls ci-pr-checks; it has no production jobs of its own to twin.
+    if (file === 'ci-nightly.yml') {
+      assert.equal(production.length, 0, 'ci-nightly should have no production jobs');
+      return;
+    }
+    assert.ok(production.length > 0, `${file} should have at least one production job`);
     for (const job of production) {
       const twin = jobs[`${job}-test-run`];
       assert.ok(twin, `${job} needs a ${job}-test-run twin`);
@@ -363,7 +368,7 @@ test('browser jobs and local runs pin one image, whose version matches the repos
 test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
   const {jobs} = load('ci-pr-checks.yml');
   for (const app of ['apps-web', 'apps-editor']) {
-    assert.match(jobs[app].with.phone_tests, /workflow_call.*workflow_dispatch.*all.*tagged/);
+    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests }}');
     const {browser} = load(`ci-${app}.yml`).jobs;
     assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
     const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');

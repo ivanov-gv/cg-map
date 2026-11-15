@@ -18,6 +18,10 @@ on:
         type: boolean
         required: false
         default: true
+      phone_tests:
+        type: string
+        required: false
+        default: 'tagged'
   workflow_dispatch:
     inputs:
       test_run:
@@ -189,7 +193,7 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
-      phone_tests: ${{ (github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch') && 'all' || 'tagged' }}
+      phone_tests: ${{ inputs.phone_tests }}
   apps-editor:
     name: apps-editor
     needs: [switch, plan, plan-test-run]
@@ -198,7 +202,7 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
       browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
-      phone_tests: ${{ (github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch') && 'all' || 'tagged' }}
+      phone_tests: ${{ inputs.phone_tests }}
   apps-core-demo:
     name: apps-core-demo
     needs: [switch, plan, plan-test-run]

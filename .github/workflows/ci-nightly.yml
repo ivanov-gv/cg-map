@@ -20,3 +20,4 @@ jobs:
     with:
       test_run: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
       run_all: true
+      phone_tests: all
