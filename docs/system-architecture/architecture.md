@@ -69,7 +69,7 @@ a slot in an existing project's Makefile, tests or pipeline.
 | Offline         | Service worker/Cache Storage for shell; OPFS for verified archive                                                                                                                                                                                    |
 | Data pipeline   | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely                                                                                                                                                                     |
 | Backend         | Independent Go module with ConnectRPC and protobuf transport definitions: static artifact host, map layers API (TileJSON + vector tiles from the release archive), live ePodgorica vehicles API with movement directions, web config (`config.json`) |
-| Delivery        | GitHub Actions builds the dev site from source (ci-dev-pages); when it completes, cd-dev-pages deploys to Pages via workflow_run: [release](../runbooks/release.md)                                                                                  |
+| Delivery        | GitHub Actions builds the dev site from source (ci-dev-pages) as artifact `dev-pages-<sha>` with `version.json`; cd-dev-pages deploys to Pages via `workflow_run` (only for successful push on main): [release](../runbooks/release.md)              |
 | Verification    | ESLint, markdownlint/Prettier, Node tests, Python unittest, Playwright; separate Go vet/lint/test/build                                                                                                                                              |
 
 The Go server is optional. When the app is served by it, `config.json` selects server mode and the app reads layers and
@@ -107,8 +107,10 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
 5. A merge to main triggers ci-dev-pages, which builds all three apps from source, writes version.json with the commit
-   SHA, and uploads the artifact. When ci-dev-pages completes, cd-dev-pages is triggered via `workflow_run` and deploys
-   it to GitHub Pages. Source files, docs, datasets used for generation, and backend code are excluded.
+   SHA, and uploads the artifact as `dev-pages-<sha>`. When ci-dev-pages completes successfully on main, cd-dev-pages is
+   triggered via `workflow_run`, downloads the artifact by name, verifies version.json, and deploys it to GitHub Pages.
+   CD never runs for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch but main. Source
+   files, docs, datasets used for generation, and backend code are excluded.
 
 The web app runs at /cg-map/web/, and owns only that path's worker. No deployment redirect or web asset tree is
 committed in repository root.

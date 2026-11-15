@@ -75,10 +75,11 @@ site that should update automatically when code lands.
 **Outcome (#168, 2026-11-15):** the spike found page_build never fires with build_type workflow; cd-dev-pages triggers
 on push to main and polls for its SHA's ci-dev-pages run, so CI never triggers CD.
 
-**Outcome (#237, 2026-11-15):** cd-dev-pages no longer triggers on push; it triggers on `workflow_run` when ci-dev-pages
-completes. The CI run ID is passed from the event to the find-pages-artifact action, which downloads directly without
-polling. On `workflow_dispatch`, the action performs a single lookup (no retries). The find job's `if:` gates on
-`workflow_dispatch` or successful CI conclusion — no separate gate job. The deploy `if:` requires find success and
-either `workflow_dispatch` (for manual rollback) or `is_newest` (for automatic deploys). The `workflow_run` trigger is
-scoped to `branches: [main]`. The Makefile target supports both `workflow_run` (default, via event payload) and
-`workflow_dispatch` (with `COMMIT=`) paths under act.
+**Outcome (owner, 2026-11-15, #230/#237):** page_build never fires here (webhook spike, #168), and polling was rejected.
+The wiki's model stands: CI builds the artifact, CD acknowledges the new version and deploys it. GitHub offers no other
+way to acknowledge a version change, so cd-dev-pages starts on ci-dev-pages' completion (`workflow_run`), and only for a
+successful push build on main, never for a CI test run or any other run. This is an exception that follows the rule: CI
+never calls or knows about CD, and CD only acknowledges new versions. The CI→CD contract is the artifact
+`dev-pages-<sha>` with `version.json` inside — CD needs nothing from CI but a version. CD downloads by artifact name,
+verifies `version.json` matches the expected SHA, and re-uploads as `github-pages` for deploy-pages. Rollback works for
+any commit whose artifact is still within retention.

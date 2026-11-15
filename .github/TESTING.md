@@ -81,15 +81,16 @@ because a version never changes there either.
 
 - **workflow_run path** (default, no arguments): simulates the `workflow_run` trigger using
   `.github/act/event-workflow-run.json`, which contains a real `ci-dev-pages` run (ID 43708216403) on `main`. The find
-  step downloads the artifact from that run directly using its ID (no polling). Run it with `make test-cd-dev-pages`.
+  step downloads the artifact `dev-pages-<head_sha>` from that run by name. CD only runs for a successful push build on
+  main — never for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch but main. Run it with
+  `make test-cd-dev-pages`.
 - **workflow_dispatch path** (with `COMMIT=`): simulates a manual dispatch. Pass a commit on `main` that has a
-  successful `ci-dev-pages` run with a `github-pages` artifact. The find step performs a single lookup for the run. Find
+  successful `ci-dev-pages` run with a `dev-pages-<commit>` artifact. The find step locates the artifact by name. Find
   one with `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
   Run it with `make test-cd-dev-pages COMMIT=<full SHA>`.
 
 Under `act`, the GitHub run/artifact APIs need a real token and a real `ci-dev-pages` run, so both paths download from
-an actual CI run. The action never polls — it uses the run ID from the event (workflow_run) or a single lookup
-(workflow_dispatch).
+an actual CI run. The action downloads by artifact name (`dev-pages-<commit>`) and verifies `version.json` matches.
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.

@@ -2,6 +2,9 @@ name: cd-dev-pages
 # Deploys the dev site from the ci-dev-pages artifact. CI builds the site and uploads the artifact;
 # this CD workflow finds that artifact for a given commit and deploys it to GitHub Pages.
 # Triggered by workflow_run when ci-dev-pages finishes on main, or by workflow_dispatch for manual deploys.
+# CD runs only for a successful push build on main — never for a CI test run, a dispatched CI run,
+# a failed or cancelled run, or any branch but main. This is an exception that follows the rule:
+# CI never calls or knows about CD, and CD only acknowledges new versions.
 # The find job and its test-run twin share steps via a composite action.
 # The deploy job has no test-run twin: Pages can only publish to this repository, so there is no test destination.
 run-name: >-
@@ -45,7 +48,7 @@ jobs:
   find:
     name: Find Pages artifact
     needs: switch
-    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions: &find-permissions
@@ -75,7 +78,7 @@ jobs:
   find-test-run:
     name: (test-run) Find Pages artifact
     needs: switch
-    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
     environment: test-run

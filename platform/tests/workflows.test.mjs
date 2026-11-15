@@ -192,6 +192,25 @@ test('build always takes every app, because it replaces the whole site', () => {
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
 
+test('ci-dev-pages uploads artifact with versioned name dev-pages-<sha>', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+  assert.match(stepsText, /dev-pages-\$\{\{\s*github\.sha\s*\}\}/, 'must use versioned artifact name');
+  assert.match(stepsText, /retention-days/, 'must set retention-days');
+});
+
+test('find-pages-artifact downloads by versioned name dev-pages-<commit>', () => {
+  const stepsText = JSON.stringify(findArtifactYaml.runs.steps);
+  assert.match(stepsText, /dev-pages-\$\{\{\s*steps\.resolve\.outputs\.commit\s*\}\}/, 'must download by versioned name');
+  assert.doesNotMatch(stepsText, /name:\s*github-pages/, 'must not use the default github-pages name');
+});
+
+test('find-pages-artifact verifies version.json after extraction', () => {
+  const verifyStep = findArtifactYaml.runs.steps.find(s => s.id === 'verify_version');
+  assert.ok(verifyStep, 'must have a verify_version step');
+  assert.match(verifyStep.run, /version\.json/, 'must check version.json');
+  assert.match(verifyStep.run, /mismatch/, 'must report mismatch');
+});
+
 test('jobs below the optional approval survive it being skipped', () => {
   const {jobs} = load('ci-pr-checks.yml');
   const statusFunction = /\b(always|cancelled|failure|success)\(\)/;
@@ -466,10 +485,10 @@ test('find-pages-artifact: action contains no retry loop', () => {
   assert.doesNotMatch(findArtifactAction, /POLL_DELAY/, 'action must not contain POLL_DELAY');
 });
 
-// Evaluate the find job's if: expression against event/conclusion combinations.
-// On workflow_run, find only runs when conclusion is success.
+// Evaluate the find job's if: expression against event/conclusion/branch combinations.
+// On workflow_run, find only runs when ALL three hold: event==push, head_branch==main, conclusion==success.
 // On workflow_dispatch, find always runs (manual deploy bypasses CI check).
-// A failed or cancelled CI run must skip CD cleanly.
+// A failed, cancelled, or non-main CI run must skip CD cleanly — no red run.
 function evaluateFindIf(expression, context) {
   let expr = expression
     .replace(/\$\{\{\s*/g, '')
@@ -482,20 +501,31 @@ function evaluateFindIf(expression, context) {
   return Function('context_cancelled', 'return ' + expr + ';')();
 }
 
-test('cd-dev-pages find if: workflow_run success runs, failure/cancelled skips, dispatch runs', () => {
+test('cd-dev-pages find if: only push+main+success runs, everything else skips', () => {
   const findIf = load('cd-dev-pages.yml').jobs.find.if;
 
   const cases = [
-    {event: 'workflow_run', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: true, label: 'workflow_run success'},
-    {event: 'workflow_run', conclusion: 'failure', testRun: 'false', cancelled: false, wantRun: false, label: 'workflow_run failure'},
-    {event: 'workflow_run', conclusion: 'cancelled', testRun: 'false', cancelled: false, wantRun: false, label: 'workflow_run cancelled'},
-    {event: 'workflow_dispatch', conclusion: '', testRun: 'false', cancelled: false, wantRun: true, label: 'workflow_dispatch'},
-    {event: 'workflow_dispatch', conclusion: '', testRun: 'true', cancelled: false, wantRun: false, label: 'workflow_dispatch test_run'},
+    // Core case: push on main with success → runs
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: true, label: 'push+main+success'},
+    // workflow_dispatch-triggered CI run (event workflow_dispatch) → skips
+    {event: 'workflow_run', ciEvent: 'workflow_dispatch', headBranch: 'main', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'workflow_dispatch CI run'},
+    // Failure → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'failure', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+failure'},
+    // Cancelled → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'main', conclusion: 'cancelled', testRun: 'false', cancelled: false, wantRun: false, label: 'push+main+cancelled'},
+    // Another branch → skips
+    {event: 'workflow_run', ciEvent: 'push', headBranch: 'feature-branch', conclusion: 'success', testRun: 'false', cancelled: false, wantRun: false, label: 'push+feature+success'},
+    // CD workflow_dispatch (rollback/test run) → runs
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'false', cancelled: false, wantRun: true, label: 'CD workflow_dispatch'},
+    // CD workflow_dispatch test_run → skips (test_run gate)
+    {event: 'workflow_dispatch', ciEvent: '', headBranch: '', conclusion: '', testRun: 'true', cancelled: false, wantRun: false, label: 'CD workflow_dispatch test_run'},
   ];
 
   for (const tc of cases) {
     const got = evaluateFindIf(findIf, {
       'github.event_name': tc.event,
+      'github.event.workflow_run.event': tc.ciEvent,
+      'github.event.workflow_run.head_branch': tc.headBranch,
       "github.event.workflow_run.conclusion": tc.conclusion,
       "needs.switch.outputs.test_run": tc.testRun,
     });

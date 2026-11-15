@@ -1,9 +1,10 @@
 name: Find Pages artifact
 description: >-
   Resolves a commit SHA, verifies it is on main, locates the ci-dev-pages run that built it,
-  downloads the github-pages artifact, and extracts it for re-upload.
+  downloads the dev-pages-&lt;commit&gt; artifact by name, verifies version.json matches,
+  and extracts it for re-upload.
   When a run ID is supplied (from workflow_run), it downloads directly without any lookup.
-  When no run ID is supplied (workflow_dispatch), it performs a single lookup for a successful run.
+  When no run ID is supplied (workflow_dispatch), it finds the artifact by name (newest non-expired).
 inputs:
   commit:
     description: The full commit SHA to find the artifact for.
@@ -116,10 +117,10 @@ runs:
         echo "Found ci-dev-pages run $run_id for commit $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: download
-      name: Download github-pages artifact
+      name: Download Pages artifact by name
       uses: actions/download-artifact@v8
       with:
-        name: github-pages
+        name: dev-pages-${{ steps.resolve.outputs.commit }}
         run-id: ${{ steps.resolve_run.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
         github-token: ${{ inputs.token }}
@@ -141,6 +142,25 @@ runs:
         rm "$ARTIFACT_DEST/artifact.tar"
         file_count=$(find "$ARTIFACT_DEST" -type f | wc -l)
         echo "Extracted $file_count files from ci-dev-pages run $RUN_ID to $ARTIFACT_DEST" | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - id: verify_version
+      name: Verify version.json matches expected commit
+      shell: bash
+      env:
+        ARTIFACT_DEST: ${{ inputs.artifact_destination }}
+        EXPECTED_COMMIT: ${{ steps.resolve.outputs.commit }}
+      run: |
+        version_file="$ARTIFACT_DEST/version.json"
+        if [ ! -f "$version_file" ]; then
+          echo "::error::version.json not found in extracted artifact at $version_file"
+          exit 1
+        fi
+        actual_commit=$(jq -r '.commit' "$version_file")
+        if [ "$actual_commit" != "$EXPECTED_COMMIT" ]; then
+          echo "::error::version.json commit mismatch: expected $EXPECTED_COMMIT, got $actual_commit"
+          exit 1
+        fi
+        echo "version.json commit verified: $actual_commit" | tee -a "$GITHUB_STEP_SUMMARY"
 
     - id: newest
       name: Check this is still main's newest commit
