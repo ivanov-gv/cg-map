@@ -186,21 +186,24 @@ test('build always takes every app, because it replaces the whole site', () => {
   assert.doesNotMatch(stepsText, /:main/);
   // Writes version.json with commit, run_id, and built_at.
   assert.match(stepsText, /version\.json/);
-  assert.match(stepsText, /GITHUB_SHA/);
+  assert.match(stepsText, /inputs\.commit/);
   assert.match(stepsText, /GITHUB_RUN_ID/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
 
-test('ci-dev-pages uploads artifact with versioned name dev-pages-<sha>', () => {
+test('ci-dev-pages uploads artifact with PAGES_ARTIFACT_PREFIX-<sha>', () => {
   const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
-  assert.match(stepsText, /dev-pages-\$\{\{\s*github\.sha\s*\}\}/, 'must use versioned artifact name');
+  assert.match(stepsText, /PAGES_ARTIFACT_PREFIX/, 'must use PAGES_ARTIFACT_PREFIX in artifact name');
+  assert.match(stepsText, /inputs\.commit/, 'must support commit input for artifact name');
   assert.match(stepsText, /retention-days/, 'must set retention-days');
+  assert.match(stepsText, /PAGES_ARTIFACT_RETENTION_DAYS/, 'must use PAGES_ARTIFACT_RETENTION_DAYS');
 });
 
-test('find-pages-artifact downloads by versioned name dev-pages-<commit>', () => {
+test('find-pages-artifact downloads by artifact_prefix-<commit>', () => {
   const stepsText = JSON.stringify(findArtifactYaml.runs.steps);
-  assert.match(stepsText, /dev-pages-\$\{\{\s*steps\.resolve\.outputs\.commit\s*\}\}/, 'must download by versioned name');
+  assert.match(stepsText, /inputs\.artifact_prefix/, 'must use artifact_prefix input');
+  assert.match(stepsText, /steps\.resolve\.outputs\.commit/, 'must use resolved commit');
   assert.doesNotMatch(stepsText, /name:\s*github-pages/, 'must not use the default github-pages name');
 });
 
@@ -391,6 +394,7 @@ async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
     GH_TOKEN: 'fake-token',
     GH_REPO: 'owner/repo',
     COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
+    ARTIFACT_PREFIX: 'dev-pages',
     RETENTION_DAYS: '90',
     FAKE_CURL_DIR: stubDirectory,
     ...envOverrides,
@@ -488,6 +492,87 @@ test('find-pages-artifact: action contains no retry loop', () => {
   assert.doesNotMatch(findArtifactAction, /sleep/, 'action must not contain sleep');
   assert.doesNotMatch(findArtifactAction, /MAX_ATTEMPTS/, 'action must not contain MAX_ATTEMPTS');
   assert.doesNotMatch(findArtifactAction, /POLL_DELAY/, 'action must not contain POLL_DELAY');
+});
+
+test('find-pages-artifact: resolve_artifact uses artifact_prefix in name', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages'});
+  assert.equal(result.code, 0, 'resolve_artifact must pass with default prefix');
+  assert.match(result.stdout, /Found artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
+});
+
+test('find-pages-artifact: resolve_artifact uses custom prefix', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12':
+      '{"artifacts":[{"id":100,"name":"dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12","expired":false,"workflow_run":{"id":12345},"created_at":"2026-11-15T12:00:00Z"}]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages-test-run'});
+  assert.equal(result.code, 0, 'resolve_artifact must pass with custom prefix');
+  assert.match(result.stdout, /Found artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
+});
+
+test('ci-dev-pages maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
+  const {jobs} = load('ci-dev-pages.yml');
+  // Production build maps from vars
+  assert.equal(jobs.build.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs.build.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+  // Test-run twin maps from vars
+  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs['build-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+});
+
+test('cd-dev-pages find maps PAGES_ARTIFACT_PREFIX and PAGES_ARTIFACT_RETENTION_DAYS from vars', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  // Production find maps from vars
+  assert.equal(jobs.find.env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs.find.env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+  // Test-run twin maps from vars
+  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_PREFIX, '${{ vars.PAGES_ARTIFACT_PREFIX }}');
+  assert.equal(jobs['find-test-run'].env.PAGES_ARTIFACT_RETENTION_DAYS, '${{ vars.PAGES_ARTIFACT_RETENTION_DAYS }}');
+});
+
+test('ci-dev-pages build uses environment dev', () => {
+  const {jobs} = load('ci-dev-pages.yml');
+  assert.equal(jobs.build.environment, 'dev');
+});
+
+test('cd-dev-pages find uses environment dev', () => {
+  const {jobs} = load('cd-dev-pages.yml');
+  assert.equal(jobs.find.environment, 'dev');
+});
+
+test('ci-dev-pages has commit input for workflow_dispatch', () => {
+  const {on} = load('ci-dev-pages.yml');
+  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-dev-pages must have commit input');
+  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
+  assert.equal(on.workflow_dispatch.inputs.commit.required, false);
+});
+
+test('ci-dev-pages validates commit as 40-character SHA', () => {
+  const stepsText = JSON.stringify(load('ci-dev-pages.yml').jobs.build.steps);
+  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+});
+
+test('cd-dev-pages find passes artifact_prefix to find-pages-artifact', () => {
+  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
+  assert.match(stepsText, /artifact_prefix.*PAGES_ARTIFACT_PREFIX/, 'must pass artifact_prefix');
+  assert.match(stepsText, /retention_days.*PAGES_ARTIFACT_RETENTION_DAYS/, 'must pass retention_days');
+});
+
+test('find-pages-artifact action has artifact_prefix input with default dev-pages', () => {
+  const inputs = findArtifactYaml.inputs;
+  assert.ok(inputs.artifact_prefix, 'must have artifact_prefix input');
+  assert.equal(inputs.artifact_prefix.default, 'dev-pages');
+});
+
+test('find-pages-artifact: resolve_artifact errors with custom prefix when not found', async () => {
+  const result = await runFindArtifactStep(resolveArtifactScript, {
+    'artifacts-name-dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12': '{"artifacts":[]}',
+  }, {ARTIFACT_PREFIX: 'dev-pages-test-run', RETENTION_DAYS: '1'});
+  assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
+  assert.match(result.stdout, /::error::.*No artifact dev-pages-test-run-abcdef1234567890abcdef1234567890abcdef12/);
+  assert.match(result.stdout, /expired after its retention of 1 days/);
 });
 
 // Evaluate the find job's if: expression against event/conclusion/branch combinations.

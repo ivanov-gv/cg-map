@@ -1,6 +1,6 @@
 name: Find Pages artifact
 description: >-
-  Resolves a commit SHA, verifies it is on main, finds the dev-pages-&lt;commit&gt; artifact by name
+  Resolves a commit SHA, verifies it is on main, finds the &lt;prefix&gt;-&lt;commit&gt; artifact by name
   (newest non-expired), downloads it, verifies version.json matches, and extracts it for re-upload.
   CD is independent of CI's runs: it only needs the artifact name.
 inputs:
@@ -14,6 +14,10 @@ inputs:
     description: Directory to extract the downloaded artifact into.
     required: false
     default: pages-dist
+  artifact_prefix:
+    description: The prefix for the artifact name (e.g. dev-pages).
+    required: false
+    default: dev-pages
   retention_days:
     description: Artifact retention days (for error messages).
     required: false
@@ -63,11 +67,12 @@ runs:
       shell: bash
       env:
         COMMIT: ${{ steps.resolve.outputs.commit }}
+        ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
         RETENTION_DAYS: ${{ inputs.retention_days }}
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
       run: |
-        artifact_name="dev-pages-$COMMIT"
+        artifact_name="$ARTIFACT_PREFIX-$COMMIT"
 
         gh_api() {
           curl --fail --silent --show-error --location \
@@ -100,7 +105,7 @@ runs:
       name: Download Pages artifact by name
       uses: actions/download-artifact@v8
       with:
-        name: dev-pages-${{ steps.resolve.outputs.commit }}
+        name: ${{ inputs.artifact_prefix }}-${{ steps.resolve.outputs.commit }}
         run-id: ${{ steps.resolve_artifact.outputs.run_id }}
         path: ${{ inputs.artifact_destination }}
         github-token: ${{ inputs.token }}

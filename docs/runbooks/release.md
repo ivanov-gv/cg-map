@@ -22,10 +22,11 @@ Every merge to main updates it, with no tags or releases:
    the PR run already tested this content. The nightly run of [ci-nightly](../../.github/workflows/ci-nightly.yml) tests
    main.
 2. A push to main also starts [ci-dev-pages](../../.github/workflows/ci-dev-pages.yml) independently, which builds the
-   dev site from source and uploads the artifact named `dev-pages-<commit>`. When ci-dev-pages completes successfully on
-   main, [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via `workflow_run` — it downloads the
-   artifact by name, verifies `version.json` matches, and deploys. CD only runs for a successful push build on main,
-   never for a CI test run or any other run. A deploy replaces the whole site, so it always takes all three.
+   dev site from source and uploads the artifact named `<PAGES_ARTIFACT_PREFIX>-<commit>` (default
+   `dev-pages-<commit>`). When ci-dev-pages completes successfully on main,
+   [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via `workflow_run` — it downloads the artifact
+   by name, verifies `version.json` matches, and deploys. CD only runs for a successful push build on main, never for a
+   CI test run or any other run. A deploy replaces the whole site, so it always takes all three.
 
 To put back an older build, push a revert commit to main so ci-dev-pages rebuilds from source and cd-dev-pages deploys
 the new artifact. The old image-based rollback (retag an image, then run ci-dev-pages) is out of date: ci-dev-pages now
@@ -38,10 +39,11 @@ To manually deploy a specific commit (rollback or promotion), dispatch cd-dev-pa
 gh workflow run cd-dev-pages.yml --ref main -f test_run=false -f commit=<full SHA on main>
 ```
 
-The commit must be on main and have a `dev-pages-<commit>` artifact that has not expired (retention is 90 days — the
-rollback window and GitHub's maximum for this repository). A dispatched deploy always uses the chosen commit, even when
-it is no longer main's newest commit. On a push to main, only the newest commit deploys — an older push will not
-overwrite a newer site. Find a qualifying commit with
+The commit must be on main and have a `<PAGES_ARTIFACT_PREFIX>-<commit>` artifact (default `dev-pages-<commit>`) that
+has not expired (retention is `PAGES_ARTIFACT_RETENTION_DAYS`, default 90 days — the rollback window and GitHub's
+maximum for this repository). A dispatched deploy always uses the chosen commit, even when it is no longer main's newest
+commit. On a push to main, only the newest commit deploys — an older push will not overwrite a newer site. Find a
+qualifying commit with
 `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`.
 
 To run one locally: `docker run -p 8080:8080 ghcr.io/ivanov-gv/cg-map/editor:main`.

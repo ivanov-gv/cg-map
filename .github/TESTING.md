@@ -40,12 +40,14 @@ it.
 
 The `dev` and `test-run` environments define these variables:
 
-| Variable                      | `dev`                      | `test-run`                |
-| ----------------------------- | -------------------------- | ------------------------- |
-| `IMAGE_REPOSITORY`            | `ghcr.io/ivanov-gv/cg-map` | `ttl.sh/ivanov-gv-cg-map` |
-| `WEB_ARTIFACT_NAME`           | `web-artifact`             | `web-artifact-test-run`   |
-| `WEB_ARTIFACT_RETENTION_DAYS` | `30`                       | `1`                       |
-| `PACKAGE_PUBLISH_FLAGS`       | unset                      | `--dry-run`               |
+| Variable                        | `dev`                      | `test-run`                |
+| ------------------------------- | -------------------------- | ------------------------- |
+| `IMAGE_REPOSITORY`              | `ghcr.io/ivanov-gv/cg-map` | `ttl.sh/ivanov-gv-cg-map` |
+| `WEB_ARTIFACT_NAME`             | `web-artifact`             | `web-artifact-test-run`   |
+| `WEB_ARTIFACT_RETENTION_DAYS`   | `30`                       | `1`                       |
+| `PACKAGE_PUBLISH_FLAGS`         | unset                      | `--dry-run`               |
+| `PAGES_ARTIFACT_PREFIX`         | `dev-pages`                | `dev-pages-test-run`      |
+| `PAGES_ARTIFACT_RETENTION_DAYS` | `90`                       | `1`                       |
 
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
@@ -77,21 +79,20 @@ make test-all-workflows ACT="gh act -n" # dry run of every target
 `docker tag <image> ttl.sh/ivanov-gv-cg-map/browser-ci:<SHA>`, then `docker push`. Use a new revision on each try,
 because a version never changes there either.
 
-`test-cd-dev-pages` supports two paths under `act`:
+`test-cd-dev-pages` requires `COMMIT=` and generates a dynamic event payload simulating the `workflow_run` trigger: the
+find step locates the artifact `dev-pages-<commit>` by name using the Artifacts API, then downloads it. CD only runs for
+a successful push build on main — never for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch
+but main. Run it with `make test-cd-dev-pages COMMIT=<full SHA>`.
 
-- **workflow_run path** (default, no arguments): simulates the `workflow_run` trigger using
-  `.github/act/event-workflow-run.json`, which contains a real `ci-dev-pages` run (ID 43708216403) on `main`. The find
-  step locates the artifact `dev-pages-<head_sha>` by name using the Artifacts API, then downloads it. CD only runs for
-  a successful push build on main — never for a CI test run, a dispatched CI run, a failed or cancelled run, or any
-  branch but main. Run it with `make test-cd-dev-pages`.
-- **workflow_dispatch path** (with `COMMIT=`): simulates a manual dispatch. Pass a commit on `main` that has a
-  `dev-pages-<commit>` artifact. The find step locates the artifact by name using the Artifacts API. Find one with
-  `gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it
-  with `make test-cd-dev-pages COMMIT=<full SHA>`.
+`test-cd-dev-pages-dispatch` simulates a manual dispatch via `workflow_dispatch`. Pass a commit on `main` that has a
+`dev-pages-<commit>` artifact. The find step locates the artifact by name using the Artifacts API. Find one with
+`gh run list --workflow ci-dev-pages.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it with
+`make test-cd-dev-pages-dispatch COMMIT=<full SHA>`.
 
 Under `act`, the GitHub Artifacts API needs a real token and a real `ci-dev-pages` run, so both paths download from an
-actual CI run. The action finds the artifact by name (`dev-pages-<commit>`), takes the newest non-expired entry, and
-verifies `version.json` matches.
+actual CI run. The action finds the artifact by name (`<PAGES_ARTIFACT_PREFIX>-<commit>`), takes the newest non-expired
+entry, and verifies `version.json` matches. Under `act`, `PAGES_ARTIFACT_PREFIX` is `dev-pages-test-run` (from
+`var.env`), so the test run of `ci-dev-pages` must have built the artifact first.
 
 A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
 reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
@@ -121,7 +122,7 @@ A workflow can be dispatched only once it exists on `main`. After that, dispatch
 ```sh
 gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run ci-publish.yml --ref <branch> -f test_run=true
-gh workflow run ci-dev-pages.yml --ref <branch> -f test_run=true
+gh workflow run ci-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA>
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
 gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA on main>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
@@ -157,3 +158,17 @@ make ci-plan BASE=origin/main
 ```
 
 Pushing images, deploying Pages and publishing dev packages run only from `main`, so only a real merge proves them.
+
+## Workflows must be tested before release
+
+If a path cannot be tested yet, make it testable (inputs, `workflow_dispatch`, environment variables with test-run
+values). Every workflow change must run for real under `act` and on GitHub before merge.
+
+### Pages path recipe
+
+Test the full Pages CI/CD path before merging a change to `ci-dev-pages`, `cd-dev-pages`, or `find-pages-artifact`:
+
+1. Dispatch `ci-dev-pages` on the branch with `test_run=true` and `commit=<main SHA>` to build a test-run artifact.
+2. Run `make test-cd-dev-pages COMMIT=<main SHA>` (workflow_run path) for real under `act`.
+3. Run `make test-cd-dev-pages-dispatch COMMIT=<main SHA>` (dispatch path) for real under `act`.
+4. After the stack lands, the first push to `main` runs it end to end.
