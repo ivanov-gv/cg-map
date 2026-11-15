@@ -56,11 +56,11 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
-- Read [readability](docs/engineering/readability.md) before any code change: meaningful whole-word names, short
-  functions that read as steps, and comments that explain why. Do not match a denser surrounding style.
+- Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
+  on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
+  and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
-- When a rule blocks a design, follow [the seven steps](docs/decisions/AGENTS.md#when-a-rule-seems-to-block-a-design).
 - No application copies, binaries, or temporary assets in repository root.
 
 ## Ownership and generated output
@@ -81,7 +81,8 @@ Work starts in the human-written wiki: read it, never edit it; propose changes a
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
    history: [plan rules](docs/plans/AGENTS.md).
-3. Make a bounded change, with its docs. Keep runtime modules independent of pipeline/server implementation.
+3. Make a bounded change, with its docs. Keep runtime modules independent of pipeline/server implementation. When a rule
+   blocks a design, follow [the seven steps](docs/decisions/AGENTS.md#when-a-rule-seems-to-block-a-design).
 4. Follow the owning component's AGENTS.md for focused tests during iteration and required final verification.
 5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.
@@ -95,6 +96,5 @@ Work starts in the human-written wiki: read it, never edit it; propose changes a
   responses offline. Dated bus patterns may be bundled.
 - Range/archive responses stay outside the service-worker shell cache.
 - Existing verified offline downloads survive unsuccessful replacements.
-- Data producers depend on shared contracts, not web implementation.
-- Keep source provenance and licensing intact. Legacy geometry does not have reliable upstream identity.
+- Data producers depend on shared contracts; keep provenance intact; legacy geometry lacks reliable identity.
 - Isolate simultaneous work in separate worktrees; keep secrets out of Git and artifacts.
