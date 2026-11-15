@@ -37,6 +37,8 @@ These gaps need recording so the model is documented in one place and the featur
   **Outcome (#166, 2026-11-15):** `ci-publish` was added as a third workflow for pushes to main that build and publish
   images and packages. ci-dev-pages no longer depends on ci-publish.
 
+- **Publishing flow.** A push to main triggers ci-publish (builds and publishes images and packages) and ci-dev-pages
+  (builds the dev site from source) independently. ci-dev-pages no longer depends on ci-publish.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
 
@@ -92,5 +94,5 @@ never calls or knows about CD, and CD only acknowledges new versions. The CI→C
 `dev-pages-<sha>` with `version.json` inside — CD needs nothing from CI but a version. CD finds the artifact by name
 using the GitHub Artifacts API (`GET repos/$GH_REPO/actions/artifacts?name=dev-pages-<commit>`), takes the newest
 non-expired entry, reads its `workflow_run.id`, and downloads with that run ID. CD is fully independent of CI's runs: it
-never looks up runs by commit. Retention is 90 days — the rollback window and GitHub's maximum for this repository.
-Rollback works for any commit whose artifact is still within that 90-day window.
+never looks up runs by commit. Retention is 3 days — the rollback window. Rollback works for any commit whose artifact
+is still within that 3-day window.

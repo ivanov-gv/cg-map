@@ -207,6 +207,12 @@ test('find-pages-artifact downloads by artifact_prefix-<commit>', () => {
   assert.doesNotMatch(stepsText, /name:\s*github-pages/, 'must not use the default github-pages name');
 });
 
+test('find-pages-artifact: retention_days is required with no default', () => {
+  const inputs = findArtifactYaml.inputs;
+  assert.equal(inputs.retention_days.required, true, 'retention_days must be required');
+  assert.equal(inputs.retention_days.default, undefined, 'retention_days must not have a default');
+});
+
 test('find-pages-artifact verifies version.json after extraction', () => {
   const verifyStep = findArtifactYaml.runs.steps.find(s => s.id === 'verify_version');
   assert.ok(verifyStep, 'must have a verify_version step');
@@ -403,7 +409,7 @@ async function runFindArtifactStep(script, stubFiles, envOverrides = {}) {
     GH_REPO: 'owner/repo',
     COMMIT: 'abcdef1234567890abcdef1234567890abcdef12',
     ARTIFACT_PREFIX: 'dev-pages',
-    RETENTION_DAYS: '90',
+    RETENTION_DAYS: '3',
     FAKE_CURL_DIR: stubDirectory,
     ...envOverrides,
   };
@@ -464,7 +470,7 @@ test('find-pages-artifact: resolve_artifact errors when no artifact found', asyn
   });
   assert.equal(result.code, 1, 'resolve_artifact must fail when no artifact exists');
   assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /expired after its retention of 90 days/);
+  assert.match(result.stdout, /expired after its retention of 3 days/);
 });
 
 test('find-pages-artifact: resolve_artifact errors when all artifacts are expired', async () => {
@@ -474,7 +480,7 @@ test('find-pages-artifact: resolve_artifact errors when all artifacts are expire
   });
   assert.equal(result.code, 1, 'resolve_artifact must fail when all artifacts are expired');
   assert.match(result.stdout, /::error::.*No artifact dev-pages-abcdef1234567890abcdef1234567890abcdef12/);
-  assert.match(result.stdout, /expired after its retention of 90 days/);
+  assert.match(result.stdout, /expired after its retention of 3 days/);
 });
 
 test('find-pages-artifact: resolve_artifact chooses newest non-expired among several', async () => {
