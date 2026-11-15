@@ -200,9 +200,9 @@ test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
   assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
   assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
   // Dockerfile comes from the workflow checkout (first checkout), not from source/.
-  // Build context is the workspace root where site/ is assembled.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
   assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
-  assert.equal(publishStep.with.context, '.', 'must use workspace root as build context');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
 });
 
 test('cd-dev-pages find job pulls image by commit SHA', () => {
@@ -888,7 +888,7 @@ test('cd-dev-pages extracts /site/ contents, not /usr/share/nginx/html', () => {
 test('platform/pages/Dockerfile uses FROM scratch and copies to /site', () => {
   const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/pages/Dockerfile'), 'utf8');
   assert.match(dockerfile, /FROM scratch/, 'must use FROM scratch');
-  assert.match(dockerfile, /COPY site \/site/, 'must copy to /site');
+  assert.match(dockerfile, /COPY \. \/site/, 'must copy build context to /site');
   assert.match(dockerfile, /CMD/, 'must have a CMD so docker create works');
   assert.doesNotMatch(dockerfile, /FROM nginx/, 'must not use nginx base');
 });
@@ -954,9 +954,9 @@ test('ci-publish pages job uses publish-image action with skip_main_tag', () => 
   assert.equal(publishStep.with.name, 'dev-pages');
   assert.equal(publishStep.with.skip_main_tag, 'true');
   // Dockerfile comes from the workflow checkout, not from source/.
-  // Build context is the workspace root where site/ is assembled.
+  // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
   assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
-  assert.equal(publishStep.with.context, '.', 'must use workspace root as build context');
+  assert.equal(publishStep.with.context, 'site', 'must use site/ as build context');
 });
 
 // Read the publish-image action definition to know which inputs are required.
@@ -1103,7 +1103,7 @@ test('publish-image action uses build context from context input', async () => {
     COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
     REGISTRY_TOKEN: 'fake-token',
     SKIP_MAIN_TAG: 'true',
-    BUILD_CONTEXT: '.',
+    BUILD_CONTEXT: 'site',
   });
   assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
 
@@ -1111,7 +1111,7 @@ test('publish-image action uses build context from context input', async () => {
   assert.ok(buildCall, 'should have a docker build call');
   assert.match(
     buildCall,
-    /\.$/,
+    /site$/,
     'build must use the context path from the context input'
   );
 });
