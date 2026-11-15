@@ -47,6 +47,11 @@ The `dev` and `test-run` environments define these variables:
 
 A test run really pushes images, to a temporary public registry, and really runs npm publish, as a dry run.
 
+Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
+`${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
+use `environment: test-run`. The two exceptions are the approval gate (`ci-approval`, which waits for manual approval)
+and the Pages deploy (`github-pages`, which publishes to the repository site).
+
 ## Locally with act
 
 Needs Docker and `gh extension install nektos/gh-act`. The image is private, so a new machine needs

@@ -371,3 +371,42 @@ test('the browser image runs the Node version the repository pins', () => {
   const dockerfile = fs.readFileSync(path.join(repoRoot, 'platform/browser-image/Dockerfile'), 'utf8');
   assert.equal(dockerfile.match(/^ARG NODE_VERSION=(.+)$/m)?.[1], pinnedVersion);
 });
+
+// Jobs reference an environment only when they read its variables or secrets.
+// GitHub records a deployment for every job that references an environment, so unnecessary references create noise.
+// Exceptions: the approval gate (ci-approval) waits for manual approval, and the Pages deploy (github-pages)
+// publishes to the repository Pages site. Neither is a ci-* production job that reads dev variables.
+const ENV_EXCEPTIONS = {
+  'ci-all.yml': ['approval'],
+  'ci-dev-pages.yml': ['deploy'],
+};
+
+test('ci-* production jobs reference dev only when they read vars.* or secrets.*', () => {
+  for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
+    const {jobs} = load(file);
+    const exceptions = ENV_EXCEPTIONS[file] ?? [];
+    for (const [name, job] of Object.entries(jobs)) {
+      // Skip test-run twins, exceptions, and jobs that call other workflows
+      if (name.endsWith('-test-run') || exceptions.includes(name) || job.uses) continue;
+      const jobText = JSON.stringify(job);
+      const readsVarsOrSecrets = /\$\{\{[^}]*\bvars\./.test(jobText) || /\$\{\{[^}]*\bsecrets\./.test(jobText);
+      const environment = typeof job.environment === 'string' ? job.environment : job.environment?.name;
+      if (readsVarsOrSecrets) {
+        assert.equal(environment, 'dev', `${file} ${name} reads vars/secrets but does not reference dev`);
+      } else {
+        assert.equal(environment, undefined, `${file} ${name} should not reference an environment but has ${environment}`);
+      }
+    }
+  }
+});
+
+test('ci-* test-run twins always reference test-run', () => {
+  for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
+    const {jobs} = load(file);
+    for (const [name, job] of Object.entries(jobs)) {
+      if (!name.endsWith('-test-run')) continue;
+      const environment = typeof job.environment === 'string' ? job.environment : job.environment?.name;
+      assert.equal(environment, 'test-run', `${file} ${name} must reference test-run`);
+    }
+  }
+});

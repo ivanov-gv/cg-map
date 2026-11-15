@@ -34,7 +34,6 @@ jobs:
     if: ${{ inputs.test_run != true && inputs.test_run != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
     outputs: &verify-outputs
       browser_matrix: ${{ steps.areas.outputs.editor_browser_matrix }}
     env: &verify-env
