@@ -12,12 +12,12 @@ const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'ut
 
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-all.yml': ['approval', 'switch', 'gate', 'publish', 'dev-pages', 'job-times', ...FOLDERS],
+  'ci-all.yml': ['approval', 'switch', 'gate', 'job-times', ...FOLDERS],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'ci-dev-pages.yml': ['deploy'],
-  'ci-publish.yml': ['select']
+  'ci-publish.yml': ['switch', 'select', 'dev-pages']
 };
 
 // Each twin is chosen by the mode directly, or by depending on a job that was.
@@ -87,7 +87,7 @@ for (const file of newWorkflowFiles) {
 }
 
 // Pages is the dev environment, so this is the one deploy CI may do. The rest of CI stays away from Pages permissions.
-const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-all.yml': ['dev-pages']};
+const DEV_PAGES_JOBS = {'ci-dev-pages.yml': ['deploy'], 'ci-publish.yml': ['dev-pages']};
 
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
@@ -153,16 +153,18 @@ test('jobs below the optional approval survive it being skipped', () => {
 });
 
 test('a called workflow asks for no more than its caller grants, or the whole run fails to start', () => {
-  const {jobs, permissions: defaults} = load('ci-all.yml');
   const levels = {none: 0, read: 1, write: 2};
   const allows = (granted, name, level) => levels[granted?.[name] ?? 'none'] >= levels[level];
-  for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
-    const granted = job.permissions ?? defaults;
-    const called = load(job.uses.replace('./.github/workflows/', ''));
-    const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
-    for (const request of requests.filter(Boolean)) {
-      for (const [permission, level] of Object.entries(request)) {
-        assert.ok(allows(granted, permission, level), `${name} asks for ${permission}: ${level}, beyond its caller`);
+  for (const file of ['ci-all.yml', 'ci-publish.yml']) {
+    const {jobs, permissions: defaults} = load(file);
+    for (const [name, job] of Object.entries(jobs).filter(([, candidate]) => candidate.uses)) {
+      const granted = job.permissions ?? defaults;
+      const called = load(job.uses.replace('./.github/workflows/', ''));
+      const requests = [called.permissions, ...Object.values(called.jobs).map(calledJob => calledJob.permissions)];
+      for (const request of requests.filter(Boolean)) {
+        for (const [permission, level] of Object.entries(request)) {
+          assert.ok(allows(granted, permission, level), `${file} ${name} asks for ${permission}: ${level}, beyond its caller`);
+        }
       }
     }
   }
@@ -176,7 +178,7 @@ test('only the publish workflow writes packages, and only from main unless it is
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
     assert.equal(jobs[`${name}-test-run`].permissions.packages, 'read', `a test run of ${name} must be unable to publish`);
   }
-  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && !['ci-publish.yml', 'ci-all.yml'].includes(file));
+  const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && file !== 'ci-publish.yml');
   for (const file of others) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
       assert.notEqual(job.permissions?.packages, 'write', `${file} ${name} must leave publishing to ci-publish`);
@@ -200,7 +202,7 @@ test('every job that runs has a time limit of at most 7 minutes', () => {
 test('job times are checked after everything else, and can only warn', () => {
   const job = load('ci-all.yml').jobs['job-times'];
   assert.equal(job.if, 'always()');
-  assert.deepEqual(new Set(job.needs), new Set(['gate', 'publish', 'dev-pages']));
+  assert.deepEqual(new Set(job.needs), new Set(['gate']));
   assert.deepEqual(job.permissions, {actions: 'read'});
   assert.doesNotMatch(job.steps[0].run, /exit 1|::error::/);
 });
@@ -244,21 +246,16 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-test('images and dev packages come only from pushes to main or test runs, never from a pull request', () => {
-  const {jobs} = load('ci-all.yml');
-  assert.equal(jobs.publish.uses, './.github/workflows/ci-publish.yml');
-  assert.match(jobs.publish.if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
-  assert.match(jobs.publish.if, /needs\.gate\.result == 'success'/);
-  assert.match(jobs['dev-pages'].if, /github\.event_name == 'push' \|\| needs\.switch\.outputs\.test_run == 'true'/);
-  assert.match(jobs['dev-pages'].if, /needs\.gate\.result == 'success'/);
-  assert.match(jobs['dev-pages'].if, /needs\.publish\.result == 'success' \|\| needs\.publish\.result == 'skipped'/);
+test('ci-publish is triggered on pushes to main, not from ci-all', () => {
+  const {on} = load('ci-publish.yml');
+  assert.ok(on.push, 'ci-publish must trigger on push to main');
+  assert.deepEqual(on.push.branches, ['main']);
 });
 
-test('a push to main runs no checks, while PRs and the nightly run do', () => {
-  const {jobs, on} = load('ci-all.yml');
-  for (const folder of FOLDERS) assert.match(jobs[folder].if, /github\.event_name != 'push'/, `${folder} runs on main`);
+test('ci-all has no push trigger, so only PRs and the nightly run check', () => {
+  const {on} = load('ci-all.yml');
+  assert.equal(on.push, undefined, 'ci-all must not trigger on push');
   assert.ok(on.schedule.length > 0, 'without the nightly run, nothing checks main itself');
-  assert.match(jobs.plan.env.RUN_ALL, /github\.event_name == 'schedule'/, 'the nightly run must check everything');
 });
 
 test('runs on main never share a concurrency group', () => {
@@ -284,7 +281,7 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
   const {gate} = jobs;
   assert.equal(gate.name, 'CI gate', 'the ruleset requires this exact name');
   assert.equal(gate.if, 'always()');
-  const jobsAfterGate = ['gate', 'publish', 'dev-pages', 'job-times'];
+  const jobsAfterGate = ['gate', 'job-times'];
   assert.deepEqual(new Set(gate.needs), new Set(Object.keys(jobs).filter(job => !jobsAfterGate.includes(job))));
   assert.deepEqual(gate.permissions, {});
 });
@@ -292,7 +289,9 @@ test('ci-all calls every folder workflow, and the gate needs all of them', () =>
 test('only the new pipelines run on the repository', () => {
   const others = fs.readdirSync(workflowDir).filter(file => !newWorkflowFiles.includes(file));
   assert.deepEqual(others, [], 'a workflow outside ci-all would run on every PR whatever changed');
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && !name.startsWith('cd-'))) {
+  // ci-publish runs on push to main and workflow_dispatch; ci-dev-pages on workflow_call and workflow_dispatch;
+  // all other ci-* workflows only run when called or dispatched.
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-all.yml' && name !== 'ci-publish.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
