@@ -58,19 +58,19 @@ a slot in an existing project's Makefile, tests or pipeline.
 
 ## Implemented stack
 
-| Concern         | Implementation                                                                                                                                                                                                                                                                    |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Web             | Plain JavaScript ES modules, HTML/CSS; MapLibre GL JS 5.12.0                                                                                                                                                                                                                      |
-| Vector map      | PMTiles v3, PMTiles JS 4.3.0, precomputed MVT                                                                                                                                                                                                                                     |
-| Directory       | GeoJSON snapshot with browser-side search                                                                                                                                                                                                                                         |
-| Point selection | Feature details and From/To endpoints in browser session state                                                                                                                                                                                                                    |
-| Routing         | FOSSGIS/OSRM car + foot APIs; local representative bus-pattern search with up to one transfer                                                                                                                                                                                     |
-| Satellite       | Local bounded zoom-17 WebP sample and preview                                                                                                                                                                                                                                     |
-| Offline         | Service worker/Cache Storage for shell; OPFS for verified archive                                                                                                                                                                                                                 |
-| Data pipeline   | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely                                                                                                                                                                                                  |
-| Backend         | Independent Go module with ConnectRPC and protobuf transport definitions: static artifact host, map layers API (TileJSON + vector tiles from the release archive), live ePodgorica vehicles API with movement directions, web config (`config.json`)                              |
-| Delivery        | GitHub Actions builds the dev site from source (ci-dev-pages) as artifact `<PAGES_ARTIFACT_PREFIX>-<sha>` (default `dev-pages-<sha>`) with `version.json`; cd-dev-pages deploys to Pages via `workflow_run` (only for successful push on main): [release](../runbooks/release.md) |
-| Verification    | ESLint, markdownlint/Prettier, Node tests, Python unittest, Playwright; separate Go vet/lint/test/build                                                                                                                                                                           |
+| Concern         | Implementation                                                                                                                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web             | Plain JavaScript ES modules, HTML/CSS; MapLibre GL JS 5.12.0                                                                                                                                                                                         |
+| Vector map      | PMTiles v3, PMTiles JS 4.3.0, precomputed MVT                                                                                                                                                                                                        |
+| Directory       | GeoJSON snapshot with browser-side search                                                                                                                                                                                                            |
+| Point selection | Feature details and From/To endpoints in browser session state                                                                                                                                                                                       |
+| Routing         | FOSSGIS/OSRM car + foot APIs; local representative bus-pattern search with up to one transfer                                                                                                                                                        |
+| Satellite       | Local bounded zoom-17 WebP sample and preview                                                                                                                                                                                                        |
+| Offline         | Service worker/Cache Storage for shell; OPFS for verified archive                                                                                                                                                                                    |
+| Data pipeline   | Node 24, geojson-vt 4.0.2, vt-pbf 3.1.3; Python PMTiles, optional osmium/Shapely                                                                                                                                                                     |
+| Backend         | Independent Go module with ConnectRPC and protobuf transport definitions: static artifact host, map layers API (TileJSON + vector tiles from the release archive), live ePodgorica vehicles API with movement directions, web config (`config.json`) |
+| Delivery        | ci-publish builds the dev site image `dev-pages:<sha>` with `version.json`; cd-dev-pages pulls the image by SHA and deploys to Pages via `workflow_run` (only for successful push on main): [release](../runbooks/release.md)                        |
+| Verification    | ESLint, markdownlint/Prettier, Node tests, Python unittest, Playwright; separate Go vet/lint/test/build                                                                                                                                              |
 
 The Go server is optional. When the app is served by it, `config.json` selects server mode and the app reads layers and
 vehicles from its APIs. Static hosts such as GitHub Pages serve the artifact's own `config.json`, which selects mock
@@ -106,11 +106,11 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    generates offline manifests there.
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
-5. A merge to main triggers ci-dev-pages, which builds all three apps from source, writes version.json with the commit
-   SHA, and uploads the artifact as `dev-pages-<sha>`. When ci-dev-pages completes successfully on main, cd-dev-pages is
-   triggered via `workflow_run`, downloads the artifact by name, verifies version.json, and deploys it to GitHub Pages.
-   CD never runs for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch but main. Source
-   files, docs, datasets used for generation, and backend code are excluded.
+5. A merge to main triggers ci-publish, whose `pages` job builds all three apps from source, writes version.json with
+   the commit SHA, and pushes the image as `dev-pages:<sha>`. When ci-publish completes successfully on main,
+   cd-dev-pages is triggered via `workflow_run`, pulls the image by commit SHA, extracts the site, and deploys it to
+   GitHub Pages. CD never runs for a CI test run, a dispatched CI run, a failed or cancelled run, or any branch but
+   main. Source files, docs, datasets used for generation, and backend code are excluded.
 
 The web app runs at /cg-map/web/, and owns only that path's worker. No deployment redirect or web asset tree is
 committed in repository root.
