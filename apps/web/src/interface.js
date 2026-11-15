@@ -1,7 +1,10 @@
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
-export function searchBounds({height, top = 0, inset = 12}) {
+export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
-  return {top: top + inset + 70, maxHeight: Math.max(0, height / 2 - inset - 70)};
+  // 16 px is the space between the bar and the panel below it.
+  const gapBelowBar = 16;
+  const headerBottom = inset + barHeight + gapBelowBar;
+  return {top: top + headerBottom, maxHeight: Math.max(0, height / 2 - headerBottom)};
 }
 
 // The part of the map no panel covers, in map container pixels.
@@ -73,6 +76,10 @@ export class MapInterface {
     this.cardHead = document.getElementById('place-head');
     this.cardBody = document.getElementById('place-body');
     this.cardHandle = document.getElementById('card-handle');
+    this.clearButton = document.getElementById('clear-search');
+    this.desktopSearchPanel = document.getElementById('desktop-search-panel');
+    this.footer = document.querySelector('.dock-footer');
+    this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     this.menu.addEventListener('click', () => {
@@ -81,6 +88,11 @@ export class MapInterface {
       this.setView(this.view === 'dock' ? 'closed' : 'dock');
       this.onViewport?.();
     });
+    this.clearButton.addEventListener('click', () => {
+      this.clearQuery();
+      this.search.focus();
+    });
+    this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
@@ -89,9 +101,14 @@ export class MapInterface {
       this.search.addEventListener(type, () => {
         if (!this.isRestoringFocus) this.openSearch();
       });
+    this.search.addEventListener('input', () => {
+      this.syncClearButton();
+    });
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
       if (!this.card.hidden) this.syncCardForLayout();
+      this.syncPanelPosition();
+      this.syncDesktopSearchUI();
       this.syncViewport();
     });
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
@@ -105,17 +122,48 @@ export class MapInterface {
     this.observer.observe(this.card);
     this.wireCardGestures();
     this.wireCategoryWheel();
+    this.syncPanelPosition();
+    this.syncDesktopSearchUI();
     this.syncViewport(false);
+  }
+
+  // Move the browse panel to the container for the current view without changing other state.
+  syncPanelPosition() {
+    const target = this.#panelTargetFor(this.view);
+    if (this.panel.parentElement !== target) target.append(this.panel);
+  }
+
+  // Returns true when the search input has a non-empty query.
+  hasQuery() {
+    return this.search.value.trim().length > 0;
+  }
+
+  // Show the clear button when there is a query, hide it otherwise.
+  syncClearButton() {
+    this.clearButton.hidden = !this.hasQuery();
   }
 
   openSearch() {
     this.trigger = this.search;
-    // Search stays in the view it started from; only choosing a result leaves the phone dock.
-    const view = this.mobileLayoutQuery.matches && this.view !== 'dock' ? 'search' : 'dock';
+    if (!this.mobileLayoutQuery.matches) {
+      // Desktop: keep the current view (dock stays open, closed stays closed).
+      // Searching runs from the debounced 'input' handler in app.js.
+      this.setView(this.view);
+      return;
+    }
+    // Mobile behavior: search bubble or dock.
+    const view = this.view !== 'dock' ? 'search' : 'dock';
     const hasViewChanged = view !== this.view;
     this.setView(view);
     if (hasViewChanged) this.onSearch?.();
     else if (this.areResultsMinimized) this.setCardState('peek');
+  }
+
+  // Returns the container the browse panel should live in for the given view.
+  #panelTargetFor(view) {
+    if (view === 'search') return this.bubble;
+    if (!this.mobileLayoutQuery.matches && view === 'closed') return this.desktopSearchPanel;
+    return document.getElementById('dock-main');
   }
 
   setView(view) {
@@ -125,16 +173,34 @@ export class MapInterface {
       // A peek only makes sense above open results.
       if (this.card.dataset.state === 'peek') this.setCardState('full');
     }
-    const target = view === 'search' ? this.bubble : document.getElementById('dock-main');
+    const target = this.#panelTargetFor(view);
     if (this.panel.parentElement !== target) target.append(this.panel);
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
+    this.syncDesktopSearchUI();
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
-    this.search.setAttribute('aria-expanded', String(view !== 'closed'));
+    this.syncSearchExpanded();
+    // Closing the dock resets the Flip footer to minimized.
+    if (view !== 'dock') this.minimizeFooter();
     this.onChange?.();
+  }
+
+  // Toggle the Flip footer between minimized (handle only) and expanded (all options).
+  toggleFooter() {
+    const isExpanded = this.footerToggle.getAttribute('aria-expanded') === 'true';
+    this.footerToggle.setAttribute('aria-expanded', String(!isExpanded));
+    this.footerToggle.setAttribute('aria-label', isExpanded ? 'Show map options' : 'Hide map options');
+    this.footer.dataset.footerExpanded = String(!isExpanded);
+  }
+
+  // Reset the Flip footer to minimized (handle only, content hidden).
+  minimizeFooter() {
+    this.footerToggle.setAttribute('aria-expanded', 'false');
+    this.footerToggle.setAttribute('aria-label', 'Show map options');
+    delete this.footer.dataset.footerExpanded;
   }
 
   syncResultsVisibility() {
@@ -143,6 +209,24 @@ export class MapInterface {
     this.strip.hidden = !isSearching || !this.areResultsMinimized;
     if (!this.strip.hidden)
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
+  }
+
+  // On desktop, the search panel carries the categories and results.
+  // data-has-query controls whether it looks like a floating row or a joined card.
+  syncDesktopSearchUI() {
+    if (this.mobileLayoutQuery.matches) {
+      this.desktopSearchPanel.hidden = true;
+      return;
+    }
+    const isDockOpen = this.view === 'dock';
+    this.desktopSearchPanel.hidden = isDockOpen;
+    this.desktopSearchPanel.dataset.hasQuery = String(this.hasQuery());
+    this.syncSearchExpanded();
+  }
+
+  // Keep aria-expanded on the search input in sync with whether results are visible.
+  syncSearchExpanded() {
+    this.search.setAttribute('aria-expanded', String(this.areResultsVisible()));
   }
 
   // Call after the card's content is in place and it is no longer hidden.
@@ -316,6 +400,29 @@ export class MapInterface {
     if (shouldRestoreFocus) this.restoreFocus(this.trigger);
   }
 
+  // Clear the search query and update the UI.
+  clearQuery() {
+    this.search.value = '';
+    this.syncClearButton();
+    this.syncSearchExpanded();
+    this.onSearch?.();
+  }
+
+  // Returns true when the desktop results panel is visible and shows results.
+  #isDesktopResultsPanelVisible() {
+    return !this.mobileLayoutQuery.matches &&
+      !this.desktopSearchPanel.hidden &&
+      this.desktopSearchPanel.dataset.hasQuery === 'true';
+  }
+
+  // Returns true when the results list is visible to the user.
+  areResultsVisible() {
+    if (this.view === 'search' || this.view === 'dock') return true;
+    // On desktop with a query, results are visible in the search panel even when view is 'closed'.
+    if (!this.mobileLayoutQuery.matches && this.hasQuery()) return true;
+    return false;
+  }
+
   keyboardOpen() {
     const viewport = window.visualViewport;
     // A pinch-zoomed page also shrinks the visual viewport, without any keyboard.
@@ -329,10 +436,14 @@ export class MapInterface {
     const height = viewport?.height ?? innerHeight;
     const top = viewport?.offsetTop ?? 0;
     const inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-inset'));
-    const bounds = searchBounds({height, top, inset});
+    const barHeight = document.querySelector('.search-bar').getBoundingClientRect().height;
+    const bounds = searchBounds({height, top, inset, barHeight});
     const style = document.documentElement.style;
     style.setProperty('--visible-height', `${height}px`);
     style.setProperty('--visible-top', `${top}px`);
+    // CSS 100dvh and visualViewport can disagree on screens with camera cut-outs, which left an empty band under the
+    // dock, so the keyboard inset comes from one source: the layout viewport less the visible part.
+    style.setProperty('--keyboard-inset', `${Math.max(0, innerHeight - height - top)}px`);
     style.setProperty('--search-top', `${bounds.top}px`);
     style.setProperty('--search-max-height', `${bounds.maxHeight}px`);
     // The keyboard would cover these options and the end of the results list above them.
@@ -358,7 +469,7 @@ export class MapInterface {
       headerBottom: header.bottom - map.top,
       searchBottom: this.view === 'search' ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
       dockRight:
-        this.view === 'dock'
+        (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
       details: details && {top: detailsTop - map.top, right: details.right - map.left},

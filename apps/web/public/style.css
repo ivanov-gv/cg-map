@@ -1,3 +1,15 @@
+/*
+ * Device classes: the JavaScript definition lives in src/device-class.js.
+ * The @media conditions below must match the exported query strings exactly.
+ *
+ * Flip: max-width 400px AND max-height 400px (small cover screens, nearly square).
+ *   The MOBILE_MEDIA_QUERY (max-width: 720px) also matches Flip, but deviceClass() excludes
+ *   Flip by checking it first. Flip-specific CSS rules come after the Mobile block
+ *   and override it.
+ * Mobile: max-width 720px (phones and small tablets in portrait; also matches Flip).
+ * Desktop: everything else.
+ */
+
 :root {
   font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #243f37;
@@ -11,6 +23,8 @@
   --bar-inset: 20px;
   --visible-top: 0px;
   --visible-height: 100dvh;
+  /* How far the keyboard pushes content up from the layout bottom; set by interface.js syncViewport. */
+  --keyboard-inset: 0px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -32,27 +46,38 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* This one header has identical geometry in every interface state. */
 .search-bar { position: fixed; top: calc(var(--visible-top) + var(--bar-inset)); left: var(--bar-inset); width: calc(var(--dock-width) - 2 * var(--bar-inset)); height: 54px; display: flex; align-items: center; border: 1px solid #dce0d5; border-radius: 15px; background: white; box-shadow: 0 4px 20px #243f3710; pointer-events: auto; }
 .icon-button { display: grid; place-items: center; width: 48px; height: 48px; flex: none; background: transparent; border-radius: 12px; }
-.icon-button:hover { background: #f0f3e9; }
+/* On touch screens :hover sticks to the last tapped element, so the menu button
+ * looks pressed after closing the dock. Guard hover feedback so it only applies
+ * on devices that can actually hover (issue #155). */
+@media (hover: hover) {
+  .icon-button:hover { background: #f0f3e9; }
+}
 #menu-toggle { margin: 0 3px; }
 .search-divider { height: 23px; width: 1px; flex: none; background: var(--line); }
 .search { display: flex; align-items: center; min-width: 0; flex: 1; padding-left: 14px; gap: 8px; }
 .search .icon { width: 18px; height: 18px; color: var(--muted); }
 .search input { width: 100%; min-width: 0; height: 48px; padding: 0 10px 0 0; border: 0; background: transparent; font-size: 14px; }
 .search input::placeholder { color: var(--muted); }
+/* Hide the native search cancel button so only #clear-search is visible. */
+.search input::-webkit-search-cancel-button { display: none; }
+.search input::-webkit-search-decoration { display: none; }
 /* The search field shows focus through its caret and the shared bar's border, not the generic ring. */
 .search input:focus-visible { outline: none; }
 .search-bar:has(input:focus) { border-color: var(--line-strong); }
 .dock-content { position: absolute; inset: calc(var(--bar-inset) + 70px) 0 0; display: flex; flex-direction: column; overflow: hidden; }
 .dock-main { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 .browse-panel { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-#categories { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: 7px; padding: 4px var(--bar-inset) 10px; scrollbar-width: none; }
+#categories { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: 7px; padding: 4px var(--bar-inset) 10px; overflow-x: auto; scrollbar-width: none; }
 #categories::-webkit-scrollbar, .place-card::-webkit-scrollbar { display: none; }
-#categories button { min-height: 40px; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
+#categories button { min-height: 40px; flex-shrink: 0; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
 #categories button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: white; }
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
-.result:hover, .result[aria-current=true] { background: #edf1e4; }
+.result[aria-current=true] { background: #edf1e4; }
+@media (hover: hover) {
+  .result:hover { background: #edf1e4; }
+}
 .result .symbol { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--color) 15%, white); color: var(--color); font-weight: 700; flex: none; }
 .result .copy { min-width: 0; flex: 1; }
 .result strong, .result small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -67,6 +92,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .results-strip span { display: inline-flex; flex: none; align-items: center; gap: 4px; color: var(--muted); }
 .results-strip .icon { width: 16px; height: 16px; }
 .dock-footer { flex-shrink: 0; max-height: 50dvh; overflow-y: auto; padding: 16px var(--bar-inset) max(20px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--paper); }
+/* The footer toggle handle is only used on Flip (inside the Flip @media block below).
+ * Hide it everywhere else so it does not render as a default button on Desktop or Mobile. */
+#footer-toggle { display: none; }
 .layer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .layer-tile { min-height: 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #f1f3e9; }
 .layer-tile .icon { width: 29px; height: 29px; }
@@ -76,6 +104,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .download .icon { width: 18px; height: 18px; }
 .download small { font-size: 10px; }
 .dock-footer p, .connection-badge { font-size: 11px; color: var(--muted); margin: 8px 0; }
+#map-attribution { font-size: 11px; color: var(--muted); margin: 8px 0; line-height: 1.4; }
+#map-attribution a { color: var(--muted); text-decoration: none; }
+#map-attribution a:hover { text-decoration: underline; }
 .connection-badge { display: block; }
 progress { width: 100%; accent-color: var(--green); margin-top: 8px; }
 #transport-info { margin: 8px 0 14px; }
@@ -92,11 +123,59 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
 .position-control[data-state=approximate] #position-action { color: #1f6fd1; }
 .position-control[data-state=stale] #position-action { color: #7d8790; }
+/* Following uses the filled style the app uses for pressed toggles. */
+.position-control[data-following=true] #position-action {
+  background: var(--green);
+  color: white;
+}
+@media (hover: hover) {
+  .position-control[data-following=true] #position-action:hover {
+    filter: brightness(1.15);
+  }
+}
 .maplibregl-ctrl-bottom-right { right: 2px; }
-.maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 10px; overflow: hidden; }
-.maplibregl-ctrl-group button { width: 44px; height: 44px; }
-.maplibregl-ctrl-attrib { font-size: 10px; background: #ffffffd9 !important; }
+/* map-core adds NavigationControl with no option to omit it. */
+.maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
+/* Stack bottom-left controls vertically so the OSM credit sits below the scale bar
+ * (wiki Web app – UI, ADR 0016). MapLibre inserts bottom controls at the first child
+ * (map.ts: insertBefore(controlElement, positionContainer.firstChild) for bottom
+ * positions), so the credit (added after the scale bar) becomes the first DOM child.
+ * We use flex-direction: column-reverse so the first child renders at the bottom. */
+.maplibregl-ctrl-bottom-left {
+  display: flex;
+  flex-direction: column-reverse;
+}
+/* Remove the scale bar's bottom margin so the credit sits directly below it. */
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale {
+  margin-bottom: 0;
+}
+/* Share background, text colour and font between the scale bar and the OSM credit
+ * so they stay in step if MapLibre changes its defaults (wiki Web app – UI, ADR 0016). */
+.maplibregl-ctrl-scale,
+.osm-credit-line {
+  background-color: rgb(255, 255, 255, 0.75);
+  color: #333;
+  font-family: Helvetica Neue, Arial, Helvetica, sans-serif;
+}
+/* OSM credit line sits below the scale bar (wiki Web app – UI, ADR 0016).
+ * Height is half the scale bar's (~9 px box for a 22 px bar). pointer-events
+ * restores clickability since MapLibre sets pointer-events: none on its controls. */
+.osm-credit-line {
+  border-radius: 4px;
+  line-height: 9px;
+  padding: 0 6px;
+  margin: 0 0 10px 10px;
+  pointer-events: auto;
+}
+.osm-credit-line a {
+  color: inherit;
+  text-decoration: none;
+  font: inherit;
+}
+.osm-credit-line a:hover {
+  text-decoration: underline;
+}
 .place-card, .route-panel { position: absolute; z-index: 4; overflow: auto; background: #fffffc; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #243f3718; }
 .place-card { top: 94px; left: 20px; width: min(375px, calc(100% - 96px)); max-height: calc(100% - 130px); padding: 24px; scrollbar-width: none; }
 .place-head { display: flow-root; }
@@ -127,16 +206,146 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
-/* The dock stays open beside a place card, so the card moves clear of it and keeps the map controls reachable. */
+/* The dock stays open beside a place card, so the card moves clear of whichever left panel is open.
+ * When floating chips are shown (no query, dock closed), the card drops below the chips row. */
 @media (min-width: 721px) {
-  body[data-view=dock] .place-card { top: 20px; left: calc(var(--dock-width) + 12px); width: min(375px, calc(100% - var(--dock-width) - 96px)); max-height: calc(100% - 40px); }
+  /* Bottom of the floating chips row: bar + chips (48px) + gap (16px). */
+  body {
+    --desktop-bar-height: 60px;
+    --desktop-chips-bottom: calc(var(--desktop-bar-height) + 48px + 16px);
+  }
+
+  body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
+    top: 20px;
+    left: calc(var(--dock-width) + 12px);
+    width: min(375px, calc(100% - var(--dock-width) - 96px));
+    max-height: calc(100% - 40px);
+  }
+  body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
+    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
+    left: 20px;
+    max-height: calc(100% - var(--visible-top) - var(--bar-inset) - var(--desktop-chips-bottom) - 20px);
+  }
+
+  /* Desktop search bar: taller, with clear button and floating categories. */
+  .search-bar { height: var(--desktop-bar-height); }
+  .search input { height: 54px; }
+
+  /* Clear button inside the search bar. */
+  .clear-button { margin: 0 3px; width: 40px; height: 40px; }
+  .clear-button .icon { width: 18px; height: 18px; }
+
+  /* Desktop search panel: always positioned under the bar.
+   * data-has-query="false" → floating category chips (no background, no border, no shadow).
+   * data-has-query="true"  → joined card with categories row + scrollable results. */
+  .desktop-search-panel {
+    position: fixed;
+    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-bar-height));
+    left: var(--bar-inset);
+    width: calc(var(--dock-width) - 2 * var(--bar-inset));
+    max-height: 50dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    z-index: 5;
+  }
+  /* Floating mode: no query — categories float, results hidden. */
+  .desktop-search-panel[data-has-query="false"] {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    max-height: none;
+  }
+  .desktop-search-panel[data-has-query="false"] #results { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories {
+    gap: 8px;
+    padding: 4px 0;
+  }
+  .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="false"] #categories button {
+    background: white;
+    padding-left: 14px;
+    padding-right: 14px;
+    box-shadow: 0 2px 8px #243f3710;
+    pointer-events: auto;
+  }
+  .desktop-search-panel[data-has-query="false"] #categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+  /* Joined card mode: with query — categories + results as one card. */
+  .desktop-search-panel[data-has-query="true"] {
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 15px 15px;
+    background: var(--paper);
+    box-shadow: 0 8px 24px #243f3718;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories {
+    gap: 7px;
+    padding: 6px var(--bar-inset) 8px;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-has-query="true"] #categories button {
+    min-height: 40px;
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 22px;
+    padding: 6px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .desktop-search-panel[data-has-query="true"] #categories button[aria-pressed=true] {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+  .desktop-search-panel[data-has-query="true"] #results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* The browse panel inside the desktop search panel fills the column. */
+  .desktop-search-panel .browse-panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
-  #categories { flex-wrap: nowrap; overflow-x: auto; }
-  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 70px); bottom: calc(100dvh - var(--visible-height) - var(--visible-top)); }
+
+  /* Mobile search bar: smaller than desktop, full screen width minus 12 px gutter. */
+  .search-bar {
+    left: var(--bar-inset);
+    right: var(--bar-inset);
+    width: auto;
+    height: 44px;
+  }
+  .search-bar .icon-button { width: 40px; height: 40px; }
+  .search-bar .icon { width: 16px; height: 16px; }
+  .search { padding-left: 10px; }
+  .search input { height: 40px; font-size: 13px; }
+  .search-divider { height: 18px; }
+
+  /* Categories are hidden on the main screen; they remain available in the open dock and search bubble. */
+  #categories { display: none; }
+  body[data-view=dock] #categories,
+  body[data-view=search] #categories { display: flex; }
+
+  /* Dock content starts below the smaller mobile bar. */
+  .dock-content { top: calc(var(--visible-top) + var(--bar-inset) + 56px); bottom: var(--keyboard-inset); }
+
+  /* Search bubble and results strip use the same gutters as the bar on mobile. */
+  .search-bubble { left: var(--bar-inset); right: var(--bar-inset); width: auto; }
+  .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
-  .place-card { top: auto; bottom: calc(100dvh - var(--visible-height) - var(--visible-top) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
+  .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }
@@ -146,5 +355,179 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
   .card-handle:focus-visible { outline-offset: -3px; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
+
+  /* On Mobile, the open dock fills the entire viewport — no map is visible beside it.
+   * The sidebar becomes full width and full layout height, covering everything under it.
+   * The dock-content inside uses --visible-top and --visible-height for keyboard awareness. */
+  body[data-view=dock] .sidebar {
+    width: 100vw;
+    height: 100dvh;
+    top: 0;
+    border-right: none;
+  }
+}
+/* Flip: only the menu button on the main screen; search and categories hide until the dock opens.
+ * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
+ * When the dock is open, the Mobile rules apply again (full-width bar with search). */
+@media (max-width: 400px) and (max-height: 400px) {
+  /* When the dock is closed, shrink the bar to the menu button and hide all search elements. */
+  body:not([data-view=dock]) .search-bar { right: auto; }
+  body:not([data-view=dock]) .search-bar .search-divider,
+  body:not([data-view=dock]) .search-bar .search,
+  body:not([data-view=dock]) .search-bar .clear-button { display: none; }
+
+  /* Compact search bar on Flip — reduce the top inset so the bar starts sooner.
+   * The bar itself stays 44 px; the inset above it shrinks from 20 px to 8 px. */
+  body[data-view=dock] .search-bar {
+    top: calc(var(--visible-top) + 8px);
+  }
+  /* Dock content starts below the compact Flip bar (8 px inset + 44 px bar = 52 px). */
+  body[data-view=dock] .dock-content {
+    top: calc(var(--visible-top) + 8px + 44px);
+  }
+  /* Compact category row on Flip — smaller chips (30 px) and tighter padding
+   * so the results area starts sooner. At 374×241 the space between categories
+   * bottom and the footer handle is only 121 px; three 40 px rows with 1 px
+   * separators need 123 px, so we shave the category row to gain room. */
+  body[data-view=dock] #categories {
+    gap: 5px;
+    padding-top: 2px;
+    padding-bottom: 0;
+  }
+  body[data-view=dock] #categories button {
+    min-height: 30px;
+    padding: 3px 10px;
+    font-size: 11px;
+  }
+  /* Compact result rows on Flip so at least three fit in the visible area.
+   * Target: 41 px per row (40 px min-height + 1 px separator, 24 px symbol,
+   * single-line name, smaller kind/distance). Three rows × 41 px = 123 px fits
+   * the measured 130 px between categories and the handle. */
+  body[data-view=dock] .result {
+    min-height: 40px;
+    padding: 3px var(--bar-inset);
+    gap: 8px;
+    border-bottom: 1px solid #eceee7;
+    align-items: center;
+  }
+  body[data-view=dock] .result .symbol {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    font-size: 10px;
+  }
+  body[data-view=dock] .result strong {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  body[data-view=dock] .result small,
+  body[data-view=dock] .result .distance {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  /* Flip footer is pinned at the bottom and starts minimized: only the handle row shows.
+   * The handle is a button that toggles the footer content (Satellite, Transport,
+   * Download, attribution). When opened, the results area shrinks to make room.
+   * Closing the dock resets the footer to minimized.
+   * When minimized, remove the top padding and border so the footer is only the
+   * compact handle (28 px) plus the safe-area bottom padding — no separator, no strip. */
+  body[data-view=dock] .dock-footer {
+    position: sticky;
+    bottom: 0;
+    max-height: none;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    border-top: none;
+    flex-shrink: 0;
+  }
+  /* The footer content (layers, download, attribution) is hidden when minimized. */
+  body[data-view=dock] .dock-footer #dock-footer-content {
+    display: none;
+  }
+  /* When the footer is expanded, restore the top padding and border so the
+   * content has breathing room, and show the content while hiding results. */
+  body[data-view=dock] .dock-footer[data-footer-expanded=true] {
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  body[data-view=dock] .dock-footer[data-footer-expanded=true] #dock-footer-content {
+    display: block;
+    max-height: calc(100dvh - var(--visible-top) - 100px);
+    overflow-y: auto;
+  }
+  body[data-view=dock]:has(.dock-footer[data-footer-expanded=true]) .dock-main {
+    display: none;
+  }
+  /* Compact layer tiles on Flip when footer is expanded — icon and label in one row,
+   * about 40 px high so they fit without scrolling at 340x250. */
+  body[data-view=dock] .layer-grid {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  body[data-view=dock] .layer-tile {
+    min-height: 40px;
+    flex-direction: row;
+    padding: 6px 10px;
+    gap: 6px;
+    align-items: center;
+  }
+  body[data-view=dock] .layer-tile .icon {
+    width: 20px;
+    height: 20px;
+  }
+  body[data-view=dock] .layer-tile span {
+    font-size: 12px;
+  }
+  /* Compact Download button on Flip — about 40 px high. */
+  body[data-view=dock] .download {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  /* Compact attribution and notes on Flip. */
+  body[data-view=dock] .dock-footer p,
+  body[data-view=dock] .connection-badge {
+    font-size: 10px;
+    margin: 4px 0;
+  }
+  body[data-view=dock] #map-attribution {
+    font-size: 10px;
+    margin: 4px 0;
+  }
+  /* The footer toggle handle — visible only on Flip with the dock open.
+   * Compact to 28 px with no separator line below it. */
+  #footer-toggle {
+    display: none;
+  }
+  body[data-view=dock] #footer-toggle {
+    display: block;
+    width: 100%;
+    min-height: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    position: relative;
+  }
+  /* Short horizontal bar centered in the handle, like .card-handle::before. */
+  body[data-view=dock] #footer-toggle::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    margin-top: -2px;
+    border-radius: 2px;
+    background: var(--line-strong);
+  }
+  /* When expanded, rotate the bar slightly to indicate open state. */
+  body[data-view=dock] #footer-toggle[aria-expanded=true]::before {
+    transform: rotate(180deg);
+  }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

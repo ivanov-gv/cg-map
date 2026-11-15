@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
   isInFocusZone,
@@ -7,6 +8,12 @@ import {
   uncoveredMapArea,
   uncoveredMapOffset
 } from '../src/interface.js';
+import {
+  DESKTOP_MEDIA_QUERY,
+  deviceClass,
+  FLIP_MEDIA_QUERY,
+  MOBILE_MEDIA_QUERY
+} from '../src/device-class.js';
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {
@@ -16,6 +23,18 @@ test('search bubble stays within half the visible viewport, including keyboard a
     assert.ok(bounds.maxHeight >= 0);
     if (height >= 164) assert.equal(bounds.top + bounds.maxHeight, 25 + height / 2);
   }
+});
+
+test('search bounds uses barHeight to position the bubble', () => {
+  // Default barHeight is 54; with inset 12 and gapBelowBar 16, headerBottom = 82.
+  const defaultBounds = searchBounds({height: 840, top: 0});
+  assert.equal(defaultBounds.top, 82);
+  // Mobile bar is 44 px tall; headerBottom = 12 + 44 + 16 = 72.
+  const mobileBounds = searchBounds({height: 840, top: 0, barHeight: 44});
+  assert.equal(mobileBounds.top, 72);
+  // Desktop bar is 60 px tall; headerBottom = 12 + 60 + 16 = 88.
+  const desktopBounds = searchBounds({height: 840, top: 0, barHeight: 60});
+  assert.equal(desktopBounds.top, 88);
 });
 
 test('search target stays below bubble and above keyboard without changing the map container', () => {
@@ -106,4 +125,132 @@ test('swiping steps the phone card through full, peek, and closed', () => {
     {state: 'full', direction: 'down', resultsBehind: false, next: 'closed'}
   ];
   for (const {next, ...swipe} of cases) assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
+});
+
+test('device class distinguishes flip, mobile, and desktop by viewport size', () => {
+  function fakeMatchMedia(width, height) {
+    return (query) => {
+      // Parse simple media queries: (max-width: Npx) and (max-height: Npx) or (max-width: Npx)
+      const maxWidthMatch = query.match(/\(max-width:\s*(\d+)px\)/);
+      const maxHeightMatch = query.match(/\(max-height:\s*(\d+)px\)/);
+      const matchesWidth = !maxWidthMatch || width <= Number(maxWidthMatch[1]);
+      const matchesHeight = !maxHeightMatch || height <= Number(maxHeightMatch[1]);
+      return {matches: matchesWidth && matchesHeight};
+    };
+  }
+
+  // Flip cover screens: small and nearly square (Galaxy Z Flip ~340-380 per side)
+  assert.equal(deviceClass(fakeMatchMedia(340, 340)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(380, 380)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(400, 400)), 'flip');
+  assert.equal(deviceClass(fakeMatchMedia(350, 390)), 'flip');
+
+  // Phones in portrait: width ≤ 720, height > 400 → mobile
+  assert.equal(deviceClass(fakeMatchMedia(360, 640)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(412, 840)), 'mobile');
+
+  // Edge: width ≤ 720 but height > 400 → mobile, not flip
+  assert.equal(deviceClass(fakeMatchMedia(400, 401)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(401, 400)), 'mobile');
+  assert.equal(deviceClass(fakeMatchMedia(720, 800)), 'mobile');
+
+  // Desktop: width > 720 (includes phones in landscape, e.g. 840×412)
+  assert.equal(deviceClass(fakeMatchMedia(721, 480)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(840, 412)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(1280, 800)), 'desktop');
+  assert.equal(deviceClass(fakeMatchMedia(1920, 1080)), 'desktop');
+});
+
+test('desktop and mobile queries are complements', () => {
+  const desktopMatch = DESKTOP_MEDIA_QUERY.match(/min-width:\s*(\d+)px/);
+  const mobileMatch = MOBILE_MEDIA_QUERY.match(/max-width:\s*(\d+)px/);
+  assert.ok(desktopMatch, 'DESKTOP_MEDIA_QUERY should contain min-width');
+  assert.ok(mobileMatch, 'MOBILE_MEDIA_QUERY should contain max-width');
+  const desktopMin = Number(desktopMatch[1]);
+  const mobileMax = Number(mobileMatch[1]);
+  assert.equal(desktopMin, mobileMax + 1, 'Desktop min-width should be mobile max-width + 1');
+});
+
+// Interaction-only media features describe input capability, not screen size.
+// They are not breakpoints, so their @media rules are not checked against device-class queries.
+const interactionMediaFeatures = ['hover', 'any-hover', 'pointer', 'any-pointer'];
+
+// Layout media features that would turn a condition into a breakpoint.
+const layoutMediaFeatures = ['width', 'height', 'aspect-ratio', 'orientation'];
+
+/**
+ * Returns true when every media feature in the condition is an interaction feature.
+ * A condition like "(hover: hover)" returns true; "(hover: hover) and (max-width: 720px)" returns false.
+ */
+function isInteractionOnlyCondition(condition) {
+  // Split on 'and'/'or' to get individual feature parens, then extract feature names.
+  const featureTokens = condition.match(/\(\s*(\w[\w-]*)\s*[^)]*\)/g) ?? [];
+  const featureNames = featureTokens.map(token => {
+    const nameMatch = token.match(/\(\s*(\w[\w-]*)\s*:/);
+    return nameMatch ? nameMatch[1] : null;
+  }).filter(Boolean);
+
+  // Every feature must be an interaction feature; if any are missing, it's mixed.
+  const allInteraction = featureNames.length > 0 && featureNames.every(name => interactionMediaFeatures.includes(name));
+  return allInteraction;
+}
+
+/**
+ * Returns true if the condition contains any layout media feature (width, height, etc.).
+ * Used to ensure that skipped conditions do not hide breakpoints.
+ */
+function hasLayoutFeature(condition) {
+  return layoutMediaFeatures.some(feature => new RegExp(`\\b${feature}\\b`).test(condition));
+}
+
+test('style.css @media conditions match the exported device-class queries', () => {
+  const css = fs.readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+
+  // Strip comments so the regex only sees real rules.
+  const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Find all @media conditions in the CSS.
+  const mediaPattern = /@media\s+([^{]+)\{/g;
+  const deviceQueries = [FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY, DESKTOP_MEDIA_QUERY];
+  let match;
+  while ((match = mediaPattern.exec(cssWithoutComments)) !== null) {
+    const condition = match[1].trim();
+
+    // Skip prefers-* media queries (e.g. prefers-reduced-motion, prefers-color-scheme) —
+    // they describe user preferences, not screen size.
+    const isPrefersQuery = condition.includes('prefers-');
+    // Skip interaction-only queries (e.g. hover: hover) — they describe input capability,
+    // not screen size, so they are not breakpoints.
+    const isInteractionOnly = isInteractionOnlyCondition(condition);
+
+    if (isPrefersQuery || isInteractionOnly) {
+      // Guard: a skipped condition must not contain a layout feature, otherwise it could
+      // hide a real breakpoint that should be checked against device-class queries.
+      assert.ok(
+        !hasLayoutFeature(condition),
+        `Skipped @media condition "${condition}" contains a layout feature and may hide a breakpoint`
+      );
+      continue;
+    }
+
+    const isKnownQuery = deviceQueries.some(query => condition === query);
+    assert.ok(isKnownQuery, `style.css @media condition "${condition}" does not match any exported device-class query`);
+  }
+});
+
+test('interaction-only conditions are skipped but mixed conditions are rejected', () => {
+  // Pure interaction conditions should be classified as interaction-only.
+  assert.equal(isInteractionOnlyCondition('(hover: hover)'), true);
+  assert.equal(isInteractionOnlyCondition('(any-pointer: fine)'), true);
+  assert.equal(isInteractionOnlyCondition('(hover: hover) and (pointer: fine)'), true);
+
+  // A condition that mixes interaction and layout features is NOT interaction-only.
+  assert.equal(isInteractionOnlyCondition('(hover: hover) and (max-width: 720px)'), false);
+  assert.equal(isInteractionOnlyCondition('(max-width: 720px)'), false);
+
+  // hasLayoutFeature detects layout features in a condition string.
+  assert.equal(hasLayoutFeature('(hover: hover) and (max-width: 720px)'), true);
+  assert.equal(hasLayoutFeature('(hover: hover)'), false);
+  assert.equal(hasLayoutFeature('(min-width: 721px)'), true);
+  assert.equal(hasLayoutFeature('(orientation: landscape)'), true);
 });

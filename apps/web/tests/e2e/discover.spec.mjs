@@ -28,7 +28,7 @@ test.describe('Discover first view', () => {
         page.evaluate(() => window.kompasDebug.map.getCenter().distanceTo({lng: 19.2627, lat: 42.4411}))
       )
       .toBeLessThan(5);
-    await expect(page.locator('#position-action')).toHaveAttribute('aria-label', /Recenter on your location/);
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-label', /Follow your location/);
     await expect(page.locator('#position-action')).toBeVisible();
     // The location is never written to browser storage.
     expect(
