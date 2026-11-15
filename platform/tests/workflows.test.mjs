@@ -315,8 +315,10 @@ test('cd-dev-pages triggers on push to main and workflow_dispatch with commit in
 test('cd-dev-pages deploy is the only CD job with Pages permissions', () => {
   const {jobs} = load('cd-dev-pages.yml');
   assert.deepEqual(jobs.deploy.permissions, {pages: 'write', 'id-token': 'write'});
-  // Deploy on push always; on workflow_dispatch only when is_newest.
-  assert.match(jobs.deploy.if, /github\.event_name == 'push'/);
+  // Deploy on push only when is_newest; on workflow_dispatch always (for rollback).
+  // Requires find to have succeeded so a skipped find (test-run) does not deploy.
+  assert.match(jobs.deploy.if, /needs\.find\.result == 'success'/);
+  assert.match(jobs.deploy.if, /github\.event_name == 'workflow_dispatch'/);
   assert.match(jobs.deploy.if, /needs\.find\.outputs\.is_newest/);
   assert.deepEqual(jobs.deploy.concurrency, {group: 'dev-pages', 'cancel-in-progress': false});
   // find and find-test-run must not have pages permissions
@@ -415,8 +417,7 @@ test('find-pages-artifact: resolve fails when commit has diverged from main', as
 test('find-pages-artifact: wait passes when ci-dev-pages run succeeds', async () => {
   const result = await runFindArtifactStep(waitScript, {
     'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","id":12345}]}',
-    'run-detail-12345': '{"status":"completed","conclusion":"success"}',
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"success"}]}',
   }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
   assert.equal(result.code, 0, 'wait must pass when ci-dev-pages run succeeds');
 });
@@ -424,8 +425,7 @@ test('find-pages-artifact: wait passes when ci-dev-pages run succeeds', async ()
 test('find-pages-artifact: wait fails when ci-dev-pages run concludes with failure', async () => {
   const result = await runFindArtifactStep(waitScript, {
     'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
-      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","id":12345}]}',
-    'run-detail-12345': '{"status":"completed","conclusion":"failure"}',
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":12345,"status":"completed","conclusion":"failure"}]}',
   }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
   assert.equal(result.code, 1, 'wait must fail when ci-dev-pages run fails');
   assert.match(result.stdout, /::error::.*failure/, 'must emit ::error:: with failure');
@@ -439,23 +439,57 @@ test('find-pages-artifact: wait times out when no run is found', async () => {
   assert.match(result.stdout, /::error::.*Timeout/, 'must emit ::error:: with timeout');
 });
 
-// Evaluate the deploy job's if: expression against event/is_newest combinations.
-// The deploy must run on push always, and on workflow_dispatch only when is_newest is true.
-test('cd-dev-pages deploy gating: push always deploys, workflow_dispatch respects is_newest', () => {
-  const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
-  // The expression must reference both github.event_name and is_newest.
-  assert.ok(deployIf.includes("github.event_name == 'push'"), 'deploy if must check for push event');
-  assert.ok(deployIf.includes("needs.find.outputs.is_newest"), 'deploy if must check is_newest');
+test('find-pages-artifact: wait prefers a successful run when a failed run also exists', async () => {
+  const result = await runFindArtifactStep(waitScript, {
+    'runs-head-sha-abcdef1234567890abcdef1234567890abcdef12':
+      '{"workflow_runs":[{"name":"ci-dev-pages","head_branch":"main","event":"push","id":11111,"status":"completed","conclusion":"failure"},{"name":"ci-dev-pages","head_branch":"main","event":"workflow_dispatch","id":22222,"status":"completed","conclusion":"success"}]}',
+  }, {MAX_ATTEMPTS: '1', POLL_DELAY: '0'});
+  assert.equal(result.code, 0, 'wait must pass when a successful run exists alongside a failed run');
+  assert.match(result.stdout, /run 22222 completed successfully/, 'must select the successful run');
+});
 
-  // Simulate the four combinations by checking the expression structure.
-  // Push + is_newest=true → deploy (push short-circuits)
-  // Push + is_newest=false → deploy (push short-circuits)
-  // workflow_dispatch + is_newest=true → deploy
-  // workflow_dispatch + is_newest=false → skip
-  // The expression is: !cancelled() && (github.event_name == 'push' || is_newest == 'true')
-  // This means push always deploys; workflow_dispatch deploys only when is_newest.
-  const hasOr = deployIf.includes('||');
-  assert.ok(hasOr, 'deploy if must use || to combine push and is_newest conditions');
+// Evaluate the deploy job's if: expression against event/is_newest/find-result combinations.
+// The deploy must only run on push when is_newest (so older pushes don't overwrite newer sites),
+// and must always run on workflow_dispatch when find succeeds (for rollback).
+// It must not run when find is skipped (test-run) or fails.
+function evaluateDeployIf(expression, context) {
+  // Replace GitHub Actions expression syntax with JavaScript equivalents.
+  let expr = expression
+    .replace(/\$\{\{\s*/g, '')
+    .replace(/\s*\}\}/g, '')
+    .trim();
+  for (const [key, value] of Object.entries(context)) {
+    expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), JSON.stringify(value));
+  }
+  // Handle !cancelled() -> context.cancelled
+  expr = expr.replace(/!cancelled\(\)/g, '(!context_cancelled)');
+  return Function('context_cancelled', 'return ' + expr + ';')();
+}
+
+test('cd-dev-pages deploy gating: push only deploys when newest, workflow_dispatch deploys for rollback', () => {
+  const deployIf = load('cd-dev-pages.yml').jobs.deploy.if;
+
+  const cases = [
+    {event: 'push', isNewest: 'true', findResult: 'success', cancelled: false, wantDeploy: true, label: 'push, newest'},
+    {event: 'push', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: false, label: 'push, not newest'},
+    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'success', cancelled: false, wantDeploy: true, label: 'dispatch, find success, not newest'},
+    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'skipped', cancelled: false, wantDeploy: false, label: 'dispatch test run (find skipped)'},
+    {event: 'workflow_dispatch', isNewest: 'false', findResult: 'failure', cancelled: false, wantDeploy: false, label: 'find failed'},
+  ];
+
+  for (const tc of cases) {
+    const got = evaluateDeployIf(deployIf, {
+      'github.event_name': tc.event,
+      "needs.find.outputs.is_newest": tc.isNewest,
+      "needs.find.result": tc.findResult,
+    });
+    const deployed = got === true;
+    assert.equal(
+      deployed,
+      tc.wantDeploy,
+      `${tc.label}: want deploy=${tc.wantDeploy}, got ${deployed} (if: ${deployIf})`
+    );
+  }
 });
 
 test('a pull request runs nothing until it is approved', () => {
