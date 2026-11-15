@@ -35,7 +35,10 @@ These gaps need recording so the model is documented in one place and the featur
   on main). One workflow per concern.
 - **PR time budget.** The whole run, from approval to `CI gate`, warns over 5 minutes and fails over 7. The per-job
   limits of ADR 0006 stay.
-- **No CI job creates a deployment record.** Jobs that read environment variables use `deployment: false` (#165).
+- **No CI job creates a deployment record.** CI jobs reference no environment; each job sets its non-secret values
+  (image registry, artifact name and retention, publish flags) in its own job `env:`, and test-run twins set the
+  test-run values (#165). Only CD jobs use environments. `deployment: false` would also work on GitHub, but act does not
+  accept it yet (nektos/act#6243).
 - **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
   entirely.
 
@@ -49,7 +52,8 @@ These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 - The dev site carries a version that traces back to the commit, instead of a mutable `:main` image.
 - The split separates concerns: `ci-pr-checks` handles PR checks and `ci-nightly` runs the full suite. Any speed-up
   comes from #169's re-sharding.
-- Fewer spurious deployments are recorded, since CI jobs no longer declare `environment: dev` unnecessarily.
+- No deployment records come from CI, since CI jobs reference no environment.
+- Environment-specific values live in the workflow files, so changing one is a reviewed commit, not a settings change.
 - The approval gate can actually hold PRs once reviewers are configured.
 - The features that implement this decision are #164 (this ADR and actionlint), #165 (CI without deployments), #166
   (workflow split), #167 (Pages build from source), #168 (Pages CD and its trigger), and #169 (time budget and
