@@ -185,8 +185,9 @@ test('ci-publish pages job builds every app, because it replaces the whole site'
   assert.doesNotMatch(stepsText, /:main/);
   // Writes version.json with commit, run_id, and built_at.
   assert.match(stepsText, /version\.json/);
-  assert.match(stepsText, /inputs\.commit/);
   assert.match(stepsText, /GITHUB_RUN_ID/);
+  // Builds from the source subdirectory (second checkout).
+  assert.match(stepsText, /source\/apps/);
   const appDirectories = fs.readdirSync(path.join(repoRoot, 'apps'));
   assert.deepEqual(appDirectories.toSorted(), ['core-demo', 'editor', 'web']);
 });
@@ -948,7 +949,8 @@ test('ci-publish pages job uses publish-image action with skip_main_tag', () => 
   assert.ok(publishStep, 'pages must use publish-image action');
   assert.equal(publishStep.with.name, 'dev-pages');
   assert.equal(publishStep.with.skip_main_tag, 'true');
-  assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile');
+  assert.equal(publishStep.with.dockerfile, 'source/platform/pages/Dockerfile');
+  assert.equal(publishStep.with.context, 'source', 'must pass source as build context');
 });
 
 // Read the publish-image action definition to know which inputs are required.
@@ -1084,5 +1086,83 @@ test('publish-image action tags app images with both commit SHA and main', async
     buildCall,
     /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:main/,
     'build must include main tag for app images'
+  );
+});
+
+test('publish-image action uses build context from context input', async () => {
+  const result = await runPublishImageAction({
+    IMAGE_NAME: 'dev-pages',
+    IMAGE_REPOSITORY: 'ttl.sh/ivanov-gv-cg-map',
+    DOCKERFILE: 'platform/pages/Dockerfile',
+    COMMIT_SHA: '88563c2685eb6f28062525992dc9a10aca304752',
+    REGISTRY_TOKEN: 'fake-token',
+    SKIP_MAIN_TAG: 'true',
+    BUILD_CONTEXT: 'source',
+  });
+  assert.equal(result.code, 0, 'action script should succeed: ' + result.stderr);
+
+  const buildCall = result.calls.find(c => c.startsWith('build'));
+  assert.ok(buildCall, 'should have a docker build call');
+  assert.match(
+    buildCall,
+    /source$/,
+    'build must use the context path from the context input'
+  );
+});
+
+// Any job that checks out a non-default ref must keep local actions on the
+// workflow's own checkout. The first checkout must have no ref; the one with
+// ref must have a path. This prevents the root cause of #244 where checking
+// out ref: <commit> resolved ./.github/actions to main's old versions.
+test('ci-publish pages job keeps local actions on workflow checkout', () => {
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+
+  // Find all checkout steps
+  const checkouts = pagesSteps
+    .map((step, index) => ({step, index}))
+    .filter(({step}) => step.uses?.startsWith('actions/checkout'));
+
+  assert.ok(checkouts.length >= 2, 'pages must have at least two checkouts');
+
+  // The first checkout must not have a ref (gets this branch's actions)
+  const firstCheckout = checkouts[0].step;
+  assert.equal(
+    firstCheckout.with?.ref,
+    undefined,
+    'first checkout must not specify ref so local actions come from the workflow branch'
+  );
+  assert.equal(
+    firstCheckout.with?.path,
+    undefined,
+    'first checkout must not specify path so actions are at the root'
+  );
+
+  // A checkout with ref must have a path (source subdirectory)
+  const refCheckout = checkouts.find(({step}) => step.with?.ref !== undefined);
+  assert.ok(refCheckout, 'pages must have a checkout with ref for the source commit');
+  assert.ok(
+    refCheckout.step.with?.path,
+    'checkout with ref must have a path to avoid overwriting local actions'
+  );
+});
+
+// Prove the pattern is necessary: if the first checkout had ref but no path,
+// the local actions would resolve to the wrong commit.
+test('ci-publish pages would fail with single checkout of non-default ref', () => {
+  // This test verifies that the pages job does NOT use a single checkout
+  // with ref but no path — the pattern that caused #244.
+  const {jobs} = load('ci-publish.yml');
+  const pagesSteps = jobs.pages.steps;
+  const checkouts = pagesSteps.filter(step => step.uses?.startsWith('actions/checkout'));
+
+  // Count checkouts that have ref but no path (the bad pattern)
+  const badCheckouts = checkouts.filter(
+    step => step.with?.ref !== undefined && step.with?.path === undefined
+  );
+  assert.equal(
+    badCheckouts.length,
+    0,
+    'no checkout should have ref without path — this caused #244 (invalid tag ttl.sh/ivanov-gv-cg-map/:037f5e9...)'
   );
 });

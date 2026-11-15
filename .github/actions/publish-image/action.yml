@@ -22,6 +22,10 @@ inputs:
     description: Set to "true" to skip pushing the :main tag (dev-pages is addressed by SHA only).
     required: false
     default: 'false'
+  context:
+    description: 'Docker build context path (default: current directory).'
+    required: false
+    default: '.'
 runs:
   using: composite
   steps:
@@ -33,6 +37,7 @@ runs:
         COMMIT_SHA: ${{ inputs.commit || github.sha }}
         REGISTRY_TOKEN: ${{ inputs.token }}
         SKIP_MAIN_TAG: ${{ inputs.skip_main_tag }}
+        BUILD_CONTEXT: ${{ inputs.context }}
       run: |
         image="$IMAGE_REPOSITORY/$IMAGE_NAME"
         dockerfile="${DOCKERFILE:-apps/$IMAGE_NAME/Dockerfile}"
@@ -40,11 +45,11 @@ runs:
           ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
         esac
         if [ "$SKIP_MAIN_TAG" = "true" ]; then
-          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" .
+          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" "$BUILD_CONTEXT"
           docker push "$image:$COMMIT_SHA"
           echo "Published $image at $COMMIT_SHA (no main tag)" | tee -a "$GITHUB_STEP_SUMMARY"
         else
-          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" .
+          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" "$BUILD_CONTEXT"
           docker push "$image:$COMMIT_SHA"
           docker push "$image:main"
           echo "Published $image at $COMMIT_SHA and main" | tee -a "$GITHUB_STEP_SUMMARY"

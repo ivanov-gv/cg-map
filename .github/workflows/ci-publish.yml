@@ -223,10 +223,19 @@ jobs:
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
       COMMIT: ${{ inputs.commit || github.sha }}
     steps: &pages-steps
+      # Two checkouts: the first gets this branch's local actions (setup-web, publish-image).
+      # The second checks out the source commit into a subdirectory so we build from it.
+      # Without the first checkout, ref: $COMMIT would resolve to main's old actions,
+      # causing publish-image to receive empty name/commit inputs.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
           ref: ${{ env.COMMIT }}
+          path: source
       - name: Validate commit input
         if: ${{ inputs.commit != '' }}
         shell: bash
@@ -235,19 +244,19 @@ jobs:
             echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
             exit 1
           fi
-      - uses: ./.github/actions/setup-web
+      - uses: ./source/.github/actions/setup-web
       - name: Build each app
         run: |
           mkdir site
-          cp platform/pages/index.html site/index.html
+          cp source/platform/pages/index.html site/index.html
           for app in web editor core-demo; do
             echo "::group::Build $app"
             start=$SECONDS
-            make -C "apps/$app" build
+            make -C "source/apps/$app" build
             echo "::endgroup::"
             duration=$((SECONDS - start))
             echo "$app: built in ${duration}s" | tee -a "$GITHUB_STEP_SUMMARY"
-            cp -r "dist/$app" "site/$app"
+            cp -r "source/dist/$app" "site/$app"
           done
       - name: Write version.json
         run: |
@@ -261,7 +270,8 @@ jobs:
         with:
           name: dev-pages
           repository: ${{ env.IMAGE_REPOSITORY }}
-          dockerfile: platform/pages/Dockerfile
+          dockerfile: source/platform/pages/Dockerfile
+          context: source
           commit: ${{ env.COMMIT }}
           token: ${{ github.token }}
           skip_main_tag: 'true'
