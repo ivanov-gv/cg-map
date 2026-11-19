@@ -2646,6 +2646,163 @@ test.describe('Flip icon button three-state cycle', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Flip dock content derived from state (review finding 3)
+// ---------------------------------------------------------------------------
+
+test.describe('Flip dock content derived from state', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const manyPlaces = manyPlacesFixture('state-sync');
+
+  // (a) After closing from modes menu, resize to Mobile (412x840), then open dock:
+  // the list and Satellite tile should both be visible.
+  test('Flip → close → resize to Mobile → open dock shows list and Satellite',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Cycle: menu → modes (dock open with results) → close (dock closed).
+      await page.locator('#menu-toggle').click();
+      await page.locator('#menu-toggle').click();
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+      // Resize to Mobile viewport (412x840).
+      await page.setViewportSize({width: 412, height: 840});
+      await page.waitForTimeout(100);
+
+      // Open the dock — it should show the results list AND the footer (Satellite).
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-main')).toBeVisible();
+      await expect(page.locator('.result')).toHaveCount(8);
+      await expect(page.locator('.dock-footer')).toBeVisible();
+      await expect(page.locator('#satellite-toggle')).toBeVisible();
+    });
+  });
+
+  // (b) Escape from the modes menu, then ☰ → the list shows.
+  test('Escape from modes menu then burger shows list',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Open dock (menu → modes), then cycle to modes menu.
+      await page.locator('#menu-toggle').click();
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('#dock-main')).toBeHidden();
+      await expect(page.locator('.dock-footer')).toBeVisible();
+
+      // Press Escape to close the dock.
+      await page.keyboard.press('Escape');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+      // Re-open with burger — should show the results list.
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-main')).toBeVisible();
+      await expect(page.locator('.result')).toHaveCount(8);
+    });
+  });
+
+  // Restore coverage: at 340x250 with list shown, at least 3 result rows fully visible.
+  test('340x250: at least 3 results fully visible with list shown',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+      await page.locator('#menu-toggle').click();
+
+      const visibleResults = await page.evaluate((vh) => {
+        const results = document.querySelectorAll('.result');
+        let count = 0;
+        for (const row of results) {
+          const rect = row.getBoundingClientRect();
+          if (rect.top >= 0 && rect.bottom <= vh) count++;
+        }
+        return count;
+      }, 250);
+      expect(visibleResults, 'at least 3 results fully visible at 340x250').toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // Restore coverage: menu button reachable with Tab, Enter/Space advance the cycle.
+  test('340x250: menu button reachable by Tab and advances with Enter/Space',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Focus the menu button (it should be in the tab order).
+      await page.locator('#menu-toggle').focus();
+      await expect(page.locator('#menu-toggle')).toBeFocused();
+
+      // Press Enter to advance: menu → modes (dock opens with results).
+      await page.keyboard.press('Enter');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-main')).toBeVisible();
+
+      // Press Space to advance: modes → close (modes menu shown).
+      await page.keyboard.press('Space');
+      await expect(page.locator('#dock-main')).toBeHidden();
+      await expect(page.locator('.dock-footer')).toBeVisible();
+
+      // Press Enter to advance: close → menu (dock closes).
+      await page.keyboard.press('Enter');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Desktop and Mobile dock footer visibility (review finding 4)
+// ---------------------------------------------------------------------------
+
+test.describe('Desktop and Mobile dock footer visibility', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  for (const {name, viewport} of [
+    {name: 'desktop', viewport: {width: 1280, height: 800}},
+    {name: 'mobile', viewport: {width: 412, height: 840}}
+  ]) {
+    test(`open dock shows Satellite, Transport, Download on ${name}`, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+        // Footer should be visible with all controls.
+        await expect(page.locator('.dock-footer')).toBeVisible();
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+        await expect(page.locator('#transport-toggle')).toBeVisible();
+        await expect(page.locator('#download')).toBeVisible();
+      });
+    });
+
+    test(`burger label toggles Open/Close menu on ${name}`, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+
+        // Dock closed: "Open menu".
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+
+        // Open dock: "Close menu".
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
+
+        // Close dock: "Open menu" again.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Footer toggle removed: verify it no longer exists (issue #247)
 // ---------------------------------------------------------------------------
 

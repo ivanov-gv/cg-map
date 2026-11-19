@@ -105,6 +105,7 @@ export class MapInterface {
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
     this.trigger = this.menu;
+    this.isRestoringFocus = false;
     // On Flip, the menu button cycles through Menu → Modes → Close; elsewhere it toggles the dock.
     this.menuState = 'menu'; // 'menu' | 'modes' | 'close', meaningful only on Flip
     this.menu.addEventListener('click', () => {
@@ -268,7 +269,9 @@ export class MapInterface {
     this.syncSearchExpanded();
     // Closing the dock resets the Flip menu state; opening it shows the results list.
     if (view !== 'dock') this.menuState = 'menu';
+    // Opening the dock always starts with the list (modes state).
     if (view === 'dock' && this.menuState === 'menu') this.menuState = 'modes';
+    // Derive dock content (dock-main, footer) from current state.
     this.syncDockContent();
     this.syncMenuIcon();
     this.onChange?.();
@@ -297,12 +300,21 @@ export class MapInterface {
     this.syncMenuIcon();
   }
 
-  // Derive dock content from the state: Flip shows results or modes, other devices show both.
+  // Derive the visible dock content from current state.
+  // On Flip with the dock open: show dock-main in Modes and the footer in Close.
+  // In every other case (dock closed, or not Flip): show both dock-main and footer.
   syncDockContent() {
-    const showResults = !this.flipLayoutQuery.matches || this.view !== 'dock' || this.menuState === 'modes';
-    const showFooter = !this.flipLayoutQuery.matches || this.view !== 'dock' || this.menuState === 'close';
-    this.dockMain.hidden = !showResults;
-    this.footer.hidden = !showFooter;
+    const isFlip = this.flipLayoutQuery.matches;
+    const isDockOpen = this.view === 'dock';
+    if (isFlip && isDockOpen) {
+      const showResults = this.menuState === 'modes';
+      const showFooter = this.menuState === 'close';
+      this.dockMain.hidden = !showResults;
+      this.footer.hidden = !showFooter;
+    } else {
+      this.dockMain.hidden = false;
+      this.footer.hidden = false;
+    }
   }
 
   // Update the menu button icon and accessible label for the current state.
