@@ -209,7 +209,7 @@ test('building selection provides feature details and point actions', async ({pa
   expect(picked).not.toBeNull();
   await page.mouse.click(picked.x, picked.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-details')).toContainText('Type: building');
+  await expect(page.locator('#place-details .details-section--details')).toContainText('Type: Building');
   await expect(page.getByRole('button', {name: 'To', exact: true})).toBeVisible();
   await expect
     .poll(() =>
@@ -460,7 +460,10 @@ test('building house numbers start at the 100m scale and open address details', 
   }, label.geometry.coordinates);
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-name')).toHaveText('Building ' + label.properties['addr:housenumber']);
+  await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+  const addresses = page.locator('#place-details .details-section--addresses');
+  await expect(addresses.locator('.section-title')).toHaveText('Addresses');
+  await expect(addresses.locator('.detail-value')).toHaveText(label.properties['addr:housenumber']);
   await expect(page.locator('#point-from')).toBeVisible();
 });
 
@@ -486,8 +489,10 @@ test('same building keeps its address across zooms and with number labels hidden
     }, coordinates);
     await page.mouse.click(point.x, point.y);
     await expect(page.locator('#place-category')).toHaveText('Building');
-    await expect(page.locator('#place-name')).toHaveText('Building 105,107');
-    await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
+    await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+    await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
+      'Oktobarske revolucije 105,107'
+    );
     await closeCard(page);
   }
 });
@@ -730,9 +735,11 @@ test.describe('building entrances', () => {
         await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
         await context.setOffline(true);
         await tap(label.geometry.coordinates);
-        await expect(page.locator('#place-name')).toHaveText('Building ' + variant.label);
+        await expect(page.locator('#place-name')).toHaveText('Unnamed building');
         const address = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
-        await expect(page.locator('#place-details')).toContainText(address);
+        await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
+          address
+        );
         await expect
           .poll(() =>
             page.evaluate(

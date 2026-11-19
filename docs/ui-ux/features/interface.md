@@ -2,8 +2,9 @@
 
 Status: approved on 3 November 2026 and implemented in the web source. The earlier illustrative draft established the
 composition; the application uses real directory data, device positioning, optional layers, and verified offline
-downloads. This does not claim deployment or completion of Discover’s missing geographic data. Browser acceptance and
-physical-device evidence are recorded separately below.
+downloads. Selected-card content was restructured on 19 November 2026 (issue #249) without changing card geometry on
+Desktop, Mobile or Flip. This does not claim deployment or completion of Discover’s missing geographic data. Browser
+acceptance and physical-device evidence are recorded separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -181,6 +182,24 @@ the dock or search, because the route controls replace them on the map. The cate
 scrollbars; both still scroll. In windows 721–860 px wide the card narrows to keep the map controls reachable, leaving
 only a narrow strip of map.
 
+### Selected-object card content
+
+The card keeps its existing position, size and state machine on Desktop, Mobile and Flip; only its content changes. Its
+header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay in
+place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
+shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the
+data:
+
+- A POI uses **Location and contacts** (address, containing building, coordinates, phone, website and source link) and
+  **Opening hours**.
+- A building uses **Addresses**, **Entrances (marked on the map)**, **Inside this building** and **Details**.
+- Other map objects use **Details** with the attributes appropriate to what was shown.
+
+A section or row is omitted when its fact is absent; the card never substitutes “not recorded” text or a NEARBY section
+for missing data. This serves US-04 and US-05 by making the selected subject and its evidence readable in one view,
+while From/To remain explicit planning actions. Closing the card clears the inspection highlight and keeps the query,
+category and endpoints.
+
 The search field shows focus through its caret and a neutral change to the shared bar's border, not the generic focus
 ring. Other controls keep the ring.
 
@@ -316,18 +335,19 @@ selection visibility, the still camera during search, the focus zone, phone card
 card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, preserving a
 map-picked card when desktop focus opens results, a floating chip opening those results, × closing a card and the
 desktop dock, the Flip exception (Filled-only × that cannot close the dock), the All chip and active-category return,
-seamless desktop row movement, and the follow location state machine (start, new fix moves camera, second click stops,
-drag stops, search result stops, denied shows recovery, no initial fix, button style).
+seamless desktop row movement, selected-card sections, marker and bare-building picking, gesture cancellation and close
+continuity, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
+result stops, denied shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
 buildings and addresses, that in-view building outlines and drawn place markers stay green with no red preview, that a
 below-threshold place gains its ring only when its marker is drawn, that choosing one turns red, reveals an off-screen
-result, and that clearing removes every green mark. Pure unit tests cover the state and clear-button functions and the
-search matching, classification and ordering rules; no large fake DOM is built for browser behavior. Keyboard geometry
-is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone
-behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI
-stability checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the
-illustrative draft's cumulative icons do not prove a production placement solution. Paid visibility is outside this UI
-decision.
+result, and that clearing removes every green mark. Pure unit tests cover the state and clear-button functions, search
+matching, classification and ordering rules, card builders and footprint membership; no large fake DOM is built for
+browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
+keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief
 

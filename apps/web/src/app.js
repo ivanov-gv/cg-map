@@ -30,6 +30,7 @@ import {
 import {ArchiveSource} from './offline.js';
 import {installTransport, TransportFeed} from './transport.js';
 import {
+  buildingAddress,
   buildingAddressIndex,
   buildingMapFeatures,
   describePoint,
@@ -37,7 +38,8 @@ import {
   installEntranceLayers,
   selectBuildingEntrances,
   endpointFeatures,
-  installRoutePoints
+  installRoutePoints,
+  placesInsideFootprint
 } from './point-selection.js';
 import {RoutePlanner} from './route-planner.js';
 import {ObjectSelection} from './object-selection.js';
@@ -90,6 +92,7 @@ const directoryState = {
   searchCandidates: [],
   results: [],
   loadingError: null,
+  sourceDate: null,
   visibilityConfig: null,
   markerKeysByPlaceId: new Map(),
   placeHitLayers: ['search-place'],
@@ -121,6 +124,8 @@ const placeSelection = new PlaceSelection({
   },
   onSelectionChanged: syncPanels,
   onResultsChanged: renderSearchResults,
+  buildingAddress,
+  placesInsideFootprint,
   prefersReducedMotion
 });
 
@@ -379,6 +384,7 @@ async function initializeMapTransport() {
   startupState.dataSources = dataEndpoints(startupState.dataMode, location.href);
   document.documentElement.dataset.api = startupState.dataMode;
   const manifest = await loadJSON('data/manifest.json', 'Map metadata');
+  directoryState.sourceDate = manifest.sourceTimestamp;
   startupState.archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
   startupState.offlineControls = new OfflineControls({
     archive: startupState.archive,
