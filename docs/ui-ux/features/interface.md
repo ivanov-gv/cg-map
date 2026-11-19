@@ -122,8 +122,7 @@ categories are hidden to conserve space on the small display. When the user open
 full width again (as on mobile), and the search field becomes visible and usable. The dock's results with no query make
 the bar Open, but Flip shows no × in Open; typing makes it Filled and reveals ×. That × clears the query only, keeping
 the dock and its results open. It never closes the dock or the place card: dock closing belongs to the header Icon
-Button (currently the menu control; its cycle is issue #247). The categories row follows the same dock-open behavior as
-on mobile.
+Button, whose three-state cycle is described below. The categories row follows the same dock-open behavior as on mobile.
 
 ### Full-screen dock on Mobile and Flip
 
@@ -132,9 +131,9 @@ viewport — from top 0 to 100dvh, full width, with no map visible around it. Th
 width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
 variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. Opening a place
 from the list switches to the search view with the card (`placeCardOpened` in interface.js calls `setView('search')`
-when the dock is open on mobile). The menu button closes the dock, revealing the map again. The place card and route
-panel keep their current behavior when the dock is closed. Desktop keeps the side dock unchanged (narrower than the
-viewport, with the map visible beside it).
+when the dock is open on mobile). The menu button closes the dock on Mobile; on Flip the icon button's Close state does
+it, as described below. The place card and route panel keep their current behavior when the dock is closed. Desktop
+keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
 
 ### Flip three-state icon button
 

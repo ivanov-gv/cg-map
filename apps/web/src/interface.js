@@ -108,16 +108,7 @@ export class MapInterface {
     this.isRestoringFocus = false;
     // On Flip, the menu button cycles through Menu → Modes → Close; elsewhere it toggles the dock.
     this.menuState = 'menu'; // 'menu' | 'modes' | 'close', meaningful only on Flip
-    this.menu.addEventListener('click', () => {
-      this.trigger = this.menu;
-      if (this.mobileLayoutQuery.matches) this.search.blur();
-      if (this.flipLayoutQuery.matches) {
-        this.cycleFlipMenu();
-      } else {
-        this.setView(this.view === 'dock' ? 'closed' : 'dock');
-      }
-      this.onViewport?.();
-    });
+    this.menu.addEventListener('click', () => this.activateMenu());
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
@@ -158,6 +149,18 @@ export class MapInterface {
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
     this.syncViewport(false);
+  }
+
+  // A menu click toggles the dock, or advances the three-state cycle on Flip.
+  activateMenu() {
+    this.trigger = this.menu;
+    if (this.mobileLayoutQuery.matches) this.search.blur();
+    if (this.flipLayoutQuery.matches) {
+      this.cycleFlipMenu();
+    } else {
+      this.setView(this.view === 'dock' ? 'closed' : 'dock');
+    }
+    this.onViewport?.();
   }
 
   // Move the browse panel to the container for the current view without changing other state.
