@@ -23,7 +23,7 @@ export class PlaceSelection {
   constructor(context) {
     this.#context = context;
     // These actions cross the map/DOM callback boundary and must retain their owning controller.
-    for (const action of ['showPlace', 'showPoint', 'showChooser', 'close'])
+    for (const action of ['showPlace', 'showSearchResult', 'showPoint', 'showChooser', 'close'])
       this[action] = this[action].bind(this);
   }
 
@@ -47,6 +47,13 @@ export class PlaceSelection {
   }
   get point() {
     return this.#state.selectedPoint;
+  }
+  get currentResultId() {
+    return (
+      this.#state.selectedPlace?.properties.id ??
+      this.#state.selectedPoint?.id ??
+      this.#state.previewPlace?.properties.id
+    );
   }
 
   // Explicit selection and location requests mark the map explored before moving its camera.
@@ -153,7 +160,7 @@ export class PlaceSelection {
 
   // The current listing remains discoverable in the result list without changing its order.
   markCurrentResult() {
-    const currentId = String((this.#state.selectedPlace ?? this.#state.previewPlace)?.properties.id);
+    const currentId = String(this.currentResultId);
     for (const row of elementById('results').querySelectorAll('.result')) {
       if (row.dataset.id === currentId) {
         row.setAttribute('aria-current', 'true');
@@ -190,6 +197,47 @@ export class PlaceSelection {
     elementById('close-place').focus({preventScroll: true});
     this.#state.pendingReveal = {zoom: 15};
     this.flushPendingReveal();
+  }
+
+  // A building/address result is already inside the view, so choosing it only swaps green for red: the camera stays.
+  showSearchResult(result, trigger) {
+    if (result.kind === 'place') {
+      this.showPlace(result.feature.properties.id, trigger);
+      return;
+    }
+    const point = {
+      id: result.id,
+      name: result.label,
+      coordinates: [...result.coordinates],
+      kind: result.kind === 'address' ? 'Address' : 'Building',
+      details: []
+    };
+    this.setChoosing(false);
+    this.#state.selectedPlace = null;
+    this.#state.selectedPoint = point;
+    this.#state.returnFocusElement = trigger ?? null;
+    elementById('place-name').textContent = point.name;
+    elementById('place-category').textContent = point.kind;
+    const details = elementById('place-details');
+    details.replaceChildren();
+    const coordinatesLine = point.coordinates
+      .slice()
+      .reverse()
+      .map(coordinate => coordinate.toFixed(5))
+      .join(', ');
+    for (const text of [...point.details, coordinatesLine, 'Source: OpenStreetMap · available map attributes only'])
+      if (text) details.append(createElement('p', text, 'detail'));
+    this.#state.previewPlace = null;
+    this.updatePlaceLayers();
+    elementById('search').blur();
+    elementById('place-card').hidden = false;
+    this.#interface.placeCardOpened();
+    elementById('place-card').scrollTop = 0;
+    this.#context.onSelectionChanged();
+    this.markCurrentResult();
+    this.#objectSelection.clear();
+    this.#objectSelection.setTarget({sourceLayer: 'buildings', id: result.footprintIndex});
+    elementById('close-place').focus({preventScroll: true});
   }
 
   // Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.

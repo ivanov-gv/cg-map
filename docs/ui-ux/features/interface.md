@@ -223,6 +223,22 @@ Omit the result count, “nearest first” caption, and Reset action. Tapping th
 without clearing the query; the search field's own clear action removes the query. Use readable result rows with 16px
 names and at least 76px height.
 
+### Search result kinds and visible highlights (US-02, US-04)
+
+Current behavior: with the **All** chip active (no category filter) and a typed query, the nearest-first list combines
+places with recorded building addresses from the local label snapshot. A street name, alone or with a number, is one
+**Address** row (📍); a standalone house, building, section, or entrance identifier is one **Building** row (🏢). One
+label yields at most one row, with Address winning when both forms match. Matching is local and lexical, using the
+existing Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative address identity. An empty
+query keeps the nearby place list, and choosing any category lists places only.
+
+Every result inside the current view gets a green mark: a ring for a place, a green footprint outline for a building or
+address. Both marks are rebuilt from the same ordered result set when results or the view change. Only results in the
+current bounds are drawn; the camera never moves to reveal an off-screen match. Choosing a row removes its green mark
+and uses the existing red selection instead. Choosing a building or address opens its recorded details without moving
+the camera. Clearing both query and category removes every green mark. The matching rules and why the marks are
+app-owned are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
+
 ### Mobile search keeps the map visible
 
 At the phone layout (the 720px breakpoint), focusing or typing in search with the dock closed opens a results bubble
@@ -234,10 +250,11 @@ viewport, even for a short result list. The upper half contains search; the lowe
 remaining above the on-screen keyboard when calculating that limit, not the obscured layout height.
 
 Keep the map visible and interactive without a blocking scrim. Show matching places on the map using the same identities
-as the result list, and highlight the selected result or, before selection, the nearest match. Do not relocate the
-geographic marker. A chosen place must not stay hidden under the search UI, keyboard, or card. More distant matches may
-require choosing a result rather than forcing every marker into one tiny view. An empty search result must not create a
-fictitious marker.
+as the result list. Green marks cover every result inside the current view; choosing one replaces its green mark with
+the red selection. Results outside the view are not drawn and the camera does not move to reveal them. Do not relocate
+the geographic marker. A chosen place must not stay hidden under the search UI, keyboard, or card. More distant matches
+may require choosing a result rather than forcing every marker into one tiny view. An empty search result must not
+create a fictitious marker.
 
 Choosing a result keeps the results open and shows the place card minimized at the bottom of the visible screen, showing
 only its header. Dragging or scrolling the card up, or activating its header, opens the full card and shrinks the
@@ -318,6 +335,7 @@ and reduced motion.
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock. |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                 |
 | UI-A15 | Pick a category, use its × in every row, then repeat with the dock and search closed on Mobile, and with the dock closed on Flip.                 | Every active chip (never All) has a named 40 px × that returns to All, keeps the query and preserves the row's scroll position; the standalone chip disappears. On Mobile it sits 8 px below the bar and opens the bubble; on Flip it sits under the icon button and opens the dock. It is hidden for All, with a panel open, and under a Full/Fullscreen card.   |
+| UI-A16 | Type a query with places and recorded building addresses; pan, choose each result kind, then clear search.                                        | Rows are nearest first with place/building/address symbols and labels; only visible matches are green, the chosen one turns red without a camera move, and clearing removes every green mark. A category lists places only.                                                                                                                                       |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -330,8 +348,12 @@ and its × on desktop, phone and Flip, seamless desktop row movement, the Flip l
 or two results across keyboard events, the build version on one footer line at desktop, 412×840 Mobile, 374×241 and
 340×250, the Satellite symbol's design geometry, the Locate button's box, computed radius/icon size and offsets at each
 device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
-result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button,
-dock-footer visibility and footer-version functions; no large fake DOM is built for browser behavior. Keyboard geometry
+result stops, denied shows recovery, no initial fix, button style).
+[The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
+buildings and addresses, that only visible matches are green, that choosing one turns red without a camera move, and
+that clearing the query removes every green mark. Pure unit tests cover the state, clear-button, dock-footer visibility
+and footer-version functions and the search matching, classification and ordering rules; no large fake DOM is built for
+browser behavior. Keyboard geometry
 is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone
 behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI
 stability checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the

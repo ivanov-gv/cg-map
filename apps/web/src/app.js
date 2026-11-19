@@ -1,14 +1,14 @@
 import {createElement, elementById, isReducedMotionPreferred} from './dom.js';
 import {renderPlaceResults} from './place-details.js';
 import {PlaceSelection} from './place-selection.js';
-import {installCityNames, installPublicPlaceLayers} from './public-map-layers.js';
+import {installCityNames, installPublicPlaceLayers, SearchHighlights} from './public-map-layers.js';
 import {selectTappedFeature} from './map-selection.js';
 import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
 import {transportStatusText} from './status-messages.js';
 import {
   categories,
   matchesPlaceSearch,
-  selectNearestPlaces,
+  selectSearchResults,
   featureCollection,
   DEFAULT_CENTER,
   DISCOVER_ZOOM
@@ -88,6 +88,7 @@ const mapState = {
   isSatelliteVisible: false,
   interface: null,
   objectSelection: null,
+  searchHighlights: null,
   routePlanner: null,
   transportFeed: null,
   errorTimer: null
@@ -100,6 +101,8 @@ const directoryState = {
   placesById: new Map(),
   activeCategory: null,
   buildingAddresses: new Map(),
+  buildingLabels: null,
+  results: [],
   loadingError: null,
   visibilityConfig: null,
   markerKeysByPlaceId: new Map(),
@@ -178,6 +181,7 @@ function notify(message) {
 }
 
 function syncPanels() {
+  updateSearchHighlights();
   elementById('route-endpoints').hidden =
     (!routeEndpoints.from && !routeEndpoints.to) ||
     mapState.interface?.view !== 'closed' ||
@@ -211,24 +215,58 @@ function setRouteEndpoint(role) {
   placeSelection.close();
 }
 
+// The list and both highlight layers share one result set, ordered from the current view center.
+function searchQuery() {
+  return elementById('search').value.trim();
+}
+
+function computeSearchResults() {
+  if (!mapState.map) return [];
+  return selectSearchResults({
+    places: directoryState.allPlaces,
+    buildingLabels: directoryState.buildingLabels,
+    query: searchQuery(),
+    category: directoryState.activeCategory,
+    center: mapState.map.getCenter().toArray(),
+    markerKeys: directoryState.markerKeysByPlaceId
+  });
+}
+
 // Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
 function renderSearchResults() {
-  if (!mapState.map) return;
-  const center = mapState.map.getCenter().toArray();
-  const nearestPlaces = selectNearestPlaces(directoryState.filteredPlaces, center);
-  const currentPlace = placeSelection.selectedPlace ?? placeSelection.previewPlace;
   renderPlaceResults({
-    nearestPlaces,
-    currentPlace,
+    results: directoryState.loadingError ? [] : directoryState.results,
+    currentId: placeSelection.currentResultId,
     loadingError: directoryState.loadingError,
-    onChoose: placeSelection.showPlace
+    onChoose: placeSelection.showSearchResult
   });
+}
+
+// Only results inside the current view are drawn. The camera is never moved to reveal an off-screen match.
+function updateSearchHighlights() {
+  if (!mapState.isMapReady || !mapState.searchHighlights) return;
+  if (!searchQuery() && directoryState.activeCategory === null) {
+    mapState.searchHighlights.clear();
+    return;
+  }
+  const bounds = mapState.map.getBounds();
+  const selectedId = String(placeSelection.currentResultId ?? '');
+  const visible = directoryState.results.filter(
+    result => String(result.id) !== selectedId && bounds.contains(result.coordinates)
+  );
+  mapState.searchHighlights.update(visible);
+}
+
+function refreshSearchResults() {
+  directoryState.results = computeSearchResults();
+  renderSearchResults();
+  updateSearchHighlights();
 }
 
 // A search or category narrows the candidates; matching icons keep their thresholds.
 function applyPlaceSearch() {
   directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
-    matchesPlaceSearch(feature, elementById('search').value, directoryState.activeCategory)
+    matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
   );
   if (mapState.isMapReady && !directoryState.loadingError)
     mapState.map
@@ -239,7 +277,7 @@ function applyPlaceSearch() {
         )
       );
   placeSelection.onFilterChanged();
-  renderSearchResults();
+  refreshSearchResults();
   placeSelection.previewResults();
   // Update desktop search UI after results change.
   mapState.interface.syncDesktopSearchUI();
@@ -324,6 +362,7 @@ function loadDirectoryData() {
   const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
     .then(labels => {
       directoryState.buildingAddresses = buildingAddressIndex(labels);
+      directoryState.buildingLabels = labels;
       return labels;
     })
     .catch(error => {
@@ -446,6 +485,7 @@ function installPositionBadge() {
 function installPublicLayers(placesReady, labelsReady) {
   elementById('satellite-toggle').disabled = false;
   installPublicPlaceLayers(mapState.map);
+  mapState.searchHighlights = new SearchHighlights(mapState.map);
   installCityNames(mapState.map);
   installTransport(mapState.map);
   installRoutePoints(mapState.map);
@@ -512,7 +552,11 @@ function registerPublicMapEvents() {
   mapState.map.on('resize', () => locationControls.noteMapResize());
   // The list keeps its order while a chosen place is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
-    if (!placeSelection.selectedPlace) renderSearchResults();
+    if (!placeSelection.selectedPlace) {
+      directoryState.results = computeSearchResults();
+      renderSearchResults();
+    }
+    updateSearchHighlights();
     placeSelection.flushPendingReveal();
   });
   installMapTaps(mapState.map, event =>

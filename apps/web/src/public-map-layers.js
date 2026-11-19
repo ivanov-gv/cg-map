@@ -52,6 +52,71 @@ export function installPublicPlaceLayers(map) {
   });
 }
 
+const SEARCH_HIGHLIGHT_COLOR = '#2e7d32';
+const noFootprints = ['in', ['id'], ['literal', []]];
+
+// Green search highlights live in the public app, not in shared cartography. Places use their own point source;
+// buildings and addresses filter the original footprint tiles so whole outlines are drawn at any zoom.
+export class SearchHighlights {
+  constructor(map) {
+    this.map = map;
+    map.addSource('search-place-highlights', {
+      type: 'geojson',
+      data: featureCollection([])
+    });
+    map.addLayer(
+      {
+        id: 'search-place-rings',
+        type: 'circle',
+        source: 'search-place-highlights',
+        paint: {
+          'circle-radius': 15,
+          'circle-color': SEARCH_HIGHLIGHT_COLOR,
+          'circle-opacity': 0,
+          'circle-stroke-color': SEARCH_HIGHLIGHT_COLOR,
+          'circle-stroke-width': 3
+        }
+      },
+      'road-labels'
+    );
+    map.addLayer(
+      {
+        id: 'search-building-outline',
+        type: 'line',
+        source: 'basemap',
+        'source-layer': 'buildings',
+        filter: noFootprints,
+        paint: {
+          'line-color': SEARCH_HIGHLIGHT_COLOR,
+          'line-width': 3
+        },
+        layout: {'line-join': 'round', 'line-cap': 'round'}
+      },
+      'road-labels'
+    );
+  }
+
+  // Rebuild both highlights from the results currently inside the view. An empty set clears every green mark.
+  update(visibleResults) {
+    const placeFeatures = visibleResults
+      .filter(result => result.kind === 'place')
+      .map(result => ({
+        type: 'Feature',
+        properties: {markerKey: result.markerKey},
+        geometry: {type: 'Point', coordinates: [...result.coordinates]}
+      }));
+    this.map.getSource('search-place-highlights').setData(featureCollection(placeFeatures));
+    const footprints = visibleResults
+      .filter(result => result.kind !== 'place')
+      .map(result => result.footprintIndex);
+    this.map.setFilter('search-building-outline', ['in', ['id'], ['literal', footprints]]);
+  }
+
+  clear() {
+    this.update([]);
+  }
+}
+
 export function installCityNames(map) {
   const cities = [
     ['Podgorica', 19.26, 42.437],
