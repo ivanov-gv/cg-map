@@ -48,15 +48,9 @@ test('dock expands around a stationary header and keeps layer/download options a
   await openMenu(page);
   expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
   expect(await page.locator('#menu-toggle').boundingBox()).toEqual(burger);
-  // Open results reveal × inside the unchanged header, narrowing only the input field.
+  // Open results reveal × in its reserved slot; the input keeps the same box.
   await expect(page.locator('#clear-search')).toBeVisible();
-  const searchWhileOpen = await page.locator('#search').boundingBox();
-  expect({
-    x: searchWhileOpen.x,
-    y: searchWhileOpen.y,
-    height: searchWhileOpen.height
-  }).toEqual({x: search.x, y: search.y, height: search.height});
-  expect(searchWhileOpen.width).toBeLessThan(search.width);
+  expect(await page.locator('#search').boundingBox()).toEqual(search);
   await expect(page.locator('.layer-tile')).toHaveCount(2);
   await expect(page.locator('#download-title')).toHaveText('Download for offline use');
   await expect(page.getByRole('heading', {name: /Map layers|Offline map/})).toHaveCount(0);
@@ -3145,6 +3139,40 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#results')).toBeHidden();
   });
 
+  test('desktop focus from Empty opens results without closing a map-picked card', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await closeMenu(page);
+    const panel = page.locator('#desktop-search-panel');
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+
+    const place = nearbyPlaces.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+
+    await page.locator('#search').focus();
+    await expect(panel).toHaveAttribute('data-state', 'open');
+    await expect(page.locator('#results')).toBeVisible();
+    await expect(page.locator('#place-card')).toBeVisible();
+  });
+
+  test('a desktop floating chip opens results in the joined panel', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await closeMenu(page);
+    const panel = page.locator('#desktop-search-panel');
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+    await expect(page.locator('#results')).toBeHidden();
+
+    await panel.getByRole('button', {name: 'Shops', exact: true}).click();
+    await expect(panel).toHaveAttribute('data-state', 'open');
+    await expect(page.locator('#results')).toBeVisible();
+  });
+
   test('desktop × in Filled clears the query and keeps results open, then closes card and results', async ({
     page,
     isMobile
@@ -3171,6 +3199,25 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   });
 
+  test('desktop × in the Open dock closes the dock and a chosen place card', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await openMenu(page);
+    await expect(page.locator('#results')).toBeVisible();
+
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    await expect(page.locator('#clear-search')).toBeVisible();
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
+
+    await page.locator('#clear-search').click();
+    await expect(page.locator('#dock-content')).toBeHidden();
+    await expect(page.locator('#place-card')).toBeHidden();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  });
+
   test('phone focus opens the bubble in Open and × returns to the map', {tag: '@phone'}, async ({page, isMobile}) => {
     test.skip(!isMobile, 'phone layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
@@ -3192,7 +3239,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#clear-search')).toBeHidden();
   });
 
-  test('phone dock shows × for a focused empty field and × in Open returns to the map', {tag: '@phone'}, async ({
+  test('phone dock shows × with an empty field and × in Open returns to the map', {tag: '@phone'}, async ({
     page,
     isMobile
   }) => {
@@ -3202,6 +3249,8 @@ test.describe('Search Bar states and All category', () => {
     const clearButton = page.locator('#clear-search');
 
     await openMenu(page);
+    // Opening the dock shows results, so the empty field is Open and already has ×.
+    await expect(clearButton).toBeVisible();
     await page.locator('#search').focus();
     await expect(page.locator('#search')).toBeFocused();
     await expect(page.locator('#dock-content')).toBeVisible();

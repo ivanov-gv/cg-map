@@ -549,12 +549,14 @@ function warnAboutSlowStartup() {
   }, startupTimeoutMilliseconds);
 }
 
+// UI-only key for the row's first chip; the shared category contract has no "all" entry.
+const ALL_CATEGORIES_KEY = '';
+
 // The row's first chip returns to all categories without changing the search query.
-// It is UI state only: the shared category contract does not contain an "all" category.
 function registerCategoryControls() {
   const allButton = createElement('button', 'All');
   allButton.type = 'button';
-  allButton.dataset.category = '';
+  allButton.dataset.category = ALL_CATEGORIES_KEY;
   allButton.setAttribute('aria-label', 'All categories');
   allButton.addEventListener('click', () => selectCategory(null));
   const container = elementById('categories');
@@ -571,7 +573,7 @@ function registerCategoryControls() {
 }
 
 function syncCategoryButtons() {
-  const activeCategory = directoryState.activeCategory ?? '';
+  const activeCategory = directoryState.activeCategory ?? ALL_CATEGORIES_KEY;
   for (const button of elementById('categories').children) {
     const isActiveCategory = button.dataset.category === activeCategory;
     button.setAttribute('aria-pressed', String(isActiveCategory));
@@ -605,15 +607,16 @@ function registerSelectionControls() {
   elementById('close-place').addEventListener('click', () => placeSelection.close());
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
+      const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
       if (!elementById('place-card').hidden) placeSelection.close();
       else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.
         mapState.interface.close(true);
-      } else if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.state === 'filled') {
+      } else if (isDesktop && mapState.interface.state === 'filled') {
         // On desktop with dock closed, Escape clears the query and refocuses the input; results stay Open.
         mapState.interface.clearQuery();
         mapState.interface.restoreFocus(elementById('search'));
-      } else if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.state === 'open') {
+      } else if (isDesktop && mapState.interface.state === 'open') {
         // A second Escape leaves the Open state, matching the × action.
         mapState.interface.closeResults();
       } else if (mapState.interface.view !== 'closed') {
@@ -693,8 +696,8 @@ function initializeInterface() {
       placeSelection.close(false);
       applyPlaceSearch();
     },
-    onQueryCleared: () => {
-      // Clearing a query is not a new search: keep the chosen place and refresh the results.
+    onResultsRefreshed: () => {
+      // Opening results or clearing a query is not a new search: keep the chosen place and refresh the list.
       applyPlaceSearch();
     },
     onChange: () => {

@@ -75,10 +75,10 @@ const WHEEL_GESTURE_MILLISECONDS = 600;
 const MINIMUM_KEYBOARD_HEIGHT_PIXELS = 100;
 
 export class MapInterface {
-  constructor({onSearch, onQueryCleared, onChange, onViewport, onCardSwipedAway, onResultsClosed, resultsLabel}) {
+  constructor({onSearch, onResultsRefreshed, onChange, onViewport, onCardSwipedAway, onResultsClosed, resultsLabel}) {
     Object.assign(this, {
       onSearch,
-      onQueryCleared,
+      onResultsRefreshed,
       onChange,
       onViewport,
       onCardSwipedAway,
@@ -173,10 +173,14 @@ export class MapInterface {
   }
 
   syncClearButton() {
-    this.clearButton.hidden = !isClearButtonVisible({
+    // The slot stays in layout; only visibility and keyboard/a11y access change.
+    const isVisible = isClearButtonVisible({
       state: this.state,
       isFlipLayout: this.flipLayoutQuery.matches
     });
+    this.clearButton.dataset.clearVisible = String(isVisible);
+    this.clearButton.setAttribute('aria-hidden', String(!isVisible));
+    this.clearButton.tabIndex = isVisible ? 0 : -1;
   }
 
   // Filled clears the query; Open closes results except on Flip, where the Icon Button owns dock closing.
@@ -213,7 +217,8 @@ export class MapInterface {
     const wasOpen = this.areResultsVisible();
     this.showResults();
     this.setView(this.view);
-    if (!wasOpen) this.onSearch?.();
+    // Refreshing results is not a new search: a card chosen on the map must stay open.
+    if (!wasOpen) this.onResultsRefreshed?.();
   }
 
   // Leave search entirely: hide results and the card, then return to the map.
@@ -474,7 +479,7 @@ export class MapInterface {
     this.syncClearButton();
     this.syncDesktopSearchUI();
     this.syncSearchExpanded();
-    this.onQueryCleared?.();
+    this.onResultsRefreshed?.();
   }
 
   // Returns true when the desktop results panel is visible and shows results.

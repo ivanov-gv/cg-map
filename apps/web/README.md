@@ -49,8 +49,8 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 ## Laconic controls
 
 The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
-viewport and starts with the dock closed. A single burger/search header keeps its outer geometry when the dock opens;
-where Open shows ×, only the field narrows to make room for it. [interface.js](src/interface.js) owns
+viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens, and the
+× keeps its slot in every search-bar state so the input never changes width. [interface.js](src/interface.js) owns
 closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
 swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 

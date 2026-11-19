@@ -46,6 +46,8 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* This one header has identical geometry in every interface state. */
 .search-bar { position: fixed; top: calc(var(--visible-top) + var(--bar-inset)); left: var(--bar-inset); width: calc(var(--dock-width) - 2 * var(--bar-inset)); height: 54px; display: flex; align-items: center; border: 1px solid #dce0d5; border-radius: 15px; background: white; box-shadow: 0 4px 20px #243f3710; pointer-events: auto; }
 .icon-button { display: grid; place-items: center; width: 48px; height: 48px; flex: none; background: transparent; border-radius: 12px; }
+/* Keep × in the flex layout in every state; only its visibility changes, so the input keeps its width. */
+.clear-button[data-clear-visible='false'] { visibility: hidden; }
 /* On touch screens :hover sticks to the last tapped element, so the menu button
  * looks pressed after closing the dock. Guard hover feedback so it only applies
  * on devices that can actually hover (issue #155). */
