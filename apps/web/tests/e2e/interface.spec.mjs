@@ -1898,9 +1898,9 @@ test.describe('Mobile search bar', () => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     await openMenu(page);
-    // Categories become visible when the dock opens.
+    // All and the five categories become visible when the dock opens.
     await expect(page.locator('#categories')).toBeVisible();
-    await expect(page.locator('#categories button')).toHaveCount(5);
+    await expect(page.locator('#categories button')).toHaveCount(6);
   });
 
   test('touch targets are at least 40 px on mobile', async ({page}) => {
