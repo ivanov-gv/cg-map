@@ -50,7 +50,7 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 
 The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
 viewport and starts with the dock closed. A single burger/search header keeps its outer geometry when the dock opens;
-only the field narrows to make room for the Open state's ×. [interface.js](src/interface.js) owns
+where Open shows ×, only the field narrows to make room for it. [interface.js](src/interface.js) owns
 closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
 swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 
@@ -78,9 +78,10 @@ open.
 **Flip search bar** (issues #103, #246): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks
 to the menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The
 search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as
-on mobile), and the search field becomes usable. The open dock's results make the bar Open with × already visible;
-typing makes it Filled. The × clears the query but keeps the dock open, and a second × closes the dock and any place
-card. The category row starts with **All**, as on other devices.
+on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no × until a
+query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the dock or
+card. Closing the dock belongs to the header Icon Button (currently the menu control; its cycle is issue #247). The
+category row starts with **All**, as on other devices.
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar

@@ -1,7 +1,15 @@
+import {FLIP_MEDIA_QUERY} from './device-class.js';
+
 // The bar is Empty without results, Open with results and no query, and Filled with a query.
 export function searchBarState({hasQuery, resultsVisible}) {
   if (hasQuery) return 'filled';
   return resultsVisible ? 'open' : 'empty';
+}
+
+// Flip reserves × for clearing a query; its Icon Button owns closing the dock.
+export function isClearButtonVisible({state, isFlipLayout}) {
+  if (isFlipLayout) return state === 'filled';
+  return state !== 'empty';
 }
 
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
@@ -81,6 +89,7 @@ export class MapInterface {
     this.isResultsPanelOpen = false;
     this.areResultsMinimized = false;
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
+    this.flipLayoutQuery = matchMedia(FLIP_MEDIA_QUERY);
     this.search = document.getElementById('search');
     this.menu = document.getElementById('menu-toggle');
     this.panel = document.getElementById('browse-panel');
@@ -103,15 +112,7 @@ export class MapInterface {
       this.setView(this.view === 'dock' ? 'closed' : 'dock');
       this.onViewport?.();
     });
-    this.clearButton.addEventListener('click', () => {
-      if (this.state === 'filled') {
-        this.clearQuery();
-        // Refocus without firing the focus handler, which would close the chosen place's card.
-        this.restoreFocus(this.search);
-      } else {
-        this.closeResults();
-      }
-    });
+    this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
@@ -132,6 +133,7 @@ export class MapInterface {
       this.syncDesktopSearchUI();
       this.syncViewport();
     });
+    this.flipLayoutQuery.addEventListener('change', () => this.syncClearButton());
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
     window.visualViewport?.addEventListener('scroll', () => this.syncViewport());
     window.addEventListener('resize', () => this.syncViewport());
@@ -165,13 +167,28 @@ export class MapInterface {
     return this.search.value.trim().length > 0;
   }
 
-  // The bar state drives the clear button, which means Open as well as Filled.
+  // The bar state combines query and result visibility; clear-button rules depend on the device.
   get state() {
     return searchBarState({hasQuery: this.hasQuery(), resultsVisible: this.areResultsVisible()});
   }
 
   syncClearButton() {
-    this.clearButton.hidden = this.state === 'empty';
+    this.clearButton.hidden = !isClearButtonVisible({
+      state: this.state,
+      isFlipLayout: this.flipLayoutQuery.matches
+    });
+  }
+
+  // Filled clears the query; Open closes results except on Flip, where the Icon Button owns dock closing.
+  clearQueryOrCloseResults() {
+    if (this.state === 'filled') {
+      this.clearQuery();
+      // Refocus without firing the focus handler, which would close the chosen place's card.
+      this.restoreFocus(this.search);
+      return;
+    }
+    if (this.flipLayoutQuery.matches) return;
+    this.closeResults();
   }
 
   // Reveal results without taking focus from the control the person used.

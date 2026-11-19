@@ -63,9 +63,9 @@ extends behind and below it, and the header belongs to the dock.
 
 At a fixed viewport, both states MUST have identical outer header coordinates, width, height, border, corner radius, and
 burger position. The search field keeps its start, height, and text baseline; opening the dock makes the results
-visible, so the Open state's × may narrow that field inside the unchanged header. Do not move the header beside the
-dock, replace it with another input, or turn its rounded shape into a different toolbar. Preserve query, category,
-focus, and text selection through expansion.
+visible, so the Open state's × may narrow that field inside the unchanged header where that × is shown. Do not move the
+header beside the dock, replace it with another input, or turn its rounded shape into a different toolbar. Preserve
+query, category, focus, and text selection through expansion.
 
 Keep the dock attached to the left edge rather than presenting a floating bubble or bottom sheet. The same rule applies
 on phones; viewport changes may adapt dimensions, but opening alone must not change the outer header geometry. The
@@ -81,10 +81,11 @@ The same three states apply on every device:
 | Open   | Placeholder and ×      | Nearby list, nearest first, shown with no query. |
 | Filled | Query and ×            | Results for the query and the active category.   |
 
-The × acts on state, not just on text. In Filled it clears the query and keeps the results open, leaving the bar Open.
-In Open it closes the results and the place card and returns to the map, leaving the bar Empty. With the dock open, the
-same sequence applies: Filled → Open keeps the dock and its results; Open → Empty closes the dock and the card. Focus
-and query survive opening and closing the dock.
+On Desktop and Mobile, × acts on state, not just on text. In Filled it clears the query and keeps the results open,
+leaving the bar Open. In Open it closes the results and the place card and returns to the map, leaving the bar Empty.
+With the dock open, the same sequence applies: Filled → Open keeps the dock and its results; Open → Empty closes the
+dock and the card. Focus and query survive opening and closing the dock. Flip is the documented exception: Open shows no
+×, and Filled × clears only the query; its Icon Button owns dock closing.
 
 ### Desktop search bar
 
@@ -118,9 +119,10 @@ On flip cover screens (viewport ≤ 400 px wide and ≤ 400 px tall), the search
 on the main screen — the bar's bounding box is at most the menu button width plus 16 px of padding. The search field and
 categories are hidden to conserve space on the small display. When the user opens the dock, the search bar spans the
 full width again (as on mobile), and the search field becomes visible and usable. The dock's results with no query make
-the bar Open, so the clear button is already present; typing makes it Filled. The × clears a query but keeps the dock
-open, and a second × closes the dock and the place card. The categories row follows the same dock-open behavior as on
-mobile.
+the bar Open, but Flip shows no × in Open; typing makes it Filled and reveals ×. That × clears the query only, keeping
+the dock and its results open. It never closes the dock or the place card: dock closing belongs to the header Icon
+Button (currently the menu control; its cycle is issue #247). The categories row follows the same dock-open behavior as
+on mobile.
 
 ### Full-screen dock on Mobile and Flip
 
@@ -264,33 +266,34 @@ and reduced motion.
 
 ## Acceptance
 
-| ID     | Check                                                                                                                                  | Pass condition                                                                                                                                                                                                                                                                     |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| UI-A01 | Open with no app interaction.                                                                                                          | Only the opening controls and geographic scene are present; dock content is closed.                                                                                                                                                                                                |
-| UI-A02 | Toggle the dock at an unchanged viewport.                                                                                              | Outer header and burger boxes, shape, and text baseline remain unchanged; the Open state's × may narrow the field; query, category, focus, and selection survive.                                                                                                                  |
-| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                        | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                 |
-| UI-A04 | Inspect bottom options.                                                                                                                | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                   |
-| UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                 | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                           |
-| UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                        | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                       |
-| UI-A07 | Use keyboard, screen reader, and touch.                                                                                                | Controls have names/states, visible focus and adequate targets; closing restores focus without reopening the dock.                                                                                                                                                                 |
-| UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                              | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                             |
-| UI-A09 | On a phone, focus search, type, select different results, and open/dismiss the keyboard; then use the burger and search from the dock. | Search started with the dock closed leaves it closed, the bubble is at most half the visible viewport, and a selected marker stays uncovered once the keyboard is dismissed. Burger opens the full dock with query/category retained; search stays in it until a result is chosen. |
-| UI-A10 | Open search, type, and choose categories; then choose results inside and outside the focus zone.                                       | Only choosing a place outside the inner 75% of the uncovered map moves the camera, unless it must zoom in to street level. The result list does not reorder while the card is open.                                                                                                |
-| UI-A11 | On a phone, choose a result, swipe the card up and down, use the strip, and swipe it closed.                                           | Results and minimized card share the screen; the full card reduces results to the strip; swiping steps back and closes. Closing leaves results open and the camera still; other steps move it only if the place leaves the zone.                                                   |
-| UI-A12 | On desktop, choose a result and close its card.                                                                                        | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                           |
-| UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open.                                                   | The bar shows Empty → Open → Filled; the first × clears only the query, the next closes results, the card, and the dock.                                                                                                                                                           |
-| UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.             | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                  |
+| ID     | Check                                                                                                                                             | Pass condition                                                                                                                                                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI-A01 | Open with no app interaction.                                                                                                                     | Only the opening controls and geographic scene are present; dock content is closed.                                                                                                                                                                                                |
+| UI-A02 | Toggle the dock at an unchanged viewport.                                                                                                         | Outer header and burger boxes, shape, and text baseline remain unchanged; the Open state's × may narrow the field; query, category, focus, and selection survive.                                                                                                                  |
+| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                                   | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                 |
+| UI-A04 | Inspect bottom options.                                                                                                                           | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                   |
+| UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                            | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                           |
+| UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                                   | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                       |
+| UI-A07 | Use keyboard, screen reader, and touch.                                                                                                           | Controls have names/states, visible focus and adequate targets; closing restores focus without reopening the dock.                                                                                                                                                                 |
+| UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                                         | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                             |
+| UI-A09 | On a phone, focus search, type, select different results, and open/dismiss the keyboard; then use the burger and search from the dock.            | Search started with the dock closed leaves it closed, the bubble is at most half the visible viewport, and a selected marker stays uncovered once the keyboard is dismissed. Burger opens the full dock with query/category retained; search stays in it until a result is chosen. |
+| UI-A10 | Open search, type, and choose categories; then choose results inside and outside the focus zone.                                                  | Only choosing a place outside the inner 75% of the uncovered map moves the camera, unless it must zoom in to street level. The result list does not reorder while the card is open.                                                                                                |
+| UI-A11 | On a phone, choose a result, swipe the card up and down, use the strip, and swipe it closed.                                                      | Results and minimized card share the screen; the full card reduces results to the strip; swiping steps back and closes. Closing leaves results open and the camera still; other steps move it only if the place leaves the zone.                                                   |
+| UI-A12 | On desktop, choose a result and close its card.                                                                                                   | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                           |
+| UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query, the next closes results, the card, and the dock. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock.                                                |
+| UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                  |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
 selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, desktop
-card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, the All chip and
-active-category return, seamless desktop row movement, and the follow location state machine (start, new fix moves
-camera, second click stops, drag stops, search result stops, denied shows recovery, no initial fix, button style). A
-pure unit test covers the state function; no large fake DOM is built for browser behavior. Keyboard geometry is
-simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior.
-Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability
-checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, the Flip exception
+(Filled-only × that cannot close the dock), the All chip and active-category return, seamless desktop row movement, and
+the follow location state machine (start, new fix moves camera, second click stops, drag stops, search result stops,
+denied shows recovery, no initial fix, button style). Pure unit tests cover the state and clear-button functions; no
+large fake DOM is built for browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does
+not establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief

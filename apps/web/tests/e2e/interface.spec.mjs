@@ -1951,21 +1951,22 @@ test.describe('Flip search bar', () => {
     });
   });
 
-  test('flip dock opens search in Open state and × moves Filled back to Open', async ({page}) => {
+  test('flip dock hides × in Open and its Filled × only clears the query', async ({page}) => {
     await withFlipViewport(page, async () => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
       await ready(page);
-      // Open the dock. Its results with no query make the bar Open, so × is already shown.
+      // Open the dock. Its results with no query make the bar Open, but Flip has no × in Open.
       await openMenu(page);
       await expect(page.locator('#search')).toBeVisible();
-      await expect(page.locator('#clear-search')).toBeVisible();
+      await expect(page.locator('#clear-search')).toBeHidden();
       await page.locator('#search').fill('Café');
-      expect(await page.locator('#search').inputValue()).toBe('Café');
+      await expect(page.locator('#search')).toHaveValue('Café');
       await expect(page.locator('#clear-search')).toBeVisible();
-      // Clearing the query keeps the dock and its results open.
+      // Clearing the query keeps the dock and its results open; × never closes the dock on Flip.
       await page.locator('#clear-search').click();
       await expect(page.locator('#search')).toHaveValue('');
-      await expect(page.locator('#clear-search')).toBeVisible();
+      await expect(page.locator('#clear-search')).toBeHidden();
+      await expect(page.locator('#results')).toBeVisible();
       await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
     });
   });
@@ -3191,13 +3192,19 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#clear-search')).toBeHidden();
   });
 
-  test('phone dock uses the same Filled → Open → Empty sequence', {tag: '@phone'}, async ({page, isMobile}) => {
+  test('phone dock shows × for a focused empty field and × in Open returns to the map', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
     test.skip(!isMobile, 'phone layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
 
     await openMenu(page);
+    await page.locator('#search').focus();
+    await expect(page.locator('#search')).toBeFocused();
+    await expect(page.locator('#dock-content')).toBeVisible();
     await expect(clearButton).toBeVisible();
     await page.locator('#search').fill('Nearby place 1');
     await expect(clearButton).toBeVisible();
@@ -3208,6 +3215,7 @@ test.describe('Search Bar states and All category', () => {
 
     await clearButton.click();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(page.locator('#map')).toBeVisible();
     await expect(clearButton).toBeHidden();
     await expect(page.locator('#dock-content')).toBeHidden();
   });

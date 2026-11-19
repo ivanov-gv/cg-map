@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
+  isClearButtonVisible,
   isInFocusZone,
   searchBarState,
   searchBounds,
@@ -22,6 +23,14 @@ test('search bar state follows the query and whether results are open', () => {
   assert.equal(searchBarState({hasQuery: true, resultsVisible: true}), 'filled');
   // A query still shown after leaving a dock stays Filled until it is cleared.
   assert.equal(searchBarState({hasQuery: true, resultsVisible: false}), 'filled');
+});
+
+test('the clear button is Filled-only on Flip and Open as well as Filled elsewhere', () => {
+  assert.equal(isClearButtonVisible({state: 'empty', isFlipLayout: false}), false);
+  assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: false}), true);
+  assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: false}), true);
+  assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: true}), false);
+  assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: true}), true);
 });
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
