@@ -373,6 +373,9 @@ function installPublicMapDebug() {
     },
     get explored() {
       return mapState.hasExploredMap;
+    },
+    get interface() {
+      return mapState.interface;
     }
   };
 }

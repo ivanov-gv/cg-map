@@ -2833,6 +2833,27 @@ test.describe('Flip dock content derived from state', () => {
     });
   });
 
+  // Opening the dock by any path other than cycleFlipMenu (e.g. setView('dock') called
+  // from app.js or a future feature) must still show the list, not an empty dock.
+  test('opening dock via setView shows list and sets button label',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Open the dock directly via setView, bypassing the menu button cycle.
+      await page.evaluate(() => window.kompasDebug.interface.setView('dock'));
+
+      // The dock should be open with the results list visible.
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-main')).toBeVisible();
+      await expect(page.locator('.result')).toHaveCount(8);
+
+      // The button should show "Show map modes" (modes state), not "Open menu".
+      await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
+    });
+  });
+
   // Restore coverage: menu button reachable with Tab, Enter/Space advance the cycle.
   test('340x250: menu button reachable by Tab and advances with Enter/Space',
     {tag: '@phone'}, async ({page}) => {
