@@ -1,5 +1,7 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
+import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
+import {buildingAddress} from '../../src/point-selection.js';
 import {
   atViewport,
   camera,
@@ -14,6 +16,7 @@ import {
   settled,
   simulateKeyboard,
   stubRouting,
+  tapMapCenter,
   tapRenderedPlace,
   withFlipViewport,
   CAMERA_HOLD_MILLISECONDS,
@@ -25,6 +28,33 @@ import {
 const RESORT_WINDOW_MILLISECONDS = 200;
 // A little over the card's own WHEEL_GESTURE_MILLISECONDS.
 const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
+const TAP_ACTION_WINDOW_MILLISECONDS = 650;
+const TOUCH_DRAG_STEP_MILLISECONDS = 25;
+const SNAPSHOT_DATE = '17 Oct 2026';
+
+const readGeoJSON = path =>
+  JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
+
+const cardPlace = (id, coordinates, extra = {}) => ({
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates},
+  properties: {
+    id,
+    name: `Place ${id}`,
+    category: 'food',
+    kind: 'cafe',
+    source: 'OpenStreetMap',
+    visibilityLevel: 5,
+    ...extra
+  }
+});
+
+async function openPoiCards(page, features) {
+  await page.route('**/data/places.geojson', route =>
+    route.fulfill({json: {type: 'FeatureCollection', features}})
+  );
+  await ready(page);
+}
 
 const webPackage = JSON.parse(fileSystem.readFileSync(new URL('../../package.json', import.meta.url)));
 const builtManifest = JSON.parse(
@@ -4114,4 +4144,311 @@ test.describe('Active category chip', () => {
       expect(geometry.visibleResults).toBeGreaterThanOrEqual(3);
     });
   });
+});
+
+test('one tap opens a POI card with recorded sections', async ({page}) => {
+  const label = readGeoJSON('building-labels.geojson').features.find(
+    feature => Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
+  );
+  expect(label).toBeTruthy();
+  const expectedBuildingAddress = buildingAddress(label.properties);
+  const first = cardPlace('node/42424242', label.geometry.coordinates, {
+    name: 'Café Ribnica',
+    'addr:street': 'Njegoševa',
+    'addr:housenumber': '12',
+    opening_hours: 'Mo-Fr 07:00-23:00',
+    phone: '+382 20 123 456',
+    website: 'https://example.org/ribnica'
+  });
+  const second = cardPlace('node/42424243', [first.geometry.coordinates[0] + 0.003, first.geometry.coordinates[1]], {
+    name: 'Second place',
+    category: 'shops',
+    kind: 'shop'
+  });
+  await openPoiCards(page, [first, second]);
+
+  await tapRenderedPlace(page, first.geometry.coordinates, first.properties.id);
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect(page.locator('#place-name')).toHaveText('Café Ribnica');
+  await expect(page.locator('#place-category')).toHaveText('Eat & drink');
+  await expect(page.locator('#place-subtitle')).toHaveText('Café · Njegoševa 12');
+  await expect(page.locator('#place-source')).toHaveText(
+    `Source: OpenStreetMap, snapshot ${SNAPSHOT_DATE}. Hours are as recorded, not checked.`
+  );
+  const card = page.locator('#place-details');
+  await expect(card.locator('.details-section')).toHaveCount(2);
+  await expect(card.locator('.section-title')).toHaveText(['Location and contacts', 'Opening hours']);
+  await expect(card).toContainText('Address: Njegoševa 12');
+  await expect(card).toContainText(`In the building at: ${expectedBuildingAddress}`);
+  await expect(card).toContainText('Coordinates: 42.');
+  await expect(card).toContainText('Phone: +382 20 123 456');
+  await expect(card).toContainText('Monday – Friday');
+  await expect(card).toContainText('07:00–23:00');
+  await expect(card.getByRole('link', {name: 'Website ↗'})).toHaveAttribute(
+    'href',
+    'https://example.org/ribnica'
+  );
+  await expect(card.getByRole('link', {name: 'View source ↗'})).toHaveAttribute(
+    'href',
+    'https://www.openstreetmap.org/node/42424242'
+  );
+  await expect(card.getByRole('button', {name: /more details/i})).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        id => window.kompasDebug.map.getFeatureState({source: 'places', id}).selected,
+        first.properties.id
+      )
+    )
+    .toBe(true);
+});
+
+test('choosing another listing replaces the card and its highlight', async ({page, isMobile}) => {
+  test.skip(isMobile, 'A phone card covers the map');
+  const first = cardPlace('node/42424242', [19.262839, 42.439658], {name: 'First place'});
+  const second = cardPlace('node/42424243', [19.265839, 42.439658], {
+    name: 'Second place',
+    category: 'shops',
+    kind: 'shop'
+  });
+  await openPoiCards(page, [first, second]);
+
+  await tapRenderedPlace(page, first.geometry.coordinates, first.properties.id);
+  await expect(page.locator('#place-name')).toHaveText('First place');
+  await tapRenderedPlace(page, second.geometry.coordinates, second.properties.id);
+  await expect(page.locator('#place-name')).toHaveText('Second place');
+  expect(
+    await page.evaluate(
+      id => window.kompasDebug.map.getFeatureState({source: 'places', id}).selected,
+      first.properties.id
+    )
+  ).toBe(false);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        id => window.kompasDebug.map.getFeatureState({source: 'places', id}).selected,
+        second.properties.id
+      )
+    )
+    .toBe(true);
+});
+
+test('a bare building opens a card with its addresses, entrances and places inside the footprint', async ({
+  page
+}) => {
+  const labels = readGeoJSON('building-labels.geojson');
+  const buildings = readGeoJSON('buildings.geojson');
+  const label = labels.features.find(
+    feature =>
+      Number.isInteger(feature.properties.footprintIndex) &&
+      buildings.features[feature.properties.footprintIndex]?.geometry.type === 'Polygon'
+  );
+  expect(label).toBeTruthy();
+  const footprintIndex = label.properties.footprintIndex;
+  const ring = buildings.features[footprintIndex].geometry.coordinates[0];
+  delete label.properties.name;
+  delete label.properties['addr:housenumber'];
+  label.properties['addr:street'] = 'Ulica Slobode';
+  label.properties.entrances = [
+    {
+      id: 'node/42424301',
+      number: '27',
+      ref: 'M',
+      coordinates: ring[0],
+      bearing: entranceBearing(ring[0], buildings.features[footprintIndex].geometry)
+    },
+    {
+      id: 'node/42424302',
+      number: '29',
+      coordinates: ring[Math.floor(ring.length / 2)],
+      bearing: entranceBearing(
+        ring[Math.floor(ring.length / 2)],
+        buildings.features[footprintIndex].geometry
+      )
+    }
+  ];
+  const inside = cardPlace('node/inside-cafe', label.geometry.coordinates, {
+    name: 'Inside café',
+    opening_hours: 'Mo-Fr 08:00-18:00'
+  });
+  await page.route('**/data/building-labels.geojson', route =>
+    route.fulfill({json: {type: 'FeatureCollection', features: [label]}})
+  );
+  await openPoiCards(page, [inside]);
+
+  let picked = null;
+  for (const zoom of [17, 18, 19]) {
+    await page.evaluate(
+      ({coordinates, zoom}) => window.kompasDebug.map.jumpTo({center: coordinates, zoom}),
+      {coordinates: label.geometry.coordinates, zoom}
+    );
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+    await mapIdle(page);
+    picked = await page.evaluate(index => {
+      const map = window.kompasDebug.map;
+      const bounds = map.getCanvas().getBoundingClientRect();
+      const iconLayers = map
+        .getStyle()
+        .layers.map(layer => layer.id)
+        .filter(id => id.startsWith('place-icons-'));
+      for (let y = 150; y < bounds.height - 65; y += 4)
+        for (let x = bounds.width * 0.5; x < bounds.width - 65; x += 4) {
+          const hits = map.queryRenderedFeatures([x, y], {layers: ['buildings', ...iconLayers]});
+          const isOnlyFootprint =
+            hits.length > 0 && hits.every(hit => hit.layer.id === 'buildings' && hit.id === index);
+          if (isOnlyFootprint) return {x: bounds.left + x, y: bounds.top + y};
+        }
+      return null;
+    }, footprintIndex);
+    if (picked) break;
+  }
+  expect(picked).not.toBeNull();
+
+  await page.mouse.click(picked.x, picked.y);
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect(page.locator('#place-category')).toHaveText('Building');
+  await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+  await expect(page.locator('#place-subtitle')).toContainText('1 recorded address');
+  await expect(page.locator('#place-source')).toHaveText(`Source: OpenStreetMap, snapshot ${SNAPSHOT_DATE}.`);
+  const card = page.locator('#place-details');
+  await expect(card.locator('.section-title')).toHaveText([
+    'Addresses',
+    'Entrances (marked on the map)',
+    'Inside this building',
+    'Details'
+  ]);
+  await expect(card).toContainText('Ulica Slobode');
+  await expect(card).toContainText('1 · 27, Ulaz');
+  await expect(card).toContainText('2 · 29');
+  await expect(card).toContainText('Inside café · Café · 08:00–18:00');
+  await expect(card).toContainText('Coordinates: 42.');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.kompasDebug.map.queryRenderedFeatures({layers: ['entrance-selection-arrows']}).length
+      )
+    )
+    .toBe(2);
+});
+
+test('a result chosen outside the viewport gains its building address once the map settles', async ({page}) => {
+  const label = readGeoJSON('building-labels.geojson').features.find(
+    feature => Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
+  );
+  expect(label).toBeTruthy();
+  const expectedBuildingAddress = buildingAddress(label.properties);
+  await page.route('**/data/building-labels.geojson', route =>
+    route.fulfill({json: {type: 'FeatureCollection', features: [label]}})
+  );
+  await openPoiCards(page, [
+    cardPlace('node/42424444', label.geometry.coordinates, {
+      name: 'Offscreen café',
+      'addr:street': 'Njegoševa',
+      'addr:housenumber': '12'
+    })
+  ]);
+  await settled(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19, 42], zoom: 12}));
+  await mapIdle(page);
+  await openMenu(page);
+  await page.locator('#search').fill('Offscreen café');
+  const result = page.locator('.result', {hasText: 'Offscreen café'});
+  await expect(result).toHaveCount(1);
+  await result.click();
+
+  await expect(page.locator('#place-card')).toBeVisible();
+  await expect(page.locator('#place-name')).toHaveText('Offscreen café');
+  await expect(page.locator('#place-subtitle')).toHaveText('Café · Njegoševa 12');
+  await expect(page.locator('#place-details')).toContainText(
+    `In the building at: ${expectedBuildingAddress}`
+  );
+});
+
+test('panning and double-clicking keep the card closed', async ({page}) => {
+  await ready(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
+  await mapIdle(page);
+  const center = await page.evaluate(() => {
+    const bounds = window.kompasDebug.map.getCanvas().getBoundingClientRect();
+    return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
+  });
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  for (const offset of [10, 30, 60]) await page.mouse.move(center.x + offset, center.y + offset / 2);
+  await page.mouse.up();
+  await expectToHold(
+    async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+    TAP_ACTION_WINDOW_MILLISECONDS
+  );
+  const zoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
+  await page.mouse.dblclick(center.x, center.y);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom + 0.2);
+  await expectToHold(
+    async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+    TAP_ACTION_WINDOW_MILLISECONDS
+  );
+});
+
+test('a two-finger pinch zooms without selecting a point', {tag: '@phone'}, async ({page, context, isMobile}) => {
+  test.skip(!isMobile, 'native touch gesture');
+  await ready(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
+  await mapIdle(page);
+  const center = await page.evaluate(() => {
+    const bounds = window.kompasDebug.map.getCanvas().getBoundingClientRect();
+    return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
+  });
+  const zoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
+  const touch = (cdp, type, points) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: points.map(({x, y}, index) => ({x, y, id: index + 1}))
+    });
+  const cdp = await context.newCDPSession(page);
+  await touch(cdp, 'touchStart', [
+    {x: center.x - 25, y: center.y},
+    {x: center.x + 25, y: center.y}
+  ]);
+  for (const distance of [45, 75, 100]) {
+    await touch(cdp, 'touchMove', [
+      {x: center.x - distance, y: center.y},
+      {x: center.x + distance, y: center.y}
+    ]);
+    await page.waitForTimeout(TOUCH_DRAG_STEP_MILLISECONDS);
+  }
+  await touch(cdp, 'touchEnd', []);
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.map.getZoom())).toBeGreaterThan(zoom + 0.2);
+  await expectToHold(
+    async () => expect(await page.locator('#place-card').isHidden()).toBe(true),
+    TAP_ACTION_WINDOW_MILLISECONDS
+  );
+});
+
+test('closing a selection clears the highlight but keeps search, category and endpoints', async ({page}) => {
+  await ready(page);
+  await page.locator('#search').fill('place');
+  await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+  await tapMapCenter(page, [20.8, 43.7]);
+  await expect(page.locator('#place-card')).toBeVisible();
+  await page.getByRole('button', {name: 'From', exact: true}).click();
+  await expect(page.locator('#route-from')).toContainText('43.70000, 20.80000');
+
+  await tapMapCenter(page, [20.81, 43.71]);
+  await expect(page.locator('#place-card')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#place-card')).toBeHidden();
+  expect(
+    await page.evaluate(() => window.kompasDebug.map.getSource('point-selection')._data.features.length)
+  ).toBe(0);
+  await expect(page.locator('#search')).toHaveValue('place');
+  await expect(page.locator('#categories button[data-category="food"]')).toHaveAttribute('aria-pressed', 'true');
+
+  await tapMapCenter(page, [20.81, 43.71]);
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+  const endpointCoordinates = (await page.evaluate(() => window.kompasDebug.endpoints)).from.coordinates;
+  expect(endpointCoordinates[0]).toBeCloseTo(20.8, 6);
+  expect(endpointCoordinates[1]).toBeCloseTo(43.7, 6);
+  await expect(page.locator('#search')).toHaveValue('place');
 });

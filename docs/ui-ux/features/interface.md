@@ -2,8 +2,9 @@
 
 Status: approved on 3 November 2026 and implemented in the web source. The earlier illustrative draft established the
 composition; the application uses real directory data, device positioning, optional layers, and verified offline
-downloads. This does not claim deployment or completion of Discover’s missing geographic data. Browser acceptance and
-physical-device evidence are recorded separately below.
+downloads. Selected-card content was restructured on 19 November 2026 (issue #249) without changing card geometry on
+Desktop, Mobile or Flip. This does not claim deployment or completion of Discover’s missing geographic data. Browser
+acceptance and physical-device evidence are recorded separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -207,6 +208,24 @@ keeps its order. Choosing From or To closes the dock or search, because the rout
 category strip and the place card show no scrollbars; both still scroll. In windows 721–860 px wide the card narrows to
 keep the map controls reachable, leaving only a narrow strip of map.
 
+### Selected-object card content
+
+The card keeps its existing position, size and state machine on Desktop, Mobile and Flip; only its content changes. Its
+header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay in
+place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
+shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the
+data:
+
+- A POI uses **Location and contacts** (address, containing building, coordinates, phone, website and source link) and
+  **Opening hours**.
+- A building uses **Addresses**, **Entrances (marked on the map)**, **Inside this building** and **Details**.
+- Other map objects use **Details** with the attributes appropriate to what was shown.
+
+A section or row is omitted when its fact is absent; the card never substitutes “not recorded” text or a NEARBY section
+for missing data. This serves US-04 and US-05 by making the selected subject and its evidence readable in one view,
+while From/To remain explicit planning actions. Closing the card clears the inspection highlight and keeps the query,
+category and endpoints.
+
 The search field shows focus through its caret and a neutral change to the shared bar's border, not the generic focus
 ring. Other controls keep the ring.
 
@@ -371,19 +390,22 @@ card and dock coexistence, the Empty/Open/Filled transitions and × behavior on 
 blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
-and its × on desktop, phone and Flip, seamless desktop row movement, the Flip list footer staying hidden with zero, one
-or two results across keyboard events, the build version on one footer line at desktop, 412×840 Mobile, 374×241 and
-340×250, the Satellite symbol's design geometry, the Locate button's box, computed radius/icon size and offsets at each
-device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
-result stops, denied shows recovery, no initial fix, button style).
+and its × on desktop, phone and Flip, seamless desktop row movement, selected-card sections, marker and bare-building
+picking, gesture cancellation and close continuity, the Flip list footer staying hidden with zero, one or two results
+across keyboard events, the build version on one footer line at desktop, 412×840 Mobile, 374×241 and 340×250, the
+Satellite symbol's design geometry, the Locate button's box, computed radius/icon size and offsets at each device class,
+and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search result stops,
+denied shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
-buildings, addresses and streets, that a street appears once with a green road outline, a red Road card and a revealed
-off-screen choice, that in-view building outlines and drawn place markers stay green with no red preview, that an active
-filter draws and rings every in-view result at zoom 12 while an unfiltered view keeps POI thresholds, that choosing a
-result turns red and reveals an off-screen result under the focus-zone rule, and that clearing removes every green mark.
-Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit tests cover
-the state, clear-button, dock-footer visibility and footer-version functions and the search matching, street grouping,
-number-query exclusion, classification, distance origin, formatting and ordering rules; no large fake DOM is built for
+buildings, addresses and streets, that a street appears once with a green road outline, a red Road card with the same
+structured sections as other cards and a revealed off-screen choice, that in-view building outlines and drawn place
+markers stay green with no red preview, that a below-threshold place gains its ring only when its marker is drawn, that
+an active filter draws and rings every in-view result at zoom 12 while an unfiltered view keeps POI thresholds, that
+choosing a result turns red and reveals an off-screen result under the focus-zone rule, and that clearing removes every
+green mark. Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit
+tests cover the state, clear-button, dock-footer visibility and footer-version functions and the search matching,
+street grouping, number-query exclusion, classification, distance origin, formatting and ordering rules, card builders
+and footprint membership; no large fake DOM is built for
 browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
 keyboard, screen-reader, or phone behavior. Review physical-device usability under
 [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in

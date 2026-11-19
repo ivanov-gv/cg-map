@@ -8,6 +8,7 @@ import {
   buildingAddressIndex,
   buildingMapFeatures,
   entranceFeatures,
+  placesInsideFootprint,
   selectBuildingEntrances
 } from '../src/point-selection.js';
 test('unnamed buildings and empty map points do not acquire invented metadata', () => {
@@ -30,6 +31,27 @@ test('stop selection keeps source identity and point coordinates', () => {
   assert.deepEqual(stop.coordinates, [19.25, 42.45]);
   assert.ok(stop.details.includes('Stop ID: 17'));
 });
+test('footprint membership lists only places inside the recorded polygon', () => {
+  const footprint = {
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [19.25, 42.43],
+          [19.27, 42.43],
+          [19.27, 42.45],
+          [19.25, 42.45],
+          [19.25, 42.43]
+        ]
+      ]
+    }
+  };
+  const inside = {properties: {id: 'inside'}, geometry: {type: 'Point', coordinates: [19.26, 42.44]}};
+  const outside = {properties: {id: 'outside'}, geometry: {type: 'Point', coordinates: [19.3, 42.44]}};
+  assert.deepEqual(placesInsideFootprint(footprint, [inside, outside]), [inside]);
+  assert.deepEqual(placesInsideFootprint({}, [inside]), []);
+});
+
 test('endpoint features keep both roles and do not share mutable coordinate arrays', () => {
   const endpoints = {
     from: {name: 'A place', coordinates: [19, 42]},

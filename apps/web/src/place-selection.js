@@ -1,8 +1,14 @@
 import {isInFocusZone} from './interface.js';
 import {requestedPlaceMarker} from '@ivanov-gv/map-core';
-import {categories, featureCollection, selectNearestPlaces} from './core.js';
+import {featureCollection, selectNearestPlaces} from './core.js';
 import {createElement, elementById} from './dom.js';
-import {listingButton, renderPlaceDetails} from './place-details.js';
+import {
+  buildObjectCard,
+  buildPlaceCard,
+  clearCardContent,
+  listingButton,
+  renderCardContent
+} from './place-details.js';
 
 const selectionCameraDurationMilliseconds = 450;
 
@@ -19,7 +25,9 @@ export class PlaceSelection {
     pendingReveal: null,
     revealOnlyWhenNeeded: false,
     isChoosingListing: false,
-    requestedMarkerKey: null
+    requestedMarkerKey: null,
+    renderedBuildingAddress: null,
+    placeCardRefreshInstalled: false
   };
 
   constructor(context) {
@@ -57,6 +65,40 @@ export class PlaceSelection {
   get hasOpenCard() {
     return Boolean(this.#state.selectedPlace || this.#state.selectedPoint || this.#state.isChoosingListing);
   }
+
+  #buildingAt(coordinates) {
+    if (!this.#context.isMapReady() || !coordinates) return null;
+    return this.#map.queryRenderedFeatures(this.#map.project(coordinates), {layers: ['buildings']})[0] ?? null;
+  }
+
+  #buildingFeatureFor(feature) {
+    if (feature?.layer?.id === 'buildings') return feature;
+    const footprintIndex = feature?.properties?.footprintIndex;
+    if (!Number.isInteger(footprintIndex) || !this.#context.isMapReady()) return null;
+    return this.#map.queryRenderedFeatures({layers: ['buildings']}).find(
+      candidate => candidate.id === footprintIndex
+    ) ?? null;
+  }
+
+  #buildingAddressFor(feature) {
+    const address = this.#directory.buildingAddresses.get(feature?.id);
+    return address ? this.#context.buildingAddress(address) : '';
+  }
+
+  // A listing chosen off-screen has no rendered footprint yet; rebuilding on idle picks up tiles that arrive later.
+  #refreshPlaceCard = () => {
+    const feature = this.#state.selectedPlace;
+    if (!feature) return;
+    const buildingAddress = this.#buildingAddressFor(this.#buildingAt(feature.geometry.coordinates));
+    if (buildingAddress === this.#state.renderedBuildingAddress) return;
+    this.#state.renderedBuildingAddress = buildingAddress;
+    renderCardContent(
+      buildPlaceCard(feature, {
+        sourceDate: this.#directory.sourceDate,
+        buildingAddress
+      })
+    );
+  };
 
   // Explicit selection and location requests mark the map explored before moving its camera.
   focusCoordinates(coordinates, zoom = 15, durationMilliseconds = selectionCameraDurationMilliseconds) {
@@ -140,6 +182,7 @@ export class PlaceSelection {
     this.#state.selectedPlace = null;
     this.#state.pendingReveal = null;
     this.#state.revealOnlyWhenNeeded = false;
+    this.#state.renderedBuildingAddress = null;
     this.setChoosing(false);
     elementById('place-card').hidden = true;
     this.#interface?.resetCardState();
@@ -183,9 +226,11 @@ export class PlaceSelection {
     };
     this.#state.returnFocusElement = trigger ?? null;
     const properties = feature.properties;
-    elementById('place-name').textContent = properties.name;
-    elementById('place-category').textContent = categories[properties.category] ?? properties.category;
-    renderPlaceDetails(feature);
+    if (!this.#state.placeCardRefreshInstalled && this.#map) {
+      this.#map.on('idle', this.#refreshPlaceCard);
+      this.#state.placeCardRefreshInstalled = true;
+    }
+    this.#refreshPlaceCard();
     this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     elementById('search').blur();
@@ -266,18 +311,13 @@ export class PlaceSelection {
     const footprintIndex =
       feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
     this.#state.selectedFootprintIndex = Number.isInteger(footprintIndex) ? footprintIndex : null;
-    elementById('place-name').textContent = point.name;
-    elementById('place-category').textContent = point.kind;
-    const details = elementById('place-details');
-    details.replaceChildren();
-    const coordinatesLine = point.coordinates
-      .slice()
-      .reverse()
-      .map(coordinate => coordinate.toFixed(5))
-      .join(', ');
-    for (const text of [...point.details, coordinatesLine]) {
-      if (text) details.append(createElement('p', text, 'detail'));
-    }
+    const buildingFeature = this.#buildingFeatureFor(feature);
+    renderCardContent(
+      buildObjectCard(point, {
+        sourceDate: this.#directory.sourceDate,
+        placesInside: this.#context.placesInsideFootprint(buildingFeature, this.#directory.allPlaces)
+      })
+    );
     elementById('place-card').hidden = false;
     this.#state.requestedPlace = null;
     this.updatePlaceLayers();
@@ -309,10 +349,10 @@ export class PlaceSelection {
   showChooser(listings, coordinates) {
     this.close(false);
     this.setChoosing(true);
+    clearCardContent();
     elementById('place-name').textContent = `${listings.length} places here`;
     elementById('place-category').textContent = 'Choose a listing';
     const details = elementById('place-details');
-    details.replaceChildren();
     const list = createElement('div', undefined, 'place-chooser');
     list.setAttribute('role', 'group');
     list.setAttribute('aria-label', 'Listings at this point');
