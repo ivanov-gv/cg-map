@@ -267,10 +267,14 @@ export class MapInterface {
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.syncSearchExpanded();
-    // Closing the dock resets the Flip menu state; opening it shows the results list.
-    if (view !== 'dock') this.menuState = 'menu';
+    // Closing the dock resets the Flip menu state.
+    if (view !== 'dock') {
+      this.menuState = 'menu';
+    }
     // Opening the dock always starts with the list (modes state).
-    if (view === 'dock' && this.menuState === 'menu') this.menuState = 'modes';
+    if (view === 'dock' && this.menuState === 'menu') {
+      this.menuState = 'modes';
+    }
     // Derive dock content (dock-main, footer) from current state.
     this.syncDockContent();
     this.syncMenuIcon();
@@ -284,7 +288,7 @@ export class MapInterface {
   cycleFlipMenu() {
     switch (this.menuState) {
       case 'menu':
-        // Opening the dock sets the modes state and shows the results list.
+        // Open the dock; setView transitions menuState to 'modes' and shows the list.
         this.setView('dock');
         break;
       case 'modes':
