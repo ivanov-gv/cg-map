@@ -993,9 +993,9 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
     await ready(page);
     await expect(page.locator('.maplibregl-ctrl-attrib')).toHaveCount(0);
 
-    await openMenu(page);
-    // Expand the footer to reveal the attribution (minimized by default on Flip).
-    await page.locator('#footer-toggle').click();
+    // Open dock (state 1: menu → results), then cycle to modes (state 2: modes menu).
+    await page.locator('#menu-toggle').click();
+    await page.locator('#menu-toggle').click();
     const attribution = page.locator('#map-attribution');
     await expect(attribution).toBeVisible();
     const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
@@ -2581,50 +2581,140 @@ function manyPlacesFixture(prefix) {
 }
 
 // ---------------------------------------------------------------------------
-// Flip dock: minimizable footer (issue #155, replaces issue #104 one-column scroll)
+// Flip icon button: three-state cycle (issue #247, replaces issue #155 footer toggle)
 // ---------------------------------------------------------------------------
 
-// The requirement changed: instead of a one-column scroll, Flip uses a pinned
-// footer that starts minimized (only a handle row shows). The handle is a
-// <button> with aria-expanded and aria-controls. Opening it reveals Satellite,
-// Transport, Download, and attribution. Closing the dock resets to minimized.
-// Issue #161: tests must run at both 340×250 (real Flip screen) and 340×340.
+// The menu button on Flip cycles through three states:
+//   ☰ Menu (dock closed) → tap opens dock with categories + results
+//   ◇ Modes (dock open, results shown) → tap shows modes menu (footer)
+//   × Close (modes menu shown) → tap closes dock and resets
+// Tests run at 340×250 (real Flip screen) and 340×340.
 
-test.describe('Flip dock minimizable footer', () => {
+test.describe('Flip icon button three-state cycle', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
-  // Test at the real Flip screen size (374×241), the previous test size (340×250),
-  // and the original square viewport (340×340).
   const flipViewports = [
-    {name: '374x241', viewport: {width: 374, height: 241}},
     {name: '340x250', viewport: {width: 340, height: 250}},
     {name: '340x340', viewport: {width: 340, height: 340}}
   ];
-  const manyPlaces = manyPlacesFixture('flip-footer');
+  const manyPlaces = manyPlacesFixture('flip-menu');
 
-  // Every Flip footer test runs at both viewport sizes.
   for (const {name, viewport} of flipViewports) {
-    test(`opening the dock shows the handle and hides layer buttons and Download (${name})`,
+    test(`three-step cycle: Menu → Modes → Close (${name})`,
       {tag: '@phone'}, async ({page}) => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
       await atViewport(page, viewport, async () => {
         await ready(page);
-        await openMenu(page);
+
+        // State 1: ☰ Menu — dock is closed, icon is menu, label is "Open menu".
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+        const menuIcon = await page.locator('#menu-toggle svg use').getAttribute('href');
+        expect(menuIcon).toContain('i-menu');
+
+        // Tap → State 2: ◇ Modes — dock opens with results, icon changes to modes.
+        await page.locator('#menu-toggle').click();
         await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
-
-        // The footer toggle handle is visible.
-        await expect(page.locator('#footer-toggle')).toBeVisible();
-
-        // Footer starts minimized: aria-expanded is false.
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-
-        // Layer buttons and Download are hidden while minimized.
-        await expect(page.locator('#satellite-toggle')).toBeHidden();
-        await expect(page.locator('#transport-toggle')).toBeHidden();
-        await expect(page.locator('#download')).toBeHidden();
-
-        // At least 3 results are visible.
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
+        const modesIcon = await page.locator('#menu-toggle svg use').getAttribute('href');
+        expect(modesIcon).toContain('i-modes');
+        // Results are visible, footer (modes menu) is hidden.
         await expect(page.locator('.result')).toHaveCount(8);
+        await expect(page.locator('#dock-main')).toBeVisible();
+        await expect(page.locator('.dock-footer')).toBeHidden();
+
+        // Tap → State 3: × Close — modes menu shown, icon changes to close.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
+        const closeIcon = await page.locator('#menu-toggle svg use').getAttribute('href');
+        expect(closeIcon).toContain('i-close');
+        // Results hidden, footer (modes menu) visible.
+        await expect(page.locator('#dock-main')).toBeHidden();
+        await expect(page.locator('.dock-footer')).toBeVisible();
+        await expect(page.locator('#satellite-toggle')).toBeVisible();
+        await expect(page.locator('#transport-toggle')).toBeVisible();
+        await expect(page.locator('#download')).toBeVisible();
+        await expect(page.locator('#map-attribution')).toBeVisible();
+
+        // Tap → back to State 1: dock closed, icon resets to menu.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+        const resetIcon = await page.locator('#menu-toggle svg use').getAttribute('href');
+        expect(resetIcon).toContain('i-menu');
+      });
+    });
+
+    test(`modes menu fits without scrolling (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+
+        // Cycle to modes state.
+        await page.locator('#menu-toggle').click();
+        await page.locator('#menu-toggle').click();
+
+        // All footer items must be within the viewport.
+        const fit = await page.evaluate((vh) => {
+          const satellite = document.querySelector('#satellite-toggle');
+          const transport = document.querySelector('#transport-toggle');
+          const download = document.querySelector('#download');
+          const attribution = document.querySelector('#map-attribution');
+          return {
+            satelliteBottom: satellite.getBoundingClientRect().bottom,
+            transportBottom: transport.getBoundingClientRect().bottom,
+            downloadBottom: download.getBoundingClientRect().bottom,
+            attributionBottom: attribution.getBoundingClientRect().bottom,
+            viewportBottom: vh,
+            allWithinViewport:
+              satellite.getBoundingClientRect().bottom <= vh &&
+              transport.getBoundingClientRect().bottom <= vh &&
+              download.getBoundingClientRect().bottom <= vh &&
+              attribution.getBoundingClientRect().bottom <= vh,
+          };
+        }, viewport.height);
+        expect(fit.allWithinViewport, 'all modes menu items within viewport').toBe(true);
+      });
+    });
+
+    test(`aria-expanded reflects dock open/closed (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+
+        // Dock closed.
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-expanded', 'false');
+
+        // Open dock (menu → modes).
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Modes state — dock still open.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // Close dock.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    test(`results visible when dock opens (${name})`,
+      {tag: '@phone'}, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await page.locator('#menu-toggle').click();
+
+        // Results and categories are visible.
+        await expect(page.locator('.result')).toHaveCount(8);
+        await expect(page.locator('#categories')).toBeVisible();
+        await expect(page.locator('#dock-main')).toBeVisible();
+
+        // At least 3 results fully visible in viewport.
         const visibleResults = await page.evaluate((vh) => {
           const results = document.querySelectorAll('.result');
           let count = 0;
@@ -2638,230 +2728,48 @@ test.describe('Flip dock minimizable footer', () => {
       });
     });
 
-    test(`clicking the handle shows all footer content and sets aria-expanded true (${name})`,
+    test(`reset after close: next open shows results (${name})`,
       {tag: '@phone'}, async ({page}) => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
       await atViewport(page, viewport, async () => {
         await ready(page);
-        await openMenu(page);
 
-        // Open the footer.
-        await page.locator('#footer-toggle').click();
-
-        // aria-expanded is now true.
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-        // Layer buttons and Download are visible (not hidden by CSS).
-        await expect(page.locator('#satellite-toggle')).toBeVisible();
-        await expect(page.locator('#transport-toggle')).toBeVisible();
-        await expect(page.locator('#download')).toBeVisible();
-
-        // Attribution is also visible.
-        await expect(page.locator('#map-attribution')).toBeVisible();
-
-        // Results area is hidden while footer is expanded (wiki drawing 2).
-        await expect(page.locator('.dock-main')).toBeHidden();
-      });
-    });
-
-    test(`clicking the handle again hides the footer content (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        // Open then close the footer.
-        await page.locator('#footer-toggle').click();
-        await page.locator('#footer-toggle').click();
-
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-        await expect(page.locator('#satellite-toggle')).toBeHidden();
-        await expect(page.locator('#download')).toBeHidden();
-      });
-    });
-
-    test(`the handle is reachable by Tab and toggles with Enter (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        // Tab to the footer toggle (it should be in the tab order).
-        await page.locator('#footer-toggle').focus();
-        await expect(page.locator('#footer-toggle')).toBeFocused();
-
-        // Press Enter to toggle open.
-        await page.keyboard.press('Enter');
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-        // Press Enter again to toggle closed.
-        await page.keyboard.press('Enter');
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-      });
-    });
-
-    test(`closing the dock resets the footer to minimized (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        // Open the footer.
-        await page.locator('#footer-toggle').click();
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-        // Close the dock.
-        await closeMenu(page);
+        // Full cycle: menu → modes → close.
+        await page.locator('#menu-toggle').click();
+        await page.locator('#menu-toggle').click();
+        await page.locator('#menu-toggle').click();
         await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
 
-        // Reopen the dock — footer should be minimized again.
-        await openMenu(page);
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'false');
-      });
-    });
-
-    // Issue #159, #161: at least 3 .result rows must be fully visible between
-    // the compact category chips and the footer handle when minimized.
-    // The chips' invisible target padding must not move the results down.
-    // Each result top >= chip bottom and bottom <= footer-toggle top.
-    // The last visible row must leave at least 4 px above the handle.
-    test(`minimized: 3 results fully visible between categories and handle (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        const resultPositions = await page.evaluate(() => {
-          const categoryBottom = document.querySelector('#categories button[data-category]').getBoundingClientRect().bottom;
-          const resultsTop = document.getElementById('results').getBoundingClientRect().top;
-          const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
-          const toggleTop = document.querySelector('#footer-toggle').getBoundingClientRect().top;
-          const results = document.querySelectorAll('.result');
-          const fullyVisible = [];
-          for (const row of results) {
-            const rect = row.getBoundingClientRect();
-            if (rect.top >= categoryBottom && rect.bottom <= toggleTop) {
-              fullyVisible.push({top: rect.top, bottom: rect.bottom});
-            }
-          }
-          const lastVisibleBottom = fullyVisible.length > 0
-            ? fullyVisible[fullyVisible.length - 1].bottom
-            : 0;
-          const spareAboveHandle = toggleTop - lastVisibleBottom;
-          return {categoryBottom, resultsTop, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
-        });
-        expect(Math.abs(resultPositions.resultsTop - resultPositions.categoryBottom)).toBeLessThanOrEqual(1);
-        expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
-        expect(resultPositions.spareAboveHandle, 'at least 4 px spare above handle').toBeGreaterThanOrEqual(4);
-      });
-    });
-
-    // Issue #161: nothing visible below the handle except safe-area padding.
-    test(`minimized: nothing visible below the handle except padding (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        const handleBottom = await page.evaluate((vh) => {
-          const toggle = document.querySelector('#footer-toggle');
-          const rect = toggle.getBoundingClientRect();
-          const paddingBottom = parseFloat(getComputedStyle(document.querySelector('.dock-footer')).paddingBottom);
-          return {
-            handleBottom: rect.bottom,
-            viewportHeight: vh,
-            gap: vh - rect.bottom,
-            paddingBottom
-          };
-        }, viewport.height);
-        // The handle's bottom should be within (safe-area padding + 2 px) of the visible bottom.
-        const maxGap = handleBottom.paddingBottom + 2;
-        expect(handleBottom.gap, 'gap below handle within safe-area padding + 2px')
-          .toBeLessThanOrEqual(maxGap);
-      });
-    });
-
-    // Issue #159, #161: when the footer is expanded, all footer items must be within
-    // the viewport with no scrolling (scrollHeight <= clientHeight + 1).
-    test(`expanded footer fits without scrolling (${name})`,
-      {tag: '@phone'}, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-        await page.locator('#footer-toggle').click();
-        await expect(page.locator('#footer-toggle')).toHaveAttribute('aria-expanded', 'true');
-
-        const footerFit = await page.evaluate((vh) => {
-          const footer = document.querySelector('.dock-footer');
-          const satellite = document.querySelector('#satellite-toggle');
-          const transport = document.querySelector('#transport-toggle');
-          const download = document.querySelector('#download');
-          const attribution = document.querySelector('#map-attribution');
-          return {
-            scrollHeight: footer.scrollHeight,
-            clientHeight: footer.clientHeight,
-            needsScroll: footer.scrollHeight > footer.clientHeight + 1,
-            satelliteBottom: satellite.getBoundingClientRect().bottom,
-            transportBottom: transport.getBoundingClientRect().bottom,
-            downloadBottom: download.getBoundingClientRect().bottom,
-            attributionBottom: attribution.getBoundingClientRect().bottom,
-            viewportBottom: vh,
-            allWithinViewport:
-              satellite.getBoundingClientRect().bottom <= vh &&
-              transport.getBoundingClientRect().bottom <= vh &&
-              download.getBoundingClientRect().bottom <= vh &&
-              attribution.getBoundingClientRect().bottom <= vh,
-          };
-        }, viewport.height);
-        expect(footerFit.needsScroll, 'footer should not need scrolling').toBe(false);
-        expect(footerFit.allWithinViewport, 'all footer items within viewport').toBe(true);
+        // Re-open: should show results again.
+        await page.locator('#menu-toggle').click();
+        await expect(page.locator('#dock-main')).toBeVisible();
+        await expect(page.locator('.result')).toHaveCount(8);
+        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
       });
     });
   }
 });
 
 // ---------------------------------------------------------------------------
-// Footer toggle must be hidden on Desktop and Mobile (issue #155)
+// Footer toggle removed: verify it no longer exists (issue #247)
 // ---------------------------------------------------------------------------
 
-// The footer toggle handle is only meant for Flip (where the footer starts
-// minimized). On Desktop and Mobile it must not render at all, so the footer
-// content (Satellite, Transport, Download) appears directly with the standard
-// 16 px top padding — the same gap that origin/feature/92-left-dock has.
-
-test.describe('footer toggle hidden on non-Flip devices', () => {
+test.describe('footer toggle removed', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
   for (const {name, viewport} of [
     {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'mobile', viewport: {width: 412, height: 840}}
+    {name: 'mobile', viewport: {width: 412, height: 840}},
+    {name: 'flip', viewport: {width: 340, height: 340}}
   ]) {
-    test(`footer toggle is hidden and footer padding is 16px on ${name}`, async ({page}) => {
+    test(`#footer-toggle does not exist on ${name}`, async ({page}) => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
       await atViewport(page, viewport, async () => {
         await ready(page);
-        await openMenu(page);
-        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-        // #footer-toggle must not be visible on Desktop or Mobile.
-        await expect(page.locator('#footer-toggle')).toBeHidden();
-
-        // The footer's top padding must be the baseline 16 px (from .dock-footer CSS).
-        // Measure it with getComputedStyle to assert the exact value.
-        const footerTopPadding = await page.evaluate(() => {
-          const footer = document.querySelector('.dock-footer');
-          return parseInt(getComputedStyle(footer).paddingTop, 10);
-        });
-        expect(footerTopPadding).toBe(16);
-
-        // The Satellite button should be visible without needing to expand a footer.
-        await expect(page.locator('#satellite-toggle')).toBeVisible();
+        // #footer-toggle should not exist in the DOM.
+        const exists = await page.locator('#footer-toggle').count();
+        expect(exists).toBe(0);
       });
     });
   }
@@ -2971,8 +2879,8 @@ test.describe('GPS follow — layer toggle stops following', () => {
 
       // Open the menu to access the satellite toggle, then toggle it.
       await openMenu(page);
-      // On Flip, the footer starts minimized — expand it to reach the satellite toggle.
-      if (name === 'flip') await page.locator('#footer-toggle').click();
+      // On Flip, cycle to the modes state to reach the satellite toggle.
+      if (name === 'flip') await page.locator('#menu-toggle').click();
       await page.locator('#satellite-toggle').click();
       await settled(page);
 
