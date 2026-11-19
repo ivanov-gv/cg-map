@@ -94,6 +94,7 @@ export class MapInterface {
     this.menu = document.getElementById('menu-toggle');
     this.panel = document.getElementById('browse-panel');
     this.dock = document.getElementById('dock-content');
+    this.dockMain = document.getElementById('dock-main');
     this.bubble = document.getElementById('search-bubble');
     this.strip = document.getElementById('results-strip');
     this.card = document.getElementById('place-card');
@@ -103,17 +104,20 @@ export class MapInterface {
     this.clearButton = document.getElementById('clear-search');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
-    this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
-    this.isRestoringFocus = false;
+    // On Flip, the menu button cycles through Menu → Modes → Close; elsewhere it toggles the dock.
+    this.menuState = 'menu'; // 'menu' | 'modes' | 'close', meaningful only on Flip
     this.menu.addEventListener('click', () => {
       this.trigger = this.menu;
       if (this.mobileLayoutQuery.matches) this.search.blur();
-      this.setView(this.view === 'dock' ? 'closed' : 'dock');
+      if (this.flipLayoutQuery.matches) {
+        this.cycleFlipMenu();
+      } else {
+        this.setView(this.view === 'dock' ? 'closed' : 'dock');
+      }
       this.onViewport?.();
     });
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
-    this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
@@ -133,7 +137,12 @@ export class MapInterface {
       this.syncDesktopSearchUI();
       this.syncViewport();
     });
-    this.flipLayoutQuery.addEventListener('change', () => this.syncClearButton());
+    // A device-class change re-derives both the clear-button rule and the Flip menu state.
+    this.flipLayoutQuery.addEventListener('change', () => {
+      this.syncClearButton();
+      this.syncDockContent();
+      this.syncMenuIcon();
+    });
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
     window.visualViewport?.addEventListener('scroll', () => this.syncViewport());
     window.addEventListener('resize', () => this.syncViewport());
@@ -233,7 +242,7 @@ export class MapInterface {
   #panelTargetFor(view) {
     if (view === 'search') return this.bubble;
     if (!this.mobileLayoutQuery.matches && view === 'closed') return this.desktopSearchPanel;
-    return document.getElementById('dock-main');
+    return this.dockMain;
   }
 
   setView(view) {
@@ -256,26 +265,66 @@ export class MapInterface {
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
-    this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
     this.syncSearchExpanded();
-    // Closing the dock resets the Flip footer to minimized.
-    if (view !== 'dock') this.minimizeFooter();
+    // Closing the dock resets the Flip menu state; opening it shows the results list.
+    if (view !== 'dock') this.menuState = 'menu';
+    if (view === 'dock' && this.menuState === 'menu') this.menuState = 'modes';
+    this.syncDockContent();
+    this.syncMenuIcon();
     this.onChange?.();
   }
 
-  // Toggle the Flip footer between minimized (handle only) and expanded (all options).
-  toggleFooter() {
-    const isExpanded = this.footerToggle.getAttribute('aria-expanded') === 'true';
-    this.footerToggle.setAttribute('aria-expanded', String(!isExpanded));
-    this.footerToggle.setAttribute('aria-label', isExpanded ? 'Show map options' : 'Hide map options');
-    this.footer.dataset.footerExpanded = String(!isExpanded);
+  // On Flip, cycle the menu button through three states:
+  //   'menu' (☰) → open dock showing categories + results
+  //   'modes' (◇) → replace results with modes menu (footer)
+  //   'close' (×) → close dock and reset
+  cycleFlipMenu() {
+    switch (this.menuState) {
+      case 'menu':
+        // Opening the dock sets the modes state and shows the results list.
+        this.setView('dock');
+        break;
+      case 'modes':
+        // Show the modes menu (footer content) and hide results.
+        this.menuState = 'close';
+        this.syncDockContent();
+        break;
+      case 'close':
+        // Closing the dock reset the state to menu.
+        this.setView('closed');
+        break;
+    }
+    this.syncMenuIcon();
   }
 
-  // Reset the Flip footer to minimized (handle only, content hidden).
-  minimizeFooter() {
-    this.footerToggle.setAttribute('aria-expanded', 'false');
-    this.footerToggle.setAttribute('aria-label', 'Show map options');
-    delete this.footer.dataset.footerExpanded;
+  // Derive dock content from the state: Flip shows results or modes, other devices show both.
+  syncDockContent() {
+    const showResults = !this.flipLayoutQuery.matches || this.view !== 'dock' || this.menuState === 'modes';
+    const showFooter = !this.flipLayoutQuery.matches || this.view !== 'dock' || this.menuState === 'close';
+    this.dockMain.hidden = !showResults;
+    this.footer.hidden = !showFooter;
+  }
+
+  // Update the menu button icon and accessible label for the current state.
+  syncMenuIcon() {
+    const iconUse = this.menu.querySelector('use');
+    const icons = {
+      menu: '#i-menu',
+      modes: '#i-modes',
+      close: '#i-close'
+    };
+    const labels = {
+      menu: 'Open menu',
+      modes: 'Show map modes',
+      close: 'Close menu'
+    };
+    if (this.flipLayoutQuery.matches) {
+      iconUse.setAttribute('href', icons[this.menuState]);
+      this.menu.setAttribute('aria-label', labels[this.menuState]);
+    } else {
+      iconUse.setAttribute('href', '#i-menu');
+      this.menu.setAttribute('aria-label', this.view === 'dock' ? 'Close menu' : 'Open menu');
+    }
   }
 
   syncResultsVisibility() {

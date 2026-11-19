@@ -136,25 +136,28 @@ when the dock is open on mobile). The menu button closes the dock, revealing the
 panel keep their current behavior when the dock is closed. Desktop keeps the side dock unchanged (narrower than the
 viewport, with the map visible beside it).
 
-### Flip minimizable footer
+### Flip three-state icon button
 
-On Flip, the dock footer is pinned at the bottom and starts minimized — only a compact handle row (28 px) shows, with no
-separator line or empty strip below it. The handle is a `<button>` (#footer-toggle) with an accessible name ("Show map
-options" / "Hide map options"), `aria-expanded` and `aria-controls`, and a short horizontal bar drawn in CSS (like the
-existing `.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
+On Flip, the menu icon button (#menu-toggle) cycles through three states, one per screen:
 
-Opening the footer reveals Satellite, Transport, Download, and the attribution line; the results area hides to make room
-(the wiki's second Flip drawing shows the results hidden while the footer is open). The handle stays at the top of the
-footer. Clicking the handle again collapses the footer and restores the results. Closing the dock resets the footer to
-minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
+1. **☰ Menu** (dock closed): tap opens the full-screen dock showing the search field, categories, and results list.
+2. **◇ Modes** (dock open, results shown): tap replaces the categories and results with the "modes menu": Satellite and
+   Transport tiles side by side, the "Download for offline use" button, and the one-line license/attribution. The search
+   field stays in the header. Everything fits without scrolling at 340×250 and 340×340.
+3. **× Close** (modes menu shown): tap closes the dock and returns to the map. The next time the dock is opened, it
+   shows the results list again (state resets to ☰ Menu).
 
-**Compact layout for real Flip screens** (issue #161): the real Flip cover screen is about 340×250 CSS px (shorter than
-the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible
-when minimized: the search bar uses an 8 px top inset (instead of 20 px), category chips are 32 px high with tight
-padding, each result row is about 40 px (24 px symbol, 13 px name, 10 px kind/distance with ellipsis), and the handle is
-28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are compact (icon and label in one
-row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution line all fit
-without scrolling. These sizes are tested at both 340×250 and 340×340.
+Each state has its own icon (☰ from `#i-menu`, ◇ from `#i-modes`, × from `#i-close` in the SVG sprite), an accessible
+name ("Open menu" / "Show map modes" / "Close menu"), and `aria-expanded` on the dock reflecting whether it is open. The
+old minimizable footer handle (#footer-toggle) has been removed and replaced by this cycle.
+
+**Compact layout for real Flip screens**: the real Flip cover screen is about 340×250 CSS px (shorter than the 340×340
+used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible when the dock
+shows results: the search bar uses an 8 px top inset (instead of 20 px), category chips are 30 px high with tight
+padding, each result row is about 40 px (24 px symbol, 13 px name, 10 px kind/distance with ellipsis). When the modes
+menu is shown, layer tiles are compact (icon and label in one row, ~40 px high) and the Download button is ~40 px so
+Satellite, Transport, Download and the attribution line all fit without scrolling. These sizes are tested at both
+340×250 and 340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 
