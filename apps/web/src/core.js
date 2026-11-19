@@ -68,6 +68,97 @@ export function matchesPlaceSearch(feature, query, category) {
   return matchesCategory && normalizeSearchText(searchableText).includes(normalizeSearchText(query));
 }
 
+// A building record contributes one result at most. Street names describe addresses; numbers and entrance
+// references describe the building itself. A query spanning both is still one address result.
+function buildingSearchText(properties) {
+  const entrances = properties.entrances ?? [];
+  const streets = [properties['addr:street'], ...entrances.map(entrance => entrance.street)].filter(Boolean);
+  const numbers = [
+    properties['addr:housenumber'],
+    properties.building_number && `Zgrada ${properties.building_number}`,
+    properties.lamela && `Lamela ${properties.lamela}`,
+    ...entrances.flatMap(entrance => [
+      entrance.ref && `Ulaz ${entrance.ref}`,
+      entrance.number,
+      entrance.lamela && `Lamela ${entrance.lamela}`
+    ])
+  ].filter(Boolean);
+  const streetForms = streets.flatMap(street => [street, street.split(/\s+/)[0]]);
+  const streetNumberPairs = streetForms.flatMap(street => numbers.map(number => `${street} ${number}`));
+  return {
+    address: normalizeSearchText(streets.join(' ')),
+    number: normalizeSearchText(numbers.join(' ')),
+    pair: normalizeSearchText(streetNumberPairs.join(' ')),
+    streetLeads: streetForms.map(street => normalizeSearchText(street))
+  };
+}
+
+// Returns the result kind for a matching building label, or null when the query does not match it.
+// Address wins over building only when a street (or street plus number) was what matched.
+export function classifyBuildingMatch(feature, query) {
+  const needle = normalizeSearchText(query);
+  if (!needle) return null;
+  const text = buildingSearchText(feature.properties ?? {});
+  const matchesAddress = text.address.includes(needle);
+  const matchesNumber = text.number.includes(needle);
+  const matchesPair = text.pair.includes(needle);
+  if (!matchesAddress && !matchesNumber && !matchesPair) return null;
+  const startsWithStreet = text.streetLeads.some(lead => needle.startsWith(lead));
+  return {kind: matchesAddress || (matchesPair && startsWithStreet) ? 'address' : 'building'};
+}
+
+// Row title for a building/address result, using only recorded address attributes.
+export function buildingResultLabel(properties) {
+  const number = properties.building_number ?? properties['addr:housenumber'];
+  const street = properties['addr:street'];
+  if (street && number) return `${street} ${number}`;
+  if (street) return street;
+  return number ? `Building ${number}` : 'Building';
+}
+
+// Places and recorded addresses share one nearest-first list. Building/address results need an explicit query:
+// browsing with an empty query keeps the nearby place list, and any category narrows the list to places only.
+export function selectSearchResults({
+  places = [],
+  buildingLabels = null,
+  query = '',
+  category = null,
+  center,
+  markerKeys = new Map(),
+  limit = 40
+}) {
+  const results = [];
+  for (const feature of places) {
+    if (!matchesPlaceSearch(feature, query, category)) continue;
+    results.push({
+      kind: 'place',
+      id: feature.properties.id,
+      markerKey: markerKeys.get(feature.properties.id) ?? String(feature.properties.id),
+      feature,
+      coordinates: feature.geometry.coordinates
+    });
+  }
+  if (category === null && normalizeSearchText(query)) {
+    for (const feature of buildingLabels?.features ?? []) {
+      const match = classifyBuildingMatch(feature, query);
+      if (!match) continue;
+      const properties = feature.properties;
+      results.push({
+        kind: match.kind,
+        id: `footprint/${properties.footprintIndex}`,
+        footprintIndex: properties.footprintIndex,
+        label: buildingResultLabel(properties),
+        feature,
+        coordinates: feature.geometry.coordinates
+      });
+    }
+  }
+  return results
+    .map(result => ({...result, distanceKilometres: distanceKilometres(center, result.coordinates)}))
+    .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
+    .slice(0, limit);
+}
+
 // Approximate ground distance in kilometres, suitable for ordering nearby results.
 export function distanceKilometres(first, second) {
   const radiansPerDegree = Math.PI / 180;

@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeSearchText, matchesPlaceSearch, selectNearestPlaces, safeWebsite} from '../src/core.js';
+import {
+  normalizeSearchText,
+  matchesPlaceSearch,
+  classifyBuildingMatch,
+  buildingResultLabel,
+  selectNearestPlaces,
+  selectSearchResults,
+  safeWebsite
+} from '../src/core.js';
 const feature = (name, category, coordinates) => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates},
@@ -58,6 +66,97 @@ test('no category filter includes all categories', () => {
   );
   assert.equal(filtered.length, 3, 'no category and empty query matches all');
 });
+const addressLabel = (footprintIndex, coordinates, properties = {}) => ({
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates},
+  properties: {
+    kind: 'building',
+    footprintIndex,
+    'addr:housenumber': '18',
+    'addr:street': 'Bulevar Stanka Dragojevića',
+    ...properties
+  }
+});
+
+test('building search distinguishes a street address from a building number', () => {
+  const label = addressLabel(4, [19.25, 42.44]);
+  assert.deepEqual(classifyBuildingMatch(label, 'dragojevica'), {kind: 'address'});
+  assert.deepEqual(classifyBuildingMatch(label, '18'), {kind: 'building'});
+  assert.deepEqual(classifyBuildingMatch(label, 'Bulevar 18'), {kind: 'address'});
+  assert.equal(classifyBuildingMatch(label, 'bulevar 99'), null);
+  assert.equal(classifyBuildingMatch(label, ''), null);
+});
+
+test('building search uses entrance and section identifiers without duplicating a footprint', () => {
+  const label = addressLabel(9, [19.25, 42.44], {
+    building_number: '12',
+    lamela: 'B',
+    entrances: [{number: '3', ref: 'M', street: 'Ulica Slobode'}]
+  });
+  assert.deepEqual(classifyBuildingMatch(label, 'lamela b'), {kind: 'building'});
+  assert.deepEqual(classifyBuildingMatch(label, 'ulaz m'), {kind: 'building'});
+  assert.deepEqual(classifyBuildingMatch(label, 'Ulica Slobode'), {kind: 'address'});
+  // One footprint matches several fields but still yields a single result.
+  const results = selectSearchResults({
+    places: [],
+    buildingLabels: {type: 'FeatureCollection', features: [label]},
+    query: '12',
+    center: [19.25, 42.44]
+  });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].kind, 'building');
+  assert.equal(results[0].label, buildingResultLabel(label.properties));
+});
+
+test('search results mix places, buildings and addresses in nearest-first order', () => {
+  const far = addressLabel(30, [19.5, 42.5], {'addr:street': 'Bulevar Ivana Crnojevića'});
+  const near = addressLabel(4, [19.26, 42.44]);
+  const place = {
+    type: 'Feature',
+    geometry: {type: 'Point', coordinates: [19.255, 42.441]},
+    properties: {id: 'cafe/1', name: 'Bulevar Cafe', category: 'food'}
+  };
+  const results = selectSearchResults({
+    places: [place],
+    buildingLabels: {type: 'FeatureCollection', features: [far, near]},
+    query: 'bulevar',
+    center: [19.26, 42.44],
+    markerKeys: new Map([['cafe/1', 'place-key']])
+  });
+  assert.deepEqual(
+    results.map(result => result.kind),
+    ['address', 'place', 'address']
+  );
+  assert.equal(results[0].footprintIndex, 4);
+  assert.equal(results[1].feature, place);
+  assert.equal(results[2].footprintIndex, 30);
+  assert.ok(results[0].distanceKilometres < results[1].distanceKilometres);
+  assert.ok(results[1].distanceKilometres < results[2].distanceKilometres);
+});
+
+test('categories list places only and an empty query lists no buildings', () => {
+  const label = addressLabel(4, [19.26, 42.44]);
+  const cafe = feature('Cafe 18', 'food', [19.26, 42.44]);
+  const collection = {type: 'FeatureCollection', features: [label]};
+  const byCategory = selectSearchResults({
+    places: [cafe],
+    buildingLabels: collection,
+    query: '18',
+    category: 'food',
+    center: [19.26, 42.44]
+  });
+  assert.equal(byCategory.length, 1);
+  assert.equal(byCategory[0].kind, 'place');
+  const browsing = selectSearchResults({
+    places: [cafe],
+    buildingLabels: collection,
+    query: '',
+    center: [19.26, 42.44]
+  });
+  assert.equal(browsing.length, 1);
+  assert.equal(browsing[0].kind, 'place');
+});
+
 test('place URLs reject executable and malformed schemes', () => {
   for (const value of ['javascript:alert(1)', 'data:text/html,hello', 'file:///tmp/x', 'not a URL'])
     assert.equal(safeWebsite(value), null);
