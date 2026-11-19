@@ -147,7 +147,7 @@ export class MapInterface {
   }
 
   wireControls() {
-    this.menu.addEventListener('click', () => this.toggleMenu());
+    this.menu.addEventListener('click', () => this.activateMenu());
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.activeChipLabel.addEventListener('click', () => this.openChipTarget());
     this.activeChipRemove.addEventListener('click', () => this.onRemoveCategory?.());
@@ -158,9 +158,8 @@ export class MapInterface {
     this.wireSearchEvents();
   }
 
-  // The header button owns dock toggling and becomes the focus target when it closes.
-  // On Flip it cycles Menu → Modes → Close instead of merely toggling the dock.
-  toggleMenu() {
+  // A menu click toggles the dock, or advances the three-state cycle on Flip.
+  activateMenu() {
     this.trigger = this.menu;
     if (this.mobileLayoutQuery.matches) this.search.blur();
     if (this.flipLayoutQuery.matches) this.cycleFlipMenu();

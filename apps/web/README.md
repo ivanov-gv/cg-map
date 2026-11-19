@@ -85,31 +85,39 @@ shrinks to the menu (hamburger) button on the main screen — the bar width is a
 The search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again
 (as on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no ×
 until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the
-dock or card. Closing the dock belongs to the header Icon Button (currently the menu control; its cycle is issue #247).
+dock or card. Closing the dock belongs to the header icon button, whose three-state cycle is described below.
 The category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8
-px below the ☰ Icon Button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
+px below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
-stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
-content ends above the keyboard because it uses the keyboard-aware visible viewport variables (--visible-top,
---visible-height). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to
-the search view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on
-mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
-current behavior when the dock is closed.
+stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
+button's Close state does it, as described below. The dock content ends above the keyboard because it uses the
+keyboard-aware visible viewport variables (--visible-top, --visible-height). While the dock is open, the route panel is
+hidden under it. Opening a place from the list switches to the search view with the card (`placeCardOpened` in
+interface.js calls `setView('search')` when the dock is open on mobile). Desktop keeps the side dock unchanged (narrower
+than the viewport). The place card and route panel keep their current behavior when the dock is closed.
 
-**Flip minimizable footer** (issues #155, #161): on Flip, the dock footer is pinned at the bottom and starts minimized —
-only a compact handle row (28 px) shows, with no separator line or empty strip below it. The handle is a `<button>`
-(#footer-toggle) with aria-expanded and aria-controls and a short horizontal bar drawn in CSS. Clicking it expands the
-footer to show Satellite, Transport, Download, and attribution; the results area hides to make room. Clicking again
-collapses it. Closing the dock resets to minimized. The handle is hidden on Mobile and Desktop where the footer is
-always shown.
+**Flip three-state icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three states,
+one per screen:
 
-When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
-visible: the search bar uses an 8 px inset, inactive category chips are 30 px while the active pill stays 40 px, each
-result row is about 37 px (24 px symbol, smaller fonts), and the handle is 28 px with only the safe-area padding (4 px)
-below it. When expanded, layer tiles are compact (icon and label in one row, ~40 px) and the Download button is ~40 px
-so everything fits without scrolling. These sizes are tested at both 340×250 and 340×340.
+1. **☰ Menu** (dock closed): tap opens the full-screen dock with the search field, categories and results list.
+2. **◇ Modes** (dock open, results shown): tap replaces the categories and results with the modes menu — Satellite and
+   Transport tiles, the "Download for offline use" button and the one-line license/attribution. The search field stays
+   in the header, and everything fits without scrolling at 340×250 and 340×340.
+3. **× Close** (modes menu shown): tap closes the dock and returns to the map. Opening it again shows the results list;
+   the state resets to Menu.
+
+Each state has its own icon (`#i-menu`, `#i-modes`, `#i-close`), accessible name ("Open menu" / "Show map modes" /
+"Close menu") and `aria-expanded` on the dock. The old minimizable footer handle (#footer-toggle) is gone. On Mobile and
+Desktop the footer is still always shown and the menu button simply toggles the dock.
+
+**Compact layout for real Flip screens**: the real Flip cover screen is about 340×250 CSS px (shorter than 340×340). At
+that height at least 3 result rows are fully visible when the dock shows results: the search bar uses an 8 px inset,
+inactive category chips are 30 px high while the active pill stays 40 px, and each result row is about 37 px (24 px
+symbol, smaller fonts). In the modes menu, layer tiles put icon and label in one row (~40 px) and the Download button is
+~40 px, so Satellite, Transport, Download and the attribution line fit without scrolling. These sizes are tested at both
+340×250 and 340×340.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
