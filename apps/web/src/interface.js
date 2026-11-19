@@ -1,3 +1,9 @@
+// The bar is Empty without results, Open with results and no query, and Filled with a query.
+export function searchBarState({hasQuery, resultsVisible}) {
+  if (hasQuery) return 'filled';
+  return resultsVisible ? 'open' : 'empty';
+}
+
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
@@ -61,9 +67,18 @@ const WHEEL_GESTURE_MILLISECONDS = 600;
 const MINIMUM_KEYBOARD_HEIGHT_PIXELS = 100;
 
 export class MapInterface {
-  constructor({onSearch, onChange, onViewport, onCardSwipedAway, resultsLabel}) {
-    Object.assign(this, {onSearch, onChange, onViewport, onCardSwipedAway, resultsLabel});
+  constructor({onSearch, onQueryCleared, onChange, onViewport, onCardSwipedAway, onResultsClosed, resultsLabel}) {
+    Object.assign(this, {
+      onSearch,
+      onQueryCleared,
+      onChange,
+      onViewport,
+      onCardSwipedAway,
+      onResultsClosed,
+      resultsLabel
+    });
     this.view = 'closed';
+    this.isResultsPanelOpen = false;
     this.areResultsMinimized = false;
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
     this.search = document.getElementById('search');
@@ -89,8 +104,13 @@ export class MapInterface {
       this.onViewport?.();
     });
     this.clearButton.addEventListener('click', () => {
-      this.clearQuery();
-      this.search.focus();
+      if (this.state === 'filled') {
+        this.clearQuery();
+        // Refocus without firing the focus handler, which would close the chosen place's card.
+        this.restoreFocus(this.search);
+      } else {
+        this.closeResults();
+      }
     });
     this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
@@ -103,6 +123,7 @@ export class MapInterface {
       });
     this.search.addEventListener('input', () => {
       this.syncClearButton();
+      this.syncDesktopSearchUI();
     });
     this.mobileLayoutQuery.addEventListener('change', () => {
       if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
@@ -129,8 +150,14 @@ export class MapInterface {
 
   // Move the browse panel to the container for the current view without changing other state.
   syncPanelPosition() {
-    const target = this.#panelTargetFor(this.view);
+    this.movePanelTo(this.#panelTargetFor(this.view));
+  }
+
+  // Keep the category row's horizontal position when the one shared panel changes container.
+  movePanelTo(target, scrollLeft = document.getElementById('categories').scrollLeft) {
+    const categories = document.getElementById('categories');
     if (this.panel.parentElement !== target) target.append(this.panel);
+    categories.scrollLeft = scrollLeft;
   }
 
   // Returns true when the search input has a non-empty query.
@@ -138,25 +165,46 @@ export class MapInterface {
     return this.search.value.trim().length > 0;
   }
 
-  // Show the clear button when there is a query, hide it otherwise.
+  // The bar state drives the clear button, which means Open as well as Filled.
+  get state() {
+    return searchBarState({hasQuery: this.hasQuery(), resultsVisible: this.areResultsVisible()});
+  }
+
   syncClearButton() {
-    this.clearButton.hidden = !this.hasQuery();
+    this.clearButton.hidden = this.state === 'empty';
+  }
+
+  // Reveal results without taking focus from the control the person used.
+  showResults() {
+    this.isResultsPanelOpen = true;
+    this.syncDesktopSearchUI();
+    this.syncClearButton();
   }
 
   openSearch() {
     this.trigger = this.search;
-    if (!this.mobileLayoutQuery.matches) {
-      // Desktop: keep the current view (dock stays open, closed stays closed).
-      // Searching runs from the debounced 'input' handler in app.js.
-      this.setView(this.view);
+    if (this.mobileLayoutQuery.matches) {
+      // Mobile behavior: search bubble or dock.
+      const view = this.view !== 'dock' ? 'search' : 'dock';
+      const hasViewChanged = view !== this.view;
+      this.setView(view);
+      if (hasViewChanged) this.onSearch?.();
+      else if (this.areResultsMinimized) this.setCardState('peek');
       return;
     }
-    // Mobile behavior: search bubble or dock.
-    const view = this.view !== 'dock' ? 'search' : 'dock';
-    const hasViewChanged = view !== this.view;
-    this.setView(view);
-    if (hasViewChanged) this.onSearch?.();
-    else if (this.areResultsMinimized) this.setCardState('peek');
+    // Desktop: focusing reveals the joined results panel even with no query. The dock's state stays as it was.
+    const wasOpen = this.areResultsVisible();
+    this.showResults();
+    this.setView(this.view);
+    if (!wasOpen) this.onSearch?.();
+  }
+
+  // Leave search entirely: hide results and the card, then return to the map.
+  closeResults() {
+    this.onResultsClosed?.();
+    this.isResultsPanelOpen = false;
+    this.trigger = this.menu;
+    this.close(true);
   }
 
   // Returns the container the browse panel should live in for the given view.
@@ -167,17 +215,22 @@ export class MapInterface {
   }
 
   setView(view) {
+    const wasClosed = this.view === 'closed';
+    // Capture before hiding a container, which would clamp the hidden row's scroll position to zero.
+    const categoryScrollLeft = document.getElementById('categories').scrollLeft;
     this.view = view;
+    // Closing a dock or bubble is a return to the map; a desktop focus refresh with the same view is not.
+    if (view === 'closed' && !wasClosed) this.isResultsPanelOpen = false;
     if (view !== 'search') {
       this.areResultsMinimized = false;
       // A peek only makes sense above open results.
       if (this.card.dataset.state === 'peek') this.setCardState('full');
     }
-    const target = this.#panelTargetFor(view);
-    if (this.panel.parentElement !== target) target.append(this.panel);
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
     this.syncDesktopSearchUI();
+    this.movePanelTo(this.#panelTargetFor(view), categoryScrollLeft);
+    this.syncClearButton();
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
@@ -211,16 +264,14 @@ export class MapInterface {
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
   }
 
-  // On desktop, the search panel carries the categories and results.
-  // data-has-query controls whether it looks like a floating row or a joined card.
+  // On desktop, data-state makes the panel a floating chips row (empty) or a joined results card (open/filled).
   syncDesktopSearchUI() {
     if (this.mobileLayoutQuery.matches) {
       this.desktopSearchPanel.hidden = true;
       return;
     }
-    const isDockOpen = this.view === 'dock';
-    this.desktopSearchPanel.hidden = isDockOpen;
-    this.desktopSearchPanel.dataset.hasQuery = String(this.hasQuery());
+    this.desktopSearchPanel.hidden = this.view === 'dock';
+    this.desktopSearchPanel.dataset.state = this.state;
     this.syncSearchExpanded();
   }
 
@@ -404,23 +455,23 @@ export class MapInterface {
   clearQuery() {
     this.search.value = '';
     this.syncClearButton();
+    this.syncDesktopSearchUI();
     this.syncSearchExpanded();
-    this.onSearch?.();
+    this.onQueryCleared?.();
   }
 
   // Returns true when the desktop results panel is visible and shows results.
   #isDesktopResultsPanelVisible() {
     return !this.mobileLayoutQuery.matches &&
       !this.desktopSearchPanel.hidden &&
-      this.desktopSearchPanel.dataset.hasQuery === 'true';
+      this.desktopSearchPanel.dataset.state !== 'empty';
   }
 
   // Returns true when the results list is visible to the user.
   areResultsVisible() {
     if (this.view === 'search' || this.view === 'dock') return true;
-    // On desktop with a query, results are visible in the search panel even when view is 'closed'.
-    if (!this.mobileLayoutQuery.matches && this.hasQuery()) return true;
-    return false;
+    // On desktop, focusing search or a query shows results in the panel even with the dock closed.
+    return !this.mobileLayoutQuery.matches && (this.isResultsPanelOpen || this.hasQuery());
   }
 
   keyboardOpen() {

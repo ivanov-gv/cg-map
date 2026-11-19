@@ -549,30 +549,42 @@ function warnAboutSlowStartup() {
   }, startupTimeoutMilliseconds);
 }
 
-// Category toggles share the same filter and never move the camera.
-// Pressing a category selects it; pressing it again clears the filter.
+// The row's first chip returns to all categories without changing the search query.
+// It is UI state only: the shared category contract does not contain an "all" category.
 function registerCategoryControls() {
+  const allButton = createElement('button', 'All');
+  allButton.type = 'button';
+  allButton.dataset.category = '';
+  allButton.setAttribute('aria-label', 'All categories');
+  allButton.addEventListener('click', () => selectCategory(null));
+  const container = elementById('categories');
+  container.append(allButton);
+
   for (const [key, label] of Object.entries(categories)) {
     const button = createElement('button', label);
     button.type = 'button';
     button.dataset.category = key;
-    button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
-    button.addEventListener('click', () => {
-      toggleCategory(key);
-    });
-    elementById('categories').append(button);
+    button.addEventListener('click', () => selectCategory(key));
+    container.append(button);
   }
+  syncCategoryButtons();
 }
 
-function toggleCategory(key) {
-  directoryState.activeCategory =
-    directoryState.activeCategory === key ? null : key;
-  const container = elementById('categories');
-  for (const button of container.children) {
-    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
+function syncCategoryButtons() {
+  const activeCategory = directoryState.activeCategory ?? '';
+  for (const button of elementById('categories').children) {
+    const isActiveCategory = button.dataset.category === activeCategory;
     button.setAttribute('aria-pressed', String(isActiveCategory));
     if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
+}
+
+function selectCategory(key) {
+  directoryState.activeCategory = directoryState.activeCategory === key ? null : key;
+  syncCategoryButtons();
+  // A floating desktop chip reveals the same results the dock row would show.
+  if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.view === 'closed')
+    mapState.interface.showResults();
   applyPlaceSearch();
 }
 
@@ -597,10 +609,13 @@ function registerSelectionControls() {
       else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.
         mapState.interface.close(true);
-      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
-        // On desktop with dock closed, Escape clears the query and refocuses the input.
+      } else if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.state === 'filled') {
+        // On desktop with dock closed, Escape clears the query and refocuses the input; results stay Open.
         mapState.interface.clearQuery();
-        elementById('search').focus();
+        mapState.interface.restoreFocus(elementById('search'));
+      } else if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.state === 'open') {
+        // A second Escape leaves the Open state, matching the × action.
+        mapState.interface.closeResults();
       } else if (mapState.interface.view !== 'closed') {
         // On mobile with search view (not dock), Escape closes the search.
         mapState.interface.close(true);
@@ -678,6 +693,10 @@ function initializeInterface() {
       placeSelection.close(false);
       applyPlaceSearch();
     },
+    onQueryCleared: () => {
+      // Clearing a query is not a new search: keep the chosen place and refresh the results.
+      applyPlaceSearch();
+    },
     onChange: () => {
       syncPanels();
       if (mapState.interface && mapState.interface.view !== 'closed' && !mapState.hasExploredMap) {
@@ -691,6 +710,7 @@ function initializeInterface() {
     // Recompute selection framing only after keyboard and camera changes have settled.
     onViewport: () => placeSelection.viewportChanged(),
     onCardSwipedAway: () => placeSelection.close(),
+    onResultsClosed: () => placeSelection.close(),
     resultsLabel: () => {
       const query = elementById('search').value.trim();
       if (query) return `“${query}”`;

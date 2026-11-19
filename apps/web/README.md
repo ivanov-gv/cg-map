@@ -49,30 +49,38 @@ Application modules load directly as browser ES modules; vendor bundles are comm
 ## Laconic controls
 
 The [interface feature](../../docs/ui-ux/features/interface.md) defines the implemented composition. The map fills the
-viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens.
-[interface.js](src/interface.js) owns closed/dock/mobile-search states, the shared result panel, phone card states and
+viewport and starts with the dock closed. A single burger/search header keeps its outer geometry when the dock opens;
+only the field narrows to make room for the Open state's ×. [interface.js](src/interface.js) owns
+closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
 swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
 scroll above it.
 
-**Desktop search bar** (issue #101): the search bar is 60 px tall (instead of 54 px). With no query and the dock closed,
-a row of floating category chips appears under the bar; each chip has its own shadow and the row scrolls horizontally
-when it overflows. Typing a query shows a clear (×) button inside the bar and replaces the floating chips with a unified
-search panel joined to the bar, containing the categories row and a scrollable results list. When the dock is open,
-Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps the search field
-focused. Tab reaches the menu button, the input, the clear button, and the category chips. The dock remains available
-for the full layer/download controls.
+**Desktop search bar** (issues #101, #246): the search bar is 60 px tall (instead of 54 px) and has three states. Empty
+shows only the placeholder and a floating row of category chips, with **All** first; each chip has its own shadow and
+the row scrolls horizontally when it overflows. Focusing the field opens the joined Search panel in Open, with × and a
+nearest-first nearby list; typing makes it Filled and filters that list. The × in Filled clears only the query and keeps
+results Open. The × in Open closes the results, returns to the map, and also closes the place card. With the dock
+closed, Escape follows the same sequence: the first Escape clears a query and refocuses the input, the second closes
+Open results; with the dock open, Escape closes the dock. The floating row and the dock row are one element, so opening
+the dock keeps its scroll position, active chip, query, and focus. Tab reaches the menu button, the input, the clear
+button, and the category chips. The dock remains available for the full layer/download controls.
 
-**Mobile search bar** (issue #102): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px default
-and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and font.
-Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains available
-inside the open dock and the search bubble.
+**Mobile search bar** (issues #102, #246): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px
+default and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and
+font. Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains
+available inside the open dock and the search bubble, with **All** first. Focusing with the dock closed opens the bubble
+in Open with × and a nearest-first nearby list; the same × sequence applies: clearing a Filled query keeps results Open,
+and the next × closes the bubble and any place card. With the dock open, the bottom options hide while the keyboard is
+open.
 
-**Flip search bar** (issue #103): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks to the
-menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The search field
-and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as on mobile),
-and the search field becomes usable. Typing a query shows the clear button.
+**Flip search bar** (issues #103, #246): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks
+to the menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The
+search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as
+on mobile), and the search field becomes usable. The open dock's results make the bar Open with × already visible;
+typing makes it Filled. The × clears the query but keeps the dock open, and a second × closes the dock and any place
+card. The category row starts with **All**, as on other devices.
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
@@ -403,12 +411,13 @@ and the shared house-number scale listeners.
 This lets MapLibre update its canvas when the real container dimensions change, for example during rotation. It does not
 rebuild map sources or tiles.
 
-MapInterface switches the shared result panel between the full dock and mobile search bubble. The category navigation
-stays outside the scrolling list. There is no count/reset row; clicking an active category returns to all categories
-without clearing the query. The bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events
-update the bubble cap and hide the phone dock's options when a keyboard reduces the visible area; the camera stays still
-until the keyboard closes. Selecting a result keeps search open and shows its existing details card as a header-only
-peek, with the selected feature kept in the remaining map area. The burger/search header is never replaced or moved.
+MapInterface switches the shared result panel between the full dock, the desktop search panel, and the mobile search
+bubble. The category navigation stays outside the scrolling list and begins with the All chip. There is no count/reset
+row; clicking an active category returns to All without clearing the query. The bubble extends to the visible viewport's
+midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone dock's options when a keyboard
+reduces the visible area; the camera stays still until the keyboard closes. Selecting a result keeps search open and
+shows its existing details card as a header-only peek, with the selected feature kept in the remaining map area. The
+burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.

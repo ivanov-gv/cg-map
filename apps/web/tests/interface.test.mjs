@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
   isInFocusZone,
+  searchBarState,
   searchBounds,
   uncoveredMapArea,
   uncoveredMapOffset
@@ -14,6 +15,14 @@ import {
   FLIP_MEDIA_QUERY,
   MOBILE_MEDIA_QUERY
 } from '../src/device-class.js';
+
+test('search bar state follows the query and whether results are open', () => {
+  assert.equal(searchBarState({hasQuery: false, resultsVisible: false}), 'empty');
+  assert.equal(searchBarState({hasQuery: false, resultsVisible: true}), 'open');
+  assert.equal(searchBarState({hasQuery: true, resultsVisible: true}), 'filled');
+  // A query still shown after leaving a dock stays Filled until it is cleared.
+  assert.equal(searchBarState({hasQuery: true, resultsVisible: false}), 'filled');
+});
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {

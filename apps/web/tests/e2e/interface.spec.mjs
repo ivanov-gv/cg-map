@@ -48,24 +48,34 @@ test('dock expands around a stationary header and keeps layer/download options a
   await openMenu(page);
   expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
   expect(await page.locator('#menu-toggle').boundingBox()).toEqual(burger);
-  expect(await page.locator('#search').boundingBox()).toEqual(search);
+  // Open results reveal × inside the unchanged header, narrowing only the input field.
+  await expect(page.locator('#clear-search')).toBeVisible();
+  const searchWhileOpen = await page.locator('#search').boundingBox();
+  expect({
+    x: searchWhileOpen.x,
+    y: searchWhileOpen.y,
+    height: searchWhileOpen.height
+  }).toEqual({x: search.x, y: search.y, height: search.height});
+  expect(searchWhileOpen.width).toBeLessThan(search.width);
   await expect(page.locator('.layer-tile')).toHaveCount(2);
   await expect(page.locator('#download-title')).toHaveText('Download for offline use');
   await expect(page.getByRole('heading', {name: /Map layers|Offline map/})).toHaveCount(0);
   await expect(page.locator('#toggle-results, #reset')).toHaveCount(0);
-  await expect(page.locator('#categories').getByRole('button', {name: 'Explore all'})).toHaveCount(0);
+  await expect(page.locator('#categories').getByRole('button', {name: 'All categories'})).toHaveAttribute('aria-pressed', 'true');
   const footer = await page.locator('.dock-footer').boundingBox();
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
   await expect(page.locator('.result')).toHaveCount(0);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
-  await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.locator('#categories').getByRole('button', {name: 'All categories'})).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
   await expect(page.locator('.result')).toHaveCount(3);
   expect(await page.locator('.dock-footer').boundingBox()).toEqual(footer);
   await page.screenshot({path: testInfo.outputPath('dock.png')});
   await closeMenu(page);
   expect(await page.locator('.search-bar').boundingBox()).toEqual(header);
   expect(await page.locator('#menu-toggle').boundingBox()).toEqual(burger);
+  await expect(page.locator('#clear-search')).toBeHidden();
   expect(await page.locator('#search').boundingBox()).toEqual(search);
 });
 
@@ -618,8 +628,9 @@ test(
     await chip('Essentials').evaluate(element => element.click());
     await expect.poll(() => chipInStrip('Essentials')).toBe(true);
     await chip('Essentials').evaluate(element => element.click());
-    // Toggling off clears the category filter — no button is pressed.
-    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
+    // Pressing the active chip again returns to All, which is now the pressed chip.
+    await expect(chip('All categories')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
 
     const scrolled = await strip.evaluate(element => {
       const start = element.scrollLeft;
@@ -649,9 +660,10 @@ test(
     await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.result')).toHaveCount(3);
 
-    // Press 'Shops' again: none is pressed, and all results are shown.
+    // Press 'Shops' again: All is pressed, and all results are shown.
     await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
-    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(0);
+    await expect(page.locator('#categories').getByRole('button', {name: 'All categories'})).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
     await expect(page.locator('.result')).toHaveCount(6);
   }
 );
@@ -1495,10 +1507,11 @@ test.describe('Desktop search bar', () => {
     await closeMenu(page);
     const panel = page.locator('#desktop-search-panel');
     await expect(panel).toBeVisible();
-    // The panel carries data-has-query="false" in floating mode.
-    await expect(panel).toHaveAttribute('data-has-query', 'false');
-    // Categories are inside the panel (single source of truth).
-    await expect(panel.locator('#categories button')).toHaveCount(5);
+    // The panel carries data-state="empty" in floating mode.
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+    // All leads the categories inside the panel (single source of truth).
+    await expect(panel.locator('#categories button')).toHaveCount(6);
+    await expect(panel.locator('#categories button').first()).toHaveAttribute('aria-label', 'All categories');
     // The dock should be closed.
     await expect(page.locator('#dock-content')).toBeHidden();
   });
@@ -1536,20 +1549,29 @@ test.describe('Desktop search bar', () => {
     expect(chipShadow).not.toBe('none');
   });
 
-  test('typing shows the clear button and clicking it empties the input', async ({page, isMobile}) => {
+  test('typing shows the clear button; clearing a query stays Open and closing Open returns Empty', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
-    // Clear button is hidden initially.
+    const panel = page.locator('#desktop-search-panel');
+    // Empty: no ×, only floating chips with no results.
     await expect(clearButton).toBeHidden();
-    // Type a query.
+    await expect(page.locator('#results')).toBeHidden();
     await page.locator('#search').fill('museum');
     await expect(clearButton).toBeVisible();
-    // Click the clear button.
+    await expect(panel).toHaveAttribute('data-state', 'filled');
+    // Filled → Open: the query is gone, but results and × stay.
     await clearButton.click();
     await expect(page.locator('#search')).toHaveValue('');
+    await expect(clearButton).toBeVisible();
+    await expect(panel).toHaveAttribute('data-state', 'open');
+    await expect(page.locator('#results')).toBeVisible();
+    // Open → Empty: × closes the results and restores the floating row.
+    await clearButton.click();
     await expect(clearButton).toBeHidden();
+    await expect(page.locator('#results')).toBeHidden();
+    await expect(panel).toHaveAttribute('data-state', 'empty');
   });
 
   test('with a query, categories and results are inside one container under the bar', async ({page, isMobile}) => {
@@ -1559,10 +1581,10 @@ test.describe('Desktop search bar', () => {
     // Type a query that matches some places.
     await page.locator('#search').fill('Café');
     await expect(page.locator('#clear-search')).toBeVisible();
-    // The desktop search panel should be visible with data-has-query="true".
+    // The desktop search panel should be visible with data-state="filled".
     const panel = page.locator('#desktop-search-panel');
     await expect(panel).toBeVisible();
-    await expect(panel).toHaveAttribute('data-has-query', 'true');
+    await expect(panel).toHaveAttribute('data-state', 'filled');
     // The panel should contain the browse panel with categories and results.
     await expect(panel.locator('#categories')).toBeVisible();
     await expect(panel.locator('#results')).toBeVisible();
@@ -1727,10 +1749,16 @@ test.describe('Desktop search bar', () => {
     // Tab moves focus off the input to #clear-search.
     await page.keyboard.press('Tab');
     await expect(page.locator('#clear-search')).toBeFocused();
-    // Press Escape: input should be empty and #search should be focused.
+    // Escape clears the query and keeps the field focused; results stay Open.
     await page.keyboard.press('Escape');
     await expect(page.locator('#search')).toHaveValue('');
     await expect(page.locator('#search')).toBeFocused();
+    await expect(page.locator('#clear-search')).toBeVisible();
+    await expect(page.locator('#desktop-search-panel')).toHaveAttribute('data-state', 'open');
+    // A second Escape closes the Open results, as × does.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#clear-search')).toBeHidden();
+    await expect(page.locator('#desktop-search-panel')).toHaveAttribute('data-state', 'empty');
     // Part B: dock open, press Escape: dock should close.
     await openMenu(page);
     await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
@@ -1742,12 +1770,18 @@ test.describe('Desktop search bar', () => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
-    // Initially no query: aria-expanded should be 'false'.
+    // Empty: no query and no results, so aria-expanded is 'false'.
     await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
-    // Type a query: results become visible, aria-expanded should be 'true'.
+    // Focus opens results even with no query: aria-expanded becomes 'true'.
+    await page.locator('#search').click();
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
+    // Type a query: the bar is Filled, still expanded.
     await page.locator('#search').fill('museum');
     await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
-    // Clear the query: aria-expanded should be 'false'.
+    // Filled → Open: results remain, so aria-expanded stays 'true'.
+    await page.locator('#clear-search').click();
+    await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'true');
+    // Open → Empty: aria-expanded becomes 'false'.
     await page.locator('#clear-search').click();
     await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
   });
@@ -1917,20 +1951,22 @@ test.describe('Flip search bar', () => {
     });
   });
 
-  test('search becomes visible and clear button appears when typing in dock on flip', async ({page}) => {
+  test('flip dock opens search in Open state and × moves Filled back to Open', async ({page}) => {
     await withFlipViewport(page, async () => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
       await ready(page);
-      // Open the dock.
+      // Open the dock. Its results with no query make the bar Open, so × is already shown.
       await openMenu(page);
-      // Search input is now visible inside the dock.
       await expect(page.locator('#search')).toBeVisible();
-      // Clear button should be hidden when there is no query.
-      await expect(page.locator('#clear-search')).toBeHidden();
-      // Type a query — clear button should appear.
+      await expect(page.locator('#clear-search')).toBeVisible();
       await page.locator('#search').fill('Café');
       expect(await page.locator('#search').inputValue()).toBe('Café');
       await expect(page.locator('#clear-search')).toBeVisible();
+      // Clearing the query keeps the dock and its results open.
+      await page.locator('#clear-search').click();
+      await expect(page.locator('#search')).toHaveValue('');
+      await expect(page.locator('#clear-search')).toBeVisible();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
     });
   });
 
@@ -3073,3 +3109,188 @@ test.describe('menu button hover state on touch screens', () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Search Bar states and the All category (issue #246)
+// ---------------------------------------------------------------------------
+
+test.describe('Search Bar states and All category', () => {
+  const allChip = page => page.locator('#categories').getByRole('button', {name: 'All categories'});
+  // CSS selection also reaches the chip while the phone main screen hides the category row.
+  const allElement = page => page.locator('#categories button[data-category=""]');
+
+  test('desktop focus opens nearby results and × returns through Open to Empty', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const clearButton = page.locator('#clear-search');
+    const panel = page.locator('#desktop-search-panel');
+
+    await expect(clearButton).toBeHidden();
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+    await expect(page.locator('#results')).toBeHidden();
+
+    // Focusing with no query opens the joined panel with a nearest-first nearby list.
+    await page.locator('#search').focus();
+    await expect(clearButton).toBeVisible();
+    await expect(panel).toHaveAttribute('data-state', 'open');
+    await expect(page.locator('.result')).toHaveCount(6);
+    await expect(page.locator('.result').first()).toContainText('Nearby place 0');
+    await expect(page.locator('#results')).toBeVisible();
+
+    await clearButton.click();
+    await expect(clearButton).toBeHidden();
+    await expect(panel).toHaveAttribute('data-state', 'empty');
+    await expect(page.locator('#results')).toBeHidden();
+  });
+
+  test('desktop × in Filled clears the query and keeps results open, then closes card and results', async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const clearButton = page.locator('#clear-search');
+    await page.locator('#search').fill('Nearby place 0');
+    await expect(page.locator('.result')).toHaveCount(1);
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+
+    await clearButton.click();
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(clearButton).toBeVisible();
+    await expect(page.locator('#desktop-search-panel')).toHaveAttribute('data-state', 'open');
+    await expect(page.locator('#results')).toBeVisible();
+    await expect(page.locator('#place-card')).toBeVisible();
+
+    await clearButton.click();
+    await expect(clearButton).toBeHidden();
+    await expect(page.locator('#place-card')).toBeHidden();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  });
+
+  test('phone focus opens the bubble in Open and × returns to the map', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await expect(page.locator('#clear-search')).toBeHidden();
+
+    await page.locator('#search').focus();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(page.locator('#clear-search')).toBeVisible();
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await page.locator('#clear-search').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(page.locator('#search-bubble')).toBeHidden();
+    await expect(page.locator('#place-card')).toBeHidden();
+    await expect(page.locator('#clear-search')).toBeHidden();
+  });
+
+  test('phone dock uses the same Filled → Open → Empty sequence', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const clearButton = page.locator('#clear-search');
+
+    await openMenu(page);
+    await expect(clearButton).toBeVisible();
+    await page.locator('#search').fill('Nearby place 1');
+    await expect(clearButton).toBeVisible();
+    await clearButton.click();
+    await expect(page.locator('#search')).toHaveValue('');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await expect(clearButton).toBeVisible();
+
+    await clearButton.click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(clearButton).toBeHidden();
+    await expect(page.locator('#dock-content')).toBeHidden();
+  });
+
+  test('All leads the category row on every device and is pressed when no category is picked', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+
+    const firstIsAll = async () =>
+      page.evaluate(() => document.getElementById('categories').firstElementChild?.dataset.category === '');
+    expect(await firstIsAll()).toBe(true);
+    await expect(allElement(page)).toHaveCount(1);
+    await expect(allElement(page)).toHaveText('All');
+    await expect(allElement(page)).toHaveAttribute('aria-label', 'All categories');
+    await expect(allElement(page)).toHaveAttribute('aria-pressed', 'true');
+
+    await openMenu(page);
+    expect(await firstIsAll()).toBe(true);
+    await expect(allChip(page)).toBeVisible();
+    await expect(allChip(page)).toHaveAttribute('aria-pressed', 'true');
+    await closeMenu(page);
+
+    await page.locator('#search').focus();
+    await expect(allChip(page)).toBeVisible();
+    await expect(allChip(page)).toHaveAttribute('aria-pressed', 'true');
+
+    await withFlipViewport(page, async () => {
+      await openMenu(page);
+      expect(await firstIsAll()).toBe(true);
+      await expect(allChip(page)).toBeVisible();
+      await expect(allChip(page)).toHaveAttribute('aria-pressed', 'true');
+      await closeMenu(page);
+    });
+  });
+
+  test('the active category returns to All without clearing the query', async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await page.locator('#search').fill('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    const shops = page.locator('#categories').getByRole('button', {name: 'Shops', exact: true});
+    await shops.click();
+    await expect(shops).toHaveAttribute('aria-pressed', 'true');
+    await expect(allChip(page)).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.result')).toHaveCount(3);
+
+    await shops.click();
+    await expect(allChip(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#categories [aria-pressed="true"]')).toHaveCount(1);
+    await expect(page.locator('#search')).toHaveValue('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+  });
+
+  test('desktop dock keeps the category row scroll position and active category', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const scrollLeft = () => page.locator('#categories').evaluate(element => element.scrollLeft);
+
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await page.locator('#categories').evaluate(element => {
+      element.scrollLeft = 40;
+    });
+    const before = await scrollLeft();
+    expect(before).toBeGreaterThan(0);
+
+    await openMenu(page);
+    expect(await scrollLeft()).toBe(before);
+    await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await closeMenu(page);
+    expect(await scrollLeft()).toBe(before);
+    await expect(page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+});

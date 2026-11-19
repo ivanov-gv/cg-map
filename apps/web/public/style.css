@@ -215,13 +215,14 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     --desktop-chips-bottom: calc(var(--desktop-bar-height) + 48px + 16px);
   }
 
-  body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
+  body[data-view=dock] .place-card,
+  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
     top: 20px;
     left: calc(var(--dock-width) + 12px);
     width: min(375px, calc(100% - var(--dock-width) - 96px));
     max-height: calc(100% - 40px);
   }
-  body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
+  body:has(.desktop-search-panel[data-state=empty]:not([hidden])) .place-card {
     top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
     left: 20px;
     max-height: calc(100% - var(--visible-top) - var(--bar-inset) - var(--desktop-chips-bottom) - 20px);
@@ -236,8 +237,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .clear-button .icon { width: 18px; height: 18px; }
 
   /* Desktop search panel: always positioned under the bar.
-   * data-has-query="false" → floating category chips (no background, no border, no shadow).
-   * data-has-query="true"  → joined card with categories row + scrollable results. */
+   * data-state="empty"         → floating category chips (no background, no border, no shadow).
+   * data-state="open"/"filled" → joined card with categories row + scrollable results. */
   .desktop-search-panel {
     position: fixed;
     top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-bar-height));
@@ -251,45 +252,45 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     z-index: 5;
   }
   /* Floating mode: no query — categories float, results hidden. */
-  .desktop-search-panel[data-has-query="false"] {
+  .desktop-search-panel[data-state=empty] {
     background: transparent;
     border: none;
     border-radius: 0;
     box-shadow: none;
     max-height: none;
   }
-  .desktop-search-panel[data-has-query="false"] #results { display: none; }
-  .desktop-search-panel[data-has-query="false"] #categories {
+  .desktop-search-panel[data-state=empty] #results { display: none; }
+  .desktop-search-panel[data-state=empty] #categories {
     gap: 8px;
     padding: 4px 0;
   }
-  .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
-  .desktop-search-panel[data-has-query="false"] #categories button {
+  .desktop-search-panel[data-state=empty] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-state=empty] #categories button {
     background: white;
     padding-left: 14px;
     padding-right: 14px;
     box-shadow: 0 2px 8px #243f3710;
     pointer-events: auto;
   }
-  .desktop-search-panel[data-has-query="false"] #categories button[aria-pressed=true] {
+  .desktop-search-panel[data-state=empty] #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
   /* Joined card mode: with query — categories + results as one card. */
-  .desktop-search-panel[data-has-query="true"] {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) {
     border: 1px solid var(--line);
     border-top: none;
     border-radius: 0 0 15px 15px;
     background: var(--paper);
     box-shadow: 0 8px 24px #243f3718;
   }
-  .desktop-search-panel[data-has-query="true"] #categories {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories {
     gap: 7px;
     padding: 6px var(--bar-inset) 8px;
   }
-  .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
-  .desktop-search-panel[data-has-query="true"] #categories button {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories button {
     min-height: 40px;
     border: 1px solid var(--line);
     background: transparent;
@@ -298,12 +299,12 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     font-size: 12px;
     white-space: nowrap;
   }
-  .desktop-search-panel[data-has-query="true"] #categories button[aria-pressed=true] {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
-  .desktop-search-panel[data-has-query="true"] #results {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #results {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
