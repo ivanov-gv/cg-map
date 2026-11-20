@@ -94,6 +94,23 @@ test('building classification ignores street and number word order', () => {
   assert.deepEqual(classifyBuildingMatch(label, '18'), {kind: 'building'});
 });
 
+test('building matches need every query word', () => {
+  const place = feature('Mobile result 07', 'shops', [19.26, 42.44]);
+  // The street's one-letter word "i" hides inside "Mobile", so a substring street test is not enough.
+  const numberedBuilding = addressLabel(7, [19.26001, 42.44], {
+    'addr:housenumber': '7',
+    'addr:street': 'Bratstva i Jedinstva'
+  });
+  assert.equal(classifyBuildingMatch(numberedBuilding, 'Mobile result 07'), null);
+  const results = selectSearchResults({
+    places: [place],
+    buildingLabels: {type: 'FeatureCollection', features: [numberedBuilding]},
+    query: 'Mobile result 07',
+    center: [19.26, 42.44]
+  });
+  assert.deepEqual(results.map(result => result.kind), ['place']);
+});
+
 test('building search uses entrance and section identifiers without duplicating a footprint', () => {
   const label = addressLabel(9, [19.25, 42.44], {
     building_number: '12',
