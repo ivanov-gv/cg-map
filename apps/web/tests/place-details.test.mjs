@@ -40,9 +40,24 @@ test('a POI card exposes only recorded facts and the containing building', () =>
       opening_hours: 'Mo-Fr 07:00-23:00'
     }
   };
+  const nearbyPlaces = [
+    {
+      feature: {properties: {id: 'node/2', name: 'Bakery', category: 'food', kind: 'bakery'}},
+      distanceKilometres: 0.12
+    },
+    {
+      feature: {properties: {id: 'node/3', name: 'Bookshop', category: 'shops', kind: 'books'}},
+      distanceKilometres: 0.26
+    },
+    {
+      feature: {properties: {id: 'node/4', name: 'Far café', category: 'food', kind: 'cafe'}},
+      distanceKilometres: 0.61
+    }
+  ];
   const card = buildPlaceCard(feature, {
     sourceDate: '2026-10-17T20:20:51Z',
-    buildingAddress: 'Njegoševa 12, Zgrada 4'
+    buildingAddress: 'Njegoševa 12, Zgrada 4',
+    nearbyPlaces
   });
 
   assert.equal(card.eyebrow, 'Eat & drink');
@@ -54,7 +69,7 @@ test('a POI card exposes only recorded facts and the containing building', () =>
   );
   assert.deepEqual(
     card.sections.map(section => section.id),
-    ['location-and-contacts', 'opening-hours']
+    ['location-and-contacts', 'opening-hours', 'nearby']
   );
   const location = sectionById(card, 'location-and-contacts');
   assert.equal(rowByLabel(location, 'Address').value, 'Njegoševa 12');
@@ -68,6 +83,10 @@ test('a POI card exposes only recorded facts and the containing building', () =>
   assert.deepEqual(sectionById(card, 'opening-hours').rows, [
     {label: 'Monday – Friday', value: '07:00–23:00'}
   ]);
+  assert.deepEqual(
+    sectionById(card, 'nearby').rows.map(row => row.value),
+    ['Bakery · Eat & drink · 120 m', 'Bookshop · Shops · 260 m']
+  );
 });
 
 test('a POI card omits sections whose facts are absent', () => {
@@ -80,21 +99,19 @@ test('a POI card omits sections whose facts are absent', () => {
     card.sections.map(section => section.id),
     ['location-and-contacts']
   );
-  assert.deepEqual(sectionById(card, 'location-and-contacts').rows, [
-    {label: 'Coordinates', value: '42.44000° N, 19.26000° E'}
-  ]);
+  assert.equal(rowByLabel(sectionById(card, 'location-and-contacts'), 'Coordinates').value, '42.44000° N, 19.26000° E');
   assert.equal(card.source, 'Source: OpenStreetMap.');
 });
 
 test('a building card groups addresses, entrances and places mapped inside the footprint', () => {
   const facts = {
     kind: 'Building',
-    properties: {building: 'apartments', 'building:levels': 4, source: 'OpenStreetMap'},
-    addressLine: 'Njegoševa 12',
-    addresses: ['Njegoševa 12'],
+    properties: {building: 'apartments', 'building:levels': 4, name: 'A different label', source: 'OpenStreetMap'},
+    addressLine: 'Njegoševa 12, 14',
+    addresses: ['Njegoševa 12', 'Njegoševa 14'],
     entrances: [
       {number: '27', ref: 'M', label: '27, Ulaz M', address: 'Njegoševa 12, Ulaz 27'},
-      {number: '29', label: '29', address: 'Njegoševa 12, Ulaz 29'}
+      {number: '29', label: '29', address: 'Njegoševa 14, Ulaz 29'}
     ],
     typeLabel: 'Building',
     source: 'OpenStreetMap',
@@ -102,13 +119,20 @@ test('a building card groups addresses, entrances and places mapped inside the f
   };
   const placesInside = [
     {
-      properties: {name: 'Mimoza', kind: 'cafe', opening_hours: 'Mo-Fr 07:00-23:00'}
+      properties: {
+        name: 'Mimoza',
+        kind: 'cafe',
+        opening_hours: 'Mo-Fr 08:00-18:00; Sa 10:00-14:00'
+      }
+    },
+    {
+      properties: {name: 'Late shop', kind: 'shop', opening_hours: 'Mo-Fr 09:00-17:00; Su'}
     }
   ];
   const card = buildObjectCard(
     {
       coordinates: [19.262, 42.44],
-      name: 'Unnamed building',
+      name: 'Building 12, 14',
       kind: 'Building',
       facts
     },
@@ -116,19 +140,23 @@ test('a building card groups addresses, entrances and places mapped inside the f
   );
 
   assert.equal(card.eyebrow, 'Building');
-  assert.equal(card.title, 'Unnamed building');
-  assert.equal(card.subtitle, 'Apartments · 4 levels · 1 recorded address');
+  assert.equal(card.title, 'Building 12, 14');
+  assert.equal(card.subtitle, 'Apartments · 4 levels · 2 recorded addresses');
   assert.deepEqual(
     card.sections.map(section => section.id),
     ['addresses', 'entrances', 'inside-this-building', 'details']
   );
-  assert.deepEqual(sectionById(card, 'addresses').rows[0], {label: '', value: 'Njegoševa 12'});
+  assert.deepEqual(sectionById(card, 'addresses').rows, [
+    {label: '', value: 'Njegoševa 12'},
+    {label: '', value: 'Njegoševa 14'}
+  ]);
   assert.deepEqual(sectionById(card, 'entrances').rows, [
-    {label: '', value: '1 · 27, Ulaz M · Njegoševa 12, Ulaz 27'},
-    {label: '', value: '2 · 29 · Njegoševa 12, Ulaz 29'}
+    {label: '', value: '27, Ulaz M · Njegoševa 12, Ulaz 27'},
+    {label: '', value: '29 · Njegoševa 14, Ulaz 29'}
   ]);
   assert.deepEqual(sectionById(card, 'inside-this-building').rows, [
-    {label: '', value: 'Mimoza · Café · 07:00–23:00'}
+    {label: '', value: 'Mimoza · Café · Monday – Friday 08:00–18:00, Saturday 10:00–14:00'},
+    {label: '', value: 'Late shop · Shop · Mo-Fr 09:00-17:00; Su'}
   ]);
   assert.equal(rowByLabel(sectionById(card, 'details'), 'Coordinates').value, '42.44000° N, 19.26200° E');
   assert.equal(card.source, 'Source: OpenStreetMap, snapshot 17 Oct 2026.');
@@ -152,6 +180,31 @@ test('other map objects use the same card without duplicating their source line'
   assert.equal(details.rows.filter(row => row.label === 'Source').length, 0);
   assert.equal(rowByLabel(details, 'Coordinates').value, '42.44606° N, 19.25495° E');
   assert.equal(card.source, 'Source: ePodgorica, snapshot 18 Oct 2026.');
+});
+
+test('object detail rows come from facts rather than display strings', () => {
+  const card = buildObjectCard({
+    name: 'Bridge',
+    kind: 'Bridge',
+    coordinates: [19.262, 42.44],
+    details: ['Type: Wrong', 'Invented: value', 'Source: OpenStreetMap'],
+    facts: {
+      kind: 'Bridge',
+      typeLabel: 'Bridge',
+      detailRows: [{label: 'Road', value: 'M-2'}],
+      properties: {},
+      addressLine: '',
+      addresses: [],
+      entrances: [],
+      source: ''
+    }
+  });
+
+  assert.deepEqual(
+    sectionById(card, 'details').rows.map(row => row.label),
+    ['Road', 'Type', 'Coordinates']
+  );
+  assert.equal(rowByLabel(sectionById(card, 'details'), 'Road').value, 'M-2');
 });
 
 test('footprint membership respects holes, separate parts and invalid points', () => {
@@ -191,4 +244,42 @@ test('footprint membership respects holes, separate parts and invalid points', (
     place([11, 11])
   ]);
   assert.deepEqual(placesInsideFootprint({geometry: {type: 'Point', coordinates: [1, 1]}}, candidates), []);
+});
+
+test('separate rendered footprint fragments form one building footprint', () => {
+  const fragments = [
+    {
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [2, 0],
+            [2, 2],
+            [0, 2],
+            [0, 0]
+          ]
+        ]
+      }
+    },
+    {
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [10, 10],
+            [12, 10],
+            [12, 12],
+            [10, 12],
+            [10, 10]
+          ]
+        ]
+      }
+    }
+  ];
+  const first = {geometry: {type: 'Point', coordinates: [1, 1]}};
+  const second = {geometry: {type: 'Point', coordinates: [11, 11]}};
+  const outside = {geometry: {type: 'Point', coordinates: [5, 5]}};
+
+  assert.deepEqual(placesInsideFootprint(fragments, [first, second, outside]), [first, second]);
 });

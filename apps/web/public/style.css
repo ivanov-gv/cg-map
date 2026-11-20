@@ -194,7 +194,6 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .detail-label { flex: none; color: #51594f; font-weight: 600; }
 .detail-value { min-width: 0; }
 .place-card a { font-size: 13px; display: inline-block; margin: 8px 12px 0 0; }
-.place-chooser .result { min-height: 56px; padding: 8px 4px; }
 .place-card .source-note { font-size: 11px; color: var(--muted); margin: 0 0 18px; }
 .point-actions { display: flex; gap: 10px; margin-bottom: 18px; }
 .point-actions button { flex: 1; min-height: 44px; border-radius: 10px; background: var(--green); color: white; font-weight: 600; }

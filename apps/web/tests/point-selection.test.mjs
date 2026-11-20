@@ -13,7 +13,7 @@ import {
 } from '../src/point-selection.js';
 test('unnamed buildings and empty map points do not acquire invented metadata', () => {
   const building = describePoint({layer: {id: 'buildings'}, properties: {kind: 'building'}}, [19.26, 42.44]);
-  assert.equal(building.name, 'Building');
+  assert.equal(building.name, 'Unnamed building');
   assert.deepEqual(building.coordinates, [19.26, 42.44]);
   assert.equal(describePoint(null, [19, 42]).name, 'Map point');
   const park = describePoint({layer: {id: 'land'}, properties: {kind: 'park', name: 'Park'}}, [19, 42]);
@@ -91,7 +91,7 @@ test('polygon address lookup is independent of label rendering and handles footp
   const point = describePoint(feature, [19.26, 42.44], index);
   assert.equal(point.name, 'Building 12B');
   assert.ok(point.details.includes('Test street 12B'));
-  assert.equal(describePoint({...feature, id: 1}, [19.26, 42.44], index).name, 'Building');
+  assert.equal(describePoint({...feature, id: 1}, [19.26, 42.44], index).name, 'Unnamed building');
   assert.equal(describePoint({...feature, layer: {id: 'land'}}, [19.26, 42.44], index).kind, 'Land');
   assert.equal(feature.properties['addr:housenumber'], undefined);
 });

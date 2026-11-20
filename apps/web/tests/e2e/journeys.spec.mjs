@@ -460,7 +460,7 @@ test('building house numbers start at the 100m scale and open address details', 
   }, label.geometry.coordinates);
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+  await expect(page.locator('#place-name')).toHaveText(`Building ${label.properties['addr:housenumber']}`);
   const addresses = page.locator('#place-details .details-section--addresses');
   await expect(addresses.locator('.section-title')).toHaveText('Addresses');
   await expect(addresses.locator('.detail-value')).toHaveText(label.properties['addr:housenumber']);
@@ -489,7 +489,7 @@ test('same building keeps its address across zooms and with number labels hidden
     }, coordinates);
     await page.mouse.click(point.x, point.y);
     await expect(page.locator('#place-category')).toHaveText('Building');
-    await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+    await expect(page.locator('#place-name')).toHaveText('Building 105,107');
     await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
       'Oktobarske revolucije 105,107'
     );
@@ -735,7 +735,7 @@ test.describe('building entrances', () => {
         await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
         await context.setOffline(true);
         await tap(label.geometry.coordinates);
-        await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+        await expect(page.locator('#place-name')).toHaveText(`Building ${variant.label}`);
         const address = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
         await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
           address

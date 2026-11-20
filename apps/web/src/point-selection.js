@@ -2,6 +2,7 @@ const MAX_ENTRANCES_PER_BUILDING = 100;
 const MAX_ADDRESS_TEXT_LENGTH = 128;
 const ENTRANCE_LABEL_ZOOM = 18;
 const SELECTED_ENTRANCE_MIN_ZOOM = 13;
+const busStopSnapshotDate = '2026-10-18';
 const ENTRANCE_LAYERS = [
   'entrance-points',
   'entrance-numbers',
@@ -302,9 +303,12 @@ function isInsideRing(point, ring) {
   let isInside = false;
   for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
     const [east, north] = ring[index];
-    const [west, south] = ring[previous];
-    const crossesLatitude = north > latitude !== south > latitude;
-    if (crossesLatitude && longitude < ((west - east) * (latitude - north)) / (south - north) + east)
+    const [previousLongitude, previousLatitude] = ring[previous];
+    const crossesLatitude = north > latitude !== previousLatitude > latitude;
+    if (
+      crossesLatitude &&
+      longitude < ((previousLongitude - east) * (latitude - north)) / (previousLatitude - north) + east
+    )
       isInside = !isInside;
   }
   return isInside;
@@ -315,15 +319,20 @@ function isInsidePolygon(point, rings) {
   return isInsideRing(point, rings[0]) && !rings.slice(1).some(hole => isInsideRing(point, hole));
 }
 
+// One building may arrive as several rendered fragments; each contributes its polygon to the union.
+function footprintPolygons(footprints) {
+  const features = Array.isArray(footprints) ? footprints : footprints ? [footprints] : [];
+  return features.flatMap(feature => {
+    const geometry = feature?.geometry;
+    if (geometry?.type === 'Polygon') return [geometry.coordinates];
+    if (geometry?.type === 'MultiPolygon') return geometry.coordinates;
+    return [];
+  });
+}
+
 // Geometry association is explicit: only a point within a recorded footprint is listed.
-export function placesInsideFootprint(feature, places = []) {
-  const geometry = feature?.geometry;
-  const polygons =
-    geometry?.type === 'Polygon'
-      ? [geometry.coordinates]
-      : geometry?.type === 'MultiPolygon'
-        ? geometry.coordinates
-        : [];
+export function placesInsideFootprint(footprints, places = []) {
+  const polygons = footprintPolygons(footprints);
   return places.filter(place => {
     const point = place?.geometry?.coordinates;
     if (!Array.isArray(point) || point.length < 2 || !point.every(Number.isFinite)) return false;
@@ -339,11 +348,21 @@ function entranceAddress(entrance, properties) {
   });
 }
 
+function pointDetailRows(kind, properties, addressLine) {
+  const rows = [];
+  if (properties.stopId) rows.push({label: 'Stop ID', value: properties.stopId});
+  if (addressLine) rows.push({label: 'Address', value: addressLine});
+  if (kind === 'Building' && properties['building:levels'])
+    rows.push({label: 'Levels', value: `${properties['building:levels']} levels`});
+  return rows;
+}
+
 function pointFacts({kind, properties, source, sourceDate, addressLine, typeLabel}) {
   return {
     kind,
     properties,
     addressLine,
+    detailRows: pointDetailRows(kind, properties, addressLine),
     addresses: addressLine ? [addressLine] : [],
     entrances: (properties.entrances ?? []).map(entrance => ({
       ...entrance,
@@ -377,8 +396,10 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
     ? entranceLabel(entrance)
     : hasName
       ? properties.name
-      : kind === 'Building' && number
-        ? `Building ${number}`
+      : kind === 'Building'
+        ? number
+          ? `Building ${number}`
+          : 'Unnamed building'
         : kind;
   const pointCoordinates = isEntrance
     ? entrance.coordinates
@@ -390,12 +411,12 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
       coordinates: [...pointCoordinates],
       name,
       kind,
-      details: [`Stop ID: ${properties.stopId}`, 'Source: ePodgorica · snapshot 18 October 2026'],
+      details: [`Stop ID: ${properties.stopId}`],
       facts: pointFacts({
         kind,
         properties,
         source: 'ePodgorica',
-        sourceDate: '2026-10-18',
+        sourceDate: busStopSnapshotDate,
         addressLine: '',
         typeLabel: kind
       })

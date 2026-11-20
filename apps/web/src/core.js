@@ -207,6 +207,11 @@ export function distanceKilometres(first, second) {
   return Math.hypot(longitudeDifference, latitudeDifference) * kilometresPerDegree;
 }
 
+// Shared rounding for result rows and nearby context: metres close by, kilometres farther out.
+export function formatDistance(kilometres) {
+  return kilometres < 1 ? Math.round(kilometres * 1000) + ' m' : kilometres.toFixed(1) + ' km';
+}
+
 // Only HTTP links may leave the details card; malformed or executable URLs are omitted.
 export function safeWebsite(value) {
   try {

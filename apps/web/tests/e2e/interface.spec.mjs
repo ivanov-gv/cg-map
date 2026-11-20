@@ -1,7 +1,7 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
 import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
-import {buildingAddress} from '../../src/point-selection.js';
+import {buildingAddress, placesInsideFootprint} from '../../src/point-selection.js';
 import {
   atViewport,
   camera,
@@ -3590,14 +3590,17 @@ test('one tap opens a POI card with recorded sections', async ({page}) => {
     `Source: OpenStreetMap, snapshot ${SNAPSHOT_DATE}. Hours are as recorded, not checked.`
   );
   const card = page.locator('#place-details');
-  await expect(card.locator('.details-section')).toHaveCount(2);
-  await expect(card.locator('.section-title')).toHaveText(['Location and contacts', 'Opening hours']);
+  await expect(card.locator('.details-section')).toHaveCount(3);
+  await expect(card.locator('.section-title')).toHaveText(['Location and contacts', 'Opening hours', 'NEARBY']);
   await expect(card).toContainText('Address: Njegoševa 12');
   await expect(card).toContainText(`In the building at: ${expectedBuildingAddress}`);
   await expect(card).toContainText('Coordinates: 42.');
   await expect(card).toContainText('Phone: +382 20 123 456');
   await expect(card).toContainText('Monday – Friday');
   await expect(card).toContainText('07:00–23:00');
+  await expect(card.locator('.details-section--nearby .detail-value')).toHaveText([
+    'Second place · Shops · 246 m'
+  ]);
   await expect(card.getByRole('link', {name: 'Website ↗'})).toHaveAttribute(
     'href',
     'https://example.org/ribnica'
@@ -3619,8 +3622,8 @@ test('one tap opens a POI card with recorded sections', async ({page}) => {
 
 test('choosing another listing replaces the card and its highlight', async ({page, isMobile}) => {
   test.skip(isMobile, 'A phone card covers the map');
-  const first = cardPlace('node/42424242', [19.262839, 42.439658], {name: 'First place'});
-  const second = cardPlace('node/42424243', [19.265839, 42.439658], {
+  const first = cardPlace('node/42424242', [20.8, 43.7], {name: 'First place'});
+  const second = cardPlace('node/42424243', [20.81, 43.71], {
     name: 'Second place',
     category: 'shops',
     kind: 'shop'
@@ -3645,6 +3648,64 @@ test('choosing another listing replaces the card and its highlight', async ({pag
       )
     )
     .toBe(true);
+});
+
+test('two places in one building each open their own card with the same building address', async ({
+  page,
+  isMobile
+}) => {
+  test.skip(isMobile, 'A phone card covers the map');
+  const label = readGeoJSON('building-labels.geojson').features.find(
+    feature =>
+      Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
+  );
+  const building = readGeoJSON('buildings.geojson').features[label.properties.footprintIndex];
+  expect(building.geometry.type).toBe('Polygon');
+  const buildingAddressText = buildingAddress(label.properties);
+  const insideCandidate = [
+    [0.00002, 0],
+    [-0.00002, 0],
+    [0, 0.00002],
+    [0, -0.00002]
+  ]
+    .map(([east, north]) => [label.geometry.coordinates[0] + east, label.geometry.coordinates[1] + north])
+    .find(coordinates =>
+      placesInsideFootprint(building, [{geometry: {type: 'Point', coordinates}}]).length > 0
+    );
+  expect(insideCandidate).toBeTruthy();
+  const first = cardPlace('node/42424252', label.geometry.coordinates, {
+    name: 'First in building',
+    website: 'https://example.org/first'
+  });
+  const second = cardPlace('node/42424253', insideCandidate, {
+    name: 'Second in building',
+    website: 'https://example.org/second'
+  });
+  await openPoiCards(page, [first, second]);
+
+  // Below the buildings layer, an idle refresh must keep the resolved row and the focused link.
+  const addressSurvivesZoomOut = async () => {
+    const link = page.getByRole('link', {name: 'Website ↗'});
+    await settled(page);
+    await link.focus();
+    await expect(link).toBeFocused();
+    await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19, 42], zoom: 12}));
+    await mapIdle(page);
+    await expect(page.locator('#place-details')).toContainText(`In the building at: ${buildingAddressText}`);
+    await expect(link).toBeFocused();
+  };
+  await openMenu(page);
+  await page.locator('#search').fill('First in building');
+  await page.locator('.result', {hasText: 'First in building'}).click();
+  await expect(page.locator('#place-name')).toHaveText('First in building');
+  await expect(page.locator('#place-details')).toContainText(`In the building at: ${buildingAddressText}`);
+  await addressSurvivesZoomOut();
+  await openMenu(page);
+  await page.locator('#search').fill('Second in building');
+  await page.locator('.result', {hasText: 'Second in building'}).click();
+  await expect(page.locator('#place-name')).toHaveText('Second in building');
+  await expect(page.locator('#place-details')).toContainText(`In the building at: ${buildingAddressText}`);
+  await addressSurvivesZoomOut();
 });
 
 test('a bare building opens a card with its addresses, entrances and places inside the footprint', async ({
@@ -3721,7 +3782,7 @@ test('a bare building opens a card with its addresses, entrances and places insi
   await page.mouse.click(picked.x, picked.y);
   await expect(page.locator('#place-card')).toBeVisible();
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-name')).toHaveText('Unnamed building');
+  await expect(page.locator('#place-name')).toHaveText('Building 27-29');
   await expect(page.locator('#place-subtitle')).toContainText('1 recorded address');
   await expect(page.locator('#place-source')).toHaveText(`Source: OpenStreetMap, snapshot ${SNAPSHOT_DATE}.`);
   const card = page.locator('#place-details');
@@ -3732,9 +3793,9 @@ test('a bare building opens a card with its addresses, entrances and places insi
     'Details'
   ]);
   await expect(card).toContainText('Ulica Slobode');
-  await expect(card).toContainText('1 · 27, Ulaz');
-  await expect(card).toContainText('2 · 29');
-  await expect(card).toContainText('Inside café · Café · 08:00–18:00');
+  await expect(card).toContainText('27, Ulaz M · Ulica Slobode 27');
+  await expect(card).toContainText('29 · Ulica Slobode 29');
+  await expect(card).toContainText('Inside café · Café · Monday – Friday 08:00–18:00');
   await expect(card).toContainText('Coordinates: 42.');
   await expect
     .poll(() =>
@@ -3746,7 +3807,7 @@ test('a bare building opens a card with its addresses, entrances and places insi
     .toBe(2);
 });
 
-test('a result chosen outside the viewport gains its building address once the map settles', async ({page}) => {
+test('an off-screen result keeps its building address and focus when the map settles away', async ({page}) => {
   const label = readGeoJSON('building-labels.geojson').features.find(
     feature => Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
   );
@@ -3759,7 +3820,8 @@ test('a result chosen outside the viewport gains its building address once the m
     cardPlace('node/42424444', label.geometry.coordinates, {
       name: 'Offscreen café',
       'addr:street': 'Njegoševa',
-      'addr:housenumber': '12'
+      'addr:housenumber': '12',
+      website: 'https://example.org/offscreen'
     })
   ]);
   await settled(page);
@@ -3777,6 +3839,17 @@ test('a result chosen outside the viewport gains its building address once the m
   await expect(page.locator('#place-details')).toContainText(
     `In the building at: ${expectedBuildingAddress}`
   );
+
+  const websiteLink = page.getByRole('link', {name: 'Website ↗'});
+  await websiteLink.focus();
+  await expect(websiteLink).toBeFocused();
+  // Below the buildings layer, the old idle refresh removed the row and rebuilt the card under the focused link.
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19, 42], zoom: 12}));
+  await mapIdle(page);
+  await expect(page.locator('#place-details')).toContainText(
+    `In the building at: ${expectedBuildingAddress}`
+  );
+  await expect(websiteLink).toBeFocused();
 });
 
 test('panning and double-clicking keep the card closed', async ({page}) => {
