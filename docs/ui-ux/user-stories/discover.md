@@ -336,9 +336,10 @@ The interface approved on 3 November is implemented in the web source: stable ex
 and mobile search with fixed categories over a scrolling list. The nearest search result uses the existing place feature
 with protected icon visibility. Search also covers recorded building addresses from the local label snapshot: typed
 queries mix them with places in a nearest-first list, distinguish place/building/address rows, and mark visible matches
-green until one is chosen in red. Result distances and nearest-first order come from a usable device fix; without one
-the list keeps map-centre order and shows no distance, so the camera is never presented as the person's position; see
-[the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
+green until one is chosen in red. An explicit query or category draws and rings every in-view result place at any zoom;
+with no query and All, ordinary POI thresholds apply. Result distances and nearest-first order come from a usable device
+fix; without one the list keeps map-centre order and shows no distance, so the camera is never presented as the person's
+position; see [the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
 [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md#distance-rule-issue-262). Existing key/banner
 behavior below is historical baseline evidence; see [the current interface](../features/interface.md) for control
 behavior. Data coverage and default POI importance gaps remain.
