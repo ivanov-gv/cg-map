@@ -12,6 +12,13 @@ export function isClearButtonVisible({state, isFlipLayout}) {
   return state !== 'empty';
 }
 
+// The Flip screen owns the footer: only ◇ Modes shows it, regardless of results or keyboard.
+// Elsewhere the footer stays available unless the keyboard would cover it.
+export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, isKeyboardOpen}) {
+  if (isFlipLayout && isDockOpen) return flipDockScreen === 'modes';
+  return !isKeyboardOpen;
+}
+
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
@@ -332,22 +339,20 @@ export class MapInterface {
   // Derive the visible dock content from current state.
   // On Flip with the dock open: show the results list on the list screen, show the footer on the modes screen.
   // The categories row stays visible in both screens (it lives inside dock-main).
-  // In every other case (dock closed, or not Flip): show both dock-main and footer.
+  // In every other case (dock closed, or not Flip): show both dock-main and footer, minus a covering keyboard.
   syncDockContent() {
     const isFlip = this.flipLayoutQuery.matches;
     const isDockOpen = this.view === 'dock';
-    if (isFlip && isDockOpen) {
-      const showResults = this.flipDockScreen === 'list';
-      const showFooter = this.flipDockScreen === 'modes';
-      // On the modes screen, hide only the results section so categories remain visible.
-      this.dockMain.hidden = false;
-      document.getElementById('results').hidden = !showResults;
-      this.footer.hidden = !showFooter;
-    } else {
-      this.dockMain.hidden = false;
-      document.getElementById('results').hidden = false;
-      this.footer.hidden = false;
-    }
+    const showResults = !(isFlip && isDockOpen) || this.flipDockScreen === 'list';
+    // On the modes screen, hide only the results section so categories remain visible.
+    this.dockMain.hidden = false;
+    document.getElementById('results').hidden = !showResults;
+    this.footer.hidden = !isDockFooterVisible({
+      isFlipLayout: isFlip,
+      isDockOpen,
+      flipDockScreen: this.flipDockScreen,
+      isKeyboardOpen: this.keyboardOpen()
+    });
   }
 
   // Update the menu button icon and accessible label for the current state.
@@ -615,8 +620,9 @@ export class MapInterface {
     style.setProperty('--keyboard-inset', `${Math.max(0, innerHeight - height - top)}px`);
     style.setProperty('--search-top', `${bounds.top}px`);
     style.setProperty('--search-max-height', `${bounds.maxHeight}px`);
-    // The keyboard would cover these options and the end of the results list above them.
-    document.querySelector('.dock-footer').hidden = this.keyboardOpen();
+    // A viewport event must not overrule the Flip screen's own footer rule. Re-derive the whole dock content,
+    // which also hides the footer here when a keyboard would cover it outside Flip.
+    this.syncDockContent();
     if (notify) this.onViewport?.();
   }
 

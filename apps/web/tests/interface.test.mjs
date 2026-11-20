@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
   isClearButtonVisible,
+  isDockFooterVisible,
   isInFocusZone,
   searchBarState,
   searchBounds,
@@ -31,6 +32,34 @@ test('the clear button is Filled-only on Flip and Open as well as Filled elsewhe
   assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: false}), true);
   assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: true}), false);
   assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: true}), true);
+});
+
+test('the Flip list screen never shows the dock footer, whatever the keyboard does', () => {
+  for (const isKeyboardOpen of [false, true]) {
+    assert.equal(
+      isDockFooterVisible({isFlipLayout: true, isDockOpen: true, flipDockScreen: 'list', isKeyboardOpen}),
+      false
+    );
+  }
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: true, isDockOpen: true, flipDockScreen: 'modes', isKeyboardOpen: false}),
+    true
+  );
+});
+
+test('other layouts keep the footer unless a keyboard covers it', () => {
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: false, isDockOpen: true, flipDockScreen: null, isKeyboardOpen: false}),
+    true
+  );
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: false, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: true}),
+    false
+  );
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: true, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: false}),
+    true
+  );
 });
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
