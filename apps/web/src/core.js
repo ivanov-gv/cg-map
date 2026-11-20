@@ -174,10 +174,19 @@ export function collectSearchResults({
   return results;
 }
 
-// Only distance changes when the camera moves, so ranking is separate from candidate collection.
-export function rankSearchResults(results, center, limit = 40) {
+// Only distance changes when the camera or usable fix moves, so ranking stays separate from candidate collection.
+// The centre still orders rows without a fix, but it must never be presented as the person's location.
+export function rankSearchResults(results, center, {limit = 40, origin = null} = {}) {
+  const rankOrigin = origin ?? center;
   return results
-    .map(result => ({...result, distanceKilometres: distanceKilometres(center, result.coordinates)}))
+    .map(result => {
+      const kilometres = distanceKilometres(rankOrigin, result.coordinates);
+      return {
+        ...result,
+        distanceKilometres: kilometres,
+        distanceText: origin ? formatDistance(kilometres) : ''
+      };
+    })
     .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
     .slice(0, limit);
 }
@@ -189,12 +198,13 @@ export function selectSearchResults({
   query = '',
   category = null,
   center,
+  origin = null,
   markerKeys = new Map(),
   limit = 40
 }) {
   const matchingPlaces = places.filter(feature => matchesPlaceSearch(feature, query, category));
   const candidates = collectSearchResults({places: matchingPlaces, buildingLabels, query, category, markerKeys});
-  return rankSearchResults(candidates, center, limit);
+  return rankSearchResults(candidates, center, {origin, limit});
 }
 
 // Approximate ground distance in kilometres, suitable for ordering nearby results.
@@ -205,6 +215,12 @@ export function distanceKilometres(first, second) {
   const latitudeDifference = first[1] - second[1];
   const kilometresPerDegree = 111.2;
   return Math.hypot(longitudeDifference, latitudeDifference) * kilometresPerDegree;
+}
+
+// Row text uses metres nearby and one decimal kilometre farther out; it is never a route length.
+export function formatDistance(kilometres) {
+  if (kilometres < 1) return `${Math.round(kilometres * 1000)} m`;
+  return `${kilometres.toFixed(1)} km`;
 }
 
 // Only HTTP links may leave the details card; malformed or executable URLs are omitted.
@@ -246,6 +262,17 @@ export const DISCOVER_ZOOM = Math.round(zoomForMetresPerPixel(DEFAULT_CENTER[1],
 export const POSITION_FRESH_MILLISECONDS = 30000;
 export const POSITION_TIMEOUT_MILLISECONDS = 15000;
 export const POSITION_APPROXIMATE_METRES = 50;
+// States with a fix good enough to centre the map on or measure distances from.
+export const USABLE_POSITION_STATES = ['live', 'approximate'];
+export function hasUsablePosition(state) {
+  return USABLE_POSITION_STATES.includes(state);
+}
+// Only a fresh or approximate in-map fix may stand in for the person. Every other state keeps centre ordering
+// without distance text, including a stale fix that still has coordinates.
+export function distanceOrigin(snapshot) {
+  const {state, fix} = snapshot ?? {};
+  return hasUsablePosition(state) && fix?.coordinates ? fix.coordinates : null;
+}
 // Bounds and coordinates are WGS84 longitude/latitude, including the edges.
 export function isInBounds([longitude, latitude], [[west, south], [east, north]]) {
   return longitude >= west && longitude <= east && latitude >= south && latitude <= north;
