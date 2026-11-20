@@ -164,6 +164,10 @@ On Flip, the menu icon button (#menu-toggle) cycles through three screens:
 3. **× Close** (modes screen shown): tap closes the dock and returns to the map. The next time the dock is opened, it
    shows the results list again.
 
+On the list screen the modes footer (Satellite, Transport, Download and the attribution line) is never shown, whatever
+the number of results; an empty result shows the normal "No places found" message in the list area. Keyboard and other
+viewport changes must not reveal the footer there. Only ◇ Modes shows it, and that screen is unchanged.
+
 Each screen has its own icon (☰ from `#i-menu`, ◇ from `#i-modes`, × from `#i-close` in the SVG sprite), an accessible
 name ("Open menu" / "Show map modes" / "Close menu"), and `aria-expanded` on the dock reflecting whether it is open. The
 old minimizable footer handle (#footer-toggle) has been removed and replaced by this cycle.
@@ -296,7 +300,7 @@ and reduced motion.
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | UI-A01 | Open with no app interaction.                                                                                                                     | Only the opening controls and geographic scene are present; dock content is closed.                                                                                                                                                                                                                                                                               |
 | UI-A02 | Toggle the dock at an unchanged viewport.                                                                                                         | Header/control bounding boxes, shape, and text baseline remain unchanged; query, category, focus, and selection survive.                                                                                                                                                                                                                                          |
-| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                                   | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                                                                                                |
+| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure. Include Flip with zero, one and two results and keyboard changes. | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible. On Flip the list keeps its area and never shows the modes footer; an empty result shows the normal no-results message.                                                                                         |
 | UI-A04 | Inspect bottom options.                                                                                                                           | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                                                                                                  |
 | UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                            | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                                                                                                          |
 | UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                                   | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                                                                                                      |
@@ -317,10 +321,11 @@ card and dock coexistence, the Empty/Open/Filled transitions and × behavior on 
 blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
-and its × on desktop, phone and Flip, seamless desktop row movement, the Locate button's box, computed radius/icon size
-and offsets at each device class, and the follow location state machine (start, new fix moves camera, second click
-stops, drag stops, search result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the
-state and clear-button functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
+and its × on desktop, phone and Flip, seamless desktop row movement, the Flip list footer staying hidden with zero, one
+or two results across keyboard events, the Locate button's box, computed radius/icon size and offsets at each device
+class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search result
+stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button and
+dock-footer visibility functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
 smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
 physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
