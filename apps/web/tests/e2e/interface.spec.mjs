@@ -1020,8 +1020,8 @@ const deviceCases = [
 // box and the computed style must both be checked (issue #272).
 const locateDesignCases = [
   {name: 'desktop', viewport: {width: 1280, height: 800}, size: 48, rightGap: 20, bottomGap: 20},
-  {name: 'mobile', viewport: {width: 412, height: 840}, size: 48, rightGap: 12, bottomGap: 20},
-  {name: 'flip', viewport: FLIP_VIEWPORT, size: 40, rightGap: 12, bottomGap: 20}
+  {name: 'mobile', viewport: {width: 412, height: 840}, size: 48, rightGap: 12, bottomGap: 24},
+  {name: 'flip', viewport: FLIP_VIEWPORT, size: 40, rightGap: 12, bottomGap: 12}
 ];
 
 for (const device of locateDesignCases) {

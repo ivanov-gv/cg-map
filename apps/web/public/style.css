@@ -330,6 +330,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 
   /* Mobile and Flip keep the 12 px right edge: 2 + MapLibre's 10 px margin. */
   .maplibregl-ctrl-bottom-right { right: 2px; }
+  /* The design keeps the Mobile button 24 px above the bottom edge. */
+  .position-control.maplibregl-ctrl { margin-bottom: 24px; }
 
   /* Mobile search bar: smaller than desktop, full screen width minus 12 px gutter. */
   .search-bar {
@@ -383,6 +385,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 @media (max-width: 400px) and (max-height: 400px) {
   /* Flip keeps the 21 px icon and 14 px radius in a 40 px target. */
   #position-action { width: 40px; height: 40px; }
+  /* The design keeps the Flip button 12 px above the bottom edge, as on its right. */
+  .position-control.maplibregl-ctrl { margin-bottom: 12px; }
 
   /* When the dock is closed, shrink the bar to the menu button and hide all search elements. */
   body:not([data-view=dock]) .search-bar { right: auto; }
