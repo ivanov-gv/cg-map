@@ -269,7 +269,7 @@ export class PlaceSelection {
     elementById('place-card').scrollTop = 0;
     this.#context.onSelectionChanged();
     this.markCurrentResult();
-    this.#objectSelection.selectPlace(feature, this.#directory.markerKeysByPlaceId.get(properties.id));
+    this.#objectSelection.selectPlace(this.#directory.markerKeysByPlaceId.get(properties.id));
     elementById('close-place').focus({preventScroll: true});
     this.#state.pendingReveal = {zoom: 15};
     this.flushPendingReveal();

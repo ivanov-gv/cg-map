@@ -639,10 +639,10 @@ responses are never cached there. See [transport behavior](../../docs/ui-ux/feat
 
 [point-selection.js](src/point-selection.js) describes clicked features and installs the A/B endpoint layers. app.js
 presents the shared details card and stores From/To session state. [object-selection.js](src/object-selection.js)
-highlights source polygons with a contour and translucent fill, or lines with a stroke. Point-only places/stops
-highlight their existing marker; bare coordinates use a small circle. No extra pin is added. See
-[point selection](../../docs/ui-ux/features/point-selection.md) for hit priority, available metadata, and offline
-behavior.
+highlights source polygons with a contour and translucent fill, or lines with a stroke. A picked place or stop keeps
+only its existing marker ring; a separate building pick owns the footprint highlight. Bare coordinates use a small
+circle. No extra pin is added. See [point selection](../../docs/ui-ux/features/point-selection.md) for hit priority,
+available metadata, and offline behavior.
 
 ## Routes
 
