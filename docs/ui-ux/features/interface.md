@@ -341,13 +341,13 @@ seamless desktop row movement, selected-card sections, marker and bare-building 
 continuity, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
 result stops, denied shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
-buildings and addresses, that in-view building outlines and drawn place markers stay green with no red preview, that a
-below-threshold place gains its ring only when its marker is drawn, that choosing one turns red, reveals an off-screen
-result, and that clearing removes every green mark. Pure unit tests cover the state and clear-button functions, search
-matching, classification and ordering rules, card builders and footprint membership; no large fake DOM is built for
-browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
-keyboard, screen-reader, or phone behavior. Review physical-device usability under
-[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+buildings and addresses, that unchosen visible matches stay green with no red preview—in-view building outlines and
+drawn place markers stay green, and a below-threshold place gains its ring only when its marker is drawn—that choosing
+one turns red, reveals an off-screen result when needed, and clears every green mark when the query is cleared. Pure
+unit tests cover the state and clear-button functions, search matching, classification and ordering rules, card
+builders and footprint membership; no large fake DOM is built for browser behavior. Keyboard geometry is simulated
+with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
+physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
