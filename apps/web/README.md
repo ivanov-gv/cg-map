@@ -125,15 +125,15 @@ beside it visible. Zoom rises to at least 15 when needed.
 A chosen place's card opens as a fixed floating sheet on Desktop (> 720 px): 1000 × 252, clamped to `min(252px, 45dvh)`,
 with a 20 px bottom gap. It is centered on screen with the dock closed and centered in the map area right of the dock
 when it opens; the size never changes, and the width shrinks only when that area cannot keep 20 px side margins. The
-joined search panel is given a height that stops it 16 px above the card. Its frame stays put while `#card-layout`
-scrolls, so the × cannot scroll away, and closing it returns focus to the chosen row. The grid gives identity, contacts
-or addresses/entrances, and hours with nearby or inside-place sections explicit 280/270/260 px columns; the two detail
-stacks keep their own rows. Narrower cards step through two columns to one. `syncLocateClearance()` sets
-`body[data-card-at-locate]` from the card and Locate boxes, so Locate rises 16 px above the card only when their columns
-overlap. The scale bar and OSM credit stay fixed in the map's bottom-left corner: any card, panel or dock covering that
-corner paints over them. On phones the card keeps its header-only peek under the open results. Pulling it up gives the
-full card and shrinks results to a strip; swiping down steps back and then closes it. Choosing a result in the phone
-dock switches to this compact view. See
+joined search panel keeps its content height and is capped 16 px above the card, so a short list does not stretch to the
+card. Its frame stays put while `#card-layout` scrolls, so the plain 40 px × cannot scroll away, and closing it returns
+focus to the chosen row. The grid gives identity, contacts or addresses/entrances, and hours with nearby or inside-place
+sections explicit 280/270/260 px columns; the two detail stacks keep their own rows. Narrower cards step through two
+columns to one. `syncLocateClearance()` sets `body[data-card-at-locate]` from the card and Locate boxes, so Locate rises
+16 px above the card only when their columns overlap. The scale bar and OSM credit stay fixed in the map's bottom-left
+corner: any card, panel or dock covering that corner paints over them. On phones the card keeps its header-only peek
+under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and
+then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button

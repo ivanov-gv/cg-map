@@ -206,7 +206,7 @@ test(
           return (
             Math.abs(card.x - (viewport.width - card.width) / 2) < 1 &&
             Math.abs(card.y + card.height - (viewport.height - 20)) < 1 &&
-            Math.abs(panel.y + panel.height - (card.y - 16)) < 1 &&
+            panel.y + panel.height < card.y - 16 &&
             point.x > panel.x + panel.width + 8 &&
             point.y < card.y - 8
           );
@@ -408,6 +408,19 @@ test.describe('Desktop floating card', () => {
     expect(close.y).toBeCloseTo(card.y + 20, 0);
     expect(close.width).toBeCloseTo(40, 0);
     expect(close.height).toBeCloseTo(40, 0);
+    const closeAppearance = await page.locator('#close-place').evaluate(element => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        radius: style.borderTopLeftRadius,
+        border: style.borderTopWidth,
+        colour: style.color
+      };
+    });
+    expect(closeAppearance.background).toBe('rgba(0, 0, 0, 0)');
+    expect(closeAppearance.radius).toBe('0px');
+    expect(closeAppearance.border).toBe('0px');
+    expect(closeAppearance.colour).toBe('rgb(36, 63, 55)');
     // Outside its column, the card does not push Locate; the map's bottom-left controls never move.
     await expect(page.locator('body')).toHaveAttribute('data-card-at-locate', 'false');
     expect(locate.x + locate.width).toBeCloseTo(1420, 0);
@@ -457,7 +470,7 @@ test.describe('Desktop floating card', () => {
     for (const [name, value] of Object.entries(withResults)) expect(value, name).not.toBeNull();
     expect(withResults.card.x).toBeCloseTo(220, 0);
     expect(withResults.card.y + withResults.card.height).toBeCloseTo(880, 0);
-    expect(withResults.panel.y + withResults.panel.height).toBeCloseTo(withResults.card.y - 16, 0);
+    expect(withResults.panel.y + withResults.panel.height).toBeLessThan(withResults.card.y - 16);
     await page.screenshot({path: testInfo.outputPath('search-result-chosen-1440x900.png')});
 
     await page.setViewportSize({width: 1100, height: 700});
@@ -467,6 +480,39 @@ test.describe('Desktop floating card', () => {
     expect(narrow.width).toBeCloseTo(1000, 0);
     expect(narrow.y + narrow.height).toBeCloseTo(680, 0);
     await page.screenshot({path: testInfo.outputPath('card-1100x700.png')});
+  });
+
+  test('keeps a one-result search panel at its content height above the card', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await page.locator('#search').fill('Mimoza');
+    await expect(page.locator('#desktop-search-panel .result')).toHaveCount(1);
+    await page.locator('#desktop-search-panel .result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    const boxes = await readBoxes(page, {
+      bar: '.search-bar',
+      panel: '#desktop-search-panel',
+      categories: '#desktop-search-panel #categories',
+      row: '#desktop-search-panel .result',
+      card: '#place-card'
+    });
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    const {bar, panel, categories, row, card} = boxes;
+    expect(panel.y).toBeCloseTo(bar.y + bar.height, 0);
+    // The joined panel is bar + categories + one row; its bottom limit is not its height.
+    expect(panel.height - (categories.height + row.height)).toBeGreaterThanOrEqual(0);
+    expect(panel.height - (categories.height + row.height)).toBeLessThanOrEqual(2);
+    const fromBarTop = panel.y + panel.height - bar.y - (bar.height + categories.height + row.height);
+    expect(fromBarTop).toBeGreaterThanOrEqual(0);
+    expect(fromBarTop).toBeLessThanOrEqual(2);
+    expect(panel.y + panel.height).toBeLessThan(card.y - 16);
+    const radius = await page
+      .locator('#desktop-search-panel')
+      .evaluate(element => getComputedStyle(element).borderBottomLeftRadius);
+    expect(radius).toBe('15px');
   });
 
   test('stacks sections within their column beside an open dock', async ({page, isMobile}) => {
@@ -523,7 +569,7 @@ test.describe('Desktop floating card', () => {
     const panel = await page.locator('#desktop-search-panel').boundingBox();
     const after = await pointOnMap(page, place.geometry.coordinates);
     expect(card.x).toBeCloseTo(220, 0);
-    expect(panel.y + panel.height).toBeCloseTo(card.y - 16, 0);
+    expect(panel.y + panel.height).toBeLessThan(card.y - 16);
     expect(after.x).toBeGreaterThan(panel.x + panel.width + 16);
     expect(after.y).toBeLessThan(card.y - 8);
     expect(after.y).toBeGreaterThan(96);
@@ -2085,7 +2131,7 @@ test.describe('Desktop search bar', () => {
     expect(sidebar.x + sidebar.width).toBeGreaterThan(card.x);
     expect(page.viewportSize().width - (card.x + card.width)).toBeCloseTo(card.x, 0);
     expect(card.y + card.height).toBeCloseTo(page.viewportSize().height - 20, 0);
-    expect(panel.y + panel.height).toBeCloseTo(card.y - 16, 0);
+    expect(panel.y + panel.height).toBeLessThan(card.y - 16);
     // The card centre must not be covered by another element — walk up to find #place-card.
     const cardCentreX = card.x + card.width / 2;
     const cardCentreY = card.y + card.height / 2;
@@ -4286,9 +4332,9 @@ test('a bare building opens a card with its addresses, entrances and places insi
     expect(inside.x).toBeGreaterThan(addresses.x + 8);
     expect(details.x).toBeCloseTo(inside.x, 0);
     expect(details.y).toBeGreaterThan(inside.y + inside.height - 1);
-    expect(await page.locator('#place-details').evaluate(element => getComputedStyle(element).display)).toBe(
-      'grid'
-    );
+    // Desktop columns are direct children of the card grid; #place-details only forwards them.
+    expect(await page.locator('#card-layout').evaluate(element => getComputedStyle(element).display)).toBe('grid');
+    expect(await page.locator('#place-details').evaluate(element => getComputedStyle(element).display)).toBe('contents');
   }
   await expect
     .poll(() =>

@@ -101,8 +101,9 @@ overflows. Focusing the field opens the joined Search panel even with no query: 
 scrollable results list under the bar, as one card, and × appears at the right of the bar. Typing keeps the panel open
 in Filled. The chips are the same row as the dock categories, not a second row: opening the dock keeps its horizontal
 scroll position and active chip, and query and focus stay with the field. Pressing a chip filters the map's places and
-reveals the results, exactly as a dock category does. While a Desktop place card is open, the joined panel is 16 px
-above the card: at 1440×900 it ends at y 612, with the floating card starting at y 628.
+reveals the results, exactly as a dock category does. While a Desktop place card is open, the joined panel keeps its
+content height and is capped 16 px above the card: a short list stops higher, while a long list scrolls inside the cap.
+At 1440×900 that cap ends at y 612, with the floating card starting at y 628.
 
 When the dock is open, Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps
 the search field focused, leaving the results Open. A second Escape closes those Open results, matching ×. Tab reaches
@@ -196,13 +197,14 @@ map area right of the dock (x 420 at 1440 px wide). Narrow windows keep 20 px si
 and shrink the width only when that area cannot fit 1000 px. A click on another map object swaps the card to that
 object.
 
-A visible × stays pinned 40 px at relative (940, 20) while the content scrolls. It closes the card, returns focus to the
-chosen row and leaves the results open. While the card is open, the joined Search panel stops 16 px above it: at 1440 ×
-900 the panel is 532 px tall and ends at y 612. Locate stays 20 px from the bottom right and rises 16 px above the card
-only when the card reaches its column, as with the dock open. The scale bar and OSM credit stay fixed in the map's
-bottom-left corner in every search, dock and card state. The card, panel or dock may cover that corner because those
-controls belong to the map; only Locate moves for the card. The card frame does not scroll, its inner layout does, and
-the page itself does not scroll.
+A visible plain 40 px ×, with no fill and a #243F37 stroke, stays pinned at relative (940, 20) while the content
+scrolls. It closes the card, returns focus to the chosen row and leaves the results open. While the card is open, the
+joined Search panel keeps its content height and is capped 16 px above the card: at 1440 × 900 a one-result panel ends
+well above that cap, while a long list scrolls down to it. Locate stays 20 px from the bottom right and rises 16 px
+above the card only when the card reaches its column, as with the dock open. The scale bar and OSM credit stay fixed in
+the map's bottom-left corner in every search, dock and card state. The card, panel or dock may cover that corner because
+those controls belong to the map; only Locate moves for the card. The card frame does not scroll, its inner layout does,
+and the page itself does not scroll.
 
 Content uses three explicit columns of 280, 270 and 260 px at relative x 32, 352 and 662, all starting at y 28: identity
 (eyebrow, name, subtitle, a 16 px gap, From/To buttons and the source line), Location and contacts or the building's

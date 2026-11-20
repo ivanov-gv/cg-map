@@ -254,6 +254,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     display: block;
     overflow: hidden;
   }
+  /* Penpot uses a plain × glyph: no circular fill, just the dark green stroke of the character. */
   .place-card > .close {
     position: absolute;
     float: none;
@@ -262,6 +263,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     width: 40px;
     height: 40px;
     margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #243f37;
     line-height: 36px;
     font-size: 26px;
   }
@@ -289,16 +295,15 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .details-column--second { grid-column: 3; grid-row: 1 / 4; align-self: start; }
   #place-details .details-section--opening-hours .detail-row { justify-content: space-between; }
   #place-details .details-section--opening-hours .detail-value { text-align: right; }
-  /* A joined search panel stops one gap above the floating card instead of running under it. */
+  /* A joined search panel keeps its content height and may grow only until one gap above the card. */
   body:has(#place-card:not([hidden])) .desktop-search-panel:is([data-state=open], [data-state=filled]) {
-    height: max(
+    max-height: max(
       0px,
       calc(
         var(--visible-top) + var(--visible-height) - var(--bar-inset) - var(--desktop-bar-height) -
           var(--desktop-card-gap) - var(--desktop-card-height) - var(--desktop-card-search-gap)
       )
     );
-    max-height: none;
   }
   /* A joined search panel replaces the dock's bottom area; never leave its paper behind the card. */
   body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .dock-footer {
