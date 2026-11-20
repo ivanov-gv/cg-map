@@ -54,9 +54,9 @@ reintroducing viewport-dependent suppression. Do not declare the feature complet
 Two places at identical coordinates cannot have individually readable icons at the same pixel. Represent eligible
 co-located members with one stable shared-location marker; show the eligible count only when more than one member is
 present. Tapping it opens the first active listing's card directly; there is no chooser step. On a phone that card opens
-full when search is open. Every listing keeps its identity and true coordinates and stays reachable through search and
-the building card's Inside this building section. A count changes only when a member crosses its threshold or a
-deliberate filter changes.
+as a peek while search is open and full otherwise. Every listing keeps its identity and true coordinates and stays
+reachable through search and the building card's Inside this building section. A count changes only when a member
+crosses its threshold or a deliberate filter changes.
 
 For nearby distinct markers that overlap, the first rendered hit and its first active identity also open directly, so
 one tap never requires a second choice. Do not move geographic anchors, turn ordinary businesses into broad-scale count

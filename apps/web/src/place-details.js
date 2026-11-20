@@ -131,7 +131,7 @@ export function buildPlaceCard(feature, context = {}) {
   addIfPresent(location.rows, 'Phone', properties.phone);
   location.links.push(...sourceLinks(properties));
   const hours = detailsSection('opening-hours', 'Opening hours', openingHourRows(properties.opening_hours));
-  const nearby = detailsSection('nearby', 'NEARBY', nearbyRows(context.nearbyPlaces));
+  const nearby = detailsSection('nearby', 'Nearby', nearbyRows(context.nearbyPlaces));
   return {
     eyebrow: categoryLabel,
     title: properties.name ?? '',
@@ -191,13 +191,12 @@ function buildBuildingCard(point, facts, coordinates, context) {
       detailsSection(
         'entrances',
         'Entrances (marked on the map)',
-        entrances.map(entrance => detailRow('', `${entrance.label ?? ''} · ${entrance.address ?? ''}`.trim()))
+        entrances.map(entrance => detailRow('', [entrance.label, entrance.address].filter(Boolean).join(' · ')))
       )
     );
   if (placesInside.length)
     sections.push(detailsSection('inside-this-building', 'Inside this building', enclosedPlacesRows(placesInside)));
   const details = detailsSection('details', 'Details');
-  addIfPresent(details.rows, 'Type', facts.typeLabel ?? 'building');
   addIfPresent(details.rows, 'Coordinates', coordinates);
   sections.push(details);
   const addressCount = addresses.length
@@ -270,6 +269,27 @@ export function setPlaceCardBuildingAddress(address) {
   const coordinates = location.querySelector('[data-detail="coordinates"]');
   if (coordinates) location.insertBefore(row, coordinates);
   else location.append(row);
+}
+
+// A late footprint query replaces only the membership rows; the rest of the building card keeps its focus and content.
+export function setPlaceCardInsidePlaces(places) {
+  const details = elementById('place-details');
+  let section = details.querySelector('.details-section--inside-this-building');
+  if (!places.length) {
+    section?.remove();
+    return;
+  }
+  if (!section) {
+    section = createElement('section', undefined, 'details-section details-section--inside-this-building');
+    section.append(createElement('h2', 'Inside this building', 'section-title'));
+    const factsSection = details.querySelector('.details-section--details');
+    if (factsSection) details.insertBefore(section, factsSection);
+    else details.append(section);
+  }
+  for (const child of [...section.children]) {
+    if (!child.classList.contains('section-title')) child.remove();
+  }
+  appendDetailRows(section, enclosedPlacesRows(places));
 }
 
 export function clearCardContent() {

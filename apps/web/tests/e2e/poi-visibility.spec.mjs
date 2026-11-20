@@ -373,6 +373,7 @@ test(
     await tap(page, coordinates);
     await expect(page.locator('#place-name')).toHaveText('Place near-b');
     await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'closed');
+    if (isMobile) await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
     await expect(page.locator('#point-actions')).toBeVisible();
   }
 );

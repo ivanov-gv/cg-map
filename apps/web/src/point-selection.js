@@ -302,12 +302,15 @@ function isInsideRing(point, ring) {
   const [longitude, latitude] = point;
   let isInside = false;
   for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
-    const [east, north] = ring[index];
+    const [vertexLongitude, vertexLatitude] = ring[index];
     const [previousLongitude, previousLatitude] = ring[previous];
-    const crossesLatitude = north > latitude !== previousLatitude > latitude;
+    const crossesLatitude = vertexLatitude > latitude !== previousLatitude > latitude;
     if (
       crossesLatitude &&
-      longitude < ((previousLongitude - east) * (latitude - north)) / (previousLatitude - north) + east
+      longitude <
+        ((previousLongitude - vertexLongitude) * (latitude - vertexLatitude)) /
+          (previousLatitude - vertexLatitude) +
+          vertexLongitude
     )
       isInside = !isInside;
   }
@@ -358,17 +361,20 @@ function pointDetailRows(kind, properties, addressLine) {
 }
 
 function pointFacts({kind, properties, source, sourceDate, addressLine, typeLabel}) {
+  const entrances = (properties.entrances ?? []).map(entrance => ({
+    ...entrance,
+    label: entranceLabel(entrance),
+    address: entranceAddress(entrance, properties)
+  }));
+  // The label address and each distinct entrance address are separate recorded facts, even when the label summarizes them.
+  const addresses = [...new Set([addressLine, ...entrances.map(entrance => entrance.address)].filter(Boolean))];
   return {
     kind,
     properties,
     addressLine,
     detailRows: pointDetailRows(kind, properties, addressLine),
-    addresses: addressLine ? [addressLine] : [],
-    entrances: (properties.entrances ?? []).map(entrance => ({
-      ...entrance,
-      label: entranceLabel(entrance),
-      address: entranceAddress(entrance, properties)
-    })),
+    addresses,
+    entrances,
     typeLabel: typeLabel ?? readableType(properties.kind ?? kind),
     source,
     sourceDate,
@@ -411,7 +417,6 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
       coordinates: [...pointCoordinates],
       name,
       kind,
-      details: [`Stop ID: ${properties.stopId}`],
       facts: pointFacts({
         kind,
         properties,
@@ -428,22 +433,10 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
         entrances: [entrance]
       })
     : buildingAddress(properties);
-  const entranceDetails =
-    kind === 'Building'
-      ? (properties.entrances ?? []).map(entrance => `Entrance: ${entranceLabel(entrance)}`)
-      : [];
   return {
     coordinates: [...pointCoordinates],
     name,
     kind,
-    details: layer
-      ? [
-          properties.kind ? `Type: ${properties.kind.replaceAll('_', ' ')}` : '',
-          addressLine,
-          ...entranceDetails,
-          'Source: OpenStreetMap · available map attributes only'
-        ]
-      : [],
     facts: pointFacts({
       kind,
       properties,

@@ -37,8 +37,7 @@ function selectTappedMarker(map, event, context) {
       {
         name: feature.properties.name,
         coordinates: [...feature.geometry.coordinates],
-        kind: feature.properties.role === 'from' ? 'From point' : 'To point',
-        details: []
+        kind: feature.properties.role === 'from' ? 'From point' : 'To point'
       },
       feature
     );

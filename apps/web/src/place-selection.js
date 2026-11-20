@@ -7,7 +7,8 @@ import {
   buildPlaceCard,
   maximumNearbyPlaces,
   renderCardContent,
-  setPlaceCardBuildingAddress
+  setPlaceCardBuildingAddress,
+  setPlaceCardInsidePlaces
 } from './place-details.js';
 
 const selectionCameraDurationMilliseconds = 450;
@@ -20,14 +21,15 @@ export class PlaceSelection {
     selectedPlace: null,
     selectedPoint: null,
     selectedFootprintIndex: null,
+    selectedBuildingFeature: null,
     returnFocusElement: null,
     requestedPlace: null,
     pendingReveal: null,
     revealOnlyWhenNeeded: false,
-    isChoosingListing: false,
     requestedMarkerKey: null,
     resolvedBuildingAddress: '',
-    buildingAddressListenerInstalled: false
+    renderedInsideKey: '',
+    cardRefreshListenerInstalled: false
   };
 
   constructor(context) {
@@ -63,7 +65,7 @@ export class PlaceSelection {
     return this.#state.selectedFootprintIndex;
   }
   get hasOpenCard() {
-    return Boolean(this.#state.selectedPlace || this.#state.selectedPoint || this.#state.isChoosingListing);
+    return Boolean(this.#state.selectedPlace || this.#state.selectedPoint);
   }
 
   #buildingAt(coordinates) {
@@ -102,7 +104,18 @@ export class PlaceSelection {
     return this.#buildingAddressFor(this.#buildingAt(feature.geometry.coordinates));
   }
 
-  // A late address is patched into one row; the card is not rebuilt unless the selection changes.
+  // Late map data patches one row or one section; the card is never rebuilt under an open link.
+  #refreshCard = () => {
+    this.#refreshBuildingAddress();
+    this.#refreshInsideThisBuilding();
+  };
+
+  #installCardRefresh() {
+    if (this.#state.cardRefreshListenerInstalled || !this.#map) return;
+    this.#map.on('idle', this.#refreshCard);
+    this.#state.cardRefreshListenerInstalled = true;
+  }
+
   #refreshBuildingAddress = () => {
     const feature = this.#state.selectedPlace;
     if (!feature) return;
@@ -110,6 +123,23 @@ export class PlaceSelection {
     if (buildingAddress === this.#state.resolvedBuildingAddress) return;
     this.#state.resolvedBuildingAddress = buildingAddress;
     setPlaceCardBuildingAddress(buildingAddress);
+  };
+
+  #insideKey(places) {
+    return places.map(place => place.properties?.id ?? place.properties?.name ?? '').join('|');
+  }
+
+  #refreshInsideThisBuilding = () => {
+    const selectedBuilding = this.#state.selectedBuildingFeature;
+    if (this.#state.selectedPoint?.kind !== 'Building' || !selectedBuilding) return;
+    const places = this.#context.placesInsideFootprint(
+      this.#buildingFootprintsFor(selectedBuilding),
+      this.#directory.allPlaces
+    );
+    const key = this.#insideKey(places);
+    if (key === this.#state.renderedInsideKey) return;
+    this.#state.renderedInsideKey = key;
+    setPlaceCardInsidePlaces(places);
   };
 
   #renderPlaceCard(feature) {
@@ -197,22 +227,17 @@ export class PlaceSelection {
     this.#context.onResultsChanged();
   }
 
-  // While choosing among real listings, endpoint actions must stay unavailable.
-  setChoosing(isChoosingListing) {
-    this.#state.isChoosingListing = isChoosingListing;
-    elementById('point-actions').hidden = isChoosingListing;
-  }
-
   // Clear the card and map selection together, then restore the originating control when requested.
   close(shouldRestoreFocus = true) {
-    const hadPoint = !!this.#state.selectedPoint || this.#state.isChoosingListing;
+    const hadPoint = !!this.#state.selectedPoint;
     this.#state.selectedPoint = null;
     this.#state.selectedFootprintIndex = null;
+    this.#state.selectedBuildingFeature = null;
     this.#state.selectedPlace = null;
     this.#state.pendingReveal = null;
     this.#state.revealOnlyWhenNeeded = false;
     this.#state.resolvedBuildingAddress = '';
-    this.setChoosing(false);
+    this.#state.renderedInsideKey = '';
     elementById('place-card').hidden = true;
     this.#interface?.resetCardState();
     this.#objectSelection?.clear();
@@ -245,7 +270,9 @@ export class PlaceSelection {
   showPlace(placeId, trigger) {
     const feature = this.#directory.placesById.get(String(placeId));
     if (!feature) return;
-    this.setChoosing(false);
+    this.#state.resolvedBuildingAddress = '';
+    this.#state.renderedInsideKey = '';
+    this.#state.selectedBuildingFeature = null;
     this.#state.selectedPlace = feature;
     this.#state.selectedFootprintIndex = null;
     this.#state.selectedPoint = {
@@ -255,10 +282,7 @@ export class PlaceSelection {
     };
     this.#state.returnFocusElement = trigger ?? null;
     const properties = feature.properties;
-    if (!this.#state.buildingAddressListenerInstalled && this.#map) {
-      this.#map.on('idle', this.#refreshBuildingAddress);
-      this.#state.buildingAddressListenerInstalled = true;
-    }
+    this.#installCardRefresh();
     this.#state.resolvedBuildingAddress = this.#resolveBuildingAddress(feature);
     this.#renderPlaceCard(feature);
     this.#state.requestedPlace = null;
@@ -337,19 +361,24 @@ export class PlaceSelection {
   // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
   showPoint(point, feature = null, {trigger = null, reveal = false, streetName = null} = {}) {
     this.close(false);
+    this.#state.resolvedBuildingAddress = '';
     this.#state.selectedPoint = point;
     this.#state.returnFocusElement = trigger;
     const footprintIndex =
       feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
     this.#state.selectedFootprintIndex = Number.isInteger(footprintIndex) ? footprintIndex : null;
+    this.#state.selectedBuildingFeature = point.kind === 'Building' ? feature : null;
     const buildingFootprints = this.#buildingFootprintsFor(feature);
+    const placesInside = this.#context.placesInsideFootprint(buildingFootprints, this.#directory.allPlaces);
+    this.#state.renderedInsideKey = this.#insideKey(placesInside);
     renderCardContent(
       buildObjectCard(point, {
         sourceDate: this.#directory.sourceDate,
-        placesInside: this.#context.placesInsideFootprint(buildingFootprints, this.#directory.allPlaces)
+        placesInside
       })
     );
     elementById('place-card').hidden = false;
+    this.#installCardRefresh();
     this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     // A map tap leaves search; choosing a row keeps the results beside the card.
@@ -411,7 +440,7 @@ export class PlaceSelection {
       !this.#directory.filteredPlaces.some(
         feature => feature.properties.id === this.#state.selectedPlace.properties.id
       );
-    if (this.#state.isChoosingListing || isSelectedPlaceExcluded) this.close(false);
+    if (isSelectedPlaceExcluded) this.close(false);
     this.clearRequestedPlace();
   }
 

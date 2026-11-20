@@ -29,7 +29,7 @@ test('stop selection keeps source identity and point coordinates', () => {
     [19, 42]
   );
   assert.deepEqual(stop.coordinates, [19.25, 42.45]);
-  assert.ok(stop.details.includes('Stop ID: 17'));
+  assert.deepEqual(stop.facts.detailRows, [{label: 'Stop ID', value: '17'}]);
 });
 test('footprint membership lists only places inside the recorded polygon', () => {
   const footprint = {
@@ -78,7 +78,7 @@ test('numbered building labels expose an address without inventing a building na
   );
   assert.equal(point.kind, 'Building');
   assert.equal(point.name, 'Building 12B');
-  assert.ok(point.details.includes('Test street 12B'));
+  assert.equal(point.facts.addressLine, 'Test street 12B');
 });
 
 test('polygon address lookup is independent of label rendering and handles footprint zero', async () => {
@@ -90,7 +90,7 @@ test('polygon address lookup is independent of label rendering and handles footp
   const feature = {id: 0, layer: {id: 'buildings'}, properties: {kind: 'building'}};
   const point = describePoint(feature, [19.26, 42.44], index);
   assert.equal(point.name, 'Building 12B');
-  assert.ok(point.details.includes('Test street 12B'));
+  assert.equal(point.facts.addressLine, 'Test street 12B');
   assert.equal(describePoint({...feature, id: 1}, [19.26, 42.44], index).name, 'Unnamed building');
   assert.equal(describePoint({...feature, layer: {id: 'land'}}, [19.26, 42.44], index).kind, 'Land');
   assert.equal(feature.properties['addr:housenumber'], undefined);
@@ -195,10 +195,15 @@ test('building selection, entrance selection and map labels use the same reviewe
   assert.equal(point.kind, 'Entrance');
   assert.equal(point.name, '27, Ulaz M, Lamela P');
   assert.deepEqual(point.coordinates, [19.26, 42.44]);
-  assert.ok(point.details.includes('Ulica Slobode, Zgrada 1, 27'));
+  assert.equal(point.facts.entrances[0].address, 'Ulica Slobode, Zgrada 1, 27');
   const building = describePoint({id: 0, layer: {id: 'buildings'}}, [19, 42], index);
   assert.equal(building.name, 'Building Zgrada 1, 27-32');
-  assert.ok(building.details.includes('Entrance: 27, Ulaz M, Lamela P'));
+  assert.deepEqual(building.facts.addresses, [
+    'Ulica Slobode, Zgrada 1, 27-32',
+    'Ulica Slobode, Zgrada 1, 27',
+    'Ulica Slobode, Zgrada 1, 32'
+  ]);
+  assert.equal(building.facts.entrances[0].label, '27, Ulaz M, Lamela P');
   features.features[0].geometry.coordinates[0] = 0;
   assert.equal(properties.entrances[0].coordinates[0], 19.26);
 });

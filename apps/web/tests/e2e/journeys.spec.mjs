@@ -209,7 +209,8 @@ test('building selection provides feature details and point actions', async ({pa
   expect(picked).not.toBeNull();
   await page.mouse.click(picked.x, picked.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-details .details-section--details')).toContainText('Type: Building');
+  await expect(page.locator('#place-details .details-section--details')).not.toContainText('Type: Building');
+  await expect(page.locator('#place-details .details-section--details')).toContainText('Coordinates:');
   await expect(page.getByRole('button', {name: 'To', exact: true})).toBeVisible();
   await expect
     .poll(() =>
@@ -721,9 +722,16 @@ test.describe('building entrances', () => {
         await context.setOffline(true);
         await tap(label.geometry.coordinates);
         await expect(page.locator('#place-name')).toHaveText(`Building ${variant.label}`);
-        const address = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
+        const addressPrefix = variant.building
+          ? `Ulica Slobode, Zgrada ${variant.building}, `
+          : 'Ulica Slobode ';
+        const summaryAddress = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
+        const expectedAddresses = [
+          summaryAddress,
+          ...variant.numbers.map(number => `${addressPrefix}${number}`)
+        ].filter((address, index, all) => all.indexOf(address) === index);
         await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
-          address
+          expectedAddresses
         );
         await expect
           .poll(() =>
