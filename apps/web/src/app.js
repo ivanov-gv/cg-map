@@ -92,6 +92,8 @@ const directoryState = {
   activeCategory: null,
   buildingAddresses: new Map(),
   buildingLabelIndex: [],
+  visibleRoads: [],
+  roadNamesInView: new Set(),
   searchCandidates: [],
   results: [],
   loadingError: null,
@@ -117,6 +119,16 @@ const routeEndpoints = {from: null, to: null};
 
 const prefersReducedMotion = isReducedMotionPreferred();
 const distanceRefreshDelayMilliseconds = 200;
+// Road lines, not road labels: a label's point geometry cannot supply a street segment for the highlight or the card.
+const roadNameLayers = [
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+];
 
 const placeSelection = new PlaceSelection({
   map: () => mapState.map,
@@ -223,13 +235,42 @@ function searchQuery() {
 }
 
 function computeSearchCandidates() {
+  const referencePoint = locationControls.distanceOrigin ?? mapState.map?.getCenter().toArray() ?? null;
   return collectSearchResults({
     places: directoryState.filteredPlaces,
     buildingLabels: directoryState.buildingLabelIndex,
+    roads: directoryState.visibleRoads,
     query: searchQuery(),
     category: directoryState.activeCategory,
-    markerKeys: directoryState.markerKeysByPlaceId
+    markerKeys: directoryState.markerKeysByPlaceId,
+    referencePoint
   });
+}
+
+// Query the current tile view once per settled camera change. Segment identity and name dedupe repeated tile copies.
+function collectVisibleRoads() {
+  if (!mapState.isMapReady || !mapState.map) return [];
+  const seen = new Set();
+  const features = [];
+  for (const feature of mapState.map.queryRenderedFeatures({layers: roadNameLayers})) {
+    const name = feature.properties?.name;
+    if (typeof name !== 'string' || !name.trim()) continue;
+    if (!['LineString', 'MultiLineString'].includes(feature.geometry?.type)) continue;
+    const firstCoordinate = JSON.stringify(feature.geometry.coordinates[0] ?? null);
+    const identity = `${name}\u0000${feature.id ?? ''}\u0000${firstCoordinate}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    features.push(feature);
+  }
+  return features;
+}
+
+// Street candidates depend on the current view; rebuilding them keeps a moved map's green roads and row order in step.
+function refreshVisibleRoads() {
+  const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+  directoryState.visibleRoads = hasExplicitFilter ? collectVisibleRoads() : [];
+  directoryState.roadNamesInView = new Set(directoryState.visibleRoads.map(feature => feature.properties.name));
+  directoryState.searchCandidates = computeSearchCandidates();
 }
 
 function rankSearchCandidates() {
@@ -264,6 +305,7 @@ function updateSearchHighlights() {
   const visible = directoryState.searchCandidates.filter(result => {
     if (String(result.id) === selectedId) return false;
     if (selectedFootprintIndex !== null && result.footprintIndex === selectedFootprintIndex) return false;
+    if (result.kind === 'street') return directoryState.roadNamesInView.has(result.streetName);
     return bounds.contains(result.coordinates);
   });
   mapState.searchHighlights.update(visible);
@@ -281,6 +323,8 @@ function applyDistanceRefresh() {
     directoryState.hasPendingDistanceRerank = true;
     return;
   }
+  // The representative point of a multi-segment street also follows a new fix, not only the row's ranking.
+  directoryState.searchCandidates = computeSearchCandidates();
   refreshSearchResults();
 }
 
@@ -321,7 +365,7 @@ function applyPlaceSearch() {
     );
   }
   placeSelection.onFilterChanged();
-  directoryState.searchCandidates = computeSearchCandidates();
+  refreshVisibleRoads();
   refreshSearchResults();
   placeSelection.updateRequestedPlace();
   // Update desktop search UI after results change.
@@ -597,6 +641,7 @@ function registerPublicMapEvents() {
   mapState.map.on('resize', () => locationControls.noteMapResize());
   // The list keeps its order while any card is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
+    refreshVisibleRoads();
     if (!placeSelection.hasOpenCard) {
       directoryState.results = rankSearchCandidates();
       renderSearchResults();
@@ -605,7 +650,10 @@ function registerPublicMapEvents() {
     placeSelection.flushPendingReveal();
   });
   // Symbol placement can finish after moveend, so settle the rings once the final marker set is drawn.
-  mapState.map.on('idle', updateSearchHighlights);
+  mapState.map.on('idle', () => {
+    refreshVisibleRoads();
+    updateSearchHighlights();
+  });
   installMapTaps(mapState.map, event =>
     selectTappedFeature(mapState.map, event, {
       isMapReady: mapState.isMapReady,

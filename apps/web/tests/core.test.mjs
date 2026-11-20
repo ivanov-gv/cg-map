@@ -5,6 +5,8 @@ import {
   matchesPlaceSearch,
   classifyBuildingMatch,
   buildingResultLabel,
+  matchesStreetName,
+  collectStreetCandidates,
   selectNearestPlaces,
   selectSearchResults,
   safeWebsite
@@ -77,6 +79,13 @@ const addressLabel = (footprintIndex, coordinates, properties = {}) => ({
     ...properties
   }
 });
+const roadFeature = (name, coordinates, layerId = 'minor-roads') => ({
+  type: 'Feature',
+  id: 1,
+  geometry: {type: 'LineString', coordinates: [coordinates, coordinates]},
+  properties: {kind: 'residential', name},
+  layer: {id: layerId}
+});
 
 test('building search distinguishes a street address from a building number', () => {
   const label = addressLabel(4, [19.25, 42.44]);
@@ -92,6 +101,69 @@ test('building classification ignores street and number word order', () => {
   assert.deepEqual(classifyBuildingMatch(label, 'Dragojevića 18'), {kind: 'address'});
   assert.deepEqual(classifyBuildingMatch(label, '18 Bulevar Stanka'), {kind: 'address'});
   assert.deepEqual(classifyBuildingMatch(label, '18'), {kind: 'building'});
+});
+
+test('street search matches every query word against words in the street name', () => {
+  assert.equal(matchesStreetName('Jerevanska', 'jerevan'), true);
+  assert.equal(matchesStreetName('Jerevanska', 'Jerevanska'), true);
+  assert.equal(matchesStreetName('Bulevar Stanka Dragojevića', 'Stanka dragojevica'), true);
+  assert.equal(matchesStreetName('Jerevanska', 'Jerevanska 42'), false);
+  assert.equal(matchesStreetName('Bulevar Stanka Dragojevića', 'Stanka 18'), false);
+  assert.equal(matchesStreetName('Jerevanska', ''), false);
+});
+
+test('street candidates group every road segment and address label into one nearest row', () => {
+  const nearRoad = roadFeature('Jerevanska', [19.25, 42.43]);
+  const farRoad = roadFeature('Jerevanska', [19.26, 42.44]);
+  const farLabel = addressLabel(12, [19.3, 42.5], {'addr:street': 'Jerevanska'});
+  const results = collectStreetCandidates({
+    query: 'jerevanska',
+    labels: [farLabel],
+    roads: [farRoad, nearRoad],
+    referencePoint: [19.25, 42.43]
+  });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].kind, 'street');
+  assert.equal(results[0].id, 'street/jerevanska');
+  assert.equal(results[0].name, 'Jerevanska');
+  assert.equal(results[0].streetName, 'Jerevanska');
+  assert.deepEqual(results[0].coordinates, [19.25, 42.43]);
+  assert.equal(results[0].feature, nearRoad);
+  assert.equal(results[0].layerId, 'minor-roads');
+});
+
+test('street rows join other results under All, but a number query and a category exclude them', () => {
+  const label = addressLabel(12, [19.25, 42.43], {'addr:street': 'Jerevanska'});
+  const road = roadFeature('Jerevanska', [19.2502, 42.4301]);
+  const place = feature('Jerevanska Cafe', 'food', [19.26, 42.44]);
+  const center = [19.25, 42.43];
+  const search = {
+    places: [place],
+    buildingLabels: {type: 'FeatureCollection', features: [label]},
+    roads: [road],
+    center
+  };
+
+  const results = selectSearchResults({...search, query: 'jerevanska'});
+  assert.deepEqual(
+    results.map(result => result.kind),
+    ['address', 'street', 'place']
+  );
+  assert.equal(results[0].distanceText, '');
+  assert.equal(results[1].distanceText, '');
+  const ranked = selectSearchResults({...search, query: 'jerevanska', origin: center});
+  assert.equal(ranked[1].kind, 'street');
+  assert.match(ranked[1].distanceText, /^\d+ m$/);
+
+  assert.deepEqual(
+    selectSearchResults({...search, query: 'Jerevanska 42'}).map(result => result.kind),
+    []
+  );
+  assert.deepEqual(
+    selectSearchResults({...search, query: 'jerevanska', category: 'food'}).map(result => result.kind),
+    ['place']
+  );
 });
 
 test('building matches need every query word', () => {
@@ -149,13 +221,13 @@ test('search results mix places, buildings and addresses in nearest-first order'
   });
   assert.deepEqual(
     results.map(result => result.kind),
-    ['address', 'place', 'address']
+    ['address', 'street', 'place', 'address', 'street']
   );
   assert.equal(results[0].footprintIndex, 4);
-  assert.equal(results[1].feature, place);
-  assert.equal(results[2].footprintIndex, 30);
-  assert.ok(results[0].distanceKilometres < results[1].distanceKilometres);
-  assert.ok(results[1].distanceKilometres < results[2].distanceKilometres);
+  assert.equal(results[2].feature, place);
+  assert.equal(results[3].footprintIndex, 30);
+  assert.ok(results[0].distanceKilometres < results[2].distanceKilometres);
+  assert.ok(results[2].distanceKilometres < results[3].distanceKilometres);
 });
 
 test('categories list places only and an empty query lists no buildings', () => {

@@ -84,7 +84,7 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
   .result:hover { background: #edf1e4; }
 }
 .result .symbol { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--color) 15%, white); color: var(--color); font-weight: 700; flex: none; }
-.result[data-kind=building] .symbol, .result[data-kind=address] .symbol { --color: var(--search-highlight); }
+.result[data-kind=building] .symbol, .result[data-kind=address] .symbol, .result[data-kind=street] .symbol { --color: var(--search-highlight); }
 .result .copy { min-width: 0; flex: 1; }
 .result strong, .result small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result strong { font-size: 16px; font-weight: 600; }

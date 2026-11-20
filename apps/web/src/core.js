@@ -141,14 +141,91 @@ export function buildingResultLabel(properties) {
   return number ? `Building ${number}` : 'Building';
 }
 
+// A street query uses the building rule: every word starts a word in the street name. A number is never a street word.
+export function matchesStreetName(name, query) {
+  const queryWords = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+  const nameWords = normalizeSearchText(name).split(/\s+/).filter(Boolean);
+  if (!queryWords.length || !nameWords.length) return false;
+  return queryWords.every(queryWord => nameWords.some(nameWord => nameWord.startsWith(queryWord)));
+}
+
+// Rendered road segments and address labels both supply candidate points; a label may be a pre-built index entry.
+function streetSourceCandidates(feature, name, layerId, isRoad) {
+  if (typeof name !== 'string' || !name.trim()) return [];
+  const {type, coordinates} = feature?.geometry ?? {};
+  let points;
+  if (type === 'Point') points = [coordinates];
+  else if (type === 'LineString') points = coordinates;
+  else if (type === 'MultiLineString') points = coordinates.flat();
+  else points = [];
+  return points
+    .filter(point => Array.isArray(point) && point.length >= 2)
+    .map(point => ({name: name.trim(), coordinates: point, layerId, isRoad, feature}));
+}
+
+function nearestStreetSource(sources, referencePoint) {
+  return sources.reduce((nearest, source) => {
+    if (!nearest) return source;
+    if (!referencePoint) return nearest;
+    return distanceKilometres(referencePoint, source.coordinates) <
+      distanceKilometres(referencePoint, nearest.coordinates)
+      ? source
+      : nearest;
+  }, null);
+}
+
+// One row per street name, even when many road segments and building labels carry it. Road features supply the card's
+// source attributes; every source supplies the representative point used for ranking and reveal.
+export function collectStreetCandidates({query = '', labels = [], roads = [], referencePoint = null}) {
+  const byStreetName = new Map();
+  const addSources = (features, nameFor, layerIdFor, isRoad) => {
+    for (const entry of features) {
+      const feature = entry?.feature ?? entry;
+      for (const source of streetSourceCandidates(feature, nameFor(feature), layerIdFor(feature), isRoad)) {
+        if (!matchesStreetName(source.name, query)) continue;
+        const key = normalizeSearchText(source.name);
+        if (!byStreetName.has(key)) byStreetName.set(key, []);
+        byStreetName.get(key).push(source);
+      }
+    }
+  };
+  addSources(roads, feature => feature?.properties?.name, feature => feature?.layer?.id ?? null, true);
+  addSources(indexBuildingLabels(labels), feature => feature?.properties?.['addr:street'], () => null, false);
+
+  return [...byStreetName.entries()].map(([key, sources]) => {
+    const nearest = nearestStreetSource(sources, referencePoint);
+    const roadSources = sources.filter(source => source.isRoad);
+    const representative = nearestStreetSource(roadSources.length ? roadSources : sources, referencePoint);
+    const feature = representative.isRoad
+      ? representative.feature
+      : {
+          type: 'Feature',
+          properties: {name: representative.name},
+          geometry: {type: 'Point', coordinates: [...representative.coordinates]}
+        };
+    return {
+      kind: 'street',
+      id: `street/${key.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+      name: representative.name,
+      streetName: representative.name,
+      label: representative.name,
+      feature,
+      coordinates: [...nearest.coordinates],
+      layerId: representative.isRoad ? representative.layerId : null
+    };
+  });
+}
+
 // Collect every candidate once. Places supplied here already satisfy the active query and category; the app keeps
 // that filtered set so a camera move never matches the same listings twice. Labels can be a pre-built index.
 export function collectSearchResults({
   places = [],
   buildingLabels = [],
+  roads = [],
   query = '',
   category = null,
-  markerKeys = new Map()
+  markerKeys = new Map(),
+  referencePoint = null
 }) {
   const results = places.map(feature => ({
     kind: 'place',
@@ -171,6 +248,7 @@ export function collectSearchResults({
       coordinates: feature.geometry.coordinates
     });
   }
+  results.push(...collectStreetCandidates({query, labels: buildingLabels, roads, referencePoint}));
   return results;
 }
 
@@ -195,15 +273,25 @@ export function rankSearchResults(results, center, {limit = 40, origin = null} =
 export function selectSearchResults({
   places = [],
   buildingLabels = [],
+  roads = [],
   query = '',
   category = null,
   center,
   origin = null,
+  referencePoint = null,
   markerKeys = new Map(),
   limit = 40
 }) {
   const matchingPlaces = places.filter(feature => matchesPlaceSearch(feature, query, category));
-  const candidates = collectSearchResults({places: matchingPlaces, buildingLabels, query, category, markerKeys});
+  const candidates = collectSearchResults({
+    places: matchingPlaces,
+    buildingLabels,
+    roads,
+    query,
+    category,
+    markerKeys,
+    referencePoint
+  });
   return rankSearchResults(candidates, center, {origin, limit});
 }
 

@@ -207,6 +207,10 @@ export class PlaceSelection {
       this.showPlace(result.feature.properties.id, trigger);
       return;
     }
+    if (result.kind === 'street') {
+      this.showStreet(result, trigger);
+      return;
+    }
     const feature = {...result.feature, layer: {id: 'building-numbers'}};
     const point = {
       ...this.#context.describePoint(feature, result.coordinates),
@@ -214,6 +218,20 @@ export class PlaceSelection {
     };
     elementById('search').blur();
     this.showPoint(point, feature, {trigger, reveal: true});
+  }
+
+  // A street row opens the same Road card as tapping one of its segments, with the segment's recorded attributes.
+  showStreet(result, trigger) {
+    const feature = {
+      ...result.feature,
+      layer: {id: result.layerId ?? 'minor-roads'}
+    };
+    const point = {
+      ...this.#context.describePoint(feature, result.coordinates),
+      id: result.id
+    };
+    elementById('search').blur();
+    this.showPoint(point, feature, {trigger, reveal: true, streetName: result.streetName});
   }
 
   // Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
@@ -241,7 +259,7 @@ export class PlaceSelection {
 
   // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
   // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
-  showPoint(point, feature = null, {trigger = null, reveal = false} = {}) {
+  showPoint(point, feature = null, {trigger = null, reveal = false, streetName = null} = {}) {
     this.close(false);
     this.#state.selectedPoint = point;
     this.#state.returnFocusElement = trigger;
@@ -268,7 +286,8 @@ export class PlaceSelection {
     this.#interface.placeCardOpened();
     this.#context.onSelectionChanged();
     this.markCurrentResult();
-    this.#objectSelection.select(feature, point.coordinates);
+    if (streetName) this.#objectSelection.selectStreet(streetName);
+    else this.#objectSelection.select(feature, point.coordinates);
     const entrances =
       point.kind === 'Building' ? this.#directory.buildingAddresses.get(footprintIndex)?.entrances : [];
     this.#state.revealOnlyWhenNeeded = reveal;

@@ -89,6 +89,21 @@ export class ObjectSelection {
       this.map.setFilter(`selected-${sourceLayer}-outline`, filter);
     }
   }
+
+  // A street names many tile segments, so select them by name instead of one feature id. The red filter spans every
+  // matching segment, including the parts outside the tile that supplied the result row.
+  selectStreet(name) {
+    this.clear();
+    for (const sourceLayer of selectableSourceLayers) {
+      const filter = sourceLayer === 'roads' ? ['==', ['get', 'name'], name] : emptyFilter;
+      this.map.setFilter(`selected-${sourceLayer}-fill`, [
+        'all',
+        filter,
+        ['==', ['geometry-type'], 'Polygon']
+      ]);
+      this.map.setFilter(`selected-${sourceLayer}-outline`, filter);
+    }
+  }
   // Label and entrance hits refer back to the original footprint instead of selecting a point copy.
   select(feature, coordinates) {
     this.clear();

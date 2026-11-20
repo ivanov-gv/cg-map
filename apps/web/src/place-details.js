@@ -40,8 +40,8 @@ export function renderPlaceDetails(feature) {
 }
 
 // The symbol carries the result kind, not just the category: a building or address is not a place listing.
-const kindSymbols = {building: '🏢', address: '📍'};
-const kindLabels = {building: 'Building', address: 'Address'};
+const kindSymbols = {building: '🏢', address: '📍', street: '🛣'};
+const kindLabels = {building: 'Building', address: 'Address', street: 'Street'};
 
 export function listingButton(place, onClick, distanceText, {kind = 'place', id = null, label = null} = {}) {
   const properties = place.properties;
