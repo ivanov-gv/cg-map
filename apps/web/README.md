@@ -116,18 +116,21 @@ header-only peek under the open results. Pulling it up gives the full card and s
 steps back and then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
-Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
-starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes arrive,
-preserving the current zoom. Following stops on a second click, any camera move the follower did not make (user drag,
-pinch, scroll, or an app-initiated move such as choosing a search result), or location failure. The follower tags its
-own camera moves with `isLocationFollowMove` so the `movestart` handler can distinguish them. The button fills with the
-app's pressed-toggle colour (green background, white icon) while following; `aria-pressed` and `data-following` reflect
-the state. The accessible name stays constant — "Follow your location" when a fix is usable, "Locate me" otherwise.
-There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear after endpoint
-selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states, and offline
-safety remain part of the existing features. Map attribution lives in the left dock footer and also appears as a small
-"OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's sources at
-runtime so they stay in sync when layers change
+Location is a single icon in the bottom-right corner;
+[UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and
+states. MapLibre's `.maplibregl-ctrl-group button` rule sizes controls to 29×29, so the app's own ID selector sets the
+button size without `!important` (issue #272). The control keeps its accessible state and non-color badges. A click on
+the button starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes
+arrive, preserving the current zoom. Following stops on a second click, any camera move the follower did not make (user
+drag, pinch, scroll, or an app-initiated move such as choosing a search result), or location failure. The follower tags
+its own camera moves with `isLocationFollowMove` so the `movestart` handler can distinguish them. The button fills with
+the app's pressed-toggle colour (green background, white icon) while following; `aria-pressed` and `data-following`
+reflect the state. The accessible name stays constant — "Follow your location" when a fix is usable, "Locate me"
+otherwise. There are no zoom buttons on the map—wheel, pinch, and keyboard zoom work instead. Route controls appear
+after endpoint selection; choosing From or To closes search or the dock to show them. Source notes, live-layer states,
+and offline safety remain part of the existing features. Map attribution lives in the left dock footer and also appears
+as a small "OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's
+sources at runtime so they stay in sync when layers change
 ([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a

@@ -1016,6 +1016,50 @@ const deviceCases = [
   {name: 'flip', viewport: FLIP_VIEWPORT}
 ];
 
+// MapLibre's control CSS sets .maplibregl-ctrl-group button to 29×29, so the rendered
+// box and the computed style must both be checked (issue #272).
+const locateDesignCases = [
+  {name: 'desktop', viewport: {width: 1280, height: 800}, size: 48, rightGap: 20, bottomGap: 20},
+  {name: 'mobile', viewport: {width: 412, height: 840}, size: 48, rightGap: 12, bottomGap: 20},
+  {name: 'flip', viewport: FLIP_VIEWPORT, size: 40, rightGap: 12, bottomGap: 20}
+];
+
+for (const device of locateDesignCases) {
+  const phoneTag = device.name === 'desktop' ? {} : {tag: '@phone'};
+
+  test(`Locate button has the design size, radius, icon and offsets on ${device.name}`, {...phoneTag}, async ({page}) => {
+    await atViewport(page, device.viewport, async () => {
+      await ready(page);
+      const button = page.locator('#position-action');
+      await expect(button).toBeVisible();
+      const computed = await button.evaluate(element => {
+        const style = getComputedStyle(element);
+        const iconStyle = getComputedStyle(element.querySelector('.icon'));
+        return {
+          width: style.width,
+          height: style.height,
+          radius: style.borderTopLeftRadius,
+          iconWidth: iconStyle.width,
+          iconHeight: iconStyle.height
+        };
+      });
+      expect(computed).toEqual({
+        width: `${device.size}px`,
+        height: `${device.size}px`,
+        radius: '14px',
+        iconWidth: '21px',
+        iconHeight: '21px'
+      });
+      const box = await button.boundingBox();
+      expect(box.width).toBe(device.size);
+      expect(box.height).toBe(device.size);
+      const viewport = page.viewportSize();
+      expect(viewport.width - (box.x + box.width)).toBe(device.rightGap);
+      expect(viewport.height - (box.y + box.height)).toBe(device.bottomGap);
+    });
+  });
+}
+
 async function assertMapFillsViewport(page) {
   const viewport = page.viewportSize();
   const mapBox = await page.locator('#map').boundingBox();

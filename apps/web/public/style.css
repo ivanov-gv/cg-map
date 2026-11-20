@@ -119,8 +119,11 @@ progress { width: 100%; accent-color: var(--green); margin-top: 8px; }
 summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .control, .maplibregl-ctrl-group { background: white; border-radius: 12px; box-shadow: 0 4px 20px #243f3715 !important; }
 .position-control { position: absolute; right: 12px; bottom: 148px; z-index: 3; }
-.position-control.maplibregl-ctrl { position: relative; right: auto; bottom: auto; z-index: auto; }
-#position-action { position: relative; }
+.position-control.maplibregl-ctrl { position: relative; right: auto; bottom: auto; z-index: auto; margin-bottom: 20px; }
+/* MapLibre sizes .maplibregl-ctrl-group button to 29×29; the ID wins without !important (issue #272). */
+#position-action { position: relative; width: 48px; height: 48px; border-radius: 14px; }
+/* The white group and the pressed green fill need the same corners. */
+.position-control.maplibregl-ctrl-group { border-radius: 14px; }
 #position-indicator { position: absolute; right: 3px; bottom: 2px; min-width: 16px; height: 16px; border-radius: 50%; background: white; color: #8c571b; font-size: 12px; font-weight: 700; line-height: 16px; }
 .position-control[data-state=live] #position-action { color: #1f6fd1; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
@@ -136,7 +139,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     filter: brightness(1.15);
   }
 }
-.maplibregl-ctrl-bottom-right { right: 2px; }
+/* MapLibre adds a 10 px right margin to bottom-right controls: 10 + 10 = 20 px from the edge. */
+.maplibregl-ctrl-bottom-right { right: 10px; }
 /* map-core adds NavigationControl with no option to omit it. */
 .maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
@@ -324,6 +328,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
 
+  /* Mobile and Flip keep the 12 px right edge: 2 + MapLibre's 10 px margin. */
+  .maplibregl-ctrl-bottom-right { right: 2px; }
+
   /* Mobile search bar: smaller than desktop, full screen width minus 12 px gutter. */
   .search-bar {
     left: var(--bar-inset);
@@ -374,6 +381,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
  * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
  * When the dock is open, the Mobile rules apply again (full-width bar with search). */
 @media (max-width: 400px) and (max-height: 400px) {
+  /* Flip keeps the 21 px icon and 14 px radius in a 40 px target. */
+  #position-action { width: 40px; height: 40px; }
+
   /* When the dock is closed, shrink the bar to the menu button and hide all search elements. */
   body:not([data-view=dock]) .search-bar { right: auto; }
   body:not([data-view=dock]) .search-bar .search-divider,
