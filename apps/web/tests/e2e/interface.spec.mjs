@@ -270,16 +270,17 @@ test(
       await page.screenshot({path: testInfo.outputPath('search-keyboard.png')});
     }
     await page.locator('#search').fill('Mobile result 07');
-    await expect(page.locator('.result')).toHaveCount(1);
+    const chosenResult = page.locator('.result', {hasText: 'Mobile result 07'});
+    await expect(chosenResult).toHaveCount(1);
     await openMenu(page);
     await expect(page.locator('#dock-content')).toBeVisible();
     await expect(page.locator('#search-bubble')).toBeHidden();
     await expect(page.locator('#search')).toHaveValue('Mobile result 07');
     await closeMenu(page);
     await page.locator('#search').click();
-    await page.locator('.result').click();
+    await chosenResult.click();
     await expect(page.locator('#place-name')).toHaveText('Mobile result 07');
-    await expect(page.locator('.result')).toBeVisible();
+    await expect(chosenResult).toBeVisible();
     // Choosing a result dismisses the keyboard simulated above; the place is judged in the layout that leaves.
     if (isMobile) await simulateKeyboard(page, 840);
     await expect
