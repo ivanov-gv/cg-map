@@ -48,6 +48,28 @@ const SECOND_PLACE = {
   geometry: {type: 'Point', coordinates: [19.26085, 42.44205]},
   properties: {id: 'node/2', name: 'Bulevar Market', category: 'food', kind: 'market'}
 };
+const LOW_LEVEL_MATCH = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26068, 42.44192]},
+  properties: {
+    id: 'node/3',
+    name: 'Threshold Cafe',
+    category: 'food',
+    kind: 'cafe',
+    visibilityLevel: 1
+  }
+};
+const HIGH_LEVEL_MATCH = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26095, 42.44208]},
+  properties: {
+    id: 'node/4',
+    name: 'Threshold Market',
+    category: 'food',
+    kind: 'market',
+    visibilityLevel: 5
+  }
+};
 const FAR_ADDRESS = {
   type: 'Feature',
   geometry: {type: 'Point', coordinates: [19.8, 42.8]},
@@ -83,6 +105,18 @@ const highlightState = page =>
       searchGreen: getComputedStyle(document.documentElement).getPropertyValue('--search-highlight').trim()
     };
   });
+// Expands the rendered marker layers to the listing identities used by the result list and the ring comparison.
+const renderedPlaceIds = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    const layers = map
+      .getStyle()
+      .layers.map(layer => layer.id)
+      .filter(id => id.startsWith('place-icons-') || id === 'search-place');
+    return [
+      ...new Set(map.queryRenderedFeatures({layers}).flatMap(feature => JSON.parse(feature.properties.activeIds)))
+    ].sort();
+  });
 // Mirrors the app's footprint filter contract without relying on the expression's position in the array.
 const footprintFilter = footprints => ['in', ['id'], ['literal', footprints]];
 const isInView = (page, coordinates) =>
@@ -108,7 +142,12 @@ test.beforeEach(async ({page}) => {
     })
   );
   await page.route('**/data/places.geojson', route =>
-    route.fulfill({json: {type: 'FeatureCollection', features: [PLACE, SECOND_PLACE]}})
+    route.fulfill({
+      json: {
+        type: 'FeatureCollection',
+        features: [PLACE, SECOND_PLACE, LOW_LEVEL_MATCH, HIGH_LEVEL_MATCH]
+      }
+    })
   );
   await ready(page);
   await page.evaluate(coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 17}), CENTRE);
@@ -155,6 +194,19 @@ test('visible results get green highlights and the camera stays still', async ({
     .poll(async () => (await highlightState(page)).rings)
     .toEqual([]);
   expect(await camera(page)).not.toEqual(before);
+});
+
+test('a place below its marker threshold is ringed only once its marker is drawn', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 15.8}));
+  await mapIdle(page);
+  await page.locator('#search').fill('threshold');
+  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3']);
+  await expect.poll(async () => (await highlightState(page)).rings).toEqual(['node/3']);
+
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 17}));
+  await mapIdle(page);
+  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3', 'node/4']);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/3', 'node/4']);
 });
 
 test('choosing a building result replaces its green outline with the red selection', async ({page}) => {

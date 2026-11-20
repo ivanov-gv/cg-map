@@ -250,7 +250,8 @@ function renderSearchResults() {
   });
 }
 
-// Every match in view is marked, including those past the 40-row list limit. Choosing a hidden match reveals it later.
+// Every in-view match is marked, including those past the 40-row list limit. A place needs a drawn marker; choosing a
+// hidden match reveals it later.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
   const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
@@ -572,6 +573,8 @@ function registerPublicMapEvents() {
     updateSearchHighlights();
     placeSelection.flushPendingReveal();
   });
+  // Symbol placement can finish after moveend, so settle the rings once the final marker set is drawn.
+  mapState.map.on('idle', updateSearchHighlights);
   installMapTaps(mapState.map, event =>
     selectTappedFeature(mapState.map, event, {
       isMapReady: mapState.isMapReady,
