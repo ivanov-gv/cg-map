@@ -778,8 +778,10 @@ test.describe('building entrances', () => {
           expect(position.y).toBeGreaterThan(header.y + header.height + 20);
           if (page.viewportSize().width <= 720)
             expect(position.y).toBeLessThan(card.y - 20);
-          else
+          else {
             expect(position.x).toBeGreaterThan(panel.x + panel.width + 20);
+            expect(position.y).toBeLessThan(card.y - 16);
+          }
         }
         if (process.env.ENTRANCE_SCREENSHOTS)
           await page.screenshot({

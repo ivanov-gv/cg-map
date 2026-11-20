@@ -3,9 +3,9 @@
 Status: approved on 3 November 2026 and implemented in the web source. The earlier illustrative draft established the
 composition; the application uses real directory data, device positioning, optional layers, and verified offline
 downloads. Selected-card content was restructured on 19 November 2026 (issue #249); on 20 November 2026 the Desktop card
-became a bottom panel (issue #250), while Mobile and Flip kept their geometry and state machines. This does not claim
-deployment or completion of Discover’s missing geographic data. Browser acceptance and physical-device evidence are
-recorded separately below.
+became a bottom panel (issue #250) and then a fixed floating card (issue #282), while Mobile and Flip kept their
+geometry and state machines. This does not claim deployment or completion of Discover’s missing geographic data. Browser
+acceptance and physical-device evidence are recorded separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -53,9 +53,9 @@ Show the map, one combined burger/search bar, an icon-only location button, a me
 credit below the scale bar, and full attribution in the left dock footer (per
 [ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Current behavior: the scale bar and its credit
 keep one position, the map's bottom-left corner, on every device and in every card, search, dock and keyboard state.
-They are part of the map, so a card, search panel or Left Dock drawn over that corner covers them; only the Locate
-button rises above a Desktop card. Default geographic content remains governed by Discover; simplifying controls does
-not remove roads, buildings, addresses, terrain, or scale-appropriate places.
+They are part of the map, so a card, search panel or Left Dock drawn over that corner covers them; the Locate button
+rises above a Desktop card only when the card reaches its column. Default geographic content remains governed by
+Discover; simplifying controls does not remove roads, buildings, addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -101,7 +101,8 @@ overflows. Focusing the field opens the joined Search panel even with no query: 
 scrollable results list under the bar, as one card, and × appears at the right of the bar. Typing keeps the panel open
 in Filled. The chips are the same row as the dock categories, not a second row: opening the dock keeps its horizontal
 scroll position and active chip, and query and focus stay with the field. Pressing a chip filters the map's places and
-reveals the results, exactly as a dock category does.
+reveals the results, exactly as a dock category does. While a Desktop place card is open, the joined panel is 16 px
+above the card: at 1440×900 it ends at y 612, with the floating card starting at y 628.
 
 When the dock is open, Escape closes it. When the dock is closed and there is a query, Escape clears the query and keeps
 the search field focused, leaving the results Open. A second Escape closes those Open results, matching ×. Tab reaches
@@ -179,36 +180,41 @@ active download may need more room for progress/cancellation, but its lower edge
 
 Retain all supported categories and directory/search semantics from the baseline. The category strip starts with an
 **All** chip, which is pressed whenever no category is selected; every device uses that same state. Pressing the active
-category again returns to **All** without clearing the query. Choosing a result opens that place's details along the
-bottom, clear of the dock, and the dock and results stay open. Moving or closing the dock does not clear the query,
-select route endpoints, or start a route. While a chosen place's details are open, the result list keeps its order.
-Choosing From or To closes the dock or search, because the route controls replace them on the map. The category strip
-and the place card show no scrollbars; both still scroll.
+category again returns to **All** without clearing the query. Choosing a result opens that place's details in the
+floating card, clear of the dock, and the dock and results stay open. Moving or closing the dock does not clear the
+query, select route endpoints, or start a route. While a chosen place's details are open, the result list keeps its
+order. Choosing From or To closes the dock or search, because the route controls replace them on the map. The category
+strip and the place card show no scrollbars; both still scroll.
 
 ### Desktop selected-object card
 
-On Desktop (> 720 px) the card is a paper panel along the bottom of the screen: right 0, bottom 0, at most 300 px tall
-and clamped to 45% of the viewport height so short windows keep the map controls reachable. It has a top border and no
-rounding at the lower corners. It is screen-wide when the dock and search results are closed; with the dock open its
-left edge starts at the dock's right edge (400 px), and with the joined Search panel open it starts at that panel's
-right edge (380 px). The panel keeps its full height beside it. A visible × is pinned at the card's top right while its
-content scrolls; it closes the card, returns focus to the chosen row and leaves the panel open. A click on another map
-object swaps the card to that object.
+On Desktop (> 720 px) the card is a fixed floating sheet: 1000 × 252, with an 18 px corner radius and a 20 px gap above
+the bottom edge. It uses #FFFFFC fill, a 1 px #E3E6DC border and a 0 -8 32 #243F37 shadow at 8%. Its height is clamped
+to `min(252px, 45dvh)` so short windows keep the map reachable. Opening the dock moves the card but does not resize it:
+with the dock closed it is centered on the screen (x 220 at 1440 px wide), and with the dock open it is centered in the
+map area right of the dock (x 420 at 1440 px wide). Narrow windows keep 20 px side margins in the area being centered in
+and shrink the width only when that area cannot fit 1000 px. A click on another map object swaps the card to that
+object.
 
-Content uses three explicit columns with about 32 px padding: identity (eyebrow, name, subtitle, a 16 px gap,
-side-by-side From/To buttons and the source line), Location and contacts or the building's Addresses and Entrances, then
-Opening hours with NEARBY or Inside this building. Any other section uses the last column; weekdays sit left and hours
-are right-aligned there. The locate button still rises above the card. The scale bar and OSM credit stay fixed in the
-map's bottom-left corner in every search, dock and card state. A screen-wide card, the inset joined search panel or the
-Left Dock may cover them because they belong to the map; only the Locate button rises above the card. The card frame
-does not scroll; its inner layout does, so the × never scrolls away, and the page itself does not scroll. At card widths
-561–780 px the layout changes to identity | all sections; at 560 px and below it becomes one column.
+A visible × stays pinned 40 px at relative (940, 20) while the content scrolls. It closes the card, returns focus to the
+chosen row and leaves the results open. While the card is open, the joined Search panel stops 16 px above it: at 1440 ×
+900 the panel is 532 px tall and ends at y 612. Locate stays 20 px from the bottom right and rises 16 px above the card
+only when the card reaches its column, as with the dock open. The scale bar and OSM credit stay fixed in the map's
+bottom-left corner in every search, dock and card state. The card, panel or dock may cover that corner because those
+controls belong to the map; only Locate moves for the card. The card frame does not scroll, its inner layout does, and
+the page itself does not scroll.
+
+Content uses three explicit columns of 280, 270 and 260 px at relative x 32, 352 and 662, all starting at y 28: identity
+(eyebrow, name, subtitle, a 16 px gap, From/To buttons and the source line), Location and contacts or the building's
+Addresses and Entrances, then Opening hours with NEARBY or Inside this building. Any other section uses the last column;
+weekdays sit left and hours are right-aligned there. Each details column stacks independently rather than sharing rows.
+At card widths 561–780 px the layout changes to identity | all sections; at 560 px and below it becomes one column.
 
 ### Selected-object card content
 
-Mobile and Flip keep their existing position, size and state machine; Desktop uses the bottom panel described above. The
-header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay in
-place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
+Mobile and Flip keep their existing position, size and state machine; Desktop uses the floating card described above.
+The header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay
+in place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
 shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the
 data:
 
@@ -230,11 +236,12 @@ ring. Other controls keep the ring.
 ### Search moves the map only for a chosen result
 
 Opening search, typing, and choosing a category leave the camera still. Choosing a place, building, or address result
-moves the map only if that result is outside the focus zone: the inner 75% of the width and height of the map area no
-panel covers. A result outside the zone is centered in the uncovered area. Below street level (zoom 15), a chosen result
-also zooms in to it, because a pin with no streets around it is not useful. A tap on another map object, such as a
-building or stop, still centers that object. The camera also stays still while the phone keyboard is open; the result is
-checked again once it closes.
+moves the map only if that result is outside the focus zone: the inner 75% of each uncovered map rectangle. A phone card
+shortens the uncovered map, while a floating Desktop card splits it so a result beside the card can stay visible. A
+result outside the zone is centered in the uncovered area. Below street level (zoom 15), a chosen result also zooms in
+to it, because a pin with no streets around it is not useful. A tap on another map object, such as a building or stop,
+still centers that object. The camera also stays still while the phone keyboard is open; the result is checked again
+once it closes.
 
 Omit the result count, “nearest first” caption, and Reset action. Tapping the active category again returns to All
 without clearing the query; the search field's own clear action removes the query. Use readable result rows with 16px
