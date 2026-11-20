@@ -569,20 +569,7 @@ function registerPublicMapEvents() {
       buildingAddresses: directoryState.buildingAddresses,
       showPlace: placeSelection.showPlace,
       showPoint: placeSelection.showPoint,
-      onEmptyTap: () => {
-        const ui = mapState.interface;
-        // An empty spot while the search bubble is open compacts results to the strip (issue #266).
-        if (
-          ui?.mobileLayoutQuery.matches &&
-          ui.view === 'search' &&
-          !ui.isResultsCompacted &&
-          !ui.areResultsMinimized &&
-          elementById('place-card').hidden
-        ) {
-          return ui.compactResultsToStrip();
-        }
-        return false;
-      }
+      onEmptyTap: () => mapState.interface?.handleEmptyMapTap() ?? false
     })
   );
   mapState.map.on('mousemove', () => {

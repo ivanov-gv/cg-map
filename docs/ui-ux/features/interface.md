@@ -303,9 +303,9 @@ bubble.
 
 On Mobile and Flip, system Back steps back through open overlays instead of leaving the page until the opening view:
 phone card Fullscreen → Full → Peek → card closed, results strip → bubble, search bubble → search closed, dock → closed,
-and Flip modes screen → list screen → closed. A Flip card opened from the dock steps Full → Peek → card closed → dock.
-Closing by ×, swipe, or other UI actions consumes the matching history entry so Back does not reopen a closed state and
-history does not grow unbounded. Desktop Escape behavior is unchanged.
+and Flip modes screen → list screen → closed. A map-tap card has no Peek step. A Flip card opened from the dock returns
+to the dock when the card closes. UI closes keep history aligned so Back does not reopen a closed state. Reloading while
+overlay history is present returns to the opening view. Desktop Escape behavior is unchanged.
 
 ## UI-04 Bottom controls and wording
 

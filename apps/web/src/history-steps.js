@@ -1,83 +1,95 @@
-// Pure mapping between overlay steps and browser history entries.
-// Each move away from the opening view pushes one entry; a close by UI or Back consumes it.
+// Pure mapping between the visible UI state and browser history depth.
+// openSteps returns ordered steps away from the opening view; stateAfterBack returns
+// the UI state one step back so Back and UI closes reach the same state.
 
-export const STEP = {
-  DOCK: 'dock',
-  FLIP_MODES: 'flip-modes',
+export const STEP = Object.freeze({
   SEARCH_BUBBLE: 'search-bubble',
   SEARCH_STRIP: 'search-strip',
   CARD_PEEK: 'card-peek',
   CARD_FULL: 'card-full',
-  CARD_FULLSCREEN: 'card-fullscreen'
-};
-
-export const BASE_MARKER = {kompasHistory: 0};
+  CARD_FULLSCREEN: 'card-fullscreen',
+  DOCK: 'dock',
+  FLIP_MODES: 'flip-modes'
+});
 
 export function historyMarker(depth) {
-  return {kompasHistory: depth};
+  return {depth};
 }
 
 export function depthOf(marker) {
-  return typeof marker?.kompasHistory === 'number' ? marker.kompasHistory : null;
+  return typeof marker?.depth === 'number' ? marker.depth : null;
 }
 
-export function createHistorySteps() {
-  return {entries: []};
+// UI state:
+// {
+//   view: 'closed' | 'search' | 'dock',
+//   flipDockScreen: 'list' | 'modes' | null,
+//   resultsCompacted: boolean, // true when search bubble is compacted to the strip
+//   card: null | { state: 'peek' | 'full' | 'fullscreen', fromDock: boolean }
+// }
+export function openSteps(state) {
+  if (!state) return [];
+  const steps = [];
+  if (state.view === 'search') {
+    steps.push(STEP.SEARCH_BUBBLE);
+    if (state.resultsCompacted && !state.card) {
+      steps.push(STEP.SEARCH_STRIP);
+      return steps;
+    }
+    if (state.card) appendCardSteps(steps, state.card, {overSearch: true});
+    return steps;
+  }
+  if (state.view === 'dock') {
+    steps.push(STEP.DOCK);
+    if (state.flipDockScreen === 'modes') steps.push(STEP.FLIP_MODES);
+    return steps;
+  }
+  if (state.card) appendCardSteps(steps, state.card, {overSearch: false});
+  return steps;
 }
 
-export function currentDepth(state) {
-  return state.entries.length;
+function appendCardSteps(steps, card, {overSearch}) {
+  // A card outside search has no Peek step: Back from Full closes it.
+  if (overSearch) steps.push(STEP.CARD_PEEK);
+  if (card.state === 'peek') return;
+  steps.push(STEP.CARD_FULL);
+  if (card.state === 'fullscreen') steps.push(STEP.CARD_FULLSCREEN);
 }
 
-export function topEntry(state) {
-  return state.entries[state.entries.length - 1] ?? null;
+export function stateAfterBack(state) {
+  const steps = openSteps(state);
+  if (steps.length === 0) return openingState();
+  const top = steps[steps.length - 1];
+  switch (top) {
+    case STEP.SEARCH_BUBBLE:
+      return openingState();
+    case STEP.SEARCH_STRIP:
+      return {...openingState(), view: 'search'};
+    case STEP.CARD_PEEK:
+      // Closing the card keeps search; a Flip card opened from the dock returns to it.
+      if (state.card?.fromDock) return {...openingState(), view: 'dock', flipDockScreen: 'list'};
+      return {...openingState(), view: 'search'};
+    case STEP.CARD_FULL:
+      if (steps.includes(STEP.CARD_PEEK)) return withCardState(state, 'peek');
+      return openingState();
+    case STEP.CARD_FULLSCREEN:
+      return withCardState(state, 'full');
+    case STEP.DOCK:
+      return openingState();
+    case STEP.FLIP_MODES:
+      return {...openingState(), view: 'dock', flipDockScreen: 'list'};
+    default:
+      return openingState();
+  }
 }
 
-export function topStep(state) {
-  return topEntry(state)?.step ?? null;
+function openingState() {
+  return {view: 'closed', flipDockScreen: null, resultsCompacted: false, card: null};
 }
 
-// Pushes one step away from the opening view. Does nothing when that step is already on top.
-export function enterStep(state, step, meta = {}) {
-  if (topStep(state) === step) return {state, changed: false};
+function withCardState(state, cardState) {
   return {
-    state: {entries: [...state.entries, {step, meta}]},
-    changed: true
+    ...state,
+    card: state.card ? {...state.card, state: cardState} : {state: cardState, fromDock: false}
   };
-}
-
-// Pops the top step: the state reached by Back. Returns null when already at the opening view.
-export function stepBack(state) {
-  if (state.entries.length === 0) return null;
-  const entry = state.entries[state.entries.length - 1];
-  return {
-    state: {entries: state.entries.slice(0, -1)},
-    entry
-  };
-}
-
-// Removes the top step when it matches, for a close performed by UI that must consume its history entry.
-export function closeTopStep(state, step) {
-  if (topStep(state) !== step) return {state, changed: false};
-  return {state: {entries: state.entries.slice(0, -1)}, changed: true};
-}
-
-// Replaces metadata on the top step without changing depth (e.g. remembering origin).
-export function updateTopMeta(state, meta) {
-  if (state.entries.length === 0) return state;
-  const entries = state.entries.slice();
-  entries[entries.length - 1] = {...entries[entries.length - 1], meta: {...entries[entries.length - 1].meta, ...meta}};
-  return {entries};
-}
-
-// Clears every step, for a jump straight to the opening view.
-export function clearSteps() {
-  return createHistorySteps();
-}
-
-// Finds how many top entries to close so that Back lands on the given history depth.
-export function stepsToCloseForDepth(state, depth) {
-  const current = currentDepth(state);
-  if (depth === null || depth < 0 || depth > current) return null;
-  return current - depth;
 }

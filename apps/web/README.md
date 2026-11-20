@@ -121,8 +121,8 @@ place, building or address result moves it only when the result is outside the f
 left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`), raising zoom to at least 15 when
 needed. Tapping an empty spot on the map while the mobile/Flip search bubble is open compacts results to the strip; the
 strip or system Back restores the bubble. On Mobile and Flip, system Back steps through open overlays (search, dock,
-Flip modes, strip, and card states) toward the opening view, and UI closes consume the matching history entries so Back
-never reopens a closed state.
+Flip modes, strip, and card states) toward the opening view, and UI closes keep history aligned so Back never reopens a
+closed state. Reloading while overlay history is present returns to the opening view.
 
 A chosen place's card opens as a bottom panel on Desktop (> 720 px), at most 300 px tall and clamped to 45dvh. Its frame
 stays put while `#card-layout` scrolls, so the × cannot scroll away. The card starts at the dock's right edge or, for

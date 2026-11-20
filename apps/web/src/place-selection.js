@@ -246,10 +246,6 @@ export class PlaceSelection {
     this.#state.renderedInsideKey = '';
     elementById('place-card').hidden = true;
     this.#interface?.resetCardState();
-    // If a Flip card came from the dock, closing it returns to the dock (issue #266).
-    if (this.#interface?.cardRestoreDock === false) {
-      // resetCardState cleared the flag; nothing to restore.
-    }
     this.#objectSelection?.clear();
     this.updatePlaceLayers();
     this.markCurrentResult();
