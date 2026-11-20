@@ -35,6 +35,20 @@ const SNAPSHOT_DATE = '17 Oct 2026';
 const readGeoJSON = path =>
   JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
 
+// One browser-side box reader for every desktop geometry assertion.
+const readBoxes = (page, selectors) =>
+  page.evaluate(namedSelectors => {
+    const box = selector => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const {x, y, width, height} = element.getBoundingClientRect();
+      return {x, y, width, height};
+    };
+    return Object.fromEntries(
+      Object.entries(namedSelectors).map(([name, selector]) => [name, box(selector)])
+    );
+  }, selectors);
+
 const cardPlace = (id, coordinates, extra = {}) => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates},
@@ -183,7 +197,14 @@ test(
       .poll(async () => {
         const point = await pointOnMap(page, places.features[7].geometry.coordinates);
         const card = await page.locator('#place-card').boundingBox();
-        if (!isMobile) return point.y < card.y - 8;
+        if (!isMobile) {
+          const panel = await page.locator('#desktop-search-panel').boundingBox();
+          return (
+            Math.abs(card.x - (panel.x + panel.width)) < 1 &&
+            point.x > panel.x + panel.width + 8 &&
+            point.y < card.y - 8
+          );
+        }
         const bubble = await page.locator('#search-bubble').boundingBox();
         return point.y > bubble.y + bubble.height && point.y < card.y - 8;
       })
@@ -282,7 +303,15 @@ test('desktop keeps the results open beside the place card', async ({page, isMob
   expect(card.x + card.width).toBeCloseTo(viewport.width, 0);
   expect(card.y + card.height).toBeCloseTo(viewport.height, 0);
   const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
+  expect(place.x).toBeGreaterThan(dock.x + dock.width + 8);
   expect(place.y).toBeLessThan(card.y - 8);
+  // The frame stays beside the dock while the inner layout scrolls the close control nowhere.
+  const scrolling = await page.evaluate(() => ({
+    frame: getComputedStyle(document.getElementById('place-card')).overflowY,
+    content: getComputedStyle(document.getElementById('card-layout')).overflowY
+  }));
+  expect(scrolling.frame).toBe('hidden');
+  expect(scrolling.content).toBe('auto');
   await page.screenshot({path: testInfo.outputPath('desktop-results-card.png')});
   await page.locator('#close-place').click();
   await expect(page.locator('#place-card')).toBeHidden();
@@ -300,25 +329,23 @@ test.describe('Desktop bottom card', () => {
     await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
     await settled(page);
     await expect(page.locator('#place-card')).toBeVisible();
-    const boxes = await page.evaluate(() => {
-      const box = selector => {
-        const element = document.querySelector(selector);
-        if (!element) return null;
-        const {x, y, width, height} = element.getBoundingClientRect();
-        return {x, y, width, height};
-      };
-      return {
-        card: box('#place-card'),
-        head: box('#place-head'),
-        location: box('.details-section--location-and-contacts'),
-        nearby: box('.details-section--nearby'),
-        close: box('#close-place'),
-        locate: box('#position-action'),
-        scale: box('.maplibregl-ctrl-scale'),
-        credit: box('.osm-credit-line')
-      };
+    const boxes = await readBoxes(page, {
+      card: '#place-card',
+      head: '#place-head',
+      subtitle: '#place-subtitle',
+      actions: '#point-actions',
+      location: '.details-section--location-and-contacts',
+      hours: '.details-section--opening-hours',
+      hourLabel: '.details-section--opening-hours .detail-row:first-of-type .detail-label',
+      hourValue: '.details-section--opening-hours .detail-row:first-of-type .detail-value',
+      nearby: '.details-section--nearby',
+      close: '#close-place',
+      locate: '#position-action',
+      scale: '.maplibregl-ctrl-scale',
+      credit: '.osm-credit-line'
     });
-    const {card, head, location, nearby, close, locate, scale, credit} = boxes;
+    const {card, head, subtitle, actions, location, hours, hourLabel, hourValue, nearby, close, locate, scale, credit} =
+      boxes;
     for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
     expect(card.x).toBeCloseTo(0, 0);
     expect(card.x + card.width).toBeCloseTo(1440, 0);
@@ -327,8 +354,15 @@ test.describe('Desktop bottom card', () => {
     expect(card.height).toBeLessThan(330);
     // Identity, contacts and hours/nearby occupy three side-by-side columns.
     expect(head.x + head.width).toBeLessThan(location.x);
-    expect(location.x + location.width).toBeLessThan(nearby.x);
+    expect(hours.x).toBeCloseTo(nearby.x, 0);
+    expect(hours.x).toBeGreaterThan(location.x + 8);
+    expect(nearby.y).toBeGreaterThan(hours.y + hours.height - 1);
     expect(nearby.y).toBeLessThan(card.y + card.height);
+    // Hours keep the weekday left and the time right-aligned in their column.
+    expect(hourLabel.x).toBeLessThan(hourValue.x);
+    expect(hours.x + hours.width - (hourValue.x + hourValue.width)).toBeLessThan(4);
+    // The Penpot gap separates the subtitle from From/To without moving the identity column.
+    expect(actions.y - (subtitle.y + subtitle.height)).toBeCloseTo(16, 0);
     expect(close.x).toBeGreaterThan(card.x + card.width - 80);
     expect(close.y).toBeLessThan(card.y + 60);
     for (const [name, control] of Object.entries({locate, scale, credit})) {
@@ -365,7 +399,12 @@ test.describe('Desktop bottom card', () => {
     await settled(page);
     await mapIdle(page);
     const card = await page.locator('#place-card').boundingBox();
+    const panel = await page.locator('#desktop-search-panel').boundingBox();
+    const locate = await page.locator('#position-action').boundingBox();
     const after = await pointOnMap(page, place.geometry.coordinates);
+    expect(card.x).toBeCloseTo(panel.x + panel.width, 0);
+    expect(after.x).toBeGreaterThan(panel.x + panel.width + 16);
+    expect(after.x).toBeLessThan(locate.x - 8);
     expect(after.y).toBeLessThan(card.y - 8);
     expect(after.y).toBeGreaterThan(96);
   });
@@ -395,35 +434,36 @@ test.describe('Desktop bottom card', () => {
     await page.locator('.result').first().click();
     await expect(page.locator('#place-card')).toBeVisible();
     await settled(page);
-    const panel = await page.locator('#desktop-search-panel').boundingBox();
-    const sidebar = await page.locator('.sidebar').boundingBox();
-    const card = await page.locator('#place-card').boundingBox();
-    const controls = await page.evaluate(() => {
-      const box = selector => {
-        const {x, y, width, height} = document.querySelector(selector).getBoundingClientRect();
-        return {x, y, width, height};
-      };
+    const boxes = await readBoxes(page, {
+      panel: '#desktop-search-panel',
+      sidebar: '.sidebar',
+      card: '#place-card',
+      scale: '.maplibregl-ctrl-scale',
+      credit: '.osm-credit-line'
+    });
+    const {panel, sidebar, card, scale, credit} = boxes;
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    const hits = await page.evaluate(() => {
       const hit = selector => {
         const {x, y, width, height} = document.querySelector(selector).getBoundingClientRect();
         const element = document.elementFromPoint(x + width / 2, y + height / 2);
         return element?.closest('.maplibregl-ctrl-bottom-left') !== null;
       };
-      return {
-        scale: box('.maplibregl-ctrl-scale'),
-        credit: box('.osm-credit-line'),
-        scaleHit: hit('.maplibregl-ctrl-scale'),
-        creditHit: hit('.osm-credit-line')
-      };
+      return {scale: hit('.maplibregl-ctrl-scale'), credit: hit('.osm-credit-line')};
     });
-    expect(card.x).toBeCloseTo(sidebar.x + sidebar.width, 0);
+    // The card joins the search panel's inset edge, and the closed dock paints nothing under it.
+    expect(card.x).toBeCloseTo(panel.x + panel.width, 0);
+    expect(sidebar.x + sidebar.width).toBeGreaterThan(card.x);
     expect(card.y + card.height).toBeCloseTo(800, 0);
-    expect(panel.y + panel.height).toBeGreaterThan(controls.scale.y);
-    for (const [name, control] of Object.entries({scale: controls.scale, credit: controls.credit})) {
+    expect(panel.y + panel.height).toBeGreaterThan(scale.y);
+    for (const [name, control] of Object.entries({scale, credit})) {
       expect(control.x, name).toBeGreaterThanOrEqual(panel.x + panel.width - 1);
       expect(control.y + control.height, name).toBeLessThan(card.y);
     }
-    expect(controls.scaleHit).toBe(true);
-    expect(controls.creditHit).toBe(true);
+    expect(hits.scale).toBe(true);
+    expect(hits.credit).toBe(true);
+    await expect(page.locator('#dock-content')).toBeHidden();
+    await expect(page.locator('.dock-footer')).toBeHidden();
   });
 
   test('scrolls tall content inside the bottom card without scrolling the page', async ({page, isMobile}) => {
@@ -448,16 +488,51 @@ test.describe('Desktop bottom card', () => {
     expect(bounds.y + bounds.height).toBeCloseTo(700, 0);
     expect(bounds.height).toBeGreaterThan(270);
     expect(bounds.height).toBeLessThan(330);
-    const overflow = await card.evaluate(element => ({
+    const scroller = page.locator('#card-layout');
+    const overflow = await scroller.evaluate(element => ({
       scrollHeight: element.scrollHeight,
       clientHeight: element.clientHeight
     }));
     expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
-    await card.evaluate(element => {
+    await scroller.evaluate(element => {
       element.scrollTop = 80;
     });
-    expect(await card.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect(await scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect(await card.evaluate(element => element.scrollTop)).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
+    const boxes = await readBoxes(page, {card: '#place-card', close: '#close-place'});
+    const {card: cardBox, close} = boxes;
+    expect(close.x + close.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+    expect(close.y).toBeGreaterThanOrEqual(cardBox.y);
+    expect(close.y + close.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+  });
+
+  test('clamps the card on a short desktop window and keeps the locate button readable', async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 900, height: 420});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await tapRenderedPlace(
+      page,
+      fixture.features[1].geometry.coordinates,
+      fixture.features[1].properties.id
+    );
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    const boxes = await readBoxes(page, {
+      search: '.search-bar',
+      locate: '#position-action',
+      card: '#place-card'
+    });
+    const {search, locate, card} = boxes;
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    expect(card.height).toBeGreaterThan(170);
+    expect(card.height).toBeLessThan(210);
+    expect(locate.y).toBeGreaterThan(search.y + search.height);
+    expect(locate.y + locate.height).toBeLessThan(card.y);
   });
 });
 
@@ -1876,25 +1951,21 @@ test.describe('Desktop search bar', () => {
     await page.locator('.result').first().click();
     await expect(page.locator('#place-card')).toBeVisible();
     await settled(page);
-    // Measure both the sidebar and the card using getBoundingClientRect.
-    const {sidebarRight, cardLeft, cardTop, cardWidth, cardHeight} = await page.evaluate(() => {
-      const sidebar = document.querySelector('.sidebar');
-      const card = document.getElementById('place-card');
-      return {
-        sidebarRight: sidebar.getBoundingClientRect().right,
-        cardLeft: card.getBoundingClientRect().left,
-        cardTop: card.getBoundingClientRect().top,
-        cardWidth: card.getBoundingClientRect().width,
-        cardHeight: card.getBoundingClientRect().height
-      };
+    const boxes = await readBoxes(page, {
+      panel: '#desktop-search-panel',
+      sidebar: '.sidebar',
+      card: '#place-card'
     });
-    // The card starts at the panel/dock edge and runs to the bottom-right corner.
-    expect(cardLeft).toBeGreaterThanOrEqual(sidebarRight - 1);
-    expect(cardLeft + cardWidth).toBeCloseTo(page.viewportSize().width, 0);
-    expect(cardTop + cardHeight).toBeCloseTo(page.viewportSize().height, 0);
+    const {panel, sidebar, card} = boxes;
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    // The joined panel is inset from the dock, so the card starts at the panel's right edge.
+    expect(card.x).toBeCloseTo(panel.x + panel.width, 0);
+    expect(sidebar.x + sidebar.width).toBeGreaterThan(card.x);
+    expect(card.x + card.width).toBeCloseTo(page.viewportSize().width, 0);
+    expect(card.y + card.height).toBeCloseTo(page.viewportSize().height, 0);
     // The card centre must not be covered by another element — walk up to find #place-card.
-    const cardCentreX = cardLeft + cardWidth / 2;
-    const cardCentreY = cardTop + cardHeight / 2;
+    const cardCentreX = card.x + card.width / 2;
+    const cardCentreY = card.y + card.height / 2;
     const isCardVisible = await page.evaluate(({x, y}) => {
       const el = document.elementFromPoint(x, y);
       return el?.closest('#place-card') !== null;
@@ -3981,7 +4052,8 @@ test('a place card never carries the previous building address', async ({page}) 
 });
 
 test('a bare building opens a card with its addresses, entrances and places inside the footprint', async ({
-  page
+  page,
+  isMobile
 }) => {
   const labels = readGeoJSON('building-labels.geojson');
   const buildings = readGeoJSON('buildings.geojson');
@@ -4074,6 +4146,24 @@ test('a bare building opens a card with its addresses, entrances and places insi
   await expect(card).toContainText('29 · Ulica Slobode 29');
   await expect(card).toContainText('Inside café · Café · Monday – Friday 08:00–18:00');
   await expect(card).toContainText('Coordinates: 42.');
+  if (!isMobile) {
+    const boxes = await readBoxes(page, {
+      addresses: '.details-section--addresses',
+      entrances: '.details-section--entrances',
+      inside: '.details-section--inside-this-building',
+      details: '.details-section--details'
+    });
+    const {addresses, entrances, inside, details} = boxes;
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    expect(entrances.x).toBeCloseTo(addresses.x, 0);
+    expect(entrances.y).toBeGreaterThan(addresses.y + addresses.height - 1);
+    expect(inside.x).toBeGreaterThan(addresses.x + 8);
+    expect(details.x).toBeCloseTo(inside.x, 0);
+    expect(details.y).toBeGreaterThan(inside.y + inside.height - 1);
+    expect(await page.locator('#place-details').evaluate(element => getComputedStyle(element).display)).toBe(
+      'grid'
+    );
+  }
   await expect
     .poll(() =>
       page.evaluate(

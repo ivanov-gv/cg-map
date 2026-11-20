@@ -218,7 +218,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 @media (min-width: 721px) {
   body {
     --desktop-bar-height: 60px;
-    --desktop-card-height: 300px;
+    --desktop-card-height: min(300px, 45dvh);
   }
 
   /* The badge is relative inside MapLibre's bottom-right control, so raise the control itself. */
@@ -227,9 +227,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     bottom: calc(var(--desktop-card-height) + 20px);
   }
   /* A long joined panel reaches this band, so keep the scale and credit to its right. */
-  body[data-view=dock]:has(#place-card:not([hidden])) .maplibregl-ctrl-bottom-left,
-  body:has(#place-card:not([hidden])):has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .maplibregl-ctrl-bottom-left {
+  body[data-view=dock]:has(#place-card:not([hidden])) .maplibregl-ctrl-bottom-left {
     left: var(--dock-width);
+  }
+  body:has(#place-card:not([hidden])):has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .maplibregl-ctrl-bottom-left {
+    left: calc(var(--dock-width) - var(--bar-inset));
   }
 
   .place-card {
@@ -240,7 +242,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     width: auto;
     height: var(--desktop-card-height);
     max-height: var(--desktop-card-height);
-    padding: 32px 64px 32px 32px;
+    padding: 0;
     border: 0;
     border-top: 1px solid var(--line);
     border-radius: 0;
@@ -248,31 +250,60 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     box-shadow: 0 -8px 24px #243f3718;
     container-type: inline-size;
     display: block;
-    scrollbar-width: none;
+    overflow: hidden;
   }
   .place-card > .close { position: absolute; float: none; top: 16px; right: 16px; margin: 0; }
+  /* The frame does not scroll, so the close button cannot move with the content. */
   #card-layout {
+    height: 100%;
+    padding: 32px 64px 32px 32px;
+    overflow-y: auto;
+    scrollbar-width: none;
     display: grid;
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
     grid-template-rows: auto auto 1fr;
     column-gap: 32px;
     align-content: start;
   }
+  #card-layout::-webkit-scrollbar { display: none; }
   #place-body { display: contents; }
-  #place-head { grid-column: 1; grid-row: 1; }
-  #point-actions { grid-column: 1; grid-row: 2; align-self: start; margin-bottom: 0; }
+  #place-head { grid-column: 1; grid-row: 1; align-self: start; }
+  #point-actions { grid-column: 1; grid-row: 2; align-self: start; margin-top: 16px; }
   #place-source { grid-column: 1; grid-row: 3; align-self: start; }
-  #place-details { grid-column: 2; grid-row: 1 / 4; column-count: 2; column-gap: 32px; }
-  .details-section { break-inside: avoid; }
-  /* Start at the panel edge; the panel itself stays full height beside the card. */
-  body[data-view=dock] .place-card,
-  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
-    left: var(--dock-width);
+  /* The sections grid spans the identity rows, so long sections cannot stretch the subtitle gap. */
+  #place-details {
+    grid-column: 2;
+    grid-row: 1 / 4;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 32px;
+    align-content: start;
   }
-  /* A narrow card cannot carry three columns; stack its sections in one readable column. */
-  @container (max-width: 760px) {
+  #place-details > .details-section { grid-column: 2; }
+  #place-details > .details-section--location-and-contacts,
+  #place-details > .details-section--addresses,
+  #place-details > .details-section--entrances { grid-column: 1; }
+  #place-details > .details-section--opening-hours .detail-row { justify-content: space-between; }
+  #place-details > .details-section--opening-hours .detail-value { text-align: right; }
+  /* The dock is full width; the joined search panel is inset by the bar gutter. */
+  body[data-view=dock] .place-card { left: var(--dock-width); }
+  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
+    left: calc(var(--dock-width) - var(--bar-inset));
+  }
+  /* A joined search panel replaces the dock's bottom area; never leave its paper behind the card. */
+  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .dock-footer {
+    display: none;
+  }
+  /* Below 780 px the card has room for identity plus one sections column. */
+  @container (max-width: 780px) {
+    #place-details { grid-template-columns: minmax(0, 1fr); }
+    #place-details > .details-section { grid-column: 1; }
+  }
+  /* Below 560 px identity and sections share one column. */
+  @container (max-width: 560px) {
     #card-layout { grid-template-columns: minmax(0, 1fr); }
-    #place-details { column-count: 1; }
+    #place-head, #point-actions, #place-source { grid-column: 1; grid-row: auto; }
+    #place-details { grid-column: 1; grid-row: auto; }
   }
 
   /* Desktop search bar: taller, with clear button and floating categories. */

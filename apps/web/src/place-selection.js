@@ -13,6 +13,12 @@ import {
 
 const selectionCameraDurationMilliseconds = 450;
 
+// Desktop scrolls the card frame's inner layout; other layouts scroll the card itself.
+function resetCardScroll() {
+  elementById('place-card').scrollTop = 0;
+  elementById('card-layout').scrollTop = 0;
+}
+
 // Owns one selection transaction: listing/point, map highlights, deferred camera framing and focus.
 // Directory and map getters always read current state, including data that arrives after construction.
 export class PlaceSelection {
@@ -290,7 +296,7 @@ export class PlaceSelection {
     elementById('search').blur();
     elementById('place-card').hidden = false;
     this.#interface.placeCardOpened();
-    elementById('place-card').scrollTop = 0;
+    resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();
     this.#objectSelection.selectPlace(this.#directory.markerKeysByPlaceId.get(properties.id));
@@ -366,6 +372,7 @@ export class PlaceSelection {
     // A map tap leaves search; choosing a row keeps the results beside the card.
     if (!reveal) this.#interface.close();
     this.#interface.placeCardOpened();
+    resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();
     this.#objectSelection.select(feature, point.coordinates);
