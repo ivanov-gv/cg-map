@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
+  isActiveChipVisible,
   isClearButtonVisible,
   isInFocusZone,
   searchBarState,
@@ -31,6 +32,30 @@ test('the clear button is Filled-only on Flip and Open as well as Filled elsewhe
   assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: false}), true);
   assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: true}), false);
   assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: true}), true);
+});
+
+test('the map chip replaces the category row only where search and the dock are closed', () => {
+  const onMap = {hasCategory: true, view: 'closed', cardState: undefined, cardHidden: true};
+  assert.equal(isActiveChipVisible({...onMap, isDesktopLayout: false}), true);
+  assert.equal(isActiveChipVisible({...onMap, isDesktopLayout: true}), false, 'desktop row stays visible');
+  assert.equal(isActiveChipVisible({...onMap, hasCategory: false}), false, 'All has no chip');
+  assert.equal(isActiveChipVisible({...onMap, view: 'dock'}), false, 'dock row shows it');
+  assert.equal(isActiveChipVisible({...onMap, view: 'search'}), false, 'bubble row shows it');
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'full'}),
+    false,
+    'a full card covers it'
+  );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'fullscreen'}),
+    false,
+    'a fullscreen card covers it'
+  );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),
+    true,
+    'a peek leaves it available'
+  );
 });
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {

@@ -74,6 +74,16 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* Short All label still needs a full-width touch target beside the longer category chips. */
 #categories button { min-width: 40px; min-height: 40px; flex-shrink: 0; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
 #categories button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: white; }
+/* The remove control is a sibling button so the chip stays a native button. Together they read as one green pill. */
+#categories button[aria-pressed=true].has-remove { border-radius: 22px 0 0 22px; padding-right: 6px; }
+#categories button.category-remove { min-width: 40px; min-height: 40px; flex-shrink: 0; margin-left: -7px; display: grid; place-items: center; padding: 0; border: 1px solid var(--green); border-radius: 0 22px 22px 0; background: var(--green); color: white; }
+#categories button.category-remove.is-placeholder { visibility: hidden; pointer-events: none; }
+.category-remove .icon { width: 16px; height: 16px; stroke-width: 2.4; }
+/* The map chip stands in for the category row on phones and Flip while search and the dock are closed. */
+.active-category-chip { position: fixed; top: calc(var(--visible-top) + var(--bar-inset) + 52px); left: var(--bar-inset); z-index: 6; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px 0 14px; border-radius: 20px; background: var(--green); color: white; box-shadow: 0 4px 20px #243f3718; pointer-events: auto; }
+.active-category-chip-label { min-width: 40px; min-height: 40px; padding: 0; background: transparent; color: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.active-category-chip-remove { min-width: 40px; min-height: 40px; display: grid; place-items: center; padding: 0; border-radius: 20px; background: transparent; color: inherit; }
+.active-category-chip-remove .icon { width: 16px; height: 16px; stroke-width: 2.4; }
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
@@ -324,6 +334,15 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     flex-direction: column;
     min-height: 0;
   }
+  /* The desktop category rows have their own padding; keep the joined × pill tight. */
+  #categories button[aria-pressed=true].has-remove { padding-right: 6px; }
+  #desktop-search-panel #categories button.category-remove {
+    padding: 0;
+    background: var(--green);
+    border-color: var(--green);
+    border-radius: 0 22px 22px 0;
+  }
+  .active-category-chip { display: none; }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
@@ -409,8 +428,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
    * separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
     gap: 5px;
-    padding-top: 2px;
-    padding-bottom: 0;
+    /* Reserve room for the × target's invisible 10 px extension, then cancel it so the row stays compact. */
+    padding-top: 7px;
+    padding-bottom: 10px;
+    margin-top: -5px;
+    margin-bottom: -10px;
   }
   body[data-view=dock] #categories button {
     min-height: 30px;
@@ -546,6 +568,31 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   /* When expanded, rotate the bar slightly to indicate open state. */
   body[data-view=dock] #footer-toggle[aria-expanded=true]::before {
     transform: rotate(180deg);
+  }
+  /* Flip keeps the visible pill compact while the transparent button is a 40 px touch target. */
+  body[data-view=dock] #categories button[aria-pressed=true].has-remove { padding-right: 4px; }
+  body[data-view=dock] #categories button.category-remove {
+    position: relative;
+    min-width: 40px;
+    min-height: 30px;
+    margin-left: -12px;
+    padding: 0;
+    border: 1px solid var(--green);
+    border-radius: 0 15px 15px 0;
+    background: var(--green);
+  }
+  body[data-view=dock] #categories button.category-remove::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    right: 0;
+    left: 0;
+    height: 40px;
+  }
+  /* Match the icon button's 3 px margin plus the bar's 1 px border. */
+  .active-category-chip {
+    top: calc(var(--visible-top) + var(--bar-inset) + 50px);
+    left: calc(var(--bar-inset) + 4px);
   }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

@@ -569,16 +569,63 @@ function registerCategoryControls() {
     button.addEventListener('click', () => selectCategory(key));
     container.append(button);
   }
+  // One shared × follows the active chip, so every category row has the same control.
+  const removeButton = document.createElement('button');
+  removeButton.id = 'remove-category';
+  removeButton.className = 'category-remove';
+  removeButton.type = 'button';
+  removeButton.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>';
+  removeButton.addEventListener('click', removeCategory);
+  // Keep one control in flow even for All: removing it would shrink scrollWidth and clamp the saved scroll position.
+  removeButton.classList.add('is-placeholder');
+  removeButton.setAttribute('aria-hidden', 'true');
+  removeButton.disabled = true;
+  removeButton.tabIndex = -1;
+  container.append(removeButton);
   syncCategoryButtons();
+}
+
+// Clearing a category must not scroll the shared row back to All.
+function removeCategory() {
+  const categoriesRow = elementById('categories');
+  const scrollLeft = categoriesRow.scrollLeft;
+  selectCategory(null);
+  categoriesRow.scrollLeft = scrollLeft;
 }
 
 function syncCategoryButtons() {
   const activeCategory = directoryState.activeCategory ?? ALL_CATEGORIES_KEY;
-  for (const button of elementById('categories').children) {
+  const categoryButtons = [...elementById('categories').querySelectorAll('button[data-category]')];
+  for (const button of categoryButtons) {
     const isActiveCategory = button.dataset.category === activeCategory;
     button.setAttribute('aria-pressed', String(isActiveCategory));
+    button.classList.toggle('has-remove', isActiveCategory && Boolean(activeCategory));
     if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
+  syncCategoryRemoveButton(categoryButtons, activeCategory);
+  mapState.interface?.syncActiveChip();
+}
+
+// Place the × beside the active chip in its normal row position; All has no ×.
+function syncCategoryRemoveButton(categoryButtons, activeCategory) {
+  const removeButton = elementById('remove-category');
+  const activeButton = categoryButtons.find(button => button.dataset.category === activeCategory);
+  if (!activeCategory || !activeButton) {
+    // Park the inert placeholder at the row's end so it does not sit between chips with All selected.
+    elementById('categories').append(removeButton);
+    removeButton.classList.add('is-placeholder');
+    removeButton.setAttribute('aria-hidden', 'true');
+    removeButton.removeAttribute('aria-label');
+    removeButton.disabled = true;
+    removeButton.tabIndex = -1;
+    return;
+  }
+  activeButton.after(removeButton);
+  removeButton.classList.remove('is-placeholder');
+  removeButton.removeAttribute('aria-hidden');
+  removeButton.setAttribute('aria-label', `Remove category ${categories[activeCategory]}`);
+  removeButton.disabled = false;
+  removeButton.tabIndex = 0;
 }
 
 function selectCategory(key) {
@@ -714,6 +761,8 @@ function initializeInterface() {
     onViewport: () => placeSelection.viewportChanged(),
     onCardSwipedAway: () => placeSelection.close(),
     onResultsClosed: () => placeSelection.close(),
+    onRemoveCategory: removeCategory,
+    activeCategoryLabel: () => categories[directoryState.activeCategory] ?? '',
     resultsLabel: () => {
       const query = elementById('search').value.trim();
       if (query) return `“${query}”`;

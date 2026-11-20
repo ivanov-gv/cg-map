@@ -128,6 +128,20 @@ the dock and its results open. It never closes the dock or the place card: dock 
 Button (currently the menu control; its cycle is issue #247). The categories row follows the same dock-open behavior as
 on mobile.
 
+### Active category chip (issue #268)
+
+An active category (never **All**) shows a × beside its label in every category row: the desktop floating row, the
+joined search panel, the dock and the phone bubble. The chip and its × are separate native buttons with accessible
+names; the × is named "Remove category _name_". Its touch target is at least 40 px on every device — on Flip the green
+pill stays compact and the invisible part of the target extends into the row's padding. The × returns to **All** without
+clearing the query and without losing the row's scroll position.
+
+When the row is off screen, one green chip stands in for it. On Mobile (≤ 720 px, excluding Flip) it sits 8 px below the
+search bar, aligned with its left edge, while the dock and search are closed; a tap on its label opens the Search Bubble
+with that category. On Flip it sits 8 px below the ☰ Icon Button, aligned with it; a tap opens the dock's list screen.
+The chip is hidden for **All**, while the bubble or dock is open (their own row shows the chip), and while a place card
+is Full or Fullscreen. Desktop adds no standalone chip: its floating row already shows the active chip in its place.
+
 ### Full-screen dock on Mobile and Flip
 
 On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire layout
@@ -171,12 +185,12 @@ active download may need more room for progress/cancellation, but its lower edge
 
 Retain all supported categories and directory/search semantics from the baseline. The category strip starts with an
 **All** chip, which is pressed whenever no category is selected; every device uses that same state. Pressing the active
-category again returns to **All** without clearing the query. Choosing a result opens that place's details beside the
-dock, and the dock and results stay open. Moving or closing the dock does not clear the query, select route endpoints,
-or start a route. While a chosen place's details are open, the result list keeps its order. Choosing From or To closes
-the dock or search, because the route controls replace them on the map. The category strip and the place card show no
-scrollbars; both still scroll. In windows 721–860 px wide the card narrows to keep the map controls reachable, leaving
-only a narrow strip of map.
+category again, or its ×, returns to **All** without clearing the query; the × keeps the row's scroll position. Choosing
+a result opens that place's details beside the dock, and the dock and results stay open. Moving or closing the dock does
+not clear the query, select route endpoints, or start a route. While a chosen place's details are open, the result list
+keeps its order. Choosing From or To closes the dock or search, because the route controls replace them on the map. The
+category strip and the place card show no scrollbars; both still scroll. In windows 721–860 px wide the card narrows to
+keep the map controls reachable, leaving only a narrow strip of map.
 
 The search field shows focus through its caret and a neutral change to the shared bar's border, not the generic focus
 ring. Other controls keep the ring.
@@ -288,6 +302,7 @@ and reduced motion.
 | UI-A12 | On desktop, choose a result and close its card.                                                                                                   | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                                                                                                          |
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock. |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                 |
+| UI-A15 | Pick a category, use its × in every row, then repeat with the dock and search closed on Mobile, and with the dock closed on Flip.                 | Every active chip (never All) has a named 40 px × that returns to All, keeps the query and preserves the row's scroll position; the standalone chip disappears. On Mobile it sits 8 px below the bar and opens the bubble; on Flip it sits under the icon button and opens the dock. It is hidden for All, with a panel open, and under a Full/Fullscreen card.   |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -295,8 +310,9 @@ selection visibility, the still camera during search, the focus zone, phone card
 card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, the mobile Search key
 blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
-exception (Filled-only × that cannot close the dock), the All chip and active-category return, seamless desktop row
-movement, the Locate button's box, computed radius/icon size and offsets at each device class, and the follow location
+exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
+and its × on desktop, phone and Flip, seamless desktop row movement, the Locate button's box, computed radius/icon size
+and offsets at each device class, and the follow location
 state machine (start, new fix moves camera, second click stops, drag stops, search result stops, denied shows recovery,
 no initial fix, button style). Pure unit tests cover the state and clear-button functions; no large fake DOM is built
 for browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical

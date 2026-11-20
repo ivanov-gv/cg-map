@@ -678,7 +678,7 @@ test.describe('categories row is a single row on desktop', () => {
     // Dock is closed, no query: floating chips are visible in the desktop search panel.
     const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
       const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button');
+      const buttons = categories.querySelectorAll('button[data-category]');
       const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
       return {
         tops: rectTops,
@@ -705,7 +705,7 @@ test.describe('categories row is a single row on desktop', () => {
 
     const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
       const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button');
+      const buttons = categories.querySelectorAll('button[data-category]');
       const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
       return {
         tops: rectTops,
@@ -732,7 +732,7 @@ test.describe('categories row is a single row on desktop', () => {
 
     const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
       const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button');
+      const buttons = categories.querySelectorAll('button[data-category]');
       const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
       return {
         tops: rectTops,
@@ -1548,8 +1548,8 @@ test.describe('Desktop search bar', () => {
     // The panel carries data-state="empty" in floating mode.
     await expect(panel).toHaveAttribute('data-state', 'empty');
     // All leads the categories inside the panel (single source of truth).
-    await expect(panel.locator('#categories button')).toHaveCount(6);
-    await expect(panel.locator('#categories button').first()).toHaveAttribute('aria-label', 'All categories');
+    await expect(panel.locator('#categories button[data-category]')).toHaveCount(6);
+    await expect(panel.locator('#categories button[data-category]').first()).toHaveAttribute('aria-label', 'All categories');
     // The dock should be closed.
     await expect(page.locator('#dock-content')).toBeHidden();
   });
@@ -1581,7 +1581,7 @@ test.describe('Desktop search bar', () => {
     const background = await panel.evaluate(el => getComputedStyle(el).backgroundColor);
     expect(background).toBe('rgba(0, 0, 0, 0)');
     // Each category chip floats with its own box-shadow.
-    const chipShadow = await panel.locator('#categories button').first().evaluate(
+    const chipShadow = await panel.locator('#categories button[data-category]').first().evaluate(
       el => getComputedStyle(el).boxShadow
     );
     expect(chipShadow).not.toBe('none');
@@ -1649,7 +1649,7 @@ test.describe('Desktop search bar', () => {
     await expect(page.locator('#clear-search')).toBeFocused();
     // Tab to the first category chip in the desktop search panel.
     await page.keyboard.press('Tab');
-    const firstChip = page.locator('#desktop-search-panel #categories button').first();
+    const firstChip = page.locator('#desktop-search-panel #categories button[data-category]').first();
     await expect(firstChip).toBeFocused();
   });
 
@@ -1938,7 +1938,7 @@ test.describe('Mobile search bar', () => {
     await openMenu(page);
     // All and the five categories become visible when the dock opens.
     await expect(page.locator('#categories')).toBeVisible();
-    await expect(page.locator('#categories button')).toHaveCount(6);
+    await expect(page.locator('#categories button[data-category]')).toHaveCount(6);
   });
 
   test('touch targets are at least 40 px on mobile', async ({page}) => {
@@ -1954,7 +1954,7 @@ test.describe('Mobile search bar', () => {
     expect(clearButton.height).toBeGreaterThanOrEqual(40);
     // Open the dock and measure a category chip.
     await page.locator('#menu-toggle').click();
-    const categoryChip = await page.locator('#categories button').first().boundingBox();
+    const categoryChip = await page.locator('#categories button[data-category]').first().boundingBox();
     expect(categoryChip.width).toBeGreaterThanOrEqual(40);
     expect(categoryChip.height).toBeGreaterThanOrEqual(40);
   });
@@ -2724,8 +2724,9 @@ test.describe('Flip dock minimizable footer', () => {
     });
 
     // Issue #159, #161: at least 3 .result rows must be fully visible between
-    // #categories bottom and .dock-footer top when minimized.
-    // Each result top >= categories bottom and bottom <= footer-toggle top.
+    // the compact category chips and the footer handle when minimized.
+    // The chips' invisible target padding must not move the results down.
+    // Each result top >= chip bottom and bottom <= footer-toggle top.
     // The last visible row must leave at least 4 px above the handle.
     test(`minimized: 3 results fully visible between categories and handle (${name})`,
       {tag: '@phone'}, async ({page}) => {
@@ -2735,14 +2736,15 @@ test.describe('Flip dock minimizable footer', () => {
         await openMenu(page);
 
         const resultPositions = await page.evaluate(() => {
-          const categoriesBottom = document.querySelector('#categories').getBoundingClientRect().bottom;
+          const categoryBottom = document.querySelector('#categories button[data-category]').getBoundingClientRect().bottom;
+          const resultsTop = document.getElementById('results').getBoundingClientRect().top;
           const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
           const toggleTop = document.querySelector('#footer-toggle').getBoundingClientRect().top;
           const results = document.querySelectorAll('.result');
           const fullyVisible = [];
           for (const row of results) {
             const rect = row.getBoundingClientRect();
-            if (rect.top >= categoriesBottom && rect.bottom <= toggleTop) {
+            if (rect.top >= categoryBottom && rect.bottom <= toggleTop) {
               fullyVisible.push({top: rect.top, bottom: rect.bottom});
             }
           }
@@ -2750,8 +2752,9 @@ test.describe('Flip dock minimizable footer', () => {
             ? fullyVisible[fullyVisible.length - 1].bottom
             : 0;
           const spareAboveHandle = toggleTop - lastVisibleBottom;
-          return {categoriesBottom, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
+          return {categoryBottom, resultsTop, footerTop, toggleTop, count: fullyVisible.length, rows: fullyVisible, spareAboveHandle};
         });
+        expect(Math.abs(resultPositions.resultsTop - resultPositions.categoryBottom)).toBeLessThanOrEqual(1);
         expect(resultPositions.count, 'at least 3 results fully visible').toBeGreaterThanOrEqual(3);
         expect(resultPositions.spareAboveHandle, 'at least 4 px spare above handle').toBeGreaterThanOrEqual(4);
       });
@@ -3454,5 +3457,229 @@ test.describe('Search Bar states and All category', () => {
       'aria-pressed',
       'true'
     );
+  });
+});
+
+test.describe('Active category chip', () => {
+  const shopsButton = page => page.locator('#categories button[data-category="shops"]');
+  const allButton = page => page.locator('#categories button[data-category=""]');
+  const rowRemove = page => page.locator('#remove-category');
+  const mapChip = page => page.locator('#active-category-chip');
+  const chipRemove = page => page.locator('#active-category-chip-remove');
+
+  test('desktop × on the active chip unsets the category and keeps the query', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await closeMenu(page);
+    await page.locator('#search').fill('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    const shops = shopsButton(page);
+    await shops.click();
+    await expect(shops).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.result')).toHaveCount(3);
+    await expect(rowRemove(page)).toBeVisible();
+    await expect(rowRemove(page)).toHaveAttribute('aria-label', 'Remove category Shops');
+    expect(await shops.evaluate(element => element.tagName)).toBe('BUTTON');
+    expect(await rowRemove(page).evaluate(element => element.tagName)).toBe('BUTTON');
+    const shopBox = await shops.boundingBox();
+    const removeBox = await rowRemove(page).boundingBox();
+    expect(shopBox.height).toBeGreaterThanOrEqual(40);
+    expect(removeBox.width).toBeGreaterThanOrEqual(40);
+    expect(removeBox.height).toBeGreaterThanOrEqual(40);
+    const scrollLeft = await page.locator('#categories').evaluate(element => element.scrollLeft);
+
+    await rowRemove(page).click();
+    await expect(rowRemove(page)).toBeHidden();
+    await expect(shops).toHaveAttribute('aria-pressed', 'false');
+    await expect(allButton(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#search')).toHaveValue('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+    expect(await page.locator('#categories').evaluate(element => element.scrollLeft)).toBe(scrollLeft);
+
+    const lastCategory = page.locator('#categories button[data-category]').last();
+    await lastCategory.click();
+    await expect(lastCategory).toHaveAttribute('aria-pressed', 'true');
+    await expect(rowRemove(page)).toBeVisible();
+    await page.locator('#categories').evaluate(element => {
+      element.scrollLeft = element.scrollWidth;
+    });
+    const maxScrollLeft = await page.locator('#categories').evaluate(element => element.scrollLeft);
+    expect(maxScrollLeft).toBeGreaterThan(0);
+
+    await rowRemove(page).click();
+    await expect(rowRemove(page)).toBeHidden();
+    expect(await page.locator('#categories').evaluate(element => element.scrollLeft)).toBe(maxScrollLeft);
+  });
+
+  test('phone chip appears under the header and × restores all places', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await openMenu(page);
+    await shopsButton(page).click();
+    await expect(page.locator('.result')).toHaveCount(3);
+    await expect(mapChip(page)).toBeHidden();
+    await closeMenu(page);
+
+    await expect(mapChip(page)).toBeVisible();
+    const bar = await page.locator('.search-bar').boundingBox();
+    const chip = await mapChip(page).boundingBox();
+    expect(chip.x).toBe(bar.x);
+    expect(chip.y).toBe(bar.y + bar.height + 8);
+    expect(chip.height).toBe(40);
+    expect(await mapChip(page).evaluate(element => getComputedStyle(element).borderRadius)).toBe('20px');
+    await expect(page.locator('#active-category-chip-label')).toHaveText('Shops');
+    await expect(chipRemove(page)).toHaveAttribute('aria-label', 'Remove category Shops');
+    expect(await page.locator('#active-category-chip-label').evaluate(element => element.tagName)).toBe('BUTTON');
+    expect(await chipRemove(page).evaluate(element => element.tagName)).toBe('BUTTON');
+    const labelBox = await page.locator('#active-category-chip-label').boundingBox();
+    expect(labelBox.width).toBeGreaterThanOrEqual(40);
+    expect(labelBox.height).toBeGreaterThanOrEqual(40);
+    const removeBox = await chipRemove(page).boundingBox();
+    expect(removeBox.width).toBeGreaterThanOrEqual(40);
+    expect(removeBox.height).toBeGreaterThanOrEqual(40);
+
+    await chipRemove(page).click();
+    await expect(mapChip(page)).toBeHidden();
+    await openMenu(page);
+    await expect(allButton(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.result')).toHaveCount(6);
+  });
+
+  test('phone chip opens the bubble with its category and hides while panels are open', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await openMenu(page);
+    await shopsButton(page).click();
+    await closeMenu(page);
+    await expect(mapChip(page)).toBeVisible();
+
+    await page.locator('#active-category-chip-label').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(mapChip(page)).toBeHidden();
+    await expect(shopsButton(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(rowRemove(page)).toBeVisible();
+    await expect(page.locator('.result')).toHaveCount(3);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(mapChip(page)).toBeVisible();
+    await openMenu(page);
+    await expect(mapChip(page)).toBeHidden();
+    await expect(rowRemove(page)).toBeVisible();
+  });
+
+  test('phone chip hides for All and behind a full place card', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await expect(mapChip(page)).toBeHidden();
+    await openMenu(page);
+    await shopsButton(page).click();
+    await closeMenu(page);
+    await expect(mapChip(page)).toBeVisible();
+
+    const place = nearbyPlaces.features[0];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
+    await expect(mapChip(page)).toBeHidden();
+    await closeCard(page);
+    await expect(page.locator('#place-card')).toBeHidden();
+    await expect(mapChip(page)).toBeVisible();
+
+    await openMenu(page);
+    await allButton(page).click();
+    await closeMenu(page);
+    await expect(mapChip(page)).toBeHidden();
+  });
+
+  test('flip chip sits under the icon button and a tap opens the dock', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await withFlipViewport(page, async () => {
+      await expect(mapChip(page)).toBeHidden();
+      await openMenu(page);
+      await shopsButton(page).click();
+      await closeMenu(page);
+
+      await expect(mapChip(page)).toBeVisible();
+      const menu = await page.locator('#menu-toggle').boundingBox();
+      const chip = await mapChip(page).boundingBox();
+      expect(chip.x).toBe(menu.x);
+      expect(chip.y).toBe(menu.y + menu.height + 8);
+      expect(chip.height).toBe(40);
+
+      await page.locator('#active-category-chip-label').click();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-content')).toBeVisible();
+      await expect(mapChip(page)).toBeHidden();
+      await expect(rowRemove(page)).toBeVisible();
+
+      await closeMenu(page);
+      await expect(mapChip(page)).toBeVisible();
+      await chipRemove(page).click();
+      await expect(mapChip(page)).toBeHidden();
+      await openMenu(page);
+      await expect(allButton(page)).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
+  test('flip keeps three results visible with the active category ×', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlacesFixture('flip-active')}));
+    await atViewport(page, {width: 374, height: 241}, async () => {
+      await ready(page);
+      await openMenu(page);
+      await shopsButton(page).click();
+      await expect(page.locator('.result')).toHaveCount(4);
+
+      const geometry = await page.evaluate(() => {
+        const activeChip = document.querySelector('#categories button[aria-pressed="true"]');
+        const removeButton = document.getElementById('remove-category');
+        const chipBox = activeChip.getBoundingClientRect();
+        const removeBox = removeButton.getBoundingClientRect();
+        const resultsTop = document.getElementById('results').getBoundingClientRect().top;
+        const toggleTop = document.getElementById('footer-toggle').getBoundingClientRect().top;
+        const visibleResults = [...document.querySelectorAll('.result')].filter(result => {
+          const box = result.getBoundingClientRect();
+          return box.top >= chipBox.bottom && box.bottom <= toggleTop;
+        }).length;
+        const targetStyle = getComputedStyle(removeButton, '::before');
+        const targetCenterX = removeBox.x + removeBox.width / 2;
+        return {
+          chipHeight: chipBox.height,
+          removeWidth: removeBox.width,
+          removeHeight: removeBox.height,
+          targetTop: targetStyle.top,
+          targetHeight: targetStyle.height,
+          hitBelow: document.elementFromPoint(targetCenterX, removeBox.bottom + 9)?.id,
+          resultsTop,
+          chipBottom: chipBox.bottom,
+          visibleResults
+        };
+      });
+      expect(geometry.chipHeight).toBeLessThanOrEqual(30);
+      expect(geometry.removeWidth).toBeGreaterThanOrEqual(40);
+      expect(geometry.removeHeight).toBeLessThanOrEqual(30);
+      expect(geometry.targetTop).toBe('-1px');
+      expect(geometry.targetHeight).toBe('40px');
+      expect(geometry.hitBelow).toBe('remove-category');
+      expect(Math.abs(geometry.resultsTop - geometry.chipBottom)).toBeLessThanOrEqual(1);
+      expect(geometry.visibleResults).toBeGreaterThanOrEqual(3);
+    });
   });
 });
