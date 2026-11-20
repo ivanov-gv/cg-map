@@ -574,7 +574,7 @@ test.describe('Desktop bottom card', () => {
 });
 
 test(
-  'phone place card peeks under results and swipes through full and closed',
+  'phone place card from search steps through peek, full, fullscreen and back',
   {tag: '@phone'},
   async ({page, isMobile}, testInfo) => {
     test.skip(!isMobile, 'phone layout');
@@ -583,6 +583,135 @@ test(
     const touch = await page.context().newCDPSession(page);
     const swipe = async (deltaY, selector = '#place-card') => {
       const start = await page.locator(selector).boundingBox();
+      const screenX = start.x + start.width / 2;
+      const screenY = selector === '#place-card' ? start.y + 30 : start.y + start.height / 2;
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{x: screenX, y: screenY}]
+      });
+      for (let step = 1; step <= 5; step++)
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5}]
+        });
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    };
+    const card = page.locator('#place-card');
+    const cardSettled = async state => {
+      await expect(card).toHaveAttribute('data-state', state);
+      await expect.poll(() => card.evaluate(element => element.getAnimations().length)).toBe(0);
+    };
+    const viewport = page.viewportSize();
+    const searchBar = page.locator('.search-bar');
+    const locate = page.locator('#position-badge');
+
+    await page.locator('#search').click();
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    // Read in the click's own task: the card must open as a peek, not shrink down from full height.
+    const opening = await page.locator('.result', {hasText: 'Nearby place 0'}).evaluate(row => {
+      row.click();
+      const element = document.getElementById('place-card');
+      return {height: element.getBoundingClientRect().height, animations: element.getAnimations().length};
+    });
+    expect(opening.animations).toBe(0);
+    expect(opening.height).toBeLessThan(100);
+
+    await cardSettled('peek');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(page.locator('#results-strip')).toBeHidden();
+    const peek = await card.boundingBox();
+    expect(peek.height).toBeLessThan(100);
+    expect(peek.x).toBeLessThanOrEqual(12);
+    expect(peek.x + peek.width).toBeGreaterThanOrEqual(viewport.width - 12);
+    await expect(page.locator('#place-body')).toHaveJSProperty('inert', true);
+    const clippedBody = await page.locator('#place-body').boundingBox();
+    expect(clippedBody.y).toBeGreaterThanOrEqual(peek.y + peek.height - 2);
+    const closeBox = await page.locator('#close-place').boundingBox();
+    expect(closeBox.width).toBeLessThanOrEqual(1);
+    await expect(locate).toBeVisible();
+    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(peek.y);
+    await page.screenshot({path: testInfo.outputPath('phone-peek.png')});
+
+    // Peek -> Full.
+    await swipe(-160);
+    await cardSettled('full');
+    await expect(page.locator('#search-bubble')).toBeHidden();
+    await expect(page.locator('#results-strip')).toBeVisible();
+    await expect(page.locator('#results-strip-label')).toHaveText('Shops');
+    await expect(searchBar).toBeVisible();
+    await expect(locate).toBeVisible();
+    await settled(page);
+    const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
+    const strip = await page.locator('#results-strip').boundingBox();
+    const full = await card.boundingBox();
+    expect(place.y).toBeGreaterThan(strip.y + strip.height);
+    expect(place.y).toBeLessThan(full.y);
+    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(full.y);
+    await page.screenshot({path: testInfo.outputPath('phone-full.png')});
+
+    // Full -> Fullscreen (swipe up) hides search and the map, and covers the viewport.
+    await swipe(-180);
+    await cardSettled('fullscreen');
+    await expect(searchBar).toBeHidden();
+    await expect(page.locator('#results-strip')).toBeHidden();
+    await expect(locate).toBeHidden();
+    const fullScreen = await card.boundingBox();
+    expect(fullScreen.x).toBe(0);
+    expect(fullScreen.y).toBe(0);
+    expect(fullScreen.width).toBe(viewport.width);
+    expect(fullScreen.height).toBeGreaterThanOrEqual(viewport.height - 1);
+    await page.screenshot({path: testInfo.outputPath('phone-fullscreen.png')});
+
+    // Fullscreen -> Full (swipe down) restores the strip.
+    await swipe(180);
+    await cardSettled('full');
+    await expect(searchBar).toBeVisible();
+    await expect(page.locator('#results-strip')).toBeVisible();
+    await expect(locate).toBeVisible();
+
+    // Tapping the strip brings the list back with the card in Peek.
+    await page.locator('#results-strip').click();
+    await cardSettled('peek');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+
+    // The handle steps the card up: Peek -> Full -> Fullscreen.
+    await page.locator('#card-handle').click();
+    await cardSettled('full');
+    await page.locator('#card-handle').click();
+    await cardSettled('fullscreen');
+
+    // Fullscreen -> Full -> Peek (swipe down steps back).
+    await swipe(180);
+    await cardSettled('full');
+    await swipe(140);
+    await cardSettled('peek');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+
+    // A short full card also swipes from its body, not only the header.
+    await page.locator('#card-handle').click();
+    await cardSettled('full');
+    await swipe(120, '#place-details');
+    await cardSettled('peek');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+
+    // Peek -> closed, leaving search open.
+    await swipe(80);
+    await expect(card).toBeHidden();
+    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+  }
+);
+
+test(
+  'phone map pick opens the card in Full and swipes through Fullscreen and closed',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const swipe = async deltaY => {
+      const start = await page.locator('#place-card').boundingBox();
       const screenX = start.x + start.width / 2;
       const screenY = start.y + 30;
       await touch.send('Input.dispatchTouchEvent', {
@@ -601,62 +730,7 @@ test(
       await expect(card).toHaveAttribute('data-state', state);
       await expect.poll(() => card.evaluate(element => element.getAnimations().length)).toBe(0);
     };
-    await page.locator('#search').click();
-    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
-    // Read in the click's own task: the card must open as a peek, not shrink down from full height.
-    const opening = await page.locator('.result', {hasText: 'Nearby place 0'}).evaluate(row => {
-      row.click();
-      const element = document.getElementById('place-card');
-      return {height: element.getBoundingClientRect().height, animations: element.getAnimations().length};
-    });
-    expect(opening.animations).toBe(0);
-    expect(opening.height).toBeLessThan(100);
 
-    await cardSettled('peek');
-    await expect(page.locator('#search-bubble')).toBeVisible();
-    await expect(page.locator('#results-strip')).toBeHidden();
-    const peek = await card.boundingBox();
-    expect(peek.height).toBeLessThan(100);
-    await expect(page.locator('#place-body')).toHaveJSProperty('inert', true);
-    const clippedBody = await page.locator('#place-body').boundingBox();
-    // Allows the 1px border and sub-pixel text layout.
-    expect(clippedBody.y).toBeGreaterThanOrEqual(peek.y + peek.height - 2);
-    const closeBox = await page.locator('#close-place').boundingBox();
-    expect(closeBox.width).toBeLessThanOrEqual(1);
-    await page.screenshot({path: testInfo.outputPath('phone-peek.png')});
-
-    await swipe(-160);
-    await cardSettled('full');
-    await expect(page.locator('#search-bubble')).toBeHidden();
-    await expect(page.locator('#results-strip')).toBeVisible();
-    await expect(page.locator('#results-strip-label')).toHaveText('Shops');
-    await expect(page.locator('#point-from')).toBeVisible();
-    await settled(page);
-    const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
-    const strip = await page.locator('#results-strip').boundingBox();
-    const full = await card.boundingBox();
-    expect(place.y).toBeGreaterThan(strip.y + strip.height);
-    expect(place.y).toBeLessThan(full.y);
-    await page.screenshot({path: testInfo.outputPath('phone-full.png')});
-
-    await page.locator('#results-strip').click();
-    await cardSettled('peek');
-    await expect(page.locator('#search-bubble')).toBeVisible();
-    await page.locator('#card-handle').click();
-    await cardSettled('full');
-
-    // A short full card also swipes from its body, not only the header.
-    await swipe(120, '#place-details');
-    await cardSettled('peek');
-    await expect(page.locator('#search-bubble')).toBeVisible();
-    await swipe(60);
-    await expect(card).toBeHidden();
-    await expect(page.locator('#search-bubble')).toBeVisible();
-    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
-
-    // With no search behind it, one swipe closes the card.
-    await page.keyboard.press('Escape');
-    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
     await tapRenderedPlace(
       page,
       nearbyPlaces.features[0].geometry.coordinates,
@@ -664,11 +738,79 @@ test(
     );
     await cardSettled('full');
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
-    // The handle has nothing to fold down to here.
+    await expect(page.locator('#results-strip')).toBeHidden();
+    await expect(page.locator('#search-bubble')).toBeHidden();
+    const locate = page.locator('#position-badge');
+    await expect(locate).toBeVisible();
+    const full = await card.boundingBox();
+    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(full.y);
+
+    // Full -> Fullscreen (tap the handle steps up, no search behind).
     await page.locator('#card-handle').click();
-    await expect(card).toHaveAttribute('data-state', 'full');
-    await swipe(120);
+    await cardSettled('fullscreen');
+    await expect(page.locator('.search-bar')).toBeHidden();
+    await expect(locate).toBeHidden();
+
+    // Fullscreen -> Full.
+    await swipe(180);
+    await cardSettled('full');
+    await expect(page.locator('.search-bar')).toBeVisible();
+
+    // Full -> closed (no Peek when opened from the map).
+    await swipe(140);
     await expect(card).toBeHidden();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  }
+);
+
+test(
+  'phone results strip names the active category and query',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const swipeUp = async () => {
+      const start = await page.locator('#place-card').boundingBox();
+      const screenX = start.x + start.width / 2;
+      const screenY = start.y + 30;
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: screenX, y: screenY}]});
+      for (let step = 1; step <= 5; step++)
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{x: screenX, y: screenY - (160 * step) / 5}]
+        });
+      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    };
+    const card = page.locator('#place-card');
+    const stripLabel = page.locator('#results-strip-label');
+
+    await page.locator('#search').click();
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    await page.locator('#search').fill('Nearby');
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await swipeUp();
+    await expect(card).toHaveAttribute('data-state', 'full');
+    await expect(stripLabel).toHaveText('Shops · “Nearby”');
+
+    await page.locator('#results-strip').click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await page.locator('#categories').getByRole('button', {name: 'All categories'}).click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await swipeUp();
+    await expect(stripLabel).toHaveText('All · “Nearby”');
+
+    await page.locator('#results-strip').click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await page.locator('#clear-search').click();
+    await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await swipeUp();
+    await expect(stripLabel).toHaveText('Shops');
   }
 );
 

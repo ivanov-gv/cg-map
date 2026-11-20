@@ -270,19 +270,25 @@ reveals it by the focus-zone rule. Do not relocate the geographic marker. A chos
 search UI, keyboard, or card. More distant matches may require choosing a result rather than forcing every marker into
 one tiny view. An empty search result must not create a fictitious marker or ring.
 
-Choosing a result keeps the results open and shows the place card minimized at the bottom of the visible screen, showing
-only its header. Dragging or scrolling the card up, or activating its header, opens the full card and shrinks the
-results to one strip under the search bar. The strip names the active query or category and brings the list back.
-Swiping down from the full card returns to the minimized card with the results; swiping down from the minimized card
-closes it. A card with no search behind it, such as one opened from a map object, closes on one swipe. The phone card
-has no visible close button; one remains for screen readers. A card long enough to scroll keeps vertical swipes on its
-body for scrolling, so it is swiped from its header.
+On phones (not Flip), the place card is screen-wide with 12 px gutters and has three steps: **Peek**, **Full**, and
+**Fullscreen**. A result chosen from search or the dock keeps the results open and shows the card in Peek, with only its
+header visible. Pulling up, or tapping the header or handle, steps the card up: Peek to Full, and Full to Fullscreen.
+Swiping down steps it back. Full keeps the card above the lower map and shrinks the results to a strip under the search
+bar; the strip names the active category and query (for example `Cafés · “kafa”`, `All · “kafa”`, or just the category
+with no query) and a tap on it brings the list back with the card in Peek. Fullscreen covers the whole screen, edge to
+edge with safe-area padding and no rounded outer corners at the top edge, and hides search and the map. Swiping down
+from Fullscreen returns to Full. From Peek, swiping down closes the card. A place picked on the map opens in Full with
+no search behind it; swiping down from Full closes it. The Locate button sits above the card in Peek and Full and is
+hidden in Fullscreen, and the focus zone uses the visible map above the card. The phone card has no visible close
+button; one remains for screen readers. A card long enough to scroll keeps vertical swipes on its body for scrolling, so
+it is swiped from its header.
 
 The burger explicitly opens the existing full dock, retaining the query and category. Focusing or typing in search keeps
-the dock open. Choosing a result switches from the dock to the compact view, with the same minimized card and results
-and the query and category kept. Result selection and keyboard dismissal must keep the relevant place visible. This is a
-mobile search exception to the dock composition, not a replacement of the burger menu with a bottom sheet. The category
-strip has no scrollbar: it scrolls by touch or mouse wheel and brings the active category into view.
+the dock open. Choosing a result switches from the dock to the compact view (search bubble with the same category and
+query and the card in Peek). The menu button brings back the same dock with query and category kept. Result selection
+and keyboard dismissal must keep the relevant place visible. This is a mobile search exception to the dock composition,
+not a replacement of the burger menu with a bottom sheet. The category strip has no scrollbar: it scrolls by touch or by
+mouse wheel and brings the active category into view.
 
 ## UI-04 Bottom controls and wording
 
@@ -342,7 +348,7 @@ and reduced motion.
 | UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                                         | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                                                                                                            |
 | UI-A09 | On a phone, focus search, type, select different results, and open/dismiss the keyboard; then use the burger and search from the dock.            | Search started with the dock closed leaves it closed, the bubble is at most half the visible viewport, and a selected marker stays uncovered once the keyboard is dismissed. Burger opens the full dock with query/category retained; search stays in it until a result is chosen.                                                                                |
 | UI-A10 | Open search, type, and choose categories; then choose results inside and outside the focus zone.                                                  | Only choosing a result outside the inner 75% of the uncovered map moves the camera, unless it must zoom in to street level. The result list does not reorder while any card is open.                                                                                                                                                                              |
-| UI-A11 | On a phone, choose a result, swipe the card up and down, use the strip, and swipe it closed.                                                      | Results and minimized card share the screen; the full card reduces results to the strip; swiping steps back and closes. Closing leaves results open and the camera still; other steps move it only if the place leaves the zone.                                                                                                                                  |
+| UI-A11 | On a phone, choose a result and pick a place on the map; swipe or tap the card through every step and use the strip.                              | Peek/Full/Fullscreen step up and back; Full shows the named results strip and Fullscreen hides search and the map. A search or dock result starts in Peek; a map pick starts in Full and swiping down from Full closes it. The Locate button stays above the card in Peek and Full and is hidden in Fullscreen.                                                   |
 | UI-A12 | On desktop, choose a result and close its card.                                                                                                   | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                                                                                                          |
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock. |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                 |
@@ -350,13 +356,14 @@ and reduced motion.
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
-selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, desktop
-card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, preserving a
-map-picked card when desktop focus opens results, a floating chip opening those results, × closing a card and the
-desktop dock, the Flip exception (Filled-only × that cannot close the dock), the All chip and active-category return,
-seamless desktop row movement, selected-card sections, marker and bare-building picking, gesture cancellation and close
-continuity, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
-result stops, denied shows recovery, no initial fix, button style).
+selection visibility, the still camera during search, the focus zone, phone card Peek/Full/Fullscreen transitions with
+simulated touch, results strip labels and tap, map picks opening in Full, the Locate button above the card, desktop card
+and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, preserving a map-picked
+card when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the
+Flip exception (Filled-only × that cannot close the dock), the All chip and active-category return, seamless desktop row
+movement, selected-card sections, marker and bare-building picking, gesture cancellation and close continuity, and the
+follow location state machine (start, new fix moves camera, second click stops, drag stops, search result stops, denied
+shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
 buildings and addresses, that unchosen visible matches stay green with no red preview—in-view building outlines and
 drawn place markers stay green, and a below-threshold place gains its ring only when its marker is drawn—that choosing
@@ -380,13 +387,13 @@ cumulative icons do not prove a production placement solution. Paid visibility i
 > results scroll; options stay anchored at the bottom regardless of result count. Omit the count, “nearest first,” and
 > Reset row. Tapping the active category again removes that category filter.
 >
-> On phones, search opens a results bubble instead of the full dock. Fill the area below the header down to the visible
-> screen's midpoint, accounting for the keyboard, with readable result rows. Keep categories fixed above the scrolling
-> result list. Keep the map interactive and a selected marker visible outside the bubble. Searching does not move the
-> map; choosing a place moves it only if the place is outside the inner 75% of the uncovered map. Choosing a result
-> keeps the results open above a minimized place card; pulling the card up shrinks the results to one strip, and swiping
-> down steps back and then closes the card. The burger still opens the full dock with the current query and category;
-> search stays there until a result is chosen, which switches to this compact view.
+> On phones (not Flip), search opens a results bubble instead of the full dock. Fill the area below the header down to
+> the visible screen's midpoint, accounting for the keyboard, with readable result rows. Keep categories fixed above the
+> scrolling result list. Keep the map interactive and a selected marker visible outside the bubble. Searching does not
+> move the map; choosing a place moves it only if the place is outside the inner 75% of the uncovered map. Choosing a
+> result keeps the results open and the screen-wide card steps Peek → Full → Fullscreen (Full shows a named results
+> strip; Fullscreen hides search and the map). A map pick opens in Full. The burger still opens the full dock with the
+> current query and category; search stays there until a result is chosen, which switches to this compact view.
 >
 > At the bottom, show two pictogram tiles with small labels underneath: Satellite and Transport. Below them, put a
 > button labeled “Download for offline use.” No Standard map option, section headings, nested menus, desktop result

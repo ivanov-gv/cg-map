@@ -142,14 +142,20 @@ test('a desktop card covering the map bottom is excluded from the focus zone', (
   assert.ok(uncoveredMapOffset(geometry)[1] < 0, 'camera aims above the card');
 });
 
-test('swiping steps the phone card through full, peek, and closed', () => {
+test('swiping steps the phone card through peek, full, fullscreen, and closed', () => {
   const cases = [
     {state: 'peek', direction: 'up', resultsBehind: true, next: 'full'},
+    {state: 'full', direction: 'up', resultsBehind: true, next: 'fullscreen'},
+    {state: 'full', direction: 'up', resultsBehind: false, next: 'fullscreen'},
+    {state: 'fullscreen', direction: 'up', resultsBehind: true, next: 'fullscreen'},
+    {state: 'fullscreen', direction: 'down', resultsBehind: true, next: 'full'},
+    {state: 'fullscreen', direction: 'down', resultsBehind: false, next: 'full'},
     {state: 'full', direction: 'down', resultsBehind: true, next: 'peek'},
-    {state: 'peek', direction: 'down', resultsBehind: true, next: 'closed'},
-    {state: 'full', direction: 'down', resultsBehind: false, next: 'closed'}
+    {state: 'full', direction: 'down', resultsBehind: false, next: 'closed'},
+    {state: 'peek', direction: 'down', resultsBehind: true, next: 'closed'}
   ];
-  for (const {next, ...swipe} of cases) assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
+  for (const {next, ...swipe} of cases)
+    assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
 });
 
 test('device class distinguishes flip, mobile, and desktop by viewport size', () => {

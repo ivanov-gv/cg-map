@@ -125,10 +125,17 @@ A chosen place's card opens as a bottom panel on Desktop (> 720 px), at most 300
 stays put while `#card-layout` scrolls, so the × cannot scroll away. The card starts at the dock's right edge or, for
 the inset joined search panel, at that panel's right edge. Its grid gives identity the first column, contacts/addresses
 and entrances the second, and hours with nearby or inside-place sections the third; narrower cards step through two
-columns to one. The locate button, scale bar and credit move above it. On phones it opens as a header-only peek under
-the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
-closes it. Choosing a result in the phone dock switches to this compact view. See
+columns to one. The locate button, scale bar and credit move above it. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
+
+On phones (not Flip), the card steps through Peek, Full, and Fullscreen. A search or dock result opens in Peek under the
+open results. Pulling up, or tapping the header or handle, steps up: Full shows the card with results reduced to a strip
+naming the active category and query, and Fullscreen covers the screen and hides search and the map. Swiping down steps
+back; from Peek it closes the card. A place picked on the map opens in Full, and swiping down from Full closes it. The
+phone card is screen-wide with 12 px gutters, the Locate button sits above it in Peek and Full and is hidden in
+Fullscreen, and the screen-reader close button remains. Choosing a result in the phone dock switches to this compact view
+with the query and category kept. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
 starts following the current GPS location: the map centres on the fix and keeps the camera there as new fixes arrive,
@@ -435,9 +442,9 @@ MapInterface switches the shared result panel between the full dock, the desktop
 bubble. The category navigation stays outside the scrolling list and begins with the All chip. There is no count/reset
 row; clicking an active category returns to All without clearing the query. The bubble extends to the visible viewport's
 midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone dock's options when a keyboard
-reduces the visible area; the camera stays still until the keyboard closes. Selecting a result keeps search open and
-shows its existing details card as a header-only peek, with the selected feature kept in the remaining map area. The
-burger/search header is never replaced or moved.
+reduces the visible area; the camera stays still until the keyboard closes. On phones (not Flip), selecting a search or
+dock result keeps search open and shows the card in Peek, stepping up to Full and Fullscreen; a map pick opens the card
+in Full. The selected feature stays in the visible map area and the burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
