@@ -224,7 +224,7 @@ unavailable, outside coverage, or no fix — keeps map-centre ordering but omits
 camera is not the person's position. A changed fix re-ranks and redraws the list after a short throttle. While any card
 is open, the row order stays frozen and the deferred update is applied when the card closes. The details card itself is
 unchanged. The reason the camera is never a distance proxy is recorded in
-[ADR 0019](../../decisions/0019-result-distances-from-gps-fix.md).
+[ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md#distance-rule-issue-262).
 
 ### Mobile search keeps the map visible
 
