@@ -2,9 +2,10 @@
 
 Status: approved on 3 November 2026 and implemented in the web source. The earlier illustrative draft established the
 composition; the application uses real directory data, device positioning, optional layers, and verified offline
-downloads. Selected-card content was restructured on 19 November 2026 (issue #249) without changing card geometry on
-Desktop, Mobile or Flip. This does not claim deployment or completion of Discover’s missing geographic data. Browser
-acceptance and physical-device evidence are recorded separately below.
+downloads. Selected-card content was restructured on 19 November 2026 (issue #249); on 20 November 2026 the Desktop card
+became a bottom panel (issue #250), while Mobile and Flip kept their geometry and state machines. This does not claim
+deployment or completion of Discover’s missing geographic data. Browser acceptance and physical-device evidence are
+recorded separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -202,15 +203,28 @@ active download may need more room for progress/cancellation, but its lower edge
 Retain all supported categories and directory/search semantics from the baseline. The category strip starts with an
 **All** chip, which is pressed whenever no category is selected; every device uses that same state. Pressing the active
 category again, or its ×, returns to **All** without clearing the query; the × keeps the row's scroll position. Choosing
-a result opens that place's details beside the dock, and the dock and results stay open. Moving or closing the dock does
-not clear the query, select route endpoints, or start a route. While a chosen place's details are open, the result list
-keeps its order. Choosing From or To closes the dock or search, because the route controls replace them on the map. The
-category strip and the place card show no scrollbars; both still scroll. In windows 721–860 px wide the card narrows to
-keep the map controls reachable, leaving only a narrow strip of map.
+a result opens that place's details along the bottom, clear of the dock, and the dock and results stay open. Moving or
+closing the dock does not clear the query, select route endpoints, or start a route. While a chosen place's details are
+open, the result list keeps its order. Choosing From or To closes the dock or search, because the route controls replace
+them on the map. The category strip and the place card show no scrollbars; both still scroll.
+
+### Desktop selected-object card
+
+On Desktop (> 720 px) the card is a paper panel along the bottom of the screen: left 0, right 0, bottom 0, about 300 px
+tall, with a top border and no rounding at the lower corners. It is screen-wide when the dock and search results are
+closed; when the dock or the joined Search panel is open, its left edge starts at that panel's right edge and the panel
+keeps its full height beside it. A visible × at the card's top right closes the card, returns focus to the chosen row
+and leaves the panel open. A click on another map object swaps the card to that object.
+
+Content is arranged in three columns with about 32 px padding: identity (eyebrow, name, subtitle, side-by-side From/To
+buttons and the source line), contacts/addresses/entrances, then opening hours with NEARBY or places inside. The locate
+button, scale bar and OSM credit remain readable above the card. Content taller than the panel scrolls inside it; the
+page itself does not scroll. In windows 721–860 px wide the columns stack in the card so the dock and map controls stay
+reachable, without overlapping them.
 
 ### Selected-object card content
 
-The card keeps its existing position, size and state machine on Desktop, Mobile and Flip; only its content changes. Its
+Mobile and Flip keep their existing position, size and state machine; Desktop uses the bottom panel described above. The
 header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay in
 place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
 shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the

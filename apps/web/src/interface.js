@@ -45,17 +45,14 @@ export function uncoveredMapArea({
   searchBottom = 0,
   dockRight = 0,
   details = null,
-  routeBottom = 0,
-  mobile: isMobileLayout = false
+  routeBottom = 0
 }) {
   let left = Math.max(16, dockRight ? dockRight + 16 : 0);
   const right = width - 72;
   let top = Math.max(visibleTop + 16, headerBottom + 16, searchBottom + 16, routeBottom + 16);
   let bottom = Math.min(height - 20, visibleTop + visibleHeight - 20);
-  if (details) {
-    if (isMobileLayout) bottom = Math.min(bottom, details.top - 16);
-    else left = Math.max(left, details.right + 16);
-  }
+  // Every details card covers the bottom of the map, on the phone and on the desktop alike.
+  if (details) bottom = Math.min(bottom, details.top - 16);
   left = Math.min(left, Math.max(16, right - 40));
   top = Math.min(top, Math.max(visibleTop + 16, bottom - 40));
   return {left, right, top, bottom};
@@ -735,9 +732,8 @@ export class MapInterface {
         (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
-      details: details && {top: detailsTop - map.top, right: details.right - map.left},
-      routeBottom: route.hidden ? 0 : route.getBoundingClientRect().bottom - map.top,
-      mobile: this.mobileLayoutQuery.matches
+      details: details && {top: detailsTop - map.top},
+      routeBottom: route.hidden ? 0 : route.getBoundingClientRect().bottom - map.top
     };
   }
 

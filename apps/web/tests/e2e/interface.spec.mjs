@@ -256,7 +256,7 @@ test(
       .poll(async () => {
         const point = await pointOnMap(page, places.features[7].geometry.coordinates);
         const card = await page.locator('#place-card').boundingBox();
-        if (!isMobile) return point.x > card.x + card.width;
+        if (!isMobile) return point.y < card.y - 8;
         const bubble = await page.locator('#search-bubble').boundingBox();
         return point.y > bubble.y + bubble.height && point.y < card.y - 8;
       })
@@ -347,17 +347,191 @@ test('desktop keeps the results open beside the place card', async ({page, isMob
   await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
   await expect(row).toHaveAttribute('aria-current', 'true');
   await settled(page);
-  // The card should be to the right of the dock.
+  // The card runs from the dock's right edge to the viewport edge along the bottom.
   const dock = await page.locator('.sidebar').boundingBox();
   const card = await page.locator('#place-card').boundingBox();
-  expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
+  const viewport = page.viewportSize();
+  expect(card.x).toBeCloseTo(dock.x + dock.width, 0);
+  expect(card.x + card.width).toBeCloseTo(viewport.width, 0);
+  expect(card.y + card.height).toBeCloseTo(viewport.height, 0);
   const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
-  expect(place.x).toBeGreaterThan(card.x + card.width);
+  expect(place.y).toBeLessThan(card.y - 8);
   await page.screenshot({path: testInfo.outputPath('desktop-results-card.png')});
   await page.locator('#close-place').click();
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
   await expect(row).toBeFocused();
+});
+
+test.describe('Desktop bottom card', () => {
+  test('spans the bottom in columns and keeps map controls readable', async ({page, isMobile}, testInfo) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const place = fixture.features[1];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    const boxes = await page.evaluate(() => {
+      const box = selector => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        const {x, y, width, height} = element.getBoundingClientRect();
+        return {x, y, width, height};
+      };
+      return {
+        card: box('#place-card'),
+        head: box('#place-head'),
+        location: box('.details-section--location-and-contacts'),
+        nearby: box('.details-section--nearby'),
+        close: box('#close-place'),
+        locate: box('#position-action'),
+        scale: box('.maplibregl-ctrl-scale'),
+        credit: box('.osm-credit-line')
+      };
+    });
+    const {card, head, location, nearby, close, locate, scale, credit} = boxes;
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    expect(card.x).toBeCloseTo(0, 0);
+    expect(card.x + card.width).toBeCloseTo(1440, 0);
+    expect(card.y + card.height).toBeCloseTo(900, 0);
+    expect(card.height).toBeGreaterThan(270);
+    expect(card.height).toBeLessThan(330);
+    // Identity, contacts and hours/nearby occupy three side-by-side columns.
+    expect(head.x + head.width).toBeLessThan(location.x);
+    expect(location.x + location.width).toBeLessThan(nearby.x);
+    expect(nearby.y).toBeLessThan(card.y + card.height);
+    expect(close.x).toBeGreaterThan(card.x + card.width - 80);
+    expect(close.y).toBeLessThan(card.y + 60);
+    for (const [name, control] of Object.entries({locate, scale, credit})) {
+      const gap = card.y - (control.y + control.height);
+      expect(gap, name).toBeGreaterThan(8);
+      expect(gap, name).toBeLessThan(80);
+    }
+    expect(card.y - (locate.y + locate.height)).toBeLessThan(48);
+    await page.screenshot({path: testInfo.outputPath('desktop-bottom-card.png')});
+  });
+
+  test('reveals a place chosen near the bottom of the map above the card', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 1440, height: 900});
+    const place = fixture.features[1];
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    // Put the place just inside the old focus zone but under the new bottom panel.
+    await page.evaluate(coordinates => {
+      const map = window.kompasDebug.map;
+      map.jumpTo({zoom: 16});
+      const target = map.project(coordinates);
+      const {width, height} = map.getCanvas().getBoundingClientRect();
+      const centre = map.unproject([width / 2 + target.x - 900, height / 2 + target.y - 650]);
+      map.jumpTo({center: centre.toArray(), zoom: 16});
+    }, place.geometry.coordinates);
+    await mapIdle(page);
+    const before = await pointOnMap(page, place.geometry.coordinates);
+    expect(before.y).toBeGreaterThan(600);
+    expect(before.y).toBeLessThan(690);
+    await page.locator('#search').fill('Mimoza');
+    await expect(page.locator('.result')).toHaveCount(1);
+    await page.locator('.result').first().click();
+    await settled(page);
+    await mapIdle(page);
+    const card = await page.locator('#place-card').boundingBox();
+    const after = await pointOnMap(page, place.geometry.coordinates);
+    expect(after.y).toBeLessThan(card.y - 8);
+    expect(after.y).toBeGreaterThan(96);
+  });
+
+  test('keeps the scale and credit readable beside an open search panel', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 1280, height: 800});
+    const many = {
+      type: 'FeatureCollection',
+      features: Array.from({length: 24}, (_, index) => ({
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.26 + index * 0.001, 42.44]},
+        properties: {
+          id: `node/${300000000 + index}`,
+          name: `Panel place ${index}`,
+          category: 'shops',
+          kind: 'shop',
+          source: 'OpenStreetMap',
+          visibilityLevel: 5
+        }
+      }))
+    };
+    await page.route('**/data/places.geojson', route => route.fulfill({json: many}));
+    await ready(page);
+    await page.locator('#search').fill('Panel place');
+    await expect(page.locator('.result').nth(5)).toBeVisible();
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-card')).toBeVisible();
+    await settled(page);
+    const panel = await page.locator('#desktop-search-panel').boundingBox();
+    const sidebar = await page.locator('.sidebar').boundingBox();
+    const card = await page.locator('#place-card').boundingBox();
+    const controls = await page.evaluate(() => {
+      const box = selector => {
+        const {x, y, width, height} = document.querySelector(selector).getBoundingClientRect();
+        return {x, y, width, height};
+      };
+      const hit = selector => {
+        const {x, y, width, height} = document.querySelector(selector).getBoundingClientRect();
+        const element = document.elementFromPoint(x + width / 2, y + height / 2);
+        return element?.closest('.maplibregl-ctrl-bottom-left') !== null;
+      };
+      return {
+        scale: box('.maplibregl-ctrl-scale'),
+        credit: box('.osm-credit-line'),
+        scaleHit: hit('.maplibregl-ctrl-scale'),
+        creditHit: hit('.osm-credit-line')
+      };
+    });
+    expect(card.x).toBeCloseTo(sidebar.x + sidebar.width, 0);
+    expect(card.y + card.height).toBeCloseTo(800, 0);
+    expect(panel.y + panel.height).toBeGreaterThan(controls.scale.y);
+    for (const [name, control] of Object.entries({scale: controls.scale, credit: controls.credit})) {
+      expect(control.x, name).toBeGreaterThanOrEqual(panel.x + panel.width - 1);
+      expect(control.y + control.height, name).toBeLessThan(card.y);
+    }
+    expect(controls.scaleHit).toBe(true);
+    expect(controls.creditHit).toBe(true);
+  });
+
+  test('scrolls tall content inside the bottom card without scrolling the page', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 800, height: 700});
+    const hours = Array.from({length: 14}, (_, index) => {
+      const start = String(8 + (index % 9)).padStart(2, '0');
+      const end = String(17 - (index % 9)).padStart(2, '0');
+      return `Mo-Fr ${start}:00-${end}:00`;
+    }).join('; ');
+    const tall = structuredClone(fixture);
+    tall.features[2].properties.opening_hours = hours;
+    const place = tall.features[2];
+    await page.route('**/data/places.geojson', route => route.fulfill({json: tall}));
+    await ready(page);
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    const card = page.locator('#place-card');
+    const bounds = await card.boundingBox();
+    expect(bounds.x).toBeCloseTo(0, 0);
+    expect(bounds.y + bounds.height).toBeCloseTo(700, 0);
+    expect(bounds.height).toBeGreaterThan(270);
+    expect(bounds.height).toBeLessThan(330);
+    const overflow = await card.evaluate(element => ({
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight
+    }));
+    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight);
+    await card.evaluate(element => {
+      element.scrollTop = 80;
+    });
+    expect(await card.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
+  });
 });
 
 test(
@@ -944,7 +1118,7 @@ test(
   }
 );
 
-test('a narrow desktop window narrows the card and keeps the map controls reachable', async ({
+test('a narrow desktop window keeps the bottom card clear of the dock and map controls', async ({
   page,
   isMobile
 }) => {
@@ -958,9 +1132,15 @@ test('a narrow desktop window narrows the card and keeps the map controls reacha
   const dock = await page.locator('.sidebar').boundingBox();
   const card = await page.locator('#place-card').boundingBox();
   const locate = await page.locator('#position-action').boundingBox();
+  const viewport = page.viewportSize();
   expect(card.x).toBeGreaterThanOrEqual(dock.x + dock.width);
-  expect(card.width).toBeLessThan(375);
-  expect(card.x + card.width).toBeLessThanOrEqual(locate.x);
+  expect(card.x + card.width).toBeCloseTo(viewport.width, 0);
+  expect(card.y + card.height).toBeCloseTo(viewport.height, 0);
+  expect(locate.y + locate.height).toBeLessThan(card.y);
+  const hasHorizontalOverflow = await page
+    .locator('#place-card')
+    .evaluate(element => element.scrollWidth > element.clientWidth + 1);
+  expect(hasHorizontalOverflow).toBe(false);
 });
 
 test('the layout never scrolls sideways', {tag: '@phone'}, async ({page}) => {
@@ -1874,7 +2054,7 @@ test.describe('Desktop search bar', () => {
     await expect(firstChip).toBeFocused();
   });
 
-  test('choosing a result from the search panel places the card to the right of the panel', async ({page, isMobile}) => {
+  test('choosing a result from the search panel places the card along the bottom beside it', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -1897,8 +2077,10 @@ test.describe('Desktop search bar', () => {
         cardHeight: card.getBoundingClientRect().height
       };
     });
-    // The card's left edge must be at or right of the sidebar's right edge.
+    // The card starts at the panel/dock edge and runs to the bottom-right corner.
     expect(cardLeft).toBeGreaterThanOrEqual(sidebarRight - 1);
+    expect(cardLeft + cardWidth).toBeCloseTo(page.viewportSize().width, 0);
+    expect(cardTop + cardHeight).toBeCloseTo(page.viewportSize().height, 0);
     // The card centre must not be covered by another element — walk up to find #place-card.
     const cardCentreX = cardLeft + cardWidth / 2;
     const cardCentreY = cardTop + cardHeight / 2;
@@ -1936,7 +2118,7 @@ test.describe('Desktop search bar', () => {
     expect(nativeCancelHidden).toBe(true);
   });
 
-  test('place card drops below floating chips row on desktop', async ({page, isMobile}) => {
+  test('place card is a bottom panel clear of the floating chips on desktop', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -1949,9 +2131,9 @@ test.describe('Desktop search bar', () => {
     await settled(page);
     await expect(page.locator('#place-card')).toBeVisible();
     // The card's top must be at or below the bottom of the desktop-search-panel chips row.
-    const cardTop = await page.evaluate(() => {
-      const card = document.getElementById('place-card');
-      return card.getBoundingClientRect().top;
+    const {cardTop, cardBottom} = await page.evaluate(() => {
+      const rect = document.getElementById('place-card').getBoundingClientRect();
+      return {cardTop: rect.top, cardBottom: rect.bottom};
     });
     const chipsBottom = await page.evaluate(() => {
       const panel = document.getElementById('desktop-search-panel');
@@ -1965,8 +2147,9 @@ test.describe('Desktop search bar', () => {
       const el = document.elementFromPoint(centerX, centerY);
       return el?.closest('#place-card') !== null;
     });
-    // Card top >= chips row bottom.
+    // Card top >= chips row bottom, and the panel touches the bottom edge.
     expect(cardTop).toBeGreaterThanOrEqual(chipsBottom - 1);
+    expect(cardBottom).toBeCloseTo(page.viewportSize().height, 0);
     // The card centre must be visible (not covered by the chips row).
     expect(cardVisible).toBe(true);
   });
