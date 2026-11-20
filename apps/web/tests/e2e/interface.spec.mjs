@@ -3807,7 +3807,10 @@ test('a bare building opens a card with its addresses, entrances and places insi
     .toBe(2);
 });
 
-test('an off-screen result keeps its building address and focus when the map settles away', async ({page}) => {
+test('an off-screen result keeps its building address and focus when the map settles away', async ({
+  page,
+  isMobile
+}) => {
   const label = readGeoJSON('building-labels.geojson').features.find(
     feature => Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
   );
@@ -3839,6 +3842,11 @@ test('an off-screen result keeps its building address and focus when the map set
   await expect(page.locator('#place-details')).toContainText(
     `In the building at: ${expectedBuildingAddress}`
   );
+  // A phone result opens as a peek with an inert body; expand it before focusing a card link.
+  if (isMobile) {
+    await page.locator('#card-handle').click();
+    await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
+  }
 
   const websiteLink = page.getByRole('link', {name: 'Website ↗'});
   await websiteLink.focus();

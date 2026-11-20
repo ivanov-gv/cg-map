@@ -33,7 +33,7 @@ export class PlaceSelection {
   constructor(context) {
     this.#context = context;
     // These actions cross the map/DOM callback boundary and must retain their owning controller.
-    for (const action of ['showPlace', 'showSearchResult', 'showPoint', 'showChooser', 'close'])
+    for (const action of ['showPlace', 'showSearchResult', 'showPoint', 'close'])
       this[action] = this[action].bind(this);
   }
 
@@ -282,6 +282,7 @@ export class PlaceSelection {
       this.showPlace(result.feature.properties.id, trigger);
       return;
     }
+    // Describe the reviewed label like a map-tapped building number, then use the same card path.
     const feature = {...result.feature, layer: {id: 'building-numbers'}};
     const point = {
       ...this.#context.describePoint(feature, result.coordinates),

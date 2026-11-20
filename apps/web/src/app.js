@@ -125,6 +125,7 @@ const placeSelection = new PlaceSelection({
   onSelectionChanged: syncPanels,
   onResultsChanged: renderSearchResults,
   buildingAddress,
+  describePoint,
   placesInsideFootprint,
   prefersReducedMotion
 });
