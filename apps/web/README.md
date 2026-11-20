@@ -120,8 +120,9 @@ Source-level details:
 - `syncDockContent()` is the sole owner of Flip footer visibility: the list screen always hides the footer, including
   with zero results and after keyboard/viewport events; only the modes screen shows it.
 - On the modes screen, focusing the search field or typing switches to the list screen.
-- An open card claims the Icon Button as ×: "Close details" in Peek and "Back to summary" in Fullscreen. Escape takes
-  the same step. `flipCardOrigin` (`'map'` or `'dock'`) decides where Peek × returns.
+- An open card claims the Icon Button as ×: "Close details" in Peek and "Back to summary" in Fullscreen. Escape and the
+  screen-reader close button call the same `stepBackOrCloseFlipCard()` method. `flipCardOrigin` (`'map'` or `'dock'`)
+  decides where the final step returns, and a replacement selection keeps the origin captured on first open.
 - The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
 - Tested at 374×241, 340×250 and 340×340 viewports. The list is checked with zero, one and two results, including
   keyboard open/close events: it keeps the whole dock area and hides the footer. The CSS compact layout (style.css
@@ -166,12 +167,13 @@ switches to this compact view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 **Flip place card** (issue #252): on Flip, every place opens a two-step card. Peek shows only the header with 12 px
-gutters so the picked object remains visible above it; tapping the header or handle opens Fullscreen, where details can
-scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in Fullscreen it returns to Peek, and
-in Peek it closes the card, clears the red selection and hides Locate. It returns to the dock list when the place came
-from there, preserving the query, category, order and focus row; a map pick returns to the bare map. Back takes the same
-history step as the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek.
-Swipes and wheel input never change a Flip card. The screen-reader close button remains in the card.
+gutters and no grab-handle bar, so the picked object remains visible above it; tapping the header or handle opens
+Fullscreen, where details can scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in
+Fullscreen it returns to Peek, and in Peek it closes the card, clears the red selection and hides Locate. Back, Escape
+and the screen-reader close button share that step-back method. It returns to the dock list when the place came from
+there, preserving the query, category, order and originating row; a later map pick replaces the card without changing
+that origin. Back takes the same history step as the Icon Button, and the active-category chip stays hidden under every
+open Flip state, including Peek. Swipes and wheel input never change a Flip card.
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and

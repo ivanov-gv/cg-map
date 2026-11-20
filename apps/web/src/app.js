@@ -863,7 +863,7 @@ function registerSelectionControls() {
     renderRouteEndpoints();
   });
   elementById('close-place').addEventListener('click', () => {
-    if (mapState.interface?.hasFlipCard) mapState.interface.closeFlipCard();
+    if (mapState.interface?.hasFlipCard) mapState.interface.stepBackOrCloseFlipCard();
     else placeSelection.close();
   });
   document.addEventListener('keydown', event => {
@@ -871,7 +871,7 @@ function registerSelectionControls() {
       const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
       if (!elementById('place-card').hidden) {
         // On Flip, Escape follows the Icon Button: Fullscreen returns to Peek, then Peek closes.
-        if (mapState.interface.flipLayoutQuery.matches) mapState.interface.closeFlipCard();
+        if (mapState.interface.hasFlipCard) mapState.interface.stepBackOrCloseFlipCard();
         else placeSelection.close();
       } else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.

@@ -366,11 +366,11 @@ along with the named card handle.
 
 On Flip, every place opens the same two-step card: Peek shows only the header with 12 px gutters and rounded corners so
 the picked object stays visible above it. Tapping the header or its handle opens Fullscreen, which fills the cover
-screen, keeps the Icon Button in the header row, and allows vertical scrolling of the details. A tap or Escape on the
-Icon Button returns from Fullscreen to Peek; a second one closes Peek and clears the red selection. There are no card
-swipes or wheel state changes on Flip, and the Locate control is hidden while a card is open. A map pick and a dock pick
-both start in Peek. Choosing a dock place closes the dock; × in Peek brings back its unchanged query, category and list
-order with focus on the originating row.
+screen, keeps the Icon Button in the header row, and allows vertical scrolling of the details. A tap on the Icon Button,
+or Escape, returns from Fullscreen to Peek; a second one closes Peek and clears the red selection. The screen-reader
+close button follows the same step-back path. There are no card swipes or wheel state changes on Flip, and the Locate
+control is hidden while a card is open. A map pick and a dock pick both start in Peek. Choosing a dock place closes the
+dock; × in Peek brings back its unchanged query, category and list order with focus on the originating row.
 
 The burger explicitly opens the existing full dock, retaining the query and category. Focusing or typing in search keeps
 the dock open. Choosing a result switches from the dock to the compact view (search bubble with the same category and
@@ -457,7 +457,7 @@ and reduced motion.
 | UI-A16 | Type a query with places, recorded building addresses and named streets; pan, choose each result kind, then clear search. Zoom out and pick a category.   | Rows are nearest first with place/building/address/street symbols and labels; a visible street has one row and a green road outline, choosing it turns the road red and opens the Road card, in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, and clearing removes every green mark. With no query and All, ordinary POI thresholds apply. A category lists places only.                                                                                                                      |
 | UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                                 | With a usable fix, every result kind, including streets, is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                                                                                                                                                                                                                                                                                                       |
 | UI-A18 | On Desktop with no card, the wide card, the search panel and the dock; on phone Peek and Full; and under the Flip dock, inspect the scale bar and credit. | The scale and credit boxes stay at the map's bottom-left within 1 px. At each centre, a covering card, panel or dock is the hit target; otherwise the map control is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| UI-A19 | At 340×250 and 374×241, pick a map place and a dock result; tap Peek and use both Back and the Icon Button; try swipes and wheel input. | Both picks open header-only Peek; tapping opens Fullscreen, and Back and the Icon Button each step Fullscreen → Peek → closed → dock (for a dock pick) or bare map. Swipes and wheel input never change the Flip card state, the active-category chip stays hidden for every open Flip state, and a dock result returns to the unchanged list with focus on its row. |
+| UI-A19 | At 340×250 and 374×241, pick a map place, a building and a dock result; tap Peek and use Back, the Icon Button, Escape and the screen-reader close button; try swipes and wheel input, then replace the card with another object. | Every pick opens header-only Peek with the picked object visible; tapping opens Fullscreen, and every step-back control follows the same Fullscreen → Peek → closed → dock (for a dock pick) or bare map path. Swipes and wheel input never change the Flip card state, the active-category chip stays hidden for every open Flip state, and a dock result returns to the unchanged list with focus on its row, including after that row's origin survives a replacement selection. |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -481,6 +481,10 @@ no-wheel behavior, selection clearing, dock/query preservation, focus return, th
 the Icon Button, the active-category chip hidden under Flip Peek, and the Mobile card guard. Pure Flip transition tests
 live in [flip-card.test.mjs](../../../apps/web/tests/flip-card.test.mjs), and the shared history steps are covered in
 [history-steps.test.mjs](../../../apps/web/tests/history-steps.test.mjs).
+
+The Flip checks also cover a hidden grab handle and pointer cursor in Peek, an unclipped From/To action row, building
+picks, and the shared step-back path used by the Icon Button, Escape and screen-reader close. A replacement selection
+keeps the originating dock row, and the active-category chip stays hidden under every open Flip state.
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
 buildings, addresses and streets, that a street appears once with a green road outline, a red Road card with the same
 structured sections as other cards and a revealed off-screen choice, that in-view building outlines and drawn place

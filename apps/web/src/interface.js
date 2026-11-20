@@ -458,11 +458,11 @@ export class MapInterface {
     return typeof history !== 'undefined' && typeof history.pushState === 'function';
   }
 
-  // The Icon Button is the Flip card's only close control. Fullscreen steps back to Peek;
-  // Peek closes the selection and returns to the dock it came from or to the bare map.
-  closeFlipCard() {
+  // One Flip step-back action for the Icon Button, Escape and the screen-reader close button.
+  // Fullscreen returns to Peek; Peek closes the selection and returns to its origin.
+  stepBackOrCloseFlipCard() {
     const current = this.currentUIState();
-    // The same pure step that Back uses decides whether this closes to Peek or ends the card.
+    // The same pure step Back uses decides whether this closes to Peek or ends the card.
     const nextCardState = stateAfterBack(current).card?.state ?? 'closed';
     if (nextCardState === 'peek') {
       this.setCardState('peek');
@@ -720,7 +720,7 @@ export class MapInterface {
     if (this.mobileLayoutQuery.matches) this.search.blur();
     if (this.flipLayoutQuery.matches) {
       // A Flip card claims the Icon Button; without one it cycles the dock screens.
-      if (this.hasFlipCard) this.closeFlipCard();
+      if (this.hasFlipCard) this.stepBackOrCloseFlipCard();
       else this.cycleFlipMenu();
     } else if (this.view === 'dock') {
       this.setView('closed');
@@ -932,9 +932,9 @@ export class MapInterface {
   }
 
   // Call after the card's content is in place and it is no longer hidden.
-  placeCardOpened() {
+  placeCardOpened({returnFocusElement = null, isCardReplacingSelection = false} = {}) {
     if (this.flipLayoutQuery.matches) {
-      this.openFlipCard();
+      this.openFlipCard({returnFocusElement, isCardReplacingSelection});
       return;
     }
     if (this.mobileLayoutQuery.matches && this.view === 'dock') {
@@ -946,11 +946,18 @@ export class MapInterface {
   }
 
   // Choosing a dock row leaves the list intact and shows only the card's header over the map.
-  openFlipCard() {
-    this.flipCardOrigin = this.view === 'dock' ? 'dock' : 'map';
-    this.cardFromDock = this.flipCardOrigin === 'dock';
-    this.flipReturnFocusElement = this.flipCardOrigin === 'dock' ? document.activeElement : null;
-    if (this.view === 'dock') this.setView('closed');
+  // A replacement selection keeps the origin and return row captured when the card was hidden.
+  openFlipCard({returnFocusElement = null, isCardReplacingSelection = false} = {}) {
+    if (isCardReplacingSelection) {
+      if (returnFocusElement) this.flipReturnFocusElement = returnFocusElement;
+      this.cardFromDock = this.flipCardOrigin === 'dock';
+    } else {
+      this.flipCardOrigin = this.view === 'dock' ? 'dock' : 'map';
+      this.cardFromDock = this.flipCardOrigin === 'dock';
+      this.flipReturnFocusElement =
+        this.flipCardOrigin === 'dock' ? returnFocusElement ?? this.menu : null;
+      if (this.view === 'dock') this.setView('closed');
+    }
     this.setCardState('peek');
   }
 
@@ -1007,15 +1014,19 @@ export class MapInterface {
     if (!skipReconcile) this.reconcile();
   }
 
-  resetCardState() {
-    const restoreDock = !!(this.cardFromDock && this.isFlip);
+  resetCardState({preserveFlipCardOrigin = false} = {}) {
+    const restoreDock = !preserveFlipCardOrigin && !!(this.cardFromDock && this.isFlip);
     delete this.card.dataset.state;
     this.clearCardDragGeometry();
     this.card.style.removeProperty('touch-action');
     this.cardBody.inert = false;
-    this.cardFromDock = false;
-    this.flipCardOrigin = null;
-    this.flipReturnFocusElement = null;
+    if (preserveFlipCardOrigin) {
+      this.cardFromDock = this.flipCardOrigin === 'dock';
+    } else {
+      this.cardFromDock = false;
+      this.flipCardOrigin = null;
+      this.flipReturnFocusElement = null;
+    }
     this.areResultsMinimized = this.isResultsCompacted && this.view === 'search';
     if (this.view !== 'search') this.isResultsCompacted = false;
     this.syncMobileCardPresentation();
@@ -1027,10 +1038,8 @@ export class MapInterface {
     else this.reconcile();
   }
 
-  // Expose the Flip card state for CSS and keep the shared Icon Button's action in step with it.
+  // Keep the shared Icon Button's action in step with the visible Flip card.
   syncFlipCardPresentation() {
-    if (this.hasFlipCard) document.body.dataset.flipCardState = this.card.dataset.state;
-    else delete document.body.dataset.flipCardState;
     this.syncMenuIcon();
   }
 

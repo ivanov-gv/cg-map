@@ -234,7 +234,8 @@ export class PlaceSelection {
   }
 
   // Clear the card and map selection together, then restore the originating control when requested.
-  close(shouldRestoreFocus = true) {
+  // A replacement Flip selection keeps the dock origin and return row that were captured on first open.
+  close(shouldRestoreFocus = true, {preserveFlipCardOrigin = false} = {}) {
     const hadPoint = !!this.#state.selectedPoint;
     this.#state.selectedPoint = null;
     this.#state.selectedFootprintIndex = null;
@@ -245,7 +246,7 @@ export class PlaceSelection {
     this.#state.resolvedBuildingAddress = '';
     this.#state.renderedInsideKey = '';
     elementById('place-card').hidden = true;
-    this.#interface?.resetCardState();
+    this.#interface?.resetCardState({preserveFlipCardOrigin});
     this.#objectSelection?.clear();
     this.updatePlaceLayers();
     this.markCurrentResult();
@@ -276,7 +277,8 @@ export class PlaceSelection {
   showPlace(placeId, trigger) {
     const feature = this.#directory.placesById.get(String(placeId));
     if (!feature) return;
-    const openedFromDock = this.#interface.view === 'dock';
+    const card = elementById('place-card');
+    const wasCardHidden = card.hidden;
     this.#state.resolvedBuildingAddress = '';
     this.#state.renderedInsideKey = '';
     this.#state.selectedBuildingFeature = null;
@@ -295,8 +297,11 @@ export class PlaceSelection {
     this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     elementById('search').blur();
-    elementById('place-card').hidden = false;
-    this.#interface.placeCardOpened({fromDock: openedFromDock});
+    card.hidden = false;
+    this.#interface.placeCardOpened({
+      returnFocusElement: trigger,
+      isCardReplacingSelection: !wasCardHidden
+    });
     resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();
@@ -367,8 +372,9 @@ export class PlaceSelection {
   // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
   // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
   showPoint(point, feature = null, {trigger = null, reveal = false, streetName = null} = {}) {
-    const openedFromDock = reveal && this.#interface.view === 'dock';
-    this.close(false);
+    const card = elementById('place-card');
+    const wasCardHidden = card.hidden;
+    this.close(false, {preserveFlipCardOrigin: !wasCardHidden});
     this.#state.resolvedBuildingAddress = '';
     this.#state.selectedPoint = point;
     this.#state.returnFocusElement = trigger;
@@ -385,13 +391,16 @@ export class PlaceSelection {
         placesInside
       })
     );
-    elementById('place-card').hidden = false;
+    card.hidden = false;
     this.#installCardRefresh();
     this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     // A map tap leaves search; choosing a row keeps the results beside the card.
     if (!reveal) this.#interface.close();
-    this.#interface.placeCardOpened({fromDock: openedFromDock});
+    this.#interface.placeCardOpened({
+      returnFocusElement: trigger,
+      isCardReplacingSelection: !wasCardHidden
+    });
     resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();

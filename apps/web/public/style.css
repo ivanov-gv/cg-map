@@ -689,7 +689,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     bottom: 12px;
     max-height: var(--card-peek, 78px);
     overflow: hidden;
+    cursor: pointer;
   }
+  /* Flip has no swipes: keep the header tappable, but show no grab-handle bar. */
+  body[data-device=flip] .place-card .card-handle::before { display: none; }
   /* Locate would cover the card on a cover screen; the same Card controls remain available. */
   body[data-device=flip]:has(.place-card:not([hidden])) .position-control {
     display: none;
