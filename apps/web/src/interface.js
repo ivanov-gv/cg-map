@@ -122,6 +122,14 @@ export class MapInterface {
       this.search.addEventListener(type, () => {
         if (!this.isRestoringFocus) this.openSearch();
       });
+    this.search.addEventListener('keydown', event => {
+      const isSearchKey = event.key === 'Enter' && !event.isComposing;
+      if (!isSearchKey || !this.mobileLayoutQuery.matches) return;
+      // The phone keyboard's Search key hides the keyboard; the bubble or dock keeps the results.
+      // Enter during IME composition confirms a candidate and must leave the field focused.
+      event.preventDefault();
+      this.search.blur();
+    });
     this.search.addEventListener('input', () => {
       this.syncClearButton();
       this.syncDesktopSearchUI();

@@ -1914,6 +1914,46 @@ test.describe('Mobile search bar', () => {
     expect(categoryChip.width).toBeGreaterThanOrEqual(40);
     expect(categoryChip.height).toBeGreaterThanOrEqual(40);
   });
+
+  test('Search key hides the keyboard without closing the bubble or dock', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const search = page.locator('#search');
+
+    await search.fill('Nearby');
+    await expect(page.locator('.result')).toHaveCount(6);
+    await simulateKeyboard(page, 420);
+    await expect(search).toBeFocused();
+    // Enter confirming an IME candidate is not the Search key and must keep the field focused.
+    await search.evaluate(element => {
+      element.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter', isComposing: true, bubbles: true, cancelable: true})
+      );
+    });
+    await expect(search).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(search).not.toBeFocused();
+    await expect(search).toHaveValue('Nearby');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(page.locator('.result')).toHaveCount(6);
+
+    await openMenu(page);
+    await search.focus();
+    await simulateKeyboard(page, 420);
+    await expect(search).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(search).not.toBeFocused();
+    await expect(search).toHaveValue('Nearby');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await expect(page.locator('#dock-content')).toBeVisible();
+    await expect(page.locator('.result')).toHaveCount(6);
+    await expect(search).toHaveAttribute('enterkeyhint', 'search');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1982,6 +2022,27 @@ test.describe('Flip search bar', () => {
       await expect(page.locator('#search')).toBeHidden();
       await expect(page.locator('.search-divider')).toBeHidden();
       await expect(page.locator('#clear-search')).toBeHidden();
+    });
+  });
+
+  test('Flip Search key hides the keyboard without closing the dock', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+      await ready(page);
+      const search = page.locator('#search');
+      await openMenu(page);
+      await search.fill('Nearby');
+      await expect(page.locator('.result')).toHaveCount(6);
+
+      await simulateKeyboard(page, 125);
+      await expect(search).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(search).not.toBeFocused();
+      await expect(search).toHaveValue('Nearby');
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect(page.locator('#dock-content')).toBeVisible();
+      await expect(page.locator('.result')).toHaveCount(6);
     });
   });
 });

@@ -112,7 +112,10 @@ On phones (viewport ≤ 720 px), the search bar is 44 px tall — smaller than t
 spans the screen width minus 12 px gutters on each side. The icon and font are smaller, and touch targets remain at
 least 40 px. The categories row is hidden on the main screen to save space; it becomes available inside the open dock
 and the search bubble. Focusing the field with the dock closed opens that bubble in Open, with × and a nearest-first
-nearby list, without opening the full dock.
+nearby list, without opening the full dock. The input uses `enterkeyhint="search"`; pressing the phone keyboard's Search
+key blurs the field to hide the keyboard while leaving the query, results bubble or dock list, and place card unchanged.
+Enter that confirms an IME candidate is not the Search key and leaves the field focused. Desktop Enter behavior is
+unchanged.
 
 ### Flip search bar
 
@@ -287,14 +290,15 @@ and reduced motion.
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
 selection visibility, the still camera during search, the focus zone, phone card swipes with simulated touch, desktop
-card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, preserving a
-map-picked card when desktop focus opens results, a floating chip opening those results, × closing a card and the
-desktop dock, the Flip exception (Filled-only × that cannot close the dock), the All chip and active-category return,
-seamless desktop row movement, and the follow location state machine (start, new fix moves camera, second click stops,
-drag stops, search result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state
-and clear-button functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
-smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
-physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+card and dock coexistence, the Empty/Open/Filled transitions and × behavior on desktop and phone, the mobile Search key
+blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
+when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
+exception (Filled-only × that cannot close the dock), the All chip and active-category return, seamless desktop row
+movement, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
+result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state and clear-button
+functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a smaller visual
+viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability
+under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
