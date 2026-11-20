@@ -246,6 +246,10 @@ export class PlaceSelection {
     this.#state.renderedInsideKey = '';
     elementById('place-card').hidden = true;
     this.#interface?.resetCardState();
+    // If a Flip card came from the dock, closing it returns to the dock (issue #266).
+    if (this.#interface?.cardRestoreDock === false) {
+      // resetCardState cleared the flag; nothing to restore.
+    }
     this.#objectSelection?.clear();
     this.updatePlaceLayers();
     this.markCurrentResult();
@@ -276,6 +280,7 @@ export class PlaceSelection {
   showPlace(placeId, trigger) {
     const feature = this.#directory.placesById.get(String(placeId));
     if (!feature) return;
+    const openedFromDock = this.#interface.view === 'dock';
     this.#state.resolvedBuildingAddress = '';
     this.#state.renderedInsideKey = '';
     this.#state.selectedBuildingFeature = null;
@@ -295,7 +300,7 @@ export class PlaceSelection {
     this.updatePlaceLayers();
     elementById('search').blur();
     elementById('place-card').hidden = false;
-    this.#interface.placeCardOpened();
+    this.#interface.placeCardOpened({fromDock: openedFromDock});
     resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();
@@ -348,6 +353,7 @@ export class PlaceSelection {
   // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
   // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
   showPoint(point, feature = null, {trigger = null, reveal = false} = {}) {
+    const openedFromDock = reveal && this.#interface.view === 'dock';
     this.close(false);
     this.#state.resolvedBuildingAddress = '';
     this.#state.selectedPoint = point;
@@ -371,7 +377,7 @@ export class PlaceSelection {
     this.updatePlaceLayers();
     // A map tap leaves search; choosing a row keeps the results beside the card.
     if (!reveal) this.#interface.close();
-    this.#interface.placeCardOpened();
+    this.#interface.placeCardOpened({fromDock: openedFromDock});
     resetCardScroll();
     this.#context.onSelectionChanged();
     this.markCurrentResult();

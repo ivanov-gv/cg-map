@@ -30,6 +30,7 @@ for (const name of fileSystem.readdirSync(path.join(outputDirectory, 'data')))
 const shell = [
   'index.html',
   'device-class.js',
+  'history-steps.js',
   'interface.js',
   'app-updates.js',
   'app.js',

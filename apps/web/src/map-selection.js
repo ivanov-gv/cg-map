@@ -62,9 +62,9 @@ function selectTappedMarker(map, event, context) {
 
 // Listings win over geography; among geographic objects the most specific one under the tap wins.
 export function selectTappedFeature(map, event, context) {
-  if (!context.isMapReady) return;
-  if (selectTappedMarker(map, event, context)) return;
-  const {buildingAddresses, showPoint} = context;
+  if (!context.isMapReady) return 'ignored';
+  if (selectTappedMarker(map, event, context)) return 'selected';
+  const {buildingAddresses, showPoint, onEmptyTap} = context;
   const roadLayers = [
     'road-labels',
     'steps',
@@ -84,5 +84,9 @@ export function selectTappedFeature(map, event, context) {
     features.find(feature => roadLayers.includes(feature.layer.id)) ??
     features.find(feature => feature.layer.id === 'land' && feature.properties.kind === 'park') ??
     features.find(feature => feature.layer.id === 'water' || feature.layer.id === 'rivers');
+  if (!selectedFeature) {
+    if (onEmptyTap?.()) return 'empty';
+  }
   showPoint(describePoint(selectedFeature, event.lngLat.toArray(), buildingAddresses), selectedFeature);
+  return selectedFeature ? 'selected' : 'point';
 }

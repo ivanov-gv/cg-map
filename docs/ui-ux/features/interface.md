@@ -297,6 +297,16 @@ and keyboard dismissal must keep the relevant place visible. This is a mobile se
 not a replacement of the burger menu with a bottom sheet. The category strip has no scrollbar: it scrolls by touch or by
 mouse wheel and brings the active category into view.
 
+Tapping an empty spot on the map (not a marker or map object) while the search bubble is open on Mobile or Flip compacts
+the results to the strip so the map is unobstructed, without opening a card. The strip or system Back returns to the
+bubble.
+
+On Mobile and Flip, system Back steps back through open overlays instead of leaving the page until the opening view:
+phone card Fullscreen → Full → Peek → card closed, results strip → bubble, search bubble → search closed, dock → closed,
+and Flip modes screen → list screen → closed. A Flip card opened from the dock steps Full → Peek → card closed → dock.
+Closing by ×, swipe, or other UI actions consumes the matching history entry so Back does not reopen a closed state and
+history does not grow unbounded. Desktop Escape behavior is unchanged.
+
 ## UI-04 Bottom controls and wording
 
 | Control          | Presentation                                                                                    |

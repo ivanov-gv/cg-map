@@ -1,4 +1,17 @@
 import {FLIP_MEDIA_QUERY} from './device-class.js';
+import {
+  BASE_MARKER,
+  STEP,
+  closeTopStep,
+  createHistorySteps,
+  currentDepth,
+  depthOf,
+  enterStep,
+  historyMarker,
+  stepBack,
+  stepsToCloseForDepth,
+  topStep
+} from './history-steps.js';
 
 // The bar is Empty without results, Open with results and no query, and Filled with a query.
 export function searchBarState({hasQuery, resultsVisible}) {
@@ -156,6 +169,11 @@ const FLIP_SWIPE_THRESHOLD_PIXELS = 24;
 const WHEEL_GESTURE_MILLISECONDS = 600;
 // A smaller gap can be browser chrome rather than an on-screen keyboard.
 const MINIMUM_KEYBOARD_HEIGHT_PIXELS = 100;
+const CARD_STEP_RANK = {peek: 1, full: 2, fullscreen: 3};
+
+function cardStepRankValue(state) {
+  return CARD_STEP_RANK[state] ?? 0;
+}
 
 export class MapInterface {
   constructor({onSearch, onResultsRefreshed, onChange, onViewport, onCardSwipedAway, onResultsClosed, resultsLabel}) {
@@ -168,9 +186,16 @@ export class MapInterface {
       onResultsClosed,
       resultsLabel
     });
-    this.view = 'closed';
-    this.isResultsPanelOpen = false;
-    this.areResultsMinimized = false;
+    this.initQueries();
+    this.initState();
+    this.installHistorySteps();
+    this.wireInterfaceEvents();
+    this.syncPanelPosition();
+    this.syncDesktopSearchUI();
+    this.syncViewport(false);
+  }
+
+  initQueries() {
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
     this.flipLayoutQuery = matchMedia(FLIP_MEDIA_QUERY);
     this.search = document.getElementById('search');
@@ -187,15 +212,35 @@ export class MapInterface {
     this.clearButton = document.getElementById('clear-search');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
+  }
+
+  initState() {
+    this.view = 'closed';
+    this.isResultsPanelOpen = false;
+    this.areResultsMinimized = false;
     this.trigger = this.menu;
     this.isRestoringFocus = false;
     // On Flip, the menu button cycles through three screens; elsewhere it toggles the dock.
     // 'list' → dock open, results shown; 'modes' → dock open, modes menu shown.
     // When the dock is closed, flipDockScreen is null and view === 'closed'.
     this.flipDockScreen = null; // 'list' | 'modes' | null, meaningful only on Flip
+    this.historySteps = createHistorySteps();
+    this.pendingProgrammaticBacks = 0;
+    this.cardRestoreDock = false;
+    // True while this is the result list without a card, so the strip is a back step.
+    this.isResultsCompacted = false;
+  }
+
+  wireInterfaceEvents() {
     this.menu.addEventListener('click', () => this.activateMenu());
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
-    this.strip.addEventListener('click', () => this.setCardState('peek'));
+    this.strip.addEventListener('click', () => {
+      if (this.isResultsCompacted && this.card.hidden) {
+        this.restoreSearchBubble();
+        return;
+      }
+      this.setCardState('peek');
+    });
     this.cardHandle.addEventListener('click', () => this.activateCardHandle());
     this.card.addEventListener('focusin', (event) => this.revealFocusedCardContent(event.target));
     this.cardHead.addEventListener('click', (event) => {
@@ -203,22 +248,9 @@ export class MapInterface {
       this.activateCardHandle();
     });
     this.wireSearchEvents();
-    this.mobileLayoutQuery.addEventListener('change', () => {
-      if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
-      if (!this.card.hidden) this.syncCardForLayout();
-      else this.syncMobileCardPresentation();
-      this.syncPanelPosition();
-      this.syncDesktopSearchUI();
-      this.syncViewport();
-    });
+    this.mobileLayoutQuery.addEventListener('change', () => this.handleMobileLayoutChange());
     // A device-class change re-derives both the clear-button rule and the Flip menu state.
-    this.flipLayoutQuery.addEventListener('change', () => {
-      this.syncClearButton();
-      this.syncDockContent();
-      this.syncMenuIcon();
-      if (!this.card.hidden) this.syncCardForLayout();
-      else this.syncMobileCardPresentation();
-    });
+    this.flipLayoutQuery.addEventListener('change', () => this.handleFlipLayoutChange());
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
     window.visualViewport?.addEventListener('scroll', () => this.syncViewport());
     window.addEventListener('resize', () => this.syncViewport());
@@ -230,9 +262,133 @@ export class MapInterface {
     this.observer.observe(this.card);
     this.wireCardGestures();
     this.wireCategoryWheel();
+  }
+
+  handleMobileLayoutChange() {
+    if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
+    if (!this.card.hidden) this.syncCardForLayout();
+    else this.syncMobileCardPresentation();
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
-    this.syncViewport(false);
+    this.syncViewport();
+  }
+
+  handleFlipLayoutChange() {
+    this.syncClearButton();
+    this.syncDockContent();
+    this.syncMenuIcon();
+    if (!this.card.hidden) this.syncCardForLayout();
+    else this.syncMobileCardPresentation();
+  }
+
+  installHistorySteps() {
+    if (typeof history === 'undefined' || !history.pushState) return;
+    history.replaceState(BASE_MARKER, '');
+    window.addEventListener('popstate', (event) => this.handleHistoryPop(event));
+  }
+
+  canUseHistory() {
+    return typeof history !== 'undefined' && typeof history.pushState === 'function';
+  }
+
+  pushHistoryStep(step, meta = {}) {
+    if (!this.canUseHistory()) return;
+    const result = enterStep(this.historySteps, step, meta);
+    if (!result.changed) {
+      this.historySteps = result.state;
+      return;
+    }
+    this.historySteps = result.state;
+    history.pushState(historyMarker(currentDepth(this.historySteps)), '');
+  }
+
+  // A UI action closed the current top step; remove its matching history entry.
+  consumeHistoryStep(step) {
+    const result = closeTopStep(this.historySteps, step);
+    if (!result.changed) return false;
+    this.historySteps = result.state;
+    if (this.canUseHistory() && this.pendingProgrammaticBacks >= 0) {
+      this.pendingProgrammaticBacks += 1;
+      history.back();
+    }
+    return true;
+  }
+
+  consumeHistorySteps(count) {
+    if (count <= 0) return;
+    for (let index = 0; index < count; index += 1) stepBack(this.historySteps);
+    this.historySteps = {entries: this.historySteps.entries.slice(0, -count)};
+    if (this.canUseHistory()) {
+      this.pendingProgrammaticBacks += count;
+      history.go(-count);
+    }
+  }
+
+  consumeAllHistorySteps() {
+    const count = currentDepth(this.historySteps);
+    if (count <= 0) return;
+    this.historySteps = createHistorySteps();
+    if (this.canUseHistory()) {
+      this.pendingProgrammaticBacks += count;
+      history.go(-count);
+    }
+  }
+
+  handleHistoryPop(event) {
+    if (this.pendingProgrammaticBacks > 0) {
+      this.pendingProgrammaticBacks -= 1;
+      return;
+    }
+    const targetDepth = depthOf(event.state);
+    const count = stepsToCloseForDepth(this.historySteps, targetDepth);
+    if (count === null || count <= 0) {
+      // Foreign or unexpected state: keep our logical state aligned with the reported depth when possible.
+      if (targetDepth === 0 && currentDepth(this.historySteps) > 0) this.applyHistoryBackSteps(currentDepth(this.historySteps));
+      return;
+    }
+    this.applyHistoryBackSteps(count);
+  }
+
+  applyHistoryBackSteps(count) {
+    this.applyingHistory = true;
+    try {
+      for (let index = 0; index < count; index += 1) {
+        const back = stepBack(this.historySteps);
+        if (!back) break;
+        this.historySteps = back.state;
+        this.undoHistoryStep(back.entry);
+      }
+    } finally {
+      this.applyingHistory = false;
+    }
+  }
+
+  undoHistoryStep(entry) {
+    switch (entry.step) {
+      case STEP.DOCK:
+        this.closeDockSilently();
+        break;
+      case STEP.FLIP_MODES:
+        this.leaveFlipModesSilently();
+        break;
+      case STEP.SEARCH_BUBBLE:
+        this.closeSearchBubbleSilently();
+        break;
+      case STEP.SEARCH_STRIP:
+        this.restoreSearchBubbleSilently();
+        break;
+      case STEP.CARD_PEEK:
+        this.closeCardStepSilently(entry);
+        break;
+      case STEP.CARD_FULL:
+        this.setCardStateFromHistory('peek');
+        break;
+      case STEP.CARD_FULLSCREEN:
+        this.setCardStateFromHistory(this.isMobilePhone ? 'full' : 'peek');
+        break;
+      default:
+        break;
+    }
   }
 
   // Wire the search input handlers. On Flip with the modes screen shown,
@@ -242,9 +398,7 @@ export class MapInterface {
       this.search.addEventListener(type, () => {
         if (!this.isRestoringFocus) {
           if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
-            this.flipDockScreen = 'list';
-            this.syncDockContent();
-            this.syncMenuIcon();
+            this.leaveFlipModesByUI();
             this.onSearch?.();
             return;
           }
@@ -253,18 +407,29 @@ export class MapInterface {
       });
     this.search.addEventListener('input', () => {
       if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
-        this.flipDockScreen = 'list';
-        this.syncDockContent();
-        this.syncMenuIcon();
+        this.leaveFlipModesByUI();
       }
       this.syncClearButton();
       this.syncDesktopSearchUI();
     });
   }
 
+  leaveFlipModesByUI() {
+    if (this.flipDockScreen !== 'modes') return;
+    if (!this.applyingHistory && topStep(this.historySteps) === STEP.FLIP_MODES)
+      this.consumeHistoryStep(STEP.FLIP_MODES);
+    this.flipDockScreen = 'list';
+    this.syncDockContent();
+    this.syncMenuIcon();
+  }
+
   // The three-step mobile card (peek, full, fullscreen) applies on phones, not Flip.
   get isMobilePhone() {
     return this.mobileLayoutQuery.matches && !this.flipLayoutQuery.matches;
+  }
+
+  get isFlip() {
+    return this.flipLayoutQuery.matches;
   }
 
   // A menu click toggles the dock, or advances the three-state cycle on Flip.
@@ -274,9 +439,25 @@ export class MapInterface {
     if (this.flipLayoutQuery.matches) {
       this.cycleFlipMenu();
     } else {
-      this.setView(this.view === 'dock' ? 'closed' : 'dock');
+      if (this.view === 'dock') this.closeDockByUI();
+      else this.openDockByUI();
     }
     this.onViewport?.();
+  }
+
+  openDockByUI() {
+    this.setView('dock');
+    if (!this.applyingHistory) this.pushHistoryStep(STEP.DOCK);
+  }
+
+  closeDockByUI() {
+    if (!this.applyingHistory) {
+      // Close modes/list steps above dock first if any, then dock.
+      if (topStep(this.historySteps) === STEP.FLIP_MODES) this.consumeHistoryStep(STEP.FLIP_MODES);
+      this.consumeHistoryStep(STEP.DOCK);
+    }
+    this.flipDockScreen = null;
+    this.setView('closed');
   }
 
   // Move the browse panel to the container for the current view without changing other state.
@@ -324,6 +505,18 @@ export class MapInterface {
     this.closeResults();
   }
 
+  // ×/UI closes whatever the current view represents toward the opening view.
+  closeViewByUI() {
+    if (this.view === 'dock') {
+      this.closeDockByUI();
+      return;
+    }
+    if (this.view === 'search') {
+      this.closeResults();
+      return;
+    }
+  }
+
   // Reveal results without taking focus from the control the person used.
   showResults() {
     this.isResultsPanelOpen = true;
@@ -331,23 +524,28 @@ export class MapInterface {
     this.syncClearButton();
   }
 
-  openSearch() {
+  openSearch({fromHistory = false} = {}) {
     this.trigger = this.search;
     if (this.mobileLayoutQuery.matches) {
       // Mobile behavior: search bubble or dock.
       const view = this.view !== 'dock' ? 'search' : 'dock';
       const hasViewChanged = view !== this.view;
-      this.setView(view);
+      if (hasViewChanged && view === 'search' && !fromHistory && !this.applyingHistory)
+        this.pushHistoryStep(STEP.SEARCH_BUBBLE);
+      this.setView(view, {fromHistory});
       if (hasViewChanged) this.onSearch?.();
-      else if (this.areResultsMinimized) this.setCardState('peek');
+      else if (this.areResultsMinimized) {
+        if (this.isResultsCompacted) this.restoreSearchBubble({fromHistory});
+        else this.setCardState('peek', {fromHistory});
+      } else if (this.isResultsCompacted) this.restoreSearchBubble({fromHistory});
       return;
     }
     // Desktop: focusing reveals the joined results panel even with no query. The dock's state stays as it was.
     const wasOpen = this.areResultsVisible();
     this.showResults();
-    this.setView(this.view);
+    this.setView(this.view, {fromHistory});
     // Refreshing results is not a new search: a card chosen on the map must stay open.
-    if (!wasOpen) this.onResultsRefreshed?.();
+    if (!wasOpen && !fromHistory) this.onResultsRefreshed?.();
   }
 
   // Leave search entirely: hide results and the card, then return to the map.
@@ -355,7 +553,25 @@ export class MapInterface {
     this.onResultsClosed?.();
     this.isResultsPanelOpen = false;
     this.trigger = this.menu;
+    if (!this.applyingHistory) {
+      // Consume search-context steps (card steps above search, strip, bubble) in UI-close order.
+      this.consumeSearchStepsByUI();
+    }
+    this.isResultsCompacted = false;
+    this.areResultsMinimized = false;
     this.close(true);
+  }
+
+  consumeSearchStepsByUI() {
+    // If a card is open over search, its close will be handled by place selection; consume card steps here
+    // so Back never reopens them after results/search are dismissed.
+    while (
+      [STEP.CARD_FULLSCREEN, STEP.CARD_FULL, STEP.CARD_PEEK].includes(topStep(this.historySteps))
+    ) {
+      this.consumeHistoryStep(topStep(this.historySteps));
+    }
+    if (topStep(this.historySteps) === STEP.SEARCH_STRIP) this.consumeHistoryStep(STEP.SEARCH_STRIP);
+    if (topStep(this.historySteps) === STEP.SEARCH_BUBBLE) this.consumeHistoryStep(STEP.SEARCH_BUBBLE);
   }
 
   // Returns the container the browse panel should live in for the given view.
@@ -365,17 +581,22 @@ export class MapInterface {
     return this.dockMain;
   }
 
-  setView(view) {
-    const wasClosed = this.view === 'closed';
+  setView(view, {fromHistory = false} = {}) {
+    const previousView = this.view;
+    if (view === previousView) {
+      if (!fromHistory) this.syncDesktopSearchUI();
+      return;
+    }
     // Capture before hiding a container, which would clamp the hidden row's scroll position to zero.
     const categoryScrollLeft = document.getElementById('categories').scrollLeft;
     this.view = view;
     // Closing a dock or bubble is a return to the map; a desktop focus refresh with the same view is not.
-    if (view === 'closed' && !wasClosed) this.isResultsPanelOpen = false;
+    if (view === 'closed' && previousView !== 'closed') this.isResultsPanelOpen = false;
     if (view !== 'search') {
+      this.isResultsCompacted = false;
       this.areResultsMinimized = false;
       // A peek only makes sense above open results.
-      if (this.card.dataset.state === 'peek') this.setCardState('full');
+      if (this.card.dataset.state === 'peek') this.setCardState('full', {notify: false, fromHistory: true});
     }
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
@@ -397,7 +618,7 @@ export class MapInterface {
     // Derive dock content (dock-main, footer) from current state.
     this.syncDockContent();
     this.syncMenuIcon();
-    this.onChange?.();
+    if (!fromHistory) this.onChange?.();
   }
 
   // On Flip, cycle the icon button through three screens:
@@ -409,14 +630,21 @@ export class MapInterface {
       case null:
         // Open the dock; setView transitions flipDockScreen to 'list' and shows the list.
         this.setView('dock');
+        if (!this.applyingHistory) this.pushHistoryStep(STEP.DOCK);
         break;
       case 'list':
         // Show the modes menu (footer content) and hide results.
         this.flipDockScreen = 'modes';
         this.syncDockContent();
+        if (!this.applyingHistory) this.pushHistoryStep(STEP.FLIP_MODES);
         break;
       case 'modes':
         // Closing the dock resets the screen to null.
+        if (!this.applyingHistory) {
+          if (topStep(this.historySteps) === STEP.FLIP_MODES) this.consumeHistoryStep(STEP.FLIP_MODES);
+          if (topStep(this.historySteps) === STEP.DOCK) this.consumeHistoryStep(STEP.DOCK);
+        }
+        this.flipDockScreen = null;
         this.setView('closed');
         break;
     }
@@ -477,6 +705,31 @@ export class MapInterface {
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
   }
 
+  // Standalone compacted results: strip shown without a card, Back returns to the bubble.
+  compactResultsToStrip() {
+    if (this.view !== 'search' || this.isResultsCompacted) return false;
+    // Only compact the open bubble (not when a card already minimized results behind it).
+    if (this.areResultsMinimized) return false;
+    this.isResultsCompacted = true;
+    this.areResultsMinimized = true;
+    this.syncResultsVisibility();
+    this.pushHistoryStep(STEP.SEARCH_STRIP);
+    return true;
+  }
+
+  restoreSearchBubble({fromHistory = false} = {}) {
+    if (!this.isResultsCompacted) return false;
+    if (!fromHistory) this.consumeHistoryStep(STEP.SEARCH_STRIP);
+    this.isResultsCompacted = false;
+    this.areResultsMinimized = false;
+    this.syncResultsVisibility();
+    return true;
+  }
+
+  restoreSearchBubbleSilently() {
+    this.restoreSearchBubble({fromHistory: true});
+  }
+
   // On desktop, data-state makes the panel a floating chips row (empty) or a joined results card (open/filled).
   syncDesktopSearchUI() {
     if (this.mobileLayoutQuery.matches) {
@@ -494,19 +747,52 @@ export class MapInterface {
   }
 
   // Call after the card's content is in place and it is no longer hidden.
-  placeCardOpened() {
-    if (this.mobileLayoutQuery.matches && this.view === 'dock') this.setView('search');
+  placeCardOpened({fromDock = false} = {}) {
+    // Remember Flip dock origin so Back/card-close can restore it (issue #266).
+    this.cardRestoreDock = !!(fromDock && this.isFlip);
+    // A fresh card starts from its layout's resting state; clear any stale compaction flag.
+    if (this.isResultsCompacted && !this.applyingHistory && topStep(this.historySteps) === STEP.SEARCH_STRIP)
+      this.consumeHistoryStep(STEP.SEARCH_STRIP);
+    this.isResultsCompacted = false;
+    if (this.mobileLayoutQuery.matches && this.view === 'dock') {
+      if (this.cardRestoreDock) {
+        // Keep DOCK as the step below the card so Back can return to it.
+        // Present the card in search view, as the mobile dock result flow does.
+        this.setView('search');
+      } else {
+        // Leaving the dock for search+card: consume the dock step.
+        if (!this.applyingHistory && topStep(this.historySteps) === STEP.DOCK) this.consumeHistoryStep(STEP.DOCK);
+        this.setView('search');
+        if (!this.applyingHistory) this.pushHistoryStep(STEP.SEARCH_BUBBLE);
+      }
+    }
     this.syncCardForLayout();
   }
 
-  resetCardState() {
+  resetCardState({fromHistory = false} = {}) {
+    const hadState = !!this.card.dataset.state;
+    const restoreDock = this.cardRestoreDock;
+    if (hadState && !fromHistory && !this.applyingHistory) this.consumeCardHistoryStepsByUI();
     delete this.card.dataset.state;
     this.clearCardDragGeometry();
     this.card.style.removeProperty('touch-action');
     this.cardBody.inert = false;
+    this.cardRestoreDock = false;
     this.areResultsMinimized = false;
+    // Standalone compaction is separate from a card; keep it only when still in search without card steps.
+    if (this.view !== 'search') this.isResultsCompacted = false;
     this.syncMobileCardPresentation();
     this.syncResultsVisibility();
+    if (hadState && restoreDock && this.isFlip && !fromHistory && !this.applyingHistory) {
+      // Return to the dock the card came from; DOCK remains the current step.
+      this.restoreDockView({fromHistory: false});
+    }
+  }
+
+  consumeCardHistoryStepsByUI() {
+    while ([STEP.CARD_FULLSCREEN, STEP.CARD_FULL, STEP.CARD_PEEK].includes(topStep(this.historySteps))) {
+      this.consumeHistoryStep(topStep(this.historySteps));
+    }
   }
 
   syncCardForLayout() {
@@ -514,7 +800,13 @@ export class MapInterface {
       this.resetCardState();
       return;
     }
-    this.setCardState(this.view === 'search' ? 'peek' : 'full', {notify: false});
+    const initialState = this.view === 'search' ? 'peek' : 'full';
+    // Opening the card creates its first step.
+    this.setCardState(initialState, {notify: false, fromHistory: true});
+    if (!this.applyingHistory) {
+      const step = this.cardHistoryStepForState(initialState);
+      if (step) this.pushHistoryStep(step, {restoreDock: this.cardRestoreDock});
+    }
   }
 
   // The phone card can step up from Peek and Full; the fullscreen handle steps back to Full.
@@ -544,12 +836,29 @@ export class MapInterface {
     else if (this.view === 'search' && state === 'full') this.setCardState('peek');
   }
 
-  setCardState(state, {notify = true} = {}) {
+  cardHistoryStepForState(state) {
+    if (state === 'peek') return STEP.CARD_PEEK;
+    if (state === 'full') return STEP.CARD_FULL;
+    if (state === 'fullscreen') return STEP.CARD_FULLSCREEN;
+    return null;
+  }
+
+  setCardState(state, {notify = true, fromHistory = false} = {}) {
+    const previousState = this.card.dataset.state;
+    if (!fromHistory && previousState && state !== previousState) this.syncCardHistoryTransition(previousState, state);
     this.clearCardDragGeometry();
     this.card.dataset.state = state;
     // Clipped controls must not stay reachable by keyboard; fullscreen content is fully visible.
     this.cardBody.inert = state === 'peek';
-    if (this.view === 'search') this.areResultsMinimized = state === 'full' || state === 'fullscreen';
+    if (this.view === 'search') {
+      // Full/fullscreen over search keeps results behind as a strip, unless the strip is the standalone step.
+      this.areResultsMinimized = state === 'full' || state === 'fullscreen';
+      if (state === 'peek') this.areResultsMinimized = this.isResultsCompacted;
+      // A real card state above peek is not the standalone compaction step.
+      if (state === 'full' || state === 'fullscreen') this.isResultsCompacted = false;
+    } else {
+      this.isResultsCompacted = false;
+    }
     this.syncResultsVisibility();
     this.syncCardHandle();
     this.syncMobileCardPresentation();
@@ -557,6 +866,37 @@ export class MapInterface {
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
     if (notify) this.onViewport?.();
+  }
+
+  setCardStateFromHistory(state) {
+    this.setCardState(state, {fromHistory: true});
+  }
+
+  syncCardHistoryTransition(previousState, nextState) {
+    const cardStepRank = {peek: 1, full: 2, fullscreen: 3};
+    const previousRank = cardStepRank[previousState] ?? 0;
+    const nextRank = cardStepRank[nextState] ?? 0;
+    if (nextRank > previousRank) {
+      this.pushCardStepsBetween(previousRank, nextRank);
+      return;
+    }
+    if (nextRank < previousRank) this.consumeCardStepsBetween(previousRank, nextRank);
+  }
+
+  pushCardStepsBetween(previousRank, nextRank) {
+    for (const state of ['peek', 'full', 'fullscreen']) {
+      if (cardStepRankValue(state) <= previousRank || cardStepRankValue(state) > nextRank) continue;
+      const step = this.cardHistoryStepForState(state);
+      if (step) this.pushHistoryStep(step, {restoreDock: this.cardRestoreDock});
+    }
+  }
+
+  consumeCardStepsBetween(previousRank, nextRank) {
+    for (const state of ['fullscreen', 'full']) {
+      if (cardStepRankValue(state) > previousRank || cardStepRankValue(state) <= nextRank) continue;
+      const step = this.cardHistoryStepForState(state);
+      if (step) this.consumeHistoryStep(step);
+    }
   }
 
   // Expose the phone card state so CSS can hide search, place the Locate button, and style fullscreen.
@@ -723,6 +1063,40 @@ export class MapInterface {
     if (next === state) return;
     if (next === 'closed') this.onCardSwipedAway?.();
     else this.setCardState(next);
+  }
+
+  closeDockSilently() {
+    // Dock may be the logical step below a card-origin flow; always leave dock view.
+    this.flipDockScreen = null;
+    this.setView('closed', {fromHistory: true});
+  }
+
+  leaveFlipModesSilently() {
+    if (this.flipDockScreen !== 'modes') return;
+    this.flipDockScreen = 'list';
+    this.syncDockContent();
+    this.syncMenuIcon();
+  }
+
+  closeSearchBubbleSilently() {
+    this.isResultsCompacted = false;
+    this.areResultsMinimized = false;
+    this.isResultsPanelOpen = false;
+    this.trigger = this.menu;
+    this.setView('closed', {fromHistory: true});
+  }
+
+  closeCardStepSilently(entry) {
+    const restoreDock = !!entry?.meta?.restoreDock;
+    this.cardRestoreDock = false;
+    // Closing by Back must behave like closing the card, without consuming history again.
+    this.onCardSwipedAway?.();
+    if (restoreDock && this.isFlip) this.restoreDockView({fromHistory: true});
+  }
+
+  restoreDockView({fromHistory = false} = {}) {
+    this.flipDockScreen = 'list';
+    this.setView('dock', {fromHistory});
   }
 
   wireCardGestures() {
@@ -951,9 +1325,22 @@ export class MapInterface {
     this.isRestoringFocus = false;
   }
 
-  close(shouldRestoreFocus = false) {
-    this.setView('closed');
+  close(shouldRestoreFocus = false, {fromHistory = false} = {}) {
+    if (!fromHistory && !this.applyingHistory) this.consumeOpenViewStepByUI();
+    this.isResultsCompacted = false;
+    this.areResultsMinimized = false;
+    this.flipDockScreen = null;
+    this.setView('closed', {fromHistory});
     if (shouldRestoreFocus) this.restoreFocus(this.trigger);
+  }
+
+  consumeOpenViewStepByUI() {
+    if (this.view === 'dock') {
+      if (topStep(this.historySteps) === STEP.FLIP_MODES) this.consumeHistoryStep(STEP.FLIP_MODES);
+      if (topStep(this.historySteps) === STEP.DOCK) this.consumeHistoryStep(STEP.DOCK);
+      return;
+    }
+    if (this.view === 'search') this.consumeSearchStepsByUI();
   }
 
   // Clear the search query and update the UI.
