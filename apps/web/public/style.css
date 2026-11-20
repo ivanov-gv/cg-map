@@ -438,9 +438,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     top: calc(var(--visible-top) + 8px + 44px);
   }
   /* Compact category row on Flip — smaller chips (30 px) and tighter padding
-   * so the results area starts sooner. At 374×241 the space between categories
-   * bottom and the footer handle is only 121 px; three 40 px rows with 1 px
-   * separators need 123 px, so we shave the category row to gain room. */
+   * so the results area starts sooner. At 374×241 the available space between
+   * categories bottom and the viewport edge is only ~121 px; three 40 px rows
+   * with 1 px separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
     gap: 5px;
     /* Reserve room for the × target's invisible 10 px extension, then cancel it so the row stays compact. */

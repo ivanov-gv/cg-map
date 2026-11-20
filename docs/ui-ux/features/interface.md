@@ -154,18 +154,22 @@ keeps the side dock unchanged (narrower than the viewport, with the map visible 
 
 ### Flip three-state icon button
 
-On Flip, the menu icon button (#menu-toggle) cycles through three states, one per screen:
+On Flip, the menu icon button (#menu-toggle) cycles through three screens:
 
 1. **☰ Menu** (dock closed): tap opens the full-screen dock showing the search field, categories, and results list.
-2. **◇ Modes** (dock open, results shown): tap replaces the categories and results with the "modes menu": Satellite and
-   Transport tiles side by side, the "Download for offline use" button, and the one-line license/attribution. The search
-   field stays in the header. Everything fits without scrolling at 340×250 and 340×340.
-3. **× Close** (modes menu shown): tap closes the dock and returns to the map. The next time the dock is opened, it
-   shows the results list again (state resets to ☰ Menu).
+2. **◇ Modes** (dock open, list screen shown): tap shows the modes menu — Satellite and Transport tiles side by side,
+   the "Download for offline use" button, and the one-line license/attribution. The search field stays in the header,
+   and the categories row remains visible above the tiles. Everything fits without scrolling at 374×241, 340×250 and
+   340×340.
+3. **× Close** (modes screen shown): tap closes the dock and returns to the map. The next time the dock is opened, it
+   shows the results list again.
 
-Each state has its own icon (☰ from `#i-menu`, ◇ from `#i-modes`, × from `#i-close` in the SVG sprite), an accessible
+Each screen has its own icon (☰ from `#i-menu`, ◇ from `#i-modes`, × from `#i-close` in the SVG sprite), an accessible
 name ("Open menu" / "Show map modes" / "Close menu"), and `aria-expanded` on the dock reflecting whether it is open. The
 old minimizable footer handle (#footer-toggle) has been removed and replaced by this cycle.
+
+On the modes screen, focusing the search field or typing a query switches back to the list screen, showing filtered
+results and updating the button icon to ◇ Modes.
 
 **Compact layout for real Flip screens** (issues #161, #268): the real Flip cover screen is about 340×250 CSS px
 (shorter than the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are
@@ -173,7 +177,7 @@ fully visible when the dock shows results: the search bar uses an 8 px top inset
 chips are 30 px high with tight padding while the active pill stays 40 px, and each result row is about 37 px (24 px
 symbol, 13 px name, 10 px kind/distance with ellipsis). When the modes menu is shown, layer tiles are compact (icon and
 label in one row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution
-line all fit without scrolling. These sizes are tested at both 340×250 and 340×340.
+line all fit without scrolling. These sizes are tested at 374×241, 340×250 and 340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 

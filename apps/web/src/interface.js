@@ -121,8 +121,10 @@ export class MapInterface {
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
     this.flipLayoutQuery = matchMedia(FLIP_MEDIA_QUERY);
     this.isRestoringFocus = false;
-    // On Flip, the menu button cycles through Menu → Modes → Close; elsewhere it toggles the dock.
-    this.menuState = 'menu'; // 'menu' | 'modes' | 'close', meaningful only on Flip
+    // On Flip, the menu button cycles through three screens; elsewhere it toggles the dock.
+    // 'list' → dock open, results shown; 'modes' → dock open, modes menu shown.
+    // When the dock is closed, flipDockScreen is null and view === 'closed'.
+    this.flipDockScreen = null; // 'list' | 'modes' | null, meaningful only on Flip
   }
 
   findControls() {
@@ -158,21 +160,21 @@ export class MapInterface {
     this.wireSearchEvents();
   }
 
-  // A menu click toggles the dock, or advances the three-state cycle on Flip.
-  activateMenu() {
-    this.trigger = this.menu;
-    if (this.mobileLayoutQuery.matches) this.search.blur();
-    if (this.flipLayoutQuery.matches) this.cycleFlipMenu();
-    else this.setView(this.view === 'dock' ? 'closed' : 'dock');
-    this.onViewport?.();
-  }
-
+  // Wire the search input handlers. On Flip with the modes screen shown,
+  // focus or typing switches to the list screen instead of opening search.
   wireSearchEvents() {
-    // A restored focus must not reopen the panel it just returned to.
     for (const type of ['focus', 'click'])
       this.search.addEventListener(type, () => {
-        if (this.isRestoringFocus) return;
-        this.openSearch();
+        if (!this.isRestoringFocus) {
+          if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
+            this.flipDockScreen = 'list';
+            this.syncDockContent();
+            this.syncMenuIcon();
+            this.onSearch?.();
+            return;
+          }
+          this.openSearch();
+        }
       });
     this.search.addEventListener('keydown', event => {
       const isSearchKey = event.key === 'Enter' && !event.isComposing;
@@ -183,9 +185,23 @@ export class MapInterface {
       this.search.blur();
     });
     this.search.addEventListener('input', () => {
+      if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
+        this.flipDockScreen = 'list';
+        this.syncDockContent();
+        this.syncMenuIcon();
+      }
       this.syncClearButton();
       this.syncDesktopSearchUI();
     });
+  }
+
+  // A menu click toggles the dock, or advances the three-state cycle on Flip.
+  activateMenu() {
+    this.trigger = this.menu;
+    if (this.mobileLayoutQuery.matches) this.search.blur();
+    if (this.flipLayoutQuery.matches) this.cycleFlipMenu();
+    else this.setView(this.view === 'dock' ? 'closed' : 'dock');
+    this.onViewport?.();
   }
 
   wireLayoutChanges() {
@@ -362,13 +378,13 @@ export class MapInterface {
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.syncSearchExpanded();
     this.syncActiveChip();
-    // Closing the dock resets the Flip menu state; opening it shows the results list.
+    // Closing the dock resets the Flip screen to null.
     if (view !== 'dock') {
-      this.menuState = 'menu';
+      this.flipDockScreen = null;
     }
-    // Opening the dock always starts with the list (modes state).
-    if (view === 'dock' && this.menuState === 'menu') {
-      this.menuState = 'modes';
+    // Opening the dock always starts with the list screen.
+    if (view === 'dock' && this.flipDockScreen === null) {
+      this.flipDockScreen = 'list';
     }
     // Derive dock content (dock-main, footer) from current state.
     this.syncDockContent();
@@ -376,23 +392,23 @@ export class MapInterface {
     this.onChange?.();
   }
 
-  // On Flip, cycle the menu button through three states:
-  //   'menu' (☰) → open dock showing categories + results
-  //   'modes' (◇) → replace results with modes menu (footer)
-  //   'close' (×) → close dock and reset
+  // On Flip, cycle the icon button through three screens:
+  //   null (☰) → open dock showing categories + results (list screen)
+  //   'list' (◇) → replace results with modes menu (modes screen)
+  //   'modes' (×) → close dock and reset
   cycleFlipMenu() {
-    switch (this.menuState) {
-      case 'menu':
-        // Open the dock; setView transitions menuState to 'modes' and shows the list.
+    switch (this.flipDockScreen) {
+      case null:
+        // Open the dock; setView transitions flipDockScreen to 'list' and shows the list.
         this.setView('dock');
         break;
-      case 'modes':
+      case 'list':
         // Show the modes menu (footer content) and hide results.
-        this.menuState = 'close';
+        this.flipDockScreen = 'modes';
         this.syncDockContent();
         break;
-      case 'close':
-        // Closing the dock reset the state to menu.
+      case 'modes':
+        // Closing the dock resets the screen to null.
         this.setView('closed');
         break;
     }
@@ -400,38 +416,44 @@ export class MapInterface {
   }
 
   // Derive the visible dock content from current state.
-  // On Flip with the dock open: show dock-main in Modes and the footer in Close.
+  // On Flip with the dock open: show the results list on the list screen, show the footer on the modes screen.
+  // The categories row stays visible in both screens (it lives inside dock-main).
   // In every other case (dock closed, or not Flip): show both dock-main and footer.
   syncDockContent() {
     const isFlip = this.flipLayoutQuery.matches;
     const isDockOpen = this.view === 'dock';
     if (isFlip && isDockOpen) {
-      const showResults = this.menuState === 'modes';
-      const showFooter = this.menuState === 'close';
-      this.dockMain.hidden = !showResults;
+      const showResults = this.flipDockScreen === 'list';
+      const showFooter = this.flipDockScreen === 'modes';
+      // On the modes screen, hide only the results section so categories remain visible.
+      this.dockMain.hidden = false;
+      document.getElementById('results').hidden = !showResults;
       this.footer.hidden = !showFooter;
     } else {
       this.dockMain.hidden = false;
+      document.getElementById('results').hidden = false;
       this.footer.hidden = false;
     }
   }
 
   // Update the menu button icon and accessible label for the current state.
+  // On Flip, derive icon and label from view + flipDockScreen.
   syncMenuIcon() {
     const iconUse = this.menu.querySelector('use');
-    const icons = {
-      menu: '#i-menu',
-      modes: '#i-modes',
-      close: '#i-close'
-    };
-    const labels = {
-      menu: 'Open menu',
-      modes: 'Show map modes',
-      close: 'Close menu'
-    };
     if (this.flipLayoutQuery.matches) {
-      iconUse.setAttribute('href', icons[this.menuState]);
-      this.menu.setAttribute('aria-label', labels[this.menuState]);
+      if (this.view !== 'dock') {
+        // Dock closed: ☰ Menu
+        iconUse.setAttribute('href', '#i-menu');
+        this.menu.setAttribute('aria-label', 'Open menu');
+      } else if (this.flipDockScreen === 'list') {
+        // Dock open, list shown: ◇ Modes
+        iconUse.setAttribute('href', '#i-modes');
+        this.menu.setAttribute('aria-label', 'Show map modes');
+      } else {
+        // Dock open, modes shown: × Close
+        iconUse.setAttribute('href', '#i-close');
+        this.menu.setAttribute('aria-label', 'Close menu');
+      }
     } else {
       iconUse.setAttribute('href', '#i-menu');
       this.menu.setAttribute('aria-label', this.view === 'dock' ? 'Close menu' : 'Open menu');
