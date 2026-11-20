@@ -172,11 +172,20 @@ export class PlaceSelection {
   }
 
   // Keep a chosen place visible with as little camera movement as possible: pan only when it leaves the focus zone.
-  revealCoordinates(coordinates, {zoom = 15, duration: durationMilliseconds = selectionCameraDurationMilliseconds} = {}) {
+  // A map tap passes the area from before its card opened, so new card content cannot turn a visible tap into a move.
+  revealCoordinates(
+    coordinates,
+    {
+      zoom = 15,
+      duration: durationMilliseconds = selectionCameraDurationMilliseconds,
+      focusArea = null
+    } = {}
+  ) {
     if (!this.#map) return;
     this.#context.onExploreMap();
     const needsZoom = this.#map.getZoom() < zoom;
-    if (!needsZoom && isInFocusZone(this.#map.project(coordinates), this.#interface.mapArea())) return;
+    const judgedArea = focusArea ?? this.#interface.mapArea();
+    if (!needsZoom && isInFocusZone(this.#map.project(coordinates), judgedArea)) return;
     this.#map.easeTo({
       center: coordinates,
       zoom: Math.max(this.#map.getZoom(), zoom),
@@ -267,9 +276,10 @@ export class PlaceSelection {
 
   // Requires a ready map and initialized selection layers; opens a known listing and defers camera
   // framing until the keyboard is closed, preserving the originating control for focus restoration.
-  showPlace(placeId, trigger) {
+  showPlace(placeId, trigger, {fromMapTap = false} = {}) {
     const feature = this.#directory.placesById.get(String(placeId));
     if (!feature) return;
+    const tapFocusArea = fromMapTap && this.#map ? this.#interface.mapArea() : null;
     this.#state.resolvedBuildingAddress = '';
     this.#state.renderedInsideKey = '';
     this.#state.selectedBuildingFeature = null;
@@ -295,7 +305,8 @@ export class PlaceSelection {
     this.markCurrentResult();
     this.#objectSelection.selectPlace(this.#directory.markerKeysByPlaceId.get(properties.id));
     elementById('close-place').focus({preventScroll: true});
-    this.#state.pendingReveal = {zoom: 15};
+    this.#state.revealOnlyWhenNeeded = fromMapTap;
+    this.#state.pendingReveal = {zoom: 15, focusArea: tapFocusArea};
     this.flushPendingReveal();
   }
 
