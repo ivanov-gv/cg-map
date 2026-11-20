@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted. Issue #263 refines the highlight rule in a dated outcome note below; the original decision stays on record.
+Accepted. Issues #263 and #264 refine the highlight and result-kind rules in dated outcome notes below; the original
+decision stays on record.
 
 ## Context
 
@@ -68,6 +69,31 @@ The narrow scope is deliberate: this is an exception to marker admission for exp
 signal, a camera move, or a change to directory levels. Current behaviour is described in
 [the interface guide](../ui-ux/features/interface.md#search-result-kinds-and-visible-highlights-us-02-us-04) and
 [stable POI visibility](../ui-ux/features/poi-visibility.md#pv-03-search-selection-and-filters).
+
+## Outcome note: street results (issue #264, 20 November 2026)
+
+The list showed building addresses but no streets, even though named road lines and `addr:street` values are already in
+the loaded runtime data. The fix stays inside that data: no geography rebuild, backend search, or editorial service.
+
+- Rendered road line features and loaded address labels supply street candidates. Candidates are grouped by normalized
+  street name, so many segments and labels carrying one name produce exactly one **Street** row (🛣). The row title is
+  the street name and its subtitle is `Street`.
+- Every query word must start a word in the street name. A number that is not part of the name, such as `42` in
+  `Jerevanska 42`, never lists the street; matching address labels still produce their address rows. This keeps the
+  earlier address rule intact and prevents a partial house number from inventing a street match.
+- The nearest candidate point supplies row ranking and the focus-zone reveal. Road segments supply the attributes for
+  the card; a street known only from a label still yields the same Road card from a synthesized road feature built at
+  that recorded point.
+- A green line filter marks matching roads while their street row is in view. Choosing the row replaces that with the
+  existing red road-selection filter over every rendered segment of the name and opens the same Road card as a map tap,
+  through `describePoint`. The reveal keeps the zoom floor of 15.
+- The result stays in the **All** category only. A picked category remains places-only, and clearing the query removes
+  the green road filter with the other marks.
+
+The older consequence that a street without a number matches every address on it is historical: #264 groups those
+matches into one Street row and keeps address rows only for labels that satisfy the full query. Current behavior is
+described in
+[the interface guide](../ui-ux/features/interface.md#search-result-kinds-and-visible-highlights-us-02-us-04).
 
 ## Distance rule (issue #262)
 

@@ -75,6 +75,8 @@ export function installPublicPlaceLayers(map) {
 }
 
 const noFootprints = ['in', ['id'], ['literal', []]];
+const noStreetNames = ['in', ['get', 'name'], ['literal', []]];
+const streetNameFilter = names => ['in', ['get', 'name'], ['literal', names]];
 
 // One marker per result location, carrying every matching listing at that point. The highest band already holds all
 // members at a shared location, so it gives the icon and activeIds without any level's zoom threshold.
@@ -140,6 +142,22 @@ export class SearchHighlights {
       },
       'road-labels'
     );
+    // A street row has no footprint; filter the road tiles by the street names currently in the visible result set.
+    map.addLayer(
+      {
+        id: 'search-street-outline',
+        type: 'line',
+        source: 'basemap',
+        'source-layer': 'roads',
+        filter: noStreetNames,
+        paint: {
+          'line-color': SEARCH_HIGHLIGHT_COLOR,
+          'line-width': 4
+        },
+        layout: {'line-join': 'round', 'line-cap': 'round'}
+      },
+      'road-labels'
+    );
   }
 
   // One source update when the filter changes, never one per result or per camera move. An empty set hides the layer
@@ -168,9 +186,13 @@ export class SearchHighlights {
     }
     this.map.getSource('search-place-highlights').setData(featureCollection([...ringsByMarkerKey.values()]));
     const footprints = visibleResults
-      .filter(result => result.kind !== 'place')
+      .filter(result => result.kind === 'building' || result.kind === 'address')
       .map(result => result.footprintIndex);
+    const streetNames = [
+      ...new Set(visibleResults.filter(result => result.kind === 'street').map(result => result.streetName))
+    ];
     this.map.setFilter('search-building-outline', ['in', ['id'], ['literal', footprints]]);
+    this.map.setFilter('search-street-outline', streetNameFilter(streetNames));
   }
 
   clear() {

@@ -226,28 +226,35 @@ names and at least 76px height.
 ### Search result kinds and visible highlights (US-02, US-04)
 
 Current behavior: with the **All** chip active (no category filter) and a typed query, the nearest-first list combines
-places with recorded building addresses from the local label snapshot. A street name, alone or with a number, is one
-**Address** row (📍); a standalone house, building, section, or entrance identifier is one **Building** row (🏢). One
-label yields at most one row, with Address winning when both forms match. Matching is local and lexical, using the
-existing Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative address identity. An empty
-query keeps the nearby place list, and choosing any category lists places only.
+places, recorded building addresses from the local label snapshot, and named streets from the loaded map data. A street
+name alone is one **Street** row (🛣), titled with the name and subtitled `Street`; all query words must start words in
+that name, and a number that is not part of the name, such as `42` in `Jerevanska 42`, does not list a street. A street
+name with a number still yields **Address** rows (📍) for matching labels. A standalone house, building, section, or
+entrance identifier is one **Building** row (🏢). Each building label yields at most one row, with Address winning when
+both forms match; each street name yields at most one Street row however many road segments or labels carry it. Street
+names come only from rendered road lines and `addr:street` on loaded address labels, with no data refresh. Matching is
+local and lexical, using the existing Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative
+address identity. An empty query keeps the nearby place list, and choosing any category lists places only.
 
-Every building or address match inside the current view gets a green footprint outline. While a query or a category
-other than **All** is active, every place result inside the current view gets its marker drawn at any zoom, even below
-its usual POI threshold, and a green ring. Names may yield to collisions, but markers may not; one app-owned GeoJSON
-source and symbol layer draw them so hundreds of results do not stall panning. With no query and **All**, ordinary POI
-levels apply as before and no result marks are drawn. The 40-row list limit does not cap the marks. Unchosen results are
-never painted with the red preview; only a chosen row removes its green mark and uses the existing red selection
-instead. Choosing a building or address opens the same point card as tapping that building on the map, and reveals it by
-the focus-zone rule above when it is off-screen. Clearing both query and category removes every green mark. The matching
-rules, chosen-result behavior, the #263 exception, and why the marks are app-owned are recorded in
-[ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
+Every building or address match inside the current view gets a green footprint outline. Every in-view result street name
+also gets a green road outline: the road layer is filtered to the names of visible Street rows. While a query or a
+category other than **All** is active, every place result inside the current view gets its marker drawn at any zoom,
+even below its usual POI threshold, and a green ring. Names may yield to collisions, but markers may not; one app-owned
+GeoJSON source and symbol layer draw them so hundreds of results do not stall panning. With no query and **All**,
+ordinary POI levels apply as before and no result marks are drawn. The 40-row list limit does not cap the marks.
+Unchosen results are never painted with the red preview; only a chosen row removes its green mark and uses the existing
+red selection instead. Choosing a street turns every rendered segment of that named road red and opens the same Road
+card as tapping the road, using its recorded attributes. Choosing a building or address opens the same point card as
+tapping that building on the map. Every chosen result is revealed by the focus-zone rule above when it is off-screen,
+with a zoom floor of 15. Clearing both query and category removes every green mark, including road outlines. The
+matching rules, the #263 marker exception, the #264 street rule, chosen-result behavior, and why the marks are app-owned
+are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
 
 ### Distance comes from the person, not the camera (US-03, US-13)
 
 Current behavior: result rows in the dock, mobile bubble, desktop panel and Flip dock measure and order distance from a
-usable device fix. A fresh or approximate fix supplies distance text for places, buildings and addresses alike, so a
-person can compare options that are genuinely near them. Any other location state — acquiring, stale, denied,
+usable device fix. A fresh or approximate fix supplies distance text for places, buildings, addresses and streets alike,
+so a person can compare options that are genuinely near them. Any other location state — acquiring, stale, denied,
 unavailable, outside coverage, or no fix — keeps map-centre ordering but omits the distance text entirely, because the
 camera is not the person's position. A changed fix re-ranks and redraws the list after a short throttle. While any card
 is open, the row order stays frozen and the deferred update is applied when the card closes. The details card itself is
@@ -351,8 +358,8 @@ and reduced motion.
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock. |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                 |
 | UI-A15 | Pick a category, use its × in every row, then repeat with the dock and search closed on Mobile, and with the dock closed on Flip.                 | Every active chip (never All) has a named 40 px × that returns to All, keeps the query and preserves the row's scroll position; the standalone chip disappears. On Mobile it sits 8 px below the bar and opens the bubble; on Flip it sits under the icon button and opens the dock. It is hidden for All, with a panel open, and under a Full/Fullscreen card.   |
-| UI-A16 | Type a query with places and recorded building addresses; pan, zoom out, pick a category, then choose each result kind and clear search.          | Rows are nearest first with place/building/address symbols and labels; in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, and clearing removes every green mark. With no query and All, ordinary POI thresholds apply. A category lists places only. |
-| UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                         | With a usable fix, every result kind is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                              |
+| UI-A16 | Type a query with places, recorded building addresses and named streets; pan, choose each result kind, then clear search. Zoom out and pick a category. | Rows are nearest first with place/building/address/street symbols and labels; a visible street has one row and a green road outline, choosing it turns the road red and opens the Road card, in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, and clearing removes every green mark. With no query and All, ordinary POI thresholds apply. A category lists places only. |
+| UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                               | With a usable fix, every result kind, including streets, is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                                                                                                                                                                                  |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -367,15 +374,16 @@ or two results across keyboard events, the build version on one footer line at d
 device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
 result stops, denied shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
-buildings and addresses, that in-view building outlines and drawn place markers stay green with no red preview, that an
-active filter draws and rings every in-view result at zoom 12 while an unfiltered view keeps POI thresholds, that
-choosing one turns red, reveals an off-screen result under the focus-zone rule, and that clearing removes every green
-mark. Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit tests
-cover the state, clear-button, dock-footer visibility and footer-version functions and the search matching,
-classification, distance origin, formatting and ordering rules; no large fake DOM is built for browser behavior.
-Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader,
-or phone behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep
-scale/POI stability checks in
+buildings, addresses and streets, that a street appears once with a green road outline, a red Road card and a revealed
+off-screen choice, that in-view building outlines and drawn place markers stay green with no red preview, that an active
+filter draws and rings every in-view result at zoom 12 while an unfiltered view keeps POI thresholds, that choosing a
+result turns red and reveals an off-screen result under the focus-zone rule, and that clearing removes every green mark.
+Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit tests cover
+the state, clear-button, dock-footer visibility and footer-version functions and the search matching, street grouping,
+number-query exclusion, classification, distance origin, formatting and ordering rules; no large fake DOM is built for
+browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
+keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
