@@ -127,6 +127,9 @@ test(
     await page.locator('.result', {hasText: 'Nearby place 0'}).click();
     await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
     await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await page.locator('#place-card').evaluate(card =>
+      Promise.allSettled(card.getAnimations().map(animation => animation.finished))
+    );
 
     await swipe(page, -170);
     await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
