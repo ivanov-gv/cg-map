@@ -12,13 +12,15 @@ endpoints selected, the [route planner](routing.md) calculates the selected mode
 
 Visible endpoint markers, entrance markers, bus stops, and drawn directory place symbols take priority over basemap
 geometry. Places are not clustered; a place below its [visibility level's](poi-visibility.md) zoom is reached through
-the directory list instead. A tap on several listings opens a chooser of those listings. Otherwise buildings, roads,
-parks and water expose available map attributes. Building polygons take precedence over house-number label hit boxes;
-their revision-bound tile IDs retrieve address metadata independently of zoom, collisions, or label visibility. See
-[building numbers](../../map-data/building-numbers.md). Unnamed buildings show their feature type and coordinates;
-names, addresses, bridge classifications and metadata are never invented. A named bridge may be represented as a
-directory attraction or road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates
-alone. No reverse geocoder is used.
+the directory list instead. One click or tap opens a marker's card directly: the topmost rendered hit and its first
+active identity win, with no chooser. Co-located listings remain reachable through search and a building card's Inside
+this building section. Otherwise buildings, roads, parks and water expose available map attributes. Building polygons
+take precedence over house-number label hit boxes; their revision-bound tile IDs retrieve address metadata independently
+of zoom, collisions, or label visibility. See [building numbers](../../map-data/building-numbers.md). A recorded
+building number supplies the building name; without a name or number the card says Unnamed building. Names, addresses,
+bridge classifications and metadata are never invented. A named bridge may be represented as a directory attraction or
+road; legacy roads do not consistently preserve bridge tags. Blank map points show coordinates alone. No reverse
+geocoder is used.
 
 The same card and actions work for directory results. Existing website/source links remain. Bus-stop details use the
 dated ePodgorica snapshot. All point selection works with the downloaded offline map; From/To are independent of live
@@ -37,15 +39,17 @@ recorded source and published snapshot date, and adds “Hours are as recorded, 
 cards use the release manifest's snapshot date; bus-stop cards use the dated ePodgorica snapshot.
 
 Named sections carry only recorded facts. A POI gets **Location and contacts** (address, containing building,
-coordinates, phone, website and source link) and **Opening hours**. A building gets **Addresses**, **Entrances (marked
-on the map)**, **Inside this building** and **Details**; a place is listed inside only when its recorded coordinates lie
-within the selected footprint, including polygon holes and separate parts. Other objects get **Details** with whatever
-attributes they have. Missing facts omit their row or section rather than claiming a value is absent in the world, and
-the current card has no NEARBY section.
+coordinates, phone, website and source link), **Opening hours**, and **NEARBY** with up to three other already loaded
+directory places within 500 m, each shown as name · category · rounded distance. Hours keep their weekday labels; an
+unsupported expression is shown exactly as recorded. A building gets **Addresses**, **Entrances (marked on the map)**,
+**Inside this building** and **Details**; entrance rows lead with the same labels shown on the map, and a place is
+listed inside only when its recorded coordinates lie within the whole selected footprint, including polygon holes and
+separate parts. Other objects get **Details** with whatever attributes they have. Missing facts omit their row or
+section rather than claiming a value is absent in the world.
 
-A marker selects that place; a bare building outline selects the building, not a tenant. Picking another subject
-replaces both the card and its highlight. Close or Escape clears the inspection highlight while leaving the query,
-category and any planned endpoints unchanged. Card composition is shared with
+The topmost rendered marker selects its first active place; a bare building outline selects the building, not a tenant.
+Picking another subject replaces both the card and its highlight. Close or Escape clears the inspection highlight while
+leaving the query, category and any planned endpoints unchanged. Card composition is shared with
 [the interface](interface.md#selected-object-card-content); browser acceptance is in
 [the place-card coverage](../../../apps/web/tests/e2e/interface.spec.mjs).
 
@@ -65,11 +69,12 @@ footprint stays highlighted across tile boundaries, zoom changes and satellite m
 fragment into a separate geometry. Picking another subject replaces the highlight rather than adding to it. Closing the
 card or choosing From/To clears the selection highlight.
 
-Selecting a directory place inside a rendered building highlights that building footprint. When tiles are still loading
-or the camera is moving to a search result, this lookup finishes when the map becomes idle. When a place has no building
-footprint, its existing circle gets a red contour and translucent red fill. Bus stops use the same marker highlight. The
-normal marker style returns when selection closes or changes. Bare coordinates use a small red selection circle. No
-additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles. Buildings
-with reviewed entrance metadata show arrows at their entrance positions and individual entrance labels. Selecting an
-entrance uses its exact recorded coordinates for From/To. See
+Selecting a directory place inside a rendered building highlights that building footprint. The containing building
+address comes from loaded building-label data or the first rendered match and stays with that selection; a late lookup
+adds one row without rebuilding the card, and panning away cannot withdraw a recorded address. When a place has no
+building footprint, its existing circle gets a red contour and translucent red fill. Bus stops use the same marker
+highlight. The normal marker style returns when selection closes or changes. Bare coordinates use a small red selection
+circle. No additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles.
+Buildings with reviewed entrance metadata show arrows at their entrance positions and individual entrance labels.
+Selecting an entrance uses its exact recorded coordinates for From/To. See
 [building and entrance addresses](../../map-data/building-numbers.md). Selection uses local data and works offline.

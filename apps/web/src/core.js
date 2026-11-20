@@ -305,7 +305,7 @@ export function distanceKilometres(first, second) {
   return Math.hypot(longitudeDifference, latitudeDifference) * kilometresPerDegree;
 }
 
-// Row text uses metres nearby and one decimal kilometre farther out; it is never a route length.
+// Shared rounding for result rows and nearby context: metres close by, kilometres farther out, never a route length.
 export function formatDistance(kilometres) {
   if (kilometres < 1) return `${Math.round(kilometres * 1000)} m`;
   return `${kilometres.toFixed(1)} km`;

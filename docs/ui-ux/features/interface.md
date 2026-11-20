@@ -216,15 +216,17 @@ place below the header, followed by one source line with the recorded source, it
 shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the
 data:
 
-- A POI uses **Location and contacts** (address, containing building, coordinates, phone, website and source link) and
-  **Opening hours**.
-- A building uses **Addresses**, **Entrances (marked on the map)**, **Inside this building** and **Details**.
+- A POI uses **Location and contacts** (address, containing building, coordinates, phone, website and source link),
+  **Opening hours**, and **NEARBY** when other already loaded directory places lie within 500 m. NEARBY lists up to
+  three as name · category · distance rounded like a result row. Hours keep weekday labels or the recorded expression.
+- A building uses **Addresses**, **Entrances (marked on the map)**, **Inside this building** and **Details**. Entrance
+  rows lead with the labels shown on the map, and inside-place hours keep their weekday labels or raw expression.
 - Other map objects use **Details** with the attributes appropriate to what was shown.
 
-A section or row is omitted when its fact is absent; the card never substitutes “not recorded” text or a NEARBY section
-for missing data. This serves US-04 and US-05 by making the selected subject and its evidence readable in one view,
-while From/To remain explicit planning actions. Closing the card clears the inspection highlight and keeps the query,
-category and endpoints.
+A section or row is omitted when its fact is absent; the card never substitutes “not recorded” text. NEARBY is absent
+when no other loaded place is within 500 m, and a recorded containing building address stays with the current selection.
+This serves US-04 and US-05 by making the selected subject and its evidence readable in one view, while From/To remain
+explicit planning actions. Closing the card clears the inspection highlight and keeps the query, category and endpoints.
 
 The search field shows focus through its caret and a neutral change to the shared bar's border, not the generic focus
 ring. Other controls keep the ring.

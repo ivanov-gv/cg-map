@@ -1,6 +1,6 @@
 // Render listing content without owning selection, camera movement or focus restoration.
 import {placeColors} from '@ivanov-gv/map-core';
-import {categories, safeWebsite} from './core.js';
+import {categories, formatDistance, safeWebsite} from './core.js';
 import {createElement, elementById} from './dom.js';
 
 const weekdayNames = {
@@ -13,6 +13,8 @@ const weekdayNames = {
   Su: 'Sunday'
 };
 const weekdayOrder = Object.keys(weekdayNames);
+export const maximumNearbyPlaces = 3;
+const maximumNearbyDistanceKilometres = 0.5;
 
 // Display WGS84 as latitude first, with hemispheres; inputs stay [longitude, latitude].
 export function formatCoordinates(coordinates) {
@@ -81,16 +83,16 @@ function streetAddress(properties) {
   return [properties['addr:street'], properties['addr:housenumber']].filter(Boolean).join(' ');
 }
 
-function detailRow(label, value) {
-  return {label, value};
+function detailRow(label, value, key) {
+  return key ? {label, value, key} : {label, value};
 }
 
 function detailsSection(id, heading, rows = [], links = []) {
   return {id, heading, rows, links};
 }
 
-function addIfPresent(rows, label, value) {
-  if (value) rows.push(detailRow(label, value));
+function addIfPresent(rows, label, value, key) {
+  if (value) rows.push(detailRow(label, value, key));
 }
 
 function sourceLinks(properties) {
@@ -102,6 +104,20 @@ function sourceLinks(properties) {
   return links;
 }
 
+// Nearby context uses already loaded directory entries and the same distance rounding as result rows.
+function nearbyRows(nearbyPlaces) {
+  const rows = [];
+  for (const candidate of nearbyPlaces ?? []) {
+    const {distanceKilometres} = candidate;
+    if (!Number.isFinite(distanceKilometres) || distanceKilometres > maximumNearbyDistanceKilometres) continue;
+    const properties = candidate.feature?.properties ?? {};
+    const categoryLabel = categories[properties.category] ?? humanizeKind(properties.kind ?? properties.category);
+    if (!properties.name || !categoryLabel) continue;
+    rows.push(detailRow('', `${properties.name} · ${categoryLabel} · ${formatDistance(distanceKilometres)}`));
+  }
+  return rows;
+}
+
 // A POI card contains only fields recorded for that place, plus the containing building when known.
 export function buildPlaceCard(feature, context = {}) {
   const properties = feature?.properties ?? {};
@@ -110,27 +126,33 @@ export function buildPlaceCard(feature, context = {}) {
   const address = streetAddress(properties);
   const location = detailsSection('location-and-contacts', 'Location and contacts');
   addIfPresent(location.rows, 'Address', address);
-  addIfPresent(location.rows, 'In the building at', context.buildingAddress);
-  addIfPresent(location.rows, 'Coordinates', formatCoordinates(feature?.geometry?.coordinates));
+  addIfPresent(location.rows, 'In the building at', context.buildingAddress, 'building-address');
+  addIfPresent(location.rows, 'Coordinates', formatCoordinates(feature?.geometry?.coordinates), 'coordinates');
   addIfPresent(location.rows, 'Phone', properties.phone);
   location.links.push(...sourceLinks(properties));
   const hours = detailsSection('opening-hours', 'Opening hours', openingHourRows(properties.opening_hours));
+  const nearby = detailsSection('nearby', 'NEARBY', nearbyRows(context.nearbyPlaces));
   return {
     eyebrow: categoryLabel,
     title: properties.name ?? '',
     subtitle: [kindLabel, address].filter(Boolean).join(' · '),
     source: sourceLine(properties.source ?? 'OpenStreetMap', context.sourceDate, Boolean(properties.opening_hours)),
-    sections: [location, hours].filter(section => section.rows.length || section.links.length)
+    sections: [location, hours, nearby].filter(section => section.rows.length || section.links.length)
   };
+}
+
+// Keep weekday labels with their hours; an unsupported expression stays raw instead of losing its days.
+function readableHours(value) {
+  const rows = openingHourRows(value);
+  if (!rows.length) return '';
+  if (rows.some(row => !row.label)) return value;
+  return rows.map(row => `${row.label} ${row.value}`).join(', ');
 }
 
 function enclosedPlacesRows(places) {
   return places.map(place => {
     const properties = place.properties ?? {};
-    const hours = openingHourRows(properties.opening_hours)
-      .map(row => row.value)
-      .join(', ');
-    const value = [properties.name, humanizeKind(properties.kind), hours || properties.opening_hours]
+    const value = [properties.name, humanizeKind(properties.kind), readableHours(properties.opening_hours)]
       .filter(Boolean)
       .join(' · ');
     return detailRow('', value);
@@ -140,23 +162,13 @@ function enclosedPlacesRows(places) {
 // Other map objects use the same card with only the sections their recorded attributes fill.
 export function buildObjectCard(point, context = {}) {
   const facts = point.facts ?? {};
-  const properties = facts.properties ?? {};
   const isBuilding = facts.kind === 'Building';
   const coordinates = formatCoordinates(point.coordinates);
-  if (isBuilding) return buildBuildingCard(facts, coordinates, context);
+  if (isBuilding) return buildBuildingCard(point, facts, coordinates, context);
   const details = detailsSection('details', 'Details');
+  for (const row of facts.detailRows ?? []) addIfPresent(details.rows, row.label, row.value);
   addIfPresent(details.rows, 'Type', facts.typeLabel ?? point.kind);
-  addIfPresent(details.rows, 'Stop ID', properties.stopId);
-  addIfPresent(details.rows, 'Address', facts.addressLine);
   addIfPresent(details.rows, 'Coordinates', coordinates);
-  for (const text of point.details ?? []) {
-    if (!text) continue;
-    const match = /^([^:]+): (.*)$/.exec(text);
-    const label = match?.[1] ?? '';
-    const value = match?.[2] ?? text;
-    if (label === 'Source' || details.rows.some(row => row.label === label && row.value === value)) continue;
-    addIfPresent(details.rows, label, value);
-  }
   return {
     eyebrow: point.kind,
     title: point.name,
@@ -166,28 +178,20 @@ export function buildObjectCard(point, context = {}) {
   };
 }
 
-function buildBuildingCard(facts, coordinates, context) {
+function buildBuildingCard(point, facts, coordinates, context) {
   const properties = facts.properties ?? {};
   const addresses = facts.addresses ?? [];
   const entrances = facts.entrances ?? [];
   const placesInside = context.placesInside ?? [];
   const sections = [];
   if (addresses.length)
-    sections.push(
-      detailsSection(
-        'addresses',
-        'Addresses',
-        addresses.map((address, index) => detailRow(addresses.length > 1 ? `Address ${index + 1}` : '', address))
-      )
-    );
+    sections.push(detailsSection('addresses', 'Addresses', addresses.map(address => detailRow('', address))));
   if (entrances.length)
     sections.push(
       detailsSection(
         'entrances',
         'Entrances (marked on the map)',
-        entrances.map((entrance, index) =>
-          detailRow('', `${index + 1} · ${entrance.label ?? ''} · ${entrance.address ?? ''}`.trim())
-        )
+        entrances.map(entrance => detailRow('', `${entrance.label ?? ''} · ${entrance.address ?? ''}`.trim()))
       )
     );
   if (placesInside.length)
@@ -202,7 +206,7 @@ function buildBuildingCard(facts, coordinates, context) {
   const levels = properties['building:levels'] ? `${properties['building:levels']} levels` : '';
   return {
     eyebrow: 'Building',
-    title: properties.name?.trim() || 'Unnamed building',
+    title: point.name || 'Unnamed building',
     subtitle: [humanizeKind(properties.building).replace(/^Building$/, ''), levels, addressCount]
       .filter(Boolean)
       .join(' · '),
@@ -211,13 +215,16 @@ function buildBuildingCard(facts, coordinates, context) {
   };
 }
 
+function createDetailRow(row) {
+  const line = createElement('p', undefined, 'detail-row');
+  if (row.key) line.dataset.detail = row.key;
+  line.append(createElement('span', row.label ? `${row.label}: ` : undefined, 'detail-label'));
+  line.append(createElement('span', row.value, 'detail-value'));
+  return line;
+}
+
 function appendDetailRows(container, rows) {
-  for (const row of rows) {
-    const line = createElement('p', undefined, 'detail-row');
-    line.append(createElement('span', row.label ? `${row.label}: ` : undefined, 'detail-label'));
-    line.append(createElement('span', row.value, 'detail-value'));
-    container.append(line);
-  }
+  for (const row of rows) container.append(createDetailRow(row));
 }
 
 function appendDetailLinks(container, links) {
@@ -248,6 +255,21 @@ export function renderCardContent(card) {
     appendDetailLinks(element, section.links);
     details.append(element);
   }
+}
+
+// A late building lookup adds one row; it never rebuilds the card or moves focus from an open link.
+export function setPlaceCardBuildingAddress(address) {
+  const location = elementById('place-details').querySelector('.details-section--location-and-contacts');
+  if (!location) return;
+  const existing = location.querySelector('[data-detail="building-address"]');
+  if (existing) {
+    existing.querySelector('.detail-value').textContent = address;
+    return;
+  }
+  const row = createDetailRow(detailRow('In the building at', address, 'building-address'));
+  const coordinates = location.querySelector('[data-detail="coordinates"]');
+  if (coordinates) location.insertBefore(row, coordinates);
+  else location.append(row);
 }
 
 export function clearCardContent() {
@@ -311,6 +333,7 @@ function buildPlaceResults(list, {results, currentId, loadingError, onChoose}) {
     return;
   }
   for (const result of results) {
+    // The origin-aware text is prepared by ranking; without a usable fix there is no distance to show.
     const button = listingButton(result.feature, () => onChoose(result, button), result.distanceText, {
       kind: result.kind,
       id: result.id,

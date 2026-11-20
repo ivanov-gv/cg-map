@@ -53,15 +53,15 @@ reintroducing viewport-dependent suppression. Do not declare the feature complet
 
 Two places at identical coordinates cannot have individually readable icons at the same pixel. Represent eligible
 co-located members with one stable shared-location marker; show the eligible count only when more than one member is
-present. Tapping it opens a short, keyboard-accessible chooser of the actual listings. On a phone the chooser opens as a
-full card; picking a listing shows that listing's normal card, which is a header-only peek when search is open. A count
-changes only when a member crosses its threshold or a deliberate filter changes. Preserve every listing's identity and
-true coordinates.
+present. Tapping it opens the first active listing's card directly; there is no chooser step. On a phone that card opens
+full when search is open. Every listing keeps its identity and true coordinates and stays reachable through search and
+the building card's Inside this building section. A count changes only when a member crosses its threshold or a
+deliberate filter changes.
 
-For nearby distinct markers that overlap, provide the same multiple-hit chooser rather than silently choosing the first
-rendered feature. Do not move geographic anchors, turn ordinary businesses into broad-scale count clusters, or promise
-separate readable pixels for co-located listings. Severe remaining overdraw is a release blocker, not permission to hide
-icons arbitrarily.
+For nearby distinct markers that overlap, the first rendered hit and its first active identity also open directly, so
+one tap never requires a second choice. Do not move geographic anchors, turn ordinary businesses into broad-scale count
+clusters, or promise separate readable pixels for co-located listings. Severe remaining overdraw is a release blocker,
+not permission to hide icons arbitrarily.
 
 ## PV-03 Search, selection, and filters
 
@@ -115,7 +115,7 @@ take them on request with `POI_DENSITY_SCREENSHOTS=1`.
 - Level 1 is empty and no overrides ship; both need editorial review.
 - The shipped snapshot has no co-located listings, so real data has not exercised shared-location markers.
 - Clinics and other unlisted essentials take their category's default, level 5.
-- Long shop rows still overlap at zoom 17, for example at Bulevar knjaza Danila Petrovića 13. The chooser reaches each
-  listing.
+- Long shop rows still overlap at zoom 17, for example at Bulevar knjaza Danila Petrovića 13. Search and building cards
+  reach each listing.
 - House numbers draw over icons at the same position and partly cover the glyph. Icons stay below road and address
   labels on purpose.

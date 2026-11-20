@@ -197,7 +197,7 @@ transient state with the behavior that changes it:
 | `directoryState`                             | Loaded places, visibility rules, stable marker keys, building addresses and the active search                |
 | `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
-| [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
+| [PlaceSelection](src/place-selection.js)     | The selected listing or point, leading preview, deferred camera framing and return-focus target              |
 | [LocationControls](src/location-controls.js) | The in-memory fix, its distance origin, location following, explicit requests and first-fix recentering      |
 | [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
@@ -206,10 +206,12 @@ Controllers read the map and directory through getters because those inputs fini
 controls are bound. Selection and location keep their transient state private; app.js wires their effects together.
 
 [place-details.js](src/place-details.js) renders details and result rows without owning the selection. It preserves the
-focused row when a camera move rebuilds the list. [map-selection.js](src/map-selection.js) chooses the most specific hit
-and calls the matching selection action. [public-map-layers.js](src/public-map-layers.js) installs app-owned overlays;
-shared rendering remains in map-core. [status-messages.js](src/status-messages.js) keeps transport/location wording
-pure. Map gestures are MapLibre's own, unchanged ([ADR 0015](../../docs/decisions/0015-maplibre-gestures-unchanged.md)).
+focused row when a camera move rebuilds the list and patches a late building-address row without rebuilding the card.
+[map-selection.js](src/map-selection.js) chooses the most specific hit and calls the matching selection action, opening
+the first identity of the topmost rendered listing marker directly. [public-map-layers.js](src/public-map-layers.js)
+installs app-owned overlays; shared rendering remains in map-core. [status-messages.js](src/status-messages.js) keeps
+transport/location wording pure. Map gestures are MapLibre's own, unchanged
+([ADR 0015](../../docs/decisions/0015-maplibre-gestures-unchanged.md)).
 
 Nearest results from `selectNearestPlaces()` carry `feature` and `distanceKilometres`. Search normalization is
 `normalizeSearchText()`, its predicate is `matchesPlaceSearch()`, and GeoJSON construction is `featureCollection()`.
@@ -310,8 +312,8 @@ CSS does not set vector-road colors. Change map-core/map-style.js for cartograph
 Map clicks use queryRenderedFeatures() on the place icon, place name, and search-place layers. Places are not clustered;
 one below its level's zoom is reached through the result list.
 
-- A hit on one listing passes its place ID to PlaceSelection.showPlace().
-- A hit on several listings, co-located or overlapping, opens a chooser in the details card.
+- A listing hit passes the first active ID of the first rendered marker hit to PlaceSelection.showPlace(); there is no
+  chooser for co-located or overlapping listings.
 - A background click closes the card.
 - A result-list button calls PlaceSelection.showPlace() directly.
 
@@ -321,7 +323,8 @@ PlaceSelection.showPlace():
 2. Stores selected and the originating control, when supplied.
 3. Fills card text and safe links.
 4. Shows the existing card element.
-5. Selects the containing building footprint when one is known.
+5. Selects the containing building footprint from loaded label data or the first rendered match, and keeps its address
+   for the selection.
 6. Moves the camera only if the place is outside the focus zone, or zooms in if the map is below street level.
 7. Focuses the close button, which on phones is available only to screen readers.
 
