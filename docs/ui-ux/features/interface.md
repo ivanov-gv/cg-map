@@ -242,9 +242,11 @@ connection,” a tutorial paragraph, or a Help/Map key block to fill unused dock
 
 ## UI-05 Honest state with minimal interruption
 
-The location control uses a small icon with non-color state differences and an accessible name/state. It must
-distinguish acquisition, a usable fix, approximate/stale data, and unavailable positioning without a persistent text
-banner. The position marker and uncertainty remain truthful under
+The location control is an icon button with a 14 px corner radius and a 21 px icon: 48×48 on Desktop and Mobile, and
+40×40 on Flip. Its offsets are 20 px from the bottom on every device, with 20 px from the right on Desktop and 12 px
+from the right on Mobile and Flip. It uses non-color state differences and an accessible name/state. It must distinguish
+acquisition, a usable fix, approximate/stale data, and unavailable positioning without a persistent text banner. The
+position marker and uncertainty remain truthful under
 [Discover D-06](../user-stories/discover.md#d-06-current-position-and-honest-uncertainty).
 
 The location button is a toggle. With a usable fix, clicking it starts following: the camera moves to the fix and stays
@@ -294,11 +296,12 @@ card and dock coexistence, the Empty/Open/Filled transitions and × behavior on 
 blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, seamless desktop row
-movement, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
-result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state and clear-button
-functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a smaller visual
-viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review physical-device usability
-under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+movement, the Locate button's box, computed radius/icon size and offsets at each device class, and the follow location
+state machine (start, new fix moves camera, second click stops, drag stops, search result stops, denied shows recovery,
+no initial fix, button style). Pure unit tests cover the state and clear-button functions; no large fake DOM is built
+for browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
+keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
