@@ -1,7 +1,12 @@
 import {createElement, elementById, isReducedMotionPreferred} from './dom.js';
 import {renderPlaceResults} from './place-details.js';
 import {PlaceSelection} from './place-selection.js';
-import {installCityNames, installPublicPlaceLayers, SearchHighlights} from './public-map-layers.js';
+import {
+  installCityNames,
+  installPublicPlaceLayers,
+  searchResultMarkerData,
+  SearchHighlights
+} from './public-map-layers.js';
 import {selectTappedFeature} from './map-selection.js';
 import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
 import {transportStatusText} from './status-messages.js';
@@ -110,7 +115,7 @@ const directoryState = {
   loadingError: null,
   visibilityConfig: null,
   markerKeysByPlaceId: new Map(),
-  placeHitLayers: ['search-place'],
+  placeHitLayers: ['search-place', 'search-result-places'],
   searchTimer: null,
   distanceRefreshTimer: null,
   lastDistanceRefreshAt: 0,
@@ -263,8 +268,8 @@ function renderSearchResults() {
   });
 }
 
-// Every in-view match is marked, including those past the 40-row list limit. A place needs a drawn marker; choosing a
-// hidden match reveals it later.
+// Every in-view match is marked, including those past the 40-row list limit. An active filter supplies a marker for
+// every result place; choosing a hidden match reveals it later.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
   const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
@@ -313,12 +318,13 @@ function scheduleDistanceRefresh() {
   }, distanceRefreshDelayMilliseconds - elapsedMilliseconds);
 }
 
-// A search or category narrows the candidates once; matching icons keep their thresholds.
+// A search or category narrows the candidates once. Its own marker source bypasses POI thresholds; unfiltered places
+// keep their level bands.
 function applyPlaceSearch() {
   directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
     matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
   );
-  if (mapState.isMapReady && !directoryState.loadingError)
+  if (mapState.isMapReady && !directoryState.loadingError) {
     mapState.map
       .getSource('places')
       .setData(
@@ -326,6 +332,13 @@ function applyPlaceSearch() {
           buildPlaceMarkers(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
         )
       );
+    const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+    mapState.searchHighlights.setResultMarkers(
+      hasExplicitFilter
+        ? searchResultMarkerData(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
+        : featureCollection([])
+    );
+  }
   placeSelection.onFilterChanged();
   directoryState.searchCandidates = computeSearchCandidates();
   refreshSearchResults();
@@ -568,6 +581,7 @@ function installPublicLayers(placesReady, labelsReady) {
       for (const layer of [...names, ...icons]) mapState.map.addLayer(layer, 'road-labels');
       directoryState.placeHitLayers = [
         'search-place',
+        'search-result-places',
         ...icons.map(layer => layer.id),
         ...names.map(layer => layer.id)
       ];

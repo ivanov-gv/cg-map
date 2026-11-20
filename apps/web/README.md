@@ -89,15 +89,16 @@ dock or card. Closing the dock belongs to the header icon button, whose three-st
 category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8 px
 below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
 
-**Search result kinds and highlights** (issue #248): with **All** active (no category filter), a query lists matching
-places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
+**Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
+matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
 buildings and addresses are not searchable while a category is selected. Every matching building or address inside the
-current view gets a green outline; a matching place gets a ring only while its marker is drawn, so a below-threshold
-place stays in the list without a ring until zoomed in. Marks include matches past the 40-row list limit; an unchosen
-result never gets the red preview. Choosing a row uses the red selection and reveals an off-screen result by the
-focus-zone rule below. The × in Filled clears only the query and keeps an active category's results and highlights. The
-× in Open clears those highlights and closes the results without resetting the category. See
-[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
+current view gets a green outline. While a query or a non-**All** category is active, every place result inside the view
+gets a marker drawn and a green ring at any zoom, even below its usual POI threshold; names may collide, markers may
+not. With no query and **All**, the ordinary visibility thresholds still decide which markers appear. Marks include
+matches past the 40-row list limit; an unchosen result never gets the red preview. Choosing a row uses the red selection
+and reveals an off-screen result by the focus-zone rule below. The × in Filled clears only the query and keeps an active
+category's results and highlights. The × in Open clears those highlights and closes the results without resetting the
+category. See [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
@@ -230,7 +231,7 @@ Suppose the user types "museum".
 5. matchesPlaceSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
 7. It assigns the resulting array to directoryState.filteredPlaces.
-8. If the map is ready, it calls setData() on the places GeoJSON source.
+8. If the map is ready, it calls setData() on the places GeoJSON source and on the explicit-filter result marker source.
 9. It closes the current place card if that place no longer matches.
 10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
     candidates by approximate distance from the usable GPS fix when one exists, otherwise from the map center, and
@@ -263,13 +264,15 @@ This distinction keeps thousands of map features out of the DOM.
 Sources hold geometry or imagery. Layers apply rendering rules to a source; changing a layer does not replace its data.
 
 [Stable POI visibility](../../docs/ui-ux/features/poi-visibility.md) decides which markers exist. The `places` source
-holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes:
+holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes. During an
+explicit query or category, `search-result-markers` adds one app-owned marker per result location without a minzoom:
 
 | Layer                | Purpose                                                                                                     |
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones           |
 | place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon       |
 | search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom |
+| search-result-places | Every result location during an explicit filter, from `search-result-markers`, at any zoom                  |
 | place-highlight      | Invisible ring that becomes the selection highlight through feature state                                   |
 
 A band is a zoom range: `4-open` starts at level 4's zoom and never ends. Layer `minzoom`/`maxzoom` are compared with
@@ -594,19 +597,19 @@ testing what users see.
 
 Common symptoms:
 
-| Symptom                                  | Check first                                                       |
-| ---------------------------------------- | ----------------------------------------------------------------- |
-| Old UI after deployment                  | Reload while online; inspect worker update/install failures       |
-| Satellite button remains disabled        | Map startup failed or load did not finish                         |
-| WebGL initialization error               | Browser/device graphics support; this is before layer interaction |
-| Satellite disappears outside a rectangle | Expected sample coverage                                          |
-| Photos blur at very high zoom            | Native raster resolution                                          |
-| New script fails only offline            | Missing shell entry or stale manifests                            |
-| Fonts/labels missing                     | Glyph URL, requested character blocks and network responses       |
-| Blank map after layout change            | Container dimensions and map.resize()                             |
-| Place exists but is absent from list     | Text/category filter or nearest-40 limit                          |
-| Place is listed but has no map icon      | Its visibilityLevel's zoom has not been reached                   |
-| Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch    |
+| Symptom                                  | Check first                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| Old UI after deployment                  | Reload while online; inspect worker update/install failures                           |
+| Satellite button remains disabled        | Map startup failed or load did not finish                                             |
+| WebGL initialization error               | Browser/device graphics support; this is before layer interaction                     |
+| Satellite disappears outside a rectangle | Expected sample coverage                                                              |
+| Photos blur at very high zoom            | Native raster resolution                                                              |
+| New script fails only offline            | Missing shell entry or stale manifests                                                |
+| Fonts/labels missing                     | Glyph URL, requested character blocks and network responses                           |
+| Blank map after layout change            | Container dimensions and map.resize()                                                 |
+| Place exists but is absent from list     | Text/category filter or nearest-40 limit                                              |
+| Place is listed but has no map icon      | Its visibilityLevel's zoom has not been reached without an explicit query or category |
+| Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch                        |
 
 Observe the actual error before changing rendering code. A 404, stale cached script, disabled WebGL and malformed
 geometry need different fixes.

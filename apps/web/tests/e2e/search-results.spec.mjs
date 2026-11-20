@@ -117,6 +117,19 @@ const renderedPlaceIds = page =>
       ...new Set(map.queryRenderedFeatures({layers}).flatMap(feature => JSON.parse(feature.properties.activeIds)))
     ].sort();
   });
+// The explicit-filter marker layer is absent on older builds, so report an empty set instead of throwing there.
+const renderedResultMarkerIds = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    if (!map.getLayer('search-result-places')) return [];
+    return [
+      ...new Set(
+        map
+          .queryRenderedFeatures({layers: ['search-result-places']})
+          .flatMap(feature => JSON.parse(feature.properties.activeIds))
+      )
+    ].sort();
+  });
 // Mirrors the app's footprint filter contract without relying on the expression's position in the array.
 const footprintFilter = footprints => ['in', ['id'], ['literal', footprints]];
 const isInView = (page, coordinates) =>
@@ -196,17 +209,41 @@ test('visible results get green highlights and the camera stays still', async ({
   expect(await camera(page)).not.toEqual(before);
 });
 
-test('a place below its marker threshold is ringed only once its marker is drawn', async ({page}) => {
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 15.8}));
+test('an active query draws and rings below-threshold places at zoom 12', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
   await mapIdle(page);
   await page.locator('#search').fill('threshold');
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3']);
-  await expect.poll(async () => (await highlightState(page)).rings).toEqual(['node/3']);
-
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 17}));
-  await mapIdle(page);
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3', 'node/4']);
+  await expect(page.locator('.result')).toHaveCount(2);
+  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(['node/3', 'node/4']);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/3', 'node/4']);
+});
+
+test('a picked category draws and rings every in-view result at zoom 12', async ({page}) => {
+  const coordinates = [
+    PLACE.geometry.coordinates,
+    SECOND_PLACE.geometry.coordinates,
+    LOW_LEVEL_MATCH.geometry.coordinates,
+    HIGH_LEVEL_MATCH.geometry.coordinates
+  ];
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
+  await mapIdle(page);
+  await page.locator('#search').click();
+  await page.locator('#categories button[data-category="food"]').click();
+  await expect(page.locator('.result')).toHaveCount(4);
+  const visible = await Promise.all(coordinates.map(point => isInView(page, point)));
+  expect(visible).toEqual([true, true, true, true]);
+
+  const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
+  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(expected);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+});
+
+test('without a query or category, below-threshold places keep their normal visibility', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
+  await mapIdle(page);
+  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3']);
+  expect(await renderedResultMarkerIds(page)).toEqual([]);
+  expect((await highlightState(page)).rings).toEqual([]);
 });
 
 test('choosing a building result replaces its green outline with the red selection', async ({page}) => {
