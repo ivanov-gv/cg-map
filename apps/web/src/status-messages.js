@@ -1,5 +1,12 @@
 // What the transport and location status lines say. Pure: no DOM, storage or network.
-import {POSITION_APPROXIMATE_METRES, formatPositionAge} from './core.js';
+import {
+  POSITION_APPROXIMATE_METRES,
+  USABLE_POSITION_STATES,
+  formatPositionAge,
+  hasUsablePosition
+} from './core.js';
+
+export {USABLE_POSITION_STATES, hasUsablePosition};
 
 const checkedTimeFormat = {hour: '2-digit', minute: '2-digit', second: '2-digit'};
 
@@ -19,8 +26,6 @@ export function transportStatusText({state, count, fetchedAt}) {
   return messages[state] ?? messages.unavailable;
 }
 
-// States with a fix good enough to centre the map on.
-export const USABLE_POSITION_STATES = ['live', 'approximate'];
 // States the person must act on after asking for their location; each becomes a visible error.
 export const FAILED_POSITION_STATES = [
   'denied',
@@ -32,10 +37,6 @@ export const FAILED_POSITION_STATES = [
 ];
 // States that always carry a fix inside the map, so the status already explains where the person is.
 const LOCATED_POSITION_STATES = ['live', 'approximate', 'stale'];
-
-export function hasUsablePosition(state) {
-  return USABLE_POSITION_STATES.includes(state);
-}
 
 // The location condition alone, for the status line and for errors. snapshot is PositionTracker's.
 export function positionMessage({state, fix, age}) {

@@ -17,7 +17,9 @@ selection layers.
 Compliance review of the same Feature clarified the rest of the contract: the leading match must not look chosen, a
 chosen off-screen result must be revealed like any other result, and the 40-row list limit must not cap map marks. Both
 records for issue #248 are still unmerged, so they are folded into this one record, leaving the next number available
-for the next Feature.
+for the next Feature. Bug #262 changes the distance provenance of these same rows; because it belongs to this Feature
+and its records are still unmerged, that decision is folded into the distance rule section below rather than taking
+another number.
 
 ## Decision
 
@@ -26,9 +28,10 @@ for the next Feature.
   result. Address wins when both match. Matching uses the existing Latin/Cyrillic normaliser.
 - Building and address results require a non-empty query and the **All** (null) category. Browsing with no query keeps
   the existing nearby place list; choosing any category narrows that list to places only.
-- Results are merged with places and ordered by ground distance from the current view center. The 40-result limit
-  applies to list rows only. Label search text and candidate matches are computed once per search; with no card open,
-  camera moves re-rank rows and refresh visible marks. Any open card freezes list order until it closes.
+- Results are merged with places and ordered by ground distance from the current view center unless a usable GPS fix
+  supplies the origin, as detailed in the distance rule below. The 40-result limit applies to list rows only. Label
+  search text and candidate matches are computed once per search; with no card open, camera moves re-rank rows and
+  refresh visible marks. Any open card freezes list order until it closes.
 - Green highlights are app-owned: a point-source ring layer for place results whose listing is among the rendered
   place-icon or requested-place marker identities, and a line filter over the original `buildings` tile features for
   building/address results. Every matching building or address inside the current view is green. A place is green only
@@ -42,6 +45,27 @@ for the next Feature.
   address opens the same point card as tapping that building on the map, including entrance framing.
 - One exported JavaScript colour constant supplies the search green to MapLibre paint; the stylesheet mirrors it as a
   CSS custom property for result symbols.
+
+## Distance rule (issue #262)
+
+Issue #262 closes a provenance gap in the rows described above. A result showed an approximate straight-line number from
+the map centre even when positioning was stale, still acquiring, denied, unavailable or outside coverage, so a panned
+camera could look like a known person. The app has no search service or editorial source; the only trustworthy origin is
+the in-memory position snapshot already used by the location control.
+
+- Ranking takes an optional distance origin. A fresh live or approximate fix supplies it; every other state supplies
+  none, and the map centre orders rows only as a fallback.
+- Rows in every result surface show distance text only when an origin exists, for places, buildings and addresses alike.
+  Without one they keep centre order and render no distance span at all. Distance stays a ground approximation, never a
+  route length or travel time. The details card and its existing nearby content are unchanged.
+- A changed origin refreshes rows at most once per 200 ms with a final trailing run. While any card is open the refresh
+  is deferred until the card closes, including when one place card switches directly to another.
+- Coordinates stay in memory; no transport, storage or contract is added.
+
+Keeping centre order without a number preserves useful nearby discovery without claiming the camera is the person's
+position. Fix-based order can differ from the camera's order by design. Throttling bounds rebuilds during rapid fixes;
+the trailing run adds a short delay, and the card freeze keeps a chosen row from jumping. Current behavior is documented
+in [the interface guide](../ui-ux/features/interface.md#distance-comes-from-the-person-not-the-camera).
 
 ## Consequences
 

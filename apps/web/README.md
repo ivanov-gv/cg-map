@@ -180,7 +180,7 @@ transient state with the behavior that changes it:
 | `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
-| [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
+| [LocationControls](src/location-controls.js) | The in-memory fix, its distance origin, location following, explicit requests and first-fix recentering      |
 | [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
@@ -216,19 +216,21 @@ Suppose the user types "museum".
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
 10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
-    candidates by approximate distance from the map center and renderSearchResults() creates up to 40 result buttons.
-    In-view highlights come from the full candidate set, not the 40 rows. The camera does not move, and map moves do not
-    reorder the list while any card is open.
+    candidates by approximate distance from the usable GPS fix when one exists, otherwise from the map center, and
+    renderSearchResults() creates up to 40 result buttons. In-view highlights come from the full candidate set, not the
+    40 rows. The camera does not move, and map moves do not reorder the list while any card is open.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
 
-Distance is an approximation in kilometers from the map center, not a route length or necessarily distance from the
-user.
+Distance is an approximation in kilometres from a fresh or approximate GPS fix, not a route length. Without such a fix,
+rows keep center ordering but show no distance: the camera is never presented as the person's location. Changed fixes
+re-rank after a 200 ms throttle; a card freezes the row order until it closes.
 
 Selecting a category updates category and calls the same applyPlaceSearch() path.
 
-Panning re-ranks candidates on moveend and renders only when no card is open. It changes nearest ordering, not the
-text/category filters. It does not restrict the search dataset to the visible rectangle.
+Panning re-ranks candidates on moveend and renders only when no card is open. Without a usable fix that changes nearest
+ordering; with one, the fix keeps the order while the list and highlights refresh. Panning does not change the
+text/category filters or restrict the search dataset to the visible rectangle.
 
 ## 6. Two rendering systems share the screen
 

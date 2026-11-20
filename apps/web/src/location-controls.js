@@ -1,10 +1,9 @@
 import {mapBounds} from '@ivanov-gv/map-core';
-import {DISCOVER_ZOOM} from './core.js';
+import {DISCOVER_ZOOM, distanceOrigin as fixDistanceOrigin, hasUsablePosition} from './core.js';
 import {elementById} from './dom.js';
 import {PositionTracker, positionFeatures} from './position.js';
 import {
   FAILED_POSITION_STATES,
-  hasUsablePosition,
   positionActionLabel,
   positionIndicator,
   positionMessage,
@@ -39,6 +38,9 @@ export class LocationControls {
   get state() {
     return this.#snapshot.state;
   }
+  get distanceOrigin() {
+    return fixDistanceOrigin(this.#snapshot);
+  }
   get isFollowing() {
     return this.#isFollowing;
   }
@@ -59,7 +61,16 @@ export class LocationControls {
 
   // D-06: every visible state names its location condition; no fix means the camera is a fallback view.
   render(snapshot) {
+    const previousOrigin = this.distanceOrigin;
     this.#snapshot = snapshot;
+    const currentOrigin = this.distanceOrigin;
+    const hasSameDistanceOrigin =
+      previousOrigin === currentOrigin ||
+      (Boolean(previousOrigin) &&
+        Boolean(currentOrigin) &&
+        previousOrigin[0] === currentOrigin[0] &&
+        previousOrigin[1] === currentOrigin[1]);
+    if (!hasSameDistanceOrigin) this.#context.onDistanceOriginChanged?.();
     const {state, fix} = snapshot;
     // Stop following when the state makes it impossible to continue or the permission prompt was dismissed.
     if (this.#isFollowing && this.#shouldStopFollowingFor(snapshot)) {
