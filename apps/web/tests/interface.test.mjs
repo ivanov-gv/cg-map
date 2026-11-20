@@ -62,7 +62,12 @@ test('the map chip replaces the category row only where search and the dock are 
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),
     true,
-    'a peek leaves it available'
+    'a phone peek leaves it available'
+  );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek', isFlipLayout: true}),
+    false,
+    'a Flip peek covers it too'
   );
 });
 

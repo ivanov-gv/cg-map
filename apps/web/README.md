@@ -105,9 +105,10 @@ makes it cover the entire layout viewport (top 0, 100dvh) — full width, with n
 stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
 button's Close state does it, as described below. The dock content ends above the keyboard because it uses the
 keyboard-aware visible viewport variables (--visible-top, --visible-height). While the dock is open, the route panel is
-hidden under it. Opening a place from the list switches to the search view with the card (`placeCardOpened` in
-interface.js calls `setView('search')` when the dock is open on mobile). Desktop keeps the side dock unchanged (narrower
-than the viewport). The place card and route panel keep their current behavior when the dock is closed.
+hidden under it. On Mobile, opening a place from the list switches to the search view with the card (`placeCardOpened`
+in interface.js calls `setView('search')` when the dock is open). On Flip it closes the dock and opens the card in Peek;
+the Icon Button becomes × and brings the same dock list back. Desktop keeps the side dock unchanged (narrower than the
+viewport). The place card and route panel keep their current behavior when the dock is closed.
 
 **Flip icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three screens. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#flip-three-state-icon-button) for behavior.
@@ -119,6 +120,8 @@ Source-level details:
 - `syncDockContent()` is the sole owner of Flip footer visibility: the list screen always hides the footer, including
   with zero results and after keyboard/viewport events; only the modes screen shows it.
 - On the modes screen, focusing the search field or typing switches to the list screen.
+- An open card claims the Icon Button as ×: "Close details" in Peek and "Back to summary" in Fullscreen. Escape takes
+  the same step. `flipCardOrigin` (`'map'` or `'dock'`) decides where Peek × returns.
 - The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
 - Tested at 374×241, 340×250 and 340×340 viewports. The list is checked with zero, one and two results, including
   keyboard open/close events: it keeps the whole dock area and hides the footer. The CSS compact layout (style.css
@@ -161,6 +164,14 @@ states. The phone card is screen-wide with 12 px gutters, the Locate button sits
 in Fullscreen, and the screen-reader close button and the named card handle remain. Choosing a result in the phone dock
 switches to this compact view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
+
+**Flip place card** (issue #252): on Flip, every place opens a two-step card. Peek shows only the header with 12 px
+gutters so the picked object remains visible above it; tapping the header or handle opens Fullscreen, where details can
+scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in Fullscreen it returns to Peek, and
+in Peek it closes the card, clears the red selection and hides Locate. It returns to the dock list when the place came
+from there, preserving the query, category, order and focus row; a map pick returns to the bare map. Back takes the same
+history step as the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek.
+Swipes and wheel input never change a Flip card. The screen-reader close button remains in the card.
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and
@@ -506,7 +517,8 @@ with a slightly larger cover screen still matches, without catching a phone in a
 
 Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
 device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
-[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
+[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project; pass a viewport object for
+a real cover screen or use the exported `FLIP_VIEWPORTS` list. The default remains 340×340 for earlier scenarios.
 
 ## 12. How to make common changes
 

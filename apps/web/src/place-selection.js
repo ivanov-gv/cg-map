@@ -301,7 +301,7 @@ export class PlaceSelection {
     this.#context.onSelectionChanged();
     this.markCurrentResult();
     this.#objectSelection.selectPlace(this.#directory.markerKeysByPlaceId.get(properties.id));
-    elementById('close-place').focus({preventScroll: true});
+    this.#interface.focusCardControl();
     this.#state.pendingReveal = {zoom: 15};
     this.flushPendingReveal();
   }
@@ -411,7 +411,7 @@ export class PlaceSelection {
       this.frameBuildingEntrances(entrances, point.coordinates);
     } else if (needsReveal) this.flushPendingReveal();
     else if (!reveal) this.focusCoordinates(point.coordinates, this.#map.getZoom());
-    elementById('close-place').focus({preventScroll: true});
+    this.#interface.focusCardControl();
   }
 
   // Reframe only after keyboard and camera changes settle; entrance bounds already include the card.

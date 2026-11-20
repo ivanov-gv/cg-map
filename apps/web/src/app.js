@@ -862,12 +862,18 @@ function registerSelectionControls() {
     routeEndpoints.to = null;
     renderRouteEndpoints();
   });
-  elementById('close-place').addEventListener('click', () => placeSelection.close());
+  elementById('close-place').addEventListener('click', () => {
+    if (mapState.interface?.hasFlipCard) mapState.interface.closeFlipCard();
+    else placeSelection.close();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
       const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
-      if (!elementById('place-card').hidden) placeSelection.close();
-      else if (mapState.interface.view === 'dock') {
+      if (!elementById('place-card').hidden) {
+        // On Flip, Escape follows the Icon Button: Fullscreen returns to Peek, then Peek closes.
+        if (mapState.interface.flipLayoutQuery.matches) mapState.interface.closeFlipCard();
+        else placeSelection.close();
+      } else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.
         mapState.interface.close(true);
       } else if (isDesktop && mapState.interface.state === 'filled') {
@@ -976,6 +982,11 @@ function initializeInterface() {
     onResultsClosed: () => placeSelection.close(),
     onRemoveCategory: removeCategory,
     activeCategoryLabel: () => categories[directoryState.activeCategory] ?? '',
+    // A Flip card opened from the dock returns to the same list; a map pick returns to the bare map.
+    onFlipCardClosed: ({restoreDock}) => {
+      placeSelection.close(false);
+      if (restoreDock) mapState.interface.setView('dock');
+    },
     resultsLabel: () => {
       const query = elementById('search').value.trim();
       const activeCategoryLabel = directoryState.activeCategory

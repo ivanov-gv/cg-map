@@ -78,3 +78,17 @@ test('Flip card opened from dock returns to dock when the card closes', () => {
   assert.deepEqual(stateAfterBack(full), peek);
   assert.deepEqual(stateAfterBack(peek), {...opening, view: 'dock', flipDockScreen: 'list'});
 });
+
+test('Flip card steps backs from Fullscreen to Peek and then to its own origin', () => {
+  const mapPeek = {...opening, isFlip: true, card: {state: 'peek', fromDock: false}};
+  const mapFullscreen = {...mapPeek, card: {state: 'fullscreen', fromDock: false}};
+  const dockPeek = {...opening, isFlip: true, card: {state: 'peek', fromDock: true}};
+
+  assert.deepEqual(openSteps(mapPeek), [STEP.CARD_PEEK]);
+  assert.deepEqual(openSteps(mapFullscreen), [STEP.CARD_PEEK, STEP.CARD_FULL]);
+  assert.deepEqual(stateAfterBack(mapFullscreen), mapPeek);
+  assert.deepEqual(stateAfterBack(mapPeek), opening);
+
+  assert.deepEqual(openSteps(dockPeek), [STEP.DOCK, STEP.CARD_PEEK]);
+  assert.deepEqual(stateAfterBack(dockPeek), {...opening, view: 'dock', flipDockScreen: 'list'});
+});

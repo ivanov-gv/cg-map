@@ -22,6 +22,7 @@ import {
   CAMERA_HOLD_MILLISECONDS,
   expectCameraToHold,
   expectToHold,
+  FLIP_VIEWPORTS,
   mapIdle
 } from './helpers.mjs';
 
@@ -109,6 +110,12 @@ async function flickCard(page, touch, deltaY) {
     });
   }
   await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+}
+
+async function wheelOverCard(page, deltaY) {
+  await page.locator('#place-card').evaluate((element, amount) => {
+    element.dispatchEvent(new WheelEvent('wheel', {deltaY: amount, bubbles: true, cancelable: true}));
+  }, deltaY);
 }
 
 const readGeoJSON = path =>
@@ -5662,4 +5669,159 @@ test('scale bar stays in the bottom-left corner under the Flip dock', {tag: '@ph
     expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock modes');
     expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
   });
+});
+
+// Flip card: the cover screen uses a two-step card instead of the phone's swipe steps.
+for (const {name, viewport} of FLIP_VIEWPORTS) {
+  test(`Flip map pick opens Peek, taps to Fullscreen, and closes through the Icon Button at ${name}`, {
+    tag: '@phone'
+  }, async ({page}) => {
+    await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+    await withFlipViewport(page, async () => {
+      await ready(page);
+      const touch = await page.context().newCDPSession(page);
+      const card = page.locator('#place-card');
+      const menu = page.locator('#menu-toggle');
+      const coordinates = nearbyPlaces.features[0].geometry.coordinates;
+
+      await tapRenderedPlace(page, coordinates, 'nearby/0');
+      await expect(card).toBeVisible();
+      await expect(card).toHaveAttribute('data-state', 'peek');
+      await expect(menu).toHaveAttribute('aria-label', 'Close details');
+      await expect(page.locator('#place-body')).toHaveJSProperty('inert', true);
+      await expect(page.locator('#position-action')).toBeHidden();
+      await expect(menu).toBeFocused();
+
+      await settled(page);
+      await mapIdle(page);
+      const peek = await card.boundingBox();
+      expect(peek.x).toBeCloseTo(12, 0);
+      expect(viewport.width - (peek.x + peek.width)).toBeCloseTo(12, 0);
+      expect(viewport.height - (peek.y + peek.height)).toBeCloseTo(12, 0);
+      expect(peek.height).toBeLessThan(viewport.height / 2);
+      const pickedPoint = await pointOnMap(page, coordinates);
+      expect(pickedPoint.y).toBeLessThan(peek.y - 8);
+      expect(pickedPoint.y).toBeGreaterThan(52);
+
+      // Flip has no swipe or wheel card states: both inputs leave Peek alone.
+      await wheelOverCard(page, -220);
+      await expect(card).toHaveAttribute('data-state', 'peek');
+      await swipeCard(page, touch, -120);
+      await expect(card).toHaveAttribute('data-state', 'peek');
+
+      await page.locator('#card-handle').click();
+      await expect(card).toHaveAttribute('data-state', 'fullscreen');
+      await expect(page.locator('#place-body')).toHaveJSProperty('inert', false);
+      await expect(menu).toHaveAttribute('aria-label', 'Back to summary');
+      await expect(menu).toBeFocused();
+      const fullscreen = await card.boundingBox();
+      expect(fullscreen.x).toBeCloseTo(0, 0);
+      expect(fullscreen.y).toBeCloseTo(0, 0);
+      expect(fullscreen.width).toBeCloseTo(viewport.width, 0);
+      expect(fullscreen.height).toBeCloseTo(viewport.height, 0);
+      await expect(menu).toBeVisible();
+
+      await swipeCard(page, touch, -120);
+      await expect(card).toHaveAttribute('data-state', 'fullscreen');
+
+      // Browser Back and the Icon Button share one history step: both return to Peek.
+      await page.goBack();
+      await expect(card).toHaveAttribute('data-state', 'peek');
+      await expect(menu).toHaveAttribute('aria-label', 'Close details');
+      await page.locator('#card-handle').click();
+      await expect(card).toHaveAttribute('data-state', 'fullscreen');
+      await menu.click();
+      await expect(card).toHaveAttribute('data-state', 'peek');
+      await expect(menu).toHaveAttribute('aria-label', 'Close details');
+
+      await menu.click();
+      await expect(card).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-label', 'Open menu');
+      await expect(page.locator('#position-action')).toBeVisible();
+      await expect.poll(() => page.evaluate(() => window.kompasDebug.selected)).toBeNull();
+      expect(
+        await page.evaluate(
+          (id) => window.kompasDebug.map.getFeatureState({source: 'places', id}).selected,
+          'nearby/0'
+        )
+      ).toBe(false);
+    }, viewport);
+  });
+}
+
+test('Flip dock pick returns to the same list and query after Peek and Fullscreen', {
+  tag: '@phone'
+}, async ({page}) => {
+  await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+  await withFlipViewport(page, async () => {
+    await ready(page);
+    await openFlipDock(page);
+    const order = await page.locator('.result strong').allTextContents();
+    const row = page.locator('.result', {hasText: 'Nearby place 0'});
+    await row.click();
+
+    const card = page.locator('#place-card');
+    const menu = page.locator('#menu-toggle');
+    const shopsButton = page.locator('#categories button[data-category="shops"]');
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await expect(page.locator('#dock-content')).toBeHidden();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBeNull();
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('#search')).toHaveValue('Nearby');
+    // The dock is closed behind the card, so the category row is hidden but still retains its state.
+    await expect(shopsButton).toHaveAttribute('aria-pressed', 'true');
+
+    await page.locator('#card-handle').click();
+    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await menu.click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await expect(page.locator('#dock-content')).toBeHidden();
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+
+    await menu.click();
+    await expect(card).toBeHidden();
+    await expect(page.locator('#dock-content')).toBeVisible();
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBe('list');
+    await expect(page.locator('#search')).toHaveValue('Nearby');
+    await expect(shopsButton).toBeVisible();
+    await expect(shopsButton).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.locator('.result strong').allTextContents()).toEqual(order);
+    await expect(row).toBeFocused();
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.selected)).toBeNull();
+  }, FLIP_VIEWPORTS[1].viewport);
+});
+
+async function openFlipDock(page) {
+  await page.locator('#menu-toggle').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  await page.locator('#search').fill('Nearby');
+  await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
+  await expect(page.locator('#dock-content .result')).toHaveCount(3);
+}
+
+test('Mobile keeps its Peek, Full and swipe card behavior', {tag: '@phone'}, async ({page}) => {
+  await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  const touch = await page.context().newCDPSession(page);
+  const card = page.locator('#place-card');
+
+  await page.locator('#search').click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect(card).toHaveAttribute('data-state', 'peek');
+  await expect(page.locator('#position-action')).toBeVisible();
+  await page.locator('#card-handle').click();
+  await expect(card).toHaveAttribute('data-state', 'full');
+  await expect(page.locator('#position-action')).toBeVisible();
+
+  // With results behind it, a down swipe returns from Full to Peek; another closes it.
+  await swipeCard(page, touch, 140);
+  await expect(card).toHaveAttribute('data-state', 'peek');
+  await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+  await swipeCard(page, touch, 60);
+  await expect(card).toBeHidden();
 });

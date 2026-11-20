@@ -4,9 +4,10 @@ Status: approved on 3 November 2026 and implemented in the web source. The earli
 composition; the application uses real directory data, device positioning, optional layers, and verified offline
 downloads. Selected-card content was restructured on 19 November 2026 (issue #249); on 20 November 2026 the Desktop card
 became a bottom panel (issue #250) and then a fixed floating card (issue #282), while Mobile and Flip kept their
-geometry. On 20 November 2026 the phone card's drag became a continuous, top-edge-driven model (issue #265); Flip kept
-its two-step card and the Desktop floating card stayed unchanged. This does not claim deployment or completion of
-Discover’s missing geographic data. Browser acceptance and physical-device evidence are recorded separately below.
+geometry. On 20 November 2026 the phone card gained Peek, Full and Fullscreen (issue #251) and its drag became a
+continuous, top-edge-driven model (issue #265); Flip gained its own two-step card (issue #252), and the Desktop floating
+card stayed unchanged. This does not claim deployment or completion of Discover’s missing geographic data. Browser
+acceptance and physical-device evidence are recorded separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -157,11 +158,12 @@ is Full or Fullscreen. Desktop adds no standalone chip: its floating row already
 On Mobile (viewport ≤ 720 px) and Flip (viewport ≤ 400×400 px), opening the dock makes it cover the entire layout
 viewport — from top 0 to 100dvh, full width, with no map visible around it. The search bar row stays at the top, full
 width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
-variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. Opening a place
-from the list switches to the search view with the card (`placeCardOpened` in interface.js calls `setView('search')`
-when the dock is open on mobile). The menu button closes the dock on Mobile; on Flip the icon button's Close state does
-it, as described below. The place card and route panel keep their current behavior when the dock is closed. Desktop
-keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
+variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. On Mobile,
+opening a place from the list switches to the search view with the card (`placeCardOpened` in interface.js calls
+`setView('search')` when the dock is open). On Flip, choosing a place closes the dock and opens the card in Peek; the
+Icon Button becomes × and returns to the same dock list. The menu button closes the dock on Mobile; on Flip the icon
+button's Close state does it, as described below. The place card and route panel keep their current behavior when the
+dock is closed. Desktop keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
 
 ### Flip three-state icon button
 
@@ -185,6 +187,13 @@ old minimizable footer handle (#footer-toggle) has been removed and replaced by 
 
 On the modes screen, focusing the search field or typing a query switches back to the list screen, showing filtered
 results and updating the button icon to ◇ Modes.
+
+The same Icon Button serves an open place card. While the card is visible it shows × and is named **Close details** in
+Peek or **Back to summary** in Fullscreen. Browser Back and a tap on that Icon Button use one shared history step:
+from Fullscreen both return to Peek, and from Peek both close the card and its red selection, returning to the dock list
+if the card began there or to the bare map otherwise. The screen-reader close button remains in the card, focus returns
+to the Icon Button or the originating list row, and the active-category chip stays hidden while any Flip card is open,
+including Peek.
 
 **Compact layout for real Flip screens** (issues #161, #268): the real Flip cover screen is about 340×250 CSS px
 (shorter than the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are
@@ -241,11 +250,11 @@ At card widths 561–780 px the layout changes to identity | all sections; at 56
 
 ### Selected-object card content
 
-Mobile and Flip keep their existing position, size and state machine; Desktop uses the floating card described above.
-The header carries the category/type eyebrow, the subject name and an optional short subtitle. The From/To actions stay
-in place below the header, followed by one source line with the recorded source, its snapshot date and, when hours are
-shown, the note that hours are as recorded rather than checked. Named sections below hold only rows supported by the
-data:
+Mobile and Flip keep their own position, size and state machine (Flip's two steps are described above); Desktop uses the
+floating card described above. Card content is shared by every device. The header carries the category/type eyebrow,
+the subject name and an optional short subtitle. The From/To actions stay in place below the header, followed by one
+source line with the recorded source, its snapshot date and, when hours are shown, the note that hours are as recorded
+rather than checked. Named sections below hold only rows supported by the data:
 
 - A POI uses **Location and contacts** (address, containing building, coordinates, phone, website and source link),
   **Opening hours**, and **Nearby** when other already loaded directory places lie within 500 m. Nearby lists up to
@@ -355,6 +364,14 @@ and is hidden in Fullscreen, and the focus zone uses the visible map above the c
 transition while keeping the same end states. The card has no visible close button; one remains for screen readers,
 along with the named card handle.
 
+On Flip, every place opens the same two-step card: Peek shows only the header with 12 px gutters and rounded corners so
+the picked object stays visible above it. Tapping the header or its handle opens Fullscreen, which fills the cover
+screen, keeps the Icon Button in the header row, and allows vertical scrolling of the details. A tap or Escape on the
+Icon Button returns from Fullscreen to Peek; a second one closes Peek and clears the red selection. There are no card
+swipes or wheel state changes on Flip, and the Locate control is hidden while a card is open. A map pick and a dock pick
+both start in Peek. Choosing a dock place closes the dock; × in Peek brings back its unchanged query, category and list
+order with focus on the originating row.
+
 The burger explicitly opens the existing full dock, retaining the query and category. Focusing or typing in search keeps
 the dock open. Choosing a result switches from the dock to the compact view (search bubble with the same category and
 query and the card in Peek). The menu button brings back the same dock with query and category kept. Result selection
@@ -440,6 +457,7 @@ and reduced motion.
 | UI-A16 | Type a query with places, recorded building addresses and named streets; pan, choose each result kind, then clear search. Zoom out and pick a category.   | Rows are nearest first with place/building/address/street symbols and labels; a visible street has one row and a green road outline, choosing it turns the road red and opens the Road card, in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, and clearing removes every green mark. With no query and All, ordinary POI thresholds apply. A category lists places only.                                                                                                                      |
 | UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                                 | With a usable fix, every result kind, including streets, is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                                                                                                                                                                                                                                                                                                       |
 | UI-A18 | On Desktop with no card, the wide card, the search panel and the dock; on phone Peek and Full; and under the Flip dock, inspect the scale bar and credit. | The scale and credit boxes stay at the map's bottom-left within 1 px. At each centre, a covering card, panel or dock is the hit target; otherwise the map control is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| UI-A19 | At 340×250 and 374×241, pick a map place and a dock result; tap Peek and use both Back and the Icon Button; try swipes and wheel input. | Both picks open header-only Peek; tapping opens Fullscreen, and Back and the Icon Button each step Fullscreen → Peek → closed → dock (for a dock pick) or bare map. Swipes and wheel input never change the Flip card state, the active-category chip stays hidden for every open Flip state, and a dock result returns to the unchanged list with focus on its row. |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -457,6 +475,12 @@ list footer staying hidden with zero, one or two results across keyboard events,
 desktop, 412×840 Mobile, 374×241 and 340×250, the Satellite symbol's design geometry, the Locate button's box, computed
 radius/icon size and offsets at each device class, and the follow location state machine (start, new fix moves camera,
 second click stops, drag stops, search result stops, denied shows recovery, no initial fix, button style).
+
+The same suite also checks real cover-screen sizes, map and dock Peek openings, Fullscreen geometry, no-swipe and
+no-wheel behavior, selection clearing, dock/query preservation, focus return, the shared history step taken by Back and
+the Icon Button, the active-category chip hidden under Flip Peek, and the Mobile card guard. Pure Flip transition tests
+live in [flip-card.test.mjs](../../../apps/web/tests/flip-card.test.mjs), and the shared history steps are covered in
+[history-steps.test.mjs](../../../apps/web/tests/history-steps.test.mjs).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
 buildings, addresses and streets, that a street appears once with a green road outline, a red Road card with the same
 structured sections as other cards and a revealed off-screen choice, that in-view building outlines and drawn place

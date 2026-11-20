@@ -13,9 +13,17 @@ export function isClearButtonVisible({state, isFlipLayout}) {
   return state !== 'empty';
 }
 
-// The map chip replaces the category row while that row is off screen; an expanded card covers the map.
-export function isActiveChipVisible({hasCategory, view, cardState, cardHidden, isDesktopLayout}) {
+// The map chip replaces the category row while that row is off screen; an open card covers the map.
+export function isActiveChipVisible({
+  hasCategory,
+  view,
+  cardState,
+  cardHidden,
+  isDesktopLayout,
+  isFlipLayout = false
+}) {
   if (isDesktopLayout || !hasCategory || view !== 'closed') return false;
+  if (isFlipLayout && !cardHidden) return false;
   const isExpandedCard = !cardHidden && (cardState === 'full' || cardState === 'fullscreen');
   return !isExpandedCard;
 }
@@ -220,6 +228,22 @@ export function cardStateAfterDrag({
   return Math.abs(deltaYPixels) >= travelPixels / 2 ? targetState : state;
 }
 
+// Flip replaces swipes with two controls: tapping Peek opens Fullscreen, and the Icon Button steps back or closes.
+export function flipCardStateAfterTap(state) {
+  return state === 'peek' ? 'fullscreen' : state;
+}
+
+export function flipCardStateAfterClose(cardState) {
+  const target = stateAfterBack({
+    view: 'closed',
+    isFlip: cardState === 'peek' || cardState === 'fullscreen',
+    flipDockScreen: null,
+    resultsCompacted: false,
+    card: cardState === 'closed' ? null : {state: cardState, fromDock: false}
+  });
+  return target.card?.state ?? 'closed';
+}
+
 // A non-fullscreen card keeps its own right edge in map geometry so the desktop focus zone stays beside it.
 export function detailsGeometryForMap(detailsRect, mapRect, {detailsTop, isFullscreenCard}) {
   if (!detailsRect || isFullscreenCard) return null;
@@ -244,6 +268,7 @@ export class MapInterface {
     onResultsClosed,
     onRemoveCategory,
     activeCategoryLabel,
+    onFlipCardClosed,
     resultsLabel
   }) {
     Object.assign(this, {
@@ -255,6 +280,7 @@ export class MapInterface {
       onResultsClosed,
       onRemoveCategory,
       activeCategoryLabel,
+      onFlipCardClosed,
       resultsLabel
     });
     this.initQueries();
@@ -305,6 +331,9 @@ export class MapInterface {
     this.isApplyingHistory = false;
     this.pendingHistoryBacks = 0;
     this.queuedReconcile = false;
+    // A Flip card opened from the dock returns there; a map pick returns to the bare map.
+    this.flipCardOrigin = null; // 'map' | 'dock' | null
+    this.flipReturnFocusElement = null;
   }
 
   get isMobilePhone() {
@@ -313,6 +342,10 @@ export class MapInterface {
 
   get isFlip() {
     return this.flipLayoutQuery.matches;
+  }
+
+  get hasFlipCard() {
+    return this.flipLayoutQuery.matches && !this.card.hidden;
   }
 
   wireInterfaceEvents() {
@@ -330,7 +363,7 @@ export class MapInterface {
     this.cardHandle.addEventListener('click', () => this.activateCardHandle());
     this.card.addEventListener('focusin', event => this.revealFocusedCardContent(event.target));
     this.cardHead.addEventListener('click', event => {
-      if (!this.isMobilePhone || event.target.closest('button, a')) return;
+      if ((!this.isMobilePhone && !this.hasFlipCard) || event.target.closest('button, a')) return;
       this.activateCardHandle();
     });
     this.wireSearchEvents();
@@ -425,6 +458,28 @@ export class MapInterface {
     return typeof history !== 'undefined' && typeof history.pushState === 'function';
   }
 
+  // The Icon Button is the Flip card's only close control. Fullscreen steps back to Peek;
+  // Peek closes the selection and returns to the dock it came from or to the bare map.
+  closeFlipCard() {
+    const current = this.currentUIState();
+    // The same pure step that Back uses decides whether this closes to Peek or ends the card.
+    const nextCardState = stateAfterBack(current).card?.state ?? 'closed';
+    if (nextCardState === 'peek') {
+      this.setCardState('peek');
+      this.restoreFocus(this.menu);
+      return;
+    }
+    const shouldRestoreDock = !!current.card?.fromDock;
+    const returnFocusElement = this.flipReturnFocusElement;
+    this.flipCardOrigin = null;
+    this.flipReturnFocusElement = null;
+    this.onFlipCardClosed?.({restoreDock: shouldRestoreDock});
+    this.syncFlipCardPresentation();
+    const isReturnFocusVisible =
+      returnFocusElement?.isConnected && returnFocusElement.getClientRects().length > 0;
+    this.restoreFocus(isReturnFocusVisible ? returnFocusElement : this.menu);
+  }
+
   currentHistoryDepth() {
     return depthOf(history.state) ?? 0;
   }
@@ -433,6 +488,7 @@ export class MapInterface {
     const cardState = !this.card.hidden ? this.card.dataset.state || null : null;
     return {
       view: this.view,
+      isFlip: this.flipLayoutQuery.matches,
       flipDockScreen: this.view === 'dock' ? this.flipDockScreen : null,
       resultsCompacted: !!this.isResultsCompacted && this.view === 'search' && this.card.hidden,
       card: cardState ? {state: cardState, fromDock: !!this.cardFromDock} : null
@@ -663,7 +719,9 @@ export class MapInterface {
     this.trigger = this.menu;
     if (this.mobileLayoutQuery.matches) this.search.blur();
     if (this.flipLayoutQuery.matches) {
-      this.cycleFlipMenu();
+      // A Flip card claims the Icon Button; without one it cycles the dock screens.
+      if (this.hasFlipCard) this.closeFlipCard();
+      else this.cycleFlipMenu();
     } else if (this.view === 'dock') {
       this.setView('closed');
     } else {
@@ -723,7 +781,14 @@ export class MapInterface {
   syncMenuIcon() {
     const iconUse = this.menu.querySelector('use');
     if (this.flipLayoutQuery.matches) {
-      if (this.view !== 'dock') {
+      if (this.hasFlipCard) {
+        // The label names the × action, which changes when the card is in Fullscreen.
+        iconUse.setAttribute('href', '#i-close');
+        this.menu.setAttribute(
+          'aria-label',
+          this.card.dataset.state === 'fullscreen' ? 'Back to summary' : 'Close details'
+        );
+      } else if (this.view !== 'dock') {
         iconUse.setAttribute('href', '#i-menu');
         this.menu.setAttribute('aria-label', 'Open menu');
       } else if (this.flipDockScreen === 'list') {
@@ -807,7 +872,8 @@ export class MapInterface {
       view: this.view,
       cardState: this.card.dataset.state,
       cardHidden: this.card.hidden,
-      isDesktopLayout: !this.mobileLayoutQuery.matches
+      isDesktopLayout: !this.mobileLayoutQuery.matches,
+      isFlipLayout: this.flipLayoutQuery.matches
     });
   }
 
@@ -865,14 +931,27 @@ export class MapInterface {
     categories.scrollLeft = scrollLeft;
   }
 
-  placeCardOpened({fromDock = false} = {}) {
-    this.cardFromDock = !!(fromDock && this.isFlip);
+  // Call after the card's content is in place and it is no longer hidden.
+  placeCardOpened() {
+    if (this.flipLayoutQuery.matches) {
+      this.openFlipCard();
+      return;
+    }
     if (this.mobileLayoutQuery.matches && this.view === 'dock') {
       // A card chosen from the dock is presented in the search view.
       this.setView('search');
     }
     this.syncCardForLayout();
     this.syncLocateClearance();
+  }
+
+  // Choosing a dock row leaves the list intact and shows only the card's header over the map.
+  openFlipCard() {
+    this.flipCardOrigin = this.view === 'dock' ? 'dock' : 'map';
+    this.cardFromDock = this.flipCardOrigin === 'dock';
+    this.flipReturnFocusElement = this.flipCardOrigin === 'dock' ? document.activeElement : null;
+    if (this.view === 'dock') this.setView('closed');
+    this.setCardState('peek');
   }
 
   // The floating desktop card only pushes Locate when it reaches the button's right-hand column.
@@ -883,6 +962,15 @@ export class MapInterface {
   }
 
   syncCardForLayout() {
+    if (this.flipLayoutQuery.matches) {
+      if (this.hasFlipCard && !['peek', 'fullscreen'].includes(this.card.dataset.state))
+        this.setCardState('peek', {notify: false});
+      this.syncFlipCardPresentation();
+      return;
+    }
+    // Leaving the cover screen makes a stored Flip dock return target meaningless.
+    this.flipCardOrigin = null;
+    this.flipReturnFocusElement = null;
     if (!this.mobileLayoutQuery.matches) {
       this.resetCardState();
       return;
@@ -910,6 +998,7 @@ export class MapInterface {
     this.syncResultsVisibility();
     this.syncCardHandle();
     this.syncMobileCardPresentation();
+    this.syncFlipCardPresentation();
     this.card.style.setProperty('--card-head', `${this.cardHeadBottom()}px`);
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
@@ -925,9 +1014,12 @@ export class MapInterface {
     this.card.style.removeProperty('touch-action');
     this.cardBody.inert = false;
     this.cardFromDock = false;
+    this.flipCardOrigin = null;
+    this.flipReturnFocusElement = null;
     this.areResultsMinimized = this.isResultsCompacted && this.view === 'search';
     if (this.view !== 'search') this.isResultsCompacted = false;
     this.syncMobileCardPresentation();
+    this.syncFlipCardPresentation();
     this.syncResultsVisibility();
     this.syncActiveChip();
     this.syncLocateClearance();
@@ -935,13 +1027,37 @@ export class MapInterface {
     else this.reconcile();
   }
 
+  // Expose the Flip card state for CSS and keep the shared Icon Button's action in step with it.
+  syncFlipCardPresentation() {
+    if (this.hasFlipCard) document.body.dataset.flipCardState = this.card.dataset.state;
+    else delete document.body.dataset.flipCardState;
+    this.syncMenuIcon();
+  }
+
+  // Flip keeps the screen-reader close button but gives visible focus to the shared Icon Button.
+  focusCardControl() {
+    if (this.flipLayoutQuery.matches) this.restoreFocus(this.menu);
+    else document.getElementById('close-place').focus({preventScroll: true});
+  }
+
+  // The phone card can step up from Peek and Full; Flip's visible control is the shared Icon Button.
   canStepCardUp() {
     const state = this.card.dataset.state;
     return state === 'peek' || (state === 'full' && this.isMobilePhone);
   }
 
+  // Tapping the header or handle steps the phone card; Flip has its own two-step control.
   activateCardHandle() {
     const state = this.card.dataset.state;
+    if (this.flipLayoutQuery.matches) {
+      const nextState = flipCardStateAfterTap(state);
+      if (nextState !== state) {
+        this.setCardState(nextState);
+        // The Peek handle is hidden in Fullscreen, so keep focus on the visible card control.
+        this.restoreFocus(this.menu);
+      }
+      return;
+    }
     if (this.isMobilePhone) {
       if (state === 'fullscreen') {
         this.setCardState('full');
@@ -983,14 +1099,18 @@ export class MapInterface {
     document.documentElement.style.setProperty('--mobile-card-visible-height', `${visibleHeight}px`);
   }
 
+  // The handle stays available above results and, on Flip Peek, is the tap target that opens Fullscreen.
   syncCardHandle() {
     const state = this.card.dataset.state;
     const isExpanded = state === 'full' || state === 'fullscreen';
-    const isHandleUsable = this.isMobilePhone || this.view === 'search';
+    const isFlipHandleUsable = this.flipLayoutQuery.matches && state === 'peek';
+    const isHandleUsable = isFlipHandleUsable || this.isMobilePhone || this.view === 'search';
     this.cardHandle.tabIndex = isHandleUsable ? 0 : -1;
     this.cardHandle.setAttribute('aria-hidden', String(!isHandleUsable));
     this.cardHandle.setAttribute('aria-expanded', String(isExpanded));
-    if (this.isMobilePhone) {
+    if (this.flipLayoutQuery.matches) {
+      this.cardHandle.setAttribute('aria-label', 'Open full details');
+    } else if (this.isMobilePhone) {
       const label =
         state === 'peek' ? 'Show more' : state === 'full' ? 'Show full screen' : 'Show less';
       this.cardHandle.setAttribute('aria-label', label);
@@ -1093,6 +1213,8 @@ export class MapInterface {
   }
 
   swipeCard(direction) {
+    // Flip has no swipe states; its visible Icon Button is the only way back.
+    if (this.flipLayoutQuery.matches) return;
     const state = this.card.dataset.state;
     const next = this.isMobilePhone
       ? cardStateAfterSwipe({state, direction, resultsBehind: this.view === 'search'})
@@ -1113,7 +1235,12 @@ export class MapInterface {
     let pointerDrag = null;
     this.card.addEventListener('pointerdown', (event) => {
       if (event.pointerType === 'touch' && this.isMobilePhone) return;
-      if (!this.mobileLayoutQuery.matches || event.button || event.target.closest('a, .point-actions'))
+      if (
+        this.flipLayoutQuery.matches ||
+        !this.mobileLayoutQuery.matches ||
+        event.button ||
+        event.target.closest('a, .point-actions')
+      )
         return;
       const isOnCardHeader = !!event.target.closest('#card-handle, #place-head');
       if (!isOnCardHeader && this.card.scrollTop > 0) return;
@@ -1295,7 +1422,7 @@ export class MapInterface {
     this.card.addEventListener(
       'wheel',
       event => {
-        if (!this.mobileLayoutQuery.matches) return;
+        if (this.flipLayoutQuery.matches || !this.mobileLayoutQuery.matches) return;
         const isSteppingUp = event.deltaY > 0 && this.canStepCardUp();
         const isSwipingDown = event.deltaY < 0 && this.card.scrollTop === 0;
         if (!isSteppingUp && !isSwipingDown) return;
