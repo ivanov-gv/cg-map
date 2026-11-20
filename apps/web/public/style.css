@@ -74,6 +74,34 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* Short All label still needs a full-width touch target beside the longer category chips. */
 #categories button { min-width: 40px; min-height: 40px; flex-shrink: 0; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
 #categories button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: white; }
+/* The active chip and its × are two buttons inside one green pill; the map chip shares this appearance. */
+.category-pill, .active-category-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px 0 14px;
+  border-radius: 20px;
+  background: var(--green);
+  color: white;
+}
+#categories .category-pill { flex-shrink: 0; }
+.active-category-chip-label, .active-category-chip-remove {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: inherit;
+}
+.active-category-chip-label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.active-category-chip-remove { display: grid; place-items: center; }
+.category-remove .icon, .active-category-chip-remove .icon { width: 16px; height: 16px; stroke-width: 2.4; }
+/* Keep the unused slot in flow so clearing a scrolled filter cannot clamp scrollLeft. */
+#categories .category-pill.is-placeholder { visibility: hidden; pointer-events: none; }
+/* The map chip stands in for the category row on phones and Flip while search and the dock are closed. */
+.active-category-chip { position: fixed; top: calc(var(--visible-top) + var(--bar-inset) + 52px); left: var(--bar-inset); z-index: 6; box-shadow: 0 4px 20px #243f3718; pointer-events: auto; }
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
@@ -324,6 +352,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     flex-direction: column;
     min-height: 0;
   }
+  /* Desktop uses the floating row, so it never shows the standalone chip. */
+  .active-category-chip { display: none; }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
@@ -409,21 +439,24 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
    * separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
     gap: 5px;
-    padding-top: 2px;
-    padding-bottom: 0;
+    /* Reserve room for the × target's invisible 10 px extension, then cancel it so the row stays compact. */
+    padding-top: 7px;
+    padding-bottom: 10px;
+    margin-top: -5px;
+    margin-bottom: -10px;
   }
   body[data-view=dock] #categories button {
     min-height: 30px;
     padding: 3px 10px;
     font-size: 11px;
   }
-  /* Compact result rows on Flip so at least three fit in the visible area.
-   * Target: 41 px per row (40 px min-height + 1 px separator, 24 px symbol,
-   * single-line name, smaller kind/distance). Three rows × 41 px = 123 px fits
-   * the measured 130 px between categories and the handle. */
+  /* Compact result rows on Flip so at least three fit below the 40 px active pill.
+   * Target: 37 px per row (36 px min-height + 1 px separator, 24 px symbol,
+   * single-line name, smaller kind/distance). Three rows × 37 px = 111 px fits
+   * the space left between the pill and the handle. */
   body[data-view=dock] .result {
-    min-height: 40px;
-    padding: 3px var(--bar-inset);
+    min-height: 36px;
+    padding: 2px var(--bar-inset);
     gap: 8px;
     border-bottom: 1px solid #eceee7;
     align-items: center;
@@ -547,5 +580,35 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body[data-view=dock] #footer-toggle[aria-expanded=true]::before {
     transform: rotate(180deg);
   }
+  /* Match the icon button's 3 px margin plus the bar's 1 px border. */
+  .active-category-chip {
+    top: calc(var(--visible-top) + var(--bar-inset) + 50px);
+    left: calc(var(--bar-inset) + 4px);
+  }
+}
+/* Row chips inherit #categories button styles in every panel; the pill's two buttons keep the map chip's look. */
+#categories .category-pill button,
+.desktop-search-panel[data-state=empty] #categories .category-pill button,
+.desktop-search-panel:is([data-state=open], [data-state=filled]) #categories .category-pill button,
+body[data-view=dock] #categories .category-pill button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: none;
+}
+#categories .category-pill button[aria-pressed=true],
+.desktop-search-panel[data-state=empty] #categories .category-pill button[aria-pressed=true],
+.desktop-search-panel:is([data-state=open], [data-state=filled]) #categories .category-pill button[aria-pressed=true],
+body[data-view=dock] #categories .category-pill button[aria-pressed=true] {
+  border-color: transparent;
+  background: transparent;
+  color: white;
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

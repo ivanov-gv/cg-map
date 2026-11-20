@@ -12,6 +12,13 @@ export function isClearButtonVisible({state, isFlipLayout}) {
   return state !== 'empty';
 }
 
+// The map chip replaces the category row while that row is off screen; an expanded card covers the map.
+export function isActiveChipVisible({hasCategory, view, cardState, cardHidden, isDesktopLayout}) {
+  if (isDesktopLayout || !hasCategory || view !== 'closed') return false;
+  const isExpandedCard = !cardHidden && (cardState === 'full' || cardState === 'fullscreen');
+  return !isExpandedCard;
+}
+
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
@@ -75,7 +82,17 @@ const WHEEL_GESTURE_MILLISECONDS = 600;
 const MINIMUM_KEYBOARD_HEIGHT_PIXELS = 100;
 
 export class MapInterface {
-  constructor({onSearch, onResultsRefreshed, onChange, onViewport, onCardSwipedAway, onResultsClosed, resultsLabel}) {
+  constructor({
+    onSearch,
+    onResultsRefreshed,
+    onChange,
+    onViewport,
+    onCardSwipedAway,
+    onResultsClosed,
+    onRemoveCategory,
+    activeCategoryLabel,
+    resultsLabel
+  }) {
     Object.assign(this, {
       onSearch,
       onResultsRefreshed,
@@ -83,13 +100,30 @@ export class MapInterface {
       onViewport,
       onCardSwipedAway,
       onResultsClosed,
+      onRemoveCategory,
+      activeCategoryLabel,
       resultsLabel
     });
+    this.initializeViewState();
+    this.findControls();
+    this.wireControls();
+    this.wireLayoutChanges();
+    this.startCardObserver();
+    this.wireCardGestures();
+    this.wireCategoryWheel();
+    this.syncInitialUI();
+  }
+
+  initializeViewState() {
     this.view = 'closed';
     this.isResultsPanelOpen = false;
     this.areResultsMinimized = false;
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
     this.flipLayoutQuery = matchMedia(FLIP_MEDIA_QUERY);
+    this.isRestoringFocus = false;
+  }
+
+  findControls() {
     this.search = document.getElementById('search');
     this.menu = document.getElementById('menu-toggle');
     this.panel = document.getElementById('browse-panel');
@@ -101,26 +135,42 @@ export class MapInterface {
     this.cardBody = document.getElementById('place-body');
     this.cardHandle = document.getElementById('card-handle');
     this.clearButton = document.getElementById('clear-search');
+    this.activeChip = document.getElementById('active-category-chip');
+    this.activeChipLabel = document.getElementById('active-category-chip-label');
+    this.activeChipRemove = document.getElementById('active-category-chip-remove');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
     this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
-    this.isRestoringFocus = false;
-    this.menu.addEventListener('click', () => {
-      this.trigger = this.menu;
-      if (this.mobileLayoutQuery.matches) this.search.blur();
-      this.setView(this.view === 'dock' ? 'closed' : 'dock');
-      this.onViewport?.();
-    });
+  }
+
+  wireControls() {
+    this.menu.addEventListener('click', () => this.toggleMenu());
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
+    this.activeChipLabel.addEventListener('click', () => this.openChipTarget());
+    this.activeChipRemove.addEventListener('click', () => this.onRemoveCategory?.());
     this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
     });
+    this.wireSearchEvents();
+  }
+
+  // The header button owns dock toggling and becomes the focus target when it closes.
+  toggleMenu() {
+    this.trigger = this.menu;
+    if (this.mobileLayoutQuery.matches) this.search.blur();
+    this.setView(this.view === 'dock' ? 'closed' : 'dock');
+    this.onViewport?.();
+  }
+
+  wireSearchEvents() {
+    // A restored focus must not reopen the panel it just returned to.
     for (const type of ['focus', 'click'])
       this.search.addEventListener(type, () => {
-        if (!this.isRestoringFocus) this.openSearch();
+        if (this.isRestoringFocus) return;
+        this.openSearch();
       });
     this.search.addEventListener('keydown', event => {
       const isSearchKey = event.key === 'Enter' && !event.isComposing;
@@ -134,28 +184,45 @@ export class MapInterface {
       this.syncClearButton();
       this.syncDesktopSearchUI();
     });
-    this.mobileLayoutQuery.addEventListener('change', () => {
-      if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
-      if (!this.card.hidden) this.syncCardForLayout();
-      this.syncPanelPosition();
-      this.syncDesktopSearchUI();
-      this.syncViewport();
-    });
-    this.flipLayoutQuery.addEventListener('change', () => this.syncClearButton());
+  }
+
+  wireLayoutChanges() {
+    this.mobileLayoutQuery.addEventListener('change', () => this.syncForMobileLayoutChange());
+    this.flipLayoutQuery.addEventListener('change', () => this.syncForFlipLayoutChange());
     window.visualViewport?.addEventListener('resize', () => this.syncViewport());
     window.visualViewport?.addEventListener('scroll', () => this.syncViewport());
     window.addEventListener('resize', () => this.syncViewport());
+  }
+
+  // The panel's container and the standalone chip both change at the Mobile breakpoint.
+  syncForMobileLayoutChange() {
+    if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
+    if (!this.card.hidden) this.syncCardForLayout();
+    this.syncPanelPosition();
+    this.syncDesktopSearchUI();
+    this.syncViewport();
+    this.syncActiveChip();
+  }
+
+  syncForFlipLayoutChange() {
+    this.syncClearButton();
+    this.syncActiveChip();
+  }
+
+  startCardObserver() {
     this.observer = new ResizeObserver(() => {
       this.syncCardTouch();
       this.onViewport?.();
     });
     this.observer.observe(this.bubble);
     this.observer.observe(this.card);
-    this.wireCardGestures();
-    this.wireCategoryWheel();
+  }
+
+  syncInitialUI() {
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
     this.syncViewport(false);
+    this.syncActiveChip();
   }
 
   // Move the browse panel to the container for the current view without changing other state.
@@ -189,6 +256,30 @@ export class MapInterface {
     this.clearButton.dataset.clearVisible = String(isVisible);
     this.clearButton.setAttribute('aria-hidden', String(!isVisible));
     this.clearButton.tabIndex = isVisible ? 0 : -1;
+  }
+
+  // A chip tap opens the control that owns categories on this device: bubble on Phone, dock on Flip.
+  openChipTarget() {
+    if (this.flipLayoutQuery.matches) {
+      // Reuse the menu button's toggle so focus and viewport bookkeeping stay in one place.
+      this.menu.click();
+      return;
+    }
+    this.openSearch();
+  }
+
+  // The chip mirrors the active category and only shows where the category row is off screen.
+  syncActiveChip() {
+    const label = this.activeCategoryLabel?.() ?? '';
+    this.activeChipLabel.textContent = label;
+    this.activeChipRemove.setAttribute('aria-label', label ? `Remove category ${label}` : 'Remove category');
+    this.activeChip.hidden = !isActiveChipVisible({
+      hasCategory: Boolean(label),
+      view: this.view,
+      cardState: this.card.dataset.state,
+      cardHidden: this.card.hidden,
+      isDesktopLayout: !this.mobileLayoutQuery.matches
+    });
   }
 
   // Filled clears the query; Open closes results except on Flip, where the Icon Button owns dock closing.
@@ -266,6 +357,7 @@ export class MapInterface {
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
     this.syncSearchExpanded();
+    this.syncActiveChip();
     // Closing the dock resets the Flip footer to minimized.
     if (view !== 'dock') this.minimizeFooter();
     this.onChange?.();
@@ -322,6 +414,7 @@ export class MapInterface {
     this.cardBody.inert = false;
     this.areResultsMinimized = false;
     this.syncResultsVisibility();
+    this.syncActiveChip();
   }
 
   syncCardForLayout() {
@@ -343,6 +436,7 @@ export class MapInterface {
     this.card.style.setProperty('--card-head', `${this.cardHeadBottom()}px`);
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
+    this.syncActiveChip();
     if (notify) this.onViewport?.();
   }
 

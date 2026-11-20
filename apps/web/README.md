@@ -57,31 +57,37 @@ swipes, focus restoration, and visible-viewport geometry. It has no dependency o
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
 scroll above it.
 
-**Desktop search bar** (issues #101, #246): the search bar is 60 px tall (instead of 54 px) and has three states. Empty
-shows only the placeholder and a floating row of category chips, with **All** first; each chip has its own shadow and
-the row scrolls horizontally when it overflows. Focusing the field opens the joined Search panel in Open, with × and a
-nearest-first nearby list; typing makes it Filled and filters that list. The × in Filled clears only the query and keeps
-results Open. The × in Open closes the results, returns to the map, and also closes the place card. With the dock
+**Desktop search bar** (issues #101, #246, #268): the search bar is 60 px tall (instead of 54 px) and has three states.
+Empty shows only the placeholder and a floating row of category chips, with **All** first; each chip has its own shadow
+and the row scrolls horizontally when it overflows. Focusing the field opens the joined Search panel in Open, with × and
+a nearest-first nearby list; typing makes it Filled and filters that list. The × in Filled clears only the query and
+keeps results Open. The × in Open closes the results, returns to the map, and also closes the place card. With the dock
 closed, Escape follows the same sequence: the first Escape clears a query and refocuses the input, the second closes
 Open results; with the dock open, Escape closes the dock. The floating row and the dock row are one element, so opening
-the dock keeps its scroll position, active chip, query, and focus. Tab reaches the menu button, the input, the clear
-button, and the category chips. The dock remains available for the full layer/download controls.
+the dock keeps its scroll position, active chip, query, and focus. The active chip (never All) and its × are two buttons
+inside one green pill (40 px high, 20 px radius, 14 px left padding, 10 px right padding, 6 px gap), matching the map
+chip. The × is named `Remove category <name>`; pressing it returns to All, keeps the query and the row's scroll
+position. Tab reaches the menu button, the input, the clear button, the category chips and its ×. The dock remains
+available for the full layer/download controls.
 
-**Mobile search bar** (issues #102, #246): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54 px
-default and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons and
-font. Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains
-available inside the open dock and the search bubble, with **All** first. Focusing with the dock closed opens the bubble
-in Open with × and a nearest-first nearby list; the same × sequence applies: clearing a Filled query keeps results Open,
-and the next × closes the bubble and any place card. With the dock open, the bottom options hide while the keyboard is
-open.
+**Mobile search bar** (issues #102, #246, #268): on phones (≤ 720 px), the search bar is 44 px tall (smaller than the 54
+px default and the 60 px desktop bar), spans the screen width minus 12 px gutters on each side, and uses smaller icons
+and font. Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains
+available inside the open dock and the search bubble, with **All** first. While both are closed, a green chip under the
+header (8 px below the bar, at its left edge) stands in for the active category row: tapping its label opens the bubble
+with that category, and its × returns to All. It is hidden for All, while the bubble or dock is open, and under a Full
+or Fullscreen place card. Focusing with the dock closed opens the bubble in Open with × and a nearest-first nearby list;
+the same × sequence applies: clearing a Filled query keeps results Open, and the next × closes the bubble and any place
+card. With the dock open, the bottom options hide while the keyboard is open.
 
-**Flip search bar** (issues #103, #246): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar shrinks
-to the menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px. The
-search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again (as
-on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no × until a
-query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the dock or
-card. Closing the dock belongs to the header Icon Button (currently the menu control; its cycle is issue #247). The
-category row starts with **All**, as on other devices.
+**Flip search bar** (issues #103, #246, #268): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar
+shrinks to the menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px.
+The search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again
+(as on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no ×
+until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the
+dock or card. Closing the dock belongs to the header Icon Button (currently the menu control; its cycle is issue #247).
+The category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8
+px below the ☰ Icon Button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
@@ -100,10 +106,10 @@ collapses it. Closing the dock resets to minimized. The handle is hidden on Mobi
 always shown.
 
 When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
-visible: the search bar uses an 8 px inset, category chips are 32 px, each result row is about 40 px (24 px symbol,
-smaller fonts), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are
-compact (icon and label in one row, ~40 px) and the Download button is ~40 px so everything fits without scrolling.
-These sizes are tested at both 340×250 and 340×340.
+visible: the search bar uses an 8 px inset, inactive category chips are 30 px while the active pill stays 40 px, each
+result row is about 37 px (24 px symbol, smaller fonts), and the handle is 28 px with only the safe-area padding (4 px)
+below it. When expanded, layer tiles are compact (icon and label in one row, ~40 px) and the Download button is ~40 px
+so everything fits without scrolling. These sizes are tested at both 340×250 and 340×340.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
@@ -417,11 +423,12 @@ rebuild map sources or tiles.
 
 MapInterface switches the shared result panel between the full dock, the desktop search panel, and the mobile search
 bubble. The category navigation stays outside the scrolling list and begins with the All chip. There is no count/reset
-row; clicking an active category returns to All without clearing the query. The bubble extends to the visible viewport's
-midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone dock's options when a keyboard
-reduces the visible area; the camera stays still until the keyboard closes. Selecting a result keeps search open and
-shows its existing details card as a header-only peek, with the selected feature kept in the remaining map area. The
-burger/search header is never replaced or moved.
+row; clicking an active category or its × returns to All without clearing the query. When the row is off screen on
+Mobile or Flip, interface.js shows one active category chip under the header from the same directoryState value. The
+bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide
+the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes.
+Selecting a result keeps search open and shows its existing details card as a header-only peek, with the selected
+feature kept in the remaining map area. The burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.
