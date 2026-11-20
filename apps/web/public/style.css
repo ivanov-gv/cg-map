@@ -15,6 +15,8 @@
   color: #243f37;
   background: #f8f9f3;
   --green: #193f36;
+  /* CSS mirror of SEARCH_HIGHLIGHT_COLOR in src/core.js; MapLibre paint reads that constant directly. */
+  --search-highlight: #2e7d32;
   --muted: #7c8379;
   --line: #e3e6dc;
   --line-strong: #aab4a6;
@@ -110,6 +112,7 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
   .result:hover { background: #edf1e4; }
 }
 .result .symbol { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--color) 15%, white); color: var(--color); font-weight: 700; flex: none; }
+.result[data-kind=building] .symbol, .result[data-kind=address] .symbol { --color: var(--search-highlight); }
 .result .copy { min-width: 0; flex: 1; }
 .result strong, .result small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result strong { font-size: 16px; font-weight: 600; }

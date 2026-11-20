@@ -13,9 +13,11 @@ export class PlaceSelection {
   #state = {
     selectedPlace: null,
     selectedPoint: null,
+    selectedFootprintIndex: null,
     returnFocusElement: null,
-    previewPlace: null,
+    requestedPlace: null,
     pendingReveal: null,
+    revealOnlyWhenNeeded: false,
     isChoosingListing: false,
     requestedMarkerKey: null
   };
@@ -42,18 +44,18 @@ export class PlaceSelection {
   get selectedPlace() {
     return this.#state.selectedPlace;
   }
-  get previewPlace() {
-    return this.#state.previewPlace;
-  }
   get point() {
     return this.#state.selectedPoint;
   }
+  // Only an explicit choice is current; the leading search match is not selected and stays green.
   get currentResultId() {
-    return (
-      this.#state.selectedPlace?.properties.id ??
-      this.#state.selectedPoint?.id ??
-      this.#state.previewPlace?.properties.id
-    );
+    return this.#state.selectedPlace?.properties.id ?? this.#state.selectedPoint?.id ?? null;
+  }
+  get selectedFootprintIndex() {
+    return this.#state.selectedFootprintIndex;
+  }
+  get hasOpenCard() {
+    return Boolean(this.#state.selectedPlace || this.#state.selectedPoint || this.#state.isChoosingListing);
   }
 
   // Explicit selection and location requests mark the map explored before moving its camera.
@@ -91,17 +93,12 @@ export class PlaceSelection {
     this.revealCoordinates(coordinates, options);
   }
 
-  // Admission is fixed by each band's zoom range. Only the selected listing, or otherwise the leading explicit result,
-  // may also appear below its threshold.
+  // Admission is fixed by each band's zoom range. The chosen listing, or otherwise the leading search match, may also
+  // appear below its own threshold. Search highlights are green, so this icon never looks like a chosen result.
   updatePlaceLayers() {
     if (!this.#context.isMapReady() || this.#directory.loadingError) return;
-    this.#objectSelection.setPreview(
-      this.#state.selectedPlace || !this.#state.previewPlace
-        ? null
-        : this.#directory.markerKeysByPlaceId.get(this.#state.previewPlace.properties.id)
-    );
     const {features, maxzoom} = requestedPlaceMarker(
-      this.#state.selectedPlace ?? this.#state.previewPlace,
+      this.#state.selectedPlace ?? this.#state.requestedPlace,
       this.#directory.filteredPlaces,
       this.#directory.markerKeysByPlaceId,
       this.#directory.visibilityConfig
@@ -113,8 +110,8 @@ export class PlaceSelection {
     this.#map.setLayerZoomRange('search-place', 0, maxzoom);
   }
 
-  // A leading explicit result may be previewed only while results are open and map layers are ready.
-  previewResults() {
+  // The below-threshold icon exception follows the leading search match only while results are open and layers are ready.
+  updateRequestedPlace() {
     if (
       !this.#context.isMapReady() ||
       this.#directory.loadingError ||
@@ -122,7 +119,7 @@ export class PlaceSelection {
       !this.#interface.areResultsVisible()
     )
       return;
-    this.#state.previewPlace =
+    this.#state.requestedPlace =
       selectNearestPlaces(this.#directory.filteredPlaces, this.#map.getCenter().toArray(), 1)[0]?.feature ??
       null;
     this.updatePlaceLayers();
@@ -139,8 +136,10 @@ export class PlaceSelection {
   close(shouldRestoreFocus = true) {
     const hadPoint = !!this.#state.selectedPoint || this.#state.isChoosingListing;
     this.#state.selectedPoint = null;
+    this.#state.selectedFootprintIndex = null;
     this.#state.selectedPlace = null;
     this.#state.pendingReveal = null;
+    this.#state.revealOnlyWhenNeeded = false;
     this.setChoosing(false);
     elementById('place-card').hidden = true;
     this.#interface?.resetCardState();
@@ -176,7 +175,9 @@ export class PlaceSelection {
     if (!feature) return;
     this.setChoosing(false);
     this.#state.selectedPlace = feature;
+    this.#state.selectedFootprintIndex = null;
     this.#state.selectedPoint = {
+      id: feature.properties.id,
       name: feature.properties.name,
       coordinates: [...feature.geometry.coordinates]
     };
@@ -185,7 +186,7 @@ export class PlaceSelection {
     elementById('place-name').textContent = properties.name;
     elementById('place-category').textContent = categories[properties.category] ?? properties.category;
     renderPlaceDetails(feature);
-    this.#state.previewPlace = null;
+    this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     elementById('search').blur();
     elementById('place-card').hidden = false;
@@ -199,45 +200,20 @@ export class PlaceSelection {
     this.flushPendingReveal();
   }
 
-  // A building/address result is already inside the view, so choosing it only swaps green for red: the camera stays.
+  // A building/address row opens the same point card as tapping its house number. It reveals the result only when it
+  // leaves the focus zone, exactly as choosing a place does.
   showSearchResult(result, trigger) {
     if (result.kind === 'place') {
       this.showPlace(result.feature.properties.id, trigger);
       return;
     }
+    const feature = {...result.feature, layer: {id: 'building-numbers'}};
     const point = {
-      id: result.id,
-      name: result.label,
-      coordinates: [...result.coordinates],
-      kind: result.kind === 'address' ? 'Address' : 'Building',
-      details: []
+      ...this.#context.describePoint(feature, result.coordinates),
+      id: result.id
     };
-    this.setChoosing(false);
-    this.#state.selectedPlace = null;
-    this.#state.selectedPoint = point;
-    this.#state.returnFocusElement = trigger ?? null;
-    elementById('place-name').textContent = point.name;
-    elementById('place-category').textContent = point.kind;
-    const details = elementById('place-details');
-    details.replaceChildren();
-    const coordinatesLine = point.coordinates
-      .slice()
-      .reverse()
-      .map(coordinate => coordinate.toFixed(5))
-      .join(', ');
-    for (const text of [...point.details, coordinatesLine, 'Source: OpenStreetMap · available map attributes only'])
-      if (text) details.append(createElement('p', text, 'detail'));
-    this.#state.previewPlace = null;
-    this.updatePlaceLayers();
     elementById('search').blur();
-    elementById('place-card').hidden = false;
-    this.#interface.placeCardOpened();
-    elementById('place-card').scrollTop = 0;
-    this.#context.onSelectionChanged();
-    this.markCurrentResult();
-    this.#objectSelection.clear();
-    this.#objectSelection.setTarget({sourceLayer: 'buildings', id: result.footprintIndex});
-    elementById('close-place').focus({preventScroll: true});
+    this.showPoint(point, feature, {trigger, reveal: true});
   }
 
   // Keep every recorded entrance clear of the header and card, without zooming closer than the selected view.
@@ -264,9 +240,14 @@ export class PlaceSelection {
   }
 
   // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
-  showPoint(point, feature = null) {
+  // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
+  showPoint(point, feature = null, {trigger = null, reveal = false} = {}) {
     this.close(false);
     this.#state.selectedPoint = point;
+    this.#state.returnFocusElement = trigger;
+    const footprintIndex =
+      feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
+    this.#state.selectedFootprintIndex = Number.isInteger(footprintIndex) ? footprintIndex : null;
     elementById('place-name').textContent = point.name;
     elementById('place-category').textContent = point.kind;
     const details = elementById('place-details');
@@ -280,20 +261,28 @@ export class PlaceSelection {
       if (text) details.append(createElement('p', text, 'detail'));
     }
     elementById('place-card').hidden = false;
-    this.#state.previewPlace = null;
+    this.#state.requestedPlace = null;
     this.updatePlaceLayers();
-    this.#interface.close();
+    // A map tap leaves search; choosing a row keeps the results beside the card.
+    if (!reveal) this.#interface.close();
     this.#interface.placeCardOpened();
     this.#context.onSelectionChanged();
+    this.markCurrentResult();
     this.#objectSelection.select(feature, point.coordinates);
-    const footprintIndex =
-      feature?.layer?.id === 'buildings' ? feature.id : feature?.properties?.footprintIndex;
     const entrances =
       point.kind === 'Building' ? this.#directory.buildingAddresses.get(footprintIndex)?.entrances : [];
+    this.#state.revealOnlyWhenNeeded = reveal;
+    const needsReveal =
+      reveal &&
+      (this.#map.getZoom() < 15 ||
+        !isInFocusZone(this.#map.project(point.coordinates), this.#interface.mapArea()));
+    if (needsReveal) this.#state.pendingReveal = {zoom: 15};
     if (entrances?.length) {
       this.#state.selectedPoint = {...point, entrances};
+      // The fit ends with a moveend, which flushes the reveal after the entrance bounds are known.
       this.frameBuildingEntrances(entrances, point.coordinates);
-    } else this.focusCoordinates(point.coordinates, this.#map.getZoom());
+    } else if (needsReveal) this.flushPendingReveal();
+    else if (!reveal) this.focusCoordinates(point.coordinates, this.#map.getZoom());
     elementById('close-place').focus({preventScroll: true});
   }
 
@@ -313,7 +302,7 @@ export class PlaceSelection {
     details.append(list);
     elementById('search').blur();
     elementById('place-card').hidden = false;
-    this.#state.previewPlace = null;
+    this.#state.requestedPlace = null;
     this.updatePlaceLayers();
     this.#interface.placeCardOpened();
     // The list must be usable at once, so a phone card opens full instead of as a header-only peek.
@@ -337,6 +326,7 @@ export class PlaceSelection {
         );
       return;
     }
+    if (this.#state.revealOnlyWhenNeeded && !this.#state.pendingReveal) return;
     if (this.#map.isMoving()) {
       this.#state.pendingReveal ??= {zoom: this.#map.getZoom()};
       return;
@@ -359,12 +349,12 @@ export class PlaceSelection {
         feature => feature.properties.id === this.#state.selectedPlace.properties.id
       );
     if (this.#state.isChoosingListing || isSelectedPlaceExcluded) this.close(false);
-    this.clearPreview();
+    this.clearRequestedPlace();
   }
 
-  // Drop only the leading result; an explicitly selected listing keeps its highlight.
-  clearPreview() {
-    this.#state.previewPlace = null;
+  // Drop the below-threshold icon exception; an explicitly selected listing keeps its own marker.
+  clearRequestedPlace() {
+    this.#state.requestedPlace = null;
     this.updatePlaceLayers();
   }
 

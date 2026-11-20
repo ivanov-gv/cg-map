@@ -7,8 +7,10 @@ import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
 import {transportStatusText} from './status-messages.js';
 import {
   categories,
+  collectSearchResults,
+  indexBuildingLabels,
   matchesPlaceSearch,
-  selectSearchResults,
+  rankSearchResults,
   featureCollection,
   DEFAULT_CENTER,
   DISCOVER_ZOOM
@@ -30,6 +32,7 @@ import {installTransport, TransportFeed} from './transport.js';
 import {
   buildingAddressIndex,
   buildingMapFeatures,
+  describePoint,
   entranceFeatures,
   installEntranceLayers,
   selectBuildingEntrances,
@@ -101,7 +104,8 @@ const directoryState = {
   placesById: new Map(),
   activeCategory: null,
   buildingAddresses: new Map(),
-  buildingLabels: null,
+  buildingLabelIndex: [],
+  searchCandidates: [],
   results: [],
   loadingError: null,
   visibilityConfig: null,
@@ -129,6 +133,7 @@ const placeSelection = new PlaceSelection({
   interface: () => mapState.interface,
   directory: () => directoryState,
   objectSelection: () => mapState.objectSelection,
+  describePoint: (feature, coordinates) => describePoint(feature, coordinates, directoryState.buildingAddresses),
   isMapReady: () => mapState.isMapReady,
   onExploreMap: () => {
     mapState.hasExploredMap = true;
@@ -215,21 +220,24 @@ function setRouteEndpoint(role) {
   placeSelection.close();
 }
 
-// The list and both highlight layers share one result set, ordered from the current view center.
+// The list and both highlight layers share one candidate set; only row order changes with the view center.
 function searchQuery() {
   return elementById('search').value.trim();
 }
 
-function computeSearchResults() {
-  if (!mapState.map) return [];
-  return selectSearchResults({
-    places: directoryState.allPlaces,
-    buildingLabels: directoryState.buildingLabels,
+function computeSearchCandidates() {
+  return collectSearchResults({
+    places: directoryState.filteredPlaces,
+    buildingLabels: directoryState.buildingLabelIndex,
     query: searchQuery(),
     category: directoryState.activeCategory,
-    center: mapState.map.getCenter().toArray(),
     markerKeys: directoryState.markerKeysByPlaceId
   });
+}
+
+function rankSearchCandidates() {
+  if (!mapState.map) return [];
+  return rankSearchResults(directoryState.searchCandidates, mapState.map.getCenter().toArray());
 }
 
 // Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
@@ -242,7 +250,7 @@ function renderSearchResults() {
   });
 }
 
-// Only visible results are drawn: a closed list clears its marks, and the camera never reveals an off-screen match.
+// Every match in view is marked, including those past the 40-row list limit. Choosing a hidden match reveals it later.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
   const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
@@ -252,19 +260,22 @@ function updateSearchHighlights() {
   }
   const bounds = mapState.map.getBounds();
   const selectedId = String(placeSelection.currentResultId ?? '');
-  const visible = directoryState.results.filter(
-    result => String(result.id) !== selectedId && bounds.contains(result.coordinates)
-  );
+  const selectedFootprintIndex = placeSelection.selectedFootprintIndex;
+  const visible = directoryState.searchCandidates.filter(result => {
+    if (String(result.id) === selectedId) return false;
+    if (selectedFootprintIndex !== null && result.footprintIndex === selectedFootprintIndex) return false;
+    return bounds.contains(result.coordinates);
+  });
   mapState.searchHighlights.update(visible);
 }
 
 function refreshSearchResults() {
-  directoryState.results = computeSearchResults();
+  directoryState.results = rankSearchCandidates();
   renderSearchResults();
   updateSearchHighlights();
 }
 
-// A search or category narrows the candidates; matching icons keep their thresholds.
+// A search or category narrows the candidates once; matching icons keep their thresholds.
 function applyPlaceSearch() {
   directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
     matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
@@ -278,8 +289,9 @@ function applyPlaceSearch() {
         )
       );
   placeSelection.onFilterChanged();
+  directoryState.searchCandidates = computeSearchCandidates();
   refreshSearchResults();
-  placeSelection.previewResults();
+  placeSelection.updateRequestedPlace();
   // Update desktop search UI after results change.
   mapState.interface.syncDesktopSearchUI();
   mapState.interface.syncClearButton();
@@ -363,7 +375,7 @@ function loadDirectoryData() {
   const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
     .then(labels => {
       directoryState.buildingAddresses = buildingAddressIndex(labels);
-      directoryState.buildingLabels = labels;
+      directoryState.buildingLabelIndex = indexBuildingLabels(labels);
       return labels;
     })
     .catch(error => {
@@ -551,10 +563,10 @@ function registerPublicMapEvents() {
   // MapLibre resize() fires synchronously: movestart, move, resize, moveend.
   // The resize event cancels the pending foreign move so following is not stopped by a viewport change.
   mapState.map.on('resize', () => locationControls.noteMapResize());
-  // The list keeps its order while a chosen place is open, so the row just used does not jump.
+  // The list keeps its order while any card is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
-    if (!placeSelection.selectedPlace) {
-      directoryState.results = computeSearchResults();
+    if (!placeSelection.hasOpenCard) {
+      directoryState.results = rankSearchCandidates();
       renderSearchResults();
     }
     updateSearchHighlights();
@@ -847,7 +859,7 @@ function initializeInterface() {
         locationControls.refresh();
       }
       if (mapState.interface?.view === 'closed') {
-        placeSelection.clearPreview();
+        placeSelection.clearRequestedPlace();
       }
     },
     // Recompute selection framing only after keyboard and camera changes have settled.
