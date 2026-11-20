@@ -48,7 +48,7 @@ test('producer and browser agree on separate building numbers and located entran
     [19.2605, 42.4405],
     index,
   );
-  assert.ok(point.details.includes(fixture.address));
+  assert.ok(point.facts.addresses.includes(fixture.address));
   assert.deepEqual(
     fs.readFileSync('dist/web/data/building-labels.geojson'),
     fs.readFileSync('data/sources/building-labels.geojson'),
