@@ -35,6 +35,9 @@ const buildCommit = builtManifest.build?.commit;
 const compactFooterPrefix = `${appName} ${webPackage.version} · `;
 const fullFooterPrefix = `${compactFooterPrefix}${buildCommit ? `${buildCommit} · ` : ''}`;
 const licenceText = '© OpenStreetMap contributors · ODbL · Natural Earth';
+const SHORT_TEST_COMMIT = 'a';
+// Long enough that the full line cannot fit any supported viewport, whatever the font metrics.
+const LONG_TEST_COMMIT = 'a'.repeat(200);
 
 async function expectFooterOnOneLine(page) {
   const metrics = await page.locator('#map-attribution').evaluate(element => {
@@ -50,6 +53,42 @@ async function expectFooterOnOneLine(page) {
   expect(metrics.whiteSpace).toBe('nowrap');
   expect(metrics.height).toBeLessThanOrEqual(metrics.lineHeight + 1);
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+}
+
+// Controls the manifest commit so the fit decision does not depend on the commit made by the test build.
+async function routeFooterCommit(page, commitForRequest) {
+  await page.route('**/data/manifest.json', async route => {
+    const response = await route.fetch();
+    const manifest = await response.json();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...manifest,
+        build: {...manifest.build, name: appName, version: webPackage.version, commit: commitForRequest()}
+      })
+    });
+  });
+}
+
+// Checks that the commit is dropped only when the full line would overflow, while the one-line rule still holds.
+async function expectFooterVersionState(page, commit, {keepCommit}) {
+  const fullText = `${compactFooterPrefix}${commit} · ${licenceText}`;
+  const compactText = `${compactFooterPrefix}${licenceText}`;
+  const attribution = page.locator('#map-attribution');
+  await expect(attribution).toHaveText(keepCommit ? fullText : compactText);
+
+  const fullLineOverflows = await attribution.evaluate((element, text) => {
+    const originalNodes = [...element.childNodes];
+    element.textContent = text;
+    const overflows = element.scrollWidth > element.clientWidth + 1;
+    element.replaceChildren(...originalNodes);
+    return overflows;
+  }, fullText);
+  expect(fullLineOverflows).toBe(!keepCommit);
+
+  await expect(attribution.locator('a[href="https://www.openstreetmap.org/copyright"]')).toHaveCount(1);
+  await expectFooterOnOneLine(page);
 }
 
 async function showFlipModesScreen(page) {
@@ -1039,38 +1078,41 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
   });
 });
 
-test('dock footer shows the build version on one line at Flip, Mobile and desktop', {tag: '@phone'}, async ({page}) => {
-  await ready(page);
+test.describe('dock footer build version', () => {
+  // The manifest route must reach the page rather than a cached service-worker response.
+  test.use({serviceWorkers: 'block'});
 
-  await atViewport(page, {width: 1280, height: 800}, async () => {
-    await openMenu(page);
-    const attribution = page.locator('#map-attribution');
-    await expect(attribution).toHaveText(fullFooterPrefix + licenceText);
-    await expectFooterOnOneLine(page);
-  });
+  test('dock footer shows the build version on one line at Flip, Mobile and desktop', {tag: '@phone'}, async ({
+    page
+  }) => {
+    let footerCommit = SHORT_TEST_COMMIT;
+    await routeFooterCommit(page, () => footerCommit);
 
-  await atViewport(page, {width: 412, height: 840}, async () => {
-    await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
-    await openMenu(page);
-    const attribution = page.locator('#map-attribution');
-    await expect(attribution).toHaveText(fullFooterPrefix + licenceText);
-    await expectFooterOnOneLine(page);
-  });
+    for (const viewport of [
+      {width: 1280, height: 800, device: 'desktop'},
+      {width: 412, height: 840, device: 'mobile'}
+    ]) {
+      await atViewport(page, viewport, async () => {
+        footerCommit = SHORT_TEST_COMMIT;
+        await ready(page);
+        await expect(page.locator('body')).toHaveAttribute('data-device', viewport.device);
+        await openMenu(page);
+        await expectFooterVersionState(page, SHORT_TEST_COMMIT, {keepCommit: true});
+      });
+    }
 
-  await atViewport(page, {width: 374, height: 241}, async () => {
-    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
-    await showFlipModesScreen(page);
-    const attribution = page.locator('#map-attribution');
-    await expect(attribution).toHaveText(compactFooterPrefix + licenceText);
-    await expectFooterOnOneLine(page);
-  });
-
-  await atViewport(page, {width: 340, height: 250}, async () => {
-    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
-    await showFlipModesScreen(page);
-    const attribution = page.locator('#map-attribution');
-    await expect(attribution).toHaveText(compactFooterPrefix + licenceText);
-    await expectFooterOnOneLine(page);
+    for (const viewport of [
+      {width: 374, height: 241},
+      {width: 340, height: 250}
+    ]) {
+      await atViewport(page, viewport, async () => {
+        footerCommit = LONG_TEST_COMMIT;
+        await ready(page);
+        await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
+        await showFlipModesScreen(page);
+        await expectFooterVersionState(page, LONG_TEST_COMMIT, {keepCommit: false});
+      });
+    }
   });
 });
 
