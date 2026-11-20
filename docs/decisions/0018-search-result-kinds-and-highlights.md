@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Accepted. Issue #263 refines the highlight rule in a dated outcome note below; the original decision stays on record.
 
 ## Context
 
@@ -45,6 +45,29 @@ another number.
   address opens the same point card as tapping that building on the map, including entrance framing.
 - One exported JavaScript colour constant supplies the search green to MapLibre paint; the stylesheet mirrors it as a
   CSS custom property for result symbols.
+
+## Outcome note: result markers and rings (issue #263, 20 November 2026)
+
+The owner rejected the "rings only around drawn markers" reading after seeing a zoomed-out phone view: a result listed
+in view must also be marked in view. The wiki's Discover rule is unconditional for visible results ("Every result
+visible in the current map view is highlighted"), so the earlier choice to keep every matching icon at its POI level no
+longer serves the feature.
+
+- While a query or a category other than **All** is active, every result place inside the current view gets a marker at
+  any zoom, including below its usual visibility threshold, and a green ring. Markers may collide-hide labels, but a
+  marker is never collision-hidden. One app-owned GeoJSON source and one symbol layer draw these markers, so hundreds of
+  results do not add layers or setData calls while panning.
+- Buildings and addresses keep their green footprint outlines wherever buildings are drawn. A chosen result is red
+  instead of green; the green set never contains it.
+- With no query and **All**, nothing changes: the fixed, cumulative POI thresholds of PV-01/PV-02 still decide which
+  ordinary markers appear.
+- The exception belongs to the public app's search overlays. map-core keeps its pure level policy and published API
+  unchanged; the app reuses the map-core band builder to pick one shared-location marker per result location.
+
+The narrow scope is deliberate: this is an exception to marker admission for explicit results, not a new importance
+signal, a camera move, or a change to directory levels. Current behaviour is described in
+[the interface guide](../ui-ux/features/interface.md#search-result-kinds-and-visible-highlights-us-02-us-04) and
+[stable POI visibility](../ui-ux/features/poi-visibility.md#pv-03-search-selection-and-filters).
 
 ## Distance rule (issue #262)
 

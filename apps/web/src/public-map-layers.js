@@ -1,5 +1,5 @@
 // Public-app overlays. Shared cartography remains in the map-core package.
-import {installPlaceIcons, placeColors} from '@ivanov-gv/map-core';
+import {buildPlaceMarkers, installPlaceIcons, placeColors} from '@ivanov-gv/map-core';
 import {featureCollection, SEARCH_HIGHLIGHT_COLOR} from './core.js';
 
 // Preserve public layer ordering and the selected-result exception; core supplies reusable rendering.
@@ -12,6 +12,28 @@ export function installPublicPlaceLayers(map) {
     promoteId: 'markerKey'
   });
   map.addSource('requested-place', {type: 'geojson', data: featureCollection([])});
+  map.addSource('search-result-markers', {type: 'geojson', data: featureCollection([])});
+  // An explicit query or category draws every result location here, without a minzoom or a layer per place. Names
+  // stay out of this layer: an icon may collide with a label, but the icon itself is never collision-hidden.
+  map.addLayer(
+    {
+      id: 'search-result-places',
+      type: 'symbol',
+      source: 'search-result-markers',
+      layout: {
+        'icon-image': ['get', 'icon'],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-field': ['get', 'count'],
+        'text-font': ['Open Sans Semibold'],
+        'text-size': 12,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true
+      },
+      paint: {'text-color': '#ffffff'}
+    },
+    'road-labels'
+  );
   map.addLayer(
     {
       id: 'place-highlight',
@@ -53,6 +75,30 @@ export function installPublicPlaceLayers(map) {
 }
 
 const noFootprints = ['in', ['id'], ['literal', []]];
+
+// One marker per result location, carrying every matching listing at that point. The highest band already holds all
+// members at a shared location, so it gives the icon and activeIds without any level's zoom threshold.
+export function searchResultMarkerData(places, markerKeysById) {
+  const bands = buildPlaceMarkers(places, markerKeysById);
+  const byMarkerKey = new Map();
+  for (const marker of bands) {
+    const markerKey = marker.properties.markerKey;
+    const chosen = byMarkerKey.get(markerKey);
+    if (!chosen || marker.properties.start > chosen.properties.start) byMarkerKey.set(markerKey, marker);
+  }
+  return featureCollection(
+    [...byMarkerKey.values()].map(marker => ({
+      type: 'Feature',
+      geometry: marker.geometry,
+      properties: {
+        markerKey: marker.properties.markerKey,
+        icon: marker.properties.icon,
+        count: marker.properties.count,
+        activeIds: marker.properties.activeIds
+      }
+    }))
+  );
+}
 
 // Green search highlights live in the public app, not in shared cartography. Places use their own point source;
 // buildings and addresses filter the original footprint tiles so whole outlines are drawn at any zoom.
@@ -96,39 +142,31 @@ export class SearchHighlights {
     );
   }
 
-  // The listing identities behind markers that are actually drawn: ordinary place icons, plus the below-threshold
-  // requested marker. Shared markers list every listing they represent in activeIds.
-  drawnPlaceIds() {
-    const layers = this.map
-      .getStyle()
-      .layers.map(layer => layer.id)
-      .filter(id => id.startsWith('place-icons-') || id === 'search-place');
-    return new Set(
-      this.map
-        .queryRenderedFeatures({layers})
-        .flatMap(feature => JSON.parse(feature.properties.activeIds ?? '[]'))
-        .map(String)
-    );
+  // One source update when the filter changes, never one per result or per camera move. An empty set hides the layer
+  // until explicit results are shown again.
+  setResultMarkers(data) {
+    this.map.getSource('search-result-markers').setData(data);
+    const visibility = data.features.length ? 'visible' : 'none';
+    if (this.map.getLayoutProperty('search-result-places', 'visibility') !== visibility)
+      this.map.setLayoutProperty('search-result-places', 'visibility', visibility);
   }
 
-  // Rebuild both highlights from the results in view and the markers drawn for them. An unchanged pair touches neither
-  // source, so small pans and selection checks do not repaint marks that are already correct. An empty set clears marks.
+  // Every in-view place result has a drawn marker during an explicit filter, so its ring needs no rendered-feature
+  // lookup. Shared locations get one ring. An unchanged set touches neither source during panning.
   update(visibleResults) {
-    const drawnIds = this.drawnPlaceIds();
-    const highlightKey = [
-      visibleResults.map(result => result.id).join('|'),
-      [...drawnIds].sort().join('|')
-    ].join('\u0000');
+    const highlightKey = visibleResults.map(result => result.id).join('|');
     if (highlightKey === this.highlightKey) return;
     this.highlightKey = highlightKey;
-    const placeFeatures = visibleResults
-      .filter(result => result.kind === 'place' && drawnIds.has(String(result.id)))
-      .map(result => ({
+    const ringsByMarkerKey = new Map();
+    for (const result of visibleResults) {
+      if (result.kind !== 'place') continue;
+      ringsByMarkerKey.set(result.markerKey, {
         type: 'Feature',
         properties: {markerKey: result.markerKey},
         geometry: {type: 'Point', coordinates: [...result.coordinates]}
-      }));
-    this.map.getSource('search-place-highlights').setData(featureCollection(placeFeatures));
+      });
+    }
+    this.map.getSource('search-place-highlights').setData(featureCollection([...ringsByMarkerKey.values()]));
     const footprints = visibleResults
       .filter(result => result.kind !== 'place')
       .map(result => result.footprintIndex);
@@ -136,6 +174,8 @@ export class SearchHighlights {
   }
 
   clear() {
+    if (this.map.getLayoutProperty('search-result-places', 'visibility') !== 'none')
+      this.map.setLayoutProperty('search-result-places', 'visibility', 'none');
     this.update([]);
   }
 }

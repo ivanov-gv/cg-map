@@ -65,18 +65,25 @@ icons arbitrarily.
 
 ## PV-03 Search, selection, and filters
 
-Search and category choices narrow the directory and map candidates; matching icons still obey their normal thresholds.
-Exactly one requested result, the selected listing or otherwise the leading match, may appear below its threshold. It
-keeps its highlight at every zoom. The map keeps a selected listing uncovered; a leading match does not move the camera,
-so it can be covered or off-screen. Choosing another result moves this one exception. A broad query or category must not
-reveal every matching business at country scale. Prevent duplicate base/search icons for the same listing. A selected
-listing below its threshold that shares a location with an admitted listing is represented by that location's marker and
-highlight, not a second icon. This deliberately replaces the current blanket threshold bypass for explicit filters.
+Search and category choices narrow the directory and map candidates. With no query and **All**, matching icons still
+obey their normal thresholds; exactly one requested result, the selected listing or otherwise the leading match, may
+appear below its threshold. It keeps its highlight at every zoom. The map keeps a selected listing uncovered; a leading
+match does not move the camera, so it can be covered or off-screen. Choosing another result moves this one exception.
+Prevent duplicate base/search icons for the same listing. A selected listing below its threshold that shares a location
+with an admitted listing is represented by that location's marker and highlight, not a second icon.
 
-Clearing the explicit filter removes the preview exception. Selection remains visible until closed, even if the user
-zooms out below that place's default threshold. Zoom, pan, layer toggles, resizing, and offline reload must not change a
-place's assignment. Directory results remain complete and ordered by distance from the map center; map levels do not
-limit search or change nearest ordering.
+**#263 search exception (current behavior):** while a query or a category other than **All** is active, every result
+place inside the current view is drawn as a marker and gets a green ring at any zoom, even below its visibility
+threshold. Names may yield to collisions, but markers may not. One app-owned point source and symbol layer draw them, so
+the exception is scoped to visible results and does not add a layer per place or a GeoJSON update per pan. Buildings and
+addresses keep their green outlines wherever buildings are drawn; a chosen result is red instead of green. This
+overrides the earlier "one below-threshold leading match" rule for explicit filters on 20 November 2026 after owner
+feedback;
+[the ADR outcome note](../../decisions/0018-search-result-kinds-and-highlights.md#outcome-note-result-markers-and-rings-issue-263-20-november-2026)
+records why. Clearing the query and returning to **All** restores the ordinary thresholds and removes every result mark.
+Selection remains visible until closed, even if the user zooms out below that place's default threshold. Zoom, pan,
+layer toggles, resizing, and offline reload must not change a place's assignment. Directory results remain complete and
+ordered by distance from the map center; map levels do not limit search or change nearest ordering.
 
 ## PV-04 Priority overrides and commercial scope
 
