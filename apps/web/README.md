@@ -301,8 +301,8 @@ PlaceSelection.showPlace():
 2. Stores selected and the originating control, when supplied.
 3. Fills card text and safe links.
 4. Shows the existing card element.
-5. Selects the containing building footprint from loaded label data or the first rendered match, and keeps its address
-   for the selection.
+5. Uses the building rendered under the place as the address source and keeps that address for the selection. A place
+   pick still shows only its marker ring; the footprint highlight belongs to a separate building pick.
 6. Moves the camera only if the place is outside the focus zone, or zooms in if the map is below street level.
 7. Focuses the close button, which on phones is available only to screen readers.
 

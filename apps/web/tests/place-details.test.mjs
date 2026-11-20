@@ -1,10 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildObjectCard, buildPlaceCard, formatCoordinates, openingHourRows} from '../src/place-details.js';
-import {describePoint, placesInsideFootprint} from '../src/point-selection.js';
+import {buildingAddressIndex, describePoint, placesInsideFootprint} from '../src/point-selection.js';
 
 const sectionById = (card, id) => card.sections.find(section => section.id === id);
 const rowByLabel = (section, label) => section.rows.find(row => row.label === label);
+const entrance = (id, number, extra = {}) => ({
+  id: `node/${id}`,
+  coordinates: [19.26, 42.44],
+  bearing: 0,
+  ...(number ? {number} : {}),
+  ...extra
+});
 
 test('coordinates use latitude first and reject incomplete positions', () => {
   assert.equal(formatCoordinates([19.262, 42.441]), '42.44100° N, 19.26200° E');
@@ -103,20 +110,31 @@ test('a POI card omits sections whose facts are absent', () => {
   assert.equal(card.source, 'Source: OpenStreetMap.');
 });
 
-test('a building card groups addresses, entrances and places mapped inside the footprint', () => {
-  const facts = {
-    kind: 'Building',
-    properties: {building: 'apartments', 'building:levels': 4, name: 'A different label', source: 'OpenStreetMap'},
-    addressLine: 'Njegoševa 12, 14',
-    addresses: ['Njegoševa 12', 'Njegoševa 14'],
-    entrances: [
-      {number: '27', ref: 'M', label: '27, Ulaz M', address: 'Njegoševa 12, Ulaz 27'},
-      {number: '29', label: '29', address: 'Njegoševa 14, Ulaz 29'}
-    ],
-    typeLabel: 'Building',
-    source: 'OpenStreetMap',
-    sourceDate: '2026-10-17T20:20:51Z'
+test('a building card groups distinct addresses, entrances and places mapped inside the footprint', () => {
+  const labelProperties = {
+    kind: 'building',
+    footprintIndex: 3,
+    building: 'apartments',
+    'building:levels': 4,
+    'addr:street': 'Ulica Slobode',
+    building_number: '1',
+    entrances: [entrance(1, '27', {ref: 'M'}), entrance(2, '29')]
   };
+  const labels = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.26, 42.44]},
+        properties: labelProperties
+      }
+    ]
+  };
+  const point = describePoint(
+    {id: 3, layer: {id: 'buildings'}},
+    [19.262, 42.44],
+    buildingAddressIndex(labels)
+  );
   const placesInside = [
     {
       properties: {
@@ -129,37 +147,51 @@ test('a building card groups addresses, entrances and places mapped inside the f
       properties: {name: 'Late shop', kind: 'shop', opening_hours: 'Mo-Fr 09:00-17:00; Su'}
     }
   ];
-  const card = buildObjectCard(
-    {
-      coordinates: [19.262, 42.44],
-      name: 'Building 12, 14',
-      kind: 'Building',
-      facts
-    },
-    {placesInside, sourceDate: '2026-10-17T20:20:51Z'}
-  );
+  const card = buildObjectCard(point, {
+    placesInside,
+    sourceDate: '2026-10-17T20:20:51Z'
+  });
 
   assert.equal(card.eyebrow, 'Building');
-  assert.equal(card.title, 'Building 12, 14');
-  assert.equal(card.subtitle, 'Apartments · 4 levels · 2 recorded addresses');
+  assert.equal(card.title, 'Building Zgrada 1, 27-29');
+  assert.equal(card.subtitle, 'Apartments · 4 levels · 3 recorded addresses');
   assert.deepEqual(
     card.sections.map(section => section.id),
     ['addresses', 'entrances', 'inside-this-building', 'details']
   );
   assert.deepEqual(sectionById(card, 'addresses').rows, [
-    {label: '', value: 'Njegoševa 12'},
-    {label: '', value: 'Njegoševa 14'}
+    {label: '', value: 'Ulica Slobode, Zgrada 1, 27-29'},
+    {label: '', value: 'Ulica Slobode, Zgrada 1, 27'},
+    {label: '', value: 'Ulica Slobode, Zgrada 1, 29'}
   ]);
   assert.deepEqual(sectionById(card, 'entrances').rows, [
-    {label: '', value: '27, Ulaz M · Njegoševa 12, Ulaz 27'},
-    {label: '', value: '29 · Njegoševa 14, Ulaz 29'}
+    {label: '', value: '27, Ulaz M · Ulica Slobode, Zgrada 1, 27'},
+    {label: '', value: '29 · Ulica Slobode, Zgrada 1, 29'}
   ]);
   assert.deepEqual(sectionById(card, 'inside-this-building').rows, [
     {label: '', value: 'Mimoza · Café · Monday – Friday 08:00–18:00, Saturday 10:00–14:00'},
     {label: '', value: 'Late shop · Shop · Mo-Fr 09:00-17:00; Su'}
   ]);
+  assert.deepEqual(sectionById(card, 'details').rows.map(row => row.label), ['Coordinates']);
   assert.equal(rowByLabel(sectionById(card, 'details'), 'Coordinates').value, '42.44000° N, 19.26200° E');
   assert.equal(card.source, 'Source: OpenStreetMap, snapshot 17 Oct 2026.');
+});
+
+test('an entrance without a recorded address has no trailing separator', () => {
+  const labels = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {type: 'Point', coordinates: [19.26, 42.44]},
+        properties: {kind: 'building', footprintIndex: 4, entrances: [entrance(7)]}
+      }
+    ]
+  };
+  const point = describePoint({id: 4, layer: {id: 'buildings'}}, [19.26, 42.44], buildingAddressIndex(labels));
+  const card = buildObjectCard(point);
+  assert.deepEqual(sectionById(card, 'entrances').rows, [{label: '', value: 'Entrance'}]);
+  assert.deepEqual(point.facts.addresses, []);
 });
 
 test('other map objects use the same card without duplicating their source line', () => {

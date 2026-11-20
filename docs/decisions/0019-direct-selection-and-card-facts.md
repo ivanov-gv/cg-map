@@ -17,7 +17,7 @@ moving geographic anchors or adding an editorial service.
   co-located and overlapping listings stay reachable through search and a building's Inside this building section.
 - A selection keeps the first resolved building address. A later address lookup patches only that row, never rebuilds
   the card, and a recorded address does not disappear when the footprint leaves the viewport.
-- Cards render structured facts, not formatted display strings. POIs get weekday-labeled or raw hours and NEARBY with up
+- Cards render structured facts, not formatted display strings. POIs get weekday-labeled or raw hours and Nearby with up
   to three already loaded directory places within 500 m. Buildings get labeled entrances, the whole footprint union, and
   inside places from recorded coordinates. A missing fact omits its row; no value is invented and no reverse geocoder is
   added.

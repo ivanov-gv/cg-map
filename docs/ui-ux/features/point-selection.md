@@ -39,7 +39,7 @@ recorded source and published snapshot date, and adds “Hours are as recorded, 
 cards use the release manifest's snapshot date; bus-stop cards use the dated ePodgorica snapshot.
 
 Named sections carry only recorded facts. A POI gets **Location and contacts** (address, containing building,
-coordinates, phone, website and source link), **Opening hours**, and **NEARBY** with up to three other already loaded
+coordinates, phone, website and source link), **Opening hours**, and **Nearby** with up to three other already loaded
 directory places within 500 m, each shown as name · category · rounded distance. Hours keep their weekday labels; an
 unsupported expression is shown exactly as recorded. A building gets **Addresses**, **Entrances (marked on the map)**,
 **Inside this building** and **Details**; entrance rows lead with the same labels shown on the map, and a place is
@@ -69,12 +69,12 @@ footprint stays highlighted across tile boundaries, zoom changes and satellite m
 fragment into a separate geometry. Picking another subject replaces the highlight rather than adding to it. Closing the
 card or choosing From/To clears the selection highlight.
 
-Selecting a directory place keeps only its own red ring, even when the place lies inside a rendered building. The
-containing building address comes from loaded building-label data or the first rendered match and stays with that
-selection; a late lookup adds one row without rebuilding the card, and panning away cannot withdraw a recorded address.
-Picking the building itself is a new selection that highlights the whole footprint. Bus stops use the same marker
-highlight. The normal marker style returns when selection closes or changes. Bare coordinates use a small red selection
-circle. No additional pin is added for existing places or stops; explicit A/B route endpoints keep their normal roles.
-Buildings with reviewed entrance metadata show arrows at their entrance positions and individual entrance labels.
-Selecting an entrance uses its exact recorded coordinates for From/To. See
+Selecting a directory place keeps only its own red ring, even when the place lies inside a rendered building. Its
+address comes from the building rendered under the place and the loaded building-label data, and stays with that
+selection; no footprint is highlighted. A late lookup adds one row without rebuilding the card, and panning away cannot
+withdraw a recorded address. Picking the building itself is a new selection that highlights the whole footprint. Bus
+stops use the same marker highlight. The normal marker style returns when selection closes or changes. Bare coordinates
+use a small red selection circle. No additional pin is added for existing places or stops; explicit A/B route endpoints
+keep their normal roles. Buildings with reviewed entrance metadata show arrows at their entrance positions and
+individual entrance labels. Selecting an entrance uses its exact recorded coordinates for From/To. See
 [building and entrance addresses](../../map-data/building-numbers.md). Selection uses local data and works offline.

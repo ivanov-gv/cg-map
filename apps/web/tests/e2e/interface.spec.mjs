@@ -3591,7 +3591,7 @@ test('one tap opens a POI card with recorded sections', async ({page}) => {
   );
   const card = page.locator('#place-details');
   await expect(card.locator('.details-section')).toHaveCount(3);
-  await expect(card.locator('.section-title')).toHaveText(['Location and contacts', 'Opening hours', 'NEARBY']);
+  await expect(card.locator('.section-title')).toHaveText(['Location and contacts', 'Opening hours', 'Nearby']);
   await expect(card).toContainText('Address: Njegoševa 12');
   await expect(card).toContainText(`In the building at: ${expectedBuildingAddress}`);
   await expect(card).toContainText('Coordinates: 42.');
@@ -3708,6 +3708,50 @@ test('two places in one building each open their own card with the same building
   await addressSurvivesZoomOut();
 });
 
+test('a place card never carries the previous building address', async ({page}) => {
+  const labels = readGeoJSON('building-labels.geojson').features.filter(
+    feature => Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
+  );
+  const firstLabel = labels[0];
+  expect(firstLabel).toBeTruthy();
+  const firstAddress = buildingAddress(firstLabel.properties);
+  const secondLabel = labels.find(
+    label =>
+      label.properties.footprintIndex !== firstLabel.properties.footprintIndex &&
+      buildingAddress(label.properties) !== firstAddress
+  );
+  expect(secondLabel).toBeTruthy();
+  const secondAddress = buildingAddress(secondLabel.properties);
+  const outside = [20.8, 43.7];
+  expect(
+    placesInsideFootprint(readGeoJSON('buildings.geojson'), [
+      {geometry: {type: 'Point', coordinates: outside}}
+    ])
+  ).toEqual([]);
+  await openPoiCards(page, [
+    cardPlace('node/address-first', firstLabel.geometry.coordinates, {name: 'Address first place'}),
+    cardPlace('node/address-outside', outside, {name: 'Address outside place'}),
+    cardPlace('node/address-second', secondLabel.geometry.coordinates, {name: 'Address second place'})
+  ]);
+  // One query keeps the result list open; choosing rows must replace the card without a filter-change close.
+  await openMenu(page);
+  await page.locator('#search').fill('Address');
+  await expect(page.locator('.result')).toHaveCount(3);
+  const choose = async name => {
+    await page.locator('.result', {hasText: name}).click();
+    await expect(page.locator('#place-name')).toHaveText(name);
+    await mapIdle(page);
+  };
+
+  await choose('Address first place');
+  await expect(page.locator('#place-details')).toContainText(`In the building at: ${firstAddress}`);
+  await choose('Address outside place');
+  await expect(page.locator('[data-detail="building-address"]')).toHaveCount(0);
+  await choose('Address second place');
+  await expect(page.locator('#place-details')).toContainText(`In the building at: ${secondAddress}`);
+  await expect(page.locator('#place-details')).not.toContainText(firstAddress);
+});
+
 test('a bare building opens a card with its addresses, entrances and places inside the footprint', async ({
   page
 }) => {
@@ -3783,7 +3827,7 @@ test('a bare building opens a card with its addresses, entrances and places insi
   await expect(page.locator('#place-card')).toBeVisible();
   await expect(page.locator('#place-category')).toHaveText('Building');
   await expect(page.locator('#place-name')).toHaveText('Building 27-29');
-  await expect(page.locator('#place-subtitle')).toContainText('1 recorded address');
+  await expect(page.locator('#place-subtitle')).toContainText('3 recorded addresses');
   await expect(page.locator('#place-source')).toHaveText(`Source: OpenStreetMap, snapshot ${SNAPSHOT_DATE}.`);
   const card = page.locator('#place-details');
   await expect(card.locator('.section-title')).toHaveText([
@@ -3791,6 +3835,11 @@ test('a bare building opens a card with its addresses, entrances and places insi
     'Entrances (marked on the map)',
     'Inside this building',
     'Details'
+  ]);
+  await expect(card.locator('.details-section--addresses .detail-value')).toHaveText([
+    'Ulica Slobode 27-29',
+    'Ulica Slobode 27',
+    'Ulica Slobode 29'
   ]);
   await expect(card).toContainText('Ulica Slobode');
   await expect(card).toContainText('27, Ulaz M · Ulica Slobode 27');
