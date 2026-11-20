@@ -31,11 +31,14 @@ const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
 const TAP_ACTION_WINDOW_MILLISECONDS = 650;
 const TOUCH_DRAG_STEP_MILLISECONDS = 25;
 const SNAPSHOT_DATE = '17 Oct 2026';
+// The scale bar and OSM credit share MapLibre's bottom-left corner.
+const SCALE_BOX_TOLERANCE_PIXELS = 1;
+const SCALE_CORNER_LIMIT_PIXELS = 24;
 
 const readGeoJSON = path =>
   JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
 
-// One browser-side box reader for every desktop geometry assertion.
+// One browser-side box reader for geometry assertions.
 const readBoxes = (page, selectors) =>
   page.evaluate(namedSelectors => {
     const box = selector => {
@@ -393,7 +396,7 @@ test('desktop keeps the results open beside the place card', async ({page, isMob
 });
 
 test.describe('Desktop bottom card', () => {
-  test('spans the bottom in columns and keeps map controls readable', async ({page, isMobile}, testInfo) => {
+  test('spans the bottom in columns with the scale bar fixed under it', async ({page, isMobile}, testInfo) => {
     test.skip(isMobile, 'desktop layout');
     await page.setViewportSize({width: 1440, height: 900});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
@@ -455,12 +458,22 @@ test.describe('Desktop bottom card', () => {
     expect(actions.y - (subtitle.y + subtitle.height)).toBeCloseTo(16, 0);
     expect(close.x).toBeGreaterThan(card.x + card.width - 80);
     expect(close.y).toBeLessThan(card.y + 60);
-    for (const [name, control] of Object.entries({locate, scale, credit})) {
-      const gap = card.y - (control.y + control.height);
-      expect(gap, name).toBeGreaterThan(8);
-      expect(gap, name).toBeLessThan(80);
-    }
+    // The locate control still clears the card; the map's bottom-left controls do not move.
+    expect(card.y - (locate.y + locate.height)).toBeGreaterThan(8);
     expect(card.y - (locate.y + locate.height)).toBeLessThan(48);
+    for (const [name, control] of Object.entries({scale, credit})) {
+      expect(control.x, name).toBeLessThanOrEqual(SCALE_CORNER_LIMIT_PIXELS);
+      expect(card.y + card.height - (control.y + control.height), name).toBeLessThanOrEqual(
+        SCALE_CORNER_LIMIT_PIXELS
+      );
+    }
+    // A person tapping the scale's centre reaches the card, not the control beneath it.
+    expect(
+      await page.evaluate(() => {
+        const {x, y, width, height} = document.querySelector('.maplibregl-ctrl-scale').getBoundingClientRect();
+        return !!document.elementFromPoint(x + width / 2, y + height / 2)?.closest('#place-card');
+      })
+    ).toBe(true);
     await page.screenshot({path: testInfo.outputPath('desktop-bottom-card.png')});
   });
 
@@ -519,7 +532,7 @@ test.describe('Desktop bottom card', () => {
     expect(after.y).toBeGreaterThan(96);
   });
 
-  test('keeps the scale and credit readable beside an open search panel', async ({page, isMobile}) => {
+  test('keeps the scale and credit in the bottom-left beside an open search panel', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.setViewportSize({width: 1280, height: 800});
     const many = {
@@ -565,10 +578,13 @@ test.describe('Desktop bottom card', () => {
     expect(card.x).toBeCloseTo(panel.x + panel.width, 0);
     expect(sidebar.x + sidebar.width).toBeGreaterThan(card.x);
     expect(card.y + card.height).toBeCloseTo(800, 0);
-    expect(panel.y + panel.height).toBeGreaterThan(scale.y);
+    // The joined panel and its inset card leave the corner uncovered, so neither control moves.
     for (const [name, control] of Object.entries({scale, credit})) {
-      expect(control.x, name).toBeGreaterThanOrEqual(panel.x + panel.width - 1);
-      expect(control.y + control.height, name).toBeLessThan(card.y);
+      expect(control.x, name).toBeLessThanOrEqual(SCALE_CORNER_LIMIT_PIXELS);
+      expect(card.y + card.height - (control.y + control.height), name).toBeLessThanOrEqual(
+        SCALE_CORNER_LIMIT_PIXELS
+      );
+      expect(control.x + control.width, name).toBeLessThan(card.x);
     }
     expect(hits.scale).toBe(true);
     expect(hits.credit).toBe(true);
@@ -4938,4 +4954,159 @@ test('closing a selection clears the highlight but keeps search, category and en
   expect(endpointCoordinates[0]).toBeCloseTo(20.8, 6);
   expect(endpointCoordinates[1]).toBeCloseTo(43.7, 6);
   await expect(page.locator('#search')).toHaveValue('place');
+});
+
+// ---------------------------------------------------------------------------
+// Fixed scale bar under cards, search and dock (issue #280)
+// ---------------------------------------------------------------------------
+
+const MAP_CORNER_SELECTORS = {
+  scale: '.maplibregl-ctrl-scale',
+  credit: '.osm-credit-line'
+};
+
+const mapCornerBoxes = page => readBoxes(page, MAP_CORNER_SELECTORS);
+
+// elementFromPoint reports which surface a person would actually touch at each control's centre.
+const mapCornerHits = page =>
+  page.evaluate(selectors => {
+    const hit = selector => {
+      const control = document.querySelector(selector);
+      const {x, y, width, height} = control.getBoundingClientRect();
+      const element = document.elementFromPoint(x + width / 2, y + height / 2);
+      return {
+        isControl: !!element?.closest('.maplibregl-ctrl-bottom-left'),
+        isCard: !!element?.closest('#place-card'),
+        isDock: !!element?.closest('.sidebar')
+      };
+    };
+    return {scale: hit(selectors.scale), credit: hit(selectors.credit)};
+  }, MAP_CORNER_SELECTORS);
+
+const expectSameMapCornerBoxes = (boxes, reference, state) => {
+  for (const name of Object.keys(MAP_CORNER_SELECTORS)) {
+    for (const side of ['x', 'y', 'width', 'height'])
+      expect(Math.abs(boxes[name][side] - reference[name][side]), `${name} ${state} ${side}`).toBeLessThanOrEqual(
+        SCALE_BOX_TOLERANCE_PIXELS
+      );
+  }
+};
+
+const expectMapControlsInCorner = (page, boxes) => {
+  for (const [name, box] of Object.entries(boxes)) {
+    expect(box.x, name).toBeLessThanOrEqual(SCALE_CORNER_LIMIT_PIXELS);
+    expect(page.viewportSize().height - (box.y + box.height), name).toBeLessThanOrEqual(
+      SCALE_CORNER_LIMIT_PIXELS
+    );
+  }
+};
+
+const expectMapCornerHits = (hits, expected) => {
+  for (const [name, expectedType] of Object.entries(expected)) {
+    for (const type of ['isControl', 'isCard', 'isDock'])
+      expect(hits[name][type], `${name} ${type}`).toBe(type === expectedType);
+  }
+};
+
+test('scale bar stays in the bottom-left corner with desktop card and search states', async ({
+  page,
+  isMobile
+}) => {
+  test.skip(isMobile, 'desktop layout');
+  await page.setViewportSize({width: 1280, height: 800});
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  // A fixed camera keeps the scale's text and width out of the comparison; only its placement may change.
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 16}));
+  await mapIdle(page);
+  const initial = await mapCornerBoxes(page);
+  expectMapControlsInCorner(page, initial);
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+
+  await openMenu(page);
+  await page.locator('#dock-main .result', {hasText: 'Nearby place 0'}).click();
+  await expect(page.locator('#place-card')).toBeVisible();
+  await settled(page);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the open dock');
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+
+  await closeMenu(page);
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  const card = await page.locator('#place-card').boundingBox();
+  expect(card.x).toBeLessThanOrEqual(1);
+  expect(card.x + card.width).toBeGreaterThanOrEqual(1279);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'screen-wide card');
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isCard'});
+
+  await page.locator('#search').focus();
+  await expect(page.locator('#desktop-search-panel')).toBeVisible();
+  await settled(page);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the joined search panel');
+  // The inset panel and card leave the map corner uncovered, so the map controls are on top there.
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'joined search panel without a card');
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+});
+
+test('scale bar stays in the bottom-left corner with phone Peek and Full cards', {tag: '@phone'}, async ({
+  page,
+  isMobile
+}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
+  await settled(page);
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 16}));
+  await mapIdle(page);
+  const initial = await mapCornerBoxes(page);
+  expectMapControlsInCorner(page, initial);
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+
+  await openMenu(page);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'open phone dock');
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+  await closeMenu(page);
+
+  await page.locator('#search').click();
+  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+  await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
+  await settled(page);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Peek card');
+  // The peek card stops above the screen edge, leaving the credit below it on top of the map.
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+
+  await page.locator('#card-handle').click();
+  await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card');
+  expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+
+  // The card follows the keyboard, but the scale bar stays at the bottom of the map.
+  await simulateKeyboard(page, 600);
+  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card with keyboard');
+  await simulateKeyboard(page, 840);
+});
+
+test('scale bar stays in the bottom-left corner under the Flip dock', {tag: '@phone'}, async ({page}) => {
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await atViewport(page, {width: 340, height: 250}, async () => {
+    await ready(page);
+    await settled(page);
+    const initial = await mapCornerBoxes(page);
+    expectMapControlsInCorner(page, initial);
+    expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock list');
+    expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('#dock-main #results')).toBeHidden();
+    expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock modes');
+    expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+  });
 });

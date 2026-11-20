@@ -255,17 +255,12 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     --desktop-card-height: min(300px, 45dvh);
   }
 
-  /* The badge is relative inside MapLibre's bottom-right control, so raise the control itself. */
-  body:has(#place-card:not([hidden])) .maplibregl-ctrl-bottom-left,
+  /* The scale bar and its credit are part of the map: they stay in its bottom-left corner in
+   * every panel, card and keyboard state. Cards, search and the dock paint above them, so a
+   * panel that covers the corner hides them. Only the Locate button rises above the card;
+   * its badge is relative inside MapLibre's bottom-right control, so raise the control itself. */
   body:has(#place-card:not([hidden])) .maplibregl-ctrl-bottom-right {
     bottom: calc(var(--desktop-card-height) + 20px);
-  }
-  /* A long joined panel reaches this band, so keep the scale and credit to its right. */
-  body[data-view=dock]:has(#place-card:not([hidden])) .maplibregl-ctrl-bottom-left {
-    left: var(--dock-width);
-  }
-  body:has(#place-card:not([hidden])):has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .maplibregl-ctrl-bottom-left {
-    left: calc(var(--dock-width) - var(--bar-inset));
   }
 
   .place-card {
