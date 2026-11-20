@@ -431,6 +431,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   /* Mobile phones (not Flip): screen-wide card with 12 px gutters. */
   body[data-device=mobile] .place-card { right: 12px; }
+  /* Keep ~16 px between the header (subtitle) and the From/To actions in Full/Fullscreen; Peek clips the body. */
+  body[data-device=mobile] .point-actions { margin-top: 16px; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }
