@@ -133,10 +133,29 @@ export function doesCardReachLocateColumn(cardBox, locateBox) {
   return cardBox.right >= locateBox.left && cardBox.left <= locateBox.right;
 }
 
-// Swiping down steps back through what the card covers: full card, then peek above the results, then closed.
+// Swiping steps the phone card through peek, full and fullscreen. Swiping down
+// from full returns to peek above results, or closes a card opened from the map.
 export function cardStateAfterSwipe({state, direction, resultsBehind}) {
+  if (direction === 'up') {
+    if (state === 'peek') return 'full';
+    return 'fullscreen';
+  }
+  if (state === 'fullscreen') return 'full';
+  if (state === 'full') return resultsBehind ? 'peek' : 'closed';
+  return 'closed';
+}
+
+// Flip and other non-phone layouts keep the earlier two-step card: up opens full,
+// down from full returns to peek above results or closes, and down from peek closes.
+export function cardStateAfterSwipeWithoutFullscreen({state, direction, resultsBehind}) {
   if (direction === 'up') return 'full';
   return state === 'full' && resultsBehind ? 'peek' : 'closed';
+}
+
+// A non-fullscreen card keeps its own right edge in map geometry so the desktop focus zone stays beside it.
+export function detailsGeometryForMap(detailsRect, mapRect, {detailsTop, isFullscreenCard}) {
+  if (!detailsRect || isFullscreenCard) return null;
+  return {top: detailsTop - mapRect.top, right: detailsRect.right - mapRect.left};
 }
 
 const SWIPE_THRESHOLD_PIXELS = 24;
@@ -219,8 +238,10 @@ export class MapInterface {
     this.activeChipLabel.addEventListener('click', () => this.openChipTarget());
     this.activeChipRemove.addEventListener('click', () => this.onRemoveCategory?.());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
-    this.cardHandle.addEventListener('click', () => {
-      if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
+    this.cardHandle.addEventListener('click', () => this.activateCardHandle());
+    this.cardHead.addEventListener('click', (event) => {
+      if (!this.isMobilePhone || event.target.closest('button, a')) return;
+      this.activateCardHandle();
     });
     this.wireSearchEvents();
   }
@@ -260,6 +281,11 @@ export class MapInterface {
     });
   }
 
+  // The three-step mobile card (peek, full, fullscreen) applies on phones, not Flip.
+  get isMobilePhone() {
+    return this.mobileLayoutQuery.matches && !this.flipLayoutQuery.matches;
+  }
+
   // A menu click toggles the dock, or advances the three-state cycle on Flip.
   activateMenu() {
     this.trigger = this.menu;
@@ -281,6 +307,7 @@ export class MapInterface {
   syncForMobileLayoutChange() {
     if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
     if (!this.card.hidden) this.syncCardForLayout();
+    else this.syncMobileCardPresentation();
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
     this.syncViewport();
@@ -293,6 +320,8 @@ export class MapInterface {
     this.syncActiveChip();
     this.syncDockContent();
     this.syncMenuIcon();
+    if (!this.card.hidden) this.syncCardForLayout();
+    else this.syncMobileCardPresentation();
   }
 
   startCardObserver() {
@@ -526,8 +555,9 @@ export class MapInterface {
 
   syncResultsVisibility() {
     const isSearching = this.view === 'search';
-    this.bubble.hidden = !isSearching || this.areResultsMinimized;
-    this.strip.hidden = !isSearching || !this.areResultsMinimized;
+    const isFullscreen = this.card.dataset.state === 'fullscreen';
+    this.bubble.hidden = !isSearching || this.areResultsMinimized || isFullscreen;
+    this.strip.hidden = !isSearching || !this.areResultsMinimized || isFullscreen;
     if (!this.strip.hidden)
       document.getElementById('results-strip-label').textContent = this.resultsLabel?.() ?? '';
   }
@@ -560,6 +590,7 @@ export class MapInterface {
     this.card.style.removeProperty('touch-action');
     this.cardBody.inert = false;
     this.areResultsMinimized = false;
+    this.syncMobileCardPresentation();
     this.syncResultsVisibility();
     this.syncActiveChip();
     this.syncLocateClearance();
@@ -580,14 +611,41 @@ export class MapInterface {
     this.setCardState(this.view === 'search' ? 'peek' : 'full', {notify: false});
   }
 
+  // The phone card can step up from Peek and Full; the fullscreen handle steps back to Full.
+  canStepCardUp() {
+    const state = this.card.dataset.state;
+    return state === 'peek' || (state === 'full' && this.isMobilePhone);
+  }
+
+  // Tapping the header or handle steps the phone card; fullscreen steps back to Full.
+  activateCardHandle() {
+    const state = this.card.dataset.state;
+    if (this.isMobilePhone) {
+      if (state === 'fullscreen') {
+        this.setCardState('full');
+        return;
+      }
+      const next = cardStateAfterSwipe({
+        state,
+        direction: 'up',
+        resultsBehind: this.view === 'search'
+      });
+      if (next !== state) this.setCardState(next);
+      return;
+    }
+    // Flip and other mobile layouts keep the earlier peek/full toggle above results.
+    if (this.view === 'search' && state === 'peek') this.setCardState('full');
+    else if (this.view === 'search' && state === 'full') this.setCardState('peek');
+  }
+
   setCardState(state, {notify = true} = {}) {
     this.card.dataset.state = state;
-    const isExpanded = state === 'full';
-    // Clipped controls must not stay reachable by keyboard.
-    this.cardBody.inert = !isExpanded;
-    if (this.view === 'search') this.areResultsMinimized = isExpanded;
+    // Clipped controls must not stay reachable by keyboard; fullscreen content is fully visible.
+    this.cardBody.inert = state === 'peek';
+    if (this.view === 'search') this.areResultsMinimized = state === 'full' || state === 'fullscreen';
     this.syncResultsVisibility();
     this.syncCardHandle();
+    this.syncMobileCardPresentation();
     this.card.style.setProperty('--card-head', `${this.cardHeadBottom()}px`);
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
@@ -595,14 +653,49 @@ export class MapInterface {
     if (notify) this.onViewport?.();
   }
 
-  // The handle only switches between peek and full above results; with none behind the card, swiping closes it.
+  // Expose the phone card state so CSS can hide search, place the Locate button, and style fullscreen.
+  syncMobileCardPresentation() {
+    const state = !this.card.hidden && this.isMobilePhone ? this.card.dataset.state : '';
+    if (state) document.body.dataset.mobileCardState = state;
+    else delete document.body.dataset.mobileCardState;
+    this.syncMobileCardOffset();
+  }
+
+  syncMobileCardOffset() {
+    if (!this.isMobilePhone || this.card.hidden) {
+      document.documentElement.style.removeProperty('--mobile-card-visible-height');
+      return;
+    }
+    // --mobile-card-visible-height is the card height CSS reserves below the Locate button
+    // (style.css lifts .position-control above the visible phone card in Peek and Full).
+    const state = this.card.dataset.state;
+    let visibleHeight = 0;
+    if (state === 'peek') {
+      visibleHeight = this.cardPeekHeight();
+    } else if (state === 'full') {
+      const renderedHeight = this.card.offsetHeight || this.cardRestingHeight();
+      const restingHeight = this.cardRestingHeight();
+      // The card can be mid-transition; never reserve more than its settled Full height.
+      visibleHeight = Math.min(renderedHeight, restingHeight);
+    }
+    document.documentElement.style.setProperty('--mobile-card-visible-height', `${visibleHeight}px`);
+  }
+
+  // The handle stays available above results and, on phones, can step the card up or back from Fullscreen.
   syncCardHandle() {
-    const isExpanded = this.card.dataset.state === 'full';
-    const isHandleUsable = this.view === 'search';
+    const state = this.card.dataset.state;
+    const isExpanded = state === 'full' || state === 'fullscreen';
+    const isHandleUsable = this.isMobilePhone || this.view === 'search';
     this.cardHandle.tabIndex = isHandleUsable ? 0 : -1;
     this.cardHandle.setAttribute('aria-hidden', String(!isHandleUsable));
     this.cardHandle.setAttribute('aria-expanded', String(isExpanded));
-    this.cardHandle.setAttribute('aria-label', isExpanded ? 'Show less' : 'Show full details');
+    if (this.isMobilePhone) {
+      const label =
+        state === 'peek' ? 'Show more' : state === 'full' ? 'Show full screen' : 'Show less';
+      this.cardHandle.setAttribute('aria-label', label);
+    } else {
+      this.cardHandle.setAttribute('aria-label', isExpanded ? 'Show less' : 'Show full details');
+    }
   }
 
   cardHeadBottom() {
@@ -613,29 +706,42 @@ export class MapInterface {
     return this.cardHeadBottom() + 2 * this.card.clientTop;
   }
 
-  // Only a full card too long for its resting height keeps vertical touches for its own scrolling.
+  // Only a card too long for its resting height keeps vertical touches for its own scrolling.
   syncCardTouch() {
     const borders = this.card.offsetHeight - this.card.clientHeight;
+    const state = this.card.dataset.state;
     const isCardScrollable =
-      this.card.dataset.state === 'full' && this.card.scrollHeight + borders > this.cardRestingHeight() + 1;
+      (state === 'full' || state === 'fullscreen') &&
+      this.card.scrollHeight + borders > this.cardRestingHeight() + 1;
     if (isCardScrollable) this.card.style.touchAction = 'pan-y';
     else this.card.style.removeProperty('touch-action');
+    this.syncMobileCardOffset();
   }
 
-  // The card's height once its max-height transition settles, so the camera aims for the final layout.
+  // The card's height once its transition settles, so the camera aims for the final layout.
   cardRestingHeight() {
-    if (this.card.dataset.state === 'peek') return this.cardPeekHeight();
+    const state = this.card.dataset.state;
+    if (state === 'peek') return this.cardPeekHeight();
+    if (state === 'fullscreen') return window.visualViewport?.height ?? innerHeight;
     const borders = this.card.offsetHeight - this.card.clientHeight;
     const maximumHeightPixels = (window.visualViewport?.height ?? innerHeight) * 0.6;
     return Math.min(this.card.scrollHeight + borders, maximumHeightPixels);
   }
 
   swipeCard(direction) {
-    const next = cardStateAfterSwipe({
-      state: this.card.dataset.state,
-      direction,
-      resultsBehind: this.view === 'search'
-    });
+    const state = this.card.dataset.state;
+    const next = this.isMobilePhone
+      ? cardStateAfterSwipe({
+          state,
+          direction,
+          resultsBehind: this.view === 'search'
+        })
+      : cardStateAfterSwipeWithoutFullscreen({
+          state,
+          direction,
+          resultsBehind: this.view === 'search'
+        });
+    if (next === state) return;
     if (next === 'closed') this.onCardSwipedAway?.();
     else this.setCardState(next);
   }
@@ -672,7 +778,7 @@ export class MapInterface {
           ? `translateY(${minimumHeightPixels - draggedHeightPixels}px)`
           : '';
     });
-    const finish = (event) => {
+    const finish = event => {
       if (event.pointerId !== drag?.id) return;
       const {hasMoved, startYPixels} = drag;
       drag = null;
@@ -683,23 +789,22 @@ export class MapInterface {
       if (event.type === 'pointercancel') return;
       const deltaYPixels = event.clientY - startYPixels;
       if (deltaYPixels > SWIPE_THRESHOLD_PIXELS) this.swipeCard('down');
-      else if (deltaYPixels < -SWIPE_THRESHOLD_PIXELS && this.card.dataset.state === 'peek')
-        this.swipeCard('up');
+      else if (deltaYPixels < -SWIPE_THRESHOLD_PIXELS && this.canStepCardUp()) this.swipeCard('up');
     };
     this.card.addEventListener('pointerup', finish);
     this.card.addEventListener('pointercancel', finish);
     let wheelGestureEndsMilliseconds = 0;
     this.card.addEventListener(
       'wheel',
-      (event) => {
+      event => {
         if (!this.mobileLayoutQuery.matches) return;
-        const isOpeningPeek = this.card.dataset.state === 'peek' && event.deltaY > 0;
+        const isSteppingUp = event.deltaY > 0 && this.canStepCardUp();
         const isSwipingDown = event.deltaY < 0 && this.card.scrollTop === 0;
-        if (!isOpeningPeek && !isSwipingDown) return;
+        if (!isSteppingUp && !isSwipingDown) return;
         event.preventDefault();
         if (performance.now() < wheelGestureEndsMilliseconds) return;
         wheelGestureEndsMilliseconds = performance.now() + WHEEL_GESTURE_MILLISECONDS;
-        this.swipeCard(isOpeningPeek ? 'up' : 'down');
+        this.swipeCard(isSteppingUp ? 'up' : 'down');
       },
       {passive: false}
     );
@@ -791,6 +896,7 @@ export class MapInterface {
     const viewport = window.visualViewport;
     const details = card.hidden ? null : card.getBoundingClientRect();
     const isPhoneCard = !!details && this.mobileLayoutQuery.matches;
+    const isFullscreenCard = this.card.dataset.state === 'fullscreen';
     const detailsTop = isPhoneCard ? details.bottom - this.cardRestingHeight() : details?.top;
     const cardBox = details && {
       left: details.left - map.left,
@@ -799,20 +905,22 @@ export class MapInterface {
       bottom: details.bottom - map.top
     };
     const searchPanel = this.areResultsMinimized ? this.strip : this.bubble;
+    const isSearchUiVisible = this.view === 'search' && !isFullscreenCard;
     return {
       width: map.width,
       height: map.height,
       visibleTop: Math.max(0, (viewport?.offsetTop ?? 0) - map.top),
       visibleHeight: viewport?.height ?? innerHeight,
-      headerBottom: header.bottom - map.top,
-      searchBottom: this.view === 'search' ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
+      headerBottom: isFullscreenCard ? 0 : header.bottom - map.top,
+      searchBottom: isSearchUiVisible ? searchPanel.getBoundingClientRect().bottom - map.top : 0,
       dockRight:
-        (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
+        !isFullscreenCard && (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
-      details: cardBox,
+      details: isFullscreenCard ? null : cardBox,
       coversBottom: isPhoneCard,
-      routeBottom: route.hidden ? 0 : route.getBoundingClientRect().bottom - map.top
+      routeBottom: route.hidden || isFullscreenCard ? 0 : route.getBoundingClientRect().bottom - map.top,
+      mobile: this.mobileLayoutQuery.matches
     };
   }
 

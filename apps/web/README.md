@@ -142,10 +142,17 @@ focus to the chosen row. The grid gives identity, contacts or addresses/entrance
 sections explicit 280/270/260 px columns; the two detail stacks keep their own rows. Narrower cards step through two
 columns to one. `syncLocateClearance()` sets `body[data-card-at-locate]` from the card and Locate boxes, so Locate rises
 16 px above the card only when their columns overlap. The scale bar and OSM credit stay fixed in the map's bottom-left
-corner: any card, panel or dock covering that corner paints over them. On phones the card keeps its header-only peek
-under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and
-then closes it. Choosing a result in the phone dock switches to this compact view. See
+corner: any card, panel or dock covering that corner paints over them. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
+
+On phones (not Flip), the card steps through Peek, Full, and Fullscreen. A search or dock result opens in Peek under the
+open results. Pulling up, or tapping the header or handle, steps up: Full shows the card with results reduced to a strip
+naming the active category and query, and Fullscreen covers the screen and hides search and the map. Swiping down steps
+back; from Peek it closes the card. A place picked on the map opens in Full, and swiping down from Full closes it. The
+phone card is screen-wide with 12 px gutters, the Locate button sits above it in Peek and Full and is hidden in
+Fullscreen, and the screen-reader close button remains. Choosing a result in the phone dock switches to this compact view
+with the query and category kept. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and
@@ -465,8 +472,9 @@ row; clicking an active category or its × returns to All without clearing the q
 Mobile or Flip, interface.js shows one active category chip under the header from the same directoryState value. The
 bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide
 the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes.
-Selecting a result keeps search open and shows its existing details card as a header-only peek, with the selected
-feature kept in the remaining map area. The burger/search header is never replaced or moved.
+On phones (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up to Full
+and Fullscreen; a map pick opens the card in Full. The selected feature stays in the visible map area and the
+burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
 window made narrow does not reproduce an Android GPU or browser lifecycle.

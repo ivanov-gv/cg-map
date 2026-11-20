@@ -490,6 +490,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
   #card-layout { display: contents; }
   .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
+  /* Mobile phones (not Flip): screen-wide card with 12 px gutters. */
+  body[data-device=mobile] .place-card { right: 12px; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }
@@ -499,6 +501,28 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .card-handle { display: block; position: absolute; top: 0; left: 0; right: 0; height: var(--card-head, 78px); padding: 0; background: transparent; touch-action: none; cursor: inherit; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }
   .card-handle:focus-visible { outline-offset: -3px; }
+
+  /* Phone (not Flip): a screen-wide card covers the Locate button, so it sits above the card and hides in fullscreen. */
+  body[data-device=mobile] .place-card[data-state=fullscreen] {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    max-height: none;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    z-index: 6;
+    cursor: default;
+  }
+  body[data-device=mobile] .place-card[data-state=fullscreen] .card-handle { cursor: grab; }
+  body[data-device=mobile]:has(.place-card:not([hidden]):not([data-state=fullscreen])) .position-control {
+    bottom: calc(var(--keyboard-inset) + 28px + var(--mobile-card-visible-height, 0px));
+  }
+  body[data-device=mobile][data-mobile-card-state=fullscreen] .position-control { display: none; }
+  body[data-device=mobile][data-mobile-card-state=fullscreen] .search-bar,
+  body[data-device=mobile][data-mobile-card-state=fullscreen] .desktop-search-panel { visibility: hidden; pointer-events: none; }
   .route-panel { top: 82px; left: 12px; right: 72px; width: auto; max-height: min(calc(var(--visible-height) * .36), 270px); }
 
   /* On Mobile, the open dock fills the entire viewport — no map is visible beside it.

@@ -977,9 +977,11 @@ function initializeInterface() {
     activeCategoryLabel: () => categories[directoryState.activeCategory] ?? '',
     resultsLabel: () => {
       const query = elementById('search').value.trim();
-      if (query) return `“${query}”`;
-      if (directoryState.activeCategory) return categories[directoryState.activeCategory];
-      return 'Results';
+      const activeCategoryLabel = directoryState.activeCategory
+        ? categories[directoryState.activeCategory]
+        : 'All';
+      if (query) return `${activeCategoryLabel} · “${query}”`;
+      return activeCategoryLabel;
     }
   });
 }
