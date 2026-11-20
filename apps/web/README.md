@@ -125,9 +125,10 @@ A chosen place's card opens as a bottom panel on Desktop (> 720 px), at most 300
 stays put while `#card-layout` scrolls, so the × cannot scroll away. The card starts at the dock's right edge or, for
 the inset joined search panel, at that panel's right edge. Its grid gives identity the first column, contacts/addresses
 and entrances the second, and hours with nearby or inside-place sections the third; narrower cards step through two
-columns to one. The locate button, scale bar and credit move above it. On phones it opens as a header-only peek under
-the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
-closes it. Choosing a result in the phone dock switches to this compact view. See
+columns to one. The locate button still rises above it, while the scale bar and OSM credit stay fixed in the map's
+bottom-left corner: any card, panel or dock covering that corner paints over them. On phones it opens as a header-only
+peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back
+and then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
