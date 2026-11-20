@@ -104,7 +104,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .download .icon { width: 18px; height: 18px; }
 .download small { font-size: 10px; }
 .dock-footer p, .connection-badge { font-size: 11px; color: var(--muted); margin: 8px 0; }
-#map-attribution { font-size: 11px; color: var(--muted); margin: 8px 0; line-height: 1.4; }
+/* The footer stays on one line; the small negative side margins give the long licence the full dock width
+ * without changing the alignment of the controls above it. */
+#map-attribution { font-size: 10px; color: var(--muted); margin: 8px -6px; line-height: 1.4; white-space: nowrap; }
 #map-attribution a { color: var(--muted); text-decoration: none; }
 #map-attribution a:hover { text-decoration: underline; }
 .connection-badge { display: block; }
@@ -480,7 +482,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   }
   body[data-view=dock] #map-attribution {
     font-size: 10px;
-    margin: 4px 0;
+    margin: 4px -6px;
   }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

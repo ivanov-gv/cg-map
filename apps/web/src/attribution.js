@@ -66,37 +66,60 @@ export function attributionNodes(html, documentObject) {
   return nodes;
 }
 
-// Remembers the last attribution key so repeated calls are cheap.
-let renderedAttributionKey = '';
+const separator = ' · ';
 
-// Renders the current map's source attributions into #map-attribution.
-// Computes a key from visible source attributions; if the key matches the last
-// rendered key, it returns without touching the DOM. Otherwise it renders and
-// stores the new key.
-export function renderMapAttribution(map) {
+// Builds the version prefix of the dock footer. The compact form keeps the app name and version but drops the commit,
+// which cannot fit beside the full licence on a narrow screen. A build without a commit gets no placeholder.
+export function buildFooterVersionText(build, {compact = false} = {}) {
+  const version = build?.version?.trim();
+  if (!version) return '';
+
+  const name = build?.name?.trim();
+  const namedVersion = name ? `${name} ${version}` : version;
+  if (compact) return `${namedVersion}${separator}`;
+
+  const commit = build?.commit?.trim();
+  return `${namedVersion}${commit ? separator + commit : ''}${separator}`;
+}
+
+// Remembers the last rendered content and width so repeated calls are cheap, but a resize can re-measure the fit.
+let renderedAttribution = {width: null, signature: null};
+
+// Renders the build version followed by the current map's source attributions into #map-attribution.
+// Drops only the commit when the full line cannot fit; the licence text and links always stay in the DOM.
+export function renderMapAttribution(map, build) {
   const container = document.getElementById('map-attribution');
   if (!container) return;
 
   const style = map.getStyle();
   const attributions = visibleSourceAttributions(style);
-  const key = attributions.join('\n');
+  const fullVersionText = buildFooterVersionText(build);
+  const compactVersionText = buildFooterVersionText(build, {compact: true});
+  const signature = `${fullVersionText}\n${attributions.join('\n')}`;
+  const width = container.clientWidth;
 
-  if (key === renderedAttributionKey) {
-    return;
+  if (renderedAttribution.width === width && renderedAttribution.signature === signature) return;
+
+  renderAttributionNodes(container, attributions, fullVersionText);
+  if (container.scrollWidth > width + 1 && compactVersionText !== fullVersionText) {
+    renderAttributionNodes(container, attributions, compactVersionText);
   }
-  renderedAttributionKey = key;
 
-  const childNodes = buildAttributionNodes(attributions);
-  container.replaceChildren(...childNodes);
+  renderedAttribution = {width, signature};
 }
 
-// Builds a flat list of DOM nodes from attribution HTML strings, joined by ' · '.
-function buildAttributionNodes(attributions) {
-  const childNodes = [];
+// Replaces the footer nodes with the given version prefix and source attributions.
+function renderAttributionNodes(container, attributions, versionText) {
+  container.replaceChildren(...buildAttributionNodes(attributions, versionText));
+}
+
+// Builds a flat list of DOM nodes from the optional version prefix and attribution HTML strings.
+function buildAttributionNodes(attributions, versionText) {
+  const childNodes = versionText ? [document.createTextNode(versionText)] : [];
 
   for (let index = 0; index < attributions.length; index++) {
     if (index > 0) {
-      childNodes.push(document.createTextNode(' · '));
+      childNodes.push(document.createTextNode(separator));
     }
     childNodes.push(...attributionNodes(attributions[index]));
   }
