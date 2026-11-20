@@ -242,10 +242,11 @@ function renderSearchResults() {
   });
 }
 
-// Only results inside the current view are drawn. The camera is never moved to reveal an off-screen match.
+// Only visible results are drawn: a closed list clears its marks, and the camera never reveals an off-screen match.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
-  if (!searchQuery() && directoryState.activeCategory === null) {
+  const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
+  if ((!searchQuery() && directoryState.activeCategory === null) || resultsHidden) {
     mapState.searchHighlights.clear();
     return;
   }

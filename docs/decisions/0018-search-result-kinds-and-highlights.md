@@ -18,8 +18,8 @@ reviewed footprint indices are already the identities used by the red selection 
 - One building label yields at most one search result. Street names, alone or followed by a number, produce an
   **address** result; a house number, building number, section, or entrance identifier alone produces a **building**
   result. Address wins when both match. Matching uses the existing Latin/Cyrillic normaliser.
-- Building and address results require a non-empty query and the Explore-all (null) category. Browsing with no query
-  keeps the existing nearby place list; choosing any category narrows that list to places only.
+- Building and address results require a non-empty query and the **All** (null) category. Browsing with no query keeps
+  the existing nearby place list; choosing any category narrows that list to places only.
 - Results are merged with places and ordered by ground distance from the current view center. Only results inside the
   current bounds receive green highlights; the camera never moves to reveal an off-screen match.
 - Green highlights are app-owned: a point-source ring layer for place results and a line filter over the original
