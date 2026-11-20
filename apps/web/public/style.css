@@ -493,9 +493,12 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
   #card-layout { display: contents; }
-  .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
-  /* Mobile phones (not Flip): screen-wide card with 12 px gutters. */
+  .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: top 240ms ease, right 240ms ease, left 240ms ease, height 240ms ease, max-height 240ms ease, border-radius 240ms ease; }
+  /* Mobile phones (not Flip): screen-wide card with 12 px gutters. Settling animates the rectangle; dragging is immediate. */
   body[data-device=mobile] .place-card { right: 12px; }
+  /* clip, not hidden: Full must not be programmatically scrollable while a pull is in progress. */
+  body[data-device=mobile] .place-card[data-state=peek],
+  body[data-device=mobile] .place-card[data-state=full] { overflow: clip; touch-action: none; }
   /* Keep ~16 px between the header (subtitle) and the From/To actions in Full/Fullscreen; Peek clips the body. */
   body[data-device=mobile] .point-actions { margin-top: 16px; }
   .place-card.dragging { cursor: grabbing; transition: none; }
@@ -516,6 +519,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     left: 0;
     max-height: none;
     height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
     border: 0;
     border-radius: 0;
     padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px);

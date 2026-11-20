@@ -35,16 +35,79 @@ const SNAPSHOT_DATE = '17 Oct 2026';
 const SCALE_BOX_TOLERANCE_PIXELS = 1;
 const SCALE_CORNER_LIMIT_PIXELS = 24;
 
-async function swipeCard(page, touch, deltaY, {selector = '#place-card', fromHeader = selector === '#place-card'} = {}) {
-  const box = await page.locator(selector).boundingBox();
+// Coordinates always come from the card's visible box: a tall details element can extend off-screen.
+// Explicit CDP timestamps keep flick speed independent of how fast the runner dispatches the events.
+async function swipeCard(page, touch, deltaY, {fromHeader = true} = {}) {
+  const box = await page.locator('#place-card').boundingBox();
   const screenX = box.x + box.width / 2;
   const screenY = fromHeader ? box.y + 30 : box.y + box.height / 2;
-  await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: screenX, y: screenY}]});
+  const baseTimestampSeconds = Date.now() / 1000;
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: screenX, y: screenY, id: 1}],
+    timestamp: baseTimestampSeconds
+  });
   for (let step = 1; step <= 5; step++)
     await touch.send('Input.dispatchTouchEvent', {
       type: 'touchMove',
-      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5}]
+      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5, id: 1}],
+      timestamp: baseTimestampSeconds + step * 0.012
     });
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: baseTimestampSeconds + 6 * 0.012
+  });
+}
+
+// Leaves the finger down after the last move so a test can read the card's mid-drag geometry.
+// A slower step interval makes a deliberate pull settle by distance instead of flick velocity.
+async function holdCardDrag(
+  page,
+  touch,
+  deltaY,
+  {selector = '#place-card', fromHeader = true, steps = 6, stepMilliseconds = 12} = {}
+) {
+  const box = await page.locator(selector).boundingBox();
+  const screenX = box.x + box.width / 2;
+  const screenY = fromHeader ? box.y + 24 : box.y + box.height / 2;
+  const baseTimestampSeconds = Date.now() / 1000;
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: screenX, y: screenY, id: 1}],
+    timestamp: baseTimestampSeconds
+  });
+  for (let step = 1; step <= steps; step++)
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / steps, id: 1}],
+      timestamp: baseTimestampSeconds + (step * stepMilliseconds) / 1000
+    });
+  return {screenX, screenY};
+}
+
+async function releaseCardDrag(touch) {
+  await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+}
+
+// A fast short gesture. CDP timestamps keep it quick even when dispatching the events is slow.
+async function flickCard(page, touch, deltaY) {
+  const box = await page.locator('#place-card').boundingBox();
+  const screenX = box.x + box.width / 2;
+  const screenY = box.y + 24;
+  const baseTimestampSeconds = Date.now() / 1000;
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: screenX, y: screenY, id: 1}],
+    timestamp: baseTimestampSeconds
+  });
+  for (const [index, fraction] of [0.25, 0.65, 1].entries()) {
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: screenX, y: screenY + deltaY * fraction, id: 1}],
+      timestamp: baseTimestampSeconds + (index + 1) * 0.012
+    });
+  }
   await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
 }
 
@@ -901,7 +964,7 @@ test(
     // A short full card also swipes from its body, not only the header.
     await page.locator('#card-handle').click();
     await cardSettled('full');
-    await swipeCard(page, touch, 120, {selector: '#place-details', fromHeader: false});
+    await swipeCard(page, touch, 120, {fromHeader: false});
     await cardSettled('peek');
     await expect(page.locator('#search-bubble')).toBeVisible();
 
@@ -961,6 +1024,242 @@ test(
     await swipeCard(page, touch, 140);
     await expect(card).toBeHidden();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  }
+);
+
+test(
+  'phone card top follows the finger between Full and Fullscreen',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const card = page.locator('#place-card');
+    const settled = async (state) => {
+      await expect(card).toHaveAttribute('data-state', state);
+      await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+    };
+
+    await page.locator('#search').click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await settled('peek');
+    const peek = await card.boundingBox();
+    await holdCardDrag(page, touch, -60, {stepMilliseconds: 100});
+    const rising = await card.boundingBox();
+    expect(rising.y).toBeLessThan(peek.y);
+    expect(rising.height).toBeGreaterThan(peek.height);
+    // The Peek max-height must not cap the rectangle while the finger owns it.
+    expect(await card.evaluate(element => element.style.maxHeight)).toBe('none');
+    await releaseCardDrag(touch);
+    // Release animates from the dragged pixels to the settled step, not from auto.
+    expect(await card.evaluate(element => element.getAnimations().length)).toBeGreaterThan(0);
+    const settlingTop = await card.evaluate(element => element.getBoundingClientRect().top);
+    expect(settlingTop).toBeGreaterThanOrEqual(rising.y);
+    expect(settlingTop).toBeLessThan(peek.y);
+    await settled('peek');
+    await swipeCard(page, touch, -160);
+    await settled('full');
+    const full = await card.boundingBox();
+    const viewport = page.viewportSize();
+
+    // Halfway through the pull the card is taller, with its top still between Full and the screen edge.
+    await holdCardDrag(page, touch, -125);
+    const raised = await card.boundingBox();
+    expect(raised.y).toBeLessThan(full.y);
+    expect(raised.y).toBeGreaterThan(0);
+    expect(raised.height).toBeGreaterThan(full.height);
+    expect(raised.height).toBeLessThan(viewport.height + 1);
+    await releaseCardDrag(touch);
+    await settled('fullscreen');
+
+    // Coming back down, the top edge sinks and uncovers the map above it.
+    await holdCardDrag(page, touch, 125);
+    const sinking = await card.boundingBox();
+    expect(sinking.y).toBeGreaterThan(0);
+    expect(sinking.y).toBeLessThan(full.y);
+    const isMapAboveCard = await page.evaluate(
+      ({x, y}) => !document.elementFromPoint(x, y)?.closest('#place-card'),
+      {x: viewport.width / 2, y: sinking.y / 2}
+    );
+    expect(isMapAboveCard).toBe(true);
+    await releaseCardDrag(touch);
+    await settled('full');
+  }
+);
+
+test(
+  'phone Full does not scroll but Fullscreen does and pulls down from the top',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    const tall = structuredClone(nearbyPlaces);
+    tall.features[0].properties.opening_hours = Array.from({length: 40}, () => 'Mo-Fr 08:00-17:00').join('; ');
+    tall.features[0].properties.website = 'https://example.com';
+    await page.route('**/data/places.geojson', route => route.fulfill({json: tall}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const card = page.locator('#place-card');
+    const cardSettled = async (state) => {
+      await expect(card).toHaveAttribute('data-state', state);
+      await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+    };
+
+    await page.locator('#search').click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await cardSettled('peek');
+    await swipeCard(page, touch, -160);
+    await cardSettled('full');
+    expect(await card.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    // A tall Full card has no scroll range; a drag on its body steps it instead.
+    expect(await card.evaluate((element) => {
+      element.scrollTop = 80;
+      return element.scrollTop;
+    })).toBe(0);
+    await swipeCard(page, touch, 180, {fromHeader: false});
+    await cardSettled('peek');
+    expect(await card.evaluate((element) => element.scrollTop)).toBe(0);
+
+    await page.locator('#card-handle').click();
+    await cardSettled('full');
+    const restingFull = await card.boundingBox();
+    await holdCardDrag(page, touch, -100, {stepMilliseconds: 100});
+    const growing = await card.boundingBox();
+    expect(growing.y).toBeLessThan(restingFull.y);
+    expect(growing.height).toBeGreaterThan(restingFull.height);
+    expect(await card.evaluate(element => element.style.maxHeight)).toBe('none');
+    await releaseCardDrag(touch);
+    await cardSettled('full');
+    await page.locator('#card-handle').click();
+    await cardSettled('fullscreen');
+    expect(await card.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);
+    const visibleCard = await card.boundingBox();
+    const screenX = visibleCard.x + visibleCard.width / 2;
+    const screenY = visibleCard.y + visibleCard.height / 2;
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: screenX, y: screenY, id: 1}]});
+    for (let step = 1; step <= 6; step++)
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{x: screenX, y: screenY - step * 20, id: 1}]
+      });
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    expect(await card.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+
+    // A downward touch while content remains scrolled only scrolls it; it must not pull the card.
+    const scrolledTop = await card.evaluate((element) => element.scrollTop);
+    const scrollTimestampSeconds = Date.now() / 1000;
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{x: screenX, y: screenY, id: 1}],
+      timestamp: scrollTimestampSeconds
+    });
+    for (let step = 1; step <= 2; step++)
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{x: screenX, y: screenY + step * 20, id: 1}],
+        timestamp: scrollTimestampSeconds + step * 0.012
+      });
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+      timestamp: scrollTimestampSeconds + 3 * 0.012
+    });
+    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+    expect(await card.evaluate((element) => element.scrollTop)).toBeLessThan(scrolledTop);
+
+    // Once the content is back at the top, a further downward pull returns to Full.
+    await card.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await swipeCard(page, touch, 180, {fromHeader: false});
+    await cardSettled('full');
+  }
+);
+
+test(
+  'focusing content clipped by a tall Full card opens Fullscreen',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    const tall = structuredClone(nearbyPlaces);
+    tall.features[0].properties.phone = Array.from({length: 80}, () => '+381 11 1234567').join('; ');
+    tall.features[0].properties.website = 'https://example.com';
+    await page.route('**/data/places.geojson', route => route.fulfill({json: tall}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const card = page.locator('#place-card');
+
+    await page.locator('#search').click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await swipeCard(page, touch, -160);
+    await expect(card).toHaveAttribute('data-state', 'full');
+    const link = card.locator('a[href^="https://example.com"]');
+    await expect(link).toHaveCount(1);
+    const fullBox = await card.boundingBox();
+    const hiddenBox = await link.boundingBox();
+    expect(hiddenBox.y).toBeGreaterThan(fullBox.y + fullBox.height);
+
+    await link.focus();
+    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+    await expect.poll(() => link.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.top >= -1 && box.bottom <= innerHeight + 1;
+    })).toBe(true);
+  }
+);
+
+test(
+  'a quick flick moves a phone card one step and reduced motion keeps the same end states',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const card = page.locator('#place-card');
+
+    await page.locator('#search').click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+
+    // 20 px is below the slow-drag halfway threshold; only the flick's velocity moves the card.
+    await flickCard(page, touch, -20);
+    await expect(card).toHaveAttribute('data-state', 'full');
+    const durations = await card.evaluate((element) => getComputedStyle(element).transitionDuration);
+    expect(durations.split(',').map((value) => value.trim())).toEqual(['0s']);
+    await flickCard(page, touch, 20);
+    await expect(card).toHaveAttribute('data-state', 'peek');
+  }
+);
+
+test(
+  'Flip keeps its two-step finger swipe instead of the phone card drag',
+  {tag: '@phone'},
+  async ({page, isMobile}) => {
+    test.skip(!isMobile, 'touch emulation');
+    await withFlipViewport(page, async () => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+      await ready(page);
+      await openMenu(page);
+      await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+      const card = page.locator('#place-card');
+      const cardSettled = async (state) => {
+        await expect(card).toHaveAttribute('data-state', state);
+        await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+      };
+      await cardSettled('peek');
+      const touch = await page.context().newCDPSession(page);
+
+      await swipeCard(page, touch, -80);
+      await cardSettled('full');
+      // A second upward swipe must not enter the phone-only Fullscreen step.
+      await swipeCard(page, touch, -80);
+      await cardSettled('full');
+      await swipeCard(page, touch, 80);
+      await cardSettled('peek');
+    });
   }
 );
 

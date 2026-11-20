@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  cardDragFrame,
+  cardStateAfterDrag,
   cardStateAfterSwipe,
   cardStateAfterSwipeWithoutFullscreen,
   detailsGeometryForMap,
@@ -11,6 +13,7 @@ import {
   isClearButtonVisible,
   isDockFooterVisible,
   isInFocusZone,
+  phoneCardSteps,
   searchBarState,
   searchBounds,
   uncoveredMapArea,
@@ -275,6 +278,53 @@ test('swiping steps the phone card through peek, full, fullscreen, and closed', 
   ];
   for (const {next, ...swipe} of cases)
     assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
+});
+
+test('phone card steps share one geometry for the drag between every adjacent pair', () => {
+  const steps = phoneCardSteps({viewportHeight: 840, bottomInset: 20, peekHeight: 80, fullHeight: 320});
+  assert.deepEqual(steps.peek, {top: 740, height: 80, bottom: 820, inset: 12});
+  assert.deepEqual(steps.full, {top: 500, height: 320, bottom: 820, inset: 12});
+  assert.deepEqual(steps.fullscreen, {top: 0, height: 840, bottom: 840, inset: 0});
+
+  const expanding = cardDragFrame({state: 'full', deltaYPixels: -125, resultsBehind: true, steps});
+  assert.equal(expanding.targetState, 'fullscreen');
+  assert.equal(expanding.rect.top, 375);
+  assert.equal(expanding.rect.height, 450);
+  assert.equal(expanding.rect.bottom, 825);
+  assert.equal(expanding.rect.inset, 9);
+
+  const sinking = cardDragFrame({state: 'fullscreen', deltaYPixels: 125, resultsBehind: true, steps});
+  assert.equal(sinking.targetState, 'full');
+  // The top edge follows the finger down; the card does not shrink from the bottom up.
+  assert.equal(sinking.rect.top, 125);
+  assert.ok(sinking.rect.height < steps.fullscreen.height);
+  assert.ok(sinking.rect.bottom < steps.fullscreen.bottom);
+
+  const revealing = cardDragFrame({state: 'peek', deltaYPixels: -120, resultsBehind: true, steps});
+  assert.equal(revealing.targetState, 'full');
+  assert.equal(revealing.rect.top, 620);
+  assert.equal(revealing.rect.height, 200);
+});
+
+test('releasing a phone drag settles by distance, direction and velocity', () => {
+  const steps = phoneCardSteps({viewportHeight: 840, bottomInset: 20, peekHeight: 80, fullHeight: 320});
+  const settle = (options) => cardStateAfterDrag({resultsBehind: true, steps, ...options});
+
+  // Half the distance to the adjacent step is the slow-drag threshold.
+  assert.equal(settle({state: 'peek', deltaYPixels: -60, velocityPixelsPerMillisecond: 0}), 'peek');
+  assert.equal(settle({state: 'peek', deltaYPixels: -130, velocityPixelsPerMillisecond: 0}), 'full');
+  // A quick flick moves one step even when the finger travelled less than half the distance.
+  assert.equal(settle({state: 'peek', deltaYPixels: -20, velocityPixelsPerMillisecond: -0.8}), 'full');
+  assert.equal(settle({state: 'full', deltaYPixels: 20, velocityPixelsPerMillisecond: 0.8}), 'peek');
+  // A flick in the opposite direction wins over a slow net movement.
+  assert.equal(settle({state: 'peek', deltaYPixels: -130, velocityPixelsPerMillisecond: 0.8}), 'closed');
+  assert.equal(settle({state: 'full', deltaYPixels: -20, velocityPixelsPerMillisecond: 0.8}), 'peek');
+  assert.equal(settle({state: 'fullscreen', deltaYPixels: 20, velocityPixelsPerMillisecond: 0.8}), 'full');
+  // Without results behind it, Full ends on the closed state.
+  assert.equal(
+    settle({state: 'full', resultsBehind: false, deltaYPixels: 20, velocityPixelsPerMillisecond: 0.8}),
+    'closed'
+  );
 });
 
 test('swiping steps the Flip/non-phone card through peek, full, and closed', () => {
