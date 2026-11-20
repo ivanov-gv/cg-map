@@ -4487,7 +4487,7 @@ test('a bare building opens a card with its addresses, entrances and places insi
     .toBe(2);
 });
 
-test('an off-screen result keeps its building address and focus when the map settles away', async ({
+test('an off-screen result keeps its building address and focus when the map settles away', {tag: '@phone'}, async ({
   page,
   isMobile
 }) => {
