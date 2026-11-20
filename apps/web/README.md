@@ -85,10 +85,13 @@ starts with **All**, as on other devices.
 
 **Search result kinds and highlights** (issue #248): with **All** active (no category filter), a query lists matching
 places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
-buildings and addresses are not searchable while a category is selected. Matching results inside the current view get
-green place rings or building outlines; the camera never moves to reveal an off-screen match. The × in Filled clears
-only the query and keeps an active category's results and highlights. The × in Open clears those highlights and closes
-the results without resetting the category.
+buildings and addresses are not searchable while a category is selected. Every matching result inside the current view
+gets a green place ring or building outline, including matches past the 40-row list limit; an unchosen result never gets
+the red preview. Choosing a row uses the red selection and reveals an off-screen result by the focus-zone rule below.
+The × in Filled clears only the query and keeps an active category's results and highlights. The × in Open clears those
+highlights and closes the results without resetting the category. See
+[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md) and
+[ADR 0019](../../docs/decisions/0019-search-highlights-and-chosen-results.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
@@ -114,8 +117,9 @@ Source-level details:
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
-place moves it only when the place is outside the focus zone, the inner 75% of the map area left uncovered by the dock,
-search panel, keyboard, and details card (`isInFocusZone`).
+place, building or address result moves it only when the result is outside the focus zone, the inner 75% of the map area
+left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`), raising zoom to at least 15 when
+needed.
 
 A chosen place's card opens beside the desktop search panel or dock, which stays open. On phones it opens as a
 header-only peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down
@@ -211,8 +215,10 @@ Suppose the user types "museum".
 7. It assigns the resulting array to directoryState.filteredPlaces.
 8. If the map is ready, it calls setData() on the places GeoJSON source.
 9. It closes the current place card if that place no longer matches.
-10. renderSearchResults() sorts matching places by approximate distance from the map center and creates up to 40 result
-    buttons. The camera does not move, and map moves do not reorder the list while a chosen place's card is open.
+10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
+    candidates by approximate distance from the map center and renderSearchResults() creates up to 40 result buttons.
+    In-view highlights come from the full candidate set, not the 40 rows. The camera does not move, and map moves do not
+    reorder the list while any card is open.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
 
@@ -221,8 +227,8 @@ user.
 
 Selecting a category updates category and calls the same applyPlaceSearch() path.
 
-Panning calls renderSearchResults() on moveend. It changes nearest ordering, not the text/category filters. It does not
-restrict the search dataset to the visible rectangle.
+Panning re-ranks candidates on moveend and renders only when no card is open. It changes nearest ordering, not the
+text/category filters. It does not restrict the search dataset to the visible rectangle.
 
 ## 6. Two rendering systems share the screen
 

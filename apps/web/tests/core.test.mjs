@@ -87,6 +87,13 @@ test('building search distinguishes a street address from a building number', ()
   assert.equal(classifyBuildingMatch(label, ''), null);
 });
 
+test('building classification ignores street and number word order', () => {
+  const label = addressLabel(4, [19.25, 42.44]);
+  assert.deepEqual(classifyBuildingMatch(label, 'Dragojevića 18'), {kind: 'address'});
+  assert.deepEqual(classifyBuildingMatch(label, '18 Bulevar Stanka'), {kind: 'address'});
+  assert.deepEqual(classifyBuildingMatch(label, '18'), {kind: 'building'});
+});
+
 test('building search uses entrance and section identifiers without duplicating a footprint', () => {
   const label = addressLabel(9, [19.25, 42.44], {
     building_number: '12',

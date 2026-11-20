@@ -184,14 +184,14 @@ only a narrow strip of map.
 The search field shows focus through its caret and a neutral change to the shared bar's border, not the generic focus
 ring. Other controls keep the ring.
 
-### Search moves the map only for a chosen place
+### Search moves the map only for a chosen result
 
-Opening search, typing, and choosing a category leave the camera still. Choosing a result or map pin moves the map only
-if that place is outside the focus zone: the inner 75% of the width and height of the map area no panel covers. A place
-outside the zone is centered in the uncovered area. Below street level (zoom 15), a chosen result also zooms in to it,
-because a pin with no streets around it is not useful. A tap on another map object, such as a building or stop, still
-centers that object. The camera also stays still while the phone keyboard is open; the place is checked again once it
-closes.
+Opening search, typing, and choosing a category leave the camera still. Choosing a place, building, or address result
+moves the map only if that result is outside the focus zone: the inner 75% of the width and height of the map area no
+panel covers. A result outside the zone is centered in the uncovered area. Below street level (zoom 15), a chosen result
+also zooms in to it, because a pin with no streets around it is not useful. A tap on another map object, such as a
+building or stop, still centers that object. The camera also stays still while the phone keyboard is open; the result is
+checked again once it closes.
 
 Omit the result count, “nearest first” caption, and Reset action. Tapping the active category again returns to All
 without clearing the query; the search field's own clear action removes the query. Use readable result rows with 16px
@@ -206,12 +206,13 @@ label yields at most one row, with Address winning when both forms match. Matchi
 existing Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative address identity. An empty
 query keeps the nearby place list, and choosing any category lists places only.
 
-Every result inside the current view gets a green mark: a ring for a place, a green footprint outline for a building or
-address. Both marks are rebuilt from the same ordered result set when results or the view change. Only results in the
-current bounds are drawn; the camera never moves to reveal an off-screen match. Choosing a row removes its green mark
-and uses the existing red selection instead. Choosing a building or address opens its recorded details without moving
-the camera. Clearing both query and category removes every green mark. The matching rules and why the marks are
-app-owned are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
+Every match inside the current view gets a green mark: a ring for a place, a green footprint outline for a building or
+address. The 40-row list limit does not cap the marks. Unchosen results are never painted with the red preview; only a
+chosen row removes its green mark and uses the existing red selection instead. Choosing a building or address opens the
+same point card as tapping that building on the map, and reveals it by the focus-zone rule above when it is off-screen.
+Clearing both query and category removes every green mark. The matching rules and why the marks are app-owned are
+recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md) and
+[ADR 0019](../../decisions/0019-search-highlights-and-chosen-results.md).
 
 ### Mobile search keeps the map visible
 
@@ -225,10 +226,10 @@ remaining above the on-screen keyboard when calculating that limit, not the obsc
 
 Keep the map visible and interactive without a blocking scrim. Show matching places on the map using the same identities
 as the result list. Green marks cover every result inside the current view; choosing one replaces its green mark with
-the red selection. Results outside the view are not drawn and the camera does not move to reveal them. Do not relocate
-the geographic marker. A chosen place must not stay hidden under the search UI, keyboard, or card. More distant matches
-may require choosing a result rather than forcing every marker into one tiny view. An empty search result must not
-create a fictitious marker.
+the red selection. Results outside the view are not drawn, but choosing one reveals it by the focus-zone rule. Do not
+relocate the geographic marker. A chosen result must not stay hidden under the search UI, keyboard, or card. More
+distant matches may require choosing a result rather than forcing every marker into one tiny view. An empty search
+result must not create a fictitious marker.
 
 Choosing a result keeps the results open and shows the place card minimized at the bottom of the visible screen, showing
 only its header. Dragging or scrolling the card up, or activating its header, opens the full card and shrinks the
@@ -301,12 +302,12 @@ and reduced motion.
 | UI-A07 | Use keyboard, screen reader, and touch.                                                                                                           | Controls have names/states, visible focus and adequate targets; closing restores focus without reopening the dock.                                                                                                                                                                                                                                                |
 | UI-A08 | Repeat on desktop, 412×840 phone, around the 720px breakpoint, and short landscape views.                                                         | Stable header and bottom controls; results remain reachable, with no clipping or overlapping controls.                                                                                                                                                                                                                                                            |
 | UI-A09 | On a phone, focus search, type, select different results, and open/dismiss the keyboard; then use the burger and search from the dock.            | Search started with the dock closed leaves it closed, the bubble is at most half the visible viewport, and a selected marker stays uncovered once the keyboard is dismissed. Burger opens the full dock with query/category retained; search stays in it until a result is chosen.                                                                                |
-| UI-A10 | Open search, type, and choose categories; then choose results inside and outside the focus zone.                                                  | Only choosing a place outside the inner 75% of the uncovered map moves the camera, unless it must zoom in to street level. The result list does not reorder while the card is open.                                                                                                                                                                               |
+| UI-A10 | Open search, type, and choose categories; then choose results inside and outside the focus zone.                                                  | Only choosing a result outside the inner 75% of the uncovered map moves the camera, unless it must zoom in to street level. The result list does not reorder while any card is open.                                                                                                                                                                              |
 | UI-A11 | On a phone, choose a result, swipe the card up and down, use the strip, and swipe it closed.                                                      | Results and minimized card share the screen; the full card reduces results to the strip; swiping steps back and closes. Closing leaves results open and the camera still; other steps move it only if the place leaves the zone.                                                                                                                                  |
 | UI-A12 | On desktop, choose a result and close its card.                                                                                                   | Dock, results, and card are visible together without overlap; closing returns focus to the row and leaves the dock open.                                                                                                                                                                                                                                          |
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing. | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock. |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                 |
-| UI-A15 | Type a query with places and recorded building addresses; pan, choose each result kind, then clear search.                                        | Rows are nearest first with place/building/address symbols and labels; only visible matches are green, the chosen one turns red without a camera move, and clearing removes every green mark. A category lists places only.                                                                                                                                       |
+| UI-A15 | Type a query with places and recorded building addresses; pan, choose each result kind, then clear search.                                        | Rows are nearest first with place/building/address symbols and labels; unchosen matches are green, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, and clearing removes every green mark. A category lists places only.                                                                                                        |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -317,14 +318,14 @@ desktop dock, the Flip exception (Filled-only × that cannot close the dock), th
 seamless desktop row movement, and the follow location state machine (start, new fix moves camera, second click stops,
 drag stops, search result stops, denied shows recovery, no initial fix, button style).
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
-buildings and addresses, that only visible matches are green, that choosing one turns red without a camera move, and
-that clearing the query removes every green mark. Pure unit tests cover the state and clear-button functions and the
-search matching, classification and ordering rules; no large fake DOM is built for browser behavior. Keyboard geometry
-is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone
-behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI
-stability checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the
-illustrative draft's cumulative icons do not prove a production placement solution. Paid visibility is outside this UI
-decision.
+buildings and addresses, that unchosen matches stay green with no red preview, that choosing one turns red, reveals an
+off-screen result, and clears every green mark when the query is cleared. Pure unit tests cover the state and
+clear-button functions and the search matching, classification and ordering rules; no large fake DOM is built for
+browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
+keyboard, screen-reader, or phone behavior. Review physical-device usability under
+[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
+cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
 ## Reusable initial brief
 

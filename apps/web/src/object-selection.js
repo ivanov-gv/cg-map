@@ -32,11 +32,7 @@ export class ObjectSelection {
         const original = map.getPaintProperty(layer, property) ?? 1;
         map.setPaintProperty(layer, property, [
           'case',
-          [
-            'any',
-            ['boolean', ['feature-state', 'selected'], false],
-            ['boolean', ['feature-state', 'preview'], false]
-          ],
+          ['boolean', ['feature-state', 'selected'], false],
           value,
           original
         ]);
@@ -66,14 +62,6 @@ export class ObjectSelection {
       );
     }
     map.on('idle', () => this.resolveAnchor());
-  }
-  // The leading search match keeps the same ring, at any zoom, until a listing is chosen or the filter clears.
-  setPreview(markerKey) {
-    if (this.previewKey === markerKey) return;
-    if (this.previewKey != null)
-      this.map.setFeatureState({source: 'places', id: this.previewKey}, {preview: false});
-    this.previewKey = markerKey;
-    if (markerKey != null) this.map.setFeatureState({source: 'places', id: markerKey}, {preview: true});
   }
   clearPoint() {
     if (this.pointTarget) this.map.setFeatureState(this.pointTarget, {selected: false});

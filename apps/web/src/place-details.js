@@ -42,8 +42,6 @@ export function renderPlaceDetails(feature) {
 // The symbol carries the result kind, not just the category: a building or address is not a place listing.
 const kindSymbols = {building: '🏢', address: '📍'};
 const kindLabels = {building: 'Building', address: 'Address'};
-// Mirrors SEARCH_HIGHLIGHT_COLOR in public-map-layers.js; MapLibre paint values cannot read a CSS variable.
-const kindColor = '#2e7d32';
 
 export function listingButton(place, onClick, distanceText, {kind = 'place', id = null, label = null} = {}) {
   const properties = place.properties;
@@ -58,7 +56,8 @@ export function listingButton(place, onClick, distanceText, {kind = 'place', id 
       : (properties.kind ?? properties.category)[0].toUpperCase()
     : kindSymbols[kind];
   const symbol = createElement('span', glyph, 'symbol');
-  symbol.style.setProperty('--color', isPlace ? placeColors[properties.category] : kindColor);
+  // Building and address rows take --search-highlight from the stylesheet; only places carry a category colour.
+  if (isPlace) symbol.style.setProperty('--color', placeColors[properties.category]);
   symbol.setAttribute('aria-hidden', 'true');
   const copy = createElement('span', undefined, 'copy');
   copy.append(

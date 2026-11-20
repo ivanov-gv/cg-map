@@ -54,6 +54,9 @@ export const normalizeSearchText = text =>
     .replace(/ђ|đ/g, 'dj')
     .replace(/[а-яјљњћџ]/g, character => cyrillicTransliteration[character] ?? character)
     .trim();
+// One app-owned search green. MapLibre paint values cannot read CSS variables, so the stylesheet mirrors this value.
+export const SEARCH_HIGHLIGHT_COLOR = '#2e7d32';
+
 // Search combines category eligibility with the listing's searchable text.
 // A null category matches every listing; a non-null value filters to that category.
 export function matchesPlaceSearch(feature, query, category) {
@@ -69,7 +72,7 @@ export function matchesPlaceSearch(feature, query, category) {
 }
 
 // A building record contributes one result at most. Street names describe addresses; numbers and entrance
-// references describe the building itself. A query spanning both is still one address result.
+// references describe the building itself. A query naming both is an address in either word order.
 function buildingSearchText(properties) {
   const entrances = properties.entrances ?? [];
   const streets = [properties['addr:street'], ...entrances.map(entrance => entrance.street)].filter(Boolean);
@@ -83,28 +86,38 @@ function buildingSearchText(properties) {
       entrance.lamela && `Lamela ${entrance.lamela}`
     ])
   ].filter(Boolean);
-  const streetForms = streets.flatMap(street => [street, street.split(/\s+/)[0]]);
-  const streetNumberPairs = streetForms.flatMap(street => numbers.map(number => `${street} ${number}`));
+  const streetTerms = [
+    ...new Set(streets.flatMap(street => normalizeSearchText(street).split(/\s+/)).filter(Boolean))
+  ];
   return {
     address: normalizeSearchText(streets.join(' ')),
     number: normalizeSearchText(numbers.join(' ')),
-    pair: normalizeSearchText(streetNumberPairs.join(' ')),
-    streetLeads: streetForms.map(street => normalizeSearchText(street))
+    streetTerms,
+    numberTerms: numbers.map(normalizeSearchText).filter(Boolean)
   };
 }
 
+// Normalise each reviewed label once, when labels load. An existing index is returned unchanged so callers never
+// repeat that work when the view moves.
+export function indexBuildingLabels(labels) {
+  if (Array.isArray(labels)) return labels;
+  return (labels?.features ?? []).map(feature => ({
+    feature,
+    search: buildingSearchText(feature.properties ?? {})
+  }));
+}
+
 // Returns the result kind for a matching building label, or null when the query does not match it.
-// Address wins over building only when a street (or street plus number) was what matched.
-export function classifyBuildingMatch(feature, query) {
+// Address wins when the query names a street, with or without a number attached to this building.
+export function classifyBuildingMatch(feature, query, search = buildingSearchText(feature.properties ?? {})) {
   const needle = normalizeSearchText(query);
   if (!needle) return null;
-  const text = buildingSearchText(feature.properties ?? {});
-  const matchesAddress = text.address.includes(needle);
-  const matchesNumber = text.number.includes(needle);
-  const matchesPair = text.pair.includes(needle);
-  if (!matchesAddress && !matchesNumber && !matchesPair) return null;
-  const startsWithStreet = text.streetLeads.some(lead => needle.startsWith(lead));
-  return {kind: matchesAddress || (matchesPair && startsWithStreet) ? 'address' : 'building'};
+  const mentionsStreet = search.streetTerms.some(term => needle.includes(term));
+  const mentionsNumber = search.numberTerms.some(number => needle.includes(number));
+  const matchesAddress = search.address.includes(needle);
+  const matchesNumber = search.number.includes(needle);
+  if (!matchesAddress && !matchesNumber && !(mentionsStreet && mentionsNumber)) return null;
+  return {kind: matchesAddress || (mentionsStreet && mentionsNumber) ? 'address' : 'building'};
 }
 
 // Row title for a building/address result, using only recorded address attributes.
@@ -116,47 +129,60 @@ export function buildingResultLabel(properties) {
   return number ? `Building ${number}` : 'Building';
 }
 
-// Places and recorded addresses share one nearest-first list. Building/address results need an explicit query:
-// browsing with an empty query keeps the nearby place list, and any category narrows the list to places only.
+// Collect every candidate once. Places supplied here already satisfy the active query and category; the app keeps
+// that filtered set so a camera move never matches the same listings twice. Labels can be a pre-built index.
+export function collectSearchResults({
+  places = [],
+  buildingLabels = [],
+  query = '',
+  category = null,
+  markerKeys = new Map()
+}) {
+  const results = places.map(feature => ({
+    kind: 'place',
+    id: feature.properties.id,
+    markerKey: markerKeys.get(feature.properties.id) ?? String(feature.properties.id),
+    feature,
+    coordinates: feature.geometry.coordinates
+  }));
+  if (category !== null || !normalizeSearchText(query)) return results;
+  for (const {feature, search} of indexBuildingLabels(buildingLabels)) {
+    const match = classifyBuildingMatch(feature, query, search);
+    if (!match) continue;
+    const properties = feature.properties;
+    results.push({
+      kind: match.kind,
+      id: `footprint/${properties.footprintIndex}`,
+      footprintIndex: properties.footprintIndex,
+      label: buildingResultLabel(properties),
+      feature,
+      coordinates: feature.geometry.coordinates
+    });
+  }
+  return results;
+}
+
+// Only distance changes when the camera moves, so ranking is separate from candidate collection.
+export function rankSearchResults(results, center, limit = 40) {
+  return results
+    .map(result => ({...result, distanceKilometres: distanceKilometres(center, result.coordinates)}))
+    .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
+    .slice(0, limit);
+}
+
+// Pure convenience for callers that hold unfiltered places and a raw label collection.
 export function selectSearchResults({
   places = [],
-  buildingLabels = null,
+  buildingLabels = [],
   query = '',
   category = null,
   center,
   markerKeys = new Map(),
   limit = 40
 }) {
-  const results = [];
-  for (const feature of places) {
-    if (!matchesPlaceSearch(feature, query, category)) continue;
-    results.push({
-      kind: 'place',
-      id: feature.properties.id,
-      markerKey: markerKeys.get(feature.properties.id) ?? String(feature.properties.id),
-      feature,
-      coordinates: feature.geometry.coordinates
-    });
-  }
-  if (category === null && normalizeSearchText(query)) {
-    for (const feature of buildingLabels?.features ?? []) {
-      const match = classifyBuildingMatch(feature, query);
-      if (!match) continue;
-      const properties = feature.properties;
-      results.push({
-        kind: match.kind,
-        id: `footprint/${properties.footprintIndex}`,
-        footprintIndex: properties.footprintIndex,
-        label: buildingResultLabel(properties),
-        feature,
-        coordinates: feature.geometry.coordinates
-      });
-    }
-  }
-  return results
-    .map(result => ({...result, distanceKilometres: distanceKilometres(center, result.coordinates)}))
-    .sort((first, second) => first.distanceKilometres - second.distanceKilometres)
-    .slice(0, limit);
+  const matchingPlaces = places.filter(feature => matchesPlaceSearch(feature, query, category));
+  const candidates = collectSearchResults({places: matchingPlaces, buildingLabels, query, category, markerKeys});
+  return rankSearchResults(candidates, center, limit);
 }
 
 // Approximate ground distance in kilometres, suitable for ordering nearby results.

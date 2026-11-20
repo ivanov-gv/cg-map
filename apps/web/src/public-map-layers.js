@@ -1,6 +1,6 @@
 // Public-app overlays. Shared cartography remains in the map-core package.
 import {installPlaceIcons, placeColors} from '@ivanov-gv/map-core';
-import {featureCollection} from './core.js';
+import {featureCollection, SEARCH_HIGHLIGHT_COLOR} from './core.js';
 
 // Preserve public layer ordering and the selected-result exception; core supplies reusable rendering.
 export function installPublicPlaceLayers(map) {
@@ -52,7 +52,6 @@ export function installPublicPlaceLayers(map) {
   });
 }
 
-const SEARCH_HIGHLIGHT_COLOR = '#2e7d32';
 const noFootprints = ['in', ['id'], ['literal', []]];
 
 // Green search highlights live in the public app, not in shared cartography. Places use their own point source;
@@ -60,6 +59,7 @@ const noFootprints = ['in', ['id'], ['literal', []]];
 export class SearchHighlights {
   constructor(map) {
     this.map = map;
+    this.visibleKey = null;
     map.addSource('search-place-highlights', {
       type: 'geojson',
       data: featureCollection([])
@@ -96,8 +96,12 @@ export class SearchHighlights {
     );
   }
 
-  // Rebuild both highlights from the results currently inside the view. An empty set clears every green mark.
+  // Rebuild both highlights from the results currently inside the view. An unchanged set touches neither source, so
+  // small pans and selection checks do not repaint marks that are already correct. An empty set clears every green mark.
   update(visibleResults) {
+    const visibleKey = visibleResults.map(result => result.id).join('|');
+    if (visibleKey === this.visibleKey) return;
+    this.visibleKey = visibleKey;
     const placeFeatures = visibleResults
       .filter(result => result.kind === 'place')
       .map(result => ({

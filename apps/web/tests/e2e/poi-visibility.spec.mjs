@@ -447,21 +447,22 @@ test(
   }
 );
 
-test('the leading match keeps its ring at its threshold, with one icon and no exception layer', async ({
-  page
-}) => {
+test('the leading match keeps its icon exception with no red preview', async ({page}) => {
   const data = featureCollection([place('only-match', 4, 0, 0), place('other', 4, 0.0004, 0)]);
-  const ring = (id) =>
-    page.evaluate((key) => window.kompasDebug.map.getFeatureState({source: 'places', id: key}).preview, id);
+  const hasPreview = (id) =>
+    page.evaluate((key) => Boolean(window.kompasDebug.map.getFeatureState({source: 'places', id: key}).preview), id);
   await open(page, data, data.features[0].geometry.coordinates, 16);
   await page.locator('#search').fill('only-match');
-  await expect.poll(() => ring('only-match')).toBe(true);
+  await expect(page.locator('.result')).toHaveCount(1);
   await expect.poll(() => drawnListings(page)).toEqual(['only-match']);
+  await mapIdle(page);
+  expect(await hasPreview('only-match')).toBe(false);
   expect(
     await page.evaluate(() => window.kompasDebug.map.queryRenderedFeatures({layers: ['search-place']}).length)
   ).toBe(0);
   await page.locator('#search').fill('');
-  await expect.poll(() => ring('only-match')).toBe(false);
+  await mapIdle(page);
+  expect(await hasPreview('only-match')).toBe(false);
 });
 
 test('a broad filter admits only eligible matches plus one exception that moves and clears', async ({
