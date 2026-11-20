@@ -132,10 +132,14 @@ place, building or address result moves it only when the result is outside the f
 left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`), raising zoom to at least 15 when
 needed.
 
-A chosen place's card opens as a bottom panel on Desktop (> 720 px), clear of the dock or joined search panel when one
-is open. On phones it opens as a header-only peek under the open results. Pulling it up gives the full card and shrinks
-results to a strip; swiping down steps back and then closes it. Choosing a result in the phone dock switches to this
-compact view. See [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
+A chosen place's card opens as a bottom panel on Desktop (> 720 px), at most 300 px tall and clamped to 45dvh. Its frame
+stays put while `#card-layout` scrolls, so the × cannot scroll away. The card starts at the dock's right edge or, for
+the inset joined search panel, at that panel's right edge. Its grid gives identity the first column, contacts/addresses
+and entrances the second, and hours with nearby or inside-place sections the third; narrower cards step through two
+columns to one. The locate button, scale bar and credit move above it. On phones it opens as a header-only peek under
+the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and then
+closes it. Choosing a result in the phone dock switches to this compact view. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and

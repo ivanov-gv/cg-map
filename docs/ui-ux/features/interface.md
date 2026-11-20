@@ -210,17 +210,20 @@ them on the map. The category strip and the place card show no scrollbars; both 
 
 ### Desktop selected-object card
 
-On Desktop (> 720 px) the card is a paper panel along the bottom of the screen: left 0, right 0, bottom 0, about 300 px
-tall, with a top border and no rounding at the lower corners. It is screen-wide when the dock and search results are
-closed; when the dock or the joined Search panel is open, its left edge starts at that panel's right edge and the panel
-keeps its full height beside it. A visible × at the card's top right closes the card, returns focus to the chosen row
-and leaves the panel open. A click on another map object swaps the card to that object.
+On Desktop (> 720 px) the card is a paper panel along the bottom of the screen: right 0, bottom 0, at most 300 px tall
+and clamped to 45% of the viewport height so short windows keep the map controls reachable. It has a top border and no
+rounding at the lower corners. It is screen-wide when the dock and search results are closed; with the dock open its
+left edge starts at the dock's right edge (400 px), and with the joined Search panel open it starts at that panel's
+right edge (380 px). The panel keeps its full height beside it. A visible × is pinned at the card's top right while its
+content scrolls; it closes the card, returns focus to the chosen row and leaves the panel open. A click on another map
+object swaps the card to that object.
 
-Content is arranged in three columns with about 32 px padding: identity (eyebrow, name, subtitle, side-by-side From/To
-buttons and the source line), contacts/addresses/entrances, then opening hours with NEARBY or places inside. The locate
-button, scale bar and OSM credit remain readable above the card. Content taller than the panel scrolls inside it; the
-page itself does not scroll. In windows 721–860 px wide the columns stack in the card so the dock and map controls stay
-reachable, without overlapping them.
+Content uses three explicit columns with about 32 px padding: identity (eyebrow, name, subtitle, a 16 px gap,
+side-by-side From/To buttons and the source line), Location and contacts or the building's Addresses and Entrances, then
+Opening hours with NEARBY or Inside this building. Any other section uses the last column; weekdays sit left and hours
+are right-aligned there. The locate button, scale bar and OSM credit remain readable above the card. The card frame does
+not scroll; its inner layout does, so the × never scrolls away, and the page itself does not scroll. At card widths
+561–780 px the layout changes to identity | all sections; at 560 px and below it becomes one column.
 
 ### Selected-object card content
 
