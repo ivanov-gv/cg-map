@@ -96,8 +96,7 @@ gets a green place ring or building outline, including matches past the 40-row l
 the red preview. Choosing a row uses the red selection and reveals an off-screen result by the focus-zone rule below.
 The × in Filled clears only the query and keeps an active category's results and highlights. The × in Open clears those
 highlights and closes the results without resetting the category. See
-[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md) and
-[ADR 0019](../../docs/decisions/0019-search-highlights-and-chosen-results.md).
+[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
