@@ -4674,7 +4674,7 @@ test('a place card never carries the previous building address', async ({page}) 
   await expect(page.locator('#place-details')).not.toContainText(firstAddress);
 });
 
-test('a bare building opens a card with its addresses, entrances and places inside the footprint', async ({
+test('a bare building opens a card with its addresses, entrances and places inside the footprint', {tag: '@phone'}, async ({
   page,
   isMobile
 }) => {
