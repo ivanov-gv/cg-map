@@ -279,12 +279,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     column-gap: 32px;
     align-content: start;
   }
-  #place-details > .details-section { grid-column: 2; }
-  #place-details > .details-section--location-and-contacts,
-  #place-details > .details-section--addresses,
-  #place-details > .details-section--entrances { grid-column: 1; }
-  #place-details > .details-section--opening-hours .detail-row { justify-content: space-between; }
-  #place-details > .details-section--opening-hours .detail-value { text-align: right; }
+  /* Each column owns its stack; shared grid rows would leave a gap under the shorter column's section. */
+  .details-column--first { grid-column: 1; }
+  .details-column--second { grid-column: 2; }
+  #place-details .details-section--opening-hours .detail-row { justify-content: space-between; }
+  #place-details .details-section--opening-hours .detail-value { text-align: right; }
   /* The dock is full width; the joined search panel is inset by the bar gutter. */
   body[data-view=dock] .place-card { left: var(--dock-width); }
   body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
@@ -297,7 +296,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   /* Below 780 px the card has room for identity plus one sections column. */
   @container (max-width: 780px) {
     #place-details { grid-template-columns: minmax(0, 1fr); }
-    #place-details > .details-section { grid-column: 1; }
+    .details-column { grid-column: 1; }
   }
   /* Below 560 px identity and sections share one column. */
   @container (max-width: 560px) {

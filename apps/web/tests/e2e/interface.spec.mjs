@@ -338,14 +338,29 @@ test.describe('Desktop bottom card', () => {
       hours: '.details-section--opening-hours',
       hourLabel: '.details-section--opening-hours .detail-row:first-of-type .detail-label',
       hourValue: '.details-section--opening-hours .detail-row:first-of-type .detail-value',
+      lastHour: '.details-section--opening-hours .detail-row:last-of-type',
       nearby: '.details-section--nearby',
       close: '#close-place',
       locate: '#position-action',
       scale: '.maplibregl-ctrl-scale',
       credit: '.osm-credit-line'
     });
-    const {card, head, subtitle, actions, location, hours, hourLabel, hourValue, nearby, close, locate, scale, credit} =
-      boxes;
+    const {
+      card,
+      head,
+      subtitle,
+      actions,
+      location,
+      hours,
+      hourLabel,
+      hourValue,
+      lastHour,
+      nearby,
+      close,
+      locate,
+      scale,
+      credit
+    } = boxes;
     for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
     expect(card.x).toBeCloseTo(0, 0);
     expect(card.x + card.width).toBeCloseTo(1440, 0);
@@ -358,6 +373,8 @@ test.describe('Desktop bottom card', () => {
     expect(hours.x).toBeGreaterThan(location.x + 8);
     expect(nearby.y).toBeGreaterThan(hours.y + hours.height - 1);
     expect(nearby.y).toBeLessThan(card.y + card.height);
+    // The two columns stack independently; neither inherits the other column's row height.
+    expect(nearby.y - (lastHour.y + lastHour.height)).toBeLessThan(40);
     // Hours keep the weekday left and the time right-aligned in their column.
     expect(hourLabel.x).toBeLessThan(hourValue.x);
     expect(hours.x + hours.width - (hourValue.x + hourValue.width)).toBeLessThan(4);
@@ -372,6 +389,26 @@ test.describe('Desktop bottom card', () => {
     }
     expect(card.y - (locate.y + locate.height)).toBeLessThan(48);
     await page.screenshot({path: testInfo.outputPath('desktop-bottom-card.png')});
+  });
+
+  test('stacks sections within their column beside an open dock', async ({page, isMobile}) => {
+    test.skip(isMobile, 'desktop layout');
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    const place = fixture.features[1];
+    await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+    await settled(page);
+    await expect(page.locator('#place-card')).toBeVisible();
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await settled(page);
+    const boxes = await readBoxes(page, {
+      lastHour: '.details-section--opening-hours .detail-row:last-of-type',
+      nearby: '.details-section--nearby'
+    });
+    for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
+    expect(boxes.nearby.y - (boxes.lastHour.y + boxes.lastHour.height)).toBeLessThan(40);
   });
 
   test('reveals a place chosen near the bottom of the map above the card', async ({page, isMobile}) => {
@@ -4149,14 +4186,16 @@ test('a bare building opens a card with its addresses, entrances and places insi
   if (!isMobile) {
     const boxes = await readBoxes(page, {
       addresses: '.details-section--addresses',
+      lastAddress: '.details-section--addresses .detail-row:last-of-type',
       entrances: '.details-section--entrances',
       inside: '.details-section--inside-this-building',
       details: '.details-section--details'
     });
-    const {addresses, entrances, inside, details} = boxes;
+    const {addresses, lastAddress, entrances, inside, details} = boxes;
     for (const [name, value] of Object.entries(boxes)) expect(value, name).not.toBeNull();
     expect(entrances.x).toBeCloseTo(addresses.x, 0);
     expect(entrances.y).toBeGreaterThan(addresses.y + addresses.height - 1);
+    expect(entrances.y - (lastAddress.y + lastAddress.height)).toBeLessThan(40);
     expect(inside.x).toBeGreaterThan(addresses.x + 8);
     expect(details.x).toBeCloseTo(inside.x, 0);
     expect(details.y).toBeGreaterThan(inside.y + inside.height - 1);
