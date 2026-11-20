@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import fileSystem from 'node:fs';
 import {
   atViewport,
   camera,
@@ -24,6 +25,79 @@ import {
 const RESORT_WINDOW_MILLISECONDS = 200;
 // A little over the card's own WHEEL_GESTURE_MILLISECONDS.
 const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
+
+const webPackage = JSON.parse(fileSystem.readFileSync(new URL('../../package.json', import.meta.url)));
+const builtManifest = JSON.parse(
+  fileSystem.readFileSync(new URL('../../../../dist/web/data/manifest.json', import.meta.url))
+);
+const appName = 'Kompas';
+const buildCommit = builtManifest.build?.commit;
+const compactFooterPrefix = `${appName} ${webPackage.version} · `;
+const fullFooterPrefix = `${compactFooterPrefix}${buildCommit ? `${buildCommit} · ` : ''}`;
+const licenceText = '© OpenStreetMap contributors · ODbL · Natural Earth';
+const SHORT_TEST_COMMIT = 'a';
+// Long enough that the full line cannot fit any supported viewport, whatever the font metrics.
+const LONG_TEST_COMMIT = 'a'.repeat(200);
+
+async function expectFooterOnOneLine(page) {
+  const metrics = await page.locator('#map-attribution').evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      whiteSpace: style.whiteSpace,
+      height: element.getBoundingClientRect().height,
+      lineHeight: parseFloat(style.lineHeight),
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth
+    };
+  });
+  expect(metrics.whiteSpace).toBe('nowrap');
+  expect(metrics.height).toBeLessThanOrEqual(metrics.lineHeight + 1);
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+}
+
+// Controls the manifest commit so the fit decision does not depend on the commit made by the test build.
+async function routeFooterCommit(page, commitForRequest) {
+  await page.route('**/data/manifest.json', async route => {
+    const response = await route.fetch();
+    const manifest = await response.json();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...manifest,
+        build: {...manifest.build, name: appName, version: webPackage.version, commit: commitForRequest()}
+      })
+    });
+  });
+}
+
+// Checks that the commit is dropped only when the full line would overflow, while the one-line rule still holds.
+async function expectFooterVersionState(page, commit, {keepCommit}) {
+  const fullText = `${compactFooterPrefix}${commit} · ${licenceText}`;
+  const compactText = `${compactFooterPrefix}${licenceText}`;
+  const attribution = page.locator('#map-attribution');
+  await expect(attribution).toHaveText(keepCommit ? fullText : compactText);
+
+  const fullLineOverflows = await attribution.evaluate((element, text) => {
+    const originalNodes = [...element.childNodes];
+    element.textContent = text;
+    const overflows = element.scrollWidth > element.clientWidth + 1;
+    element.replaceChildren(...originalNodes);
+    return overflows;
+  }, fullText);
+  expect(fullLineOverflows).toBe(!keepCommit);
+
+  await expect(attribution.locator('a[href="https://www.openstreetmap.org/copyright"]')).toHaveCount(1);
+  await expectFooterOnOneLine(page);
+}
+
+async function showFlipModesScreen(page) {
+  for (let step = 0; step < 3; step++) {
+    if ((await page.evaluate(() => window.kompasDebug.flipDockScreen)) === 'modes') break;
+    await page.locator('#menu-toggle').click();
+  }
+  await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBe('modes');
+}
 
 test.beforeEach(({page}) => stubRouting(page));
 
@@ -963,7 +1037,7 @@ test('attribution appears in dock footer and updates with satellite toggle', asy
   await expect(attribution).toBeVisible();
 
   // Exact text: spaces around links preserved, each link appears once
-  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth');
+  await expect(attribution).toHaveText(fullFooterPrefix + licenceText);
   const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
   await expect(osmLink).toHaveCount(1);
 
@@ -972,13 +1046,14 @@ test('attribution appears in dock footer and updates with satellite toggle', asy
   await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(true);
   const emapaLink = attribution.locator('a[href="https://emapa.me/"]');
   await expect(emapaLink).toHaveCount(1);
-  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth · Imagery: eMapa · Ortofoto 2025');
+  // The imagery credit makes the full line overflow, so only the commit is dropped.
+  await expect(attribution).toHaveText(compactFooterPrefix + licenceText + ' · Imagery: eMapa · Ortofoto 2025');
 
   // Toggle satellite off: eMapa link disappears
   await page.getByRole('button', {name: 'Satellite', exact: true}).click();
   await expect.poll(() => page.evaluate(() => window.kompasDebug.satellite)).toBe(false);
   await expect(emapaLink).toHaveCount(0);
-  await expect(attribution).toHaveText('© OpenStreetMap contributors · ODbL · Natural Earth');
+  await expect(attribution).toHaveText(fullFooterPrefix + licenceText);
 
   // Turning on transport (which has no attribution) must not change the attribution text.
   const attributionBeforeTransport = await attribution.textContent();
@@ -1001,6 +1076,77 @@ test('attribution appears in dock footer on flip viewport', {tag: '@phone'}, asy
     const osmLink = attribution.locator('a[href="https://www.openstreetmap.org/copyright"]');
     await expect(osmLink).toBeVisible();
   });
+});
+
+test.describe('dock footer build version', () => {
+  // The manifest route must reach the page rather than a cached service-worker response.
+  test.use({serviceWorkers: 'block'});
+
+  test('dock footer shows the build version on one line at Flip, Mobile and desktop', {tag: '@phone'}, async ({
+    page
+  }) => {
+    let footerCommit = SHORT_TEST_COMMIT;
+    await routeFooterCommit(page, () => footerCommit);
+
+    for (const viewport of [
+      {width: 1280, height: 800, device: 'desktop'},
+      {width: 412, height: 840, device: 'mobile'}
+    ]) {
+      await atViewport(page, viewport, async () => {
+        footerCommit = SHORT_TEST_COMMIT;
+        await ready(page);
+        await expect(page.locator('body')).toHaveAttribute('data-device', viewport.device);
+        await openMenu(page);
+        await expectFooterVersionState(page, SHORT_TEST_COMMIT, {keepCommit: true});
+      });
+    }
+
+    for (const viewport of [
+      {width: 374, height: 241},
+      {width: 340, height: 250}
+    ]) {
+      await atViewport(page, viewport, async () => {
+        footerCommit = LONG_TEST_COMMIT;
+        await ready(page);
+        await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
+        await showFlipModesScreen(page);
+        await expectFooterVersionState(page, LONG_TEST_COMMIT, {keepCommit: false});
+      });
+    }
+  });
+});
+
+test('Satellite layer tile uses the design folded-map icon', async ({page}) => {
+  await ready(page);
+  const iconGeometry = await page.locator('#i-satellite').evaluate(symbol => ({
+    viewBox: symbol.getAttribute('viewBox'),
+    children: [...symbol.children].map(child =>
+      child.tagName.toLowerCase() === 'circle'
+        ? {
+            tag: 'circle',
+            cx: child.getAttribute('cx'),
+            cy: child.getAttribute('cy'),
+            r: child.getAttribute('r')
+          }
+        : {tag: 'path', d: child.getAttribute('d')}
+    )
+  }));
+  expect(iconGeometry.viewBox).toBe('0 0 24 24');
+  expect(iconGeometry.children).toEqual([
+    {tag: 'path', d: 'M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20Z'},
+    {tag: 'circle', cx: '16', cy: '9.3', r: '1.6'},
+    {tag: 'path', d: 'M5.2 16.6l4.1-4.3 3.3 3.1 2-2 4.2 3.4'}
+  ]);
+  const iconStroke = await page.locator('#satellite-toggle .icon').evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      fill: style.fill,
+      stroke: style.strokeWidth,
+      cap: style.strokeLinecap,
+      join: style.strokeLinejoin
+    };
+  });
+  expect(iconStroke).toEqual({fill: 'none', stroke: '1.65px', cap: 'round', join: 'round'});
 });
 
 // ---------------------------------------------------------------------------

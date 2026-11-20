@@ -1,6 +1,7 @@
 import fileSystem from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {assertOfflineModulesIncluded} from './offline-inventory.js';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -9,6 +10,34 @@ const isCheck = process.argv.includes('--check');
 const provenance = JSON.parse(
   fileSystem.readFileSync(path.join(repositoryRoot, 'data/sources/provenance.json'), 'utf8')
 );
+const webPackage = JSON.parse(
+  fileSystem.readFileSync(path.join(repositoryRoot, 'apps/web/package.json'), 'utf8')
+);
+const webManifest = JSON.parse(
+  fileSystem.readFileSync(path.join(repositoryRoot, 'apps/web/public/manifest.webmanifest'), 'utf8')
+);
+
+// The footer shows the commit that produced the artifact. Git is authoritative for a checkout; GITHUB_SHA covers
+// builds from a source tree without .git. A missing commit is rendered as version-only, never as a placeholder.
+function shortBuildCommit() {
+  let commit;
+  try {
+    commit = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+  } catch {
+    commit = process.env.GITHUB_SHA ?? '';
+  }
+  return /^[0-9a-f]{7,40}$/.test(commit) ? commit.slice(0, 7) : null;
+}
+
+const build = {
+  name: webManifest.short_name,
+  version: webPackage.version,
+  commit: shortBuildCommit()
+};
 const sha256Hex = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 let archivePath = path.join(outputDirectory, 'data/montenegro.pmtiles');
 if (!fileSystem.existsSync(archivePath)) {
@@ -100,7 +129,8 @@ const shellHash = sha256Hex(
   )
 ).slice(0, 16);
 const manifest = {
-  version: '0.1.0',
+  version: build.version,
+  build,
   sourceTimestamp: provenance.upstream_snapshot,
   coverage: provenance.coverage,
   archive: {path: archiveName, sha256: archiveHash, bytes: archiveBytes.length},

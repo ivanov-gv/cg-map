@@ -140,7 +140,11 @@ after endpoint selection; choosing From or To closes search or the dock to show 
 and offline safety remain part of the existing features. Map attribution lives in the left dock footer and also appears
 as a small "OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's
 sources at runtime so they stay in sync when layers change
-([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
+([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)). The footer line starts with the app name
+and version from `package.json`, plus the short commit recorded in the generated `data/manifest.json` at build time
+(from Git locally, `GITHUB_SHA` in CI). A build with no known commit shows the version alone. The renderer keeps the
+line unwrapped and drops only the commit when the full text would overflow, so Flip cover screens and other narrow
+layouts keep the full licence text and links on one line.
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
 handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
@@ -594,9 +598,9 @@ geometry need different fixes.
 
 ## 15. What tests prove, and what they do not
 
-The repository currently has 22 Node tests covering archive decoding/style validity, search, link safety, download
-transactions, service-worker responses, HTTP transport fallback and satellite configuration/assets. There are also
-Python server tests and an optional browser script in ../tests/browser-check.mjs.
+Node tests cover archive decoding/style validity, search, link safety, download transactions, service-worker responses,
+HTTP transport fallback and satellite configuration/assets. There are also Python server tests and an optional browser
+script in ../tests/browser-check.mjs.
 
 Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is
 smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.

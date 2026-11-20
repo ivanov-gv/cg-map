@@ -49,8 +49,11 @@ stable. A short interface still needs understandable symbols, accessible names, 
 
 Show the map, one combined burger/search bar, an icon-only location button, a metric scale, a small "OpenStreetMap"
 credit below the scale bar, and full attribution in the left dock footer (per
-[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Default geographic content remains governed by
-Discover; simplifying controls does not remove roads, buildings, addresses, terrain, or scale-appropriate places.
+[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). That footer starts with the app name and version,
+then the short build commit when the build knows one, followed by the licence credits on the same line. The line never
+wraps; when it cannot fit, including on a Flip cover screen, only the version part is shortened and the licence text and
+links stay complete. Default geographic content remains governed by Discover; simplifying controls does not remove
+roads, buildings, addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -158,7 +161,7 @@ On Flip, the menu icon button (#menu-toggle) cycles through three screens:
 
 1. **☰ Menu** (dock closed): tap opens the full-screen dock showing the search field, categories, and results list.
 2. **◇ Modes** (dock open, list screen shown): tap shows the modes menu — Satellite and Transport tiles side by side,
-   the "Download for offline use" button, and the one-line license/attribution. The search field stays in the header,
+   the "Download for offline use" button, and the one-line version/licence footer. The search field stays in the header,
    and the categories row remains visible above the tiles. Everything fits without scrolling at 374×241, 340×250 and
    340×340.
 3. **× Close** (modes screen shown): tap closes the dock and returns to the map. The next time the dock is opened, it
@@ -181,7 +184,9 @@ fully visible when the dock shows results: the search bar uses an 8 px top inset
 chips are 30 px high with tight padding while the active pill stays 40 px, and each result row is about 37 px (24 px
 symbol, 13 px name, 10 px kind/distance with ellipsis). When the modes menu is shown, layer tiles are compact (icon and
 label in one row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution
-line all fit without scrolling. These sizes are tested at 374×241, 340×250 and 340×340.
+line all fit without scrolling. At 374×241 and 340×250 the footer keeps the app version and the full licence on one
+line, dropping the short commit because the full text cannot fit. These sizes are tested at 374×241, 340×250 and
+340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 
@@ -250,11 +255,11 @@ strip has no scrollbar: it scrolls by touch or mouse wheel and brings the active
 
 ## UI-04 Bottom controls and wording
 
-| Control          | Presentation                                                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| Satellite        | Optional layer tile with a recognizable pictogram and the short label **Satellite** underneath. |
-| Transport        | Optional layer tile with a recognizable pictogram and the short label **Transport** underneath. |
-| Offline download | One button labeled **Download for offline use** before a download starts.                       |
+| Control          | Presentation                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Satellite        | Optional layer tile with the folded-map pictogram (sun and hills) and the short label **Satellite** underneath. |
+| Transport        | Optional layer tile with a recognizable pictogram and the short label **Transport** underneath.                 |
+| Offline download | One button labeled **Download for offline use** before a download starts.                                       |
 
 Arrange the layer tiles in a compact grid, not a vertical settings list. Omit the Standard map option and the visible
 headings Map layers and Offline map. Each tile exposes its active/available state; optional layers start off. Turning
@@ -322,12 +327,14 @@ blurring the field while the bubble or dock keeps its query and results (includi
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
 and its × on desktop, phone and Flip, seamless desktop row movement, the Flip list footer staying hidden with zero, one
-or two results across keyboard events, the Locate button's box, computed radius/icon size and offsets at each device
-class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search result
-stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button and
-dock-footer visibility functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
-smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
-physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+or two results across keyboard events, the build version on one footer line at desktop, 412×840 Mobile, 374×241 and
+340×250, the Satellite symbol's design geometry, the Locate button's box, computed radius/icon size and offsets at each
+device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
+result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button,
+dock-footer visibility and footer-version functions; no large fake DOM is built for browser behavior. Keyboard geometry
+is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior.
+Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability
+checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 

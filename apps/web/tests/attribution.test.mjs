@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {visibleSourceAttributions} from '../src/attribution.js';
+import {buildFooterVersionText, visibleSourceAttributions} from '../src/attribution.js';
 
 function fakeStyle(sources, layers) {
   return {sources, layers};
@@ -92,4 +92,22 @@ test('visibleSourceAttributions skips sources with no visible layers', () => {
 
   const result = visibleSourceAttributions(style);
   assert.deepEqual(result, ['© OSM']);
+});
+
+test('buildFooterVersionText includes the app name, version and short commit', () => {
+  const build = {name: 'Kompas', version: '0.1.0', commit: 'a1b2c3d'};
+
+  assert.equal(buildFooterVersionText(build), 'Kompas 0.1.0 · a1b2c3d · ');
+});
+
+test('buildFooterVersionText omits the commit when the build does not know one', () => {
+  const build = {name: 'Kompas', version: '0.1.0', commit: null};
+
+  assert.equal(buildFooterVersionText(build), 'Kompas 0.1.0 · ');
+});
+
+test('buildFooterVersionText keeps the version but drops the commit in the compact form', () => {
+  const build = {name: 'Kompas', version: '0.1.0', commit: 'a1b2c3d'};
+
+  assert.equal(buildFooterVersionText(build, {compact: true}), 'Kompas 0.1.0 · ');
 });
