@@ -83,6 +83,13 @@ query makes it Filled. That × clears only the query, leaving the dock and its r
 card. Closing the dock belongs to the header icon button, whose three-state cycle is described below. The category row
 starts with **All**, as on other devices.
 
+**Search result kinds and highlights** (issue #248): with **All** active (no category filter), a query lists matching
+places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
+buildings and addresses are not searchable while a category is selected. Matching results inside the current view get
+green place rings or building outlines; the camera never moves to reveal an off-screen match. The × in Filled clears
+only the query and keeps an active category's results and highlights. The × in Open clears those highlights and closes
+the results without resetting the category.
+
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
 stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
