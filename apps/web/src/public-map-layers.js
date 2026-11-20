@@ -59,7 +59,7 @@ const noFootprints = ['in', ['id'], ['literal', []]];
 export class SearchHighlights {
   constructor(map) {
     this.map = map;
-    this.visibleKey = null;
+    this.highlightKey = null;
     map.addSource('search-place-highlights', {
       type: 'geojson',
       data: featureCollection([])
@@ -96,14 +96,33 @@ export class SearchHighlights {
     );
   }
 
-  // Rebuild both highlights from the results currently inside the view. An unchanged set touches neither source, so
-  // small pans and selection checks do not repaint marks that are already correct. An empty set clears every green mark.
+  // The listing identities behind markers that are actually drawn: ordinary place icons, plus the below-threshold
+  // requested marker. Shared markers list every listing they represent in activeIds.
+  drawnPlaceIds() {
+    const layers = this.map
+      .getStyle()
+      .layers.map(layer => layer.id)
+      .filter(id => id.startsWith('place-icons-') || id === 'search-place');
+    return new Set(
+      this.map
+        .queryRenderedFeatures({layers})
+        .flatMap(feature => JSON.parse(feature.properties.activeIds ?? '[]'))
+        .map(String)
+    );
+  }
+
+  // Rebuild both highlights from the results in view and the markers drawn for them. An unchanged pair touches neither
+  // source, so small pans and selection checks do not repaint marks that are already correct. An empty set clears marks.
   update(visibleResults) {
-    const visibleKey = visibleResults.map(result => result.id).join('|');
-    if (visibleKey === this.visibleKey) return;
-    this.visibleKey = visibleKey;
+    const drawnIds = this.drawnPlaceIds();
+    const highlightKey = [
+      visibleResults.map(result => result.id).join('|'),
+      [...drawnIds].sort().join('|')
+    ].join('\u0000');
+    if (highlightKey === this.highlightKey) return;
+    this.highlightKey = highlightKey;
     const placeFeatures = visibleResults
-      .filter(result => result.kind === 'place')
+      .filter(result => result.kind === 'place' && drawnIds.has(String(result.id)))
       .map(result => ({
         type: 'Feature',
         properties: {markerKey: result.markerKey},

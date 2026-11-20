@@ -85,11 +85,12 @@ starts with **All**, as on other devices.
 
 **Search result kinds and highlights** (issue #248): with **All** active (no category filter), a query lists matching
 places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
-buildings and addresses are not searchable while a category is selected. Every matching result inside the current view
-gets a green place ring or building outline, including matches past the 40-row list limit; an unchosen result never gets
-the red preview. Choosing a row uses the red selection and reveals an off-screen result by the focus-zone rule below.
-The × in Filled clears only the query and keeps an active category's results and highlights. The × in Open clears those
-highlights and closes the results without resetting the category. See
+buildings and addresses are not searchable while a category is selected. Every matching building or address inside the
+current view gets a green outline; a matching place gets a ring only while its marker is drawn, so a below-threshold
+place stays in the list without a ring until zoomed in. Marks include matches past the 40-row list limit; an unchosen
+result never gets the red preview. Choosing a row uses the red selection and reveals an off-screen result by the
+focus-zone rule below. The × in Filled clears only the query and keeps an active category's results and highlights. The
+× in Open clears those highlights and closes the results without resetting the category. See
 [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
