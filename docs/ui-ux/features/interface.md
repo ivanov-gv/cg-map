@@ -210,9 +210,8 @@ Every match inside the current view gets a green mark: a ring for a place, a gre
 address. The 40-row list limit does not cap the marks. Unchosen results are never painted with the red preview; only a
 chosen row removes its green mark and uses the existing red selection instead. Choosing a building or address opens the
 same point card as tapping that building on the map, and reveals it by the focus-zone rule above when it is off-screen.
-Clearing both query and category removes every green mark. The matching rules and why the marks are app-owned are
-recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md) and
-[ADR 0019](../../decisions/0019-search-highlights-and-chosen-results.md).
+Clearing both query and category removes every green mark. The matching rules, chosen-result behavior, and why the marks
+are app-owned are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
 
 ### Mobile search keeps the map visible
 
