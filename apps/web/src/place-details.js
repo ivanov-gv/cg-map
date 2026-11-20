@@ -92,11 +92,7 @@ function buildPlaceResults(list, {results, currentId, loadingError, onChoose}) {
     return;
   }
   for (const result of results) {
-    const distanceText =
-      result.distanceKilometres < 1
-        ? Math.round(result.distanceKilometres * 1000) + ' m'
-        : result.distanceKilometres.toFixed(1) + ' km';
-    const button = listingButton(result.feature, () => onChoose(result, button), distanceText, {
+    const button = listingButton(result.feature, () => onChoose(result, button), result.distanceText, {
       kind: result.kind,
       id: result.id,
       label: result.label

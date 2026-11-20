@@ -363,3 +363,81 @@ test('tapping a highlighted building removes its green fringe', async ({page}) =
   await expect(page.locator('#place-name')).toBeVisible();
   await expect.poll(async () => (await highlightState(page)).buildings).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// GPS distances (issue #262): a row's distance is from the fix, never the map centre.
+// ---------------------------------------------------------------------------
+
+const FIRST_GPS_FIX = {latitude: 42.44205, longitude: 19.26085, accuracy: 18};
+const SECOND_GPS_FIX = {latitude: 42.4419, longitude: 19.2607, accuracy: 19};
+const rowIds = page => page.locator('.result').evaluateAll(rows => rows.map(row => row.dataset.id));
+
+test('GPS distances: without a usable fix rows keep centre order and show no distance', async ({page}) => {
+  await expect
+    .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+    .not.toBe('live');
+  await page.locator('#search').fill('bulevar');
+  await expect(page.locator('.result')).toHaveCount(3);
+  await expect(page.locator('.result .distance')).toHaveCount(0);
+  expect(await rowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+});
+
+test.describe('GPS distances with a fix', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_GPS_FIX});
+
+  test('GPS distances: a live fix supplies the order and the distance text', async ({page, context}) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await page.locator('#search').fill('bulevar');
+    await expect(page.locator('.result')).toHaveCount(3);
+    // The fix sits on node/2: it becomes nearest even though the map centre sits on footprint/4.
+    await expect.poll(() => rowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await expect(page.locator('.result .distance')).toHaveCount(3);
+    await expect(page.locator('.result').nth(0).locator('.distance')).toHaveText('0 m');
+    await expect(page.locator('.result').nth(2).locator('.distance')).toHaveText(/^\d+ m$/);
+  });
+
+  test('GPS distances: a changed fix refreshes rows but a card freezes them', async ({page, context}) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await page.locator('#search').fill('bulevar');
+    await expect.poll(() => rowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await page.locator('.result').first().click();
+    await expect(page.locator('#place-name')).toBeVisible();
+
+    await context.setGeolocation(SECOND_GPS_FIX);
+    await expect(page.locator('#position-status')).toHaveText(/±19 m/);
+    await expectToHold(
+      async () => expect(await rowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      CAMERA_HOLD_MILLISECONDS
+    );
+
+    await closeCard(page);
+    await expect.poll(() => rowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+    await expect(page.locator('.result').nth(0).locator('.distance')).toHaveText('0 m');
+  });
+
+  test('GPS distances: switching cards keeps the deferred order frozen until the card closes', async ({
+    page,
+    context
+  }) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await page.locator('#search').fill('bulevar');
+    await expect.poll(() => rowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await page.locator('.result[data-id="node/2"]').click();
+    await expect(page.locator('#place-name')).toHaveText('Bulevar Market');
+
+    await context.setGeolocation(SECOND_GPS_FIX);
+    await expect(page.locator('#position-status')).toHaveText(/±19 m/);
+    await page.locator('.result[data-id="node/1"]').click();
+    await expect(page.locator('#place-name')).toHaveText('Bulevar Cafe');
+    await expectToHold(
+      async () => expect(await rowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      CAMERA_HOLD_MILLISECONDS
+    );
+
+    await closeCard(page);
+    await expect.poll(() => rowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  });
+});

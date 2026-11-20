@@ -93,7 +93,10 @@ const directoryState = {
   visibilityConfig: null,
   markerKeysByPlaceId: new Map(),
   placeHitLayers: ['search-place'],
-  searchTimer: null
+  searchTimer: null,
+  distanceRefreshTimer: null,
+  lastDistanceRefreshAt: 0,
+  hasPendingDistanceRerank: false
 };
 
 // Host and offline adapters are created during startup and shared with their UI controller.
@@ -108,6 +111,7 @@ const startupState = {
 const routeEndpoints = {from: null, to: null};
 
 const prefersReducedMotion = isReducedMotionPreferred();
+const distanceRefreshDelayMilliseconds = 200;
 
 const placeSelection = new PlaceSelection({
   map: () => mapState.map,
@@ -132,6 +136,7 @@ const locationControls = new LocationControls({
     mapState.shouldIgnoreNextMove = true;
   },
   closeSelection: () => placeSelection.close(false),
+  onDistanceOriginChanged: scheduleDistanceRefresh,
   notify,
   prefersReducedMotion
 });
@@ -172,6 +177,11 @@ function syncPanels() {
     (!routeEndpoints.from && !routeEndpoints.to) ||
     mapState.interface?.view !== 'closed' ||
     !elementById('place-card').hidden;
+  // Choosing another place card does not close the card, so only a real close consumes the deferred ranking.
+  if (directoryState.hasPendingDistanceRerank && elementById('place-card').hidden) {
+    directoryState.hasPendingDistanceRerank = false;
+    refreshSearchResults();
+  }
 }
 
 function renderRouteEndpoints() {
@@ -201,7 +211,8 @@ function setRouteEndpoint(role) {
   placeSelection.close();
 }
 
-// The list and both highlight layers share one candidate set; only row order changes with the view center.
+// The list and both highlight layers share one candidate set; row order and distance text follow the view center or a
+// usable fix, while highlights always follow the view.
 function searchQuery() {
   return elementById('search').value.trim();
 }
@@ -218,7 +229,9 @@ function computeSearchCandidates() {
 
 function rankSearchCandidates() {
   if (!mapState.map) return [];
-  return rankSearchResults(directoryState.searchCandidates, mapState.map.getCenter().toArray());
+  return rankSearchResults(directoryState.searchCandidates, mapState.map.getCenter().toArray(), {
+    origin: locationControls.distanceOrigin
+  });
 }
 
 // Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
@@ -255,6 +268,30 @@ function refreshSearchResults() {
   directoryState.results = rankSearchCandidates();
   renderSearchResults();
   updateSearchHighlights();
+}
+
+function applyDistanceRefresh() {
+  directoryState.lastDistanceRefreshAt = Date.now();
+  if (placeSelection.hasOpenCard) {
+    directoryState.hasPendingDistanceRerank = true;
+    return;
+  }
+  refreshSearchResults();
+}
+
+// A new fix arrives independently of camera moves. Refresh at most once per interval with a final trailing run, and
+// keep the open card's row order frozen until syncPanels() applies the deferred ranking when that card closes.
+function scheduleDistanceRefresh() {
+  if (directoryState.distanceRefreshTimer !== null) return;
+  const elapsedMilliseconds = Date.now() - directoryState.lastDistanceRefreshAt;
+  if (elapsedMilliseconds >= distanceRefreshDelayMilliseconds) {
+    applyDistanceRefresh();
+    return;
+  }
+  directoryState.distanceRefreshTimer = setTimeout(() => {
+    directoryState.distanceRefreshTimer = null;
+    applyDistanceRefresh();
+  }, distanceRefreshDelayMilliseconds - elapsedMilliseconds);
 }
 
 // A search or category narrows the candidates once; matching icons keep their thresholds.
