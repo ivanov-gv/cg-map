@@ -92,25 +92,17 @@ hidden under it. Opening a place from the list switches to the search view with 
 interface.js calls `setView('search')` when the dock is open on mobile). Desktop keeps the side dock unchanged (narrower
 than the viewport). The place card and route panel keep their current behavior when the dock is closed.
 
-**Flip three-state icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three states,
-one per screen:
+**Flip icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three screens. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#flip-three-state-icon-button) for behavior.
+Source-level details:
 
-1. **☰ Menu** (dock closed): tap opens the full-screen dock with the search field, categories and results list.
-2. **◇ Modes** (dock open, results shown): tap replaces the categories and results with the modes menu — Satellite and
-   Transport tiles, the "Download for offline use" button and the one-line license/attribution. The search field stays
-   in the header, and everything fits without scrolling at 340×250 and 340×340.
-3. **× Close** (modes menu shown): tap closes the dock and returns to the map. Opening it again shows the results list;
-   the state resets to Menu.
-
-Each state has its own icon (`#i-menu`, `#i-modes`, `#i-close`), accessible name ("Open menu" / "Show map modes" /
-"Close menu") and `aria-expanded` on the dock. The old minimizable footer handle (#footer-toggle) is gone. On Mobile and
-Desktop the footer is still always shown and the menu button simply toggles the dock.
-
-**Compact layout for real Flip screens**: the real Flip cover screen is about 340×250 CSS px (shorter than 340×340). At
-that height at least 3 result rows are fully visible when the dock shows results: the search bar uses an 8 px inset,
-category chips are 30 px high, and each result row is about 40 px (24 px symbol, smaller fonts). In the modes menu,
-layer tiles put icon and label in one row (~40 px) and the Download button is ~40 px, so Satellite, Transport, Download
-and the attribution line fit without scrolling. These sizes are tested at both 340×250 and 340×340.
+- `interface.js` tracks `flipDockScreen` (`'list'` | `'modes'` | `null`). When `null`, the dock is closed
+  (`view === 'closed'`). The icon and label are derived from `view` + `flipDockScreen` in `syncMenuIcon()`.
+- `syncDockContent()` hides only `#results` on the modes screen; `#categories` stays visible above the footer tiles.
+- On the modes screen, focusing the search field or typing switches to the list screen.
+- The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
+- Tested at 374×241, 340×250 and 340×340 viewports. The CSS compact layout (style.css `@media` block) uses an 8 px bar
+  inset, 30 px category chips, and ~40 px result rows so at least 3 fit. The modes menu footer has no scroll.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`

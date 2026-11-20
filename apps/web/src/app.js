@@ -342,6 +342,7 @@ async function initializeMapTransport() {
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
+// flipDockScreen reports the Flip dock screen ('list', 'modes', or null when closed).
 function installPublicMapDebug() {
   window.kompasDebug = {
     get map() {
@@ -374,8 +375,8 @@ function installPublicMapDebug() {
     get explored() {
       return mapState.hasExploredMap;
     },
-    get interface() {
-      return mapState.interface;
+    get flipDockScreen() {
+      return mapState.interface?.flipDockScreen ?? null;
     }
   };
 }

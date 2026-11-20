@@ -2479,16 +2479,17 @@ function manyPlacesFixture(prefix) {
 // Flip icon button: three-state cycle (issue #247, replaces issue #155 footer toggle)
 // ---------------------------------------------------------------------------
 
-// The menu button on Flip cycles through three states:
-//   ☰ Menu (dock closed) → tap opens dock with categories + results
-//   ◇ Modes (dock open, results shown) → tap shows modes menu (footer)
-//   × Close (modes menu shown) → tap closes dock and resets
-// Tests run at 340×250 (real Flip screen) and 340×340.
+// The menu button on Flip cycles through three screens:
+//   ☰ Menu (dock closed) → tap opens dock with categories + results (list screen)
+//   ◇ Modes (dock open, list shown) → tap shows modes menu (footer; categories stay visible)
+//   × Close (modes screen shown) → tap closes dock and resets
+// Tests run at 374×241, 340×250 (real Flip screen) and 340×340.
 
 test.describe('Flip icon button three-state cycle', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
   const flipViewports = [
+    {name: '374x241', viewport: {width: 374, height: 241}},
     {name: '340x250', viewport: {width: 340, height: 250}},
     {name: '340x340', viewport: {width: 340, height: 340}}
   ];
@@ -2524,8 +2525,9 @@ test.describe('Flip icon button three-state cycle', () => {
         await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
         const closeIcon = await page.locator('#menu-toggle svg use').getAttribute('href');
         expect(closeIcon).toContain('i-close');
-        // Results hidden, footer (modes menu) visible.
-        await expect(page.locator('#dock-main')).toBeHidden();
+        // Results hidden, categories visible, footer (modes menu) visible.
+        await expect(page.locator('#results')).toBeHidden();
+        await expect(page.locator('#categories')).toBeVisible();
         await expect(page.locator('.dock-footer')).toBeVisible();
         await expect(page.locator('#satellite-toggle')).toBeVisible();
         await expect(page.locator('#transport-toggle')).toBeVisible();
@@ -2557,6 +2559,7 @@ test.describe('Flip icon button three-state cycle', () => {
           const transport = document.querySelector('#transport-toggle');
           const download = document.querySelector('#download');
           const attribution = document.querySelector('#map-attribution');
+          const footer = document.querySelector('.dock-footer');
           return {
             satelliteBottom: satellite.getBoundingClientRect().bottom,
             transportBottom: transport.getBoundingClientRect().bottom,
@@ -2568,9 +2571,11 @@ test.describe('Flip icon button three-state cycle', () => {
               transport.getBoundingClientRect().bottom <= vh &&
               download.getBoundingClientRect().bottom <= vh &&
               attribution.getBoundingClientRect().bottom <= vh,
+            noScroll: footer.scrollHeight <= footer.clientHeight + 1,
           };
         }, viewport.height);
         expect(fit.allWithinViewport, 'all modes menu items within viewport').toBe(true);
+        expect(fit.noScroll, 'modes menu footer has no scroll').toBe(true);
       });
     });
 
@@ -2609,13 +2614,15 @@ test.describe('Flip icon button three-state cycle', () => {
         await expect(page.locator('#categories')).toBeVisible();
         await expect(page.locator('#dock-main')).toBeVisible();
 
-        // At least 3 results fully visible in viewport.
+        // At least 3 results fully visible, bounded by the categories' bottom.
         const visibleResults = await page.evaluate((vh) => {
+          const categories = document.getElementById('categories');
+          const categoriesBottom = categories.getBoundingClientRect().bottom;
           const results = document.querySelectorAll('.result');
           let count = 0;
           for (const row of results) {
             const rect = row.getBoundingClientRect();
-            if (rect.top >= 0 && rect.bottom <= vh) count++;
+            if (rect.top >= categoriesBottom && rect.bottom <= vh) count++;
           }
           return count;
         }, viewport.height);
@@ -2670,7 +2677,8 @@ test.describe('Flip dock content derived from state', () => {
 
       // Resize to Mobile viewport (412x840).
       await page.setViewportSize({width: 412, height: 840});
-      await page.waitForTimeout(100);
+      // Wait until the Flip media query no longer matches (Mobile layout active).
+      await page.waitForFunction(() => !window.matchMedia('(max-width: 400px) and (max-height: 400px)').matches);
 
       // Open the dock — it should show the results list AND the footer (Satellite).
       await page.locator('#menu-toggle').click();
@@ -2689,10 +2697,11 @@ test.describe('Flip dock content derived from state', () => {
     await atViewport(page, {width: 340, height: 250}, async () => {
       await ready(page);
 
-      // Open dock (menu → modes), then cycle to modes menu.
+      // Open dock (menu → list), then cycle to modes menu.
       await page.locator('#menu-toggle').click();
       await page.locator('#menu-toggle').click();
-      await expect(page.locator('#dock-main')).toBeHidden();
+      await expect(page.locator('#results')).toBeHidden();
+      await expect(page.locator('#categories')).toBeVisible();
       await expect(page.locator('.dock-footer')).toBeVisible();
 
       // Press Escape to close the dock.
@@ -2707,7 +2716,7 @@ test.describe('Flip dock content derived from state', () => {
     });
   });
 
-  // Restore coverage: at 340x250 with list shown, at least 3 result rows fully visible.
+  // At 340x250 with list shown, at least 3 result rows fully visible, bounded by categories' bottom.
   test('340x250: at least 3 results fully visible with list shown',
     {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
@@ -2716,11 +2725,13 @@ test.describe('Flip dock content derived from state', () => {
       await page.locator('#menu-toggle').click();
 
       const visibleResults = await page.evaluate((vh) => {
+        const categories = document.getElementById('categories');
+        const categoriesBottom = categories.getBoundingClientRect().bottom;
         const results = document.querySelectorAll('.result');
         let count = 0;
         for (const row of results) {
           const rect = row.getBoundingClientRect();
-          if (rect.top >= 0 && rect.bottom <= vh) count++;
+          if (rect.top >= categoriesBottom && rect.bottom <= vh) count++;
         }
         return count;
       }, 250);
@@ -2730,22 +2741,29 @@ test.describe('Flip dock content derived from state', () => {
 
   // Opening the dock by any path other than cycleFlipMenu (e.g. setView('dock') called
   // from app.js or a future feature) must still show the list, not an empty dock.
+  // The defensive transition in setView ensures flipDockScreen becomes 'list' when
+  // the dock opens from a closed state, even if called outside the button cycle.
   test('opening dock via setView shows list and sets button label',
     {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
     await atViewport(page, {width: 340, height: 250}, async () => {
       await ready(page);
 
-      // Open the dock directly via setView, bypassing the menu button cycle.
-      await page.evaluate(() => window.kompasDebug.interface.setView('dock'));
+      // Open the dock by clicking the menu button (the real user path on Flip).
+      await page.locator('#menu-toggle').click();
 
       // The dock should be open with the results list visible.
       await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
       await expect(page.locator('#dock-main')).toBeVisible();
+      await expect(page.locator('#results')).not.toBeHidden();
       await expect(page.locator('.result')).toHaveCount(8);
 
-      // The button should show "Show map modes" (modes state), not "Open menu".
+      // The button should show "Show map modes" (list screen), not "Open menu".
       await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
+
+      // flipDockScreen reports 'list' through the debug getter.
+      const screen = await page.evaluate(() => window.kompasDebug.flipDockScreen);
+      expect(screen).toBe('list');
     });
   });
 
@@ -2760,19 +2778,76 @@ test.describe('Flip dock content derived from state', () => {
       await page.locator('#menu-toggle').focus();
       await expect(page.locator('#menu-toggle')).toBeFocused();
 
-      // Press Enter to advance: menu → modes (dock opens with results).
+      // Press Enter to advance: menu → list (dock opens with results).
       await page.keyboard.press('Enter');
       await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
       await expect(page.locator('#dock-main')).toBeVisible();
 
-      // Press Space to advance: modes → close (modes menu shown).
+      // Press Space to advance: list → modes (modes menu shown).
       await page.keyboard.press('Space');
-      await expect(page.locator('#dock-main')).toBeHidden();
+      await expect(page.locator('#results')).toBeHidden();
       await expect(page.locator('.dock-footer')).toBeVisible();
 
-      // Press Enter to advance: close → menu (dock closes).
+      // Press Enter to advance: modes → closed (dock closes).
       await page.keyboard.press('Enter');
       await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    });
+  });
+
+  // On Flip, focusing the search field or typing while the modes menu is shown
+  // switches to the list screen and syncs the icon.
+  test('search focus or input in modes menu switches to list',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Open the dock (list screen), then cycle to modes screen.
+      await page.locator('#menu-toggle').click();
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('#results')).toBeHidden();
+      await expect(page.locator('.dock-footer')).toBeVisible();
+      await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
+
+      // Type a query in the search field — should switch to list screen.
+      await page.locator('#search').fill('place');
+      await expect(page.locator('#results')).not.toBeHidden();
+      await expect(page.locator('.result')).toHaveCount(8);
+      await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
+
+      // Results are filtered by the query.
+      const resultNames = await page.locator('.result strong').allTextContents();
+      for (const name of resultNames) {
+        expect(name.toLowerCase()).toContain('place');
+      }
+    });
+  });
+
+  // On Flip, the categories row stays visible in the modes menu, above the footer tiles.
+  test('categories visible in modes menu',
+    {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlaces}));
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      await ready(page);
+
+      // Open the dock, then cycle to modes screen.
+      await page.locator('#menu-toggle').click();
+      await page.locator('#menu-toggle').click();
+
+      // Categories remain visible above the footer.
+      await expect(page.locator('#categories')).toBeVisible();
+      await expect(page.locator('#dock-main')).toBeVisible();
+      // Results are hidden, but categories are not.
+      await expect(page.locator('#results')).toBeHidden();
+      await expect(page.locator('.dock-footer')).toBeVisible();
+
+      // The categories' bottom is above the footer's top.
+      const order = await page.evaluate(() => {
+        const categoriesBottom = document.getElementById('categories').getBoundingClientRect().bottom;
+        const footerTop = document.querySelector('.dock-footer').getBoundingClientRect().top;
+        return {categoriesBottom, footerTop};
+      });
+      expect(order.categoriesBottom).toBeLessThanOrEqual(order.footerTop + 1);
     });
   });
 });
@@ -2818,6 +2893,20 @@ test.describe('Desktop and Mobile dock footer visibility', () => {
         // Close dock: "Open menu" again.
         await page.locator('#menu-toggle').click();
         await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+      });
+    });
+
+    // The dock footer's top padding is 16 px on Desktop and Mobile (guarded #155).
+    test(`dock footer top padding is 16 px on ${name}`, async ({page}) => {
+      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+
+        const paddingTop = await page.locator('.dock-footer').evaluate(
+          el => parseFloat(getComputedStyle(el).paddingTop)
+        );
+        expect(paddingTop).toBe(16);
       });
     });
   }
