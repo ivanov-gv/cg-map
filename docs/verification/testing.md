@@ -118,8 +118,8 @@ see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 | journeys    | journeys.spec.mjs, in three jobs                           | Point selection, routes, transport, buildings, map taps                     | routing, transport, point-selection, object-selection, map-taps, data transit                            |
 | interface   | interface.spec.mjs, search-results.spec.mjs, in eight jobs | Search results and highlights, dock, place card, phone keyboard, focus zone | core.js, public-map-layers.js, place-details.js, place-selection.js, interface.js, index.html, style.css |
 | discover    | discover.spec.mjs                                          | First view, scale, location states                                          | position.js, data/sources/places*, contracts                                                             |
-| poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs            | POI levels, marker selection                                                         | data/sources/places*, contracts                                                                          |
-| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project              | POI levels, marker selection                                                         | data/sources/places*, contracts                                                                          |
+| poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs            | POI levels, marker selection                                                | data/sources/places*, contracts                                                                          |
+| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project              | POI levels, marker selection                                                | data/sources/places*, contracts                                                                          |
 
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
 every area, because every browser test boots them.

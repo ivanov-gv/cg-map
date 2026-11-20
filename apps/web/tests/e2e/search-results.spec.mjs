@@ -444,6 +444,12 @@ test('choosing a building result replaces its green outline with the red selecti
   await expect(page.locator('.result[data-kind="address"]')).toHaveCount(1);
   await page.locator('.result[data-kind="address"]').click();
   await expect(page.locator('#place-name')).toHaveText('Building 18');
+  await expect(page.locator('#place-category')).toHaveText('Building');
+  await expect(page.locator('#place-details .section-title')).toHaveText([
+    'Addresses',
+    'Inside this building',
+    'Details'
+  ]);
   await expect(page.locator('#place-details')).toContainText('Bulevar Stanka Dragojevića 18');
   await expect
     .poll(() =>
