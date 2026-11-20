@@ -2653,6 +2653,100 @@ test.describe('Flip icon button three-state cycle', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Flip list hides map modes (issue #270)
+// ---------------------------------------------------------------------------
+
+// The reported search: "Hilton" narrowed to Eat & drink leaves no, one or two matching places.
+function hiltonFixture(resultCount) {
+  const features = [
+    {id: 'hilton/stay', name: 'Hilton Hotel', category: 'stay'},
+    {id: 'city/food', name: 'City Restaurant', category: 'food'}
+  ];
+  for (let index = 0; index < resultCount; index++)
+    features.push({id: `hilton/food/${index}`, name: `Hilton Grill ${index}`, category: 'food'});
+  return {
+    type: 'FeatureCollection',
+    features: features.map((feature, index) => ({
+      type: 'Feature',
+      geometry: {type: 'Point', coordinates: [19.26 + index * 0.001, 42.44]},
+      properties: {...feature, kind: 'restaurant'}
+    }))
+  };
+}
+
+// The list owns the whole dock area below the categories; a modes footer would shrink it.
+async function expectFlipListWithoutModes(page) {
+  await expect(page.locator('.dock-footer')).toBeHidden();
+  await expect(page.locator('#results')).toBeVisible();
+  const empty = page.locator('#results .empty');
+  if (await empty.count()) {
+    await expect(empty).toHaveText('No places found. Try another search or category.');
+    await expect(empty).toBeVisible();
+  } else {
+    await expect(page.locator('.result').first()).toBeVisible();
+  }
+  const list = await page.evaluate(() => {
+    const results = document.getElementById('results');
+    const bounds = results.getBoundingClientRect();
+    const firstContent = results.querySelector('.empty, .result');
+    const contentBounds = firstContent.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      contentBounds.left + contentBounds.width / 2,
+      contentBounds.top + contentBounds.height / 2
+    );
+    return {
+      resultsBottom: bounds.bottom,
+      viewportBottom: innerHeight,
+      contentUncovered: firstContent.contains(topmost) || firstContent === topmost
+    };
+  });
+  expect(list.contentUncovered, 'result content is not covered by the footer').toBe(true);
+  expect(list.resultsBottom).toBeGreaterThanOrEqual(list.viewportBottom - 2);
+}
+
+test.describe('Flip list hides map modes (issue #270)', () => {
+  test.beforeEach(({page}) => stubRouting(page));
+
+  const flipViewports = [
+    {name: '340x250', viewport: {width: 340, height: 250}},
+    {name: '374x241', viewport: {width: 374, height: 241}}
+  ];
+
+  for (const {name, viewport} of flipViewports) {
+    for (const resultCount of [0, 1, 2]) {
+      test(`list with ${resultCount} result(s) shows the list, not modes (${name})`,
+        {tag: '@phone'}, async ({page}) => {
+        await page.route('**/data/places.geojson', route => route.fulfill({json: hiltonFixture(resultCount)}));
+        await atViewport(page, viewport, async () => {
+          await ready(page);
+          await page.locator('#menu-toggle').click();
+          await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Show map modes');
+          await page.locator('#search').fill('Hilton');
+          await page.locator('#categories').getByRole('button', {name: 'Eat & drink', exact: true}).click();
+          await expect(page.locator('.result')).toHaveCount(resultCount);
+          await expectFlipListWithoutModes(page);
+
+          // The keyboard opens while typing and closes afterwards; neither viewport event may reveal the footer.
+          await simulateKeyboard(page, Math.floor(viewport.height / 2));
+          await expect(page.locator('.dock-footer')).toBeHidden();
+          await simulateKeyboard(page, viewport.height);
+          await expectFlipListWithoutModes(page);
+
+          // ◇ still replaces the list with the unchanged modes menu.
+          await page.locator('#menu-toggle').click();
+          await expect(page.locator('#results')).toBeHidden();
+          await expect(page.locator('.dock-footer')).toBeVisible();
+          await expect(page.locator('#satellite-toggle')).toBeVisible();
+          await expect(page.locator('#transport-toggle')).toBeVisible();
+          await expect(page.locator('#download')).toBeVisible();
+          await expect(page.locator('#map-attribution')).toBeVisible();
+        });
+      });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Flip dock content derived from state (review finding 3)
 // ---------------------------------------------------------------------------
 

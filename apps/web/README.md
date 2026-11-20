@@ -99,10 +99,14 @@ Source-level details:
 - `interface.js` tracks `flipDockScreen` (`'list'` | `'modes'` | `null`). When `null`, the dock is closed
   (`view === 'closed'`). The icon and label are derived from `view` + `flipDockScreen` in `syncMenuIcon()`.
 - `syncDockContent()` hides only `#results` on the modes screen; `#categories` stays visible above the footer tiles.
+- `syncDockContent()` is the sole owner of Flip footer visibility: the list screen always hides the footer, including
+  with zero results and after keyboard/viewport events; only the modes screen shows it.
 - On the modes screen, focusing the search field or typing switches to the list screen.
 - The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
-- Tested at 374×241, 340×250 and 340×340 viewports. The CSS compact layout (style.css `@media` block) uses an 8 px bar
-  inset, 30 px category chips, and ~40 px result rows so at least 3 fit. The modes menu footer has no scroll.
+- Tested at 374×241, 340×250 and 340×340 viewports. The list is checked with zero, one and two results, including
+  keyboard open/close events: it keeps the whole dock area and hides the footer. The CSS compact layout (style.css
+  `@media` block) uses an 8 px bar inset, 30 px category chips, and ~40 px result rows so at least 3 fit. The modes menu
+  footer has no scroll.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
