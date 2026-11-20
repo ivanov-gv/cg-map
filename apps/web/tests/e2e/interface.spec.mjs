@@ -4084,11 +4084,11 @@ test.describe('Active category chip', () => {
         const pillBox = pill.getBoundingClientRect();
         const chipBox = activeChip.getBoundingClientRect();
         const removeBox = removeButton.getBoundingClientRect();
-        const resultsTop = document.getElementById('results').getBoundingClientRect().top;
-        const toggleTop = document.getElementById('footer-toggle').getBoundingClientRect().top;
+        const resultsBox = document.getElementById('results').getBoundingClientRect();
+        // The Flip list has no footer handle; the scrollable results panel bounds fully visible rows.
         const visibleResults = [...document.querySelectorAll('.result')].filter(result => {
           const box = result.getBoundingClientRect();
-          return box.top >= chipBox.bottom && box.bottom <= toggleTop;
+          return box.top >= chipBox.bottom && box.bottom <= resultsBox.bottom;
         }).length;
         return {
           chipHeight: pillBox.height,
@@ -4099,7 +4099,8 @@ test.describe('Active category chip', () => {
             removeBox.top >= pillBox.top &&
             removeBox.right <= pillBox.right + 0.5 &&
             removeBox.bottom <= pillBox.bottom + 0.5,
-          resultsTop,
+          resultsTop: resultsBox.top,
+          resultsBottom: resultsBox.bottom,
           chipBottom: pillBox.bottom,
           visibleResults
         };
@@ -4109,6 +4110,7 @@ test.describe('Active category chip', () => {
       expect(geometry.removeHeight).toBeGreaterThanOrEqual(40);
       expect(geometry.removeInsidePill).toBe(true);
       expect(Math.abs(geometry.resultsTop - geometry.chipBottom)).toBeLessThanOrEqual(1);
+      expect(geometry.resultsBottom).toBeGreaterThan(geometry.chipBottom);
       expect(geometry.visibleResults).toBeGreaterThanOrEqual(3);
     });
   });

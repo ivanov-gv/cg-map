@@ -332,11 +332,11 @@ or two results across keyboard events, the build version on one footer line at d
 device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
 result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button,
 dock-footer visibility and footer-version functions; no large fake DOM is built for browser behavior. Keyboard geometry
-is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior.
-Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability
-checks in
-[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
-cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
+is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone
+behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI
+stability checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the
+illustrative draft's cumulative icons do not prove a production placement solution. Paid visibility is outside this UI
+decision.
 
 ## Reusable initial brief
 
