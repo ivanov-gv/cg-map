@@ -107,17 +107,29 @@ export function indexBuildingLabels(labels) {
   }));
 }
 
-// Returns the result kind for a matching building label, or null when the query does not match it.
+// Returns which part of the label matched a query word, or null when no word of this label starts with it.
+// An exact number identifier wins over a street prefix so "lamela b" stays a building, not street "Bulevar".
+function matchedWordSource(word, streetWords, numberWords) {
+  if (numberWords.includes(word)) return 'number';
+  if (streetWords.includes(word)) return 'street';
+  if (numberWords.some(numberWord => numberWord.startsWith(word))) return 'number';
+  if (streetWords.some(streetWord => streetWord.startsWith(word))) return 'street';
+  return null;
+}
+
+// Returns the result kind for a matching building label, or null when any query word is unmatched here.
 // Address wins when the query names a street, with or without a number attached to this building.
 export function classifyBuildingMatch(feature, query, search = buildingSearchText(feature.properties ?? {})) {
   const needle = normalizeSearchText(query);
   if (!needle) return null;
-  const mentionsStreet = search.streetTerms.some(term => needle.includes(term));
-  const mentionsNumber = search.numberTerms.some(number => needle.includes(number));
-  const matchesAddress = search.address.includes(needle);
-  const matchesNumber = search.number.includes(needle);
-  if (!matchesAddress && !matchesNumber && !(mentionsStreet && mentionsNumber)) return null;
-  return {kind: matchesAddress || (mentionsStreet && mentionsNumber) ? 'address' : 'building'};
+  const streetWords = search.streetTerms.flatMap(term => term.split(/\s+/)).filter(Boolean);
+  const numberWords = search.numberTerms.flatMap(term => term.split(/\s+/)).filter(Boolean);
+  const wordSources = needle
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => matchedWordSource(word, streetWords, numberWords));
+  if (wordSources.includes(null)) return null;
+  return {kind: wordSources.includes('street') ? 'address' : 'building'};
 }
 
 // Row title for a building/address result, using only recorded address attributes.
