@@ -32,6 +32,19 @@ const TAP_ACTION_WINDOW_MILLISECONDS = 650;
 const TOUCH_DRAG_STEP_MILLISECONDS = 25;
 const SNAPSHOT_DATE = '17 Oct 2026';
 
+async function swipeCard(page, touch, deltaY, {selector = '#place-card', fromHeader = selector === '#place-card'} = {}) {
+  const box = await page.locator(selector).boundingBox();
+  const screenX = box.x + box.width / 2;
+  const screenY = fromHeader ? box.y + 30 : box.y + box.height / 2;
+  await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: screenX, y: screenY}]});
+  for (let step = 1; step <= 5; step++)
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5}]
+    });
+  await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+}
+
 const readGeoJSON = path =>
   JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
 
@@ -581,25 +594,10 @@ test(
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
-    const swipe = async (deltaY, selector = '#place-card') => {
-      const start = await page.locator(selector).boundingBox();
-      const screenX = start.x + start.width / 2;
-      const screenY = selector === '#place-card' ? start.y + 30 : start.y + start.height / 2;
-      await touch.send('Input.dispatchTouchEvent', {
-        type: 'touchStart',
-        touchPoints: [{x: screenX, y: screenY}]
-      });
-      for (let step = 1; step <= 5; step++)
-        await touch.send('Input.dispatchTouchEvent', {
-          type: 'touchMove',
-          touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5}]
-        });
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-    };
     const card = page.locator('#place-card');
-    const cardSettled = async state => {
+    const cardSettled = async (state) => {
       await expect(card).toHaveAttribute('data-state', state);
-      await expect.poll(() => card.evaluate(element => element.getAnimations().length)).toBe(0);
+      await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
     };
     const viewport = page.viewportSize();
     const searchBar = page.locator('.search-bar');
@@ -608,7 +606,7 @@ test(
     await page.locator('#search').click();
     await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
     // Read in the click's own task: the card must open as a peek, not shrink down from full height.
-    const opening = await page.locator('.result', {hasText: 'Nearby place 0'}).evaluate(row => {
+    const opening = await page.locator('.result', {hasText: 'Nearby place 0'}).evaluate((row) => {
       row.click();
       const element = document.getElementById('place-card');
       return {height: element.getBoundingClientRect().height, animations: element.getAnimations().length};
@@ -625,20 +623,25 @@ test(
     expect(peek.x + peek.width).toBeGreaterThanOrEqual(viewport.width - 12);
     await expect(page.locator('#place-body')).toHaveJSProperty('inert', true);
     const clippedBody = await page.locator('#place-body').boundingBox();
+    // Allows the 1px border and sub-pixel text layout.
     expect(clippedBody.y).toBeGreaterThanOrEqual(peek.y + peek.height - 2);
     const closeBox = await page.locator('#close-place').boundingBox();
     expect(closeBox.width).toBeLessThanOrEqual(1);
     await expect(locate).toBeVisible();
-    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(peek.y);
+    const locatePeek = await locate.boundingBox();
+    const peekGap = peek.y - (locatePeek.y + locatePeek.height);
+    expect(peekGap).toBeGreaterThanOrEqual(8);
+    expect(peekGap).toBeLessThanOrEqual(24);
     await page.screenshot({path: testInfo.outputPath('phone-peek.png')});
 
     // Peek -> Full.
-    await swipe(-160);
+    await swipeCard(page, touch, -160);
     await cardSettled('full');
     await expect(page.locator('#search-bubble')).toBeHidden();
     await expect(page.locator('#results-strip')).toBeVisible();
     await expect(page.locator('#results-strip-label')).toHaveText('Shops');
     await expect(searchBar).toBeVisible();
+    await expect(page.locator('#point-from')).toBeVisible();
     await expect(locate).toBeVisible();
     await settled(page);
     const place = await pointOnMap(page, nearbyPlaces.features[0].geometry.coordinates);
@@ -646,15 +649,19 @@ test(
     const full = await card.boundingBox();
     expect(place.y).toBeGreaterThan(strip.y + strip.height);
     expect(place.y).toBeLessThan(full.y);
-    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(full.y);
+    const locateFull = await locate.boundingBox();
+    const fullGap = full.y - (locateFull.y + locateFull.height);
+    expect(fullGap).toBeGreaterThanOrEqual(8);
+    expect(fullGap).toBeLessThanOrEqual(24);
     await page.screenshot({path: testInfo.outputPath('phone-full.png')});
 
     // Full -> Fullscreen (swipe up) hides search and the map, and covers the viewport.
-    await swipe(-180);
+    await swipeCard(page, touch, -180);
     await cardSettled('fullscreen');
     await expect(searchBar).toBeHidden();
     await expect(page.locator('#results-strip')).toBeHidden();
     await expect(locate).toBeHidden();
+    await expect(page.locator('#point-from')).toBeVisible();
     const fullScreen = await card.boundingBox();
     expect(fullScreen.x).toBe(0);
     expect(fullScreen.y).toBe(0);
@@ -663,7 +670,7 @@ test(
     await page.screenshot({path: testInfo.outputPath('phone-fullscreen.png')});
 
     // Fullscreen -> Full (swipe down) restores the strip.
-    await swipe(180);
+    await swipeCard(page, touch, 180);
     await cardSettled('full');
     await expect(searchBar).toBeVisible();
     await expect(page.locator('#results-strip')).toBeVisible();
@@ -681,21 +688,21 @@ test(
     await cardSettled('fullscreen');
 
     // Fullscreen -> Full -> Peek (swipe down steps back).
-    await swipe(180);
+    await swipeCard(page, touch, 180);
     await cardSettled('full');
-    await swipe(140);
+    await swipeCard(page, touch, 140);
     await cardSettled('peek');
     await expect(page.locator('#search-bubble')).toBeVisible();
 
     // A short full card also swipes from its body, not only the header.
     await page.locator('#card-handle').click();
     await cardSettled('full');
-    await swipe(120, '#place-details');
+    await swipeCard(page, touch, 120, {selector: '#place-details', fromHeader: false});
     await cardSettled('peek');
     await expect(page.locator('#search-bubble')).toBeVisible();
 
     // Peek -> closed, leaving search open.
-    await swipe(80);
+    await swipeCard(page, touch, 60);
     await expect(card).toBeHidden();
     await expect(page.locator('#search-bubble')).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
@@ -710,25 +717,10 @@ test(
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
-    const swipe = async deltaY => {
-      const start = await page.locator('#place-card').boundingBox();
-      const screenX = start.x + start.width / 2;
-      const screenY = start.y + 30;
-      await touch.send('Input.dispatchTouchEvent', {
-        type: 'touchStart',
-        touchPoints: [{x: screenX, y: screenY}]
-      });
-      for (let step = 1; step <= 5; step++)
-        await touch.send('Input.dispatchTouchEvent', {
-          type: 'touchMove',
-          touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5}]
-        });
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-    };
     const card = page.locator('#place-card');
-    const cardSettled = async state => {
+    const cardSettled = async (state) => {
       await expect(card).toHaveAttribute('data-state', state);
-      await expect.poll(() => card.evaluate(element => element.getAnimations().length)).toBe(0);
+      await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
     };
 
     await tapRenderedPlace(
@@ -740,24 +732,29 @@ test(
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
     await expect(page.locator('#results-strip')).toBeHidden();
     await expect(page.locator('#search-bubble')).toBeHidden();
+    await expect(page.locator('#point-from')).toBeVisible();
     const locate = page.locator('#position-badge');
     await expect(locate).toBeVisible();
     const full = await card.boundingBox();
-    expect((await locate.boundingBox()).y + (await locate.boundingBox()).height).toBeLessThanOrEqual(full.y);
+    const locateFull = await locate.boundingBox();
+    const fullGap = full.y - (locateFull.y + locateFull.height);
+    expect(fullGap).toBeGreaterThanOrEqual(8);
+    expect(fullGap).toBeLessThanOrEqual(24);
 
     // Full -> Fullscreen (tap the handle steps up, no search behind).
     await page.locator('#card-handle').click();
     await cardSettled('fullscreen');
     await expect(page.locator('.search-bar')).toBeHidden();
     await expect(locate).toBeHidden();
+    await expect(page.locator('#point-from')).toBeVisible();
 
     // Fullscreen -> Full.
-    await swipe(180);
+    await swipeCard(page, touch, 180);
     await cardSettled('full');
     await expect(page.locator('.search-bar')).toBeVisible();
 
     // Full -> closed (no Peek when opened from the map).
-    await swipe(140);
+    await swipeCard(page, touch, 140);
     await expect(card).toBeHidden();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   }
@@ -771,18 +768,6 @@ test(
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
-    const swipeUp = async () => {
-      const start = await page.locator('#place-card').boundingBox();
-      const screenX = start.x + start.width / 2;
-      const screenY = start.y + 30;
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: screenX, y: screenY}]});
-      for (let step = 1; step <= 5; step++)
-        await touch.send('Input.dispatchTouchEvent', {
-          type: 'touchMove',
-          touchPoints: [{x: screenX, y: screenY - (160 * step) / 5}]
-        });
-      await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
-    };
     const card = page.locator('#place-card');
     const stripLabel = page.locator('#results-strip-label');
 
@@ -791,7 +776,7 @@ test(
     await page.locator('#search').fill('Nearby');
     await page.locator('.result', {hasText: 'Nearby place 0'}).click();
     await expect(card).toHaveAttribute('data-state', 'peek');
-    await swipeUp();
+    await swipeCard(page, touch, -160);
     await expect(card).toHaveAttribute('data-state', 'full');
     await expect(stripLabel).toHaveText('Shops · “Nearby”');
 
@@ -800,7 +785,7 @@ test(
     await page.locator('#categories').getByRole('button', {name: 'All categories'}).click();
     await page.locator('.result', {hasText: 'Nearby place 0'}).click();
     await expect(card).toHaveAttribute('data-state', 'peek');
-    await swipeUp();
+    await swipeCard(page, touch, -160);
     await expect(stripLabel).toHaveText('All · “Nearby”');
 
     await page.locator('#results-strip').click();
@@ -809,7 +794,7 @@ test(
     await page.locator('#categories').getByRole('button', {name: 'Shops', exact: true}).click();
     await page.locator('.result', {hasText: 'Nearby place 0'}).click();
     await expect(card).toHaveAttribute('data-state', 'peek');
-    await swipeUp();
+    await swipeCard(page, touch, -160);
     await expect(stripLabel).toHaveText('Shops');
   }
 );
@@ -852,6 +837,16 @@ test(
     await expect(dock).toBeHidden();
     await expect(bubble).toBeVisible();
     await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
+    await expect(page.locator('#search')).toHaveValue('Nearby');
+    await expect(
+      page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    // The menu returns to the same dock with the query and category kept.
+    await openMenu(page);
+    await expect(body).toHaveAttribute('data-view', 'dock');
+    await expect(dock).toBeVisible();
+    await expect(bubble).toBeHidden();
     await expect(page.locator('#search')).toHaveValue('Nearby');
     await expect(
       page.locator('#categories').getByRole('button', {name: 'Shops', exact: true})
