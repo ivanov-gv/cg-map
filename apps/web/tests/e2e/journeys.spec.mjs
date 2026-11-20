@@ -497,9 +497,7 @@ test('same building keeps its address across zooms and with number labels hidden
   }
 });
 
-test('a place inside a building keeps its marker selected and highlights its footprint across zoom and satellite changes', async ({
-  page
-}) => {
+test('a place inside a building keeps only its marker ring across zoom and satellite changes', async ({page}) => {
   const label = JSON.parse(
     fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
   ).features.find(feature => {
@@ -507,7 +505,6 @@ test('a place inside a building keeps its marker selected and highlights its foo
     return longitude > 19.251 && longitude < 19.261 && latitude > 42.438 && latitude < 42.445;
   });
   const coordinates = label.geometry.coordinates;
-  const footprintId = label.properties.footprintIndex;
   // A single listing's marker key is its source id, so the marker's feature state is read under this id.
   const placeId = 'node/selection-fixture';
   await page.route('**/data/places.geojson', route =>
@@ -534,6 +531,7 @@ test('a place inside a building keeps its marker selected and highlights its foo
   await openMenu(page);
   await page.locator('.result').first().click();
   await expect(page.locator('#place-name')).toHaveText('Building cafe');
+  // A picked POI gets the red ring only, even when its building is rendered underneath.
   for (const zoom of [15, 17, 20]) {
     await page.evaluate(({coordinates, zoom}) => window.kompasDebug.map.jumpTo({center: coordinates, zoom}), {
       coordinates,
@@ -546,15 +544,13 @@ test('a place inside a building keeps its marker selected and highlights its foo
       .toBe(true);
     await expect
       .poll(() =>
-        page.evaluate(id => {
-          const map = window.kompasDebug.map;
-          const features = map.queryRenderedFeatures({
+        page.evaluate(() =>
+          window.kompasDebug.map.queryRenderedFeatures({
             layers: ['selected-buildings-fill', 'selected-buildings-outline']
-          });
-          return features.length > 0 && features.every(feature => feature.id === id);
-        }, footprintId)
+          }).length
+        )
       )
-      .toBe(true);
+      .toBe(0);
     await expect
       .poll(() =>
         page.evaluate(
@@ -564,17 +560,6 @@ test('a place inside a building keeps its marker selected and highlights its foo
       )
       .toBe(true);
   }
-  await expect
-    .poll(() =>
-      page.evaluate(
-        id =>
-          window.kompasDebug.map
-            .queryRenderedFeatures({layers: ['selected-buildings-fill']})
-            .some(feature => feature.id === id),
-        footprintId
-      )
-    )
-    .toBe(true);
   expect(
     await page.evaluate(() =>
       window.kompasDebug.map
