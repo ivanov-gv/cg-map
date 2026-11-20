@@ -404,13 +404,13 @@ structured sections as other cards and a revealed off-screen choice, that in-vie
 markers stay green with no red preview, that a below-threshold place gains its ring only when its marker is drawn, that
 an active filter draws and rings every in-view result at zoom 12 while an unfiltered view keeps POI thresholds, that
 choosing a result turns red and reveals an off-screen result under the focus-zone rule, and that clearing removes every
-green mark. Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit
-tests cover the state, clear-button, dock-footer visibility and footer-version functions and the search matching,
-street grouping, number-query exclusion, classification, distance origin, formatting and ordering rules, card builders
-and footprint membership; no large fake DOM is built for
-browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
-keyboard, screen-reader, or phone behavior. Review physical-device usability under
-[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+green mark. Building and address rows use the same describePoint/showPoint path as a map tap and show the structured
+card. Mocked geolocation checks the no-fix and live-fix rows, a changed fix, and the open-card freeze. Pure unit tests
+cover the state, clear-button, dock-footer visibility and footer-version functions and the search matching, street
+grouping, number-query exclusion, classification, distance origin, formatting and ordering rules, card builders and
+footprint membership; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a smaller
+visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review physical-device
+usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
