@@ -3464,6 +3464,7 @@ test.describe('Active category chip', () => {
   const shopsButton = page => page.locator('#categories button[data-category="shops"]');
   const allButton = page => page.locator('#categories button[data-category=""]');
   const rowRemove = page => page.locator('#remove-category');
+  const rowPill = page => page.locator('#active-category-pill');
   const mapChip = page => page.locator('#active-category-chip');
   const chipRemove = page => page.locator('#active-category-chip-remove');
 
@@ -3485,9 +3486,23 @@ test.describe('Active category chip', () => {
     expect(await rowRemove(page).evaluate(element => element.tagName)).toBe('BUTTON');
     const shopBox = await shops.boundingBox();
     const removeBox = await rowRemove(page).boundingBox();
+    const pillBox = await rowPill(page).boundingBox();
     expect(shopBox.height).toBeGreaterThanOrEqual(40);
     expect(removeBox.width).toBeGreaterThanOrEqual(40);
     expect(removeBox.height).toBeGreaterThanOrEqual(40);
+    // The × is a separate button, but both it and the label sit inside the one green active pill.
+    expect(shopBox.x).toBeGreaterThanOrEqual(pillBox.x);
+    expect(shopBox.y).toBeGreaterThanOrEqual(pillBox.y);
+    expect(shopBox.x + shopBox.width).toBeLessThanOrEqual(pillBox.x + pillBox.width + 0.5);
+    expect(shopBox.y + shopBox.height).toBeLessThanOrEqual(pillBox.y + pillBox.height + 0.5);
+    expect(removeBox.x).toBeGreaterThanOrEqual(pillBox.x);
+    expect(removeBox.y).toBeGreaterThanOrEqual(pillBox.y);
+    expect(removeBox.x + removeBox.width).toBeLessThanOrEqual(pillBox.x + pillBox.width + 0.5);
+    expect(removeBox.y + removeBox.height).toBeLessThanOrEqual(pillBox.y + pillBox.height + 0.5);
+    expect(await rowPill(page).evaluate(element => getComputedStyle(element).borderRadius)).toBe('20px');
+    expect(await rowPill(page).evaluate(element => getComputedStyle(element).paddingLeft)).toBe('14px');
+    expect(await rowPill(page).evaluate(element => getComputedStyle(element).paddingRight)).toBe('10px');
+    expect(await rowPill(page).evaluate(element => getComputedStyle(element).gap)).toBe('6px');
     const scrollLeft = await page.locator('#categories').evaluate(element => element.scrollLeft);
 
     await rowRemove(page).click();
@@ -3648,8 +3663,10 @@ test.describe('Active category chip', () => {
       await expect(page.locator('.result')).toHaveCount(4);
 
       const geometry = await page.evaluate(() => {
-        const activeChip = document.querySelector('#categories button[aria-pressed="true"]');
+        const pill = document.getElementById('active-category-pill');
+        const activeChip = pill.querySelector('button[data-category]');
         const removeButton = document.getElementById('remove-category');
+        const pillBox = pill.getBoundingClientRect();
         const chipBox = activeChip.getBoundingClientRect();
         const removeBox = removeButton.getBoundingClientRect();
         const resultsTop = document.getElementById('results').getBoundingClientRect().top;
@@ -3658,26 +3675,24 @@ test.describe('Active category chip', () => {
           const box = result.getBoundingClientRect();
           return box.top >= chipBox.bottom && box.bottom <= toggleTop;
         }).length;
-        const targetStyle = getComputedStyle(removeButton, '::before');
-        const targetCenterX = removeBox.x + removeBox.width / 2;
         return {
-          chipHeight: chipBox.height,
+          chipHeight: pillBox.height,
           removeWidth: removeBox.width,
           removeHeight: removeBox.height,
-          targetTop: targetStyle.top,
-          targetHeight: targetStyle.height,
-          hitBelow: document.elementFromPoint(targetCenterX, removeBox.bottom + 9)?.id,
+          removeInsidePill:
+            removeBox.left >= pillBox.left &&
+            removeBox.top >= pillBox.top &&
+            removeBox.right <= pillBox.right + 0.5 &&
+            removeBox.bottom <= pillBox.bottom + 0.5,
           resultsTop,
-          chipBottom: chipBox.bottom,
+          chipBottom: pillBox.bottom,
           visibleResults
         };
       });
-      expect(geometry.chipHeight).toBeLessThanOrEqual(30);
+      expect(geometry.chipHeight).toBe(40);
       expect(geometry.removeWidth).toBeGreaterThanOrEqual(40);
-      expect(geometry.removeHeight).toBeLessThanOrEqual(30);
-      expect(geometry.targetTop).toBe('-1px');
-      expect(geometry.targetHeight).toBe('40px');
-      expect(geometry.hitBelow).toBe('remove-category');
+      expect(geometry.removeHeight).toBeGreaterThanOrEqual(40);
+      expect(geometry.removeInsidePill).toBe(true);
       expect(Math.abs(geometry.resultsTop - geometry.chipBottom)).toBeLessThanOrEqual(1);
       expect(geometry.visibleResults).toBeGreaterThanOrEqual(3);
     });

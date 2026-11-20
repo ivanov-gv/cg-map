@@ -569,10 +569,13 @@ function registerCategoryControls() {
     button.addEventListener('click', () => selectCategory(key));
     container.append(button);
   }
-  // One shared × follows the active chip, so every category row has the same control.
+  // One shared pill and × follow the active chip, so every category row has the same control.
+  const pill = createElement('span');
+  pill.id = 'active-category-pill';
+  pill.className = 'category-pill is-placeholder';
   const removeButton = document.createElement('button');
   removeButton.id = 'remove-category';
-  removeButton.className = 'category-remove';
+  removeButton.className = 'category-remove active-category-chip-remove';
   removeButton.type = 'button';
   removeButton.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>';
   removeButton.addEventListener('click', removeCategory);
@@ -581,7 +584,8 @@ function registerCategoryControls() {
   removeButton.setAttribute('aria-hidden', 'true');
   removeButton.disabled = true;
   removeButton.tabIndex = -1;
-  container.append(removeButton);
+  pill.append(removeButton);
+  container.append(pill);
   syncCategoryButtons();
 }
 
@@ -596,23 +600,30 @@ function removeCategory() {
 function syncCategoryButtons() {
   const activeCategory = directoryState.activeCategory ?? ALL_CATEGORIES_KEY;
   const categoryButtons = [...elementById('categories').querySelectorAll('button[data-category]')];
-  for (const button of categoryButtons) {
-    const isActiveCategory = button.dataset.category === activeCategory;
-    button.setAttribute('aria-pressed', String(isActiveCategory));
-    button.classList.toggle('has-remove', isActiveCategory && Boolean(activeCategory));
-    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
-  }
-  syncCategoryRemoveButton(categoryButtons, activeCategory);
+  for (const button of categoryButtons)
+    button.setAttribute('aria-pressed', String(button.dataset.category === activeCategory));
+  syncCategoryPill(activeCategory, categoryButtons);
+  categoryButtons
+    .find(button => button.dataset.category === activeCategory)
+    ?.scrollIntoView({block: 'nearest', inline: 'nearest'});
   mapState.interface?.syncActiveChip();
 }
 
-// Place the × beside the active chip in its normal row position; All has no ×.
-function syncCategoryRemoveButton(categoryButtons, activeCategory) {
+// Move the shared pill around the active chip; All parks it inert at the row's end.
+function syncCategoryPill(activeCategory, categoryButtons) {
+  const row = elementById('categories');
+  const pill = elementById('active-category-pill');
   const removeButton = elementById('remove-category');
   const activeButton = categoryButtons.find(button => button.dataset.category === activeCategory);
+  const previousButton = pill.querySelector('button[data-category]');
+
+  if (previousButton && previousButton !== activeButton) {
+    previousButton.classList.remove('active-category-chip-label');
+    insertBeforeFollowingChip(row, previousButton, previousButton, categoryButtons);
+  }
   if (!activeCategory || !activeButton) {
-    // Park the inert placeholder at the row's end so it does not sit between chips with All selected.
-    elementById('categories').append(removeButton);
+    row.append(pill);
+    pill.classList.add('is-placeholder');
     removeButton.classList.add('is-placeholder');
     removeButton.setAttribute('aria-hidden', 'true');
     removeButton.removeAttribute('aria-label');
@@ -620,12 +631,23 @@ function syncCategoryRemoveButton(categoryButtons, activeCategory) {
     removeButton.tabIndex = -1;
     return;
   }
-  activeButton.after(removeButton);
+
+  activeButton.classList.add('active-category-chip-label');
+  pill.insertBefore(activeButton, removeButton);
+  insertBeforeFollowingChip(row, pill, activeButton, categoryButtons);
+  pill.classList.remove('is-placeholder');
   removeButton.classList.remove('is-placeholder');
   removeButton.removeAttribute('aria-hidden');
   removeButton.setAttribute('aria-label', `Remove category ${categories[activeCategory]}`);
   removeButton.disabled = false;
   removeButton.tabIndex = 0;
+}
+
+// Keep the row's original chip order while one chip lives inside the shared pill.
+function insertBeforeFollowingChip(row, element, referenceButton, categoryButtons) {
+  const index = categoryButtons.indexOf(referenceButton);
+  const followingChip = categoryButtons.slice(index + 1).find(button => button.parentElement === row);
+  row.insertBefore(element, followingChip ?? null);
 }
 
 function selectCategory(key) {

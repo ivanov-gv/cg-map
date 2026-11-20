@@ -130,11 +130,11 @@ on mobile.
 
 ### Active category chip (issue #268)
 
-An active category (never **All**) shows a × beside its label in every category row: the desktop floating row, the
-joined search panel, the dock and the phone bubble. The chip and its × are separate native buttons with accessible
-names; the × is named "Remove category _name_". Its touch target is at least 40 px on every device — on Flip the green
-pill stays compact and the invisible part of the target extends into the row's padding. The × returns to **All** without
-clearing the query and without losing the row's scroll position.
+An active category (never **All**) shows a × inside one green pill in every category row: the desktop floating row, the
+joined search panel, the dock and the phone bubble. The pill is 40 px high with a 20 px radius, 14 px left padding, 10
+px right padding and a 6 px gap. The label and its × are separate native buttons with accessible names; the × is named
+"Remove category _name_" and has a 40 px touch target inside that pill. The standalone map chip uses the same pill
+design. The × returns to **All** without clearing the query and without losing the row's scroll position.
 
 When the row is off screen, one green chip stands in for it. On Mobile (≤ 720 px, excluding Flip) it sits 8 px below the
 search bar, aligned with its left edge, while the dock and search are closed; a tap on its label opens the Search Bubble
@@ -167,11 +167,12 @@ minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
 
 **Compact layout for real Flip screens** (issue #161): the real Flip cover screen is about 340×250 CSS px (shorter than
 the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible
-when minimized: the search bar uses an 8 px top inset (instead of 20 px), category chips are 32 px high with tight
-padding, each result row is about 40 px (24 px symbol, 13 px name, 10 px kind/distance with ellipsis), and the handle is
-28 px with only the safe-area padding (4 px) below it. When expanded, layer tiles are compact (icon and label in one
-row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution line all fit
-without scrolling. These sizes are tested at both 340×250 and 340×340.
+when minimized: the search bar uses an 8 px top inset (instead of 20 px), inactive category chips are 30 px high with
+tight padding while the active pill stays 40 px, each result row is about 37 px (24 px symbol, 13 px name, 10 px
+kind/distance with ellipsis), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded,
+layer tiles are compact (icon and label in one row, ~40 px high) and the Download button is ~40 px so Satellite,
+Transport, Download and the attribution line all fit without scrolling. These sizes are tested at both 340×250 and
+340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
 
@@ -312,12 +313,11 @@ blurring the field while the bubble or dock keeps its query and results (includi
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
 and its × on desktop, phone and Flip, seamless desktop row movement, the Locate button's box, computed radius/icon size
-and offsets at each device class, and the follow location
-state machine (start, new fix moves camera, second click stops, drag stops, search result stops, denied shows recovery,
-no initial fix, button style). Pure unit tests cover the state and clear-button functions; no large fake DOM is built
-for browser behavior. Keyboard geometry is simulated with a smaller visual viewport; this does not establish physical
-keyboard, screen-reader, or phone behavior. Review physical-device usability under
-[the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
+and offsets at each device class, and the follow location state machine (start, new fix moves camera, second click
+stops, drag stops, search result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the
+state and clear-button functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
+smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
+physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
 [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
 cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
 
