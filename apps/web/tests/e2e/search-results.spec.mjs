@@ -473,7 +473,8 @@ test('an off-screen building result lists places after its reveal', async ({page
   await expect(page.locator('#place-name')).toHaveText('Building 18');
   await expect(page.locator('#place-details .details-section--inside-this-building .detail-value')).toHaveText([
     'Bulevar Cafe · Café',
-    'Bulevar Market · Market'
+    'Bulevar Market · Market',
+    'Threshold Cafe · Café'
   ]);
 });
 
