@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
+  cardStateAfterSwipeWithoutFullscreen,
+  detailsGeometryForMap,
   isActiveChipVisible,
   doesCardReachLocateColumn,
   freeMapAreas,
@@ -273,6 +275,27 @@ test('swiping steps the phone card through peek, full, fullscreen, and closed', 
   ];
   for (const {next, ...swipe} of cases)
     assert.equal(cardStateAfterSwipe(swipe), next, JSON.stringify(swipe));
+});
+
+test('swiping steps the Flip/non-phone card through peek, full, and closed', () => {
+  const cases = [
+    {state: 'peek', direction: 'up', resultsBehind: true, next: 'full'},
+    {state: 'full', direction: 'down', resultsBehind: true, next: 'peek'},
+    {state: 'peek', direction: 'down', resultsBehind: true, next: 'closed'},
+    {state: 'full', direction: 'down', resultsBehind: false, next: 'closed'}
+  ];
+  for (const {next, ...swipe} of cases)
+    assert.equal(cardStateAfterSwipeWithoutFullscreen(swipe), next, JSON.stringify(swipe));
+});
+
+test('desktop details geometry keeps the card right edge, not the map edge', () => {
+  const map = {left: 10, top: 5, width: 1280, height: 800};
+  const details = {top: 94, right: 787, bottom: 400, left: 412, width: 375, height: 306};
+  assert.deepEqual(detailsGeometryForMap(details, map, {detailsTop: 94, isFullscreenCard: false}), {
+    top: 89,
+    right: 777
+  });
+  assert.equal(detailsGeometryForMap(details, map, {detailsTop: 94, isFullscreenCard: true}), null);
 });
 
 test('device class distinguishes flip, mobile, and desktop by viewport size', () => {

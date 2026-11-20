@@ -246,6 +246,10 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #route-steps li { margin: 7px 0; }
 #loading { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 16px 22px; background: #fffffff2; border-radius: 14px; white-space: nowrap; font-size: 13px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
+@media (max-width: 720px) {
+  /* Keep notices above the screen-wide phone card area and out of its actions. */
+  body[data-device=mobile] #error { right: 12px; }
+}
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
 /* Desktop card is a fixed floating sheet, centred in the area right of the dock when it is open. */
@@ -513,11 +517,13 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     border: 0;
     border-radius: 0;
     padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
-    z-index: 6;
+    z-index: 8;
     cursor: default;
   }
   body[data-device=mobile] .place-card[data-state=fullscreen] .card-handle { cursor: grab; }
   body[data-device=mobile]:has(.place-card:not([hidden]):not([data-state=fullscreen])) .position-control {
+    /* Relative offset inside MapLibre's bottom-right control stack: 28px clears the container's
+     * baseline inset and leaves an 8–24 px gap above the visible card height. */
     bottom: calc(var(--keyboard-inset) + 28px + var(--mobile-card-visible-height, 0px));
   }
   body[data-device=mobile][data-mobile-card-state=fullscreen] .position-control { display: none; }
