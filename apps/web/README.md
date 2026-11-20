@@ -128,18 +128,23 @@ Source-level details:
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
-place, building or address result moves it only when the result is outside the focus zone, the inner 75% of the map area
-left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`), raising zoom to at least 15 when
-needed.
+place, building or address result moves it only when the result is outside the focus zone, the inner 75% of each map
+rectangle left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`). A phone card shortens
+the uncovered map; `mapGeometry()` passes a floating Desktop card as an obstacle so `freeMapAreas()` can keep places
+beside it visible. Zoom rises to at least 15 when needed.
 
-A chosen place's card opens as a bottom panel on Desktop (> 720 px), at most 300 px tall and clamped to 45dvh. Its frame
-stays put while `#card-layout` scrolls, so the × cannot scroll away. The card starts at the dock's right edge or, for
-the inset joined search panel, at that panel's right edge. Its grid gives identity the first column, contacts/addresses
-and entrances the second, and hours with nearby or inside-place sections the third; narrower cards step through two
-columns to one. The locate button still rises above it, while the scale bar and OSM credit stay fixed in the map's
-bottom-left corner: any card, panel or dock covering that corner paints over them. On phones it opens as a header-only
-peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back
-and then closes it. Choosing a result in the phone dock switches to this compact view. See
+A chosen place's card opens as a fixed floating sheet on Desktop (> 720 px): 1000 × 252, clamped to `min(252px, 45dvh)`,
+with a 20 px bottom gap. It is centered on screen with the dock closed and centered in the map area right of the dock
+when it opens; the size never changes, and the width shrinks only when that area cannot keep 20 px side margins. The
+joined search panel keeps its content height and is capped 16 px above the card, so a short list does not stretch to the
+card. Its frame stays put while `#card-layout` scrolls, so the plain 40 px × cannot scroll away, and closing it returns
+focus to the chosen row. The grid gives identity, contacts or addresses/entrances, and hours with nearby or inside-place
+sections explicit 280/270/260 px columns; the two detail stacks keep their own rows. Narrower cards step through two
+columns to one. `syncLocateClearance()` sets `body[data-card-at-locate]` from the card and Locate boxes, so Locate rises
+16 px above the card only when their columns overlap. The scale bar and OSM credit stay fixed in the map's bottom-left
+corner: any card, panel or dock covering that corner paints over them. On phones the card keeps its header-only peek
+under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down steps back and
+then closes it. Choosing a result in the phone dock switches to this compact view. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#desktop-selected-object-card).
 
 Location is a single icon in the bottom-right corner;

@@ -91,8 +91,9 @@ function detailsSection(id, heading, rows = [], links = []) {
   return {id, heading, rows, links};
 }
 
-// The desktop card gives contact and building facts their own column; every other section stacks beside them.
-const firstColumnSectionIds = new Set(['location-and-contacts', 'addresses', 'entrances']);
+// The desktop card keeps two detail stacks: CSS places this one in grid column 2 and the other in column 3,
+// with identity in column 1. Each stack owns its own vertical flow.
+const firstDetailsStackSectionIds = new Set(['location-and-contacts', 'addresses', 'entrances']);
 
 function addIfPresent(rows, label, value, key) {
   if (value) rows.push(detailRow(label, value, key));
@@ -256,7 +257,7 @@ export function renderCardContent(card) {
     element.append(createElement('h2', section.heading, 'section-title'));
     appendDetailRows(element, section.rows);
     appendDetailLinks(element, section.links);
-    const column = firstColumnSectionIds.has(section.id) ? firstColumn : secondColumn;
+    const column = firstDetailsStackSectionIds.has(section.id) ? firstColumn : secondColumn;
     column.append(element);
   }
   details.replaceChildren(firstColumn, secondColumn);

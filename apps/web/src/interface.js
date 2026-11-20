@@ -35,6 +35,9 @@ export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   return {top: top + headerBottom, maxHeight: Math.max(0, height / 2 - headerBottom)};
 }
 
+// A phone card reaches the screen edge and shortens the map. A desktop card floats inside it as an obstacle.
+const CARD_CLEARANCE_PIXELS = 16;
+
 // The part of the map no panel covers, in map container pixels.
 export function uncoveredMapArea({
   width,
@@ -45,31 +48,89 @@ export function uncoveredMapArea({
   searchBottom = 0,
   dockRight = 0,
   details = null,
-  routeBottom = 0
+  routeBottom = 0,
+  coversBottom = true
 }) {
   let left = Math.max(16, dockRight ? dockRight + 16 : 0);
   const right = width - 72;
   let top = Math.max(visibleTop + 16, headerBottom + 16, searchBottom + 16, routeBottom + 16);
   let bottom = Math.min(height - 20, visibleTop + visibleHeight - 20);
-  // Every details card covers the bottom of the map, on the phone and on the desktop alike.
-  if (details) bottom = Math.min(bottom, details.top - 16);
+  const obstacles = [];
+  if (details) {
+    if (coversBottom) bottom = Math.min(bottom, details.top - CARD_CLEARANCE_PIXELS);
+    else
+      obstacles.push({
+        left: details.left - CARD_CLEARANCE_PIXELS,
+        right: details.right + CARD_CLEARANCE_PIXELS,
+        top: details.top - CARD_CLEARANCE_PIXELS,
+        bottom: details.bottom + CARD_CLEARANCE_PIXELS
+      });
+  }
+  // Even when the card floats, framed entrances must stay above it rather than merely inside the map.
+  const framingBottom = details ? Math.min(bottom, details.top - CARD_CLEARANCE_PIXELS) : bottom;
   left = Math.min(left, Math.max(16, right - 40));
   top = Math.min(top, Math.max(visibleTop + 16, bottom - 40));
-  return {left, right, top, bottom};
+  return {left, right, top, bottom, framingBottom, obstacles};
+}
+
+// Split one free rectangle where an obstacle crosses it: above, below, left and right of the obstacle.
+function splitAroundObstacle(area, obstacle) {
+  const leftEdge = Math.max(area.left, obstacle.left);
+  const rightEdge = Math.min(area.right, obstacle.right);
+  const topEdge = Math.max(area.top, obstacle.top);
+  const bottomEdge = Math.min(area.bottom, obstacle.bottom);
+  if (leftEdge >= rightEdge || topEdge >= bottomEdge) return [area];
+  const pieces = [];
+  if (area.top < topEdge) pieces.push({left: area.left, right: area.right, top: area.top, bottom: topEdge});
+  if (bottomEdge < area.bottom) pieces.push({left: area.left, right: area.right, top: bottomEdge, bottom: area.bottom});
+  if (area.left < leftEdge) pieces.push({left: area.left, right: leftEdge, top: topEdge, bottom: bottomEdge});
+  if (rightEdge < area.right) pieces.push({left: rightEdge, right: area.right, top: topEdge, bottom: bottomEdge});
+  return pieces;
+}
+
+// Returns the non-overlapping rectangles left uncovered by the panels and floating obstacles.
+export function freeMapAreas(area) {
+  const base = {left: area.left, right: area.right, top: area.top, bottom: area.bottom};
+  const pieces = (area.obstacles ?? []).reduce(
+    (currentAreas, obstacle) => currentAreas.flatMap(current => splitAroundObstacle(current, obstacle)),
+    [base]
+  );
+  return pieces.filter(piece => piece.right > piece.left && piece.bottom > piece.top);
+}
+
+function rectangleArea({left, right, top, bottom}) {
+  return (right - left) * (bottom - top);
 }
 
 export function uncoveredMapOffset(geometry) {
-  const {left, right, top, bottom} = uncoveredMapArea(geometry);
-  return [(left + right) / 2 - geometry.width / 2, (top + bottom) / 2 - geometry.height / 2];
+  const area = uncoveredMapArea(geometry);
+  const areas = freeMapAreas(area);
+  // A card can cover the whole free map, so fall back to the unpartitioned area.
+  const largest = areas.length
+    ? areas.reduce((best, candidate) => (rectangleArea(candidate) > rectangleArea(best) ? candidate : best))
+    : area;
+  const centreX = (largest.left + largest.right) / 2 - geometry.width / 2;
+  const centreY = (largest.top + largest.bottom) / 2 - geometry.height / 2;
+  return [centreX, centreY];
 }
 
-// A chosen place inside this share of the uncovered map's width and height needs no camera move.
+// A chosen place inside this share of one uncovered rectangle needs no camera move.
 export const FOCUS_ZONE_RATIO = 0.75;
 
-export function isInFocusZone({x, y}, {left, right, top, bottom}) {
+function isInsideFocusRectangle({x, y}, {left, right, top, bottom}) {
   const insetX = ((right - left) * (1 - FOCUS_ZONE_RATIO)) / 2;
   const insetY = ((bottom - top) * (1 - FOCUS_ZONE_RATIO)) / 2;
   return x >= left + insetX && x <= right - insetX && y >= top + insetY && y <= bottom - insetY;
+}
+
+export function isInFocusZone(point, area) {
+  return freeMapAreas(area).some(free => isInsideFocusRectangle(point, free));
+}
+
+// The card reaches the Locate column when their horizontal spans overlap, whatever their vertical positions.
+export function doesCardReachLocateColumn(cardBox, locateBox) {
+  if (!cardBox || !locateBox) return false;
+  return cardBox.right >= locateBox.left && cardBox.left <= locateBox.right;
 }
 
 // Swiping down steps back through what the card covers: full card, then peek above the results, then closed.
@@ -393,6 +454,7 @@ export class MapInterface {
     // Derive dock content (dock-main, footer) from current state.
     this.syncDockContent();
     this.syncMenuIcon();
+    this.syncLocateClearance();
     this.onChange?.();
   }
 
@@ -490,6 +552,7 @@ export class MapInterface {
   placeCardOpened() {
     if (this.mobileLayoutQuery.matches && this.view === 'dock') this.setView('search');
     this.syncCardForLayout();
+    this.syncLocateClearance();
   }
 
   resetCardState() {
@@ -499,6 +562,14 @@ export class MapInterface {
     this.areResultsMinimized = false;
     this.syncResultsVisibility();
     this.syncActiveChip();
+    this.syncLocateClearance();
+  }
+
+  // The floating desktop card only pushes Locate when it reaches the button's right-hand column.
+  syncLocateClearance() {
+    const cardBox = this.card.hidden ? null : this.card.getBoundingClientRect();
+    const locateBox = document.getElementById('position-action').getBoundingClientRect();
+    document.body.dataset.cardAtLocate = String(doesCardReachLocateColumn(cardBox, locateBox));
   }
 
   syncCardForLayout() {
@@ -708,6 +779,7 @@ export class MapInterface {
     // A viewport event must not overrule the Flip screen's own footer rule. Re-derive the whole dock content,
     // which also hides the footer here when a keyboard would cover it outside Flip.
     this.syncDockContent();
+    this.syncLocateClearance();
     if (notify) this.onViewport?.();
   }
 
@@ -720,6 +792,12 @@ export class MapInterface {
     const details = card.hidden ? null : card.getBoundingClientRect();
     const isPhoneCard = !!details && this.mobileLayoutQuery.matches;
     const detailsTop = isPhoneCard ? details.bottom - this.cardRestingHeight() : details?.top;
+    const cardBox = details && {
+      left: details.left - map.left,
+      right: details.right - map.left,
+      top: detailsTop - map.top,
+      bottom: details.bottom - map.top
+    };
     const searchPanel = this.areResultsMinimized ? this.strip : this.bubble;
     return {
       width: map.width,
@@ -732,7 +810,8 @@ export class MapInterface {
         (this.view === 'dock' || this.#isDesktopResultsPanelVisible())
           ? document.querySelector('.sidebar').getBoundingClientRect().right - map.left
           : 0,
-      details: details && {top: detailsTop - map.top},
+      details: cardBox,
+      coversBottom: isPhoneCard,
       routeBottom: route.hidden ? 0 : route.getBoundingClientRect().bottom - map.top
     };
   }

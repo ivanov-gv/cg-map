@@ -353,7 +353,7 @@ export class PlaceSelection {
       left: area.left + horizontalMarginPixels,
       right: canvas.clientWidth - area.right + horizontalMarginPixels,
       top: area.top + verticalMarginPixels,
-      bottom: canvas.clientHeight - area.bottom + verticalMarginPixels
+      bottom: canvas.clientHeight - area.framingBottom + verticalMarginPixels
     };
     this.#map.fitBounds(bounds, {
       padding,
