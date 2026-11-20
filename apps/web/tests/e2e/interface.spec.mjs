@@ -6023,22 +6023,27 @@ async function openFlipDock(page) {
 
 test('Mobile keeps its Peek, Full and swipe card behavior', {tag: '@phone'}, async ({page}) => {
   await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
-  await ready(page);
-  const touch = await page.context().newCDPSession(page);
-  const card = page.locator('#place-card');
+  await atViewport(page, {width: 412, height: 840}, async () => {
+    await ready(page);
+    const touch = await page.context().newCDPSession(page);
+    const card = page.locator('#place-card');
+    const cardSettled = async (state) => {
+      await expect(card).toHaveAttribute('data-state', state);
+      await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+    };
 
-  await page.locator('#search').click();
-  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
-  await expect(card).toHaveAttribute('data-state', 'peek');
-  await expect(page.locator('#position-action')).toBeVisible();
-  await page.locator('#card-handle').click();
-  await expect(card).toHaveAttribute('data-state', 'full');
-  await expect(page.locator('#position-action')).toBeVisible();
+    await page.locator('#search').click();
+    await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+    await cardSettled('peek');
+    await expect(page.locator('#position-action')).toBeVisible();
+    await page.locator('#card-handle').click();
+    await cardSettled('full');
+    await expect(page.locator('#position-action')).toBeVisible();
 
-  // With results behind it, a down swipe returns from Full to Peek; another closes it.
-  await swipeCard(page, touch, 140);
-  await expect(card).toHaveAttribute('data-state', 'peek');
-  await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
-  await swipeCard(page, touch, 60);
-  await expect(card).toBeHidden();
+    // With results behind it, a down swipe returns from Full to Peek; another closes it.
+    await swipeCard(page, touch, 140);
+    await cardSettled('peek');
+    await swipeCard(page, touch, 60);
+    await expect(card).toBeHidden();
+  });
 });

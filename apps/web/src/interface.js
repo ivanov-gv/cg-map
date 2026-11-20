@@ -334,6 +334,8 @@ export class MapInterface {
     // A Flip card opened from the dock returns there; a map pick returns to the bare map.
     this.flipCardOrigin = null; // 'map' | 'dock' | null
     this.flipReturnFocusElement = null;
+    // Result rows are rebuilt after camera moves, so keep the listing id as well as the node.
+    this.flipReturnResultId = null;
   }
 
   get isMobilePhone() {
@@ -470,14 +472,24 @@ export class MapInterface {
       return;
     }
     const shouldRestoreDock = !!current.card?.fromDock;
-    const returnFocusElement = this.flipReturnFocusElement;
-    this.flipCardOrigin = null;
-    this.flipReturnFocusElement = null;
+    const savedReturnFocus = this.flipReturnFocusElement;
+    const returnResultId = this.flipReturnResultId;
     this.onFlipCardClosed?.({restoreDock: shouldRestoreDock});
     this.syncFlipCardPresentation();
-    const isReturnFocusVisible =
-      returnFocusElement?.isConnected && returnFocusElement.getClientRects().length > 0;
-    this.restoreFocus(isReturnFocusVisible ? returnFocusElement : this.menu);
+    this.flipCardOrigin = null;
+    this.flipReturnFocusElement = null;
+    this.flipReturnResultId = null;
+    this.restoreFocus(this.#visibleFlipReturnFocus(savedReturnFocus, returnResultId) ?? this.menu);
+  }
+
+  // A saved row can be detached by a results rebuild; the listing id finds its replacement after the dock returns.
+  #visibleFlipReturnFocus(savedElement, resultId) {
+    if (savedElement?.isConnected && savedElement.getClientRects().length > 0) return savedElement;
+    if (!resultId) return null;
+    const replacementRow = [...document.getElementById('results').querySelectorAll('.result')].find(
+      row => row.dataset.id === resultId
+    );
+    return replacementRow?.getClientRects().length > 0 ? replacementRow : null;
   }
 
   currentHistoryDepth() {
@@ -949,13 +961,17 @@ export class MapInterface {
   // A replacement selection keeps the origin and return row captured when the card was hidden.
   openFlipCard({returnFocusElement = null, isCardReplacingSelection = false} = {}) {
     if (isCardReplacingSelection) {
-      if (returnFocusElement) this.flipReturnFocusElement = returnFocusElement;
+      if (returnFocusElement) {
+        this.flipReturnFocusElement = returnFocusElement;
+        this.flipReturnResultId = returnFocusElement.dataset.id ?? null;
+      }
       this.cardFromDock = this.flipCardOrigin === 'dock';
     } else {
       this.flipCardOrigin = this.view === 'dock' ? 'dock' : 'map';
       this.cardFromDock = this.flipCardOrigin === 'dock';
       this.flipReturnFocusElement =
         this.flipCardOrigin === 'dock' ? returnFocusElement ?? this.menu : null;
+      this.flipReturnResultId = this.flipReturnFocusElement?.dataset.id ?? null;
       if (this.view === 'dock') this.setView('closed');
     }
     this.setCardState('peek');
@@ -978,6 +994,7 @@ export class MapInterface {
     // Leaving the cover screen makes a stored Flip dock return target meaningless.
     this.flipCardOrigin = null;
     this.flipReturnFocusElement = null;
+    this.flipReturnResultId = null;
     if (!this.mobileLayoutQuery.matches) {
       this.resetCardState();
       return;
@@ -1026,6 +1043,7 @@ export class MapInterface {
       this.cardFromDock = false;
       this.flipCardOrigin = null;
       this.flipReturnFocusElement = null;
+      this.flipReturnResultId = null;
     }
     this.areResultsMinimized = this.isResultsCompacted && this.view === 'search';
     if (this.view !== 'search') this.isResultsCompacted = false;
