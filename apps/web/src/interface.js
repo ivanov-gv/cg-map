@@ -77,14 +77,81 @@ export function cardStateAfterSwipeWithoutFullscreen({state, direction, resultsB
   return state === 'full' && resultsBehind ? 'peek' : 'closed';
 }
 
+const PHONE_CARD_INSET_PIXELS = 12;
+const PHONE_CARD_BOTTOM_GAP_PIXELS = 20;
+// Only the last moments of a gesture decide whether it was a flick.
+const FLICK_VELOCITY_WINDOW_MILLISECONDS = 100;
+// A quick flick moves one step even when the finger barely travelled.
+export const CARD_FLICK_VELOCITY_PIXELS_PER_MILLISECOND = 0.35;
+
+// All settled steps share one coordinate system: the map container, whose top is the phone screen top.
+// The bottom anchor is the card's resting edge; fullscreen has no gutter and reaches the screen bottom.
+export function phoneCardSteps({viewportHeight, bottomInset, peekHeight, fullHeight}) {
+  const bottom = viewportHeight - bottomInset;
+  return {
+    peek: {top: bottom - peekHeight, height: peekHeight, bottom, inset: PHONE_CARD_INSET_PIXELS},
+    full: {top: bottom - fullHeight, height: fullHeight, bottom, inset: PHONE_CARD_INSET_PIXELS},
+    fullscreen: {top: 0, height: viewportHeight, bottom: viewportHeight, inset: 0},
+    closed: {top: bottom, height: 0, bottom, inset: PHONE_CARD_INSET_PIXELS}
+  };
+}
+
+// Interpolates the card's whole rectangle towards the adjacent step. Fullscreen grows upward under the finger;
+// coming back it sinks downward, so its top edge uncovers the map instead of its bottom edge rising.
+export function cardDragFrame({state, deltaYPixels, resultsBehind, steps}) {
+  const direction = deltaYPixels < 0 ? 'up' : 'down';
+  const targetState = cardStateAfterSwipe({state, direction, resultsBehind});
+  if (targetState === state) return null;
+  const from = steps[state];
+  const to = steps[targetState];
+  const travelPixels = Math.abs(from.top - to.top);
+  const progress = travelPixels ? Math.min(1, Math.abs(deltaYPixels) / travelPixels) : 1;
+  const interpolate = (start, end) => start + (end - start) * progress;
+  return {
+    targetState,
+    rect: {
+      top: interpolate(from.top, to.top),
+      height: interpolate(from.height, to.height),
+      bottom: interpolate(from.bottom, to.bottom),
+      inset: interpolate(from.inset, to.inset)
+    }
+  };
+}
+
+// Velocity is measured over the recent part of a gesture, so a short final pause cannot hide a flick.
+function touchVelocityPixelsPerMillisecond(samples) {
+  if (samples.length < 2) return 0;
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const elapsedMilliseconds = last.time - first.time;
+  return elapsedMilliseconds > 0 ? (last.y - first.y) / elapsedMilliseconds : 0;
+}
+
+// A slow drag settles only after halfway; a flick settles one step in its own direction.
+export function cardStateAfterDrag({
+  state,
+  deltaYPixels,
+  velocityPixelsPerMillisecond,
+  resultsBehind,
+  steps
+}) {
+  const isFlick = Math.abs(velocityPixelsPerMillisecond) >= CARD_FLICK_VELOCITY_PIXELS_PER_MILLISECOND;
+  const movementPixels = isFlick ? velocityPixelsPerMillisecond : deltaYPixels;
+  const direction = movementPixels < 0 ? 'up' : 'down';
+  const targetState = cardStateAfterSwipe({state, direction, resultsBehind});
+  if (targetState === state || isFlick) return targetState;
+  const travelPixels = Math.abs(steps[state].top - steps[targetState].top);
+  return Math.abs(deltaYPixels) >= travelPixels / 2 ? targetState : state;
+}
+
 // A non-fullscreen card keeps its own right edge in map geometry so the desktop focus zone stays beside it.
 export function detailsGeometryForMap(detailsRect, mapRect, {detailsTop, isFullscreenCard}) {
   if (!detailsRect || isFullscreenCard) return null;
   return {top: detailsTop - mapRect.top, right: detailsRect.right - mapRect.left};
 }
 
-const SWIPE_THRESHOLD_PIXELS = 24;
 const DRAG_START_PIXELS = 6;
+const FLIP_SWIPE_THRESHOLD_PIXELS = 24;
 // One trackpad gesture fires many wheel events; it may change the card state only once.
 const WHEEL_GESTURE_MILLISECONDS = 600;
 // A smaller gap can be browser chrome rather than an on-screen keyboard.
@@ -130,6 +197,7 @@ export class MapInterface {
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => this.activateCardHandle());
+    this.card.addEventListener('focusin', (event) => this.revealFocusedCardContent(event.target));
     this.cardHead.addEventListener('click', (event) => {
       if (!this.isMobilePhone || event.target.closest('button, a')) return;
       this.activateCardHandle();
@@ -433,6 +501,7 @@ export class MapInterface {
 
   resetCardState() {
     delete this.card.dataset.state;
+    this.clearCardDragGeometry();
     this.card.style.removeProperty('touch-action');
     this.cardBody.inert = false;
     this.areResultsMinimized = false;
@@ -476,6 +545,7 @@ export class MapInterface {
   }
 
   setCardState(state, {notify = true} = {}) {
+    this.clearCardDragGeometry();
     this.card.dataset.state = state;
     // Clipped controls must not stay reachable by keyboard; fullscreen content is fully visible.
     this.cardBody.inert = state === 'peek';
@@ -542,16 +612,44 @@ export class MapInterface {
     return this.cardHeadBottom() + 2 * this.card.clientTop;
   }
 
-  // Only a card too long for its resting height keeps vertical touches for its own scrolling.
-  syncCardTouch() {
+  // The settled Full height depends on the content, not on the current (possibly dragged) inline height.
+  cardFullHeight() {
     const borders = this.card.offsetHeight - this.card.clientHeight;
+    const maximumHeightPixels = (window.visualViewport?.height ?? innerHeight) * 0.6;
+    return Math.min(this.card.scrollHeight + borders, maximumHeightPixels);
+  }
+
+  // Only Fullscreen scrolls; a tall Full card keeps vertical touches for pulling the card.
+  syncCardTouch() {
     const state = this.card.dataset.state;
-    const isCardScrollable =
-      (state === 'full' || state === 'fullscreen') &&
-      this.card.scrollHeight + borders > this.cardRestingHeight() + 1;
-    if (isCardScrollable) this.card.style.touchAction = 'pan-y';
+    const isFullscreenScrollable =
+      state === 'fullscreen' && this.card.scrollHeight > this.card.clientHeight + 1;
+    if (isFullscreenScrollable) this.card.style.touchAction = 'pan-y';
     else this.card.style.removeProperty('touch-action');
     this.syncMobileCardOffset();
+  }
+
+  // Full clips its body, so focus must never land on content the person cannot see.
+  revealFocusedCardContent(target) {
+    if (!this.isMobilePhone || this.card.dataset.state !== 'full' || !this.cardBody.contains(target)) return;
+    const cardBox = this.card.getBoundingClientRect();
+    const targetBox = target.getBoundingClientRect();
+    if (targetBox.bottom <= cardBox.bottom + 1 && targetBox.top >= cardBox.top - 1) return;
+    this.setCardState('fullscreen');
+    this.scrollCardTargetIntoView(target);
+  }
+
+  // The state change animates the scroll container; reveal the target once it has its final size.
+  scrollCardTargetIntoView(target) {
+    const reveal = () => target.scrollIntoView({block: 'nearest'});
+    const animations = this.card.getAnimations();
+    if (!animations.length) {
+      reveal();
+      return;
+    }
+    Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+      if (target.isConnected) reveal();
+    });
   }
 
   // The card's height once its transition settles, so the camera aims for the final layout.
@@ -559,9 +657,54 @@ export class MapInterface {
     const state = this.card.dataset.state;
     if (state === 'peek') return this.cardPeekHeight();
     if (state === 'fullscreen') return window.visualViewport?.height ?? innerHeight;
-    const borders = this.card.offsetHeight - this.card.clientHeight;
-    const maximumHeightPixels = (window.visualViewport?.height ?? innerHeight) * 0.6;
-    return Math.min(this.card.scrollHeight + borders, maximumHeightPixels);
+    return this.cardFullHeight();
+  }
+
+  // The resting bottom gap is CSS geometry, not the current card edge: a fullscreen card reaches the screen bottom.
+  cardRestingBottomInset() {
+    const keyboardInset = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--keyboard-inset')
+    );
+    return (Number.isFinite(keyboardInset) ? keyboardInset : 0) + PHONE_CARD_BOTTOM_GAP_PIXELS;
+  }
+
+  // Every phone drag uses the same step rectangles, measured in the map container's coordinates.
+  phoneCardSteps() {
+    const containerRect = this.card.parentElement.getBoundingClientRect();
+    return phoneCardSteps({
+      viewportHeight: containerRect.height,
+      bottomInset: this.cardRestingBottomInset(),
+      peekHeight: this.cardPeekHeight(),
+      fullHeight: this.cardFullHeight()
+    });
+  }
+
+  applyCardDragFrame(frame) {
+    const style = this.card.style;
+    style.top = `${frame.rect.top}px`;
+    style.height = `${frame.rect.height}px`;
+    // A resting step can have a smaller max-height than the frame; the finger owns the size during the drag.
+    style.maxHeight = 'none';
+    style.bottom = 'auto';
+    style.left = `${frame.rect.inset}px`;
+    style.right = `${frame.rect.inset}px`;
+  }
+
+  // Pixel geometry lets the browser animate the settle; auto and none cannot be transitioned.
+  // Keep max-height unbounded until cleanup, or a Full/peek cap would clamp the animating height immediately.
+  applyCardStepGeometry(step) {
+    const style = this.card.style;
+    style.top = `${step.top}px`;
+    style.height = `${step.height}px`;
+    style.maxHeight = 'none';
+    style.bottom = `${step.bottom}px`;
+    style.left = `${step.inset}px`;
+    style.right = `${step.inset}px`;
+  }
+
+  clearCardDragGeometry() {
+    for (const property of ['top', 'height', 'max-height', 'bottom', 'left', 'right'])
+      this.card.style.removeProperty(property);
   }
 
   swipeCard(direction) {
@@ -583,13 +726,21 @@ export class MapInterface {
   }
 
   wireCardGestures() {
-    let drag = null;
+    this.wirePointerCardGestures();
+    this.wireTouchCardGestures();
+    this.wireCardWheel();
+  }
+
+  // Pointer events keep Flip and non-touch drags; phone touches use a continuous rectangle.
+  wirePointerCardGestures() {
+    let pointerDrag = null;
     this.card.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'touch' && this.isMobilePhone) return;
       if (!this.mobileLayoutQuery.matches || event.button || event.target.closest('a, .point-actions'))
         return;
       const isOnCardHeader = !!event.target.closest('#card-handle, #place-head');
       if (!isOnCardHeader && this.card.scrollTop > 0) return;
-      drag = {
+      pointerDrag = {
         id: event.pointerId,
         startYPixels: event.clientY,
         startHeightPixels: this.card.offsetHeight,
@@ -597,17 +748,17 @@ export class MapInterface {
       };
     });
     this.card.addEventListener('pointermove', (event) => {
-      if (event.pointerId !== drag?.id) return;
-      const deltaYPixels = event.clientY - drag.startYPixels;
-      if (!drag.hasMoved && Math.abs(deltaYPixels) < DRAG_START_PIXELS) return;
-      if (!drag.hasMoved) {
+      if (event.pointerId !== pointerDrag?.id) return;
+      const deltaYPixels = event.clientY - pointerDrag.startYPixels;
+      if (!pointerDrag.hasMoved && Math.abs(deltaYPixels) < DRAG_START_PIXELS) return;
+      if (!pointerDrag.hasMoved) {
         // Capturing only now leaves a plain tap to reach the handle as a normal click.
-        drag.hasMoved = true;
+        pointerDrag.hasMoved = true;
         this.card.setPointerCapture(event.pointerId);
         this.card.classList.add('dragging');
       }
-      const draggedHeightPixels = drag.startHeightPixels - deltaYPixels;
-      const minimumHeightPixels = Math.min(this.cardPeekHeight(), drag.startHeightPixels);
+      const draggedHeightPixels = pointerDrag.startHeightPixels - deltaYPixels;
+      const minimumHeightPixels = Math.min(this.cardPeekHeight(), pointerDrag.startHeightPixels);
       this.card.style.maxHeight = `${Math.max(minimumHeightPixels, draggedHeightPixels)}px`;
       this.card.style.transform =
         draggedHeightPixels < minimumHeightPixels
@@ -615,20 +766,154 @@ export class MapInterface {
           : '';
     });
     const finish = event => {
-      if (event.pointerId !== drag?.id) return;
-      const {hasMoved, startYPixels} = drag;
-      drag = null;
+      if (event.pointerId !== pointerDrag?.id) return;
+      const {hasMoved, startYPixels} = pointerDrag;
+      pointerDrag = null;
       if (!hasMoved) return;
       this.card.classList.remove('dragging');
       this.card.style.removeProperty('max-height');
       this.card.style.removeProperty('transform');
       if (event.type === 'pointercancel') return;
       const deltaYPixels = event.clientY - startYPixels;
-      if (deltaYPixels > SWIPE_THRESHOLD_PIXELS) this.swipeCard('down');
-      else if (deltaYPixels < -SWIPE_THRESHOLD_PIXELS && this.canStepCardUp()) this.swipeCard('up');
+      if (deltaYPixels > FLIP_SWIPE_THRESHOLD_PIXELS) this.swipeCard('down');
+      else if (deltaYPixels < -FLIP_SWIPE_THRESHOLD_PIXELS && this.canStepCardUp()) this.swipeCard('up');
     };
     this.card.addEventListener('pointerup', finish);
     this.card.addEventListener('pointercancel', finish);
+  }
+
+  wireTouchCardGestures() {
+    let phoneDrag = null;
+    const cancel = () => {
+      if (!phoneDrag) return;
+      phoneDrag = null;
+      this.card.classList.remove('dragging');
+      this.clearCardDragGeometry();
+    };
+    this.card.addEventListener('touchstart', (event) => {
+      if (!this.isMobilePhone || this.card.hidden || event.touches.length !== 1) {
+        cancel();
+        return;
+      }
+      const touch = event.touches[0];
+      if (!touch.target.closest('a, .point-actions')) phoneDrag = this.newPhoneCardDrag(touch, event.timeStamp);
+    }, {passive: true});
+    this.card.addEventListener('touchmove', (event) => {
+      const touch = this.matchingTouch(event.touches, phoneDrag?.identifier);
+      if (!touch) return;
+      const wasMoving = phoneDrag.hasMoved;
+      if (!this.advancePhoneCardDrag(phoneDrag, touch)) return;
+      event.preventDefault();
+      phoneDrag.lastYPixels = touch.clientY;
+      this.recordCardVelocitySample(phoneDrag, touch.clientY, event.timeStamp, wasMoving);
+      const frame = cardDragFrame({
+        state: phoneDrag.state,
+        deltaYPixels: touch.clientY - phoneDrag.pullStartYPixels,
+        resultsBehind: phoneDrag.resultsBehind,
+        steps: phoneDrag.steps
+      });
+      if (frame) {
+        phoneDrag.lastFrame = frame;
+        this.applyCardDragFrame(frame);
+      }
+    }, {passive: false});
+    const finish = event => {
+      const touch = this.matchingTouch(event.changedTouches, phoneDrag?.identifier);
+      const drag = phoneDrag;
+      cancel();
+      if (drag) this.settlePhoneCardDrag(drag, touch, event.type === 'touchcancel');
+    };
+    this.card.addEventListener('touchend', finish);
+    this.card.addEventListener('touchcancel', finish);
+  }
+
+  matchingTouch(touchList, identifier) {
+    return identifier === undefined
+      ? null
+      : Array.from(touchList).find(candidate => candidate.identifier === identifier);
+  }
+
+  newPhoneCardDrag(touch, timeMilliseconds) {
+    return {
+      identifier: touch.identifier,
+      state: this.card.dataset.state,
+      resultsBehind: this.view === 'search',
+      steps: this.phoneCardSteps(),
+      hasMoved: false,
+      startYPixels: touch.clientY,
+      lastYPixels: touch.clientY,
+      pullStartYPixels: touch.clientY,
+      samples: [{y: touch.clientY, time: timeMilliseconds}]
+    };
+  }
+
+  recordCardVelocitySample(drag, yPixels, timeMilliseconds, wasMoving) {
+    // Scrolling in Fullscreen is not part of the pull; its velocity must not carry into the settle.
+    if (!wasMoving && drag.state === 'fullscreen') drag.samples = [];
+    drag.samples.push({y: yPixels, time: timeMilliseconds});
+    while (
+      drag.samples.length > 2 &&
+      timeMilliseconds - drag.samples[0].time > FLICK_VELOCITY_WINDOW_MILLISECONDS
+    )
+      drag.samples.shift();
+  }
+
+  // Fullscreen owns vertical touches until its content is back at the top; then a downward pull moves the card.
+  advancePhoneCardDrag(drag, touch) {
+    if (drag.hasMoved) return true;
+    const deltaYPixels = touch.clientY - drag.startYPixels;
+    if (drag.state === 'fullscreen' && (this.card.scrollTop > 0 || deltaYPixels <= 0)) return false;
+    if (Math.abs(deltaYPixels) < DRAG_START_PIXELS) return false;
+    drag.hasMoved = true;
+    this.cardSettleToken = (this.cardSettleToken ?? 0) + 1;
+    drag.pullStartYPixels = touch.clientY;
+    this.card.classList.add('dragging');
+    return true;
+  }
+
+  settlePhoneCardDrag(drag, touch, isCancelled) {
+    if (!drag.hasMoved) return;
+    const lastYPixels = touch?.clientY ?? drag.lastYPixels;
+    const deltaYPixels = lastYPixels - drag.pullStartYPixels;
+    const nextState = isCancelled
+      ? drag.state
+      : cardStateAfterDrag({
+          state: drag.state,
+          deltaYPixels,
+          velocityPixelsPerMillisecond: touchVelocityPixelsPerMillisecond(drag.samples),
+          resultsBehind: drag.resultsBehind,
+          steps: drag.steps
+        });
+    this.card.classList.remove('dragging');
+    if (nextState === 'closed') {
+      this.onCardSwipedAway?.();
+      return;
+    }
+    this.setCardState(nextState);
+    if (isCancelled) return;
+    const fromFrame = drag.lastFrame;
+    if (fromFrame) this.settleCardGeometry(fromFrame, drag.steps[nextState], nextState);
+  }
+
+  settleCardGeometry(fromFrame, targetStep, targetState) {
+    const token = (this.cardSettleToken ?? 0) + 1;
+    this.cardSettleToken = token;
+    // setCardState reads layout with CSS geometry; restore the dragged rectangle and resolve it before moving on.
+    this.applyCardDragFrame(fromFrame);
+    this.card.getBoundingClientRect();
+    this.applyCardStepGeometry(targetStep);
+    const animations = this.card.getAnimations();
+    if (!animations.length) {
+      this.clearCardDragGeometry();
+      return;
+    }
+    Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+      if (this.cardSettleToken === token && this.card.dataset.state === targetState)
+        this.clearCardDragGeometry();
+    });
+  }
+
+  wireCardWheel() {
     let wheelGestureEndsMilliseconds = 0;
     this.card.addEventListener(
       'wheel',
