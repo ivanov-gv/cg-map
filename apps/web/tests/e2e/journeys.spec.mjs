@@ -765,8 +765,7 @@ test.describe('building entrances', () => {
         const card = await page.locator('#place-card').boundingBox();
         for (const position of positions) {
           expect(position.y).toBeGreaterThan(header.y + header.height + 20);
-          if (page.viewportSize().width <= 720) expect(position.y).toBeLessThan(card.y - 20);
-          else expect(position.x).toBeGreaterThan(card.x + card.width + 20);
+          expect(position.y).toBeLessThan(card.y - 20);
         }
         if (process.env.ENTRANCE_SCREENSHOTS)
           await page.screenshot({
