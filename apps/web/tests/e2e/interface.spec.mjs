@@ -674,15 +674,60 @@ test('a tapped map pin follows the focus zone like a result', {tag: '@phone'}, a
   const place = nearbyPlaces.features[0].geometry.coordinates;
   const firstFeatureId = nearbyPlaces.features[0].properties.id;
 
-  // The helper centres the map on the pin, which is inside the zone with the card open: no move.
-  await tapRenderedPlace(page, place, firstFeatureId);
+  // The taller #249 card fills the screen centre on a phone. Start the pin in the upper uncovered map, which stays
+  // inside the focus zone once the Full card opens; only a pin outside that zone may move the camera.
+  const {height} = page.viewportSize();
+  const pinOffsetPixels = Math.round(height / 5);
+  let tapPoint = null;
+  for (const zoom of [17, 18, 19, 20, 21]) {
+    await page.evaluate(
+      ({coordinates, zoom, offsetPixels}) => {
+        const map = window.kompasDebug.map;
+        map.jumpTo({center: coordinates, zoom});
+        const centredPin = map.project(coordinates);
+        // A centre below the pin makes the pin appear above it, clear of the open card.
+        const shiftedCentre = map.unproject([centredPin.x, centredPin.y + offsetPixels]);
+        map.jumpTo({center: shiftedCentre, zoom});
+      },
+      {coordinates: place, zoom, offsetPixels: pinOffsetPixels}
+    );
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
+    await mapIdle(page);
+    tapPoint = await page.evaluate(
+      ({coordinates, id}) => {
+        const map = window.kompasDebug.map;
+        const layers = map
+          .getStyle()
+          .layers.map(layer => layer.id)
+          .filter(layerId => layerId.startsWith('place-icons-'));
+        if (!map.queryRenderedFeatures({layers}).some(feature => feature.id === id)) return null;
+        const screenPoint = map.project(coordinates);
+        const canvasBounds = map.getCanvas().getBoundingClientRect();
+        return {x: canvasBounds.left + screenPoint.x, y: canvasBounds.top + screenPoint.y};
+      },
+      {coordinates: place, id: firstFeatureId}
+    );
+    if (tapPoint) break;
+  }
+  expect(tapPoint).not.toBeNull();
+  const initialCamera = await camera(page);
+  await page.mouse.click(tapPoint.x, tapPoint.y);
   await expect(page.locator('#place-name')).toHaveText('Nearby place 0');
-  const expectCameraOnPlace = async () => {
-    const {center} = await camera(page);
-    expect(center[0]).toBeCloseTo(place[0], 6);
-    expect(center[1]).toBeCloseTo(place[1], 6);
+  const pinCoveredByCard = () =>
+    page.evaluate(coordinates => {
+      const map = window.kompasDebug.map;
+      const point = map.project(coordinates);
+      const canvas = map.getCanvas().getBoundingClientRect();
+      const card = document.getElementById('place-card').getBoundingClientRect();
+      const x = canvas.left + point.x;
+      const y = canvas.top + point.y;
+      return x >= card.left && x <= card.right && y >= card.top && y <= card.bottom;
+    }, place);
+  expect(await pinCoveredByCard()).toBe(false);
+  const expectCameraHeld = async () => {
+    expect(await camera(page)).toEqual(initialCamera);
   };
-  await expectToHold(expectCameraOnPlace, CAMERA_HOLD_MILLISECONDS);
+  await expectToHold(expectCameraHeld, CAMERA_HOLD_MILLISECONDS);
   await closeCard(page);
   await expect(page.locator('#place-card')).toBeHidden();
 
