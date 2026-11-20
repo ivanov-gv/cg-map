@@ -131,7 +131,11 @@ layer, so it can appear below its level's zoom. Searching and choosing categorie
 place, building or address result moves it only when the result is outside the focus zone, the inner 75% of each map
 rectangle left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`). A phone card shortens
 the uncovered map; `mapGeometry()` passes a floating Desktop card as an obstacle so `freeMapAreas()` can keep places
-beside it visible. Zoom rises to at least 15 when needed.
+beside it visible. Zoom rises to at least 15 when needed. Tapping an empty spot on the map while the mobile/Flip search
+bubble is open compacts results to the strip; the strip or system Back restores the bubble. On Mobile and Flip, system
+Back steps through open overlays (search, dock, Flip modes, strip, and card states) toward the opening view, and UI closes
+keep history aligned so Back never reopens a closed state. Reloading while overlay history is present returns to the
+opening view.
 
 A chosen place's card opens as a fixed floating sheet on Desktop (> 720 px): 1000 × 252, clamped to `min(252px, 45dvh)`,
 with a 20 px bottom gap. It is centered on screen with the dock closed and centered in the map area right of the dock

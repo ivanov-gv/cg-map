@@ -64,7 +64,7 @@ function selectTappedMarker(map, event, context) {
 export function selectTappedFeature(map, event, context) {
   if (!context.isMapReady) return;
   if (selectTappedMarker(map, event, context)) return;
-  const {buildingAddresses, showPoint} = context;
+  const {buildingAddresses, showPoint, onEmptyTap} = context;
   const roadLayers = [
     'road-labels',
     'steps',
@@ -84,5 +84,6 @@ export function selectTappedFeature(map, event, context) {
     features.find(feature => roadLayers.includes(feature.layer.id)) ??
     features.find(feature => feature.layer.id === 'land' && feature.properties.kind === 'park') ??
     features.find(feature => feature.layer.id === 'water' || feature.layer.id === 'rivers');
+  if (!selectedFeature && onEmptyTap?.()) return;
   showPoint(describePoint(selectedFeature, event.lngLat.toArray(), buildingAddresses), selectedFeature);
 }

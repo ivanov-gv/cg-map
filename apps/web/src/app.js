@@ -687,7 +687,8 @@ function registerPublicMapEvents() {
       placesById: directoryState.placesById,
       buildingAddresses: directoryState.buildingAddresses,
       showPlace: placeSelection.showPlace,
-      showPoint: placeSelection.showPoint
+      showPoint: placeSelection.showPoint,
+      onEmptyTap: () => mapState.interface?.handleEmptyMapTap() ?? false
     })
   );
   mapState.map.on('mousemove', () => {
