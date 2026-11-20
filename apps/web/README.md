@@ -133,8 +133,8 @@ open results. Pulling up, or tapping the header or handle, steps up: Full shows 
 naming the active category and query, and Fullscreen covers the screen and hides search and the map. Swiping down steps
 back; from Peek it closes the card. A place picked on the map opens in Full, and swiping down from Full closes it. The
 phone card is screen-wide with 12 px gutters, the Locate button sits above it in Peek and Full and is hidden in
-Fullscreen, and the screen-reader close button remains. Choosing a result in the phone dock switches to this compact view
-with the query and category kept. See
+Fullscreen, and the screen-reader close button remains. Choosing a result in the phone dock switches to this compact
+view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 Location is a single icon in the bottom-right corner with accessible state and non-color badges. A click on the button
