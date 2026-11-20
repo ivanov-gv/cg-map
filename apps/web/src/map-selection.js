@@ -18,7 +18,7 @@ function selectTappedListing(map, event, context) {
     for (const id of activeIdsFromHit(hit)) {
       const feature = placesById.get(id);
       if (!feature) continue;
-      showPlace(feature.properties.id, null, {fromMapTap: true});
+      showPlace(feature.properties.id);
       return true;
     }
   }
