@@ -339,10 +339,11 @@ queries mix them with places in a nearest-first list, distinguish place/building
 green until one is chosen in red. Named streets from loaded road lines and `addr:street` labels add one Street row per
 matched name, with a green road outline while visible and the same red Road card as a map tap once chosen; a number that
 is not part of the street name does not list a street. An explicit query or category draws and rings every in-view
-result place at any zoom; with no query and All, ordinary POI thresholds apply. On Flip the same marks stay after the
-dock closes while a query or category is still set. Result distances and nearest-first order come from a usable device
-fix; without one the list keeps map-centre order and shows no distance, so the camera is never presented as the person's
-position; see [the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
+result place at any zoom; with no query and All, ordinary POI thresholds apply. On every device the same marks stay
+while a query or category is set, including with results hidden, compacted or covered by a card or the dock. Result
+distances and nearest-first order come from a usable device fix; without one the list keeps map-centre order and shows
+no distance, so the camera is never presented as the person's position; see
+[the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
 [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md#distance-rule-issue-262). Existing key/banner
 behavior below is historical baseline evidence; see [the current interface](../features/interface.md) for control
 behavior. Data coverage and default POI importance gaps remain.

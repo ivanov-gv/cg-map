@@ -97,9 +97,9 @@ quotes, ellipsises long text, and is named `Search: <query>`; its × is named `C
 query, keeping the category and refreshing the green result highlights. Both chips are hidden while the dock or search
 bubble is open and while any Flip card is open, including Peek.
 
-A query or category keeps the same in-view result marks as Mobile — rings for places and outlines for buildings,
-addresses and streets — both with the dock open and after its Close step hides the list. Closing the dock does not clear
-the filter.
+A query or category keeps the same in-view result marks as every device — rings for places and outlines for buildings,
+addresses and streets — with the dock open and after its Close step hides the list. Closing the dock does not clear the
+filter.
 
 **Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
 matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
@@ -108,9 +108,12 @@ current view gets a green outline. While a query or a non-**All** category is ac
 gets a marker drawn and a green ring at any zoom, even below its usual POI threshold; names may collide, markers may
 not. With no query and **All**, the ordinary visibility thresholds still decide which markers appear. Marks include
 matches past the 40-row list limit; an unchosen result never gets the red preview. Choosing a row uses the red selection
-and reveals an off-screen result by the focus-zone rule below. The × in Filled clears only the query and keeps an active
-category's results and highlights. The × in Open clears those highlights and closes the results without resetting the
-category. See [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
+and reveals an off-screen result by the focus-zone rule below. The marks follow the query and category on every device,
+not the result list's visibility: they stay while results are open, minimised, compacted, covered by a card or dock, or
+closed with the query still in the bar. Closing a card, closing search, or changing view recomputes them. The × in
+Filled clears only the query and keeps an active category's results and highlights; the × in Open closes the results
+without resetting the category or its marks. Only an empty query with **All** clears every mark. See
+[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
