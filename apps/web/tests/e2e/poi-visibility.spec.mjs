@@ -425,14 +425,14 @@ test(
   }
 );
 
-test('the leading match keeps its icon exception with no red preview', async ({page}) => {
+test('a query keeps other places while the leading match keeps its icon exception', async ({page}) => {
   const data = featureCollection([place('only-match', 4, 0, 0), place('other', 4, 0.0004, 0)]);
   const hasPreview = (id) =>
     page.evaluate((key) => Boolean(window.kompasDebug.map.getFeatureState({source: 'places', id: key}).preview), id);
   await open(page, data, data.features[0].geometry.coordinates, 16);
   await page.locator('#search').fill('only-match');
   await expect(page.locator('.result')).toHaveCount(1);
-  await expect.poll(() => drawnListings(page)).toEqual(['only-match']);
+  await expect.poll(() => drawnListings(page)).toEqual(['only-match', 'other']);
   await mapIdle(page);
   expect(await hasPreview('only-match')).toBe(false);
   expect(

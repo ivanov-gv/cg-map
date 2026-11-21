@@ -15,6 +15,7 @@ import {
   collectSearchResults,
   indexBuildingLabels,
   matchesPlaceSearch,
+  placesForMapLayer,
   rankSearchResults,
   featureCollection,
   DEFAULT_CENTER,
@@ -369,24 +370,26 @@ function scheduleDistanceRefresh() {
   }, distanceRefreshDelayMilliseconds - elapsedMilliseconds);
 }
 
-// A search or category narrows the candidates once. Its own marker source bypasses POI thresholds; unfiltered places
-// keep their level bands.
+// A category narrows the map's places; a query only narrows the result rows and rings.
 function applyPlaceSearch() {
-  directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
-    matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
+  const query = searchQuery();
+  const hasCategory = directoryState.activeCategory !== null;
+  const categoryPlaces = placesForMapLayer(directoryState.allPlaces, directoryState.activeCategory);
+  directoryState.filteredPlaces = categoryPlaces.filter(feature =>
+    matchesPlaceSearch(feature, query, directoryState.activeCategory)
   );
   if (mapState.isMapReady && !directoryState.loadingError) {
     mapState.map
       .getSource('places')
       .setData(
-        featureCollection(
-          buildPlaceMarkers(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
-        )
+        featureCollection(buildPlaceMarkers(categoryPlaces, directoryState.markerKeysByPlaceId))
       );
-    const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+    const hasExplicitFilter = Boolean(query) || hasCategory;
+    // A category keeps all its places in the all-zoom overlay; the query narrows only rows and rings.
+    const overlayPlaces = hasCategory ? categoryPlaces : directoryState.filteredPlaces;
     mapState.searchHighlights.setResultMarkers(
       hasExplicitFilter
-        ? searchResultMarkerData(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
+        ? searchResultMarkerData(overlayPlaces, directoryState.markerKeysByPlaceId)
         : featureCollection([])
     );
   }

@@ -107,18 +107,21 @@ A query or category keeps the same in-view result marks as every device — ring
 addresses and streets — with the dock open and after its Close step hides the list. Closing the dock does not clear the
 filter.
 
-**Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
-matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
-buildings and addresses are not searchable while a category is selected. Every matching building or address inside the
-current view gets a green outline. While a query or a non-**All** category is active, every place result inside the view
-gets a marker drawn and a green ring at any zoom, even below its usual POI threshold; names may collide, markers may
-not. With no query and **All**, the ordinary visibility thresholds still decide which markers appear. Marks include
-matches past the 40-row list limit; an unchosen result never gets the red preview. Choosing a row uses the red selection
-and reveals an off-screen result by the focus-zone rule below. The marks follow the query and category on every device,
-not the result list's visibility: they stay while results are open, minimised, compacted, covered by a card or dock, or
-closed with the query still in the bar. Closing a card, closing search, or changing view recomputes them. The × in
-Filled clears only the query and keeps an active category's results and highlights; the × in Open closes the results
-without resetting the category or its marks. Only an empty query with **All** clears every mark. See
+**Search result kinds and highlights** (issues #248, #263, #309): with **All** active (no category filter), a query
+lists matching places, buildings and addresses, nearest first. An active category narrows the list to places in that
+category; buildings and addresses are not searchable while a category is selected. A typed query never removes a place
+from the map: the base `places` source and its all-zoom category overlay keep every place in the active category, while
+the query narrows only result rows and rings. Only choosing a category other than **All** hides places outside that
+category. Every matching building or address inside the current view gets a green outline. While a query or a
+non-**All** category is active, every place result inside the view gets a marker drawn and a green ring at any zoom,
+even below its usual POI threshold; names may collide, markers may not. With no query and **All**, the ordinary
+visibility thresholds still decide which markers appear. Marks include matches past the 40-row list limit; an unchosen
+result never gets the red preview. Choosing a row uses the red selection and reveals an off-screen result by the
+focus-zone rule below. The marks follow the query and category on every device, not the result list's visibility: they
+stay while results are open, minimised, compacted, covered by a card or dock, or closed with the query still in the bar.
+Closing a card, closing search, or changing view recomputes them. The × in Filled clears only the query and keeps an
+active category's results and highlights; the × in Open closes the results without resetting the category or its marks.
+Only an empty query with **All** clears every mark. See
 [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
@@ -291,11 +294,13 @@ Suppose the user types "museum".
 1. The search input emits an input event.
 2. Its handler cancels the previous timer.
 3. It schedules applyPlaceSearch() after 120 ms without another input event.
-4. applyPlaceSearch() calls matchesPlaceSearch() on all places using the current category.
-5. matchesPlaceSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
+4. applyPlaceSearch() uses placesForMapLayer() to keep every place in the current category.
+5. It calls matchesPlaceSearch() on those places; matchesPlaceSearch() normalizes text: lower case, diacritic folding
+   and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
-7. It assigns the resulting array to directoryState.filteredPlaces.
-8. If the map is ready, it calls setData() on the places GeoJSON source and on the explicit-filter result marker source.
+7. It assigns the query-and-category result array to directoryState.filteredPlaces.
+8. If the map is ready, it calls setData() on the category-only places GeoJSON source and on the explicit-filter result
+   marker source.
 9. It closes the current place card if that place no longer matches.
 10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
     candidates by approximate distance from the usable GPS fix when one exists, otherwise from the map center, and
@@ -328,16 +333,18 @@ This distinction keeps thousands of map features out of the DOM.
 Sources hold geometry or imagery. Layers apply rendering rules to a source; changing a layer does not replace its data.
 
 [Stable POI visibility](../../docs/ui-ux/features/poi-visibility.md) decides which markers exist. The `places` source
-holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes. During an
-explicit query or category, `search-result-markers` adds one app-owned marker per result location without a minzoom:
+holds marker features built by map-core/place-visibility.js for every place in the active category; changing only the
+query leaves this source intact. An explicit query or category also fills `search-result-markers` with the all-zoom,
+app-owned markers: query result locations under **All**, or every place in the active category. Query results alone
+receive rings:
 
-| Layer                | Purpose                                                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones           |
-| place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon       |
-| search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom |
-| search-result-places | Every result location during an explicit filter, from `search-result-markers`, at any zoom                  |
-| place-highlight      | Invisible ring that becomes the selection highlight through feature state                                   |
+| Layer                | Purpose                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones               |
+| place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon           |
+| search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom     |
+| search-result-places | Every active-category place, or query result locations under **All**, from `search-result-markers`, at any zoom |
+| place-highlight      | Invisible ring that becomes the selection highlight through feature state                                       |
 
 A band is a zoom range: `4-open` starts at level 4's zoom and never ends. Layer `minzoom`/`maxzoom` are compared with
 the continuous zoom, unlike a filter's `['zoom']`, so thresholds are exact at fractional zooms and need no work during

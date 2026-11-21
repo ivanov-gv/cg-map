@@ -7,6 +7,7 @@ import {
   buildingResultLabel,
   matchesStreetName,
   collectStreetCandidates,
+  placesForMapLayer,
   selectNearestPlaces,
   selectSearchResults,
   safeWebsite
@@ -67,6 +68,27 @@ test('no category filter includes all categories', () => {
     matchesPlaceSearch(place, '', null)
   );
   assert.equal(filtered.length, 3, 'no category and empty query matches all');
+});
+test('the map layer keeps category places that the query does not match', () => {
+  const cafeMatch = feature('Cafe Alpha', 'food', [19.25, 42.44]);
+  const cafeOther = feature('Cafe Beta', 'food', [19.26, 42.44]);
+  const shopMatch = feature('Shop Alpha', 'shops', [19.27, 42.44]);
+  const categoryPlaces = placesForMapLayer([cafeMatch, cafeOther, shopMatch], 'food');
+
+  assert.deepEqual(
+    categoryPlaces.map(place => place.properties.name),
+    ['Cafe Alpha', 'Cafe Beta']
+  );
+  assert.deepEqual(
+    categoryPlaces
+      .filter(place => matchesPlaceSearch(place, 'alpha', 'food'))
+      .map(place => place.properties.name),
+    ['Cafe Alpha']
+  );
+  assert.deepEqual(
+    placesForMapLayer([cafeMatch, cafeOther, shopMatch], null).map(place => place.properties.name),
+    ['Cafe Alpha', 'Cafe Beta', 'Shop Alpha']
+  );
 });
 const addressLabel = (footprintIndex, coordinates, properties = {}) => ({
   type: 'Feature',

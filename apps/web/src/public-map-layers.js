@@ -13,8 +13,11 @@ export function installPublicPlaceLayers(map) {
   });
   map.addSource('requested-place', {type: 'geojson', data: featureCollection([])});
   map.addSource('search-result-markers', {type: 'geojson', data: featureCollection([])});
-  // An explicit query or category draws every result location here, without a minzoom or a layer per place. Names
-  // stay out of this layer: an icon may collide with a label, but the icon itself is never collision-hidden.
+  // An explicit query or category fills this source with places exempt from normal zoom thresholds: every result place
+  // under All, or every place in the active category. A category keeps its places here while a query narrows rows and
+  // rings; under All the query fills this source with just the result locations. One shared symbol layer draws them
+  // without a minzoom. Names stay out of this layer: an icon may collide with a label, but the icon itself is never
+  // collision-hidden.
   map.addLayer(
     {
       id: 'search-result-places',
