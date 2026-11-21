@@ -720,6 +720,8 @@ test.describe('building entrances', () => {
         };
         await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
         await context.setOffline(true);
+        // Desktop keeps the dock open, so entrances must stay in the map beside it.
+        if (page.viewportSize().width > 720) await openMenu(page);
         await tap(label.geometry.coordinates);
         await expect(page.locator('#place-name')).toHaveText(`Building ${variant.label}`);
         const addressPrefix = variant.building
@@ -763,10 +765,23 @@ test.describe('building entrances', () => {
         }, properties.entrances);
         const header = await page.locator('.search-bar').boundingBox();
         const card = await page.locator('#place-card').boundingBox();
+        const panel = await page.locator('.sidebar').boundingBox();
+        if (page.viewportSize().width > 720) {
+          const scrolling = await page.evaluate(() => ({
+            frame: getComputedStyle(document.getElementById('place-card')).overflowY,
+            content: getComputedStyle(document.getElementById('card-layout')).overflowY
+          }));
+          expect(scrolling.frame).toBe('hidden');
+          expect(scrolling.content).toBe('auto');
+        }
         for (const position of positions) {
           expect(position.y).toBeGreaterThan(header.y + header.height + 20);
-          if (page.viewportSize().width <= 720) expect(position.y).toBeLessThan(card.y - 20);
-          else expect(position.x).toBeGreaterThan(card.x + card.width + 20);
+          if (page.viewportSize().width <= 720)
+            expect(position.y).toBeLessThan(card.y - 20);
+          else {
+            expect(position.x).toBeGreaterThan(panel.x + panel.width + 20);
+            expect(position.y).toBeLessThan(card.y - 16);
+          }
         }
         if (process.env.ENTRANCE_SCREENSHOTS)
           await page.screenshot({

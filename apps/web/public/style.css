@@ -248,26 +248,119 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 #error { position: absolute; z-index: 7; top: calc(var(--visible-top) + var(--bar-inset) + 70px); left: 20px; right: 72px; margin: auto; max-width: 480px; background: #fff8ed; padding: 15px; border: 1px solid #ddcba9; border-radius: 12px; font-size: 12px; }
 #dismiss-error { float: right; margin: -12px -12px 0 4px; font-size: 24px; }
 #retry { min-height: 40px; padding: 6px 12px; border-radius: 8px; background: var(--green); color: white; margin-left: 10px; }
-/* The dock stays open beside a place card, so the card moves clear of whichever left panel is open.
- * When floating chips are shown (no query, dock closed), the card drops below the chips row. */
+/* Desktop card is a fixed floating sheet, centred in the area right of the dock when it is open. */
 @media (min-width: 721px) {
-  /* Bottom of the floating chips row: bar + chips (48px) + gap (16px). */
   body {
     --desktop-bar-height: 60px;
-    --desktop-chips-bottom: calc(var(--desktop-bar-height) + 48px + 16px);
+    --desktop-card-height: min(252px, 45dvh);
+    --desktop-card-border-width: 1px;
+    --desktop-card-gap: 20px;
+    --desktop-card-locate-gap: 16px;
+    --desktop-card-search-gap: 16px;
+    --desktop-card-area-left: 0px;
+  }
+  body[data-view=dock] { --desktop-card-area-left: var(--dock-width); }
+
+  /* The scale bar and its credit stay in the map's bottom-left corner in every panel and card state.
+   * Locate has its own column: it keeps its 20 px corner gap unless the floating card reaches that
+   * column, in which case interface.js sets the body attribute and the control rises above the card. */
+  .maplibregl-ctrl-bottom-right { right: var(--desktop-card-gap); bottom: var(--desktop-card-gap); }
+  .maplibregl-ctrl-bottom-right .position-control { margin: 0; }
+  body[data-card-at-locate=true] .maplibregl-ctrl-bottom-right {
+    bottom: calc(var(--desktop-card-gap) + var(--desktop-card-height) + var(--desktop-card-locate-gap));
   }
 
-  body[data-view=dock] .place-card,
-  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
-    top: 20px;
-    left: calc(var(--dock-width) + 12px);
-    width: min(375px, calc(100% - var(--dock-width) - 96px));
-    max-height: calc(100% - 40px);
+  .place-card {
+    top: auto;
+    right: 0;
+    bottom: var(--desktop-card-gap);
+    left: var(--desktop-card-area-left);
+    width: min(1000px, calc(100vw - var(--desktop-card-area-left) - 2 * var(--desktop-card-gap)));
+    height: var(--desktop-card-height);
+    max-height: var(--desktop-card-height);
+    margin-inline: auto;
+    padding: 0;
+    border: var(--desktop-card-border-width) solid var(--line);
+    border-radius: 18px;
+    background: #fffffc;
+    box-shadow: 0 -8px 32px rgba(36, 63, 55, 0.08);
+    container-type: inline-size;
+    display: block;
+    overflow: hidden;
   }
-  body:has(.desktop-search-panel[data-state=empty]:not([hidden])) .place-card {
-    top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
-    left: 20px;
-    max-height: calc(100% - var(--visible-top) - var(--bar-inset) - var(--desktop-chips-bottom) - 20px);
+  /* Penpot uses a plain × glyph: no circular fill, just the dark green stroke of the character. */
+  .place-card > .close {
+    position: absolute;
+    float: none;
+    top: calc(var(--desktop-card-gap) - var(--desktop-card-border-width));
+    right: calc(var(--desktop-card-gap) - var(--desktop-card-border-width));
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #243f37;
+    line-height: 36px;
+    font-size: 26px;
+  }
+  /* The frame does not scroll, so the close button cannot move with the content. */
+  #card-layout {
+    height: 100%;
+    /* Offsets are measured from the card's outer edge, so subtract its border. */
+    padding: calc(28px - var(--desktop-card-border-width)) calc(78px - var(--desktop-card-border-width))
+      calc(28px - var(--desktop-card-border-width)) calc(32px - var(--desktop-card-border-width));
+    overflow-y: auto;
+    scrollbar-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 280px) minmax(0, 270px) minmax(0, 260px);
+    grid-template-rows: auto auto 1fr;
+    column-gap: 40px;
+    align-content: start;
+  }
+  #card-layout::-webkit-scrollbar { display: none; }
+  #place-body, #place-details { display: contents; }
+  #place-head { grid-column: 1; grid-row: 1; align-self: start; }
+  #point-actions { grid-column: 1; grid-row: 2; align-self: start; margin-top: 16px; }
+  #place-source { grid-column: 1; grid-row: 3; align-self: start; }
+  /* Identity is column 1; the two detail stacks own columns 2 and 3 and each keeps its own stack. */
+  .details-column--first { grid-column: 2; grid-row: 1 / 4; align-self: start; }
+  .details-column--second { grid-column: 3; grid-row: 1 / 4; align-self: start; }
+  #place-details .details-section--opening-hours .detail-row { justify-content: space-between; }
+  #place-details .details-section--opening-hours .detail-value { text-align: right; }
+  /* A joined search panel keeps its content height and may grow only until one gap above the card. */
+  body:has(#place-card:not([hidden])) .desktop-search-panel:is([data-state=open], [data-state=filled]) {
+    max-height: max(
+      0px,
+      calc(
+        var(--visible-top) + var(--visible-height) - var(--bar-inset) - var(--desktop-bar-height) -
+          var(--desktop-card-gap) - var(--desktop-card-height) - var(--desktop-card-search-gap)
+      )
+    );
+  }
+  /* A joined search panel replaces the dock's bottom area; never leave its paper behind the card. */
+  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .dock-footer {
+    display: none;
+  }
+  /* Below 780 px the card has room for identity plus one sections stack. */
+  @container (max-width: 780px) {
+    #card-layout { grid-template-columns: minmax(0, 280px) minmax(0, 1fr); }
+    #place-details {
+      grid-column: 2;
+      grid-row: 1 / 4;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 20px;
+      align-content: start;
+    }
+    .details-column { grid-column: 1; grid-row: auto; }
+  }
+  /* Below 560 px identity and sections share one column. */
+  @container (max-width: 560px) {
+    #card-layout { grid-template-columns: minmax(0, 1fr); }
+    #place-head, #point-actions, #place-source { grid-column: 1; grid-row: auto; }
+    #place-details { grid-column: 1; grid-row: auto; }
   }
 
   /* Desktop search bar: taller, with clear button and floating categories. */
@@ -395,6 +488,7 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .search-bubble { left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   .results-strip { top: var(--search-top, 56px); left: var(--bar-inset); right: var(--bar-inset); width: auto; }
   /* The phone card is closed by swiping; its close button stays for screen readers only. */
+  #card-layout { display: contents; }
   .place-card { top: auto; bottom: calc(var(--keyboard-inset) + 20px); left: 12px; right: 72px; width: auto; max-height: calc(var(--visible-height) * .6); padding: 20px; touch-action: none; cursor: grab; transition: max-height 240ms ease; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }

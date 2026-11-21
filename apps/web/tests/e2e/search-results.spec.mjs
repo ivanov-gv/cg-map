@@ -38,7 +38,7 @@ const ADDRESS = {
 };
 // The uncovered focus zone differs by viewport, so each project places its unique building at that zone's centre.
 const FOCUS_COORDINATES = {
-  'root-desktop': [19.26266069478649, 42.44174956782041],
+  'root-desktop': [19.261622679898437, 42.44233545953725],
   'pages-mobile': [19.26054979629413, 42.44126264012965]
 };
 const secondAddress = () => ({

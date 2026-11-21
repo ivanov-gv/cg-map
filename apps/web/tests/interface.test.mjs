@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
   isActiveChipVisible,
+  doesCardReachLocateColumn,
+  freeMapAreas,
   isClearButtonVisible,
   isDockFooterVisible,
   isInFocusZone,
@@ -119,8 +121,7 @@ test('search target stays below bubble and above keyboard without changing the m
       visibleTop: 25,
       visibleHeight,
       headerBottom: 91,
-      searchBottom,
-      mobile: true
+      searchBottom
     });
     const point = [206 + offset[0], 420 + offset[1]];
     assert.ok(point[0] > 16 && point[0] < 340);
@@ -129,13 +130,12 @@ test('search target stays below bubble and above keyboard without changing the m
   }
 });
 
-test('selected point stays above phone details and beside desktop details or dock', () => {
+test('selected point stays above the phone and desktop details cards', () => {
   const phone = uncoveredMapOffset({
     width: 412,
     height: 840,
     headerBottom: 66,
-    details: {top: 480, right: 340},
-    mobile: true
+    details: {top: 480}
   });
   assert.ok(420 + phone[1] > 82 && 420 + phone[1] < 464);
   const desktop = uncoveredMapOffset({
@@ -143,9 +143,11 @@ test('selected point stays above phone details and beside desktop details or doc
     height: 800,
     headerBottom: 74,
     dockRight: 400,
-    details: {top: 94, right: 395}
+    details: {left: 420, right: 1420, top: 528, bottom: 780},
+    coversBottom: false
   });
   assert.ok(640 + desktop[0] > 416 && 640 + desktop[0] < 1208);
+  assert.ok(400 + desktop[1] > 90 && 400 + desktop[1] < 484);
 });
 
 test('focus zone is the inner 75% of the uncovered map width and height', () => {
@@ -171,8 +173,7 @@ test('a place under a panel is never inside the focus zone', () => {
     height: 840,
     headerBottom: 66,
     searchBottom: 420,
-    details: {top: 742, right: 340},
-    mobile: true
+    details: {top: 742}
   });
   assert.equal(isInFocusZone({x: 178, y: 300}, phone), false, 'under the results');
   assert.equal(isInFocusZone({x: 178, y: 790}, phone), false, 'under the card');
@@ -182,11 +183,80 @@ test('a place under a panel is never inside the focus zone', () => {
     height: 800,
     headerBottom: 74,
     dockRight: 400,
-    details: {top: 20, right: 787}
+    details: {left: 420, right: 1420, top: 528, bottom: 780},
+    coversBottom: false
   });
   assert.equal(isInFocusZone({x: 200, y: 400}, desktop), false, 'under the dock');
-  assert.equal(isInFocusZone({x: 600, y: 400}, desktop), false, 'under the card');
+  assert.equal(isInFocusZone({x: 600, y: 700}, desktop), false, 'under the card');
   assert.equal(isInFocusZone({x: 1000, y: 400}, desktop), true);
+});
+
+test('a floating desktop card is an obstacle rather than a bottom-wide cut', () => {
+  const geometry = {
+    width: 1440,
+    height: 900,
+    headerBottom: 96,
+    details: {left: 220, right: 1220, top: 628, bottom: 880},
+    coversBottom: false
+  };
+  const area = uncoveredMapArea(geometry);
+  assert.equal(area.bottom, 880, 'the map below the card is still available beside it');
+  assert.equal(isInFocusZone({x: 900, y: 650}, area), false, 'under the card');
+  assert.equal(isInFocusZone({x: 120, y: 700}, area), true, 'beside the card');
+  assert.equal(isInFocusZone({x: 900, y: 300}, area), true);
+  assert.ok(uncoveredMapOffset(geometry)[1] < 0, 'camera aims above the card');
+});
+
+test('free map areas partition around the floating card without overlap', () => {
+  const area = uncoveredMapArea({
+    width: 1440,
+    height: 900,
+    headerBottom: 96,
+    details: {left: 220, right: 1220, top: 628, bottom: 880},
+    coversBottom: false
+  });
+  assert.deepEqual(freeMapAreas(area), [
+    {left: 16, right: 1368, top: 112, bottom: 612},
+    {left: 16, right: 204, top: 612, bottom: 880},
+    {left: 1236, right: 1368, top: 612, bottom: 880}
+  ]);
+});
+
+test('framing keeps entrance markers above a floating card', () => {
+  const area = uncoveredMapArea({
+    width: 900,
+    height: 400,
+    headerBottom: 96,
+    searchBottom: 195,
+    details: {left: 20, right: 880, top: 211, bottom: 380},
+    coversBottom: false
+  });
+  assert.equal(area.framingBottom, 195);
+  assert.ok(area.framingBottom < area.bottom);
+});
+
+test('a card covering every free map rectangle still gives the camera a finite offset', () => {
+  const geometry = {
+    width: 900,
+    height: 400,
+    headerBottom: 96,
+    searchBottom: 195,
+    details: {left: 20, right: 880, top: 211, bottom: 380},
+    coversBottom: false
+  };
+  const area = uncoveredMapArea(geometry);
+  assert.deepEqual(freeMapAreas(area), []);
+  assert.deepEqual(uncoveredMapOffset(geometry), [
+    (area.left + area.right) / 2 - geometry.width / 2,
+    (area.top + area.bottom) / 2 - geometry.height / 2
+  ]);
+});
+
+test('locate clearance follows the card column, not the card height', () => {
+  const locateBox = {left: 1370, right: 1410};
+  assert.equal(doesCardReachLocateColumn({left: 220, right: 1220}, locateBox), false);
+  assert.equal(doesCardReachLocateColumn({left: 420, right: 1420}, locateBox), true);
+  assert.equal(doesCardReachLocateColumn(null, locateBox), false);
 });
 
 test('swiping steps the phone card through full, peek, and closed', () => {

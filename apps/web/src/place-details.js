@@ -91,6 +91,10 @@ function detailsSection(id, heading, rows = [], links = []) {
   return {id, heading, rows, links};
 }
 
+// The desktop card keeps two detail stacks: CSS places this one in grid column 2 and the other in column 3,
+// with identity in column 1. Each stack owns its own vertical flow.
+const firstDetailsStackSectionIds = new Set(['location-and-contacts', 'addresses', 'entrances']);
+
 function addIfPresent(rows, label, value, key) {
   if (value) rows.push(detailRow(label, value, key));
 }
@@ -246,14 +250,17 @@ export function renderCardContent(card) {
   source.textContent = card.source ?? '';
   source.hidden = !source.textContent;
   const details = elementById('place-details');
-  details.replaceChildren();
+  const firstColumn = createElement('div', undefined, 'details-column details-column--first');
+  const secondColumn = createElement('div', undefined, 'details-column details-column--second');
   for (const section of card.sections ?? []) {
     const element = createElement('section', undefined, `details-section details-section--${section.id}`);
     element.append(createElement('h2', section.heading, 'section-title'));
     appendDetailRows(element, section.rows);
     appendDetailLinks(element, section.links);
-    details.append(element);
+    const column = firstDetailsStackSectionIds.has(section.id) ? firstColumn : secondColumn;
+    column.append(element);
   }
+  details.replaceChildren(firstColumn, secondColumn);
 }
 
 // A late building lookup adds one row; it never rebuilds the card or moves focus from an open link.
@@ -283,7 +290,9 @@ export function setPlaceCardInsidePlaces(places) {
     section = createElement('section', undefined, 'details-section details-section--inside-this-building');
     section.append(createElement('h2', 'Inside this building', 'section-title'));
     const factsSection = details.querySelector('.details-section--details');
-    if (factsSection) details.insertBefore(section, factsSection);
+    const secondColumn = details.querySelector('.details-column--second');
+    if (factsSection) factsSection.before(section);
+    else if (secondColumn) secondColumn.append(section);
     else details.append(section);
   }
   for (const child of [...section.children]) {
