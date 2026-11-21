@@ -112,7 +112,7 @@ class BuildingsLayer(Layer):
     def finish(self, options, state):
         """Replace no-number placeholders and join street names once."""
         forbidden_values, ignored_characters = number_rules(
-            options.sources_dir
+            options.sources_directory
         )
         counts = Counter()
         for feature in self.features:
@@ -181,8 +181,8 @@ class EntrancesLayer(Layer):
 
     filename = ENTRANCE_FILE
 
-    def __init__(self, options):
-        super().__init__(options)
+    def __init__(self):
+        super().__init__()
         self.candidates = []
 
     def node(self, node, options, state):
@@ -201,7 +201,7 @@ class EntrancesLayer(Layer):
     def finish(self, options, state):
         """Keep only doors on a published building outline within one metre."""
         forbidden_values, ignored_characters = number_rules(
-            options.sources_dir
+            options.sources_directory
         )
         west, south, east, north = options.detail_bbox
         origin = ((west + east) / 2, (south + north) / 2)

@@ -409,13 +409,6 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
   requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
-  validateBuildingSources(
-    buildings,
-    JSON.parse(fs.readFileSync(path.join(root,'data/sources/roads.geojson'))),
-    JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-entrances.geojson'))),
-    JSON.parse(fs.readFileSync(path.join(root,'data/sources/places.geojson'))),
-    {contractsDirectory}
-  );
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');
@@ -425,6 +418,13 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
       `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
   }
+  validateBuildingSources(
+    buildings,
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/roads.geojson'))),
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-entrances.geojson'))),
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/places.geojson'))),
+    {contractsDirectory}
+  );
   requireValue(provenance.places_file === 'data/sources/places.geojson', 'Unexpected places_file');
   const count = checkPlaceMetadata(
     fs.readFileSync(path.join(root, provenance.places_file), 'utf8'),
