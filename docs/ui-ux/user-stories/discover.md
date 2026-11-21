@@ -272,8 +272,8 @@ cumulative admission supersede viewport-dependent icon thinning.
    threshold. Co-located listings require a stable shared marker and access to each listing; essential map readability
    remains a real-data release check, not something proved by stable eligibility alone.
 6. Suppression from the default scene MUST NOT delete directory data. Search may deliberately surface a requested cafe
-   at broad scale; explicit search/selection is a later interaction, visually distinct from ordinary default
-   cartography.
+   at broad scale without removing other places from the map; explicit search/selection is a later interaction, visually
+   distinct from ordinary default cartography.
 
 The [MapLibre symbol specification](https://maplibre.org/maplibre-style-spec/layers/#symbol-sort-key) provides
 scale/placement controls and priority ordering. Those are implementation tools; they do not choose our importance
@@ -339,10 +339,11 @@ queries mix them with places in a nearest-first list, distinguish place/building
 green until one is chosen in red. Named streets from loaded road lines and `addr:street` labels add one Street row per
 matched name, with a green road outline while visible and the same red Road card as a map tap once chosen; a number that
 is not part of the street name does not list a street. An explicit query or category draws and rings every in-view
-result place at any zoom; with no query and All, ordinary POI thresholds apply. On every device the same marks stay
-while a query or category is set, including with results hidden, compacted or covered by a card or the dock. Result
-distances and nearest-first order come from a usable device fix; without one the list keeps map-centre order and shows
-no distance, so the camera is never presented as the person's position; see
+result place at any zoom; with no query and All, ordinary POI thresholds apply. A query adds those marks without hiding
+any place: only a category other than All removes places outside it from the base map. On every device the same marks
+and the remaining places stay while a query or category is set, including with results hidden, compacted or covered by a
+card or the dock. Result distances and nearest-first order come from a usable device fix; without one the list keeps
+map-centre order and shows no distance, so the camera is never presented as the person's position; see
 [the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
 [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md#distance-rule-issue-262). Existing key/banner
 behavior below is historical baseline evidence; see [the current interface](../features/interface.md) for control

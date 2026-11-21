@@ -57,18 +57,27 @@ export const normalizeSearchText = text =>
 // One app-owned search green. MapLibre paint values cannot read CSS variables, so the stylesheet mirrors this value.
 export const SEARCH_HIGHLIGHT_COLOR = '#2e7d32';
 
+// A null category includes every place; a named category includes only its listings.
+export function matchesPlaceCategory(feature, category) {
+  return category === null || feature.properties.category === category;
+}
+
 // Search combines category eligibility with the listing's searchable text.
-// A null category matches every listing; a non-null value filters to that category.
 export function matchesPlaceSearch(feature, query, category) {
+  if (!matchesPlaceCategory(feature, category)) return false;
   const properties = feature.properties;
-  const matchesCategory = category === null || properties.category === category;
   const searchableText = [
     properties.name,
     properties['name:en'],
     properties.kind,
     properties['addr:street']
   ].join(' ');
-  return matchesCategory && normalizeSearchText(searchableText).includes(normalizeSearchText(query));
+  return normalizeSearchText(searchableText).includes(normalizeSearchText(query));
+}
+
+// The base marker source shows every place in the active category. A query adds results without removing other places.
+export function placesForMapLayer(places, category) {
+  return places.filter(feature => matchesPlaceCategory(feature, category));
 }
 
 // A building record contributes one result at most. Street names describe addresses; numbers and entrance

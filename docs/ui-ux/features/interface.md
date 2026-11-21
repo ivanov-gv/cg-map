@@ -7,10 +7,11 @@ became a bottom panel (issue #250) and then a fixed floating card (issue #282), 
 geometry. On 20 November 2026 the phone card gained Peek, Full and Fullscreen (issue #251) and its drag became a
 continuous, top-edge-driven model (issue #265); Flip gained its own two-step card (issue #252), and the Desktop floating
 card stayed unchanged. On 21 November 2026, issue #288 gave Flip a top-row query chip beside the active category chip,
-issue #294 kept the Mobile chip visible through Peek and Full, hiding it only in Fullscreen with the header, and the
-foldable-phone rule (issue #290) made Mobile and Flip follow the screen live while keeping and mapping their state. This
-does not claim deployment or completion of Discover’s missing geographic data. Browser acceptance and physical-device
-evidence are recorded separately below.
+issue #294 kept the Mobile chip visible through Peek and Full, hiding it only in Fullscreen with the header, the
+foldable-phone rule (issue #290) made Mobile and Flip follow the screen live while keeping and mapping their state, and
+issue #309 kept every place rendered during a query, so only results gain highlights. This does not claim deployment or
+completion of Discover’s missing geographic data. Browser acceptance and physical-device evidence are recorded
+separately below.
 
 This document owns control layout, wording, and expansion behavior. [Discover](../user-stories/discover.md) owns the
 geographic scene and honest location semantics; [Understand](../user-stories/understand.md) owns selected-object
@@ -20,7 +21,8 @@ details. [Plan](../user-stories/plan.md) covers journey preparation and route re
 
 [Stable POI visibility](poi-visibility.md) retains these search controls and map focus. Its levels still decide ordinary
 markers; an explicit query or a category other than **All** is the narrow #263 exception that also draws every in-view
-result marker and rings it. This refines marker admission, not the dock or mobile composition.
+result marker and rings it. A query only adds those marks: every place stays on the map unless a category other than
+**All** hides it. This refines marker admission, not the dock or mobile composition.
 
 ## User outcomes served
 
@@ -340,22 +342,24 @@ Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritati
 keeps the nearby place list, and choosing any category lists places only.
 
 Every building or address match inside the current view gets a green footprint outline. Every in-view result street name
-also gets a green road outline: the road layer is filtered to the names of visible Street rows. While a query or a
-category other than **All** is active, every place result inside the current view gets its marker drawn at any zoom,
-even below its usual POI threshold, and a green ring. Names may yield to collisions, but markers may not; one app-owned
-GeoJSON source and symbol layer draw them so hundreds of results do not stall panning. With no query and **All**,
-ordinary POI levels apply as before and no result marks are drawn. The marks follow the query and category on every
-device, not the result list's visibility: they stay when results are open, minimised or compacted to a strip, covered by
-a card or the dock, or closed while the query remains in the bar. Closing a card, closing search, or changing view
-recomputes them; only an empty query with **All** clears every mark. The 40-row list limit does not cap the marks.
-Unchosen results are never painted with the red preview; only a chosen row removes its green mark and uses the existing
-red selection instead. Choosing a street turns every rendered segment of that named road red and opens the same Road
-card as tapping the road, using its recorded attributes. Choosing a building or address opens the same point card as
-tapping that building on the map. Every chosen result is revealed by the focus-zone rule above when it is off-screen,
-with a zoom floor of 15. Clearing the query keeps an active category and expands its rows to every matching place and
-its marks to those in view; clearing both query and category removes every green mark, including road outlines. The
-matching rules, the #263 marker exception, the #264 street rule, chosen-result behavior, and why the marks are app-owned
-are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
+also gets a green road outline: the road layer is filtered to the names of visible Street rows. A typed query never
+hides a place: the base source and the all-zoom category overlay keep every place in the active category, while the
+query narrows only result rows and green rings. Only a category other than **All** removes places outside that category
+from the map. While a query or a category other than **All** is active, every place result inside the current view gets
+its marker drawn at any zoom, even below its usual POI threshold, and a green ring. Names may yield to collisions, but
+markers may not; one app-owned GeoJSON source and symbol layer draw them so hundreds of results do not stall panning.
+With no query and **All**, ordinary POI levels apply as before and no result marks are drawn. The marks follow the query
+and category on every device, not the result list's visibility: they stay when results are open, minimised or compacted
+to a strip, covered by a card or the dock, or closed while the query remains in the bar. Closing a card, closing search,
+or changing view recomputes them; only an empty query with **All** clears every mark. The 40-row list limit does not cap
+the marks. Unchosen results are never painted with the red preview; only a chosen row removes its green mark and uses
+the existing red selection instead. Choosing a street turns every rendered segment of that named road red and opens the
+same Road card as tapping the road, using its recorded attributes. Choosing a building or address opens the same point
+card as tapping that building on the map. Every chosen result is revealed by the focus-zone rule above when it is
+off-screen, with a zoom floor of 15. Clearing the query keeps an active category and expands its rows to every matching
+place and its marks to those in view; clearing both query and category removes every green mark, including road
+outlines. The matching rules, the #263 marker exception, the #264 street rule, chosen-result behavior, and why the marks
+are app-owned are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
 
 ### Distance comes from the person, not the camera (US-03, US-13)
 
@@ -499,7 +503,7 @@ and reduced motion.
 | UI-A13 | Focus search with no query, type, then use × twice; repeat with the phone dock open. On Flip, open the dock with no query and use × after typing.                                                                                                 | Desktop and phone show Empty → Open → Filled; the first × clears only the query. The next × closes results and any open card, and closes the dock when it is open; on a phone, choosing a result leaves the dock, so its dock × closes the dock without a card. Flip shows no × in Open; its Filled × clears only the query, and the Icon Button closes the dock.                                                                                                                                                                                                                                                                                                                                                                                          |
 | UI-A14 | On every device, inspect the first category, press another category, press it again, then open and close the desktop dock.                                                                                                                        | All leads the row and is pressed for no filter; the active category returns to All without clearing the query. The desktop row keeps its scroll position and active chip through dock open/close.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | UI-A15 | Pick a category, use its × in every row, then repeat with the dock and search closed on Mobile, and with the dock closed on Flip. Type a query with and without a category and use the Flip query chip's ×.                                       | Every active chip (never All) has a named 40 px × that returns to All, keeps the query and preserves the row's scroll position; the standalone chip disappears. On Mobile it sits 8 px below the bar and opens the bubble; it is hidden for All, with a panel open, and under a Fullscreen card (with the header), while a Peek or Full card leaves it visible above the card. On Flip the active category and query chips share a row 8 px right of the Icon Button, ending 12 px from the right edge, with the query chip directly beside the button when All is active. Each label opens the dock list with the same filters, the query × clears only the query and refreshes highlights, and both chips are hidden while the dock or any card is open. |
-| UI-A16 | Type a query with places, recorded building addresses and named streets; pan, choose each result kind, then clear search. Zoom out and pick a category.                                                                                           | Rows are nearest first with place/building/address/street symbols and labels; a visible street has one row and a green road outline, choosing it turns the road red and opens the Road card, in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, marks survive a map pick, a closed list and a covering card on every device, and clearing the query with All removes every green mark. With no query and All, ordinary POI thresholds apply. A category lists places only.                                                                                                                  |
+| UI-A16 | Type a query with places, recorded building addresses and named streets; pan, choose each result kind, then clear search. Zoom out and pick a category.                                                                                           | Rows are nearest first with place/building/address/street symbols and labels; a visible street has one row and a green road outline, choosing it turns the road red and opens the Road card, in-view building outlines and every in-view result marker are green, including below-threshold places during an active filter, the chosen one turns red, an off-screen choice is revealed by the focus-zone rule, marks survive a map pick, a closed list and a covering card on every device, and clearing the query with All removes every green mark. The query keeps every non-result place rendered; only a category other than All hides places outside it. With no query and All, ordinary POI thresholds apply. A category lists places only.         |
 | UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                                                                                                                         | With a usable fix, every result kind, including streets, is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | UI-A18 | On Desktop with no card, the wide card, the search panel and the dock; on phone Peek and Full; and under the Flip dock, inspect the scale bar and credit.                                                                                         | The scale and credit boxes stay at the map's bottom-left within 1 px. At each centre, a covering card, panel or dock is the hit target; otherwise the map control is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | UI-A19 | At 340×250 and 374×241, pick a map place, a building and a dock result; tap Peek and use Back, the Icon Button, Escape and the screen-reader close button; pull the card up and down, try wheel input, then replace the card with another object. | Every pick opens header-only Peek with the picked object visible; tapping or pulling up opens Fullscreen, and every step-back control, including a downward pull, follows the same Fullscreen → Peek → closed → dock (for a dock pick) or bare map path with matching focus. Fullscreen pulls wait for `scrollTop 0`; wheel input never changes the Flip card state. The grab bar is 36×4 with a 4 px top offset in both steps, both standalone chips stay hidden for every open Flip state, and a dock result returns to the unchanged list with focus on its row, including after that row's origin survives a replacement selection.                                                                                                                    |
