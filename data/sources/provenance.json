@@ -29,6 +29,8 @@
     "entrancesUnjoined": 28,
     "name": 265,
     "nohousenumber": 6,
+    "placesInsideBuildings": 1093,
+    "placesOutsideBuildings": 1019,
     "roof:levels": 142,
     "start_date": 1
   },
@@ -104,11 +106,11 @@
     "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
   ],
   "place_visibility_config_sha256": "ad76ecf865cbea764fd34ae7571418ad9e1a2434f2bf64e37073af8f0f3269c6",
-  "place_visibility_policy_sha256": "58aa75c12b1902801119a9db09c144c90ab3326ceb39080a68836767722d3fcc",
-  "places_bytes": 587199,
-  "places_count": 1876,
-  "places_facts_sha256": "005fd5e3ed8f4d421bf837bed946ffebb66bccaf03a5ed4ee607acfbe2277671",
+  "place_visibility_policy_sha256": "c1644e445fd1980d27709068d6a125f44c6be9bcf931694e68c3308e8aa52679",
+  "places_bytes": 728084,
+  "places_count": 2112,
+  "places_facts_sha256": "45028f115c3ea747c50ca217c28d637543a0951240c3d2cd322674eb5dec4f53",
   "places_file": "data/sources/places.geojson",
-  "places_sha256": "71456612a5e1b08d8622c67584bf312e5362e07045c8158a8c15f888486d11f3",
+  "places_sha256": "50e9b686aa1f24014349f1d183c5f2c088888a098111f2afaed51d2ce930943a",
   "upstream_snapshot": "2026-11-20T21:21:21Z"
 }

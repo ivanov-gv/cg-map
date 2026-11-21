@@ -52,7 +52,7 @@ test('every required offline asset exists and the glyph ranges cover names', () 
 
   const publishedPlaces = JSON.parse(fs.readFileSync(path.join(web, 'data/places.geojson')));
   // Pin the reviewed snapshot independently of the provenance record.
-  assert.equal(publishedPlaces.features.length, 1876);
+  assert.equal(publishedPlaces.features.length, 2112);
   assert.equal(publishedPlaces.features.length, provenance.places_count);
 
   const namedFilePaths = ['dist/web/data/places.geojson', dataSourcePath('roads.geojson')];
