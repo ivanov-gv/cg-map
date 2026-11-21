@@ -5,6 +5,7 @@ import {
   cardStateAfterSwipe,
   isActiveChipVisible,
   isClearButtonVisible,
+  isDockFooterVisible,
   isInFocusZone,
   searchBarState,
   searchBounds,
@@ -55,6 +56,34 @@ test('the map chip replaces the category row only where search and the dock are 
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),
     true,
     'a peek leaves it available'
+  );
+});
+
+test('the Flip list screen never shows the dock footer, whatever the keyboard does', () => {
+  for (const isKeyboardOpen of [false, true]) {
+    assert.equal(
+      isDockFooterVisible({isFlipLayout: true, isDockOpen: true, flipDockScreen: 'list', isKeyboardOpen}),
+      false
+    );
+  }
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: true, isDockOpen: true, flipDockScreen: 'modes', isKeyboardOpen: false}),
+    true
+  );
+});
+
+test('other layouts keep the footer unless a keyboard covers it', () => {
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: false, isDockOpen: true, flipDockScreen: null, isKeyboardOpen: false}),
+    true
+  );
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: false, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: true}),
+    false
+  );
+  assert.equal(
+    isDockFooterVisible({isFlipLayout: true, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: false}),
+    true
   );
 });
 

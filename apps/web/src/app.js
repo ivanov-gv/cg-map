@@ -47,9 +47,16 @@ import {MapInterface} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 import {renderMapAttribution} from './attribution.js';
 
+// Re-renders the footer when sources or the viewport change; the renderer shortens the version when needed.
+function renderCurrentAttribution() {
+  if (!mapState.map) return;
+  renderMapAttribution(mapState.map, startupState.build);
+}
+
 // Renders the current device class as a data attribute on <body>.
 function renderDeviceClass() {
   document.body.dataset.device = deviceClass(matchMedia);
+  renderCurrentAttribution();
 }
 
 // Sets data-device on <body> so CSS and scripts can target Flip, Mobile, or Desktop.
@@ -59,6 +66,17 @@ function trackDeviceClass() {
   const mobileQuery = matchMedia(MOBILE_MEDIA_QUERY);
   flipQuery.addEventListener('change', renderDeviceClass);
   mobileQuery.addEventListener('change', renderDeviceClass);
+}
+
+// Re-measures the footer when its own width changes, after layout has settled.
+function trackFooterFit() {
+  const container = document.getElementById('map-attribution');
+  if (!container) return;
+  if (typeof ResizeObserver === 'undefined') {
+    window.addEventListener('resize', renderCurrentAttribution);
+    return;
+  }
+  new ResizeObserver(renderCurrentAttribution).observe(container);
 }
 
 // One map and the controllers installed on it.
@@ -95,7 +113,8 @@ const startupState = {
   dataMode: null,
   dataSources: null,
   serviceWorkerRegistration: null,
-  offlineControls: null
+  offlineControls: null,
+  build: null
 };
 
 const routeEndpoints = {from: null, to: null};
@@ -274,7 +293,7 @@ async function start() {
   installPositionBadge();
   mapState.map.on('load', () => {
     installPublicLayers(placesReady, labelsReady);
-    renderMapAttribution(mapState.map);
+    renderCurrentAttribution();
   });
   registerPublicMapEvents();
   warnAboutSlowStartup();
@@ -326,6 +345,7 @@ async function initializeMapTransport() {
   startupState.dataSources = dataEndpoints(startupState.dataMode, location.href);
   document.documentElement.dataset.api = startupState.dataMode;
   const manifest = await loadJSON('data/manifest.json', 'Map metadata');
+  startupState.build = manifest.build;
   startupState.archive = new ArchiveSource(new URL(manifest.archive.path, location.href).href, manifest);
   startupState.offlineControls = new OfflineControls({
     archive: startupState.archive,
@@ -342,6 +362,7 @@ async function initializeMapTransport() {
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
+// flipDockScreen reports the Flip dock screen ('list', 'modes', or null when closed).
 function installPublicMapDebug() {
   window.kompasDebug = {
     get map() {
@@ -373,6 +394,9 @@ function installPublicMapDebug() {
     },
     get explored() {
       return mapState.hasExploredMap;
+    },
+    get flipDockScreen() {
+      return mapState.interface?.flipDockScreen ?? null;
     }
   };
 }
@@ -465,10 +489,10 @@ function installPublicLayers(placesReady, labelsReady) {
 
 function registerPublicMapEvents() {
   // Re-render attribution when sources change (e.g. transport layer adds a source).
-  // renderMapAttribution skips the DOM update when nothing changed.
+  // renderCurrentAttribution skips the DOM update when nothing changed.
   mapState.map.on('sourcedata', event => {
     if (event.sourceDataType === 'metadata' || event.isSourceAdded) {
-      renderMapAttribution(mapState.map);
+      renderCurrentAttribution();
     }
   });
   mapState.map.on('movestart', event => {
@@ -708,7 +732,7 @@ function registerLayerControls() {
     setSatelliteVisible(mapState.map, mapState.isSatelliteVisible);
     elementById('satellite-toggle').setAttribute('aria-pressed', String(mapState.isSatelliteVisible));
     elementById('satellite-note').hidden = !mapState.isSatelliteVisible;
-    renderMapAttribution(mapState.map);
+    renderCurrentAttribution();
     if (mapState.isSatelliteVisible) {
       placeSelection.close(false);
       mapState.hasExploredMap = true;
@@ -770,6 +794,8 @@ function initializeInterface() {
       applyPlaceSearch();
     },
     onChange: () => {
+      // The footer can be hidden while its width is measured, so re-check the fit when the dock changes.
+      renderCurrentAttribution();
       syncPanels();
       if (mapState.interface && mapState.interface.view !== 'closed' && !mapState.hasExploredMap) {
         mapState.hasExploredMap = true;
@@ -800,6 +826,7 @@ registerLayerControls();
 registerDeviceControls();
 initializeInterface();
 trackDeviceClass();
+trackFooterFit();
 start().catch(error => {
   console.error(error);
   elementById('loading').hidden = true;

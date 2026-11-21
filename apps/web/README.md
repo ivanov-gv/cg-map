@@ -85,31 +85,34 @@ shrinks to the menu (hamburger) button on the main screen — the bar width is a
 The search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again
 (as on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no ×
 until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the
-dock or card. Closing the dock belongs to the header Icon Button (currently the menu control; its cycle is issue #247).
-The category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8
-px below the ☰ Icon Button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
+dock or card. Closing the dock belongs to the header icon button, whose three-state cycle is described below. The
+category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8 px
+below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
-stays at the top, full width with its gutters. The menu button closes the dock, revealing the map again. The dock
-content ends above the keyboard because it uses the keyboard-aware visible viewport variables (--visible-top,
---visible-height). While the dock is open, the route panel is hidden under it. Opening a place from the list switches to
-the search view with the card (`placeCardOpened` in interface.js calls `setView('search')` when the dock is open on
-mobile). Desktop keeps the side dock unchanged (narrower than the viewport). The place card and route panel keep their
-current behavior when the dock is closed.
+stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
+button's Close state does it, as described below. The dock content ends above the keyboard because it uses the
+keyboard-aware visible viewport variables (--visible-top, --visible-height). While the dock is open, the route panel is
+hidden under it. Opening a place from the list switches to the search view with the card (`placeCardOpened` in
+interface.js calls `setView('search')` when the dock is open on mobile). Desktop keeps the side dock unchanged (narrower
+than the viewport). The place card and route panel keep their current behavior when the dock is closed.
 
-**Flip minimizable footer** (issues #155, #161): on Flip, the dock footer is pinned at the bottom and starts minimized —
-only a compact handle row (28 px) shows, with no separator line or empty strip below it. The handle is a `<button>`
-(#footer-toggle) with aria-expanded and aria-controls and a short horizontal bar drawn in CSS. Clicking it expands the
-footer to show Satellite, Transport, Download, and attribution; the results area hides to make room. Clicking again
-collapses it. Closing the dock resets to minimized. The handle is hidden on Mobile and Desktop where the footer is
-always shown.
+**Flip icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three screens. See
+[the interface requirements](../../docs/ui-ux/features/interface.md#flip-three-state-icon-button) for behavior.
+Source-level details:
 
-When minimized at 340×250 (the real Flip screen height), the layout is compacted so at least 3 result rows are fully
-visible: the search bar uses an 8 px inset, inactive category chips are 30 px while the active pill stays 40 px, each
-result row is about 37 px (24 px symbol, smaller fonts), and the handle is 28 px with only the safe-area padding (4 px)
-below it. When expanded, layer tiles are compact (icon and label in one row, ~40 px) and the Download button is ~40 px
-so everything fits without scrolling. These sizes are tested at both 340×250 and 340×340.
+- `interface.js` tracks `flipDockScreen` (`'list'` | `'modes'` | `null`). When `null`, the dock is closed
+  (`view === 'closed'`). The icon and label are derived from `view` + `flipDockScreen` in `syncMenuIcon()`.
+- `syncDockContent()` hides only `#results` on the modes screen; `#categories` stays visible above the footer tiles.
+- `syncDockContent()` is the sole owner of Flip footer visibility: the list screen always hides the footer, including
+  with zero results and after keyboard/viewport events; only the modes screen shows it.
+- On the modes screen, focusing the search field or typing switches to the list screen.
+- The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
+- Tested at 374×241, 340×250 and 340×340 viewports. The list is checked with zero, one and two results, including
+  keyboard open/close events: it keeps the whole dock area and hides the footer. The CSS compact layout (style.css
+  `@media` block) uses an 8 px bar inset, 30 px category chips with the active pill at 40 px (issue #268), and ~37 px
+  result rows so at least 3 fit. The modes menu footer has no scroll.
 
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
@@ -137,7 +140,11 @@ after endpoint selection; choosing From or To closes search or the dock to show 
 and offline safety remain part of the existing features. Map attribution lives in the left dock footer and also appears
 as a small "OpenStreetMap" credit link below the scale bar on the map surface; the credits are read from the map's
 sources at runtime so they stay in sync when layers change
-([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)).
+([ADR 0016](../../docs/decisions/0016-map-attribution-in-the-left-dock.md)). The footer line starts with the app name
+and version from `package.json`, plus the short commit recorded in the generated `data/manifest.json` at build time
+(from Git locally, `GITHUB_SHA` in CI). A build with no known commit shows the version alone. The renderer keeps the
+line unwrapped and drops only the commit when the full text would overflow, so Flip cover screens and other narrow
+layouts keep the full licence text and links on one line.
 
 The public app keeps orchestration in app.js. Read its named control-registration steps at the end, then follow a
 handler into its rendering or data module. Routing separates provider requests, bounded transit search, and itinerary
@@ -591,9 +598,9 @@ geometry need different fixes.
 
 ## 15. What tests prove, and what they do not
 
-The repository currently has 22 Node tests covering archive decoding/style validity, search, link safety, download
-transactions, service-worker responses, HTTP transport fallback and satellite configuration/assets. There are also
-Python server tests and an optional browser script in ../tests/browser-check.mjs.
+Node tests cover archive decoding/style validity, search, link safety, download transactions, service-worker responses,
+HTTP transport fallback and satellite configuration/assets. There are also Python server tests and an optional browser
+script in ../tests/browser-check.mjs.
 
 Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is
 smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.

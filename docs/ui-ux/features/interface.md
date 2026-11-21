@@ -49,8 +49,11 @@ stable. A short interface still needs understandable symbols, accessible names, 
 
 Show the map, one combined burger/search bar, an icon-only location button, a metric scale, a small "OpenStreetMap"
 credit below the scale bar, and full attribution in the left dock footer (per
-[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). Default geographic content remains governed by
-Discover; simplifying controls does not remove roads, buildings, addresses, terrain, or scale-appropriate places.
+[ADR 0016](../../decisions/0016-map-attribution-in-the-left-dock.md)). That footer starts with the app name and version,
+then the short build commit when the build knows one, followed by the licence credits on the same line. The line never
+wraps; when it cannot fit, including on a Flip cover screen, only the version part is shortened and the licence text and
+links stay complete. Default geographic content remains governed by Discover; simplifying controls does not remove
+roads, buildings, addresses, terrain, or scale-appropriate places.
 
 The dock starts closed. Do not show a result list, expanded map key, location text banner, download promotion, About
 block, tagline, route panel, or dedicated Country overview / Return to Podgorica buttons. Pan and zoom retain access to
@@ -125,8 +128,7 @@ categories are hidden to conserve space on the small display. When the user open
 full width again (as on mobile), and the search field becomes visible and usable. The dock's results with no query make
 the bar Open, but Flip shows no × in Open; typing makes it Filled and reveals ×. That × clears the query only, keeping
 the dock and its results open. It never closes the dock or the place card: dock closing belongs to the header Icon
-Button (currently the menu control; its cycle is issue #247). The categories row follows the same dock-open behavior as
-on mobile.
+Button, whose three-state cycle is described below. The categories row follows the same dock-open behavior as on mobile.
 
 ### Active category chip (issue #268)
 
@@ -149,29 +151,41 @@ viewport — from top 0 to 100dvh, full width, with no map visible around it. Th
 width with its gutters. The dock content ends above the keyboard because it uses the keyboard-aware visible viewport
 variables (--visible-top, --visible-height). While the dock is open, the route panel is hidden under it. Opening a place
 from the list switches to the search view with the card (`placeCardOpened` in interface.js calls `setView('search')`
-when the dock is open on mobile). The menu button closes the dock, revealing the map again. The place card and route
-panel keep their current behavior when the dock is closed. Desktop keeps the side dock unchanged (narrower than the
-viewport, with the map visible beside it).
+when the dock is open on mobile). The menu button closes the dock on Mobile; on Flip the icon button's Close state does
+it, as described below. The place card and route panel keep their current behavior when the dock is closed. Desktop
+keeps the side dock unchanged (narrower than the viewport, with the map visible beside it).
 
-### Flip minimizable footer
+### Flip three-state icon button
 
-On Flip, the dock footer is pinned at the bottom and starts minimized — only a compact handle row (28 px) shows, with no
-separator line or empty strip below it. The handle is a `<button>` (#footer-toggle) with an accessible name ("Show map
-options" / "Hide map options"), `aria-expanded` and `aria-controls`, and a short horizontal bar drawn in CSS (like the
-existing `.card-handle::before`). It is hidden on Mobile and Desktop, where the footer is always shown.
+On Flip, the menu icon button (#menu-toggle) cycles through three screens:
 
-Opening the footer reveals Satellite, Transport, Download, and the attribution line; the results area hides to make room
-(the wiki's second Flip drawing shows the results hidden while the footer is open). The handle stays at the top of the
-footer. Clicking the handle again collapses the footer and restores the results. Closing the dock resets the footer to
-minimized. The keyboard-aware bottom (#146) and safe-area padding are preserved.
+1. **☰ Menu** (dock closed): tap opens the full-screen dock showing the search field, categories, and results list.
+2. **◇ Modes** (dock open, list screen shown): tap shows the modes menu — Satellite and Transport tiles side by side,
+   the "Download for offline use" button, and the one-line version/licence footer. The search field stays in the header,
+   and the categories row remains visible above the tiles. Everything fits without scrolling at 374×241, 340×250 and
+   340×340.
+3. **× Close** (modes screen shown): tap closes the dock and returns to the map. The next time the dock is opened, it
+   shows the results list again.
 
-**Compact layout for real Flip screens** (issue #161): the real Flip cover screen is about 340×250 CSS px (shorter than
-the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are fully visible
-when minimized: the search bar uses an 8 px top inset (instead of 20 px), inactive category chips are 30 px high with
-tight padding while the active pill stays 40 px, each result row is about 37 px (24 px symbol, 13 px name, 10 px
-kind/distance with ellipsis), and the handle is 28 px with only the safe-area padding (4 px) below it. When expanded,
-layer tiles are compact (icon and label in one row, ~40 px high) and the Download button is ~40 px so Satellite,
-Transport, Download and the attribution line all fit without scrolling. These sizes are tested at both 340×250 and
+On the list screen the modes footer (Satellite, Transport, Download and the attribution line) is never shown, whatever
+the number of results; an empty result shows the normal "No places found" message in the list area. Keyboard and other
+viewport changes must not reveal the footer there. Only ◇ Modes shows it, and that screen is unchanged.
+
+Each screen has its own icon (☰ from `#i-menu`, ◇ from `#i-modes`, × from `#i-close` in the SVG sprite), an accessible
+name ("Open menu" / "Show map modes" / "Close menu"), and `aria-expanded` on the dock reflecting whether it is open. The
+old minimizable footer handle (#footer-toggle) has been removed and replaced by this cycle.
+
+On the modes screen, focusing the search field or typing a query switches back to the list screen, showing filtered
+results and updating the button icon to ◇ Modes.
+
+**Compact layout for real Flip screens** (issues #161, #268): the real Flip cover screen is about 340×250 CSS px
+(shorter than the 340×340 used in earlier tests). At that height the layout is compacted so at least 3 result rows are
+fully visible when the dock shows results: the search bar uses an 8 px top inset (instead of 20 px), inactive category
+chips are 30 px high with tight padding while the active pill stays 40 px, and each result row is about 37 px (24 px
+symbol, 13 px name, 10 px kind/distance with ellipsis). When the modes menu is shown, layer tiles are compact (icon and
+label in one row, ~40 px high) and the Download button is ~40 px so Satellite, Transport, Download and the attribution
+line all fit without scrolling. At 374×241 and 340×250 the footer keeps the app version and the full licence on one
+line, dropping the short commit because the full text cannot fit. These sizes are tested at 374×241, 340×250 and
 340×340.
 
 ## UI-03 Results scroll; options stay at the bottom
@@ -241,11 +255,11 @@ strip has no scrollbar: it scrolls by touch or mouse wheel and brings the active
 
 ## UI-04 Bottom controls and wording
 
-| Control          | Presentation                                                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| Satellite        | Optional layer tile with a recognizable pictogram and the short label **Satellite** underneath. |
-| Transport        | Optional layer tile with a recognizable pictogram and the short label **Transport** underneath. |
-| Offline download | One button labeled **Download for offline use** before a download starts.                       |
+| Control          | Presentation                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Satellite        | Optional layer tile with the folded-map pictogram (sun and hills) and the short label **Satellite** underneath. |
+| Transport        | Optional layer tile with a recognizable pictogram and the short label **Transport** underneath.                 |
+| Offline download | One button labeled **Download for offline use** before a download starts.                                       |
 
 Arrange the layer tiles in a compact grid, not a vertical settings list. Omit the Standard map option and the visible
 headings Map layers and Offline map. Each tile exposes its active/available state; optional layers start off. Turning
@@ -291,7 +305,7 @@ and reduced motion.
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | UI-A01 | Open with no app interaction.                                                                                                                     | Only the opening controls and geographic scene are present; dock content is closed.                                                                                                                                                                                                                                                                               |
 | UI-A02 | Toggle the dock at an unchanged viewport.                                                                                                         | Header/control bounding boxes, shape, and text baseline remain unchanged; query, category, focus, and selection survive.                                                                                                                                                                                                                                          |
-| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure.                                                                   | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible.                                                                                                                                                                                                                |
+| UI-A03 | Search for zero, one, and many places; scroll results; include loading/failure. Include Flip with zero, one and two results and keyboard changes. | Categories remain fixed while the result list scrolls. Full-dock bottom options stay anchored; mobile search is capped and leaves the map visible. On Flip the list keeps its area and never shows the modes footer; an empty result shows the normal no-results message.                                                                                         |
 | UI-A04 | Inspect bottom options.                                                                                                                           | Two labeled pictogram tiles and the download action; no Standard map option, redundant headings, nested menus, or generic prose.                                                                                                                                                                                                                                  |
 | UI-A05 | Activate location with a fresh fix, then test following, stop conditions, and unavailable positioning.                                            | A usable fix starts following (green toggle, aria-pressed); new fixes move the camera; a second click, a map drag, a search result, or location failure stops following; unavailable positioning follows the recovery path without inventing a location.                                                                                                          |
 | UI-A06 | Toggle layers and start/cancel/fail a download.                                                                                                   | Actual state is clear at its control; optional failures preserve browsing and an existing verified download.                                                                                                                                                                                                                                                      |
@@ -312,14 +326,17 @@ card and dock coexistence, the Empty/Open/Filled transitions and × behavior on 
 blurring the field while the bubble or dock keeps its query and results (including Flip), preserving a map-picked card
 when desktop focus opens results, a floating chip opening those results, × closing a card and the desktop dock, the Flip
 exception (Filled-only × that cannot close the dock), the All chip and active-category return, the active category chip
-and its × on desktop, phone and Flip, seamless desktop row movement, the Locate button's box, computed radius/icon size
-and offsets at each device class, and the follow location state machine (start, new fix moves camera, second click
-stops, drag stops, search result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the
-state and clear-button functions; no large fake DOM is built for browser behavior. Keyboard geometry is simulated with a
-smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone behavior. Review
-physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI stability checks in
-[Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the illustrative draft's
-cumulative icons do not prove a production placement solution. Paid visibility is outside this UI decision.
+and its × on desktop, phone and Flip, seamless desktop row movement, the Flip list footer staying hidden with zero, one
+or two results across keyboard events, the build version on one footer line at desktop, 412×840 Mobile, 374×241 and
+340×250, the Satellite symbol's design geometry, the Locate button's box, computed radius/icon size and offsets at each
+device class, and the follow location state machine (start, new fix moves camera, second click stops, drag stops, search
+result stops, denied shows recovery, no initial fix, button style). Pure unit tests cover the state, clear-button,
+dock-footer visibility and footer-version functions; no large fake DOM is built for browser behavior. Keyboard geometry
+is simulated with a smaller visual viewport; this does not establish physical keyboard, screen-reader, or phone
+behavior. Review physical-device usability under [the testing guide](../../verification/testing.md). Keep scale/POI
+stability checks in [Discover D-05](../user-stories/discover.md#d-05-points-of-interest-without-clutter); the
+illustrative draft's cumulative icons do not prove a production placement solution. Paid visibility is outside this UI
+decision.
 
 ## Reusable initial brief
 

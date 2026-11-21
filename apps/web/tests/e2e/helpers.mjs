@@ -36,10 +36,16 @@ export async function openMenu(page) {
     await page.locator('#menu-toggle').click();
 }
 export async function closeMenu(page) {
-  if ((await page.locator('#menu-toggle').getAttribute('aria-expanded')) === 'true')
-    await page.locator('#menu-toggle').click();
-  else if ((await page.locator('body').getAttribute('data-view')) === 'search')
+  const expanded = await page.locator('#menu-toggle').getAttribute('aria-expanded');
+  if (expanded === 'true') {
+    // On Flip the menu cycles through three states (menu → modes → close → menu).
+    // Keep clicking until the dock is actually closed.
+    while ((await page.locator('body').getAttribute('data-view')) !== 'closed') {
+      await page.locator('#menu-toggle').click();
+    }
+  } else if ((await page.locator('body').getAttribute('data-view')) === 'search') {
     await page.keyboard.press('Escape');
+  }
 }
 // Phones have no visible cross: activate the button the way a screen reader does.
 export async function closeCard(page) {

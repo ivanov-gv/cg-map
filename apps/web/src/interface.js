@@ -19,6 +19,13 @@ export function isActiveChipVisible({hasCategory, view, cardState, cardHidden, i
   return !isExpandedCard;
 }
 
+// The Flip screen owns the footer: only ◇ Modes shows it, regardless of results or keyboard.
+// Elsewhere the footer stays available unless the keyboard would cover it.
+export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, isKeyboardOpen}) {
+  if (isFlipLayout && isDockOpen) return flipDockScreen === 'modes';
+  return !isKeyboardOpen;
+}
+
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.
@@ -121,6 +128,10 @@ export class MapInterface {
     this.mobileLayoutQuery = matchMedia('(max-width: 720px)');
     this.flipLayoutQuery = matchMedia(FLIP_MEDIA_QUERY);
     this.isRestoringFocus = false;
+    // On Flip, the menu button cycles through three screens; elsewhere it toggles the dock.
+    // 'list' → dock open, results shown; 'modes' → dock open, modes menu shown.
+    // When the dock is closed, flipDockScreen is null and view === 'closed'.
+    this.flipDockScreen = null; // 'list' | 'modes' | null, meaningful only on Flip
   }
 
   findControls() {
@@ -128,6 +139,7 @@ export class MapInterface {
     this.menu = document.getElementById('menu-toggle');
     this.panel = document.getElementById('browse-panel');
     this.dock = document.getElementById('dock-content');
+    this.dockMain = document.getElementById('dock-main');
     this.bubble = document.getElementById('search-bubble');
     this.strip = document.getElementById('results-strip');
     this.card = document.getElementById('place-card');
@@ -140,16 +152,14 @@ export class MapInterface {
     this.activeChipRemove = document.getElementById('active-category-chip-remove');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
-    this.footerToggle = document.getElementById('footer-toggle');
     this.trigger = this.menu;
   }
 
   wireControls() {
-    this.menu.addEventListener('click', () => this.toggleMenu());
+    this.menu.addEventListener('click', () => this.activateMenu());
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.activeChipLabel.addEventListener('click', () => this.openChipTarget());
     this.activeChipRemove.addEventListener('click', () => this.onRemoveCategory?.());
-    this.footerToggle.addEventListener('click', () => this.toggleFooter());
     this.strip.addEventListener('click', () => this.setCardState('peek'));
     this.cardHandle.addEventListener('click', () => {
       if (this.view === 'search') this.setCardState(this.card.dataset.state === 'full' ? 'peek' : 'full');
@@ -157,20 +167,21 @@ export class MapInterface {
     this.wireSearchEvents();
   }
 
-  // The header button owns dock toggling and becomes the focus target when it closes.
-  toggleMenu() {
-    this.trigger = this.menu;
-    if (this.mobileLayoutQuery.matches) this.search.blur();
-    this.setView(this.view === 'dock' ? 'closed' : 'dock');
-    this.onViewport?.();
-  }
-
+  // Wire the search input handlers. On Flip with the modes screen shown,
+  // focus or typing switches to the list screen instead of opening search.
   wireSearchEvents() {
-    // A restored focus must not reopen the panel it just returned to.
     for (const type of ['focus', 'click'])
       this.search.addEventListener(type, () => {
-        if (this.isRestoringFocus) return;
-        this.openSearch();
+        if (!this.isRestoringFocus) {
+          if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
+            this.flipDockScreen = 'list';
+            this.syncDockContent();
+            this.syncMenuIcon();
+            this.onSearch?.();
+            return;
+          }
+          this.openSearch();
+        }
       });
     this.search.addEventListener('keydown', event => {
       const isSearchKey = event.key === 'Enter' && !event.isComposing;
@@ -181,9 +192,23 @@ export class MapInterface {
       this.search.blur();
     });
     this.search.addEventListener('input', () => {
+      if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
+        this.flipDockScreen = 'list';
+        this.syncDockContent();
+        this.syncMenuIcon();
+      }
       this.syncClearButton();
       this.syncDesktopSearchUI();
     });
+  }
+
+  // A menu click toggles the dock, or advances the three-state cycle on Flip.
+  activateMenu() {
+    this.trigger = this.menu;
+    if (this.mobileLayoutQuery.matches) this.search.blur();
+    if (this.flipLayoutQuery.matches) this.cycleFlipMenu();
+    else this.setView(this.view === 'dock' ? 'closed' : 'dock');
+    this.onViewport?.();
   }
 
   wireLayoutChanges() {
@@ -204,9 +229,12 @@ export class MapInterface {
     this.syncActiveChip();
   }
 
+  // A device-class change re-derives the clear-button rule, the active chip and the Flip menu state.
   syncForFlipLayoutChange() {
     this.syncClearButton();
     this.syncActiveChip();
+    this.syncDockContent();
+    this.syncMenuIcon();
   }
 
   startCardObserver() {
@@ -332,7 +360,7 @@ export class MapInterface {
   #panelTargetFor(view) {
     if (view === 'search') return this.bubble;
     if (!this.mobileLayoutQuery.matches && view === 'closed') return this.desktopSearchPanel;
-    return document.getElementById('dock-main');
+    return this.dockMain;
   }
 
   setView(view) {
@@ -355,27 +383,86 @@ export class MapInterface {
     this.syncCardHandle();
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
-    this.menu.setAttribute('aria-label', view === 'dock' ? 'Close menu' : 'Open menu');
     this.syncSearchExpanded();
     this.syncActiveChip();
-    // Closing the dock resets the Flip footer to minimized.
-    if (view !== 'dock') this.minimizeFooter();
+    // Closing the dock resets the Flip screen to null.
+    if (view !== 'dock') {
+      this.flipDockScreen = null;
+    }
+    // Opening the dock always starts with the list screen.
+    if (view === 'dock' && this.flipDockScreen === null) {
+      this.flipDockScreen = 'list';
+    }
+    // Derive dock content (dock-main, footer) from current state.
+    this.syncDockContent();
+    this.syncMenuIcon();
     this.onChange?.();
   }
 
-  // Toggle the Flip footer between minimized (handle only) and expanded (all options).
-  toggleFooter() {
-    const isExpanded = this.footerToggle.getAttribute('aria-expanded') === 'true';
-    this.footerToggle.setAttribute('aria-expanded', String(!isExpanded));
-    this.footerToggle.setAttribute('aria-label', isExpanded ? 'Show map options' : 'Hide map options');
-    this.footer.dataset.footerExpanded = String(!isExpanded);
+  // On Flip, cycle the icon button through three screens:
+  //   null (☰) → open dock showing categories + results (list screen)
+  //   'list' (◇) → replace results with modes menu (modes screen)
+  //   'modes' (×) → close dock and reset
+  cycleFlipMenu() {
+    switch (this.flipDockScreen) {
+      case null:
+        // Open the dock; setView transitions flipDockScreen to 'list' and shows the list.
+        this.setView('dock');
+        break;
+      case 'list':
+        // Show the modes menu (footer content) and hide results.
+        this.flipDockScreen = 'modes';
+        this.syncDockContent();
+        break;
+      case 'modes':
+        // Closing the dock resets the screen to null.
+        this.setView('closed');
+        break;
+    }
+    this.syncMenuIcon();
   }
 
-  // Reset the Flip footer to minimized (handle only, content hidden).
-  minimizeFooter() {
-    this.footerToggle.setAttribute('aria-expanded', 'false');
-    this.footerToggle.setAttribute('aria-label', 'Show map options');
-    delete this.footer.dataset.footerExpanded;
+  // Derive the visible dock content from current state.
+  // On Flip with the dock open: show the results list on the list screen, show the footer on the modes screen.
+  // The categories row stays visible in both screens (it lives inside dock-main).
+  // In every other case (dock closed, or not Flip): show both dock-main and footer, minus a covering keyboard.
+  syncDockContent() {
+    const isFlip = this.flipLayoutQuery.matches;
+    const isDockOpen = this.view === 'dock';
+    const showResults = !(isFlip && isDockOpen) || this.flipDockScreen === 'list';
+    // On the modes screen, hide only the results section so categories remain visible.
+    this.dockMain.hidden = false;
+    document.getElementById('results').hidden = !showResults;
+    this.footer.hidden = !isDockFooterVisible({
+      isFlipLayout: isFlip,
+      isDockOpen,
+      flipDockScreen: this.flipDockScreen,
+      isKeyboardOpen: this.keyboardOpen()
+    });
+  }
+
+  // Update the menu button icon and accessible label for the current state.
+  // On Flip, derive icon and label from view + flipDockScreen.
+  syncMenuIcon() {
+    const iconUse = this.menu.querySelector('use');
+    if (this.flipLayoutQuery.matches) {
+      if (this.view !== 'dock') {
+        // Dock closed: ☰ Menu
+        iconUse.setAttribute('href', '#i-menu');
+        this.menu.setAttribute('aria-label', 'Open menu');
+      } else if (this.flipDockScreen === 'list') {
+        // Dock open, list shown: ◇ Modes
+        iconUse.setAttribute('href', '#i-modes');
+        this.menu.setAttribute('aria-label', 'Show map modes');
+      } else {
+        // Dock open, modes shown: × Close
+        iconUse.setAttribute('href', '#i-close');
+        this.menu.setAttribute('aria-label', 'Close menu');
+      }
+    } else {
+      iconUse.setAttribute('href', '#i-menu');
+      this.menu.setAttribute('aria-label', this.view === 'dock' ? 'Close menu' : 'Open menu');
+    }
   }
 
   syncResultsVisibility() {
@@ -621,8 +708,9 @@ export class MapInterface {
     style.setProperty('--keyboard-inset', `${Math.max(0, innerHeight - height - top)}px`);
     style.setProperty('--search-top', `${bounds.top}px`);
     style.setProperty('--search-max-height', `${bounds.maxHeight}px`);
-    // The keyboard would cover these options and the end of the results list above them.
-    document.querySelector('.dock-footer').hidden = this.keyboardOpen();
+    // A viewport event must not overrule the Flip screen's own footer rule. Re-derive the whole dock content,
+    // which also hides the footer here when a keyboard would cover it outside Flip.
+    this.syncDockContent();
     if (notify) this.onViewport?.();
   }
 
