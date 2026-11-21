@@ -4986,7 +4986,10 @@ test.describe('Active category chip', () => {
     await expect(rowRemove(page)).toBeVisible();
   });
 
-  test('phone chip hides for All and behind a full place card', {tag: '@phone'}, async ({page, isMobile}) => {
+  test('phone chip stays above a Full card and hides only in Fullscreen', {tag: '@phone'}, async ({
+    page,
+    isMobile
+  }) => {
     test.skip(!isMobile, 'phone layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
@@ -4998,16 +5001,60 @@ test.describe('Active category chip', () => {
 
     const place = nearbyPlaces.features[0];
     await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
-    await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
+    const card = page.locator('#place-card');
+    await cardSettled(page, 'full');
+    await expect(mapChip(page)).toBeVisible();
+    await expect(page.locator('#active-category-chip-label')).toHaveText('Shops');
+    const chipBox = await mapChip(page).boundingBox();
+    const cardBox = await card.boundingBox();
+    expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(cardBox.y);
+
+    await page.locator('#card-handle').click();
+    await cardSettled(page, 'fullscreen');
     await expect(mapChip(page)).toBeHidden();
+
+    await page.locator('#card-handle').click();
+    await cardSettled(page, 'full');
+    await expect(mapChip(page)).toBeVisible();
+
     await closeCard(page);
-    await expect(page.locator('#place-card')).toBeHidden();
+    await expect(card).toBeHidden();
+    await expect(mapChip(page)).toBeVisible();
+    await expect(chipRemove(page)).toHaveAttribute('aria-label', 'Remove category Shops');
+
+    const secondPlace = nearbyPlaces.features[2];
+    await tapRenderedPlace(page, secondPlace.geometry.coordinates, secondPlace.properties.id);
+    await cardSettled(page, 'full');
+    await expect(mapChip(page)).toBeVisible();
+    await expect(page.locator('#active-category-chip-label')).toHaveText('Shops');
+    await closeCard(page);
+    await expect(card).toBeHidden();
     await expect(mapChip(page)).toBeVisible();
 
     await openMenu(page);
     await allButton(page).click();
     await closeMenu(page);
     await expect(mapChip(page)).toBeHidden();
+  });
+
+  test('phone chip stays above a Full card on a short phone', {tag: '@phone'}, async ({page, isMobile}) => {
+    test.skip(!isMobile, 'phone layout');
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await atViewport(page, {width: 360, height: 640}, async () => {
+      await openMenu(page);
+      await shopsButton(page).click();
+      await closeMenu(page);
+      await expect(mapChip(page)).toBeVisible();
+
+      const place = nearbyPlaces.features[0];
+      await tapRenderedPlace(page, place.geometry.coordinates, place.properties.id);
+      await cardSettled(page, 'full');
+      await expect(mapChip(page)).toBeVisible();
+      const chipBox = await mapChip(page).boundingBox();
+      const cardBox = await page.locator('#place-card').boundingBox();
+      expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(cardBox.y);
+    });
   });
 
   test('flip chip sits right of the icon button and a tap opens the dock', {tag: '@phone'}, async ({

@@ -75,10 +75,11 @@ px default and the 60 px desktop bar), spans the screen width minus 12 px gutter
 and font. Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains
 available inside the open dock and the search bubble, with **All** first. While both are closed, a green chip under the
 header (8 px below the bar, at its left edge) stands in for the active category row: tapping its label opens the bubble
-with that category, and its × returns to All. It is hidden for All, while the bubble or dock is open, and under a Full
-or Fullscreen place card. Focusing with the dock closed opens the bubble in Open with × and a nearest-first nearby list;
-the same × sequence applies: clearing a Filled query keeps results Open, and the next × closes the bubble and any place
-card. With the dock open, the bottom options hide while the keyboard is open.
+with that category, and its × returns to All. It is hidden for All, while the bubble or dock is open, and under a
+Fullscreen place card, which hides the header too; a Peek or Full card leaves it visible above the card. Focusing with
+the dock closed opens the bubble in Open with × and a nearest-first nearby list; the same × sequence applies: clearing a
+Filled query keeps results Open, and the next × closes the bubble and any place card. With the dock open, the bottom
+options hide while the keyboard is open.
 
 **Flip search bar** (issues #103, #246, #268, #287, #288): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the
 search bar shrinks to the menu (hamburger) button on the main screen — the bar width is at most the menu button width
@@ -172,9 +173,9 @@ uncover the map. Release settles to the nearest step from distance, direction an
 step. Full does not scroll, so long details are read in Fullscreen, whose body scrolls and whose downward pull at the
 top (`scrollTop 0`) returns to Full. Swiping down steps back; from Peek it closes the card. A place picked on the map
 opens in Full, and swiping down from Full closes it. Reduced motion removes the transition but keeps the same end
-states. The phone card is screen-wide with 12 px gutters, the Locate button sits above it in Peek and Full and is hidden
-in Fullscreen, and the screen-reader close button and the named card handle remain. Choosing a result in the phone dock
-switches to this compact view with the query and category kept. See
+states. The phone card is screen-wide with 12 px gutters. The active category chip and the Locate button sit above it in
+Peek and Full and hide in Fullscreen, the chip with the header; the screen-reader close button and the named card handle
+remain. Choosing a result in the phone dock switches to this compact view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
 **Flip place card** (issues #252, #289): on Flip, every place opens a two-step card. Peek shows only the header with 12
@@ -507,7 +508,8 @@ row; clicking an active category or its × returns to All without clearing the q
 Mobile, interface.js shows one active category chip under the header from the same directoryState value. On Flip it
 shows a top-row pair: the same category chip plus a query chip from the search field, governed by the pure
 `isQueryChipVisible` rule in [interface.js](src/interface.js). Both use the same `openChipTarget()` path, so tapping a
-label opens the control that owns its row, and both hide while a dock, bubble or Flip card covers the map. The bubble
+label opens the control that owns its row. Both hide while a dock or bubble covers the map; Flip chips also hide while
+any Flip card is open, whereas the Mobile chip stays above a Peek or Full card and hides only in Fullscreen. The bubble
 extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone
 dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes. On phones
 (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through a
