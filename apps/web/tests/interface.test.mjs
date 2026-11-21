@@ -17,7 +17,7 @@ import {
   phoneCardSteps,
   searchBarState,
   searchBounds,
-  shouldKeepHighlightsWhenResultsHidden,
+  hasActiveSearchFilter,
   uncoveredMapArea,
   uncoveredMapOffset
 } from '../src/interface.js';
@@ -111,12 +111,12 @@ test('other layouts keep the footer unless a keyboard covers it', () => {
   );
 });
 
-test('an active query or category keeps result marks even when the list is hidden', () => {
+test('hasActiveSearchFilter reports a query, a category, or both', () => {
   for (const filter of [{hasQuery: true, hasCategory: false}, {hasQuery: false, hasCategory: true}]) {
-    assert.equal(shouldKeepHighlightsWhenResultsHidden(filter), true);
+    assert.equal(hasActiveSearchFilter(filter), true);
   }
-  assert.equal(shouldKeepHighlightsWhenResultsHidden({hasQuery: true, hasCategory: true}), true);
-  assert.equal(shouldKeepHighlightsWhenResultsHidden({hasQuery: false, hasCategory: false}), false);
+  assert.equal(hasActiveSearchFilter({hasQuery: true, hasCategory: true}), true);
+  assert.equal(hasActiveSearchFilter({hasQuery: false, hasCategory: false}), false);
 });
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {

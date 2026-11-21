@@ -41,9 +41,9 @@ export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, i
   return !isKeyboardOpen;
 }
 
-// Result marks follow the search state on every device, not the list's visibility or covering panels. This answers
-// whether a query or category still owns marks when results are hidden, compacted, closed or covered by a card.
-export function shouldKeepHighlightsWhenResultsHidden({hasQuery, hasCategory}) {
+// An active search filter is a non-empty query or a non-All category. Result marks follow that filter on every device,
+// not the list's visibility or the panels covering it.
+export function hasActiveSearchFilter({hasQuery, hasCategory}) {
   return hasQuery || hasCategory;
 }
 

@@ -5272,6 +5272,11 @@ test.describe('Flip top-row chips', () => {
         await expect(page.locator('#categories button[data-category=""]')).toHaveAttribute('aria-pressed', 'true');
         await expect(page.locator('#results .result')).toHaveCount(1);
         await expect.poll(() => ringCount(page)).toBe(1);
+        await closeMenu(page);
+        await queryRemove(page).click();
+        await expect(queryChip(page)).toBeHidden();
+        await expect(page.locator('#search')).toHaveValue('');
+        await expect.poll(() => ringCount(page)).toBe(0);
       });
     }
   });
