@@ -379,8 +379,8 @@ resize. The button colour turns green while following; `aria-pressed` and `data-
 location fails or the permission prompt is dismissed while following, following stops. A live or approximate fix also
 supplies result-row distance and nearest-first order; other states keep centre order with no distance text, and a
 changed fix is applied after a throttle unless a card is open. Coordinates stay in memory only. | Validate thresholds on
-supported devices. Coverage is the Montenegro map bounds; a "limited detail" state for areas outside central Podgorica
-is not distinguished yet. |
+supported devices. Coverage is the Montenegro map bounds; a "limited detail" state for areas outside the whole-city
+Podgorica detail area is not distinguished yet. |
 
 Data owns acquisition, provenance, semantic preservation and validated releases. Web owns default camera, rendering,
 geolocation and communication of uncertainty. Shared producer/consumer formats belong to

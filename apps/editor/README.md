@@ -98,15 +98,17 @@ the working places, including new combinations of levels at one location.
 ### Larger datasets
 
 `make -C apps/editor measure-datasets` repeats the features of buildings.geojson and roads.geojson and times the real
-editor. Measured on 2026-11-07, one run per size, on a 16-thread machine with software rendering:
+editor. Measured on 2026-11-07 on a 16-thread machine with software rendering, using the previous 25,213 + 17,881
+features:
 
 | Size of both files         | Startup | Open Buildings | Open Roads & paths | JavaScript heap |
 | -------------------------- | ------- | -------------- | ------------------ | --------------- |
-| Today: 25,213 + 17,881     | 2.4 s   | 1.5 s          | 0.9 s              | 104 MB          |
+| Previous: 25,213 + 17,881  | 2.4 s   | 1.5 s          | 0.9 s              | 104 MB          |
 | 2 times                    | 2.0 s   | 2.0 s          | 1.5 s              | 78 MB           |
 | 4 times                    | 2.6 s   | 3.3 s          | 2.6 s              | 228 MB          |
 | 8 times: 201,704 + 143,048 | 3.8 s   | 6.2 s          | 4.2 s              | 595 MB          |
 
+Current sources have 43,978 buildings and 21,247 roads; these figures were not remeasured after that whole-city refresh.
 Opening a mode grows about linearly, and at 8 times takes long enough to notice but still works. The heap figures are
 one reading at an arbitrary moment of garbage collection, so only their overall growth means anything. This does not
 measure a phone, or edits and export at these sizes.

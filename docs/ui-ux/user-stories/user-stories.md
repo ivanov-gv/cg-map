@@ -13,8 +13,8 @@ requirements remain separate targets.
 Help someone exploring Montenegro find and understand a place, choose a useful next step, and retain useful map access
 when connectivity disappears. Success means the person can act on the information **and understands its limits**.
 
-The strongest current coverage is central Podgorica. Country-level exploration is supported with less detail elsewhere.
-The product is a read-only map and directory with route planning; its
+The strongest current coverage is the whole city of Podgorica. Country-level exploration is supported with less detail
+elsewhere. The product is a read-only map and directory with route planning; its
 [current architecture](../../system-architecture/architecture.md) defines the implemented scope.
 
 ## Product journey

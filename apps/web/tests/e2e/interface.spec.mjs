@@ -31,7 +31,16 @@ const RESORT_WINDOW_MILLISECONDS = 200;
 const WHEEL_GESTURE_GAP_MILLISECONDS = 650;
 const TAP_ACTION_WINDOW_MILLISECONDS = 650;
 const TOUCH_DRAG_STEP_MILLISECONDS = 25;
-const SNAPSHOT_DATE = '17 Oct 2026';
+const SNAPSHOT_DATE = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC'
+}).format(new Date(
+  JSON.parse(fileSystem.readFileSync(new URL(
+    '../../../../data/sources/provenance.json', import.meta.url
+  ))).upstream_snapshot
+));
 // The scale bar and OSM credit share MapLibre's bottom-left corner.
 const SCALE_BOX_TOLERANCE_PIXELS = 1;
 const SCALE_CORNER_LIMIT_PIXELS = 24;

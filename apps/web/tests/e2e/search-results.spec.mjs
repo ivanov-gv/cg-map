@@ -33,22 +33,29 @@ const ADDRESS = {
   geometry: {type: 'Point', coordinates: CENTRE},
   properties: {
     kind: 'building',
-    footprintIndex: 4,
+    footprintIndex: 31441,
     'addr:housenumber': '18',
     'addr:street': 'Bulevar Stanka Dragojevića'
   }
 };
-// The uncovered focus zone differs by viewport, so each project places its unique building at that zone's centre.
+// The focus zone differs by viewport: each point lies in the real footprint whose tile id is the label's index.
 const FOCUS_COORDINATES = {
-  'root-desktop': [19.261622679898437, 42.44233545953725],
-  'pages-mobile': [19.26054979629413, 42.44126264012965]
+  'root-desktop': [19.261687, 42.442414],
+  'pages-mobile': [19.260621, 42.44141]
 };
+const SECOND_FOOTPRINT_INDEX = {
+  'root-desktop': 26931,
+  'pages-mobile': 25890
+};
+const expectedSecondFootprint = () => [
+  SECOND_FOOTPRINT_INDEX[test.info().project.name]
+];
 const secondAddress = () => ({
   type: 'Feature',
   geometry: {type: 'Point', coordinates: FOCUS_COORDINATES[test.info().project.name]},
   properties: {
     kind: 'building',
-    footprintIndex: 5,
+    footprintIndex: SECOND_FOOTPRINT_INDEX[test.info().project.name],
     'addr:housenumber': '13',
     'addr:street': 'Njegoševa ulica'
   }
@@ -230,7 +237,7 @@ const selectedRoad = page =>
       ]
     };
   });
-// A rendered segment gives the same kind, name and details as a tap on the street itself.
+// A rendered segment gives the same kind, name and details as a tap on the street itself, where no footprint or number wins.
 const renderedRoadPoint = page =>
   page.evaluate(
     ({name, layers}) => {
@@ -252,10 +259,10 @@ const renderedRoadPoint = page =>
           const screenPoint = {x: bounds.left + point.x, y: bounds.top + point.y};
           if (document.elementFromPoint(screenPoint.x, screenPoint.y) !== map.getCanvas()) continue;
           const hits = map.queryRenderedFeatures([point.x, point.y], {
-            layers: ['buildings', ...layers]
+            layers: ['buildings', 'building-numbers', ...layers]
           });
           const hasRoad = hits.some(hit => layers.includes(hit.layer.id) && hit.properties.name === name);
-          const hasBuilding = hits.some(hit => hit.layer.id === 'buildings');
+          const hasBuilding = hits.some(hit => ['buildings', 'building-numbers'].includes(hit.layer.id));
           if (hasRoad && !hasBuilding) return screenPoint;
         }
       }
@@ -305,8 +312,8 @@ test('result rows identify places, buildings and addresses and list the nearest 
   expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
   await page.locator('#search').fill('bulevar');
   await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
-  await expect(page.locator('.result[data-id="footprint/4"]')).toHaveAttribute('data-kind', 'address');
-  await expect(page.locator('.result[data-id="footprint/4"] .symbol')).toHaveText('📍');
+  await expect(page.locator('.result[data-id="footprint/31441"]')).toHaveAttribute('data-kind', 'address');
+  await expect(page.locator('.result[data-id="footprint/31441"] .symbol')).toHaveText('📍');
   await expect(page.locator('.result[data-id="node/1"]')).toHaveAttribute('data-kind', 'place');
   await expect(page.locator('.result[data-id="node/1"] .symbol')).toHaveText('C');
   await expect(page.locator('.result[data-id="node/2"]')).toHaveAttribute('data-kind', 'place');
@@ -317,7 +324,7 @@ test('result rows identify places, buildings and addresses and list the nearest 
   expect(
     await page.locator('.result[data-kind="street"]').evaluateAll(rows => rows.map(row => row.dataset.id).sort())
   ).toEqual(streetRowIds(expectedStreetNames));
-  expect(await nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  expect(await nonStreetRowIds(page)).toEqual(['footprint/31441', 'node/1', 'node/2']);
 
   await page.locator('#search').fill('13');
   await expect(page.locator('.result')).toHaveCount(1);
@@ -390,7 +397,7 @@ test('visible results get green highlights and the camera stays still', async ({
   await page.locator('#search').fill('bulevar');
   await expect
     .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([4]);
+    .toEqual([31441]);
   await expect
     .poll(async () => (await highlightState(page)).rings.sort())
     .toEqual(['node/1', 'node/2']);
@@ -530,7 +537,7 @@ test('Flip keeps result highlights with the dock open and after it closes', {tag
     await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
     await page.locator('#search').fill('bulevar');
     await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
     await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
     await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 
@@ -538,7 +545,7 @@ test('Flip keeps result highlights with the dock open and after it closes', {tag
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
     await expect(page.locator('#search')).toHaveValue('bulevar');
     await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
     await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
     await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
   });
@@ -564,7 +571,7 @@ test('a Mobile map pick keeps result highlights while its card is open and after
   await mapIdle(page);
   await page.locator('#search').fill('bulevar');
   await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 
@@ -575,14 +582,14 @@ test('a Mobile map pick keeps result highlights while its card is open and after
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#place-name')).toHaveText('Building 13');
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
 
   await closeCard(page);
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('#search')).toHaveValue('bulevar');
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
 });
 
@@ -592,7 +599,7 @@ test('closing Mobile search keeps result highlights while the query stays in the
 }) => {
   test.skip(!isMobile, 'phone layout');
   await page.locator('#search').fill('bulevar');
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
 
   // Blur first: Escape on the focused search input natively clears it and reopens the bubble.
@@ -600,7 +607,7 @@ test('closing Mobile search keeps result highlights while the query stays in the
   await page.keyboard.press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   await expect(page.locator('#search')).toHaveValue('bulevar');
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([31441]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
 });
 
@@ -695,7 +702,7 @@ test('choosing a building result replaces its green outline with the red selecti
     .poll(() =>
       page.evaluate(() => JSON.stringify(window.kompasDebug.map.getFilter('selected-buildings-outline')))
     )
-    .toBe(JSON.stringify(['==', ['id'], 4]));
+    .toBe(JSON.stringify(['==', ['id'], 31441]));
   await expect
     .poll(async () => (await highlightState(page)).buildings)
     .toEqual([]);
@@ -722,7 +729,7 @@ test('clearing the search removes every green highlight', async ({page}) => {
   await page.locator('#search').fill('bulevar');
   await expect
     .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([4]);
+    .toEqual([31441]);
   await page.locator('#clear-search').click();
   await expect
     .poll(async () => (await highlightState(page)).buildings)
@@ -818,12 +825,12 @@ test('an address in the focus zone opens the map-tap card without moving the cam
 
 test('the list order survives a building card', async ({page}) => {
   await page.locator('#search').fill('bulevar');
-  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/4');
+  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/31441');
   await page.locator('.result[data-kind="address"]').click();
   await expect(page.locator('#place-name')).toBeVisible();
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26085, 42.44205], zoom: 17}));
   await settled(page);
-  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/4');
+  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/31441');
 });
 
 test('green outlines cover every match beyond the 40-row list limit', async ({page}) => {
@@ -835,7 +842,7 @@ test('green outlines cover every match beyond the 40-row list limit', async ({pa
 
 test('an unchanged visible set reuses the highlight source', async ({page}) => {
   await page.locator('#search').fill('13');
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([5]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual(expectedSecondFootprint());
   await mapIdle(page);
   await page.evaluate(() => {
     window.__highlightUpdates = 0;
@@ -852,7 +859,7 @@ test('an unchanged visible set reuses the highlight source', async ({page}) => {
 
 test('tapping a highlighted building removes its green fringe', async ({page}) => {
   await page.locator('#search').fill('13');
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([5]);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual(expectedSecondFootprint());
   await tapMapCenter(page, secondAddress().geometry.coordinates);
   await expect(page.locator('#place-name')).toBeVisible();
   await expect.poll(async () => (await highlightState(page)).buildings).toEqual([]);
@@ -874,7 +881,7 @@ test('GPS distances: without a usable fix rows keep centre order and show no dis
   const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
   expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
   await page.locator('#search').fill('bulevar');
-  await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/31441', 'node/1', 'node/2']);
   await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
   await expect(page.locator('.result .distance')).toHaveCount(0);
 });
@@ -893,31 +900,31 @@ test.describe('GPS distances with a fix', () => {
     expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
     await page.locator('#search').fill('bulevar');
     await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
-    // The fix sits on node/2: it becomes nearest even though the map centre sits on footprint/4.
-    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    // The fix sits on node/2: it becomes nearest even though the map centre sits on footprint/31441.
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/31441']);
     await expect(page.locator('.result .distance')).toHaveCount(3 + expectedStreetNames.length);
     await expect(page.locator('.result[data-id="node/2"] .distance')).toHaveText('0 m');
-    await expect(page.locator('.result[data-id="footprint/4"] .distance')).toHaveText(/^\d+ m$/);
+    await expect(page.locator('.result[data-id="footprint/31441"] .distance')).toHaveText(/^\d+ m$/);
   });
 
   test('GPS distances: a changed fix refreshes rows but a card freezes them', async ({page, context}) => {
     await context.setGeolocation(FIRST_GPS_FIX);
     await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
     await page.locator('#search').fill('bulevar');
-    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/31441']);
     await page.locator('.result[data-id="node/2"]').click();
     await expect(page.locator('#place-name')).toBeVisible();
 
     await context.setGeolocation(SECOND_GPS_FIX);
     await expect(page.locator('#position-status')).toHaveText(/±19 m/);
     await expectToHold(
-      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/31441']),
       CAMERA_HOLD_MILLISECONDS
     );
 
     await closeCard(page);
-    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
-    await expect(page.locator('.result[data-id="footprint/4"] .distance')).toHaveText('0 m');
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/31441', 'node/1', 'node/2']);
+    await expect(page.locator('.result[data-id="footprint/31441"] .distance')).toHaveText('0 m');
   });
 
   test('GPS distances: switching cards keeps the deferred order frozen until the card closes', async ({
@@ -927,7 +934,7 @@ test.describe('GPS distances with a fix', () => {
     await context.setGeolocation(FIRST_GPS_FIX);
     await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
     await page.locator('#search').fill('bulevar');
-    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/31441']);
     await page.locator('.result[data-id="node/2"]').click();
     await expect(page.locator('#place-name')).toHaveText('Bulevar Market');
 
@@ -936,11 +943,11 @@ test.describe('GPS distances with a fix', () => {
     await page.locator('.result[data-id="node/1"]').click();
     await expect(page.locator('#place-name')).toHaveText('Bulevar Cafe');
     await expectToHold(
-      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/31441']),
       CAMERA_HOLD_MILLISECONDS
     );
 
     await closeCard(page);
-    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/31441', 'node/1', 'node/2']);
   });
 });
