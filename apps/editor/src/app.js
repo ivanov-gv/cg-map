@@ -33,6 +33,7 @@ import {ObjectList} from './object-list.js';
 
 const layerNames = {
   'places.geojson': 'POIs',
+  'building-entrances.geojson': 'Building entrances',
   'buildings.geojson': 'Buildings',
   'building-labels.geojson': 'Building labels',
   'roads.geojson': 'Roads & paths',

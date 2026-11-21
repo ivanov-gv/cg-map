@@ -10,10 +10,10 @@ const metadata = filename => ({filename, sha256, bytes: bytes.length, featureCou
 const manifest = () => ({version: 1, layers: sourceFiles.map(metadata)});
 
 test('manifest requires exactly one entry per source filename and valid metadata', () => {
-  assert.equal(validateBundleManifest(manifest()).layers.length, 8);
+  assert.equal(validateBundleManifest(manifest()).layers.length, 9);
   const duplicate = manifest();
   duplicate.layers[1] = duplicate.layers[0];
-  assert.throws(() => validateBundleManifest(duplicate), /exactly the eight/);
+  assert.throws(() => validateBundleManifest(duplicate), /exactly the nine/);
   for (const invalid of [{version: 2}, {version: 1, layers: []}]) {
     assert.throws(() => validateBundleManifest(invalid));
   }

@@ -124,9 +124,13 @@ function onRing(point, ring) {
 
 // A placeholder such as "b.b." records a missing number, never a literal identifier. The list is shared with the editor
 // through the contract.
-function houseNumberRule(contractsDirectory) {
-  const editingRules = readContract(contractsDirectory, 'editor-layers.json');
-  return editingRules.layers['building-labels.geojson'].properties['addr:housenumber'];
+function sourceRules(contractsDirectory) {
+  const editingRules = readContract(contractsDirectory, 'editor-layers.json').layers;
+  return {
+    houseNumber: editingRules['building-labels.geojson'].properties['addr:housenumber'],
+    building: editingRules['buildings.geojson'].properties,
+    entrance: editingRules['building-entrances.geojson'].properties
+  };
 }
 function noNumber(value, rule) {
   const ignoredCharacters = new RegExp(rule.ignoredCharactersPattern, 'g');
@@ -136,6 +140,45 @@ function noNumber(value, rule) {
 function addressText(value) {
   const maximumTextLength = 128;
   return typeof value === 'string' && value.trim().length > 0 && value.length <= maximumTextLength;
+}
+
+// Match the extractor's case- and whitespace-only street fold; no transliteration or punctuation removal.
+function normalizeStreetName(value) {
+  return value.trim().split(/\s+/u).join(' ').toLowerCase();
+}
+
+function roadNameGroups(roads) {
+  const groups = new Map();
+  for (const feature of roads.features) {
+    const name = feature.properties.name;
+    const hasName = typeof name === 'string' && name.trim().length > 0;
+    if (!hasName) {
+      continue;
+    }
+    const key = normalizeStreetName(name);
+    if (!groups.has(key)) {
+      groups.set(key, new Set());
+    }
+    groups.get(key).add(feature.properties.entityId);
+  }
+  return groups;
+}
+
+export function validateBuildingDetailCounts(counts, details) {
+  const expectedNames = Object.keys(details)
+    .filter(name => name !== 'entrancesUnjoined')
+    .sort();
+  const actualNames = Object.keys(counts).sort();
+  requireValue(
+    JSON.stringify(actualNames) === JSON.stringify(expectedNames),
+    'building_details: count fields differ from the reviewed provenance'
+  );
+  for (const [name, count] of Object.entries(counts)) {
+    requireValue(
+      details[name] === count,
+      `building_details.${name}: count differs from the reviewed provenance`
+    );
+  }
 }
 
 // Only unambiguous, sourced entrance points on a footprint wall may be published.
@@ -175,7 +218,7 @@ export function validateBuildingLabels(data, buildings, {requireAdopted = false,
     requireAdopted,
     contractsDirectory
   });
-  const houseNumber = houseNumberRule(contractsDirectory);
+  const houseNumber = sourceRules(contractsDirectory).houseNumber;
   const sourceIDs = new Set();
   const footprints = new Set();
   for (const feature of data.features) {
@@ -209,6 +252,126 @@ export function validateBuildingLabels(data, buildings, {requireAdopted = false,
   requireValue(count > 0, 'Empty building address snapshot');
   return count;
 }
+const copiedBuildingTagNames = ['building', 'building:levels', 'building:material', 'start_date', 'roof:levels', 'name'];
+const copiedEntranceFieldNames = ['ref', 'level', 'wheelchair', 'door'];
+
+function incrementCount(counts, name, amount = 1) {
+  counts[name] = (counts[name] ?? 0) + amount;
+}
+
+// Text copied from OSM is bounded by the same editor rule that a reviewer would use.
+function copiedText(properties, name, rules, label) {
+  const value = properties[name];
+  if (value === undefined) {
+    return false;
+  }
+  const rule = rules[name];
+  const isAllowed = addressText(value) && (!rule || value.length <= rule.maxLength);
+  requireValue(isAllowed, `${label}: invalid ${name}`);
+  return true;
+}
+
+function validateBuildingNumberRules(properties, rules) {
+  const hasNumber = copiedText(properties, 'addr:housenumber', rules.building, 'building');
+  const hasNoNumber = properties.nohousenumber !== undefined;
+  requireValue(!(hasNumber && hasNoNumber), 'building: house number and no-number flag are exclusive');
+  if (hasNoNumber) {
+    requireValue(properties.nohousenumber === 'yes', 'building: invalid no-number flag');
+  }
+  if (hasNumber) {
+    requireValue(!noNumber(properties['addr:housenumber'], rules.houseNumber), 'building: no-number placeholder must not be a house number');
+  }
+  return {hasNumber, hasNoNumber};
+}
+
+function countCopiedBuildingTags(properties, counts, rules) {
+  for (const name of copiedBuildingTagNames) {
+    const isPresent = copiedText(properties, name, rules.building, 'building');
+    incrementCount(counts, name, Number(isPresent));
+  }
+}
+
+function validateBuildingStreetJoin(properties, streetGroups, counts, rules) {
+  const hasStreet = copiedText(properties, 'addr:street', rules.building, 'building');
+  const matchingRoads = hasStreet
+    ? streetGroups.get(normalizeStreetName(properties['addr:street'])) ?? new Set()
+    : new Set();
+  incrementCount(counts, 'addr:street', Number(hasStreet));
+  const streetEntityId = properties['addr:streetEntityId'];
+  if (streetEntityId !== undefined) {
+    requireValue(hasStreet, 'building: street join without a street name');
+    const hasUniqueMatch = matchingRoads.size === 1 && matchingRoads.has(streetEntityId);
+    requireValue(hasUniqueMatch, 'building: street join must match exactly one published road with the same name');
+    incrementCount(counts, 'addr:streetEntityId');
+    return;
+  }
+  if (hasStreet) {
+    requireValue(matchingRoads.size !== 1, 'building: a unique street name must be joined to its road entity');
+    incrementCount(counts, 'addr:streetUnjoined');
+  }
+}
+
+function validateEntranceProperties(properties, buildingIDs, counts, rules) {
+  requireValue(addressText(properties.entrance), 'entrance: invalid entrance type');
+  requireValue(buildingIDs.has(properties.buildingEntityId), 'entrance: unknown buildingEntityId');
+  for (const name of copiedEntranceFieldNames) {
+    const isPresent = copiedText(properties, name, rules.entrance, 'entrance');
+    incrementCount(counts, `entrance:${name}`, Number(isPresent));
+  }
+  for (const name of Object.keys(properties)) {
+    if (!name.startsWith('addr:')) {
+      continue;
+    }
+    copiedText(properties, name, rules.entrance, 'entrance');
+    incrementCount(counts, `entrance:${name}`);
+  }
+  const houseNumber = properties['addr:housenumber'];
+  if (houseNumber !== undefined) {
+    requireValue(!noNumber(houseNumber, rules.houseNumber), 'entrance: no-number placeholder must not be a house number');
+  }
+  incrementCount(counts, `entranceKind:${properties.entrance}`);
+}
+
+function countPlacesByBuildingJoin(places, buildingIDs, counts) {
+  const insidePlaces = [];
+  for (const feature of places.features) {
+    const buildingEntityId = feature.properties.buildingEntityId;
+    if (buildingEntityId === undefined) {
+      continue;
+    }
+    requireValue(buildingIDs.has(buildingEntityId), 'place: unknown buildingEntityId');
+    insidePlaces.push(feature);
+  }
+  counts.placesInsideBuildings = insidePlaces.length;
+  counts.placesOutsideBuildings = places.features.length - insidePlaces.length;
+}
+
+// New source files join by upstream identity, never by display name or array position.
+export function validateBuildingSources(buildings, roads, entrances, places, {contractsDirectory} = {}) {
+  validateCollection(buildings, {label: 'buildings.geojson', geometryTypes: ['Polygon', 'MultiPolygon'], requireKind: true, contractsDirectory});
+  validateCollection(roads, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString'], requireKind: true, contractsDirectory});
+  const entranceCount = validateCollection(entrances, {label: 'building-entrances.geojson', geometryTypes: ['Point'], requireKind: true, contractsDirectory});
+  const buildingIDs = new Set(buildings.features.map(feature => feature.properties.entityId));
+  const streetGroups = roadNameGroups(roads);
+  const rules = sourceRules(contractsDirectory);
+  const counts = {};
+  for (const feature of buildings.features) {
+    const properties = feature.properties;
+    const {hasNumber, hasNoNumber} = validateBuildingNumberRules(properties, rules);
+    countCopiedBuildingTags(properties, counts, rules);
+    incrementCount(counts, 'addr:housenumber', Number(hasNumber));
+    incrementCount(counts, 'addr:housenumberPresent', Number(hasNumber));
+    incrementCount(counts, 'nohousenumber', Number(hasNoNumber));
+    validateBuildingStreetJoin(properties, streetGroups, counts, rules);
+  }
+  for (const feature of entrances.features) {
+    validateEntranceProperties(feature.properties, buildingIDs, counts, rules);
+  }
+  counts.entrances = entranceCount;
+  countPlacesByBuildingJoin(places, buildingIDs, counts);
+  return counts;
+}
+
 export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance, {requireAdopted = false, contractsDirectory} = {}) {
   const places = JSON.parse(placeBytes);
   const count = validateCollection(places, {places: true, label: 'places', requireAdopted, contractsDirectory});
@@ -217,6 +380,13 @@ export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provena
   for (const [key, value] of Object.entries(placesProvenance(placeBytes, places, policyBytes, configBytes))) requireValue(provenance[key] === value, `Place provenance mismatch: ${key}. Review the change and update data/sources/provenance.json.`);
   return count;
 }
+function sourceGeometryTypes(filename) {
+  if (filename === 'roads.geojson') return ['LineString', 'MultiLineString'];
+  if (filename === 'water.geojson') return ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'];
+  if (filename === 'building-entrances.geojson') return ['Point'];
+  return ['Polygon', 'MultiPolygon'];
+}
+
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
@@ -239,11 +409,18 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
   requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
+  validateBuildingSources(
+    buildings,
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/roads.geojson'))),
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-entrances.geojson'))),
+    JSON.parse(fs.readFileSync(path.join(root,'data/sources/places.geojson'))),
+    {contractsDirectory}
+  );
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
-    const geometryTypes = name === 'roads.geojson' ? ['LineString', 'MultiLineString'] : name === 'water.geojson' ? ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'] : ['Polygon', 'MultiPolygon'];
+    const geometryTypes = sourceGeometryTypes(name);
     const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, requireAdopted: true, contractsDirectory});
     requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
       `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);

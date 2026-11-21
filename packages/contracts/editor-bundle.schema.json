@@ -8,8 +8,8 @@
     "version": {"const": 1},
     "layers": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
+      "minItems": 9,
+      "maxItems": 9,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -17,6 +17,7 @@
         "properties": {
           "filename": {
             "enum": [
+              "building-entrances.geojson",
               "building-labels.geojson",
               "buildings.geojson",
               "context-countries.geojson",

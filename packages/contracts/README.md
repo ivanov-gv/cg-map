@@ -49,6 +49,24 @@ revision-bound index rather than visible label hits. Address source IDs are reta
 (excluding holes), uniqueness, nonblank numbers, no-number placeholders, and source/provenance integrity. Labels do not
 imply complete address coverage.
 
+`buildings.schema.json` defines OSM building footprints with copied `building`, `building:levels`, `building:material`,
+`start_date`, `name`, `addr:street`, `addr:housenumber` and `roof:levels` tags. A house number that only says "no
+number" is omitted and replaced by `nohousenumber: "yes"`; the placeholder list comes from the editor's
+`addr:housenumber` rule. `addr:streetEntityId` is added only when case- and whitespace-folded `addr:street` matches
+exactly one published road group; an unmatched or ambiguous name has no join field. Street folding never transliterates
+or removes punctuation. Its `addr:housenumber` placeholder rule is identical to the building-label rule, and a data
+contract test keeps the two copies in step. There is no energy-class property: no open OSM source supports one.
+
+`building-entrances.schema.json` defines `building-entrances.geojson`: one adopted point feature per OSM `entrance=*`
+node on or within one metre of a published footprint in the detail box. Its `entrance`, `ref`, `level`, `wheelchair`,
+`door` and `addr:*` values are copied from the node; `buildingEntityId` points at the containing building's source
+identity. The existing `entrances` array inside `building-labels.geojson` remains the runtime arrow/label format; this
+file is the OSM-derived source and is read-only in the editor.
+
+A place whose point lies inside a published building footprint also carries `buildingEntityId`, the footprint's source
+identity. Overlaps resolve to the smallest containing footprint, then the lowest entity ID; a point outside every
+footprint has no such field.
+
 `proto/cgmap/transport/v1/transport.proto` defines the read-only ConnectRPC transport service and version-1 vehicle
 messages. It adds a typed RPC interface without changing `vehicles.schema.json`. Direction message presence separates
 unknown headings from a known northbound bearing of zero; check time is not GPS time and there is no stable vehicle ID.
@@ -94,12 +112,12 @@ validator; browser tests verify the rotation binding and map/pitch alignment.
 
 [entity-identity.schema.json](entity-identity.schema.json) defines source identity in `Feature.properties`, separately
 from display IDs, attribution strings and snapshot indices. [source-entities.schema.json](source-entities.schema.json)
-applies it to every feature in any of the eight source GeoJSON files. Existing geometry and domain contracts still
-apply; these schemas add identity without replacing them.
+applies it to every feature in any of the nine source GeoJSON files. Existing geometry and domain contracts still apply;
+these schemas add identity without replacing them.
 
 A file adopts version 1 by adding `entitySchemaVersion: 1` to its FeatureCollection. All its features then require
 `entityId` and `entityVersion`. `check-data` rejects partial adoption, unknown schema versions, or any of these reserved
-identity fields in a file without the marker. All eight reviewed source collections have adopted version 1. An empty
+identity fields in a file without the marker. All nine reviewed source collections have adopted version 1. An empty
 adopted collection is valid. The schema describes adopted files; legacy compatibility remains only for fixtures and
 explicitly unannotated test data.
 

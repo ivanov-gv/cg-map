@@ -13,7 +13,9 @@ from pathlib import Path
 import osmium
 
 from . import ExtractionState
-from .buildings import BuildingsLayer
+from .buildings import (
+    BuildingGeometryLayer, BuildingsLayer, EntrancesLayer, RoadNameCollector
+)
 from .country import CountryLayer
 from .identity import adopt_collection
 from .land import LandLayer
@@ -29,11 +31,14 @@ COVERAGE = (
 )
 # One selectable name owns every layer that contributes to a source file.
 LAYER_GROUPS = {
-    'buildings': (BuildingsLayer,),
+    'buildings': (
+        BuildingGeometryLayer, BuildingsLayer, RoadNameCollector,
+        EntrancesLayer
+    ),
     'roads': (RoadsLayer,),
     'land': (CountryLayer, LandLayer),
     'water': (WaterLayer,),
-    'places': (PlacesLayer,),
+    'places': (BuildingGeometryLayer, PlacesLayer),
 }
 # Country geometry is finalised before water so the ocean uses this run's
 # outline; static snapshots are adopted before land appends their features.
@@ -201,7 +206,7 @@ def layer_checksum(root, filename):
     }
 
 
-def updated_provenance(root, options, filenames, input_hash, is_partial):
+def updated_provenance(root, options, filenames, input_hash, is_partial, details=None):
     """Update generated file inventory; full runs also record their input."""
     provenance = read_provenance(root)
     if not is_partial:
@@ -211,6 +216,10 @@ def updated_provenance(root, options, filenames, input_hash, is_partial):
             # These have their own provenance fields, not a layer checksum.
             continue
         provenance['layers'][filename] = layer_checksum(root, filename)
+    if details:
+        provenance['building_details'] = {
+            **provenance.get('building_details', {}), **details
+        }
     if not is_partial:
         provenance.update({
             'export_date': options.source_date,
@@ -379,6 +388,7 @@ def run(args):
         layer.filename
         for name in selected_groups
         for layer in group_layers[name]
+        if layer.filename
     }
     written_filenames = set(layer_filenames)
     if not is_partial:
@@ -392,6 +402,7 @@ def run(args):
     if not is_partial:
         published_filenames.add('transport-stops.provenance.json')
 
+    state = ExtractionState()
     with tempfile.TemporaryDirectory(prefix='cg-map-extract-') as directory:
         staging_root = Path(directory)
         staged_sources = stage_repository(
@@ -400,22 +411,24 @@ def run(args):
         staged_options = replace(
             options, sources_directory=staged_sources
         )
-        handler = ExtractHandler(layers, staged_options, ExtractionState())
+        handler = ExtractHandler(layers, staged_options, state)
         handler.apply_file(str(input_path), locations=True, idx='flex_mem')
         if not is_partial:
             # Land appends the preserved context, so adopt it first.
             adopt_static_files(staged_sources)
         finish_layers(
-            group_layers, selected_groups, staged_options, handler.state
+            group_layers, selected_groups, staged_options, state
         )
         write_layer_files(layers, staged_sources, layer_filenames)
         if 'places.geojson' in layer_filenames:
             apply_visibility(
                 staging_root, args.accept_new_place_facts
             )
+        detail_groups = {'buildings', 'places'} & selected_groups
+        details = dict(state.building_counts) if detail_groups else None
         updated_provenance(
             staging_root, staged_options, written_filenames, input_hash,
-            is_partial
+            is_partial, details
         )
         publish_sources(
             staged_sources, sources_directory, published_filenames

@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, checkPlaceMetadata} from '../tools/check-data.mjs';
+import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata} from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const contractsDirectory = 'packages/contracts';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
+const identitySources = JSON.parse(fs.readFileSync('packages/contracts/fixtures/entity-identity-cases.json')).sources;
 test('reviewed Podgorica places satisfy the directory contract', () => {
   assert.equal(validateCollection(fixture, {places: true, contractsDirectory}), 3);
 });
@@ -70,6 +71,144 @@ test('building numbers cannot be placed inside a polygon courtyard', () => {
   const label={type:'Feature',id:'way/1',geometry:{type:'Point',coordinates:[19.5,42.5]},properties:{kind:'building',osm_id:'way/1',footprintIndex:0,'addr:housenumber':'1',address_sources:['way/1']}};
   const buildings={type:'FeatureCollection',features:[{geometry:{type:'Polygon',coordinates:[[[19,42],[20,42],[20,43],[19,43],[19,42]],[[19.4,42.4],[19.6,42.4],[19.6,42.6],[19.4,42.6],[19.4,42.4]]]}}]};
   assert.throws(()=>validateBuildingLabels({type:'FeatureCollection',features:[label]},buildings,{contractsDirectory}),/outside its polygon/);
+});
+
+test('reviewed building source counts match the extracted provenance', () => {
+  const readSource = name => JSON.parse(fs.readFileSync(`data/sources/${name}`));
+  const counts = validateBuildingSources(
+    readSource('buildings.geojson'), readSource('roads.geojson'),
+    readSource('building-entrances.geojson'), readSource('places.geojson'),
+    {contractsDirectory}
+  );
+  const details = JSON.parse(
+    fs.readFileSync('data/sources/provenance.json')
+  ).building_details;
+  validateBuildingDetailCounts(counts, details);
+  assert.throws(
+    () => validateBuildingDetailCounts(counts, {...details, building: details.building + 1}),
+    /building_details.building/
+  );
+});
+
+test('building sources validate copied tags, identity joins and no-number rules', () => {
+  const validate = sources => validateBuildingSources(
+    sources['buildings.geojson'], sources['roads.geojson'],
+    sources['building-entrances.geojson'], sources['places.geojson'],
+    {contractsDirectory}
+  );
+  const streetJoinError = /building: street join must match exactly one published road with the same name/;
+  const counts = validate(identitySources);
+  assert.equal(counts.entrances, 1);
+  assert.equal(counts.placesInsideBuildings, 1);
+  assert.equal(counts['addr:streetEntityId'], 1);
+  const invalidCases = [
+    {
+      name: 'a placeholder house number',
+      expected: /building: no-number placeholder must not be a house number/,
+      mutate: sources => {
+        sources['buildings.geojson'].features[0].properties['addr:housenumber'] = 'bb';
+      }
+    },
+    {
+      name: 'a number together with the no-number flag',
+      expected: /building: house number and no-number flag are exclusive/,
+      mutate: sources => {
+        sources['buildings.geojson'].features[0].properties.nohousenumber = 'yes';
+      }
+    },
+    {
+      name: 'an invalid no-number flag',
+      expected: /building: invalid no-number flag/,
+      mutate: sources => {
+        const properties = sources['buildings.geojson'].features[0].properties;
+        properties.nohousenumber = 'no';
+        delete properties['addr:housenumber'];
+      }
+    },
+    {
+      name: 'a street join to an unknown road',
+      expected: streetJoinError,
+      mutate: sources => {
+        sources['buildings.geojson'].features[0].properties['addr:streetEntityId'] = 'way/999';
+      }
+    },
+    {
+      name: 'a street join after the road was renamed',
+      expected: streetJoinError,
+      mutate: sources => {
+        sources['roads.geojson'].features[0].properties.name = 'Other Street';
+      }
+    },
+    {
+      name: 'a unique street name without a join',
+      expected: /building: a unique street name must be joined to its road entity/,
+      mutate: sources => {
+        delete sources['buildings.geojson'].features[0].properties['addr:streetEntityId'];
+      }
+    },
+    {
+      name: 'a street join with an ambiguous road name',
+      expected: streetJoinError,
+      mutate: sources => {
+        const duplicateRoad = structuredClone(sources['roads.geojson'].features[0]);
+        duplicateRoad.properties.entityId = 'way/5';
+        sources['roads.geojson'].features.push(duplicateRoad);
+      }
+    },
+    {
+      name: 'an entrance linked to an unknown building',
+      expected: /entrance: unknown buildingEntityId/,
+      mutate: sources => {
+        sources['building-entrances.geojson'].features[0].properties.buildingEntityId = 'way/999';
+      }
+    },
+    {
+      name: 'a blank entrance type',
+      expected: /entrance: invalid entrance type/,
+      mutate: sources => {
+        sources['building-entrances.geojson'].features[0].properties.entrance = ' ';
+      }
+    },
+    {
+      name: 'a placeholder entrance house number',
+      expected: /entrance: no-number placeholder must not be a house number/,
+      mutate: sources => {
+        const properties = sources['building-entrances.geojson'].features[0].properties;
+        properties['addr:housenumber'] = 'bez broja';
+      }
+    },
+    {
+      name: 'a place linked to an unknown building',
+      expected: /place: unknown buildingEntityId/,
+      mutate: sources => {
+        sources['places.geojson'].features[0].properties.buildingEntityId = 'way/999';
+      }
+    }
+  ];
+  for (const invalidCase of invalidCases) {
+    const bad = structuredClone(identitySources);
+    invalidCase.mutate(bad);
+    assert.throws(() => validate(bad), invalidCase.expected, invalidCase.name);
+  }
+  const ambiguous = structuredClone(identitySources);
+  const duplicateRoad = structuredClone(ambiguous['roads.geojson'].features[0]);
+  duplicateRoad.properties.entityId = 'way/5';
+  ambiguous['roads.geojson'].features.push(duplicateRoad);
+  delete ambiguous['buildings.geojson'].features[0].properties['addr:streetEntityId'];
+  let ambiguousCounts;
+  assert.doesNotThrow(() => {
+    ambiguousCounts = validate(ambiguous);
+  });
+  assert.equal(ambiguousCounts['addr:streetUnjoined'], 1);
+  assert.ok(!('addr:streetEntityId' in ambiguousCounts));
+});
+
+test('building and label placeholder rules stay identical', () => {
+  const rules = JSON.parse(fs.readFileSync('packages/contracts/editor-layers.json')).layers;
+  const buildingRule = rules['buildings.geojson'].properties['addr:housenumber'];
+  const labelRule = rules['building-labels.geojson'].properties['addr:housenumber'];
+  assert.deepEqual(buildingRule.ignoredCharactersPattern, labelRule.ignoredCharactersPattern);
+  assert.deepEqual(buildingRule.forbiddenValues, labelRule.forbiddenValues);
 });
 
 const policy = JSON.parse(fs.readFileSync('data/sources/place-visibility-policy.json'));

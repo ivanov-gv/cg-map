@@ -17,6 +17,43 @@
   <node id="1003" version="6" lat="42.4405" lon="19.2505">
     <tag k="addr:housenumber" v="12"/>
   </node>
+  <node id="5201" version="2" lat="42.4405" lon="19.2505">
+    <tag k="name" v="Inside Cafe"/>
+    <tag k="amenity" v="cafe"/>
+  </node>
+  <node id="5202" version="1" lat="42.442" lon="19.255">
+    <tag k="name" v="Outside Pharmacy"/>
+    <tag k="amenity" v="pharmacy"/>
+  </node>
+  <node id="5203" version="1" lat="42.4455" lon="19.22">
+    <tag k="name" v="Inside Bakery"/>
+    <tag k="shop" v="bakery"/>
+  </node>
+
+  <node id="5001" version="4" lat="42.44" lon="19.2505">
+    <tag k="entrance" v="yes"/>
+    <tag k="ref" v="A"/>
+    <tag k="level" v="0"/>
+    <tag k="wheelchair" v="yes"/>
+    <tag k="door" v="hinged"/>
+    <tag k="addr:housenumber" v="12"/>
+    <tag k="addr:street" v="Test Street"/>
+  </node>
+  <node id="5002" version="2" lat="42.440004" lon="19.2505">
+    <tag k="entrance" v="main"/>
+    <tag k="addr:housenumber" v="bb"/>
+  </node>
+  <node id="5003" version="1" lat="42.442" lon="19.2505">
+    <tag k="entrance" v="yes"/>
+  </node>
+  <node id="5004" version="3" lat="42.445" lon="19.225">
+    <tag k="entrance" v="service"/>
+    <tag k="ref" v="B"/>
+    <tag k="level" v="1"/>
+  </node>
+  <node id="5005" version="1" lat="42.5" lon="19.3">
+    <tag k="entrance" v="yes"/>
+  </node>
 
   <node id="2011" version="1" lat="42.44" lon="19.25"/>
   <node id="2012" version="1" lat="42.44" lon="19.251"/>
@@ -24,7 +61,13 @@
   <node id="2014" version="1" lat="42.441" lon="19.25"/>
   <way id="2001" version="5">
     <nd ref="2011"/><nd ref="2012"/><nd ref="2013"/><nd ref="2014"/><nd ref="2011"/>
-    <tag k="building" v="yes"/>
+    <tag k="building" v="apartments"/>
+    <tag k="building:levels" v="4"/>
+    <tag k="building:material" v="brick"/>
+    <tag k="start_date" v="2001"/>
+    <tag k="roof:levels" v="1"/>
+    <tag k="name" v="Atlas House"/>
+    <tag k="addr:street" v="Test Street"/>
     <tag k="addr:housenumber" v="12"/>
   </way>
 
@@ -34,7 +77,9 @@
   <node id="2024" version="1" lat="42.446" lon="19.19"/>
   <way id="2002" version="8">
     <nd ref="2021"/><nd ref="2022"/><nd ref="2023"/><nd ref="2024"/><nd ref="2021"/>
-    <tag k="building" v="yes"/>
+    <tag k="building" v="house"/>
+    <tag k="addr:street" v="Second Street"/>
+    <tag k="addr:housenumber" v="б.б."/>
   </way>
 
   <node id="2031" version="1" lat="42.43" lon="19.24"/>
@@ -70,6 +115,21 @@
   <way id="2006" version="12">
     <nd ref="2061"/><nd ref="2062"/><nd ref="2063"/><nd ref="2064"/><nd ref="2061"/>
     <tag k="building" v="yes"/>
+  </way>
+
+  <node id="5101" version="1" lat="42.435" lon="19.27"/>
+  <node id="5102" version="1" lat="42.435" lon="19.28"/>
+  <way id="2015" version="2">
+    <nd ref="5101"/><nd ref="5102"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Second Street"/>
+  </way>
+  <node id="5103" version="1" lat="42.425" lon="19.24"/>
+  <node id="5104" version="1" lat="42.425" lon="19.26"/>
+  <way id="2016" version="1">
+    <nd ref="5103"/><nd ref="5104"/>
+    <tag k="highway" v="service"/>
+    <tag k="name" v="  test   street "/>
   </way>
 
   <node id="3011" version="1" lat="42.41" lon="19.28"/>

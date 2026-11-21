@@ -2,6 +2,7 @@ import {sha256Hex} from './hashing.js';
 
 // One entry per editing mode, sorted. The shared contract and the bundle producer list the same files.
 export const sourceFiles = [
+  'building-entrances.geojson',
   'building-labels.geojson',
   'buildings.geojson',
   'context-countries.geojson',
@@ -18,7 +19,7 @@ export function validateBundleManifest(manifest) {
   if (!isSupportedVersion) throw new Error('Unsupported source bundle.');
   const filenames = manifest.layers.map(layer => layer.filename).sort();
   const hasEverySourceOnce = JSON.stringify(filenames) === JSON.stringify(sourceFiles);
-  if (!hasEverySourceOnce) throw new Error('Source bundle must contain exactly the eight supported GeoJSON files.');
+  if (!hasEverySourceOnce) throw new Error('Source bundle must contain exactly the nine supported GeoJSON files.');
   for (const layer of manifest.layers) {
     const hasValidMetadata =
       /^[a-f0-9]{64}$/.test(layer.sha256) &&

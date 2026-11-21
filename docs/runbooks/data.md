@@ -64,13 +64,32 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), and `places`; each group replaces only its own
-source file. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a
-full extract. `context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full
-run. Fix the policy, then review the new facts as above.
+source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a
+full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies
+footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups together when
+refreshing either side of that join. `context-countries.geojson` is a preserved input to the land and water layers,
+refreshed only on a full run. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
 place-only command above with `--update-provenance --accept-new-facts`. Never pass that flag just to turn a check green.
+
+## Building attributes and entrances
+
+The reviewed extract copies OSM building tags into `buildings.geojson`, folds only case and whitespace when joining
+`addr:street` to one road group, and records no-number placeholders as `nohousenumber: "yes"`. It also writes
+`building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints, and adds
+`buildingEntityId` to places inside those footprints. The nine-source editor bundle lists the new entrance file; the
+editor can inspect it but cannot change it. The separate `entrances` array in `building-labels.geojson` remains the
+runtime arrow/label format and is not generated from this source file. See
+[building addresses](../map-data/building-numbers.md) and
+[decision 0021](../decisions/0021-osm-building-source-details.md).
+
+Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
+`building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed
+counts and footprint SHA-256 in its data tests; `make -C data check` validates source structure, hashes, and that every
+street join matches exactly one published road group with the same name. A geometry change still needs the full archive
+rebuild below; an attribute-only refresh leaves tile geometry unchanged and needs no archive rebuild.
 
 ## Editor changesets
 

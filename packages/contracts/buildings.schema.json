@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/buildings/v1",
+  "title": "Building footprint source v1",
+  "description": "OSM footprints with copied building attributes and address joins. Placeholders become nohousenumber instead of a house number; street joins use the road entity ID when the normalised name matches exactly one published road group.",
+  "type": "object",
+  "required": ["type", "entitySchemaVersion", "features"],
+  "properties": {
+    "type": {"const": "FeatureCollection"},
+    "entitySchemaVersion": {"const": 1},
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "geometry", "properties"],
+        "properties": {
+          "type": {"const": "Feature"},
+          "geometry": {
+            "type": "object",
+            "properties": {
+              "type": {"enum": ["Polygon", "MultiPolygon"]}
+            },
+            "required": ["type"]
+          },
+          "properties": {
+            "allOf": [
+              {
+                "$ref": "https://github.com/ivanov-gv/cg-map/contracts/entity-identity/v1"
+              },
+              {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                  "kind": {"const": "building"},
+                  "osm_id": {"type": "string", "pattern": "^way/[1-9][0-9]*$"},
+                  "building": {"type": "string", "minLength": 1, "maxLength": 64},
+                  "building:levels": {"type": "string", "minLength": 1, "maxLength": 32},
+                  "building:material": {"type": "string", "minLength": 1, "maxLength": 128},
+                  "start_date": {"type": "string", "minLength": 1, "maxLength": 32},
+                  "roof:levels": {"type": "string", "minLength": 1, "maxLength": 32},
+                  "name": {"type": "string", "minLength": 1, "maxLength": 120},
+                  "addr:street": {"type": "string", "minLength": 1, "maxLength": 120},
+                  "addr:housenumber": {"type": "string", "minLength": 1, "maxLength": 128},
+                  "nohousenumber": {"const": "yes"},
+                  "addr:streetEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"}
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

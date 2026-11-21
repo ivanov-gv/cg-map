@@ -33,6 +33,7 @@ REQUIRED_SOURCES = (
     'place-visibility-policy.json',
 )
 GENERATED_FILES = (
+    'building-entrances.geojson',
     'buildings.geojson',
     'context-countries.geojson',
     'land.geojson',
@@ -53,12 +54,13 @@ EXTRACTED_GEOJSON = tuple(
     )
 )
 REVIEWED_GEOJSON = (
-    'buildings.geojson', 'building-labels.geojson',
+    'building-entrances.geojson', 'buildings.geojson',
+    'building-labels.geojson',
     'context-countries.geojson', 'land.geojson', 'places.geojson',
     'roads.geojson', 'transport-stops.geojson', 'water.geojson',
 )
 LAYER_FILES = {
-    'buildings': ('buildings.geojson',),
+    'buildings': ('building-entrances.geojson', 'buildings.geojson'),
     'roads': ('roads.geojson',),
     'land': ('land.geojson',),
     'water': ('water.geojson',),
@@ -92,10 +94,8 @@ def prepared_root(directory):
     contracts.mkdir(parents=True)
     for name in REQUIRED_SOURCES:
         shutil.copy2(SOURCES / name, sources / name)
-    shutil.copy2(
-        ROOT / 'packages/contracts/place-visibility.json',
-        contracts / 'place-visibility.json'
-    )
+    for name in ('place-visibility.json', 'editor-layers.json'):
+        shutil.copy2(ROOT / 'packages/contracts' / name, contracts / name)
     provenance_path = sources / 'provenance.json'
     provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
     provenance.update({
@@ -364,6 +364,85 @@ class OsmExtractTest(unittest.TestCase):
                         self.assertEqual(
                             (sources / name).read_bytes(), expected
                         )
+    def test_building_attributes_and_address_joins(self):
+        extract(self.first_root)
+        _, buildings = source_features(self.first_root, 'buildings.geojson')
+        by_id = {
+            feature['properties']['entityId']: feature['properties']
+            for feature in buildings
+        }
+        atlas = by_id['way/2001']
+        for tag, value in (
+            ('building', 'apartments'), ('building:levels', '4'),
+            ('building:material', 'brick'), ('start_date', '2001'),
+            ('roof:levels', '1'), ('name', 'Atlas House'),
+            ('addr:street', 'Test Street'),
+        ):
+            with self.subTest(tag=tag):
+                self.assertEqual(atlas[tag], value)
+        # Two road groups normalise to "test street", so no join is published.
+        self.assertNotIn('addr:streetEntityId', atlas)
+        house = by_id['way/2002']
+        self.assertEqual(house['nohousenumber'], 'yes')
+        self.assertNotIn('addr:housenumber', house)
+        self.assertEqual(house['addr:streetEntityId'], 'way/2015')
+        details = json.loads(
+            (self.first_root / 'data/sources/provenance.json').read_text()
+        )['building_details']
+        self.assertEqual(details['nohousenumber'], 1)
+        self.assertEqual(details['addr:streetUnjoined'], 1)
+        self.assertEqual(details['addr:streetEntityId'], 1)
+
+    def test_entrances_keep_osm_tags_and_join_to_a_nearby_building(self):
+        extract(self.first_root)
+        _, entrances = source_features(
+            self.first_root, 'building-entrances.geojson'
+        )
+        by_id = {
+            feature['properties']['entityId']: feature
+            for feature in entrances
+        }
+        self.assertEqual(set(by_id), {'node/5001', 'node/5002', 'node/5004'})
+        first = by_id['node/5001']
+        properties = first['properties']
+        self.assertEqual(properties['entityVersion'], 4)
+        self.assertEqual(properties['entrance'], 'yes')
+        self.assertEqual(properties['ref'], 'A')
+        self.assertEqual(properties['level'], '0')
+        self.assertEqual(properties['wheelchair'], 'yes')
+        self.assertEqual(properties['door'], 'hinged')
+        self.assertEqual(properties['addr:housenumber'], '12')
+        self.assertEqual(properties['addr:street'], 'Test Street')
+        self.assertEqual(properties['buildingEntityId'], 'way/2001')
+        self.assertEqual(
+            first['geometry']['coordinates'], [19.2505, 42.44]
+        )
+        self.assertNotIn(
+            'addr:housenumber', by_id['node/5002']['properties']
+        )
+        self.assertEqual(
+            by_id['node/5004']['properties']['buildingEntityId'], 'way/2002'
+        )
+
+    def test_places_inside_a_footprint_get_its_building_identity(self):
+        extract(self.first_root)
+        _, places = source_features(self.first_root, 'places.geojson')
+        by_name = {
+            feature['properties']['name']: feature['properties']
+            for feature in places
+        }
+        self.assertEqual(
+            by_name['Inside Cafe']['buildingEntityId'], 'way/2001'
+        )
+        self.assertEqual(
+            by_name['Inside Bakery']['buildingEntityId'], 'way/2002'
+        )
+        self.assertNotIn('buildingEntityId', by_name['Outside Pharmacy'])
+        details = json.loads(
+            (self.first_root / 'data/sources/provenance.json').read_text()
+        )['building_details']
+        self.assertEqual(details['placesInsideBuildings'], 2)
+        self.assertEqual(details['placesOutsideBuildings'], 3)
 
     def test_partial_run_refuses_a_different_input_pbf(self):
         extract(self.first_root)
