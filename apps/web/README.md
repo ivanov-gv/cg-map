@@ -662,6 +662,11 @@ Browser specs are split by area, and CI runs each area as its own job; see
 [browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
 tests/e2e/helpers.mjs.
 
+Card gesture specs size step swipes from the measured card box and viewport edge, so distance alone crosses the settle
+threshold on a slow runner. Flick specs dispatch DOM touches with explicit `timeStamp` values because the app reads
+`event.timeStamp`; CDP timestamps do not control that calculation. Release-state assertions capture geometry in the
+release task, and only no-op pulls keep a fixed short distance.
+
 The default worker count is one, and CI uses two. Raising `E2E_WORKERS` further is a performance experiment: benchmark
 elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to shorten
 the development feedback loop.
