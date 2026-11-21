@@ -15,6 +15,7 @@ import {
   collectSearchResults,
   indexBuildingLabels,
   matchesPlaceSearch,
+  placesForMapLayer,
   rankSearchResults,
   featureCollection,
   DEFAULT_CENTER,
@@ -53,7 +54,7 @@ import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
-import {MapInterface} from './interface.js';
+import {MapInterface, hasActiveSearchFilter} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 import {renderMapAttribution} from './attribution.js';
 
@@ -315,11 +316,13 @@ function renderSearchResults() {
 }
 
 // Every in-view match is marked, including those past the 40-row list limit. An active filter supplies a marker for
-// every result place; choosing a hidden match reveals it later.
+// every result place; choosing a hidden match reveals it later. Search, selection and view handlers all call this, so
+// a card or closed list never decides which marks the map shows.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
-  const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
-  if ((!searchQuery() && directoryState.activeCategory === null) || resultsHidden) {
+  const hasQuery = Boolean(searchQuery());
+  const hasCategory = directoryState.activeCategory !== null;
+  if (!hasActiveSearchFilter({hasQuery, hasCategory})) {
     mapState.searchHighlights.clear();
     return;
   }
@@ -367,24 +370,26 @@ function scheduleDistanceRefresh() {
   }, distanceRefreshDelayMilliseconds - elapsedMilliseconds);
 }
 
-// A search or category narrows the candidates once. Its own marker source bypasses POI thresholds; unfiltered places
-// keep their level bands.
+// A category narrows the map's places; a query only narrows the result rows and rings.
 function applyPlaceSearch() {
-  directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
-    matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
+  const query = searchQuery();
+  const hasCategory = directoryState.activeCategory !== null;
+  const categoryPlaces = placesForMapLayer(directoryState.allPlaces, directoryState.activeCategory);
+  directoryState.filteredPlaces = categoryPlaces.filter(feature =>
+    matchesPlaceSearch(feature, query, directoryState.activeCategory)
   );
   if (mapState.isMapReady && !directoryState.loadingError) {
     mapState.map
       .getSource('places')
       .setData(
-        featureCollection(
-          buildPlaceMarkers(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
-        )
+        featureCollection(buildPlaceMarkers(categoryPlaces, directoryState.markerKeysByPlaceId))
       );
-    const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+    const hasExplicitFilter = Boolean(query) || hasCategory;
+    // A category keeps all its places in the all-zoom overlay; the query narrows only rows and rings.
+    const overlayPlaces = hasCategory ? categoryPlaces : directoryState.filteredPlaces;
     mapState.searchHighlights.setResultMarkers(
       hasExplicitFilter
-        ? searchResultMarkerData(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
+        ? searchResultMarkerData(overlayPlaces, directoryState.markerKeysByPlaceId)
         : featureCollection([])
     );
   }
@@ -515,7 +520,7 @@ async function initializeMapTransport() {
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
-// flipDockScreen reports the Flip dock screen ('list', 'modes', or null when closed).
+// deviceClass is the shared cached class; flipDockScreen reports the Flip dock screen ('list', 'modes', or null).
 function installPublicMapDebug() {
   window.kompasDebug = {
     get map() {
@@ -550,6 +555,9 @@ function installPublicMapDebug() {
     },
     get flipDockScreen() {
       return mapState.interface?.flipDockScreen ?? null;
+    },
+    get deviceClass() {
+      return mapState.interface?.deviceClass ?? null;
     }
   };
 }
@@ -795,7 +803,7 @@ function syncCategoryButtons() {
   categoryButtons
     .find(button => button.dataset.category === activeCategory)
     ?.scrollIntoView({block: 'nearest', inline: 'nearest'});
-  mapState.interface?.syncActiveChip();
+  mapState.interface?.syncStandaloneChips();
 }
 
 // Move the shared pill around the active chip; All parks it inert at the row's end.
@@ -843,7 +851,7 @@ function selectCategory(key) {
   directoryState.activeCategory = directoryState.activeCategory === key ? null : key;
   syncCategoryButtons();
   // A floating desktop chip reveals the same results the dock row would show.
-  if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.view === 'closed')
+  if (!mapState.interface.isPhoneLayout && mapState.interface.view === 'closed')
     mapState.interface.showResults();
   applyPlaceSearch();
 }
@@ -862,12 +870,18 @@ function registerSelectionControls() {
     routeEndpoints.to = null;
     renderRouteEndpoints();
   });
-  elementById('close-place').addEventListener('click', () => placeSelection.close());
+  elementById('close-place').addEventListener('click', () => {
+    if (mapState.interface?.hasFlipCard) mapState.interface.stepBackOrCloseFlipCard();
+    else placeSelection.close();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
-      const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
-      if (!elementById('place-card').hidden) placeSelection.close();
-      else if (mapState.interface.view === 'dock') {
+      const isDesktop = mapState.interface.isDesktop;
+      if (!elementById('place-card').hidden) {
+        // On Flip, Escape follows the Icon Button: Fullscreen returns to Peek, then Peek closes.
+        if (mapState.interface.hasFlipCard) mapState.interface.stepBackOrCloseFlipCard();
+        else placeSelection.close();
+      } else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.
         mapState.interface.close(true);
       } else if (isDesktop && mapState.interface.state === 'filled') {
@@ -971,11 +985,16 @@ function initializeInterface() {
       }
     },
     // Recompute selection framing only after keyboard and camera changes have settled.
-    onViewport: () => placeSelection.viewportChanged(),
+    onViewport: reason => placeSelection.viewportChanged(reason),
     onCardSwipedAway: () => placeSelection.close(),
     onResultsClosed: () => placeSelection.close(),
     onRemoveCategory: removeCategory,
     activeCategoryLabel: () => categories[directoryState.activeCategory] ?? '',
+    // A Flip card opened from the dock returns to the same list; a map pick returns to the bare map.
+    onFlipCardClosed: ({restoreDock}) => {
+      placeSelection.close(false);
+      if (restoreDock) mapState.interface.setView('dock');
+    },
     resultsLabel: () => {
       const query = elementById('search').value.trim();
       const activeCategoryLabel = directoryState.activeCategory

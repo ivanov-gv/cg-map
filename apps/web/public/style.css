@@ -104,6 +104,9 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 #categories .category-pill.is-placeholder { visibility: hidden; pointer-events: none; }
 /* The map chip stands in for the category row on phones and Flip while search and the dock are closed. */
 .active-category-chip { position: fixed; top: calc(var(--visible-top) + var(--bar-inset) + 52px); left: var(--bar-inset); z-index: 6; box-shadow: 0 4px 20px #243f3718; pointer-events: auto; }
+/* Outside Flip the wrapper adds no box, so the phone chip keeps its own fixed position. */
+.standalone-chips { display: contents; }
+.query-chip { display: none; }
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
@@ -673,10 +676,72 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     font-size: 10px;
     margin: 4px -6px;
   }
-  /* Match the icon button's 3 px margin plus the bar's 1 px border. */
-  .active-category-chip {
-    top: calc(var(--visible-top) + var(--bar-inset) + 50px);
-    left: calc(var(--bar-inset) + 4px);
+  /* The closed bar's 40 px icon target sits inside a 1 px border and 3 px margin at a 12 px inset. */
+  .standalone-chips {
+    display: flex;
+    position: fixed;
+    top: calc(var(--visible-top) + var(--bar-inset) + 2px);
+    left: calc(var(--bar-inset) + 4px + 40px + 8px);
+    right: var(--bar-inset);
+    height: 40px;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 6;
+  }
+  .standalone-chips .active-category-chip { position: static; top: auto; left: auto; flex: none; }
+  /* The query takes only the space left beside the category, clipping a long label with an ellipsis. */
+  .standalone-chips .query-chip { display: flex; flex: 0 1 auto; min-width: 0; }
+  .standalone-chips .query-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .standalone-chips .query-chip-remove { flex: none; }
+
+  /* Flip card: Peek keeps only the header at the bottom, with the picked object visible above it. */
+  body[data-device=flip] .place-card {
+    left: 12px;
+    right: 12px;
+    padding: 16px;
+  }
+  body[data-device=flip] .place-card[data-state=peek] {
+    bottom: 12px;
+    max-height: var(--card-peek, 78px);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  /* Flip shows the same 36×4 pull bar as Mobile, 4 px from the card edge in Peek and Fullscreen. */
+  body[data-device=flip] .place-card .card-handle::before {
+    top: 4px;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
+  }
+  /* Locate would cover the card on a cover screen; the same Card controls remain available. */
+  body[data-device=flip]:has(.place-card:not([hidden])) .position-control {
+    display: none;
+  }
+  /* Fullscreen fills the cover screen but leaves the header's Icon Button above it and in the same row. */
+  body[data-device=flip] .place-card[data-state=fullscreen] {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    height: 100dvh;
+    max-height: none;
+    padding: 8px 12px 16px;
+    border: 0;
+    border-radius: 0;
+    touch-action: pan-y;
+    cursor: default;
+  }
+  /* The Fullscreen bar marks a pull target but adds no second button over the header. */
+  body[data-device=flip] .place-card[data-state=fullscreen] .card-handle {
+    pointer-events: none;
+  }
+  body[data-device=flip] .place-card[data-state=fullscreen] .place-head {
+    min-height: 44px;
+    padding-left: 48px;
   }
 }
 /* Row chips inherit #categories button styles in every panel; the pill's two buttons keep the map chip's look. */

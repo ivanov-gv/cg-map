@@ -52,7 +52,13 @@ The [interface feature](../../docs/ui-ux/features/interface.md) defines the impl
 viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens, and the
 × keeps its slot in every search-bar state so the input never changes width. [interface.js](src/interface.js) owns
 closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
-swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
+swipes, focus restoration, visible-viewport geometry, and live device-class mapping. It has no dependency on data
+producers or backend code.
+
+When a foldable phone crosses the Flip breakpoint, `interface.js` maps the current view and card state into the new
+layout instead of rebuilding them: Mobile search or dock becomes the Flip list, any Flip dock becomes the Mobile dock,
+and card steps follow the issue #290 mapping. Camera, query, category, result highlights, selection and the open card
+stay. The outgoing search controls are hidden while a card covers its mapped dock, then return when the card closes.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
 scroll above it.
@@ -75,39 +81,58 @@ px default and the 60 px desktop bar), spans the screen width minus 12 px gutter
 and font. Touch targets are at least 40 px. The categories row is hidden on the main screen to save space; it remains
 available inside the open dock and the search bubble, with **All** first. While both are closed, a green chip under the
 header (8 px below the bar, at its left edge) stands in for the active category row: tapping its label opens the bubble
-with that category, and its × returns to All. It is hidden for All, while the bubble or dock is open, and under a Full
-or Fullscreen place card. Focusing with the dock closed opens the bubble in Open with × and a nearest-first nearby list;
-the same × sequence applies: clearing a Filled query keeps results Open, and the next × closes the bubble and any place
-card. With the dock open, the bottom options hide while the keyboard is open.
+with that category, and its × returns to All. It is hidden for All, while the bubble or dock is open, and under a
+Fullscreen place card, which hides the header too; a Peek or Full card leaves it visible above the card. Focusing with
+the dock closed opens the bubble in Open with × and a nearest-first nearby list; the same × sequence applies: clearing a
+Filled query keeps results Open, and the next × closes the bubble and any place card. With the dock open, the bottom
+options hide while the keyboard is open.
 
-**Flip search bar** (issues #103, #246, #268): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the search bar
-shrinks to the menu (hamburger) button on the main screen — the bar width is at most the menu button width plus 16 px.
-The search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full width again
-(as on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip shows no ×
-until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the
-dock or card. Closing the dock belongs to the header icon button, whose three-state cycle is described below. The
-category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8 px
-below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
+**Flip search bar** (issues #103, #246, #268, #287, #288): on flip cover screens (≤ 400 px wide and ≤ 400 px tall), the
+search bar shrinks to the menu (hamburger) button on the main screen — the bar width is at most the menu button width
+plus 16 px. The search field and categories are hidden until the dock opens. When the dock opens, the bar spans the full
+width again (as on mobile), and the search field becomes usable. The open dock's results make the bar Open, but Flip
+shows no × until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never
+closes the dock or card. Closing the dock belongs to the header icon button, whose three-state cycle is described below.
+The category row starts with **All**, as on other devices.
 
-**Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
-matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
-buildings and addresses are not searchable while a category is selected. Every matching building or address inside the
-current view gets a green outline. While a query or a non-**All** category is active, every place result inside the view
-gets a marker drawn and a green ring at any zoom, even below its usual POI threshold; names may collide, markers may
-not. With no query and **All**, the ordinary visibility thresholds still decide which markers appear. Marks include
-matches past the 40-row list limit; an unchosen result never gets the red preview. Choosing a row uses the red selection
-and reveals an off-screen result by the focus-zone rule below. The × in Filled clears only the query and keeps an active
-category's results and highlights. The × in Open clears those highlights and closes the results without resetting the
-category. See [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
+With the dock closed, Flip shows standalone chips in one row 8 px right of the 44 px Icon Button, vertically centred
+with it and ending 12 px from the right edge. The active category (never All) contributes a 40 px green pill with a 20
+px radius; its label opens the dock's list screen and its × returns to All. A query contributes a second pill with the
+same geometry; with All active it sits directly right of the Icon Button. The label shows the query in typographic
+quotes, ellipsises long text, and is named `Search: <query>`; its × is named `Clear search <query>` and clears only the
+query, keeping the category and refreshing the green result highlights. Both chips are hidden while the dock or search
+bubble is open and while any Flip card is open, including Peek.
+
+A query or category keeps the same in-view result marks as every device — rings for places and outlines for buildings,
+addresses and streets — with the dock open and after its Close step hides the list. Closing the dock does not clear the
+filter.
+
+**Search result kinds and highlights** (issues #248, #263, #309): with **All** active (no category filter), a query
+lists matching places, buildings and addresses, nearest first. An active category narrows the list to places in that
+category; buildings and addresses are not searchable while a category is selected. A typed query never removes a place
+from the map: the base `places` source and its all-zoom category overlay keep every place in the active category, while
+the query narrows only result rows and rings. Only choosing a category other than **All** hides places outside that
+category. Every matching building or address inside the current view gets a green outline. While a query or a
+non-**All** category is active, every place result inside the view gets a marker drawn and a green ring at any zoom,
+even below its usual POI threshold; names may collide, markers may not. With no query and **All**, the ordinary
+visibility thresholds still decide which markers appear. Marks include matches past the 40-row list limit; an unchosen
+result never gets the red preview. Choosing a row uses the red selection and reveals an off-screen result by the
+focus-zone rule below. The marks follow the query and category on every device, not the result list's visibility: they
+stay while results are open, minimised, compacted, covered by a card or dock, or closed with the query still in the bar.
+Closing a card, closing search, or changing view recomputes them. The × in Filled clears only the query and keeps an
+active category's results and highlights; the × in Open closes the results without resetting the category or its marks.
+Only an empty query with **All** clears every mark. See
+[ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
 
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
 stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
 button's Close state does it, as described below. The dock content ends above the keyboard because it uses the
 keyboard-aware visible viewport variables (--visible-top, --visible-height). While the dock is open, the route panel is
-hidden under it. Opening a place from the list switches to the search view with the card (`placeCardOpened` in
-interface.js calls `setView('search')` when the dock is open on mobile). Desktop keeps the side dock unchanged (narrower
-than the viewport). The place card and route panel keep their current behavior when the dock is closed.
+hidden under it. On Mobile, opening a place from the list switches to the search view with the card (`placeCardOpened`
+in interface.js calls `setView('search')` when the dock is open). On Flip it closes the dock and opens the card in Peek;
+the Icon Button becomes × and brings the same dock list back. Desktop keeps the side dock unchanged (narrower than the
+viewport). The place card and route panel keep their current behavior when the dock is closed.
 
 **Flip icon button** (issue #247): on Flip, the menu icon button (#menu-toggle) cycles through three screens. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#flip-three-state-icon-button) for behavior.
@@ -119,6 +144,9 @@ Source-level details:
 - `syncDockContent()` is the sole owner of Flip footer visibility: the list screen always hides the footer, including
   with zero results and after keyboard/viewport events; only the modes screen shows it.
 - On the modes screen, focusing the search field or typing switches to the list screen.
+- An open card claims the Icon Button as ×: "Close details" in Peek and "Back to summary" in Fullscreen. Escape and the
+  screen-reader close button call the same `stepBackOrCloseFlipCard()` method. `flipCardOrigin` (`'map'` or `'dock'`)
+  decides where the final step returns, and a replacement selection keeps the origin captured on first open.
 - The debug getter `window.kompasDebug.flipDockScreen` reports the current screen.
 - Tested at 374×241, 340×250 and 340×340 viewports. The list is checked with zero, one and two results, including
   keyboard open/close events: it keeps the whole dock area and hides the footer. The CSS compact layout (style.css
@@ -157,10 +185,22 @@ uncover the map. Release settles to the nearest step from distance, direction an
 step. Full does not scroll, so long details are read in Fullscreen, whose body scrolls and whose downward pull at the
 top (`scrollTop 0`) returns to Full. Swiping down steps back; from Peek it closes the card. A place picked on the map
 opens in Full, and swiping down from Full closes it. Reduced motion removes the transition but keeps the same end
-states. The phone card is screen-wide with 12 px gutters, the Locate button sits above it in Peek and Full and is hidden
-in Fullscreen, and the screen-reader close button and the named card handle remain. Choosing a result in the phone dock
-switches to this compact view with the query and category kept. See
+states. The phone card is screen-wide with 12 px gutters. The active category chip and the Locate button sit above it in
+Peek and Full and hide in Fullscreen, the chip with the header; the screen-reader close button and the named card handle
+remain. Choosing a result in the phone dock switches to this compact view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
+
+**Flip place card** (issues #252, #289): on Flip, every place opens a two-step card. Peek shows only the header with 12
+px gutters, so the picked object remains visible above it; the 36×4 grab bar sits 4 px from the card edge in both steps
+and uses the Mobile handle colour. Tapping the header or handle, or pulling up, opens Fullscreen, where details can
+scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in Fullscreen it returns to Peek, and
+in Peek it closes the card and clears the red selection. A downward pull does the same through those button methods,
+starting in Fullscreen only at `scrollTop 0` so scrolling never steps the card. Locate stays hidden through both card
+steps and reappears only when the card closes. Back, Escape and the screen-reader close button share that step-back
+method. It returns to the dock list when the place came from there, preserving the query, category, order and
+originating row; a later map pick replaces the card without changing that origin. Back takes the same history step as
+the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek. Wheel input
+never changes a Flip card.
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and
@@ -254,11 +294,13 @@ Suppose the user types "museum".
 1. The search input emits an input event.
 2. Its handler cancels the previous timer.
 3. It schedules applyPlaceSearch() after 120 ms without another input event.
-4. applyPlaceSearch() calls matchesPlaceSearch() on all places using the current category.
-5. matchesPlaceSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
+4. applyPlaceSearch() uses placesForMapLayer() to keep every place in the current category.
+5. It calls matchesPlaceSearch() on those places; matchesPlaceSearch() normalizes text: lower case, diacritic folding
+   and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
-7. It assigns the resulting array to directoryState.filteredPlaces.
-8. If the map is ready, it calls setData() on the places GeoJSON source and on the explicit-filter result marker source.
+7. It assigns the query-and-category result array to directoryState.filteredPlaces.
+8. If the map is ready, it calls setData() on the category-only places GeoJSON source and on the explicit-filter result
+   marker source.
 9. It closes the current place card if that place no longer matches.
 10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
     candidates by approximate distance from the usable GPS fix when one exists, otherwise from the map center, and
@@ -291,16 +333,18 @@ This distinction keeps thousands of map features out of the DOM.
 Sources hold geometry or imagery. Layers apply rendering rules to a source; changing a layer does not replace its data.
 
 [Stable POI visibility](../../docs/ui-ux/features/poi-visibility.md) decides which markers exist. The `places` source
-holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes. During an
-explicit query or category, `search-result-markers` adds one app-owned marker per result location without a minzoom:
+holds marker features built by map-core/place-visibility.js for every place in the active category; changing only the
+query leaves this source intact. An explicit query or category also fills `search-result-markers` with the all-zoom,
+app-owned markers: query result locations under **All**, or every place in the active category. Query results alone
+receive rings:
 
-| Layer                | Purpose                                                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones           |
-| place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon       |
-| search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom |
-| search-result-places | Every result location during an explicit filter, from `search-result-markers`, at any zoom                  |
-| place-highlight      | Invisible ring that becomes the selection highlight through feature state                                   |
+| Layer                | Purpose                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones               |
+| place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon           |
+| search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom     |
+| search-result-places | Every active-category place, or query result locations under **All**, from `search-result-markers`, at any zoom |
+| place-highlight      | Invisible ring that becomes the selection highlight through feature state                                       |
 
 A band is a zoom range: `4-open` starts at level 4's zoom and never ends. Layer `minzoom`/`maxzoom` are compared with
 the continuous zoom, unlike a filter's `['zoom']`, so thresholds are exact at fractional zooms and need no work during
@@ -477,10 +521,14 @@ rebuild map sources or tiles.
 MapInterface switches the shared result panel between the full dock, the desktop search panel, and the mobile search
 bubble. The category navigation stays outside the scrolling list and begins with the All chip. There is no count/reset
 row; clicking an active category or its × returns to All without clearing the query. When the row is off screen on
-Mobile or Flip, interface.js shows one active category chip under the header from the same directoryState value. The
-bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide
-the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes. On
-phones (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through a
+Mobile, interface.js shows one active category chip under the header from the same directoryState value. On Flip it
+shows a top-row pair: the same category chip plus a query chip from the search field, governed by the pure
+`isQueryChipVisible` rule in [interface.js](src/interface.js). Both use the same `openChipTarget()` path, so tapping a
+label opens the control that owns its row. Both hide while a dock or bubble covers the map; Flip chips also hide while
+any Flip card is open, whereas the Mobile chip stays above a Peek or Full card and hides only in Fullscreen. The bubble
+extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide the phone
+dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes. On phones
+(not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through a
 continuous top-edge drag to Full and Fullscreen; a map pick opens the card in Full. The selected feature stays in the
 visible map area and the burger/search header is never replaced or moved.
 
@@ -491,8 +539,11 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 
 The app distinguishes three viewport categories. The single definition lives in
 [src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
-[style.css](public/style.css) must use the same conditions. At startup, `app.js` sets `data-device` on `<body>`
-(`"flip"`, `"mobile"`, or `"desktop"`) and keeps it updated when the viewport crosses a breakpoint.
+[style.css](public/style.css) must use the same conditions. At startup and on each matching media-query or resize event,
+`app.js` and `interface.js` derive `body[data-device]`, the cached `interface.deviceClass`, the dock screen, card
+presentation and history steps from that one class. Runtime code reads the shared `deviceClass(matchMedia)` helper and
+its live `isFlip`, `isMobilePhone`, `isPhoneLayout` and `isDesktop` getters; no layout reads a media query directly or
+keeps a stale class after a fold.
 
 | Class   | Rule                                     | Examples                                 |
 | ------- | ---------------------------------------- | ---------------------------------------- |
@@ -504,9 +555,17 @@ The 400 px limit on both axes separates Flip from phones: a phone in portrait (e
 and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
 with a slightly larger cover screen still matches, without catching a phone in any orientation.
 
-Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
-device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
-[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project.
+Folding between 412×840 and 340×250 is a live class change covered by [fold.spec.mjs](tests/e2e/fold.spec.mjs).
+`viewForDeviceClass()` maps Mobile search/dock to the Flip list and Flip panels to their Mobile owners, while an open
+card keeps the Flip screen to itself; `cardStateForDeviceClass()` maps Peek/Full/Fullscreen as the interface rule
+states. Both are pure helpers with unit tests in [interface.test.mjs](tests/interface.test.mjs).
+`applyViewForDeviceClass()` and `applyCardForDeviceClass()` apply that mapping and keep the Flip card's dock origin, and
+`onViewportResize()` also handles a resize that arrives before the media-query listener. `app.js` passes the
+device-change reason to `PlaceSelection.viewportChanged()`, which holds reframing until an explicit selection;
+`window.kompasDebug.deviceClass` and `flipDockScreen` expose the cached values for browser checks. Browser tests can run
+a scenario at a Flip viewport using `withFlipViewport()` from [tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without
+adding a separate Playwright project; pass a viewport object for a real cover screen or use the exported
+`FLIP_VIEWPORTS` list. The default remains 340×340 for earlier scenarios.
 
 ## 12. How to make common changes
 
@@ -603,6 +662,11 @@ Browser specs are split by area, and CI runs each area as its own job; see
 [browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
 tests/e2e/helpers.mjs.
 
+Card gesture specs size step swipes from the measured card box and viewport edge, so distance alone crosses the settle
+threshold on a slow runner. Flick specs dispatch DOM touches with explicit `timeStamp` values because the app reads
+`event.timeStamp`; CDP timestamps do not control that calculation. Release-state assertions capture geometry in the
+release task, and only no-op pulls keep a fixed short distance.
+
 The default worker count is one, and CI uses two. Raising `E2E_WORKERS` further is a performance experiment: benchmark
 elapsed time and verify isolation and stability before adopting it. Smaller selections are the default way to shorten
 the development feedback loop.
@@ -614,6 +678,8 @@ The app exposes window.kompasDebug for inspection:
 ```js
 window.kompasDebug.placeCount
 window.kompasDebug.selected
+window.kompasDebug.deviceClass
+window.kompasDebug.flipDockScreen
 window.kompasDebug.satellite
 window.kompasDebug.offline
 window.kompasDebug.map.getCenter()

@@ -164,11 +164,18 @@ export const simulateKeyboard = (page, height, scale = 1, offsetTop = 0) =>
     {visibleHeight: height, pageScale: scale, pageOffset: offsetTop}
   );
 
-// Run a scenario at a Flip cover-screen viewport (340×340) inside the existing mobile project.
+// Real cover-screen sizes used by card and menu tests; 340×340 remains the default for older tests.
+export const FLIP_VIEWPORTS = [
+  {name: '340x250', viewport: {width: 340, height: 250}},
+  {name: '374x241', viewport: {width: 374, height: 241}}
+];
+const DEFAULT_FLIP_VIEWPORT = {width: 340, height: 340};
+
+// Run a scenario at a Flip cover-screen viewport inside the existing mobile project.
 // Restores the previous viewport even when the callback throws. Returns nothing.
-export async function withFlipViewport(page, callback) {
+export async function withFlipViewport(page, callback, viewport = DEFAULT_FLIP_VIEWPORT) {
   const previousViewport = page.viewportSize();
-  await page.setViewportSize({width: 340, height: 340});
+  await page.setViewportSize(viewport);
   try {
     await callback(page);
   } finally {

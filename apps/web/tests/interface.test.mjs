@@ -6,6 +6,7 @@ import {
   cardStateAfterDrag,
   cardStateAfterSwipe,
   cardStateAfterSwipeWithoutFullscreen,
+  cardStateForDeviceClass,
   detailsGeometryForMap,
   isActiveChipVisible,
   doesCardReachLocateColumn,
@@ -13,11 +14,14 @@ import {
   isClearButtonVisible,
   isDockFooterVisible,
   isInFocusZone,
+  isQueryChipVisible,
   phoneCardSteps,
   searchBarState,
   searchBounds,
+  hasActiveSearchFilter,
   uncoveredMapArea,
-  uncoveredMapOffset
+  uncoveredMapOffset,
+  viewForDeviceClass
 } from '../src/interface.js';
 import {
   DESKTOP_MEDIA_QUERY,
@@ -51,19 +55,34 @@ test('the map chip replaces the category row only where search and the dock are 
   assert.equal(isActiveChipVisible({...onMap, view: 'search'}), false, 'bubble row shows it');
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'full'}),
-    false,
-    'a full card covers it'
+    true,
+    'a phone full card leaves the chip above it'
   );
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'fullscreen'}),
     false,
-    'a fullscreen card covers it'
+    'a fullscreen card hides it with the header'
   );
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),
     true,
-    'a peek leaves it available'
+    'a phone peek leaves it available'
   );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek', isFlipLayout: true}),
+    false,
+    'a Flip peek covers it too'
+  );
+});
+
+test('the Flip query chip only stands in for the search row beside an unobstructed map', () => {
+  const onCoverScreen = {hasQuery: true, view: 'closed', cardHidden: true, isFlipLayout: true};
+  assert.equal(isQueryChipVisible(onCoverScreen), true);
+  assert.equal(isQueryChipVisible({...onCoverScreen, hasQuery: false}), false, 'no query, no chip');
+  assert.equal(isQueryChipVisible({...onCoverScreen, view: 'dock'}), false, 'dock has its own row');
+  assert.equal(isQueryChipVisible({...onCoverScreen, view: 'search'}), false, 'bubble has its own row');
+  assert.equal(isQueryChipVisible({...onCoverScreen, cardHidden: false}), false, 'a card covers it');
+  assert.equal(isQueryChipVisible({...onCoverScreen, isFlipLayout: false}), false, 'Mobile is unchanged');
 });
 
 test('the Flip list screen never shows the dock footer, whatever the keyboard does', () => {
@@ -92,6 +111,80 @@ test('other layouts keep the footer unless a keyboard covers it', () => {
     isDockFooterVisible({isFlipLayout: true, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: false}),
     true
   );
+});
+
+test('hasActiveSearchFilter reports a query, a category, or both', () => {
+  for (const filter of [{hasQuery: true, hasCategory: false}, {hasQuery: false, hasCategory: true}]) {
+    assert.equal(hasActiveSearchFilter(filter), true);
+  }
+  assert.equal(hasActiveSearchFilter({hasQuery: true, hasCategory: true}), true);
+  assert.equal(hasActiveSearchFilter({hasQuery: false, hasCategory: false}), false);
+});
+
+test('folding maps panels to the other device and leaves an open card owning the Flip screen', () => {
+  for (const view of ['search', 'dock']) {
+    assert.deepEqual(viewForDeviceClass({view, flipDockScreen: null, hasCard: false, from: 'mobile', to: 'flip'}), {
+      view: 'dock',
+      flipDockScreen: 'list'
+    });
+    assert.deepEqual(viewForDeviceClass({view, flipDockScreen: null, hasCard: true, from: 'mobile', to: 'flip'}), {
+      view: 'closed',
+      flipDockScreen: null
+    });
+  }
+  assert.deepEqual(
+    viewForDeviceClass({view: 'closed', flipDockScreen: null, hasCard: false, from: 'mobile', to: 'flip'}),
+    {view: 'closed', flipDockScreen: null}
+  );
+  for (const flipDockScreen of ['list', 'modes']) {
+    assert.deepEqual(
+      viewForDeviceClass({view: 'dock', flipDockScreen, hasCard: false, from: 'flip', to: 'mobile'}),
+      {view: 'dock', flipDockScreen: null}
+    );
+  }
+  assert.deepEqual(
+    viewForDeviceClass({view: 'closed', flipDockScreen: null, hasCard: false, from: 'flip', to: 'mobile'}),
+    {view: 'closed', flipDockScreen: null}
+  );
+  assert.deepEqual(
+    viewForDeviceClass({
+      view: 'closed',
+      flipDockScreen: null,
+      flipCardOrigin: 'dock',
+      hasCard: true,
+      from: 'flip',
+      to: 'mobile'
+    }),
+    {view: 'search', flipDockScreen: null}
+  );
+  assert.deepEqual(
+    viewForDeviceClass({
+      view: 'closed',
+      flipDockScreen: null,
+      flipCardOrigin: 'map',
+      hasCard: true,
+      from: 'flip',
+      to: 'mobile'
+    }),
+    {view: 'closed', flipDockScreen: null}
+  );
+  assert.deepEqual(
+    viewForDeviceClass({view: 'search', flipDockScreen: null, hasCard: false, from: 'mobile', to: 'mobile'}),
+    {view: 'search', flipDockScreen: null}
+  );
+});
+
+test('the card keeps its step across a fold except Full, which becomes Peek', () => {
+  assert.equal(cardStateForDeviceClass({state: 'peek', to: 'flip'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: 'full', to: 'flip'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: 'fullscreen', to: 'flip'}), 'fullscreen');
+  assert.equal(cardStateForDeviceClass({state: undefined, to: 'flip'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: 'peek', to: 'mobile', from: 'flip'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: 'full', to: 'mobile', from: 'flip'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: 'fullscreen', to: 'mobile', from: 'flip'}), 'fullscreen');
+  assert.equal(cardStateForDeviceClass({state: undefined, to: 'mobile', from: 'desktop', view: 'search'}), 'peek');
+  assert.equal(cardStateForDeviceClass({state: undefined, to: 'mobile', from: 'desktop', view: 'dock'}), 'full');
+  assert.equal(cardStateForDeviceClass({state: 'peek', to: 'desktop'}), null);
 });
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {

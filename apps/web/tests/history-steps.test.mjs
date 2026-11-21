@@ -63,6 +63,27 @@ test('dock and Flip modes chain', () => {
   assert.deepEqual(stateAfterBack(dock), opening);
 });
 
+test('an open dock is the top step even when a card is behind it', () => {
+  const fullBehindDock = {
+    ...opening,
+    view: 'dock',
+    flipDockScreen: 'list',
+    card: {state: 'full', fromDock: false}
+  };
+  const peekBehindDock = {...fullBehindDock, card: {state: 'peek', fromDock: false}};
+
+  assert.deepEqual(openSteps(fullBehindDock), [STEP.CARD_FULL, STEP.DOCK]);
+  assert.deepEqual(stateAfterBack(fullBehindDock), {
+    ...opening,
+    card: {state: 'full', fromDock: false}
+  });
+  // A Peek card cannot stay in Peek once the results behind it close with the dock.
+  assert.deepEqual(stateAfterBack(peekBehindDock), {
+    ...opening,
+    card: {state: 'full', fromDock: false}
+  });
+});
+
 test('Flip card opened from dock returns to dock when the card closes', () => {
   const peek = {
     ...opening,
@@ -77,4 +98,18 @@ test('Flip card opened from dock returns to dock when the card closes', () => {
   assert.deepEqual(openSteps(full), [STEP.SEARCH_BUBBLE, STEP.CARD_PEEK, STEP.CARD_FULL]);
   assert.deepEqual(stateAfterBack(full), peek);
   assert.deepEqual(stateAfterBack(peek), {...opening, view: 'dock', flipDockScreen: 'list'});
+});
+
+test('Flip card steps backs from Fullscreen to Peek and then to its own origin', () => {
+  const mapPeek = {...opening, isFlip: true, card: {state: 'peek', fromDock: false}};
+  const mapFullscreen = {...mapPeek, card: {state: 'fullscreen', fromDock: false}};
+  const dockPeek = {...opening, isFlip: true, card: {state: 'peek', fromDock: true}};
+
+  assert.deepEqual(openSteps(mapPeek), [STEP.CARD_PEEK]);
+  assert.deepEqual(openSteps(mapFullscreen), [STEP.CARD_PEEK, STEP.CARD_FULL]);
+  assert.deepEqual(stateAfterBack(mapFullscreen), mapPeek);
+  assert.deepEqual(stateAfterBack(mapPeek), opening);
+
+  assert.deepEqual(openSteps(dockPeek), [STEP.DOCK, STEP.CARD_PEEK]);
+  assert.deepEqual(stateAfterBack(dockPeek), {...opening, view: 'dock', flipDockScreen: 'list'});
 });

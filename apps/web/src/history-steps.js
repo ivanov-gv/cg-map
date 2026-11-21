@@ -23,6 +23,7 @@ export function depthOf(marker) {
 // UI state:
 // {
 //   view: 'closed' | 'search' | 'dock',
+//   isFlip: boolean, // Flip has no Full step: Fullscreen steps directly back to Peek
 //   flipDockScreen: 'list' | 'modes' | null,
 //   resultsCompacted: boolean, // true when search bubble is compacted to the strip
 //   card: null | { state: 'peek' | 'full' | 'fullscreen', fromDock: boolean }
@@ -36,24 +37,31 @@ export function openSteps(state) {
       steps.push(STEP.SEARCH_STRIP);
       return steps;
     }
-    if (state.card) appendCardSteps(steps, state.card, {overSearch: true});
+    if (state.card) appendCardSteps(steps, state.card, {overSearch: true, isFlip: !!state.isFlip});
     return steps;
   }
   if (state.view === 'dock') {
+    // A visible dock sits above a card behind it, so the dock is the top step to Back out of.
+    if (state.card) appendCardSteps(steps, state.card, {overSearch: false, isFlip: !!state.isFlip});
     steps.push(STEP.DOCK);
     if (state.flipDockScreen === 'modes') steps.push(STEP.FLIP_MODES);
     return steps;
   }
-  if (state.card) appendCardSteps(steps, state.card, {overSearch: false});
+  if (state.card?.fromDock) {
+    // A Flip card opened from the dock hides the dock, but its step still sits above it.
+    steps.push(STEP.DOCK);
+  }
+  if (state.card) appendCardSteps(steps, state.card, {overSearch: false, isFlip: !!state.isFlip});
   return steps;
 }
 
-function appendCardSteps(steps, card, {overSearch}) {
-  // A card outside search has no Peek step: Back from Full closes it.
-  if (overSearch) steps.push(STEP.CARD_PEEK);
+function appendCardSteps(steps, card, {overSearch, isFlip}) {
+  // A non-Flip card outside search has no Peek step: Back from Full closes it.
+  if (overSearch || isFlip || card.state === 'peek') steps.push(STEP.CARD_PEEK);
   if (card.state === 'peek') return;
   steps.push(STEP.CARD_FULL);
-  if (card.state === 'fullscreen') steps.push(STEP.CARD_FULLSCREEN);
+  // Flip's expanded card is Fullscreen; it shares the Full step so Back returns to Peek.
+  if (card.state === 'fullscreen' && !isFlip) steps.push(STEP.CARD_FULLSCREEN);
 }
 
 export function stateAfterBack(state) {
@@ -66,15 +74,21 @@ export function stateAfterBack(state) {
     case STEP.SEARCH_STRIP:
       return {...openingState(), view: 'search'};
     case STEP.CARD_PEEK:
-      // Closing the card keeps search; a Flip card opened from the dock returns to it.
+      // Closing a Flip card returns to whatever launched it: dock, search, or the bare map.
       if (state.card?.fromDock) return {...openingState(), view: 'dock', flipDockScreen: 'list'};
-      return {...openingState(), view: 'search'};
+      if (state.view === 'search') return {...openingState(), view: 'search'};
+      return openingState();
     case STEP.CARD_FULL:
       if (steps.includes(STEP.CARD_PEEK)) return withCardState(state, 'peek');
       return openingState();
     case STEP.CARD_FULLSCREEN:
       return withCardState(state, 'full');
     case STEP.DOCK:
+      if (state.view === 'dock' && state.card) {
+        // Closing a visible dock uncovers the card behind it; a Peek needs the results that a view change removes.
+        const card = {...state.card, state: state.card.state === 'peek' ? 'full' : state.card.state};
+        return {...openingState(), card};
+      }
       return openingState();
     case STEP.FLIP_MODES:
       return {...openingState(), view: 'dock', flipDockScreen: 'list'};
