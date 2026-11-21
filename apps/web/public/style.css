@@ -531,9 +531,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   }
   body[data-device=mobile] .place-card[data-state=fullscreen] .card-handle { cursor: grab; }
   body[data-device=mobile]:has(.place-card:not([hidden]):not([data-state=fullscreen])) .position-control {
-    /* Relative offset inside MapLibre's bottom-right control stack: 28px clears the container's
-     * baseline inset and leaves an 8–24 px gap above the visible card height. */
-    bottom: calc(var(--keyboard-inset) + 28px + var(--mobile-card-visible-height, 0px));
+    /* MapLibre reserves 24px below this control and the card sits 20px above the bottom; a further 12px
+     * leaves a 16px gap above the visible card in Peek and Full. */
+    bottom: calc(var(--keyboard-inset) + 12px + var(--mobile-card-visible-height, 0px));
   }
   body[data-device=mobile][data-mobile-card-state=fullscreen] .position-control { display: none; }
   body[data-device=mobile][data-mobile-card-state=fullscreen] .search-bar,

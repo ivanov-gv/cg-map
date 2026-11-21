@@ -133,9 +133,9 @@ rectangle left uncovered by the dock, search panel, keyboard, and details card (
 the uncovered map; `mapGeometry()` passes a floating Desktop card as an obstacle so `freeMapAreas()` can keep places
 beside it visible. Zoom rises to at least 15 when needed. Tapping an empty spot on the map while the mobile/Flip search
 bubble is open compacts results to the strip; the strip or system Back restores the bubble. On Mobile and Flip, system
-Back steps through open overlays (search, dock, Flip modes, strip, and card states) toward the opening view, and UI closes
-keep history aligned so Back never reopens a closed state. Reloading while overlay history is present returns to the
-opening view.
+Back steps through open overlays (search, dock, Flip modes, strip, and card states) toward the opening view, and UI
+closes keep history aligned so Back never reopens a closed state. Reloading while overlay history is present returns to
+the opening view.
 
 A chosen place's card opens as a fixed floating sheet on Desktop (> 720 px): 1000 × 252, clamped to `min(252px, 45dvh)`,
 with a 20 px bottom gap. It is centered on screen with the dock closed and centered in the map area right of the dock
@@ -479,9 +479,9 @@ bubble. The category navigation stays outside the scrolling list and begins with
 row; clicking an active category or its × returns to All without clearing the query. When the row is off screen on
 Mobile or Flip, interface.js shows one active category chip under the header from the same directoryState value. The
 bubble extends to the visible viewport's midpoint. visualViewport resize/scroll events update the bubble cap and hide
-the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes.
-On phones (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through
-a continuous top-edge drag to Full and Fullscreen; a map pick opens the card in Full. The selected feature stays in the
+the phone dock's options when a keyboard reduces the visible area; the camera stays still until the keyboard closes. On
+phones (not Flip), selecting a search or dock result keeps search open and shows the card in Peek, stepping up through a
+continuous top-edge drag to Full and Fullscreen; a map pick opens the card in Full. The selected feature stays in the
 visible map area and the burger/search header is never replaced or moved.
 
 When changing mobile CSS, test rotation, keyboard opening, long place names, scrolling and closing panels. A desktop
