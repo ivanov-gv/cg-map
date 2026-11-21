@@ -366,10 +366,6 @@ function policyWithLevelEdits(policy, operations, changeset) {
   return {...policy, overrides: [...overrides.values()]};
 }
 
-function serializeLayer(collection) {
-  return serializeSourceCollection(collection);
-}
-
 // Keeps the values as well as the hashes: this ledger is what tells a local correction from an imported upstream fact.
 function ledgerEntries(changeset, appliedAt) {
   return changeset.operations.map(({filename, operation, reference, beforeFingerprint, before, after}) => ({
@@ -496,7 +492,7 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
         requireKind: filename !== 'transport-stops.geojson',
         contractsDirectory
       });
-      nextBytes.set(filename, serializeLayer(nextSource, originalBytes.get(filename)));
+      nextBytes.set(filename, serializeSourceCollection(nextSource));
     }
   }
   return {nextBytes, policyBytes, places};

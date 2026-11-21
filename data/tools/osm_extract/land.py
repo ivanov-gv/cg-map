@@ -44,6 +44,6 @@ class LandLayer(Layer):
 
     def finish(self, options, state):
         context = read_collection(
-            options.sources_dir / 'context-countries.geojson'
+            options.sources_directory / 'context-countries.geojson'
         )
         return [*self.features, *context['features']]

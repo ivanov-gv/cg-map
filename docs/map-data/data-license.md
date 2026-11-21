@@ -5,7 +5,7 @@ Application code: MIT, see LICENSE. Library and data licenses are separate.
 - OpenStreetMap-derived geometry and places: © OpenStreetMap contributors, ODbL 1.0.
   <https://www.openstreetmap.org/copyright> and <https://opendatacommons.org/licenses/odbl/1-0/> . Derived source layers
   are included in data/sources/; places are in data/sources/places.geojson. The extract originated from Geofabrik
-  Montenegro downloaded 2026-10-18, source timestamp 2026-10-17T20:20:51Z. Data is simplified and incomplete.
+  Montenegro downloaded 2026-11-21, source timestamp 2026-11-20T21:21:21Z. Data is simplified and incomplete.
 - Surrounding-country outlines: Natural Earth public domain, through <https://github.com/johan/world.geo.json> . These
   and the inherited Montenegro coastline define the demonstration sea fill.
 - MapLibre GL JS 5.12.0: BSD 3-clause and bundled dependency notices, packages/map-core/assets/vendor/LICENSE.txt.

@@ -1,5 +1,6 @@
 """Reproducibility and source identity checks for the OSM extractor."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -8,15 +9,21 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
 SOURCES = ROOT / 'data/sources'
 sys.path.insert(0, str(TOOLS))
 
+from osm_extract import cli  # noqa: E402
+from osm_extract.identity import content_version  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
 
 FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
+FIXTURE_HASH = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
+SOURCE_URL = 'https://example.test/montenegro.osm.pbf'
+SOURCE_DATE = '2026-11-21'
 SNAPSHOT_TIME = '2026-11-20T21:21:21Z'
 REQUIRED_SOURCES = (
     'context-countries.geojson',
@@ -28,7 +35,6 @@ REQUIRED_SOURCES = (
 GENERATED_FILES = (
     'buildings.geojson',
     'context-countries.geojson',
-    'extract-metadata.json',
     'land.geojson',
     'places.geojson',
     'provenance.json',
@@ -58,6 +64,13 @@ LAYER_FILES = {
     'water': ('water.geojson',),
     'places': ('places.geojson',),
 }
+COVERED_SEA = {
+    'type': 'Polygon',
+    'coordinates': [[
+        [17.5, 41.0], [21.5, 41.0], [21.5, 44.2],
+        [17.5, 44.2], [17.5, 41.0],
+    ]],
+}
 NODE_WRITER = (
     "import {readFileSync} from 'node:fs';\n"
     "import {serializeSourceCollection} from "
@@ -71,7 +84,7 @@ NODE_WRITER = (
 
 
 def prepared_root(directory):
-    """Build a disposable repository shape with the static snapshots."""
+    """Build a disposable repository shape pinned to the test PBF."""
     root = Path(directory)
     sources = root / 'data/sources'
     contracts = root / 'packages/contracts'
@@ -79,23 +92,57 @@ def prepared_root(directory):
     contracts.mkdir(parents=True)
     for name in REQUIRED_SOURCES:
         shutil.copy2(SOURCES / name, sources / name)
-    policy = ROOT / 'packages/contracts/place-visibility.json'
-    shutil.copy2(policy, contracts / 'place-visibility.json')
+    shutil.copy2(
+        ROOT / 'packages/contracts/place-visibility.json',
+        contracts / 'place-visibility.json'
+    )
+    provenance_path = sources / 'provenance.json'
+    provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
+    provenance.update({
+        'input_pbf_sha256': FIXTURE_HASH,
+        'input_url': SOURCE_URL,
+        'input_date': SOURCE_DATE,
+    })
+    provenance_path.write_text(
+        json.dumps(provenance, indent=2) + '\n', encoding='utf-8'
+    )
     return root
 
 
-def extract(root, layers=None):
-    """Run the reviewed entry point against the tiny OSM fixture."""
-    command = [
-        sys.executable, str(TOOLS / 'extract-osm.py'), str(FIXTURE),
-        '--root', str(root), '--source-timestamp', SNAPSHOT_TIME,
+def extract_arguments(
+    root, layers=None, input_pbf=FIXTURE,
+    source_url=SOURCE_URL, source_date=SOURCE_DATE
+):
+    """Build the reviewed entry point's arguments for a fixture run."""
+    arguments = [
+        str(input_pbf), '--root', str(root),
+        '--source-timestamp', SNAPSHOT_TIME,
+        '--source-url', source_url, '--source-date', source_date,
     ]
     if layers:
-        command.extend(['--layers', *layers])
+        arguments.extend(['--layers', *layers])
+    return arguments
+
+
+def extract(
+    root, layers=None, check=True, input_pbf=FIXTURE,
+    source_url=SOURCE_URL, source_date=SOURCE_DATE
+):
+    """Run the reviewed entry point against the tiny OSM fixture."""
+    command = [
+        sys.executable, str(TOOLS / 'extract-osm.py'),
+        *extract_arguments(root, layers, input_pbf, source_url, source_date)
+    ]
     environment = dict(os.environ, PYTHONPATH=str(TOOLS))
-    subprocess.run(
-        command, check=True, env=environment, stdout=subprocess.DEVNULL
+    result = subprocess.run(
+        command, env=environment, stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE, text=True
     )
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(
+            result.returncode, command, stderr=result.stderr
+        )
+    return result
 
 
 def source_features(root, filename):
@@ -103,6 +150,14 @@ def source_features(root, filename):
     text = (root / 'data/sources' / filename).read_text(encoding='utf-8')
     collection = json.loads(text)
     return collection['entitySchemaVersion'], collection['features']
+
+
+def file_contents(root):
+    """Snapshot every generated file so failure tests can compare bytes."""
+    return {
+        name: (root / 'data/sources' / name).read_bytes()
+        for name in GENERATED_FILES
+    }
 
 
 def coordinate_values(value):
@@ -114,12 +169,18 @@ def coordinate_values(value):
         yield value
 
 
+def feature_with(features, entity_id):
+    """Find one feature by its source identity."""
+    return next(
+        feature for feature in features
+        if feature['properties']['entityId'] == entity_id
+    )
+
+
 def node_serialization(filename):
     """Serialize one reviewed source with the shared Node writer."""
     result = subprocess.run(
-        [
-            'node', '--input-type=module', '-e', NODE_WRITER, filename
-        ],
+        ['node', '--input-type=module', '-e', NODE_WRITER, filename],
         cwd=ROOT, check=True, capture_output=True
     )
     return result.stdout.decode('utf-8')
@@ -144,13 +205,36 @@ class OsmExtractTest(unittest.TestCase):
         for name in GENERATED_FILES:
             with self.subTest(name=name):
                 self.assertEqual(
-                    (
-                        self.first_root / 'data/sources' / name
-                    ).read_bytes(),
-                    (
-                        self.second_root / 'data/sources' / name
-                    ).read_bytes(),
+                    file_contents(self.first_root)[name],
+                    file_contents(self.second_root)[name],
                 )
+
+    def test_source_options_are_required(self):
+        result = subprocess.run(
+            [
+                sys.executable, str(TOOLS / 'extract-osm.py'), str(FIXTURE),
+                '--root', str(self.first_root)
+            ],
+            env=dict(os.environ, PYTHONPATH=str(TOOLS)),
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the following arguments are required', result.stderr)
+
+    def test_visibility_review_is_explicit(self):
+        arguments = [
+            str(FIXTURE), '--root', str(self.first_root),
+            '--source-timestamp', SNAPSHOT_TIME,
+            '--source-url', SOURCE_URL, '--source-date', SOURCE_DATE,
+        ]
+        with mock.patch.object(cli, 'apply_visibility') as visibility:
+            cli.run(cli.parse_args(arguments))
+        self.assertFalse(visibility.call_args.args[1])
+        with mock.patch.object(cli, 'apply_visibility') as visibility:
+            cli.run(cli.parse_args([
+                *arguments, '--accept-new-place-facts'
+            ]))
+        self.assertTrue(visibility.call_args.args[1])
 
     def test_features_keep_source_identity_and_upstream_version(self):
         extract(self.first_root)
@@ -256,10 +340,7 @@ class OsmExtractTest(unittest.TestCase):
 
     def test_each_layer_group_replaces_only_its_source_file(self):
         extract(self.first_root)
-        baseline = {
-            name: (self.first_root / 'data/sources' / name).read_bytes()
-            for name in GENERATED_GEOJSON
-        }
+        baseline = file_contents(self.first_root)
         for group, filenames in LAYER_FILES.items():
             with self.subTest(group=group):
                 root = prepared_root(self.temporary_path / group)
@@ -276,15 +357,150 @@ class OsmExtractTest(unittest.TestCase):
                 extract(root, layers=[group])
                 for name in GENERATED_GEOJSON:
                     with self.subTest(group=group, name=name):
-                        if name in filenames:
-                            expected = baseline[name]
-                        elif name in preserved:
+                        if name in filenames or name in preserved:
                             expected = baseline[name]
                         else:
                             expected = marker
                         self.assertEqual(
                             (sources / name).read_bytes(), expected
                         )
+
+    def test_partial_run_refuses_a_different_input_pbf(self):
+        extract(self.first_root)
+        provenance_path = self.first_root / 'data/sources/provenance.json'
+        provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
+        provenance['input_pbf_sha256'] = '0' * 64
+        provenance_path.write_text(json.dumps(provenance, indent=2) + '\n')
+        before = file_contents(self.first_root)
+        result = extract(self.first_root, layers=['water'], check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Run a full extract first', result.stderr)
+        self.assertEqual(file_contents(self.first_root), before)
+
+    def test_partial_run_preserves_global_provenance(self):
+        extract(self.first_root)
+        provenance_path = self.first_root / 'data/sources/provenance.json'
+        provenance = json.loads(provenance_path.read_text(encoding='utf-8'))
+        reviewed_fields = {
+            'export_date': 'reviewed date',
+            'upstream_snapshot': 'reviewed snapshot',
+            'coverage': 'reviewed coverage',
+            'input_url': 'reviewed URL',
+            'input_date': 'reviewed input date',
+            'detail_bbox': [1, 2, 3, 4],
+            'extract_flags': {
+                'all_details': True,
+                'all_places': True,
+                'layers': ['reviewed.geojson'],
+            },
+        }
+        provenance.update(reviewed_fields)
+        provenance['layers']['water.geojson']['sha256'] = 'stale checksum'
+        provenance_path.write_text(json.dumps(provenance, indent=2) + '\n')
+        extract(self.first_root, layers=['water'])
+        updated = json.loads(provenance_path.read_text(encoding='utf-8'))
+        for field, expected in reviewed_fields.items():
+            with self.subTest(field=field):
+                self.assertEqual(updated[field], expected)
+        self.assertNotEqual(
+            updated['layers']['water.geojson']['sha256'], 'stale checksum'
+        )
+        self.assertFalse(
+            (self.first_root / 'data/sources/extract-metadata.json').exists()
+        )
+
+    def test_partial_water_uses_the_reviewed_land_outline(self):
+        extract(self.first_root)
+        before = feature_with(
+            source_features(self.first_root, 'water.geojson')[1],
+            'derived:ocean'
+        )
+        land_path = self.first_root / 'data/sources/land.geojson'
+        land = json.loads(land_path.read_text(encoding='utf-8'))
+        country = feature_with(land['features'], 'way/4000')
+        self.assertEqual(country['properties']['kind'], 'country')
+        country['geometry'] = COVERED_SEA
+        land_path.write_text(json.dumps(land, indent=2) + '\n')
+        extract(self.first_root, layers=['water'])
+        after = feature_with(
+            source_features(self.first_root, 'water.geojson')[1],
+            'derived:ocean'
+        )
+        self.assertTrue(
+            after['geometry'] != before['geometry'],
+            'partial water kept the fresh country instead of reviewed land'
+        )
+        expected_version = content_version({
+            'geometry': after['geometry'],
+            'properties': {'kind': 'ocean'},
+        })
+        self.assertEqual(
+            after['properties']['entityVersion'], expected_version
+        )
+
+    def test_failed_extract_leaves_reviewed_sources_untouched(self):
+        extract(self.first_root)
+        sentinel = self.first_root / 'data/sources/buildings.geojson'
+        sentinel.write_text('reviewed buildings sentinel\n', encoding='utf-8')
+        before = file_contents(self.first_root)
+        arguments = cli.parse_args(extract_arguments(self.first_root))
+        # Provenance runs after visibility and every layer write, so a refusal
+        # there is a late failure: an in-place writer already replaced sources.
+        with mock.patch.object(
+            cli, 'updated_provenance',
+            side_effect=RuntimeError('provenance review failed')
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'provenance review failed'):
+                cli.run(arguments)
+        self.assertEqual(file_contents(self.first_root), before)
+
+    def test_late_publication_failure_restores_reviewed_sources(self):
+        extract(self.first_root)
+        sentinel = self.first_root / 'data/sources/buildings.geojson'
+        sentinel.write_text('reviewed buildings sentinel\n', encoding='utf-8')
+        before = file_contents(self.first_root)
+        arguments = cli.parse_args(extract_arguments(self.first_root))
+        real_replace = cli.replace_file
+        attempts = []
+
+        def replace_with_late_failure(source, destination):
+            attempts.append(destination)
+            # The first file is already published; fail while replacing the
+            # second, where an earlier writer left a mixed source bundle.
+            if len(attempts) == 2:
+                raise OSError('destination write failed')
+            return real_replace(source, destination)
+
+        with mock.patch.object(
+            cli, 'replace_file', side_effect=replace_with_late_failure
+        ):
+            with self.assertRaisesRegex(OSError, 'destination write failed'):
+                cli.run(arguments)
+        self.assertEqual(file_contents(self.first_root), before)
+        self.assertGreaterEqual(len(attempts), 3)
+        self.assertEqual(
+            list((self.first_root / 'data/sources').glob('*.new')), []
+        )
+        self.assertEqual(
+            list((self.first_root / 'data/sources').glob('*.old')), []
+        )
+
+    def test_partial_run_does_not_publish_unselected_sources(self):
+        extract(self.first_root)
+        sources = self.first_root / 'data/sources'
+        (sources / 'buildings.geojson').write_text(
+            'reviewed buildings sentinel\n', encoding='utf-8'
+        )
+        (sources / 'roads.geojson').write_text(
+            'reviewed roads sentinel\n', encoding='utf-8'
+        )
+        before = file_contents(self.first_root)
+        extract(self.first_root, layers=['buildings'])
+        after = file_contents(self.first_root)
+        self.assertNotEqual(
+            after['buildings.geojson'], before['buildings.geojson']
+        )
+        self.assertEqual(after['roads.geojson'], before['roads.geojson'])
 
 
 if __name__ == '__main__':

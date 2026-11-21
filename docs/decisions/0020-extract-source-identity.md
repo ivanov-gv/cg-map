@@ -27,8 +27,13 @@ a changeset may not claim identity fields itself.
 Write every source collection as `entitySchemaVersion: 1` with one sorted, key-sorted feature per line. Extracted OSM
 coordinates use six decimals; preserved static snapshots keep their published precision. Python and Node use the same
 writer bytes. `--layers` selects layer groups, replacing only the source files those groups own; a full run also adopts
-the preserved static snapshots and refreshes their provenance. Detail features are clipped to the whole-city bbox;
-countrywide roads and water stay uncut.
+the preserved static snapshots and refreshes their provenance. A partial run must use the PBF hash already in provenance
+and leaves global provenance untouched; without `land`, the ocean is derived from reviewed `land.geojson`. Extraction
+applies the reviewed visibility policy but does not accept new place facts by default. `--accept-new-place-facts` is the
+explicit review path that updates place provenance. The extractor stages every output in a temporary repository and
+publishes only the files that run owns through sibling temporary files and atomic replacement after all outputs succeed,
+retaining backups until the set is complete and restoring them if a later replacement fails. Detail features are clipped
+to the whole-city bbox; countrywide roads and water stay uncut.
 
 ## Consequences
 

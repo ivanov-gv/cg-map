@@ -7,12 +7,15 @@ function sortedKeys(value) {
   return value;
 }
 
+// Sort by source identity, then part, then the canonical feature bytes.
 function compareRecords(first, second) {
   if (first.entityId !== second.entityId) return first.entityId < second.entityId ? -1 : 1;
   if (first.part !== second.part) return first.part - second.part;
-  return first.json < second.json ? -1 : first.json > second.json ? 1 : 0;
+  if (first.json === second.json) return 0;
+  return first.json < second.json ? -1 : 1;
 }
 
+// Write one sorted feature per line in the shared canonical format.
 export function serializeSourceCollection(collection) {
   const records = collection.features.map(feature => {
     const properties = feature.properties ?? {};

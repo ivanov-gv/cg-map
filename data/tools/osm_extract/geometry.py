@@ -44,7 +44,8 @@ def usable_area_geometry(area):
     """Skip malformed assembled areas without dropping the rest of a layer."""
     try:
         return area_geometry(area)
-    except RuntimeError:
+    except RuntimeError as error:
+        print(f'Area skipped {area.id}: {error}')
         return None
 
 

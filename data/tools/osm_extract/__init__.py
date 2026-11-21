@@ -21,7 +21,7 @@ class Layer:
 
     filename: str = ''
 
-    def __init__(self, options):
+    def __init__(self):
         self.features = []
 
     def node(self, node, options, state):

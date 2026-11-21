@@ -59,10 +59,16 @@ class WaterLayer(Layer):
         return self.features
 
     def ocean_feature(self, options, state):
-        """Compute the ocean from reviewed land with a content-hash version."""
-        country = state.country_geometry or self.country_from_sources(options)
+        """Compute the ocean from this run's country or the reviewed outline."""
+        has_fresh_country = (
+            options.uses_fresh_country and state.country_geometry is not None
+        )
+        country = (
+            state.country_geometry if has_fresh_country
+            else self.country_from_sources(options)
+        )
         context = read_collection(
-            options.sources_dir / 'context-countries.geojson'
+            options.sources_directory / 'context-countries.geojson'
         )
         land = [
             shape(country),
@@ -83,7 +89,7 @@ class WaterLayer(Layer):
 
     def country_from_sources(self, options):
         """Read the reviewed outline when only water is regenerated."""
-        land = read_collection(options.sources_dir / LAND_FILE)
+        land = read_collection(options.sources_directory / LAND_FILE)
         return next(
             feature['geometry'] for feature in land['features']
             if feature['properties']['kind'] == 'country'

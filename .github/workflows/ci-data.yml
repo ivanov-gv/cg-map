@@ -26,6 +26,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-web
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: data/tools/requirements.txt
+      - name: Install pinned data tools
+        run: python3 -m pip install -r data/tools/requirements.txt
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=data

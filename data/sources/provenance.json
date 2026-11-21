@@ -33,7 +33,7 @@
   "places_file": "data/sources/places.geojson",
   "places_count": 1876,
   "notes": [
-    "water.geojson includes one derived ocean polygon added after the original extraction.",
+    "water.geojson includes one derived ocean polygon computed by the extractor from the reviewed land outline and surrounding countries.",
     "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
   ],
   "places_bytes": 587199,

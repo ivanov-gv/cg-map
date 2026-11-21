@@ -53,24 +53,19 @@ def adopt_collection(collection, identifier):
     features = []
     for feature in collection['features']:
         properties = feature['properties']
-        already_adopted = (
+        is_already_adopted = (
             collection.get('entitySchemaVersion') == 1
             and properties.get('entityId')
             and properties.get('entityVersion')
         )
-        identity = {
-            'entityId': (
-                properties.get('entityId') or identifier(feature)
-            ),
-            'entityVersion': (
-                properties.get('entityVersion')
-                or feature_content_version(feature)
-            ),
-        }
+        entity_id = properties.get('entityId') or identifier(feature)
+        entity_version = (
+            properties.get('entityVersion') if is_already_adopted
+            else feature_content_version(feature)
+        )
+        identity = {'entityId': entity_id, 'entityVersion': entity_version}
         if 'entityPart' in properties:
             identity['entityPart'] = properties['entityPart']
-        if not already_adopted:
-            identity['entityVersion'] = feature_content_version(feature)
         features.append({
             **feature, 'properties': {**properties, **identity}
         })

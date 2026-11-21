@@ -281,7 +281,6 @@ def main():
     }
     node_addresses, entrances, ambiguous_count = associate_nodes(addresses, matched_buildings, polygons)
     labels, direct_count, node_count = build_labels(matched_buildings, polygons, node_addresses, entrances)
-    collection = {'type': 'FeatureCollection', 'entitySchemaVersion': 1, 'features': labels}
     data = serialize_collection(labels).encode('utf-8')
     metadata = {
         'source': 'OpenStreetMap / Geofabrik Montenegro',

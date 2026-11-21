@@ -11,8 +11,10 @@ generation, and reviewed releases.
 | tools/             | Extraction, validation, tiling, packaging, release metadata |
 | tests/             | Data contract tests and a small Podgorica fixture           |
 
-From repository root: `make -C data check`. Full rebuild: `make -C data build-data` after installing
-[optional Python dependencies](../docs/runbooks/data.md).
+From repository root: `make -C data check`. Local `make verify PKG=data` and full rebuilds need the pinned Python
+requirements in `tools/requirements.txt`; install them in a virtualenv as described in the
+[data runbook](../docs/runbooks/data.md#geometry-edits-or-refreshes). CI installs the same requirements before data
+verification; tests are not skipped when `osmium` is missing.
 
 From this workspace: `npm run check`, `npm run build`, `npm test`. The full build is deliberately expensive.
 Viewing/building the web uses the committed reviewed archive instead. The reviewed data is also published as

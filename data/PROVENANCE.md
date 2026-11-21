@@ -8,7 +8,7 @@ The reviewed OSM extract timestamp is 2026-11-20T21:21:21Z. Display geometry rem
 now covers the whole city within `[19.15, 42.37, 19.34, 42.51]`, alongside countrywide major roads, water, attractions
 and the country outline. There are 43,978 buildings, 21,247 road features, 332 land features and 1,491 water features
 including one derived ocean polygon. The place snapshot has 1,876 entries. No source file exceeds 40 MB; the reviewed
-archive is 20,985,386 bytes.
+archive is 20,985,409 bytes.
 
 `sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
 `packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full

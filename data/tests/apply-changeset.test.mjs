@@ -240,6 +240,42 @@ test('an added feature cannot claim an upstream identity or anything the rules d
     /must not claim invented/
   );
   refuses(addOperation('roads.geojson', 'local:road', {...road({kind: 'footway'}), id: 'way/1'}), /claim a feature id/);
+  for (const [field, value] of [
+    ['entityId', 'way/999'],
+    ['entityVersion', 7],
+    ['entityPart', 0]
+  ]) {
+    refuses(
+      addOperation('roads.geojson', 'local:road', road({kind: 'footway', [field]: value})),
+      new RegExp(`must not claim ${field}`)
+    );
+  }
+});
+
+test('an importer cannot assign an invalid local entity ID', testContext => {
+  const root = temporaryRoot(testContext);
+  const operation = addOperation('roads.geojson', 'local:road', road({kind: 'footway'}));
+  assert.throws(
+    () => applyChangeset(changeset(root, operation.filename, [operation]), root, {
+      now: reviewedAt, newEntityId: () => 'way/999'
+    }),
+    /invalid local entity ID way\/999/
+  );
+});
+
+test('an importer cannot reuse a local entity ID', testContext => {
+  const root = temporaryRoot(testContext);
+  const operations = [
+    addOperation('roads.geojson', 'local:first', road({kind: 'footway'})),
+    addOperation('roads.geojson', 'local:second', road({kind: 'footway'}))
+  ];
+  const duplicateId = 'local:11111111-1111-4111-8111-111111111111';
+  assert.throws(
+    () => applyChangeset(changeset(root, 'roads.geojson', operations), root, {
+      now: reviewedAt, newEntityId: () => duplicateId
+    }),
+    new RegExp(`duplicate local entity ID ${duplicateId}`)
+  );
 });
 
 test('a deletion that also carries an after state is refused', testContext => {
