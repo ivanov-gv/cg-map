@@ -287,4 +287,12 @@
     <tag k="building" v="yes"/>
     <tag k="addr:street" v="Remote Street"/>
   </way>
+
+  <relation id="9100" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2007" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
 </osm>

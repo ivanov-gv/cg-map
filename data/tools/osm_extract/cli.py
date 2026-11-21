@@ -90,6 +90,11 @@ class ExtractHandler(osmium.SimpleHandler):
         for layer in self.layers:
             layer.area(area, self.options, self.state)
 
+    def relation(self, relation):
+        for layer in self.layers:
+            if hasattr(layer, 'relation'):
+                layer.relation(relation, self.options, self.state)
+
 
 class RelationHandler(osmium.SimpleHandler):
     """Second pass that dispatches relations to layers that need them."""

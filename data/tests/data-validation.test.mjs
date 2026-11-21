@@ -516,7 +516,7 @@ test('turn-restrictions validate structure and report outside refs', () => {
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
   const restrictions = JSON.parse(fs.readFileSync('data/sources/turn-restrictions.json'));
   const result = validateTurnRestrictions(restrictions, roads, nodes);
-  assert.ok(Number.isInteger(result.count));
+  assert.ok(result.count > 0, 'turn-restrictions.json must not be empty');
   assert.ok(Number.isInteger(result.outsideCount));
 });
 

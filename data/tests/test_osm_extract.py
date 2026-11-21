@@ -16,21 +16,10 @@ TOOLS = ROOT / 'data/tools'
 SOURCES = ROOT / 'data/sources'
 sys.path.insert(0, str(TOOLS))
 
-# These imports need osmium (pinned in data/tools/requirements.txt).
-# Guard them so the test module loads even without the venv.
-try:
-    from osm_extract import cli  # noqa: E402
-    from osm_extract.identity import content_version  # noqa: E402
-    from osm_extract.roads import classify_path, road_level  # noqa: E402
-    from osm_extract.writing import serialize_collection  # noqa: E402
-    HAS_OSMIUM = True
-except ImportError:
-    HAS_OSMIUM = False
-    cli = None  # type: ignore[assignment]
-    content_version = None  # type: ignore[assignment]
-    classify_path = None  # type: ignore[assignment]
-    road_level = None  # type: ignore[assignment]
-    serialize_collection = None  # type: ignore[assignment]
+from osm_extract import cli  # noqa: E402
+from osm_extract.identity import content_version  # noqa: E402
+from osm_extract.roads import classify_path, road_level  # noqa: E402
+from osm_extract.writing import serialize_collection  # noqa: E402
 
 FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
 FIXTURE_HASH = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
@@ -201,7 +190,6 @@ def node_serialization(filename):
     return result.stdout.decode('utf-8')
 
 
-@unittest.skipUnless(HAS_OSMIUM, 'osmium not installed')
 class OsmExtractTest(unittest.TestCase):
     """Exercise the extractor without touching the reviewed source files."""
 
@@ -348,6 +336,22 @@ class OsmExtractTest(unittest.TestCase):
         data = json.loads(restrictions_path.read_text(encoding='utf-8'))
         self.assertEqual(data['entitySchemaVersion'], 1)
         self.assertIsInstance(data['restrictions'], list)
+
+    def test_turn_restriction_relation_is_extracted(self):
+        extract(self.first_root)
+        restrictions_path = (
+            self.first_root / 'data/sources' / 'turn-restrictions.json'
+        )
+        data = json.loads(restrictions_path.read_text(encoding='utf-8'))
+        restrictions = data['restrictions']
+        by_id = {r['entityId']: r for r in restrictions}
+        self.assertIn('relation/9100', by_id)
+        restriction = by_id['relation/9100']
+        self.assertEqual(restriction['entityVersion'], 1)
+        self.assertEqual(restriction['restriction'], 'no_left_turn')
+        self.assertEqual(restriction['from'], 2003)
+        self.assertEqual(restriction['to'], 2007)
+        self.assertEqual(restriction['viaNodes'], [2032])
 
     def test_coordinates_use_reviewed_precision(self):
         extract(self.first_root)
@@ -630,7 +634,6 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(after['roads.geojson'], before['roads.geojson'])
 
 
-@unittest.skipUnless(HAS_OSMIUM, 'osmium not installed')
 class PathClassTest(unittest.TestCase):
     """Test the classify_path function for walking route classification."""
 
@@ -705,7 +708,6 @@ class PathClassTest(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(HAS_OSMIUM, 'osmium not installed')
 class RoadLevelTest(unittest.TestCase):
     """Test the road_level function for bridge/tunnel level computation."""
 
@@ -746,7 +748,6 @@ class RoadLevelTest(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(HAS_OSMIUM, 'osmium not installed')
 class EndNodePreservationTest(unittest.TestCase):
     """Verify that simplification preserves both end nodes exactly."""
 
