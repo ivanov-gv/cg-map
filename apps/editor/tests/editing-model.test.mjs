@@ -411,7 +411,7 @@ test('an operation that breaks identity or the rules is refused like the importe
   };
   assert.match(operationProblem(added, rules, levels), /needs a local ID/);
   const fabricated = {...added, reference: {localId: 'local:1'}};
-  assert.match(operationProblem(fabricated, rules, levels), /must not claim wikidata/);
+  assert.match(operationProblem(fabricated, rules, levels), /must use its local ID/);
 });
 
 test('import refuses duplicate references', async () => {

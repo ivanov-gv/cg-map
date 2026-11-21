@@ -449,7 +449,7 @@ test('kind rules take precedence over category defaults, with a fallback for the
   const cases = [
     [{kind: 'museum', category: 'sights'}, 2], [{kind: 'hospital', category: 'essentials'}, 2],
     [{kind: 'pharmacy', category: 'essentials'}, 3], [{kind: 'hotel', category: 'sights'}, 3], [{kind: 'hostel', category: 'stay'}, 3],
-    [{kind: 'cafe', category: 'food'}, 4], [{kind: 'supermarket', category: 'shops'}, 4], [{kind: 'mall', category: 'shops'}, 4], [{kind: 'clothes', category: 'shops'}, 5], [{kind: 'gallery', category: 'sights'}, 4], [{kind: 'castle', category: 'sights'}, 4],
+    [{kind: 'cafe', category: 'food'}, 4], [{kind: 'supermarket', category: 'shops'}, 4], [{kind: 'mall', category: 'shops'}, 4], [{kind: 'clothes', category: 'shops'}, 5], [{kind: 'gallery', category: 'sights'}, 4], [{kind: 'castle', category: 'sights'}, 2],
     [{kind: 'memorial', category: 'sights'}, 5], [{kind: 'artwork', category: 'sights'}, 5], [{kind: 'atm', category: 'essentials'}, 5], [{kind: 'fuel', category: 'shops'}, 5], [{kind: 'yes', category: 'shops'}, 5],
     [{kind: 'clinic', category: 'essentials'}, 5], [{kind: 'anything', category: 'unmapped'}, 5], [{category: 'food'}, 5], [{kind: '', category: 'food'}, 5], [{kind: 'constructor', category: 'unmapped'}, 5]
   ];

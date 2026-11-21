@@ -8,14 +8,22 @@
       "properties": {
         "name": {"required": true, "maxLength": 120},
         "name:en": {"maxLength": 120},
+        "name:sr-Latn": {"maxLength": 120},
         "category": {"required": true, "enum": ["food", "sights", "shops", "stay", "essentials"]},
         "kind": {"required": true, "maxLength": 64},
+        "standalone": {"type": "boolean"},
         "visibilityLevel": {"required": true, "isLevel": true, "landmarkLevel": 1, "landmarkCategory": "sights"},
         "addr:street": {"maxLength": 120},
         "addr:housenumber": {"maxLength": 128},
         "phone": {"maxLength": 64},
         "website": {"maxLength": 512},
-        "opening_hours": {"maxLength": 256}
+        "email": {"maxLength": 128},
+        "opening_hours": {"maxLength": 256},
+        "wheelchair": {"maxLength": 64},
+        "level": {"maxLength": 16},
+        "cuisine": {"maxLength": 128},
+        "wikidata": {"maxLength": 64},
+        "wikipedia": {"maxLength": 128}
       }
     },
     "building-entrances.geojson": {

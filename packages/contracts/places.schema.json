@@ -30,7 +30,23 @@
         "visibilityLevel": {
           "description": "Level from place-visibility.json. The data producer requires it on every published place; consumers may read a missing value as legacyFallbackLevel but must reject an invalid one.",
           "type": "integer", "minimum": 1, "maximum": 5
-        }
+        },
+        "kind": {"type": "string", "description": "OSM tag value (amenity, tourism, shop, historic, barrier, or man_made)."},
+        "standalone": {"type": "boolean", "description": "True when the point is not inside a building footprint."},
+        "name:en": {"type": "string"},
+        "name:sr-Latn": {"type": "string"},
+        "phone": {"type": "string", "description": "From phone or contact:phone (normalised)."},
+        "website": {"type": "string", "description": "From website or contact:website (normalised)."},
+        "email": {"type": "string", "description": "From email or contact:email (normalised)."},
+        "opening_hours": {"type": "string", "description": "OSM opening hours format, kept as written."},
+        "wheelchair": {"type": "string"},
+        "addr:street": {"type": "string"},
+        "addr:housenumber": {"type": "string"},
+        "level": {"type": "string"},
+        "cuisine": {"type": "string"},
+        "wikidata": {"type": "string"},
+        "wikipedia": {"type": "string"},
+        "source": {"type": "string"}
       }
     }
   }

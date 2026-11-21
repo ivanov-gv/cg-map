@@ -11,8 +11,11 @@ rebuilding. Data validation reads HEAD sources against HEAD contracts, and `test
 default; a release run points that helper at the exact package being promoted.
 
 `places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported
-category, WGS84 longitude/latitude point, and a visibility level. The data validator enforces this contract and
-directory-wide uniqueness. Integration tests check that web categories agree with it.
+category, WGS84 longitude/latitude point, and a visibility level. Optional facts include `kind` (OSM tag value),
+`standalone` (true when not inside a building), `name:en`, `name:sr-Latn`, `phone` (normalised from `contact:phone`),
+`website` (normalised from `contact:website`), `email` (normalised from `contact:email`), `opening_hours` (OSM format),
+`wheelchair`, `addr:street`, `addr:housenumber`, `level`, `cuisine`, `wikidata`, `wikipedia`. The data validator
+enforces this contract and directory-wide uniqueness. Integration tests check that web categories agree with it.
 
 `place-visibility.json` (shape in `place-visibility.schema.json`) is the one level-to-zoom table. Level 1 appears
 earliest; levels are consecutive and zooms strictly increase, so eligibility is cumulative. The producer requires a
