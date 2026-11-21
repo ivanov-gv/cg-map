@@ -14,6 +14,41 @@ IDs/names/categories/levels, provenance, and the recorded release checksum. It i
 guarantee that business listings are current. make -C data check-topology adds the Shapely-backed municipality,
 shared-edge and settlement checks; make verify PKG=data and make -C data verify run both groups.
 
+## Relief sources
+
+Five read-only vectors are derived from local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed
+`land.geojson`/`water.geojson`. Install the [optional Python dependencies](#geometry-edits-or-refreshes) first, then:
+
+```sh
+make -C data build-relief
+make -C data check
+```
+
+The builder verifies DEM and PBF SHA-256 values before deriving anything. `RELIEF_DEM_DIR`, `RELIEF_OSM_PATH`, and
+`RELIEF_OSM_SHA256` can point a disposable build at another reviewed snapshot; the committed build records the exact
+inputs. The raster tiles, PBF and `.build/relief-report.json` stay outside Git. Outputs are deterministic bytes: run the
+build twice and compare their hashes before committing a source change.
+
+Summits are clipped to the `kind=country` boundary in `land.geojson`. Each carries `heightCheck`: `missing` when OSM has
+no elevation, `mismatch` only when a closed contour enclosing the summit is above OSM height or the OSM/DEM difference
+exceeds 25 m, and `ok` otherwise. The per-summit result lives on the feature; the report in `.build` adds the full
+mismatch list and build inputs. Contours are 20 m apart with 100 m index lines, one `LineString` per connected line,
+checked against crossing contours before publication. Slopes are one `Polygon` per connected area, ridges one
+`LineString` per aspect boundary, and canyon rims one `LineString` per segment with numbered `entityPart` values on one
+derived identity. Their derived IDs are deterministic for the pinned inputs but are not stable across a DEM or
+green-area change.
+
+Canyon rims keep only samples where the bank rises at least 8 m above the river surface within 60 m of the channel
+(`CANYON_BANK_RISE_METRES` and `CANYON_SEARCH_DISTANCE_METRES` in `data/tools/relief/terrain.py`). The thresholds
+exclude ordinary shallow banks; a 30 m DEM cannot reliably separate smaller rises from bank roughness. Slope aspect and
+flat-ground rules live in the same module, with unit tests run by plain `python3`. Green kinds come from the single
+`GREEN_KINDS` constant in `data/tools/relief/derivations.py`, which Feature #326 extends; the current `land.geojson`
+contains only `park` among those kinds.
+
+Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the bundle to the eight files in
+`editor-bundle.schema.json`, so adding a relief source must not change browser editing tests. See
+[data licensing](../map-data/data-license.md) for the required Copernicus attribution.
+
 ## Place-only edits
 
 Edit data/sources/places.geojson, review attribution and place count in provenance, then assign levels and record the

@@ -3,18 +3,22 @@
 Ownership: map-data team. This npm workspace owns acquisition, source snapshots, provenance/quality, imagery, tile
 generation, and reviewed releases.
 
-| Directory          | Purpose                                                     |
-| ------------------ | ----------------------------------------------------------- |
-| sources/           | Editable geometry, places, levels, provenance, and metadata |
-| imagery/podgorica/ | Bundled satellite sample with its own provenance            |
-| artifacts/         | Reviewed content-addressed archive and release.json         |
-| tools/             | Extraction, validation, tiling, packaging, release metadata |
-| tests/             | Data contract tests and a small Podgorica fixture           |
+| Directory          | Purpose                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| sources/           | Editable geometry, derived relief vectors, places, levels, provenance, and metadata |
+| imagery/podgorica/ | Bundled satellite sample with its own provenance                                    |
+| artifacts/         | Reviewed content-addressed archive and release.json                                 |
+| tools/             | Extraction, validation, tiling, packaging, release metadata                         |
+| tests/             | Data contract tests and a small Podgorica fixture                                   |
 
 From repository root: `make -C data check`. Local `make verify PKG=data` and full rebuilds need the pinned Python
 requirements in `tools/requirements.txt`; install them in a virtualenv as described in the
 [data runbook](../docs/runbooks/data.md#geometry-edits-or-refreshes). CI installs the same requirements before data
 verification; tests are not skipped when `osmium` is missing.
+
+Full rebuild: `make -C data build-data`. The five read-only relief sources are rebuilt separately with
+`make -C data build-relief`; their raster inputs and derivation report stay outside Git, and their vectors, counts and
+hashes are reviewed here.
 
 From this workspace: `npm run check`, `npm run build`, `npm test`. The full build is deliberately expensive.
 Viewing/building the web uses the committed reviewed archive instead. The reviewed data is also published as

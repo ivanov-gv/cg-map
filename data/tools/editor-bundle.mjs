@@ -56,9 +56,12 @@ function assertContractFileSet(sourceFiles, contractFiles) {
 export async function writeEditorBundle(sourceDirectory, outputDirectory, contractLocation) {
   const contract = await readBundleContract(contractLocation);
   const version = contractVersion(contract);
+  const contractFiles = contractFileSet(contract, version);
   const directoryEntries = await readdir(sourceDirectory);
-  const sourceFiles = directoryEntries.filter(name => name.endsWith('.geojson')).sort();
-  assertContractFileSet(sourceFiles, contractFileSet(contract, version));
+  const sourceFiles = directoryEntries
+    .filter(name => name.endsWith('.geojson') && contractFiles.includes(name))
+    .sort();
+  assertContractFileSet(sourceFiles, contractFiles);
   const layers = [];
   await mkdir(outputDirectory, {recursive: true});
   for (const filename of sourceFiles) {

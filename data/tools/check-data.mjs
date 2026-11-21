@@ -146,6 +146,71 @@ export function validateCollection(data, {
   }
   return data.features.length;
 }
+const reliefGeometryTypes = {
+  'contours.geojson': ['LineString'],
+  'summits.geojson': ['Point'],
+  'slopes.geojson': ['Polygon'],
+  'ridges.geojson': ['LineString'],
+  'canyon-rims.geojson': ['LineString']
+};
+const reliefKinds = {
+  'contours.geojson': 'contour',
+  'summits.geojson': 'summit',
+  'slopes.geojson': 'slope',
+  'ridges.geojson': 'ridge',
+  'canyon-rims.geojson': 'canyon-rim'
+};
+const copernicusAttribution = '© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved';
+
+export function validateRelief(data, {label}) {
+  const kind = reliefKinds[label];
+  const count = validateCollection(data, {label, geometryTypes: reliefGeometryTypes[label], requireKind: true});
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    requireValue(properties.kind === kind, `${label}: wrong relief kind ${properties.kind}`);
+    requireValue(typeof properties.source === 'string' && properties.source.length > 0, `${label}: missing source`);
+    if (kind === 'contour') {
+      const coordinates = feature.geometry.coordinates;
+      requireValue(Number.isInteger(properties.elevation) && properties.elevation % 20 === 0, `${label}: elevation is not a 20 m contour`);
+      requireValue(properties.intervalMetres === 20 && typeof properties.index === 'boolean' && properties.index === (properties.elevation % 100 === 0), `${label}: wrong contour interval or index flag`);
+      requireValue(Number.isInteger(properties.segments) && properties.segments === coordinates.length - 1, `${label}: contour segment count disagrees with its line`);
+    }
+    if (kind === 'summit') {
+      requireValue(['peak', 'hill'].includes(properties.natural), `${label}: invalid summit natural kind`);
+      requireValue(typeof properties.name === 'string' && typeof properties['name:en'] === 'string', `${label}: missing summit names`);
+      requireValue(properties.ele === null || Number.isFinite(properties.ele), `${label}: invalid OSM elevation`);
+      requireValue(Number.isFinite(properties.demElevation) && Number.isFinite(properties.surroundingDemElevation), `${label}: missing DEM elevation`);
+      requireValue(['missing', 'mismatch', 'ok'].includes(properties.heightCheck), `${label}: invalid heightCheck`);
+      requireValue(properties.heightCheck === 'missing' ? properties.ele === null : properties.ele !== null, `${label}: heightCheck disagrees with OSM elevation`);
+      requireValue(Array.isArray(properties.mismatchReasons) && properties.mismatchReasons.every(reason => typeof reason === 'string'), `${label}: invalid mismatch reasons`);
+      requireValue(properties.mismatch === (properties.heightCheck === 'mismatch'), `${label}: mismatch flag disagrees with heightCheck`);
+      requireValue(properties.mismatch === (properties.mismatchReasons.length > 0), `${label}: mismatch flag disagrees with reasons`);
+      requireValue(properties.enclosingContourElevation === null || Number.isFinite(properties.enclosingContourElevation), `${label}: invalid enclosing contour`);
+    }
+    if (kind === 'slope') {
+      requireValue(['sunlit', 'shaded'].includes(properties.aspect), `${label}: invalid aspect class`);
+      requireValue(Array.isArray(properties.greenKinds) && properties.greenKinds.length > 0 && properties.greenKinds.every(name => typeof name === 'string'), `${label}: missing green kinds`);
+      requireValue(Array.isArray(properties.greenKindsPresentInLand) && properties.greenKindsPresentInLand.every(name => properties.greenKinds.includes(name)), `${label}: unknown green kind in land.geojson`);
+      requireValue(Number.isFinite(properties.areaSquareMetres) && Number.isFinite(properties.minimumAreaSquareMetres), `${label}: invalid slope area`);
+    }
+    if (kind === 'ridge') {
+      requireValue(/^(node|way|relation)\/[1-9][0-9]*$/.test(properties.summit), `${label}: invalid summit identity`);
+      requireValue(typeof properties.summitName === 'string' && typeof properties.sunlitSide === 'string' && typeof properties.shadedSide === 'string', `${label}: incomplete ridge sides`);
+      requireValue(Number.isFinite(properties.radiusMetres), `${label}: invalid ridge radius`);
+    }
+    if (kind === 'canyon-rim') {
+      requireValue(['Morača', 'Ribnica'].includes(properties.river) && ['left', 'right'].includes(properties.bank), `${label}: invalid river bank`);
+      requireValue(typeof properties.method === 'string' && typeof properties.bankDefinition === 'string', `${label}: missing rim method`);
+      requireValue(Array.isArray(properties.cliffWays) && properties.cliffWays.every(id => /^way\/[1-9][0-9]*$/.test(id)), `${label}: invalid cliff identity`);
+      requireValue(Number.isInteger(properties.entityPart) && properties.entityPart >= 0, `${label}: invalid rim part`);
+      requireValue(properties.minimumBankRiseMetres === 8 && properties.searchDistanceMetres === 60, `${label}: canyon thresholds changed`);
+      requireValue(Number.isFinite(properties.segmentLengthMetres) && Number.isFinite(properties.demLengthMetres), `${label}: invalid rim lengths`);
+    }
+  }
+  return count;
+}
+
+
 const settlementRanks = new Set(['capital', 'city', 'town', 'village']);
 
 // Validate LineString borders that name two distinct sides and valid OSM contributors.
@@ -748,6 +813,15 @@ export function validateRoads(data, {contractsDirectory} = {}) {
   return count;
 }
 
+function validateReliefSource(data, {label, requireAdopted = false, contractsDirectory}) {
+  const count = validateRelief(data, {label});
+  if (requireAdopted) {
+    requireValue(data.entitySchemaVersion === 1, `${label}: requires entitySchemaVersion 1`);
+    validateSourceEntities(data, {label, contractsDirectory});
+  }
+  return count;
+}
+
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
@@ -776,6 +850,11 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     'border-edges.geojson': validateBorderEdges,
     'municipalities.geojson': validateMunicipalities,
     'settlements.geojson': validateSettlements,
+    'contours.geojson': validateReliefSource,
+    'summits.geojson': validateReliefSource,
+    'slopes.geojson': validateReliefSource,
+    'ridges.geojson': validateReliefSource,
+    'canyon-rims.geojson': validateReliefSource,
   };
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');
@@ -787,7 +866,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
       const geometryTypes = sourceGeometryTypes(name);
       const specificValidator = specificValidators[name];
       const count = specificValidator
-        ? specificValidator(JSON.parse(bytes), {requireAdopted: true, contractsDirectory})
+        ? specificValidator(JSON.parse(bytes), {label: name, requireAdopted: true, contractsDirectory})
         : validateCollection(JSON.parse(bytes), {
           label: name,
           geometryTypes,
@@ -833,6 +912,26 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     JSON.parse(fs.readFileSync(path.join(root,'data/sources/places.geojson'))),
     {contractsDirectory}
   );
+  const relief = provenance.relief;
+  requireValue(relief && relief.reportFile === '.build/relief-report.json', 'Relief provenance missing');
+  const summary = relief.summary;
+  requireValue(summary.contourCrossingPairs === 0, 'Relief report has contour crossings');
+  const heightChecks = summary.summitHeightChecks;
+  requireValue(heightChecks && heightChecks.ok + heightChecks.mismatch + heightChecks.missing === summary.summitFeatures, 'Relief summit height check counts disagree');
+  requireValue(Array.isArray(summary.greenKindsPresentInLand) && summary.greenKindsPresentInLand.every(kind => typeof kind === 'string'), 'Invalid green kinds in relief summary');
+  const reportPath = path.join(root, relief.reportFile);
+  if (fs.existsSync(reportPath)) {
+    const reportBytes = fs.readFileSync(reportPath);
+    requireValue(reportBytes.length === relief.reportBytes && crypto.createHash('sha256').update(reportBytes).digest('hex') === relief.reportSha256, 'Relief report provenance mismatch');
+    const report = JSON.parse(reportBytes);
+    requireValue(report.schemaVersion === 1 && report.contours.crossingPairs === 0, 'Relief report has contour crossings or an unsupported schema');
+    requireValue(report.summits.items.length === report.summits.mismatches, 'Relief summit mismatch report is incomplete');
+    requireValue(report.canyonRims.riverBanks.length === 4, 'Relief report must describe both banks of both rivers');
+    requireValue(report.license.attribution === copernicusAttribution, 'Copernicus attribution changed');
+    for (const [name, expected] of Object.entries(report.layers)) {
+      requireValue(provenance.layers[name]?.features === expected.features && provenance.layers[name]?.bytes === expected.bytes && provenance.layers[name]?.sha256 === expected.sha256, `${name}: relief report differs from provenance`);
+    }
+  }
   requireValue(provenance.places_file === 'data/sources/places.geojson', 'Unexpected places_file');
   const count = checkPlaceMetadata(
     fs.readFileSync(path.join(root, provenance.places_file), 'utf8'),

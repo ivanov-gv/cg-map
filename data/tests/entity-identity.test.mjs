@@ -124,7 +124,9 @@ test('check-data enforces adopted metadata in all thirteen source files before p
   const supportingFiles = [
     'building-labels.provenance.json', 'transport-stops.provenance.json', 'transit-network.json',
     'transit-network.provenance.json', 'provenance.json', 'place-visibility-policy.json',
-    'turn-restrictions.json'
+    'turn-restrictions.json',
+    'contours.geojson', 'summits.geojson', 'slopes.geojson', 'ridges.geojson',
+    'canyon-rims.geojson'
   ];
   for (const filename of [...sourceFiles, ...supportingFiles]) {
     symlinkSync(path.join(repositoryRoot, 'data/sources', filename), path.join(sourceDirectory, filename));

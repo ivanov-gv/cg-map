@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/relief/v1",
+  "title": "Relief source features v1",
+  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
+  "type": "object",
+  "required": ["type", "entitySchemaVersion", "features"],
+  "properties": {
+    "type": {"const": "FeatureCollection"},
+    "entitySchemaVersion": {"const": 1},
+    "features": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/feature"}
+    }
+  },
+  "$defs": {
+    "feature": {
+      "type": "object",
+      "required": ["type", "geometry", "properties"],
+      "properties": {
+        "type": {"const": "Feature"},
+        "geometry": {"type": "object", "required": ["type", "coordinates"]},
+        "properties": {
+          "type": "object",
+          "required": ["entityId", "entityVersion", "kind", "source"],
+          "properties": {
+            "kind": {"enum": ["contour", "summit", "slope", "ridge", "canyon-rim"]},
+            "entityPart": {"type": "integer", "minimum": 0}
+          },
+          "allOf": [
+            {"$ref": "#/$defs/contour"},
+            {"$ref": "#/$defs/summit"},
+            {"$ref": "#/$defs/slope"},
+            {"$ref": "#/$defs/ridge"},
+            {"$ref": "#/$defs/canyonRim"}
+          ]
+        }
+      }
+    },
+    "contour": {
+      "if": {"properties": {"kind": {"const": "contour"}}, "required": ["kind"]},
+      "then": {
+        "required": ["elevation", "intervalMetres", "index", "segments"],
+        "properties": {
+          "elevation": {"type": "integer", "multipleOf": 20},
+          "intervalMetres": {"const": 20},
+          "index": {"type": "boolean"},
+          "segments": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "summit": {
+      "if": {"properties": {"kind": {"const": "summit"}}, "required": ["kind"]},
+      "then": {
+        "required": ["natural", "name", "name:en", "ele", "demElevation", "surroundingDemElevation", "enclosingContourElevation", "heightCheck", "mismatch", "mismatchReasons"],
+        "properties": {
+          "natural": {"enum": ["peak", "hill"]},
+          "name": {"type": "string"},
+          "name:en": {"type": "string"},
+          "ele": {"type": ["number", "null"]},
+          "demElevation": {"type": "number"},
+          "surroundingDemElevation": {"type": "number"},
+          "enclosingContourElevation": {"type": ["integer", "null"]},
+          "heightCheck": {"enum": ["missing", "mismatch", "ok"]},
+          "mismatch": {"type": "boolean"},
+          "mismatchReasons": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "slope": {
+      "if": {"properties": {"kind": {"const": "slope"}}, "required": ["kind"]},
+      "then": {
+        "required": ["aspect", "greenKinds", "greenKindsPresentInLand", "areaSquareMetres", "minimumAreaSquareMetres"],
+        "properties": {
+          "aspect": {"enum": ["sunlit", "shaded"]},
+          "greenKinds": {"type": "array", "items": {"type": "string"}},
+          "greenKindsPresentInLand": {"type": "array", "items": {"type": "string"}},
+          "areaSquareMetres": {"type": "number"},
+          "minimumAreaSquareMetres": {"type": "number"}
+        }
+      }
+    },
+    "ridge": {
+      "if": {"properties": {"kind": {"const": "ridge"}}, "required": ["kind"]},
+      "then": {
+        "required": ["summit", "summitName", "sunlitSide", "shadedSide", "radiusMetres"],
+        "properties": {
+          "summit": {"type": "string", "pattern": "^(node|way|relation)/[1-9][0-9]*$"},
+          "summitName": {"type": "string"},
+          "sunlitSide": {"type": "string"},
+          "shadedSide": {"type": "string"},
+          "radiusMetres": {"type": "number"}
+        }
+      }
+    },
+    "canyonRim": {
+      "if": {"properties": {"kind": {"const": "canyon-rim"}}, "required": ["kind"]},
+      "then": {
+        "required": ["river", "bank", "bankDefinition", "method", "cliffWays", "cliffLengthMetres", "demLengthMetres", "segmentLengthMetres", "segmentBankRiseMetres", "minimumBankRiseMetres", "searchDistanceMetres", "searchStepMetres"],
+        "properties": {
+          "river": {"enum": ["Morača", "Ribnica"]},
+          "bank": {"enum": ["left", "right"]},
+          "bankDefinition": {"type": "string"},
+          "method": {"type": "string"},
+          "cliffWays": {"type": "array", "items": {"type": "string", "pattern": "^way/[1-9][0-9]*$"}},
+          "cliffLengthMetres": {"type": "number"},
+          "demLengthMetres": {"type": "number"},
+          "segmentLengthMetres": {"type": "number"},
+          "segmentBankRiseMetres": {"type": "number"},
+          "minimumBankRiseMetres": {"const": 8},
+          "searchDistanceMetres": {"const": 60},
+          "searchStepMetres": {"const": 10}
+        }
+      }
+    }
+  }
+}

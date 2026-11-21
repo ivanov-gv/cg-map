@@ -221,6 +221,36 @@
       "geometries": [],
       "readOnlyReason": "Dated ePodgorica data, duplicated in transit-network.json. Change it through the transit import.",
       "properties": {}
+    },
+    "contours.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Computed from the Copernicus DEM, one LineString per contour. Rebuild with make -C data build-relief.",
+      "properties": {}
+    },
+    "summits.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "OSM summit facts with DEM checks. Fix the upstream OSM object or rebuild the relief sources.",
+      "properties": {}
+    },
+    "slopes.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Computed from the DEM and reviewed green areas, one Polygon per slope. Rebuild with make -C data build-relief.",
+      "properties": {}
+    },
+    "ridges.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Computed aspect boundaries near OSM summits. Rebuild with make -C data build-relief.",
+      "properties": {}
+    },
+    "canyon-rims.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Computed from DEM canyon banks, one LineString per segment. Rebuild with make -C data build-relief.",
+      "properties": {}
     }
   }
 }

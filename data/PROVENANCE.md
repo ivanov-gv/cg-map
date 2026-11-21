@@ -116,3 +116,26 @@ footprint way ID and OSM way version as its source identity; real way IDs are re
 matching, and point addresses are joined only through unambiguous node membership or containment. No-number placeholders
 and ambiguous joins are excluded. The runtime label layer is bundled for offline use. See
 [building numbers](../docs/map-data/building-numbers.md).
+
+## Relief
+
+`contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived,
+read-only vectors. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed
+OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build
+artifacts and are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256
+values are recorded in `sources/provenance.json`.
+
+The current build has 5,412 Montenegro summits (4,542 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
+levels, 102 slope polygons, 2,095 ridge lines, and 80 canyon-rim segments across the four river banks. The full report
+is written to `.build/relief-report.json`; each summit already carries its `heightCheck`, enclosing contour, DEM facts
+and reasons. OSM names and elevations are never overwritten by DEM values. A summit is checked only when it lies inside
+the `kind=country` boundary in `land.geojson`, and a mismatch needs a closed contour above OSM height around the summit
+or an OSM/DEM difference over 25 m. A missing OSM elevation keeps its DEM facts and is not a mismatch.
+
+Canyon rims keep only banks rising at least 8 m above the river surface within 60 m of the channel; each segment is a
+separate `LineString` with numbered `entityPart` values on one derived river-bank identity. River banks are named
+relative to the DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
+`data/tools/relief/derivations.py`, which Feature #326 extends; the current `land.geojson` contains only `park` among
+those kinds. Derived contour, slope, ridge and rim IDs are deterministic for the pinned inputs but are not stable across
+a DEM or green-area change. See [relief sources](../docs/runbooks/data.md#relief-sources) and
+[data licensing](../docs/map-data/data-license.md).

@@ -1,6 +1,6 @@
 ROOT := ..
 
-.PHONY: verify lint check check-topology build-data apply-changeset test python-test python-check
+.PHONY: verify lint check check-topology build-data build-relief apply-changeset test python-test python-check
 
 verify: lint check test python-test python-check check-topology
 
@@ -17,6 +17,10 @@ check-topology:
 build-data:
 	npm run build
 
+# Rebuilds the five reviewed relief sources from external inputs outside Git.
+build-relief:
+	cd $(ROOT) && python3 data/tools/build-relief.py
+
 # Applies a reviewed editor export to data/sources: make -C data apply-changeset CHANGESET=<absolute path>. Never commits.
 apply-changeset:
 	$(if $(CHANGESET),,$(error Set CHANGESET to the absolute path of a changeset file))
@@ -26,7 +30,7 @@ test:
 	cd $(ROOT) && node --test data/tests/*.test.mjs
 
 python-check:
-	cd $(ROOT) && python3 -m py_compile data/tools/*.py data/tools/osm_extract/*.py
+	cd $(ROOT) && python3 -m py_compile data/tools/*.py data/tools/osm_extract/*.py data/tools/relief/*.py
 
 python-test:
 	cd $(ROOT) && python3 -m unittest discover -s data/tests -p 'test_*.py'
