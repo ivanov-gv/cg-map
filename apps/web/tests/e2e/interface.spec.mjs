@@ -5010,7 +5010,7 @@ test.describe('Active category chip', () => {
     await expect(mapChip(page)).toBeHidden();
   });
 
-  test('flip chip sits under the icon button and a tap opens the dock', {tag: '@phone'}, async ({
+  test('flip chip sits right of the icon button and a tap opens the dock', {tag: '@phone'}, async ({
     page,
     isMobile
   }) => {
@@ -5026,8 +5026,8 @@ test.describe('Active category chip', () => {
       await expect(mapChip(page)).toBeVisible();
       const menu = await page.locator('#menu-toggle').boundingBox();
       const chip = await mapChip(page).boundingBox();
-      expect(chip.x).toBe(menu.x);
-      expect(chip.y).toBe(menu.y + menu.height + 8);
+      expect(chip.x).toBe(menu.x + menu.width + 8);
+      expect(chip.y).toBe(menu.y + (menu.height - chip.height) / 2);
       expect(chip.height).toBe(40);
 
       await page.locator('#active-category-chip-label').click();
