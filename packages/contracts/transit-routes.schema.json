@@ -26,7 +26,6 @@
       "items": {
         "type": "object",
         "required": [
-          "number",
           "name",
           "network",
           "directions"
@@ -34,7 +33,8 @@
         "properties": {
           "number": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "OSM ref; omitted when the source does not publish one"
           },
           "name": {
             "type": "string"
@@ -49,14 +49,6 @@
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}$"
           },
-          "osm_id": {
-            "type": "string",
-            "pattern": "^relation/\\d+$"
-          },
-          "osm_version": {
-            "type": "integer",
-            "minimum": 1
-          },
           "directions": {
             "type": "array",
             "minItems": 1,
@@ -67,6 +59,16 @@
                 "stops"
               ],
               "properties": {
+                "entityId": {
+                  "type": "string",
+                  "pattern": "^relation/\\d+$",
+                  "description": "OSM relation identity for this direction"
+                },
+                "entityVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "OSM version of the relation"
+                },
                 "headsign": {
                   "type": "string"
                 },
@@ -74,8 +76,54 @@
                   "type": "array",
                   "minItems": 2,
                   "items": {
-                    "type": "string",
-                    "minLength": 1
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "ePodgorica stop ID for city routes"
+                      },
+                      {
+                        "type": "object",
+                        "required": ["id", "coordinates"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^node/\\d+$",
+                            "description": "OSM node ID"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Stop name from OSM, may be empty"
+                          },
+                          "coordinates": {
+                            "type": "array",
+                            "prefixItems": [
+                              {"type": "number"},
+                              {"type": "number"}
+                            ],
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "WGS84 [longitude, latitude] rounded to 6 decimals"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "variants": {
+                  "type": "array",
+                  "description": "Alternative stop sequences for the same direction",
+                  "items": {
+                    "type": "object",
+                    "required": ["headsign", "stops"],
+                    "properties": {
+                      "headsign": {"type": "string"},
+                      "stops": {
+                        "type": "array",
+                        "minItems": 2,
+                        "items": {"type": "string", "minLength": 1}
+                      }
+                    }
                   }
                 }
               }

@@ -5,7 +5,7 @@ Side is computed from the nearest road in roads.geojson using its drawing direct
 name:en is added only where the ePodgorica API publishes one.
 
 Usage:
-    python3 data/tools/enrich-stops.py [--stops FILE] [--network FILE] [--roads FILE]
+    python3 data/tools/enrich_stops.py [--stops FILE] [--network FILE] [--roads FILE]
 
 The tool reads the existing files, writes the enriched stops back, and updates
 the provenance hash and byte count. It exits non-zero on invalid input.
@@ -13,6 +13,7 @@ the provenance hash and byte count. It exits non-zero on invalid input.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,9 +21,8 @@ DEFAULT_STOPS = ROOT / 'data/sources/transport-stops.geojson'
 DEFAULT_NETWORK = ROOT / 'data/sources/transit-network.json'
 DEFAULT_ROADS = ROOT / 'data/sources/roads.geojson'
 
-# Maximum distance in degrees for a road to count as "nearby".
-# 30 metres at Podgorica's latitude (~42.4°N) is about 0.00027 degrees.
-MAX_ROAD_DISTANCE_DEGREES = 0.00027
+# Maximum distance in metres for a road to count as "nearby".
+MAX_ROAD_DISTANCE_METRES = 30
 
 
 def parse_args():
@@ -68,9 +68,19 @@ def build_lines_index(network):
     return {stop_id: sorted(lines) for stop_id, lines in stop_lines.items()}
 
 
-def distance_squared(a, b):
-    """Squared Euclidean distance between two [lon, lat] points (planar approximation)."""
-    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
+def distance_squared_metres(point_a, point_b, reference_lat):
+    """Squared distance in metres between two [lon, lat] points.
+
+    Projects longitude by cos(latitude) so that one degree of longitude
+    matches one degree of latitude at *reference_lat*.
+    """
+    cos_lat = math.cos(math.radians(reference_lat))
+    dx = (point_a[0] - point_b[0]) * cos_lat
+    dy = point_a[1] - point_b[1]
+    # One degree of latitude is roughly 111 139 metres at the equator;
+    # the variation over Montenegro is small enough to use a constant.
+    metres_per_degree = 111139
+    return (dx * metres_per_degree) ** 2 + (dy * metres_per_degree) ** 2
 
 
 def closest_point_on_segment(point, segment_start, segment_end):
@@ -82,7 +92,6 @@ def closest_point_on_segment(point, segment_start, segment_end):
     sx, sy = segment_start
     ex, ey = segment_end
 
-    # Vector from segment start to end
     dx = ex - sx
     dy = ey - sy
     squared_length = dx * dx + dy * dy
@@ -90,46 +99,46 @@ def closest_point_on_segment(point, segment_start, segment_end):
     if squared_length == 0:
         return segment_start
 
-    # Project point onto segment, clamped to [0, 1]
     t = ((px - sx) * dx + (py - sy) * dy) / squared_length
     t = max(0.0, min(1.0, t))
 
     return [sx + t * dx, sy + t * dy]
 
 
-def closest_distance_to_road(point, coordinates):
-    """Return the minimum squared distance from a point to any segment of a road.
+def closest_distance_to_road_metres(point, coordinates, reference_lat):
+    """Return the minimum squared distance in metres from a point to a road.
 
     coordinates is a list of [lon, lat] points forming the road LineString.
+    reference_lat is used to project longitude into metres.
     """
     min_dist = float('inf')
     for i in range(len(coordinates) - 1):
         closest = closest_point_on_segment(point, coordinates[i], coordinates[i + 1])
-        dist = distance_squared(point, closest)
+        dist = distance_squared_metres(point, closest, reference_lat)
         if dist < min_dist:
             min_dist = dist
     return min_dist
 
 
-def side_of_road(stop_point, road_coordinates):
+def side_of_road(stop_point, road_coordinates, reference_lat):
     """Determine whether a stop lies to the left or right of a road.
 
-    The road's drawing direction defines "forward". We find the closest segment,
-    compute the cross product of the segment direction and the vector from the
-    segment to the stop. Positive cross product means left, negative means right.
+    The road's drawing direction defines "forward". We find the closest segment
+    (in metres), then compute the cross product of the segment direction and
+    the vector from the segment to the stop. Positive cross product means left,
+    negative means right.
 
     Returns 'left', 'right', or None if the road has fewer than 2 points.
     """
     if len(road_coordinates) < 2:
         return None
 
-    # Find the closest segment
     min_dist = float('inf')
     best_segment = None
 
     for i in range(len(road_coordinates) - 1):
         closest = closest_point_on_segment(stop_point, road_coordinates[i], road_coordinates[i + 1])
-        dist = distance_squared(stop_point, closest)
+        dist = distance_squared_metres(stop_point, closest, reference_lat)
         if dist < min_dist:
             min_dist = dist
             best_segment = i
@@ -140,17 +149,13 @@ def side_of_road(stop_point, road_coordinates):
     segment_start = road_coordinates[best_segment]
     segment_end = road_coordinates[best_segment + 1]
 
-    # Direction vector of the road segment
     dx = segment_end[0] - segment_start[0]
     dy = segment_end[1] - segment_start[1]
 
-    # Vector from the closest point on segment to the stop
     closest = closest_point_on_segment(stop_point, segment_start, segment_end)
     vx = stop_point[0] - closest[0]
     vy = stop_point[1] - closest[1]
 
-    # Cross product (2D): dx * vy - dy * vx
-    # Positive means the stop is to the left of the road direction
     cross = dx * vy - dy * vx
 
     if cross > 0:
@@ -158,24 +163,24 @@ def side_of_road(stop_point, road_coordinates):
     elif cross < 0:
         return 'right'
     else:
-        # Stop is exactly on the road line — treat as no side
         return None
 
 
 def find_nearest_road_side(stop_point, roads):
-    """Find the nearest road within the distance threshold and return its side.
+    """Find the nearest road within MAX_ROAD_DISTANCE_METRES and return its side.
 
     Returns 'left', 'right', or None if no road is within range.
+    The reference latitude is derived from the stop's own latitude.
     """
-    max_squared = MAX_ROAD_DISTANCE_DEGREES ** 2
+    reference_lat = stop_point[1]
+    max_squared_metres = MAX_ROAD_DISTANCE_METRES ** 2
     best_side = None
-    best_dist = max_squared
+    best_dist = max_squared_metres
 
     for road in roads:
         geometry = road.get('geometry', {})
         coords = geometry.get('coordinates', [])
 
-        # Handle LineString and MultiLineString
         if geometry['type'] == 'LineString':
             line_sets = [coords]
         elif geometry['type'] == 'MultiLineString':
@@ -184,14 +189,14 @@ def find_nearest_road_side(stop_point, roads):
             continue
 
         for line_coords in line_sets:
-            dist = closest_distance_to_road(stop_point, line_coords)
+            dist = closest_distance_to_road_metres(stop_point, line_coords, reference_lat)
             if dist < best_dist:
                 best_dist = dist
-                side = side_of_road(stop_point, line_coords)
+                side = side_of_road(stop_point, line_coords, reference_lat)
                 if side is not None:
                     best_side = side
 
-    if best_dist <= max_squared and best_side is not None:
+    if best_dist <= max_squared_metres and best_side is not None:
         return best_side
     return None
 

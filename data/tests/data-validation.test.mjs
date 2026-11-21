@@ -892,26 +892,37 @@ test('the editor bundle keeps its thirteen editable sources and excludes relief 
 test('transit routes validate structure, network types, and direction stops', () => {
   const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
   assert.ok(validateTransitRoutes(routes) > 0);
-  // Check city and intercity routes exist
   const cityRoutes = routes.routes.filter(r => r.network === 'bus');
   const intercityRoutes = routes.routes.filter(r => r.network === 'intercity');
   assert.ok(cityRoutes.length > 0, 'Expected city routes');
-  assert.ok(intercityRoutes.length > 0, 'Expected intercity routes');
-  // Intercity routes must have OSM identity
+  // Intercity routes must have OSM identity on each direction
   for (const route of intercityRoutes) {
-    assert.match(route.osm_id, /^relation\/\d+$/, 'Intercity route must have OSM relation ID');
-    assert.ok(Number.isInteger(route.osm_version) && route.osm_version >= 1, 'Intercity route must have OSM version');
+    for (const direction of route.directions) {
+      assert.match(direction.entityId, /^relation\/\d+$/,
+        'Intercity direction must have entityId');
+      assert.ok(Number.isInteger(direction.entityVersion) && direction.entityVersion >= 1,
+        'Intercity direction must have entityVersion');
+      // OSM stops must have positions
+      for (const stop of direction.stops) {
+        if (typeof stop === 'object') {
+          assert.ok(Array.isArray(stop.coordinates) && stop.coordinates.length === 2,
+            'OSM stop must have coordinates');
+        }
+      }
+    }
   }
 });
 
 test('transit routes reject duplicate numbers, invalid colours, and missing fields', () => {
   const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  const cityRoute = routes.routes.find(r => r.number && r.network === 'bus');
+  const namedRouteIndex = routes.routes.findIndex(r => r.name && r.name.length > 0);
   for (const mutate of [
-    data => { data.routes.push(structuredClone(data.routes[0])); }, // duplicate number
+    data => { data.routes.push(structuredClone(cityRoute)); }, // duplicate number
     data => { data.routes[0].colour = 'red'; }, // invalid colour format
-    data => { delete data.routes[0].number; }, // missing number
     data => { data.routes[0].network = 'tram'; }, // invalid network
     data => { data.routes[0].directions[0].stops = ['a']; }, // fewer than 2 stops
+    data => { data.routes[namedRouteIndex].name = ''; }, // missing name
   ]) {
     const bad = structuredClone(routes);
     mutate(bad);

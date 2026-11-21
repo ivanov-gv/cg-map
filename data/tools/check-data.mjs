@@ -384,25 +384,42 @@ export function validateTransitRoutes(data) {
   requireValue(Number.isFinite(Date.parse(data.retrievedAt)) && typeof data.source === 'string' && data.source.length > 0, 'Transit routes metadata missing');
   const routeNumbers = new Set();
   for (const route of data.routes) {
-    const routeLabel = `route ${route.number || '(unknown)'}`;
-    requireValue(typeof route.number === 'string' && route.number.length > 0, `${routeLabel}: missing number`);
-    requireValue(!routeNumbers.has(route.number), `${routeLabel}: duplicate route number`);
-    routeNumbers.add(route.number);
-    requireValue(typeof route.name === 'string', `${routeLabel}: missing name`);
+    const routeLabel = `route ${route.number || route.name || '(unknown)'}`;
+    // number is optional — omitted when OSM has no ref
+    if (route.number !== undefined) {
+      requireValue(typeof route.number === 'string' && route.number.length > 0, `${routeLabel}: invalid number`);
+      requireValue(!routeNumbers.has(route.number), `${routeLabel}: duplicate route number`);
+      routeNumbers.add(route.number);
+    }
+    requireValue(typeof route.name === 'string' && route.name.length > 0, `${routeLabel}: missing name`);
     requireValue(route.network === 'bus' || route.network === 'intercity', `${routeLabel}: invalid network type`);
     if (route.colour) {
       requireValue(/^#[0-9a-fA-F]{6}$/.test(route.colour), `${routeLabel}: invalid colour format`);
     }
-    if (route.network === 'intercity') {
-      requireValue(typeof route.osm_id === 'string' && /^relation\/\d+$/.test(route.osm_id), `${routeLabel}: missing OSM ID`);
-      requireValue(Number.isInteger(route.osm_version) && route.osm_version >= 1, `${routeLabel}: invalid OSM version`);
-    }
     requireValue(Array.isArray(route.directions) && route.directions.length >= 1, `${routeLabel}: missing directions`);
     for (const direction of route.directions) {
       requireValue(typeof direction.headsign === 'string', `${routeLabel}: direction missing headsign`);
+      // entityId/entityVersion are required for OSM directions
+      if (route.network === 'intercity' || direction.entityId) {
+        requireValue(typeof direction.entityId === 'string' && /^relation\/\d+$/.test(direction.entityId),
+          `${routeLabel}: direction missing entityId`);
+        requireValue(Number.isInteger(direction.entityVersion) && direction.entityVersion >= 1,
+          `${routeLabel}: direction missing entityVersion`);
+      }
       requireValue(Array.isArray(direction.stops) && direction.stops.length >= 2, `${routeLabel}: direction has fewer than 2 stops`);
-      for (const stopId of direction.stops) {
-        requireValue(typeof stopId === 'string' && stopId.length > 0, `${routeLabel}: empty stop ID in direction`);
+      for (const stop of direction.stops) {
+        if (typeof stop === 'string') {
+          // City route stop ID
+          requireValue(stop.length > 0, `${routeLabel}: empty stop ID in direction`);
+        } else {
+          // OSM stop object with position
+          requireValue(typeof stop.id === 'string' && /^node\/\d+$/.test(stop.id),
+            `${routeLabel}: OSM stop missing node ID`);
+          requireValue(Array.isArray(stop.coordinates) && stop.coordinates.length === 2,
+            `${routeLabel}: OSM stop missing coordinates`);
+          requireValue(stop.coordinates.every(Number.isFinite),
+            `${routeLabel}: OSM stop has non-finite coordinates`);
+        }
       }
     }
   }
@@ -411,33 +428,42 @@ export function validateTransitRoutes(data) {
 
 // Cross-validate that stop lines match routes and route stops exist in the stops file.
 export function validateStopsAndRoutes(stopsData, routesData) {
-  // Build set of stop IDs from the stops GeoJSON
   const stopIds = new Set();
   for (const feature of stopsData.features) {
     stopIds.add(feature.id);
   }
 
-  // Build expected lines per stop from routes
   const expectedLines = {};
   for (const route of routesData.routes) {
+    const routeNumber = route.number;
     for (const direction of route.directions) {
-      for (const stopId of direction.stops) {
-        // Only check city route stops (epodgorica IDs) against the stops file
-        if (stopId.startsWith('node/')) {
-          continue; // Intercity OSM node IDs are not in transport-stops.geojson
+      // Check main direction stops
+      for (const stop of direction.stops) {
+        const stopId = typeof stop === 'string' ? stop : stop.id;
+        if (stopId.startsWith('node/')) continue;
+        if (routeNumber) {
+          expectedLines[stopId] = expectedLines[stopId] || new Set();
+          expectedLines[stopId].add(routeNumber);
         }
-        expectedLines[stopId] = expectedLines[stopId] || new Set();
-        expectedLines[stopId].add(route.number);
+      }
+      // Also check variant stops
+      for (const variant of direction.variants || []) {
+        for (const stop of variant.stops) {
+          const stopId = typeof stop === 'string' ? stop : stop.id;
+          if (stopId.startsWith('node/')) continue;
+          if (routeNumber) {
+            expectedLines[stopId] = expectedLines[stopId] || new Set();
+            expectedLines[stopId].add(routeNumber);
+          }
+        }
       }
     }
   }
 
-  // Check that every city route stop exists in the stops file
   for (const stopId of Object.keys(expectedLines)) {
     requireValue(stopIds.has(stopId), `Route references stop ${stopId} not in transport-stops.geojson`);
   }
 
-  // Check that lines on stops match the routes
   for (const feature of stopsData.features) {
     const stopId = feature.id;
     const stopLines = feature.properties?.lines;
