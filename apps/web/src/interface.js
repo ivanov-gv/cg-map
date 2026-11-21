@@ -583,8 +583,10 @@ export class MapInterface {
     }
     switch (top) {
       case 'search-bubble':
-      case 'dock':
         this.goToOpeningView();
+        return;
+      case 'dock':
+        this.closeDockByBack();
         return;
       case 'search-strip':
         this.restoreSearchBubble();
@@ -594,6 +596,11 @@ export class MapInterface {
         return;
       case 'card-fullscreen':
       case 'card-full':
+        // Flip shares its Back transitions with the Icon Button, including focus restoration.
+        if (current.isFlip) {
+          this.stepBackOrCloseFlipCard();
+          return;
+        }
         if (target.card) {
           this.setCardState(target.card.state);
         } else {
@@ -601,11 +608,24 @@ export class MapInterface {
         }
         return;
       case 'card-peek':
+        if (current.isFlip) {
+          this.stepBackOrCloseFlipCard();
+          return;
+        }
         this.closeCardByBack(current);
         return;
       default:
         this.goToOpeningView();
     }
+  }
+
+  // A dock above a card is its own visible step: close the dock and leave the covered card alone.
+  closeDockByBack() {
+    this.isResultsCompacted = false;
+    this.areResultsMinimized = false;
+    this.flipDockScreen = null;
+    this.cardFromDock = false;
+    this.setView('closed');
   }
 
   closeCardByBack(currentState) {

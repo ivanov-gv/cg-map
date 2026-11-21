@@ -118,6 +118,13 @@ async function wheelOverCard(page, deltaY) {
   }, deltaY);
 }
 
+// Card geometry is read after its CSS transition; a state attribute alone can still be mid-flight.
+async function cardSettled(page, state) {
+  const card = page.locator('#place-card');
+  await expect(card).toHaveAttribute('data-state', state);
+  await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
+}
+
 const readGeoJSON = path =>
   JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
 
@@ -1242,7 +1249,7 @@ test(
 );
 
 test(
-  'Flip keeps its two-step finger swipe instead of the phone card drag',
+  'Flip keeps its two-step card instead of the phone card drag',
   {tag: '@phone'},
   async ({page, isMobile}) => {
     test.skip(!isMobile, 'touch emulation');
@@ -1251,21 +1258,25 @@ test(
       await ready(page);
       await openMenu(page);
       await page.locator('.result', {hasText: 'Nearby place 0'}).click();
-      const card = page.locator('#place-card');
-      const cardSettled = async (state) => {
-        await expect(card).toHaveAttribute('data-state', state);
-        await expect.poll(() => card.evaluate((element) => element.getAnimations().length)).toBe(0);
-      };
-      await cardSettled('peek');
+      const menu = page.locator('#menu-toggle');
+      await cardSettled(page, 'peek');
       const touch = await page.context().newCDPSession(page);
 
+      // Flip keeps its two card steps, but touch gestures never drive them.
       await swipeCard(page, touch, -80);
-      await cardSettled('full');
-      // A second upward swipe must not enter the phone-only Fullscreen step.
+      await cardSettled(page, 'peek');
+      await page.locator('#card-handle').click();
+      await cardSettled(page, 'fullscreen');
+
       await swipeCard(page, touch, -80);
-      await cardSettled('full');
+      await cardSettled(page, 'fullscreen');
       await swipeCard(page, touch, 80);
-      await cardSettled('peek');
+      await cardSettled(page, 'fullscreen');
+
+      await menu.click();
+      await cardSettled(page, 'peek');
+      await swipeCard(page, touch, 80);
+      await cardSettled(page, 'peek');
     });
   }
 );
@@ -5694,6 +5705,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
 
       await settled(page);
       await mapIdle(page);
+      await cardSettled(page, 'peek');
       const peek = await card.boundingBox();
       expect(peek.x).toBeCloseTo(12, 0);
       expect(viewport.width - (peek.x + peek.width)).toBeCloseTo(12, 0);
@@ -5714,6 +5726,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
       await expect(page.locator('#place-body')).toHaveJSProperty('inert', false);
       await expect(menu).toHaveAttribute('aria-label', 'Back to summary');
       await expect(menu).toBeFocused();
+      await cardSettled(page, 'fullscreen');
       const fullscreen = await card.boundingBox();
       expect(fullscreen.x).toBeCloseTo(0, 0);
       expect(fullscreen.y).toBeCloseTo(0, 0);
@@ -5899,6 +5912,8 @@ test('Flip keeps a dock origin and return row when another map object replaces P
     const row = page.locator('.result', {hasText: 'Nearby place 0'});
     await row.click();
     const card = page.locator('#place-card');
+    const menu = page.locator('#menu-toggle');
+    const shopsButton = page.locator('#categories button[data-category="shops"]');
     await expect(card).toHaveAttribute('data-state', 'peek');
     await expect(page.locator('#dock-content')).toBeHidden();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
@@ -5929,6 +5944,56 @@ test('Flip keeps a dock origin and return row when another map object replaces P
     await expect(page.locator('#search')).toHaveValue('Nearby');
     expect(await page.locator('.result strong').allTextContents()).toEqual(order);
     await expect(row).toBeFocused();
+  });
+});
+
+test('Flip Back from Fullscreen restores the Icon Button after a card control takes focus', {
+  tag: '@phone'
+}, async ({page}) => {
+  await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+  await withFlipViewport(page, async () => {
+    await ready(page);
+    await tapRenderedPlace(page, nearbyPlaces.features[0].geometry.coordinates, 'nearby/0');
+    const card = page.locator('#place-card');
+    const menu = page.locator('#menu-toggle');
+    await expect(card).toHaveAttribute('data-state', 'peek');
+
+    await page.locator('#card-handle').click();
+    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+    await page.locator('#point-from').focus();
+    await expect(page.locator('#point-from')).toBeFocused();
+
+    await page.goBack();
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    await expect(menu).toBeFocused();
+
+    await page.goBack();
+    await expect(card).toBeHidden();
+    await expect(menu).toHaveAttribute('aria-label', 'Open menu');
+  });
+});
+
+test('Flip Back after a replacement selection restores the originating dock row', {tag: '@phone'}, async ({
+  page
+}) => {
+  await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+  await withFlipViewport(page, async () => {
+    await ready(page);
+    await openFlipDock(page);
+    const row = page.locator('.result', {hasText: 'Nearby place 0'});
+    await row.click();
+    const card = page.locator('#place-card');
+    await expect(card).toHaveAttribute('data-state', 'peek');
+
+    await tapMapCenter(page, [20.81, 43.71]);
+    await expect(card).toHaveAttribute('data-state', 'peek');
+    expect(await page.evaluate(() => window.kompasDebug.selected?.name)).not.toBe('Nearby place 0');
+
+    await page.goBack();
+    await expect(card).toBeHidden();
+    await expect(page.locator('#dock-content')).toBeVisible();
+    await expect(row).toBeFocused();
+    await expect(page.locator('#search')).toHaveValue('Nearby');
   });
 });
 

@@ -116,6 +116,28 @@ test('map-tap card: Back closes it, next Back leaves', {tag: '@phone'}, async ({
   await expectLeftApp(page);
 });
 
+test('map-tap card then dock: Back closes the dock before the covered card', {tag: '@phone'}, async ({
+  page,
+  isMobile
+}) => {
+  test.skip(!isMobile, 'phone layout');
+  await openApp(page, renderedPlace);
+  await tapRenderedPlace(page, [19.26, 42.44], 'node/1');
+  const card = page.locator('#place-card');
+  await expect(card).toHaveAttribute('data-state', 'full');
+
+  await openMenu(page);
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+  await page.goBack();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-state', 'full');
+
+  await page.goBack();
+  await expectAtOpening(page);
+});
+
 test(
   'dock to result to Full: Back gives Peek, Back closes card, Back closes search, Back closes dock, Back leaves',
   {tag: '@phone'},

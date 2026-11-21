@@ -169,11 +169,12 @@ switches to this compact view with the query and category kept. See
 **Flip place card** (issue #252): on Flip, every place opens a two-step card. Peek shows only the header with 12 px
 gutters and no grab-handle bar, so the picked object remains visible above it; tapping the header or handle opens
 Fullscreen, where details can scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in
-Fullscreen it returns to Peek, and in Peek it closes the card, clears the red selection and hides Locate. Back, Escape
-and the screen-reader close button share that step-back method. It returns to the dock list when the place came from
-there, preserving the query, category, order and originating row; a later map pick replaces the card without changing
-that origin. Back takes the same history step as the Icon Button, and the active-category chip stays hidden under every
-open Flip state, including Peek. Swipes and wheel input never change a Flip card.
+Fullscreen it returns to Peek, and in Peek it closes the card and clears the red selection. Locate stays hidden through
+both card steps and reappears only when the card closes. Back, Escape and the screen-reader close button share that
+step-back method. It returns to the dock list when the place came from there, preserving the query, category, order and
+originating row; a later map pick replaces the card without changing that origin. Back takes the same history step as
+the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek. Swipes and wheel
+input never change a Flip card.
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and

@@ -41,9 +41,13 @@ export function openSteps(state) {
     return steps;
   }
   if (state.view === 'dock') {
+    // A visible dock sits above a card behind it, so the dock is the top step to Back out of.
+    if (state.card) appendCardSteps(steps, state.card, {overSearch: false, isFlip: !!state.isFlip});
     steps.push(STEP.DOCK);
     if (state.flipDockScreen === 'modes') steps.push(STEP.FLIP_MODES);
-  } else if (state.card?.fromDock) {
+    return steps;
+  }
+  if (state.card?.fromDock) {
     // A Flip card opened from the dock hides the dock, but its step still sits above it.
     steps.push(STEP.DOCK);
   }
@@ -80,6 +84,11 @@ export function stateAfterBack(state) {
     case STEP.CARD_FULLSCREEN:
       return withCardState(state, 'full');
     case STEP.DOCK:
+      if (state.view === 'dock' && state.card) {
+        // Closing a visible dock uncovers the card behind it; a Peek needs the results that a view change removes.
+        const card = {...state.card, state: state.card.state === 'peek' ? 'full' : state.card.state};
+        return {...openingState(), card};
+      }
       return openingState();
     case STEP.FLIP_MODES:
       return {...openingState(), view: 'dock', flipDockScreen: 'list'};

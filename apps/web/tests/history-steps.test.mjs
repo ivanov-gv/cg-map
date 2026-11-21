@@ -63,6 +63,27 @@ test('dock and Flip modes chain', () => {
   assert.deepEqual(stateAfterBack(dock), opening);
 });
 
+test('an open dock is the top step even when a card is behind it', () => {
+  const fullBehindDock = {
+    ...opening,
+    view: 'dock',
+    flipDockScreen: 'list',
+    card: {state: 'full', fromDock: false}
+  };
+  const peekBehindDock = {...fullBehindDock, card: {state: 'peek', fromDock: false}};
+
+  assert.deepEqual(openSteps(fullBehindDock), [STEP.CARD_FULL, STEP.DOCK]);
+  assert.deepEqual(stateAfterBack(fullBehindDock), {
+    ...opening,
+    card: {state: 'full', fromDock: false}
+  });
+  // A Peek card cannot stay in Peek once the results behind it close with the dock.
+  assert.deepEqual(stateAfterBack(peekBehindDock), {
+    ...opening,
+    card: {state: 'full', fromDock: false}
+  });
+});
+
 test('Flip card opened from dock returns to dock when the card closes', () => {
   const peek = {
     ...opening,
