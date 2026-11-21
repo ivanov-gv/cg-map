@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {matchesStreetName, normalizeSearchText} from '../../src/core.js';
 import {
   CAMERA_HOLD_MILLISECONDS,
   camera,
@@ -129,6 +130,46 @@ const renderedPlaceIds = page =>
       ...new Set(map.queryRenderedFeatures({layers}).flatMap(feature => JSON.parse(feature.properties.activeIds)))
     ].sort();
   });
+const ROAD_LAYERS = [
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+];
+// Street candidates come from rendered road lines and loaded address labels; the app's matcher decides which names
+// become rows, so the expected set follows both the view and the query.
+const streetNamesForQuery = async (page, query) => {
+  const renderedRoadNames = await page.evaluate(
+    ({layers}) => [
+      ...new Set(
+        window.kompasDebug.map
+          .queryRenderedFeatures({layers})
+          .filter(feature => ['LineString', 'MultiLineString'].includes(feature.geometry?.type))
+          .map(feature => feature.properties.name)
+          .filter(name => typeof name === 'string')
+      )
+    ],
+    {layers: ROAD_LAYERS}
+  );
+  const labelStreetNames = [
+    ADDRESS,
+    secondAddress(),
+    FAR_ADDRESS,
+    JEREVANSKA_LABEL,
+    ...MANY_ADDRESSES
+  ].map(feature => feature.properties['addr:street']);
+  return [...new Set([...renderedRoadNames, ...labelStreetNames])]
+    .filter(name => matchesStreetName(name, query))
+    .sort();
+};
+// Mirrors the row id rule in core.js so a matching street name still pins its exact Street row identity.
+const streetRowIds = names =>
+  names
+    .map(name => `street/${normalizeSearchText(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`)
+    .sort();
 // The explicit-filter marker layer is absent on older builds, so report an empty set instead of throwing there.
 const renderedResultMarkerIds = page =>
   page.evaluate(() => {
@@ -182,45 +223,37 @@ const selectedRoad = page =>
   });
 // A rendered segment gives the same kind, name and details as a tap on the street itself.
 const renderedRoadPoint = page =>
-  page.evaluate(name => {
-    const map = window.kompasDebug.map;
-    const roadLayers = [
-      'steps',
-      'cycleways',
-      'paths',
-      'footways',
-      'pedestrian-streets',
-      'minor-roads',
-      'major-roads'
-    ];
-    const bounds = map.getCanvas().getBoundingClientRect();
-    for (const feature of map.queryRenderedFeatures({layers: roadLayers})) {
-      if (feature.properties.name !== name) continue;
-      if (!['LineString', 'MultiLineString'].includes(feature.geometry.type)) continue;
-      const lines =
-        feature.geometry.type === 'LineString'
-          ? [feature.geometry.coordinates]
-          : feature.geometry.coordinates;
-      for (const coordinates of lines.flat()) {
-        const point = map.project(coordinates);
-        const canvas = map.getCanvas();
-        const isOnCanvas =
-          point.x >= 0 && point.y >= 0 && point.x <= canvas.clientWidth && point.y <= canvas.clientHeight;
-        if (!isOnCanvas) continue;
-        const screenPoint = {x: bounds.left + point.x, y: bounds.top + point.y};
-        if (document.elementFromPoint(screenPoint.x, screenPoint.y) !== map.getCanvas()) continue;
-        const hits = map.queryRenderedFeatures([point.x, point.y], {
-          layers: ['buildings', ...roadLayers]
-        });
-        const hasRoad = hits.some(
-          hit => roadLayers.includes(hit.layer.id) && hit.properties.name === name
-        );
-        const hasBuilding = hits.some(hit => hit.layer.id === 'buildings');
-        if (hasRoad && !hasBuilding) return screenPoint;
+  page.evaluate(
+    ({name, layers}) => {
+      const map = window.kompasDebug.map;
+      const bounds = map.getCanvas().getBoundingClientRect();
+      for (const feature of map.queryRenderedFeatures({layers})) {
+        if (feature.properties.name !== name) continue;
+        if (!['LineString', 'MultiLineString'].includes(feature.geometry.type)) continue;
+        const lines =
+          feature.geometry.type === 'LineString'
+            ? [feature.geometry.coordinates]
+            : feature.geometry.coordinates;
+        for (const coordinates of lines.flat()) {
+          const point = map.project(coordinates);
+          const canvas = map.getCanvas();
+          const isOnCanvas =
+            point.x >= 0 && point.y >= 0 && point.x <= canvas.clientWidth && point.y <= canvas.clientHeight;
+          if (!isOnCanvas) continue;
+          const screenPoint = {x: bounds.left + point.x, y: bounds.top + point.y};
+          if (document.elementFromPoint(screenPoint.x, screenPoint.y) !== map.getCanvas()) continue;
+          const hits = map.queryRenderedFeatures([point.x, point.y], {
+            layers: ['buildings', ...layers]
+          });
+          const hasRoad = hits.some(hit => layers.includes(hit.layer.id) && hit.properties.name === name);
+          const hasBuilding = hits.some(hit => hit.layer.id === 'buildings');
+          if (hasRoad && !hasBuilding) return screenPoint;
+        }
       }
-    }
-    return null;
-  }, 'Jerevanska');
+      return null;
+    },
+    {name: 'Jerevanska', layers: ROAD_LAYERS}
+  );
 
 test.use({serviceWorkers: 'block'});
 
@@ -255,20 +288,26 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 17}), CENTRE);
 });
 
-test('result rows identify places, buildings and addresses and list the nearest first', async ({page}) => {
+test('result rows identify places, buildings and addresses and list the nearest first', {tag: '@phone'}, async ({
+  page
+}) => {
+  await mapIdle(page);
+  const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+  expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
   await page.locator('#search').fill('bulevar');
-  await expect(page.locator('.result')).toHaveCount(5);
+  await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
   await expect(page.locator('.result[data-id="footprint/4"]')).toHaveAttribute('data-kind', 'address');
   await expect(page.locator('.result[data-id="footprint/4"] .symbol')).toHaveText('📍');
   await expect(page.locator('.result[data-id="node/1"]')).toHaveAttribute('data-kind', 'place');
   await expect(page.locator('.result[data-id="node/1"] .symbol')).toHaveText('C');
   await expect(page.locator('.result[data-id="node/2"]')).toHaveAttribute('data-kind', 'place');
   await expect(page.locator('.result[data-id="node/2"] .symbol')).toHaveText('M');
+  expect((await page.locator('.result[data-kind="street"] strong').allInnerTexts()).sort()).toEqual(
+    expectedStreetNames
+  );
   expect(
-    await page
-      .locator('.result[data-kind="street"]')
-      .evaluateAll(rows => rows.map(row => row.dataset.id).sort())
-  ).toEqual(['street/bulevar-ivana-crnojevica', 'street/bulevar-stanka-dragojevica']);
+    await page.locator('.result[data-kind="street"]').evaluateAll(rows => rows.map(row => row.dataset.id).sort())
+  ).toEqual(streetRowIds(expectedStreetNames));
   expect(await nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
 
   await page.locator('#search').fill('13');
@@ -437,7 +476,7 @@ test('clearing the search removes every green highlight', async ({page}) => {
   expect(await highlightState(page)).toMatchObject({buildings: [], rings: []});
 });
 
-test('closing Open results clears category highlights and keeps the category filter', async ({page}) => {
+test('closing Open results clears category highlights and keeps the category filter', {tag: '@phone'}, async ({page}) => {
   await page.locator('#search').fill('bulevar');
   await page.locator('#categories button[data-category="food"]').click();
   await expect(page.locator('.result')).toHaveCount(2);
@@ -445,10 +484,12 @@ test('closing Open results clears category highlights and keeps the category fil
     .poll(async () => (await highlightState(page)).rings.sort())
     .toEqual(['node/1', 'node/2']);
 
-  // Clearing a Filled query keeps the category and its place highlights.
+  // Clearing a Filled query keeps the category and expands its marks to every in-view food place.
   await page.locator('#clear-search').click();
   await expect(page.locator('#search')).toHaveValue('');
-  expect((await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+  await expect
+    .poll(async () => (await highlightState(page)).rings.sort())
+    .toEqual(['node/1', 'node/2', 'node/3', 'node/4']);
 
   // Closing Open results removes the marks without resetting the category.
   await page.locator('#clear-search').click();
@@ -561,27 +602,38 @@ test('tapping a highlighted building removes its green fringe', async ({page}) =
 
 const FIRST_GPS_FIX = {latitude: 42.44205, longitude: 19.26085, accuracy: 18};
 const SECOND_GPS_FIX = {latitude: 42.4419, longitude: 19.2607, accuracy: 19};
-test('GPS distances: without a usable fix rows keep centre order and show no distance', async ({page}) => {
+test('GPS distances: without a usable fix rows keep centre order and show no distance', {tag: '@phone'}, async ({
+  page
+}) => {
   await expect
     .poll(() => page.locator('#position-badge').getAttribute('data-state'))
     .not.toBe('live');
+  await mapIdle(page);
+  const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+  expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
   await page.locator('#search').fill('bulevar');
-  await expect(page.locator('.result')).toHaveCount(5);
+  await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
   await expect(page.locator('.result .distance')).toHaveCount(0);
-  expect(await nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
 });
 
 test.describe('GPS distances with a fix', () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_GPS_FIX});
 
-  test('GPS distances: a live fix supplies the order and the distance text', async ({page, context}) => {
+  test('GPS distances: a live fix supplies the order and the distance text', {tag: '@phone'}, async ({
+    page,
+    context
+  }) => {
     await context.setGeolocation(FIRST_GPS_FIX);
     await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await mapIdle(page);
+    const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+    expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
     await page.locator('#search').fill('bulevar');
-    await expect(page.locator('.result')).toHaveCount(5);
+    await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
     // The fix sits on node/2: it becomes nearest even though the map centre sits on footprint/4.
     await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
-    await expect(page.locator('.result .distance')).toHaveCount(5);
+    await expect(page.locator('.result .distance')).toHaveCount(3 + expectedStreetNames.length);
     await expect(page.locator('.result[data-id="node/2"] .distance')).toHaveText('0 m');
     await expect(page.locator('.result[data-id="footprint/4"] .distance')).toHaveText(/^\d+ m$/);
   });

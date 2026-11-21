@@ -232,9 +232,11 @@ that name, and a number that is not part of the name, such as `42` in `Jerevansk
 name with a number still yields **Address** rows (📍) for matching labels. A standalone house, building, section, or
 entrance identifier is one **Building** row (🏢). Each building label yields at most one row, with Address winning when
 both forms match; each street name yields at most one Street row however many road segments or labels carry it. Street
-names come only from rendered road lines and `addr:street` on loaded address labels, with no data refresh. Matching is
-local and lexical, using the existing Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative
-address identity. An empty query keeps the nearby place list, and choosing any category lists places only.
+names come only from rendered road lines and `addr:street` on loaded address labels, with no data refresh. Because road
+names are read from the current view, a Street row can appear or disappear as the visible road set changes; a wider view
+may show a name that a narrower one omits at the same zoom. Matching is local and lexical, using the existing
+Latin/Cyrillic normaliser; it does not imply a ranking service or an authoritative address identity. An empty query
+keeps the nearby place list, and choosing any category lists places only.
 
 Every building or address match inside the current view gets a green footprint outline. Every in-view result street name
 also gets a green road outline: the road layer is filtered to the names of visible Street rows. While a query or a
@@ -246,7 +248,8 @@ Unchosen results are never painted with the red preview; only a chosen row remov
 red selection instead. Choosing a street turns every rendered segment of that named road red and opens the same Road
 card as tapping the road, using its recorded attributes. Choosing a building or address opens the same point card as
 tapping that building on the map. Every chosen result is revealed by the focus-zone rule above when it is off-screen,
-with a zoom floor of 15. Clearing both query and category removes every green mark, including road outlines. The
+with a zoom floor of 15. Clearing the query keeps an active category and expands its rows to every matching place and
+its marks to those in view; clearing both query and category removes every green mark, including road outlines. The
 matching rules, the #263 marker exception, the #264 street rule, chosen-result behavior, and why the marks are app-owned
 are recorded in [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md).
 
