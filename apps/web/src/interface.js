@@ -35,6 +35,12 @@ export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, i
   return !isKeyboardOpen;
 }
 
+// Closing the Flip dock hides its list but keeps the query and category, so their map marks stay. Elsewhere hidden
+// results mean the search was closed: clearing an Open search keeps its category but removes every mark.
+export function shouldKeepHighlightsWhenResultsHidden({isFlipLayout, hasQuery, hasCategory}) {
+  return isFlipLayout && (hasQuery || hasCategory);
+}
+
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
 export function searchBounds({height, top = 0, inset = 12, barHeight = 54}) {
   // Header, fixed categories, and results occupy the upper half of the unobscured screen.

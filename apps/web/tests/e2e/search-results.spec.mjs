@@ -11,7 +11,8 @@ import {
   ready,
   settled,
   stubRouting,
-  tapMapCenter
+  tapMapCenter,
+  withFlipViewport
 } from './helpers.mjs';
 
 const CENTRE = [19.2607, 42.4419];
@@ -400,6 +401,37 @@ test('visible results get green highlights and the camera stays still', async ({
     .poll(async () => (await highlightState(page)).rings)
     .toEqual([]);
   expect(await camera(page)).not.toEqual(before);
+});
+
+test('Flip keeps result highlights with the dock open and after it closes', {tag: '@phone'}, async ({page}) => {
+  await withFlipViewport(page, async () => {
+    await mapIdle(page);
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+    await page.locator('#search').fill('bulevar');
+    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+
+    await closeMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(page.locator('#search')).toHaveValue('bulevar');
+    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+  });
+});
+
+test('Flip keeps category highlights after the dock closes', {tag: '@phone'}, async ({page}) => {
+  await withFlipViewport(page, async () => {
+    await mapIdle(page);
+    await page.locator('#menu-toggle').click();
+    await page.locator('#categories button[data-category="food"]').click();
+    const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
+    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+
+    await closeMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+  });
 });
 
 test('an active query draws and rings below-threshold places at zoom 12', async ({page}) => {

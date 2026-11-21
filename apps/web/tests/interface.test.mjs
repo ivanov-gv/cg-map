@@ -16,6 +16,7 @@ import {
   phoneCardSteps,
   searchBarState,
   searchBounds,
+  shouldKeepHighlightsWhenResultsHidden,
   uncoveredMapArea,
   uncoveredMapOffset
 } from '../src/interface.js';
@@ -96,6 +97,17 @@ test('other layouts keep the footer unless a keyboard covers it', () => {
   assert.equal(
     isDockFooterVisible({isFlipLayout: true, isDockOpen: false, flipDockScreen: null, isKeyboardOpen: false}),
     true
+  );
+});
+
+test('only Flip keeps result marks when its results list is hidden', () => {
+  for (const filter of [{hasQuery: true, hasCategory: false}, {hasQuery: false, hasCategory: true}]) {
+    assert.equal(shouldKeepHighlightsWhenResultsHidden({isFlipLayout: true, ...filter}), true);
+    assert.equal(shouldKeepHighlightsWhenResultsHidden({isFlipLayout: false, ...filter}), false);
+  }
+  assert.equal(
+    shouldKeepHighlightsWhenResultsHidden({isFlipLayout: true, hasQuery: false, hasCategory: false}),
+    false
   );
 });
 

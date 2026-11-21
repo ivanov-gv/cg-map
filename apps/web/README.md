@@ -87,7 +87,9 @@ The search field and categories are hidden until the dock opens. When the dock o
 until a query makes it Filled. That × clears only the query, leaving the dock and its results open; it never closes the
 dock or card. Closing the dock belongs to the header icon button, whose three-state cycle is described below. The
 category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8 px
-below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
+below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All. A query or
+category keeps the same in-view result marks as Mobile — rings for places and outlines for buildings, addresses and
+streets — both with the dock open and after its Close step hides the list. Closing the dock does not clear the filter.
 
 **Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
 matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
