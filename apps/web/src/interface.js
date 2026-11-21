@@ -1,4 +1,4 @@
-import {FLIP_MEDIA_QUERY} from './device-class.js';
+import {deviceClass, FLIP_MEDIA_QUERY} from './device-class.js';
 import {depthOf, historyMarker, openSteps, stateAfterBack} from './history-steps.js';
 
 // The bar is Empty without results, Open with results and no query, and Filled with a query.
@@ -45,6 +45,40 @@ export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, i
 // not the list's visibility or the panels covering it.
 export function hasActiveSearchFilter({hasQuery, hasCategory}) {
   return hasQuery || hasCategory;
+}
+
+// A phone that folds keeps its open work, but each device class owns a different way to show panels.
+// Search and dock are one Flip dock; the Flip modes menu returns to the Mobile dock. An open card owns the
+// Flip screen, so its dock stays only as a return target; unfolding restores Mobile's results behind the card.
+export function viewForDeviceClass({view, flipDockScreen, flipCardOrigin, hasCard, from, to}) {
+  if (from === to) return {view, flipDockScreen};
+  if (from === 'mobile' && to === 'flip') {
+    if (hasCard) return {view: 'closed', flipDockScreen: null};
+    if (view === 'search' || view === 'dock') return {view: 'dock', flipDockScreen: 'list'};
+    return {view: 'closed', flipDockScreen: null};
+  }
+  if (from === 'flip' && to === 'mobile') {
+    if (hasCard) {
+      return {view: flipCardOrigin === 'dock' ? 'search' : view, flipDockScreen: null};
+    }
+    if (view === 'dock' || flipCardOrigin === 'dock') return {view: 'dock', flipDockScreen: null};
+    return {view, flipDockScreen: null};
+  }
+  if (to === 'desktop' && view === 'search') return {view: 'dock', flipDockScreen: null};
+  return {view, flipDockScreen};
+}
+
+// Mobile Full becomes Flip Peek; Fullscreen survives both directions. A Flip Peek returns as a Mobile Peek.
+// Desktop has no card steps; a layout without steps opens the card at the target phone's default step.
+export function cardStateForDeviceClass({state, to, from, view = 'closed'}) {
+  if (to === 'desktop') return null;
+  if (to === 'flip') return state === 'fullscreen' ? 'fullscreen' : 'peek';
+  if (to === 'mobile') {
+    if (from === 'flip') return ['peek', 'fullscreen'].includes(state) ? state : 'peek';
+    if (state === 'peek' || state === 'fullscreen') return state;
+    return view === 'search' ? 'peek' : 'full';
+  }
+  return state;
 }
 
 // All geometry is in CSS pixels in the map container, including the keyboard's visible viewport.
@@ -294,6 +328,8 @@ const DRAG_START_PIXELS = 6;
 const WHEEL_GESTURE_MILLISECONDS = 600;
 // A smaller gap can be browser chrome rather than an on-screen keyboard.
 const MINIMUM_KEYBOARD_HEIGHT_PIXELS = 100;
+// The browser can deliver resize events after the media-query change; hold the fold reason through that burst.
+const DEVICE_CHANGE_SETTLE_MILLISECONDS = 100;
 
 
 export class MapInterface {
@@ -377,18 +413,41 @@ export class MapInterface {
     this.flipReturnFocusElement = null;
     // Result rows are rebuilt after camera moves, so keep the listing id as well as the node.
     this.flipReturnResultId = null;
+    this.deviceClass = this.currentDeviceClass();
+    this.isApplyingDeviceClassChange = false;
+    this.deviceChangeGeneration = 0;
+    this.deviceChangeTimer = null;
+  }
+
+  currentDeviceClass() {
+    return deviceClass(query =>
+      query === FLIP_MEDIA_QUERY ? this.flipLayoutQuery : this.mobileLayoutQuery
+    );
   }
 
   get isMobilePhone() {
-    return this.mobileLayoutQuery.matches && !this.flipLayoutQuery.matches;
+    return this.currentDeviceClass() === 'mobile';
   }
 
   get isFlip() {
-    return this.flipLayoutQuery.matches;
+    return this.currentDeviceClass() === 'flip';
+  }
+
+  get isDesktop() {
+    return this.currentDeviceClass() === 'desktop';
+  }
+
+  // Mobile and Flip share the narrow phone layout used by CSS and map geometry.
+  get isPhoneLayout() {
+    return this.currentDeviceClass() !== 'desktop';
   }
 
   get hasFlipCard() {
-    return this.flipLayoutQuery.matches && !this.card.hidden;
+    return this.isFlip && !this.card.hidden;
+  }
+
+  notifyViewport({isDeviceClassChange = false} = {}) {
+    this.onViewport?.({isDeviceClassChange});
   }
 
   wireInterfaceEvents() {
@@ -412,11 +471,11 @@ export class MapInterface {
       this.activateCardHandle();
     });
     this.wireSearchEvents();
-    this.mobileLayoutQuery.addEventListener('change', () => this.handleMobileLayoutChange());
-    this.flipLayoutQuery.addEventListener('change', () => this.handleFlipLayoutChange());
-    window.visualViewport?.addEventListener('resize', () => this.syncViewport());
+    this.mobileLayoutQuery.addEventListener('change', () => this.handleDeviceClassChange());
+    this.flipLayoutQuery.addEventListener('change', () => this.handleDeviceClassChange());
+    window.visualViewport?.addEventListener('resize', () => this.onViewportResize());
     window.visualViewport?.addEventListener('scroll', () => this.syncViewport());
-    window.addEventListener('resize', () => this.syncViewport());
+    window.addEventListener('resize', () => this.onViewportResize());
     this.startCardObserver();
     this.wireCardGestures();
     this.wireCategoryWheel();
@@ -426,7 +485,7 @@ export class MapInterface {
     for (const type of ['focus', 'click']) {
       this.search.addEventListener(type, () => {
         if (this.isRestoringFocus) return;
-        if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') {
+        if (this.isFlip && this.flipDockScreen === 'modes') {
           this.showFlipList();
           this.onSearch?.();
           return;
@@ -436,45 +495,121 @@ export class MapInterface {
     }
     this.search.addEventListener('keydown', event => {
       const isSearchKey = event.key === 'Enter' && !event.isComposing;
-      if (!isSearchKey || !this.mobileLayoutQuery.matches) return;
+      if (!isSearchKey || !this.isPhoneLayout) return;
       // The phone keyboard's Search key hides the keyboard; the bubble or dock keeps the results.
       // Enter during IME composition confirms a candidate and must leave the field focused.
       event.preventDefault();
       this.search.blur();
     });
     this.search.addEventListener('input', () => {
-      if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') this.showFlipList();
+      if (this.isFlip && this.flipDockScreen === 'modes') this.showFlipList();
       this.syncClearButton();
       this.syncDesktopSearchUI();
       this.syncStandaloneChips();
     });
   }
 
-  handleMobileLayoutChange() {
-    if (this.view === 'search' && !this.mobileLayoutQuery.matches) this.setView('dock');
-    if (!this.card.hidden) this.syncCardForLayout();
-    else this.syncMobileCardPresentation();
-    this.syncPanelPosition();
-    this.syncDesktopSearchUI();
-    this.syncViewport();
-    this.syncStandaloneChips();
-    this.reconcile();
+  handleDeviceClassChange() {
+    const to = this.currentDeviceClass();
+    const from = this.deviceClass;
+    const sourceView = this.view;
+    const hasCard = !this.card.hidden;
+    this.deviceClass = to;
+    this.isApplyingDeviceClassChange = true;
+    this.deviceChangeGeneration += 1;
+    try {
+      this.applyViewForDeviceClass({from, to, hasCard});
+      this.applyCardForDeviceClass({to, from, sourceView});
+      this.syncPanelPosition();
+      this.syncDesktopSearchUI();
+      this.syncClearButton();
+      this.syncDockContent();
+      this.syncMenuIcon();
+      this.syncStandaloneChips();
+      this.syncViewport();
+      this.reconcile();
+    } finally {
+      this.#endDeviceClassChangeSoon();
+    }
   }
 
-  handleFlipLayoutChange() {
-    this.syncClearButton();
-    this.syncStandaloneChips();
-    this.syncDockContent();
-    this.syncMenuIcon();
-    if (!this.card.hidden) this.syncCardForLayout();
-    else this.syncMobileCardPresentation();
-    this.reconcile();
+  onViewportResize() {
+    // Resize can arrive before the media-query listener; map the new class here so reframing is held in time.
+    if (this.currentDeviceClass() !== this.deviceClass) {
+      this.handleDeviceClassChange();
+      return;
+    }
+    this.syncViewport();
+    this.#endDeviceClassChangeSoon();
+  }
+
+  // Every resize in the burst restarts the timer; only the last one ends the device-change reason.
+  #endDeviceClassChangeSoon() {
+    const generation = this.deviceChangeGeneration;
+    clearTimeout(this.deviceChangeTimer);
+    this.deviceChangeTimer = setTimeout(() => {
+      if (generation === this.deviceChangeGeneration) this.isApplyingDeviceClassChange = false;
+    }, DEVICE_CHANGE_SETTLE_MILLISECONDS);
+  }
+
+  applyViewForDeviceClass({from, to, hasCard}) {
+    const mapped = viewForDeviceClass({
+      view: this.view,
+      flipDockScreen: this.flipDockScreen,
+      flipCardOrigin: this.flipCardOrigin,
+      hasCard,
+      from,
+      to
+    });
+    const hasChanged = mapped.view !== this.view || mapped.flipDockScreen !== this.flipDockScreen;
+    if (!hasChanged) {
+      this.syncDockContent();
+      this.syncMenuIcon();
+      return;
+    }
+    this.setView(mapped.view, {
+      flipDockScreen: mapped.flipDockScreen,
+      preserveCardState: true
+    });
+  }
+
+  applyCardForDeviceClass({to, from, sourceView}) {
+    if (this.card.hidden) {
+      this.syncMobileCardPresentation();
+      return;
+    }
+    const state = cardStateForDeviceClass({
+      state: this.card.dataset.state,
+      to,
+      from,
+      view: this.view
+    });
+    if (!state) {
+      this.resetCardState();
+      return;
+    }
+    this.#rememberFlipCardOrigin({from, to, sourceView});
+    // Reapply even an unchanged step: the target view's results and card attributes must be rebuilt.
+    this.setCardState(state, {notify: false, skipReconcile: true});
+    this.syncMobileCardPresentation();
+    this.syncFlipCardPresentation();
+  }
+
+  // A card folded from Mobile keeps its search or dock as the Flip return target. A card unfolded from Flip
+  // keeps that origin so folding back returns to the same place; a desktop card has no origin to keep.
+  #rememberFlipCardOrigin({from, to, sourceView}) {
+    if (to !== 'flip') return;
+    const hasPhonePanels = from === 'mobile' && (sourceView === 'search' || sourceView === 'dock');
+    if (!hasPhonePanels && this.flipCardOrigin !== 'dock') return;
+    this.flipCardOrigin = 'dock';
+    this.cardFromDock = true;
   }
 
   startCardObserver() {
     this.observer = new ResizeObserver(() => {
       this.syncCardTouch();
-      this.onViewport?.();
+      this.notifyViewport({isDeviceClassChange: this.isApplyingDeviceClassChange});
+      this.#endDeviceClassChangeSoon();
     });
     this.observer.observe(this.bubble);
     this.observer.observe(this.card);
@@ -544,7 +679,7 @@ export class MapInterface {
     const cardState = !this.card.hidden ? this.card.dataset.state || null : null;
     return {
       view: this.view,
-      isFlip: this.flipLayoutQuery.matches,
+      isFlip: this.isFlip,
       flipDockScreen: this.view === 'dock' ? this.flipDockScreen : null,
       resultsCompacted: !!this.isResultsCompacted && this.view === 'search' && this.card.hidden,
       card: cardState ? {state: cardState, fromDock: !!this.cardFromDock} : null
@@ -677,7 +812,7 @@ export class MapInterface {
     this.cardFromDock = fromDock;
     this.onCardSwipedAway?.();
     // Closing a Flip card opened from the dock returns to the dock list.
-    if (fromDock && this.flipLayoutQuery.matches) {
+    if (fromDock && this.isFlip) {
       this.isResultsCompacted = false;
       this.areResultsMinimized = false;
       this.setView('dock');
@@ -702,7 +837,7 @@ export class MapInterface {
 
   openSearch() {
     this.trigger = this.search;
-    if (this.mobileLayoutQuery.matches) {
+    if (this.isMobilePhone) {
       const hasViewChanged = this.view !== 'dock' && this.view !== 'search';
       if (this.view !== 'dock') this.setView('search');
       if (hasViewChanged) this.onSearch?.();
@@ -749,7 +884,7 @@ export class MapInterface {
     if (shouldRestoreFocus) this.restoreFocus(this.trigger);
   }
 
-  setView(view) {
+  setView(view, {flipDockScreen, preserveCardState = false} = {}) {
     const previousView = this.view;
     const wasClosed = previousView === 'closed';
     // Capture before hiding a container, which would clamp the hidden row's scroll position to zero.
@@ -757,16 +892,19 @@ export class MapInterface {
     this.view = view;
     // Closing a dock or bubble is a return to the map; a desktop focus refresh with the same view is not.
     if (view === 'closed' && !wasClosed) this.isResultsPanelOpen = false;
-    if (view !== 'search') {
+    if (view !== 'search' && !preserveCardState) {
       this.isResultsCompacted = false;
       this.areResultsMinimized = false;
       // A peek only makes sense above open results.
-      if (this.card.dataset.state === 'peek' && !this.card.hidden) this.setCardState('full', {notify: false, skipReconcile: true});
+      if (this.card.dataset.state === 'peek' && !this.card.hidden) {
+        this.setCardState('full', {notify: false, skipReconcile: true});
+      }
     } else if (view === 'search' && previousView !== 'search') {
       this.isResultsCompacted = false;
     }
     if (view !== 'dock') this.flipDockScreen = null;
-    if (view === 'dock' && this.flipDockScreen === null) this.flipDockScreen = 'list';
+    else if (flipDockScreen !== undefined) this.flipDockScreen = flipDockScreen;
+    else this.flipDockScreen ??= 'list';
 
     this.dock.hidden = view !== 'dock';
     this.syncResultsVisibility();
@@ -787,14 +925,14 @@ export class MapInterface {
 
   #panelTargetFor(view) {
     if (view === 'search') return this.bubble;
-    if (!this.mobileLayoutQuery.matches && view === 'closed') return this.desktopSearchPanel;
+    if (this.isDesktop && view === 'closed') return this.desktopSearchPanel;
     return this.dockMain;
   }
 
   activateMenu() {
     this.trigger = this.menu;
-    if (this.mobileLayoutQuery.matches) this.search.blur();
-    if (this.flipLayoutQuery.matches) {
+    if (this.isPhoneLayout) this.search.blur();
+    if (this.isFlip) {
       // A Flip card claims the Icon Button; without one it cycles the dock screens.
       if (this.hasFlipCard) this.stepBackOrCloseFlipCard();
       else this.cycleFlipMenu();
@@ -803,7 +941,7 @@ export class MapInterface {
     } else {
       this.setView('dock');
     }
-    this.onViewport?.();
+    this.notifyViewport();
   }
 
   cycleFlipMenu() {
@@ -840,7 +978,7 @@ export class MapInterface {
   // The categories row stays visible in both screens (it lives inside dock-main).
   // In every other case (dock closed, or not Flip): show both dock-main and footer, minus a covering keyboard.
   syncDockContent() {
-    const isFlip = this.flipLayoutQuery.matches;
+    const isFlip = this.isFlip;
     const isDockOpen = this.view === 'dock';
     const showResults = !(isFlip && isDockOpen) || this.flipDockScreen === 'list';
     // On the modes screen, hide only the results section so categories remain visible.
@@ -856,7 +994,7 @@ export class MapInterface {
 
   syncMenuIcon() {
     const iconUse = this.menu.querySelector('use');
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       if (this.hasFlipCard) {
         // The label names the × action, which changes when the card is in Fullscreen.
         iconUse.setAttribute('href', '#i-close');
@@ -891,7 +1029,7 @@ export class MapInterface {
   }
 
   syncDesktopSearchUI() {
-    if (this.mobileLayoutQuery.matches) {
+    if (this.isPhoneLayout) {
       this.desktopSearchPanel.hidden = true;
       return;
     }
@@ -914,14 +1052,14 @@ export class MapInterface {
 
   areResultsVisible() {
     if (this.view === 'search' || this.view === 'dock') return true;
-    return !this.mobileLayoutQuery.matches && (this.isResultsPanelOpen || this.hasQuery());
+    return this.isDesktop && (this.isResultsPanelOpen || this.hasQuery());
   }
 
   syncClearButton() {
     // The slot stays in layout; only visibility and keyboard/a11y access change.
     const isVisible = isClearButtonVisible({
       state: this.state,
-      isFlipLayout: this.flipLayoutQuery.matches
+      isFlipLayout: this.isFlip
     });
     this.clearButton.dataset.clearVisible = String(isVisible);
     this.clearButton.setAttribute('aria-hidden', String(!isVisible));
@@ -930,7 +1068,7 @@ export class MapInterface {
 
   // A chip tap opens the control that owns categories on this device: bubble on Phone, dock on Flip.
   openChipTarget() {
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       // Reuse the menu button's toggle so focus and viewport bookkeeping stay in one place.
       this.menu.click();
       return;
@@ -954,8 +1092,8 @@ export class MapInterface {
       view: this.view,
       cardState: this.card.dataset.state,
       cardHidden: this.card.hidden,
-      isDesktopLayout: !this.mobileLayoutQuery.matches,
-      isFlipLayout: this.flipLayoutQuery.matches
+      isDesktopLayout: this.isDesktop,
+      isFlipLayout: this.isFlip
     });
   }
 
@@ -969,7 +1107,7 @@ export class MapInterface {
       hasQuery: Boolean(query),
       view: this.view,
       cardHidden: this.card.hidden,
-      isFlipLayout: this.flipLayoutQuery.matches
+      isFlipLayout: this.isFlip
     });
   }
 
@@ -979,7 +1117,7 @@ export class MapInterface {
       this.restoreFocus(this.search);
       return;
     }
-    if (this.flipLayoutQuery.matches) return;
+    if (this.isFlip) return;
     this.closeResults();
   }
 
@@ -993,7 +1131,7 @@ export class MapInterface {
   }
 
   handleEmptyMapTap() {
-    if (!this.mobileLayoutQuery.matches) return false;
+    if (this.isDesktop) return false;
     if (this.view !== 'search') return false;
     if (this.isResultsCompacted || this.areResultsMinimized) return false;
     if (!this.card.hidden) return false;
@@ -1030,11 +1168,11 @@ export class MapInterface {
 
   // Call after the card's content is in place and it is no longer hidden.
   placeCardOpened({returnFocusElement = null, isCardReplacingSelection = false} = {}) {
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       this.openFlipCard({returnFocusElement, isCardReplacingSelection});
       return;
     }
-    if (this.mobileLayoutQuery.matches && this.view === 'dock') {
+    if (this.isMobilePhone && this.view === 'dock') {
       // A card chosen from the dock is presented in the search view.
       this.setView('search');
     }
@@ -1070,7 +1208,7 @@ export class MapInterface {
   }
 
   syncCardForLayout() {
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       if (this.hasFlipCard && !['peek', 'fullscreen'].includes(this.card.dataset.state))
         this.setCardState('peek', {notify: false});
       this.syncFlipCardPresentation();
@@ -1080,7 +1218,7 @@ export class MapInterface {
     this.flipCardOrigin = null;
     this.flipReturnFocusElement = null;
     this.flipReturnResultId = null;
-    if (!this.mobileLayoutQuery.matches) {
+    if (this.isDesktop) {
       this.resetCardState();
       return;
     }
@@ -1112,7 +1250,7 @@ export class MapInterface {
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
     this.syncStandaloneChips();
-    if (notify) this.onViewport?.();
+    if (notify) this.notifyViewport({isDeviceClassChange: this.isApplyingDeviceClassChange});
     if (!skipReconcile) this.reconcile();
   }
 
@@ -1134,6 +1272,7 @@ export class MapInterface {
     if (this.view !== 'search') this.isResultsCompacted = false;
     this.syncMobileCardPresentation();
     this.syncFlipCardPresentation();
+    this.syncDockContent();
     this.syncResultsVisibility();
     this.syncStandaloneChips();
     this.syncLocateClearance();
@@ -1141,14 +1280,15 @@ export class MapInterface {
     else this.reconcile();
   }
 
-  // Keep the shared Icon Button's action in step with the visible Flip card.
+  // Keep the shared Icon Button in step with the visible Flip card.
   syncFlipCardPresentation() {
+    this.syncDockContent();
     this.syncMenuIcon();
   }
 
   // Flip keeps the screen-reader close button but gives visible focus to the shared Icon Button.
   focusCardControl() {
-    if (this.flipLayoutQuery.matches) this.restoreFocus(this.menu);
+    if (this.isFlip) this.restoreFocus(this.menu);
     else document.getElementById('close-place').focus({preventScroll: true});
   }
 
@@ -1161,7 +1301,7 @@ export class MapInterface {
   // The handle and header step the phone card; Flip pulls reuse this action and the Icon Button's step-back.
   activateCardHandle() {
     const state = this.card.dataset.state;
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       const nextState = flipCardStateAfterTap(state);
       if (nextState !== state) {
         this.setCardState(nextState);
@@ -1215,12 +1355,12 @@ export class MapInterface {
   syncCardHandle() {
     const state = this.card.dataset.state;
     const isExpanded = state === 'full' || state === 'fullscreen';
-    const isFlipHandleUsable = this.flipLayoutQuery.matches && state === 'peek';
+    const isFlipHandleUsable = this.isFlip && state === 'peek';
     const isHandleUsable = isFlipHandleUsable || this.isMobilePhone || this.view === 'search';
     this.cardHandle.tabIndex = isHandleUsable ? 0 : -1;
     this.cardHandle.setAttribute('aria-hidden', String(!isHandleUsable));
     this.cardHandle.setAttribute('aria-expanded', String(isExpanded));
-    if (this.flipLayoutQuery.matches) {
+    if (this.isFlip) {
       this.cardHandle.setAttribute('aria-label', 'Open full details');
     } else if (this.isMobilePhone) {
       const label =
@@ -1337,7 +1477,7 @@ export class MapInterface {
 
   swipeCard(direction) {
     // Flip touches call the button steps directly; pointer and wheel input never swipe its card.
-    if (this.flipLayoutQuery.matches) return;
+    if (this.isFlip) return;
     const state = this.card.dataset.state;
     const next = this.isMobilePhone
       ? cardStateAfterSwipe({state, direction, resultsBehind: this.view === 'search'})
@@ -1359,8 +1499,8 @@ export class MapInterface {
     this.card.addEventListener('pointerdown', (event) => {
       if (event.pointerType === 'touch' && this.isMobilePhone) return;
       if (
-        this.flipLayoutQuery.matches ||
-        !this.mobileLayoutQuery.matches ||
+        this.isFlip ||
+        this.isDesktop ||
         event.button ||
         event.target.closest('a, .point-actions')
       )
@@ -1564,7 +1704,7 @@ export class MapInterface {
     this.card.addEventListener(
       'wheel',
       event => {
-        if (this.flipLayoutQuery.matches || !this.mobileLayoutQuery.matches) return;
+        if (this.isFlip || this.isDesktop) return;
         const isSteppingUp = event.deltaY > 0 && this.canStepCardUp();
         const isSwipingDown = event.deltaY < 0 && this.card.scrollTop === 0;
         if (!isSteppingUp && !isSwipingDown) return;
@@ -1583,7 +1723,7 @@ export class MapInterface {
     strip.addEventListener(
       'wheel',
       (event) => {
-        if (!this.mobileLayoutQuery.matches || !event.deltaY || event.deltaX) return;
+        if (this.isDesktop || !event.deltaY || event.deltaX) return;
         event.preventDefault();
         strip.scrollLeft += event.deltaY;
       },
@@ -1598,7 +1738,7 @@ export class MapInterface {
   }
 
   #isDesktopResultsPanelVisible() {
-    return !this.mobileLayoutQuery.matches &&
+    return this.isDesktop &&
       !this.desktopSearchPanel.hidden &&
       this.desktopSearchPanel.dataset.state !== 'empty';
   }
@@ -1606,7 +1746,7 @@ export class MapInterface {
   keyboardOpen() {
     const viewport = window.visualViewport;
     // A pinch-zoomed page also shrinks the visual viewport, without any keyboard.
-    if (!this.mobileLayoutQuery.matches || (viewport?.scale ?? 1) > 1.01) return false;
+    if (this.isDesktop || (viewport?.scale ?? 1) > 1.01) return false;
     const visibleHeight = viewport?.height ?? innerHeight;
     return innerHeight - visibleHeight > MINIMUM_KEYBOARD_HEIGHT_PIXELS;
   }
@@ -1630,7 +1770,7 @@ export class MapInterface {
     // which also hides the footer here when a keyboard would cover it outside Flip.
     this.syncDockContent();
     this.syncLocateClearance();
-    if (notify) this.onViewport?.();
+    if (notify) this.notifyViewport({isDeviceClassChange: this.isApplyingDeviceClassChange});
   }
 
   mapGeometry() {
@@ -1640,7 +1780,7 @@ export class MapInterface {
     const route = document.getElementById('route-endpoints');
     const viewport = window.visualViewport;
     const details = card.hidden ? null : card.getBoundingClientRect();
-    const isPhoneCard = !!details && this.mobileLayoutQuery.matches;
+    const isPhoneCard = !!details && this.isPhoneLayout;
     const isFullscreenCard = this.card.dataset.state === 'fullscreen';
     const detailsTop = isPhoneCard ? details.bottom - this.cardRestingHeight() : details?.top;
     const cardBox = details && {
@@ -1665,7 +1805,7 @@ export class MapInterface {
       details: isFullscreenCard ? null : cardBox,
       coversBottom: isPhoneCard,
       routeBottom: route.hidden || isFullscreenCard ? 0 : route.getBoundingClientRect().bottom - map.top,
-      mobile: this.mobileLayoutQuery.matches
+      mobile: this.isPhoneLayout
     };
   }
 

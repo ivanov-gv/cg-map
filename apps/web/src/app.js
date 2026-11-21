@@ -517,7 +517,7 @@ async function initializeMapTransport() {
 }
 
 // Exposed for existing browser QA and manual inspection; no map instance is copied or replaced.
-// flipDockScreen reports the Flip dock screen ('list', 'modes', or null when closed).
+// deviceClass is the shared cached class; flipDockScreen reports the Flip dock screen ('list', 'modes', or null).
 function installPublicMapDebug() {
   window.kompasDebug = {
     get map() {
@@ -552,6 +552,9 @@ function installPublicMapDebug() {
     },
     get flipDockScreen() {
       return mapState.interface?.flipDockScreen ?? null;
+    },
+    get deviceClass() {
+      return mapState.interface?.deviceClass ?? null;
     }
   };
 }
@@ -845,7 +848,7 @@ function selectCategory(key) {
   directoryState.activeCategory = directoryState.activeCategory === key ? null : key;
   syncCategoryButtons();
   // A floating desktop chip reveals the same results the dock row would show.
-  if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.view === 'closed')
+  if (!mapState.interface.isPhoneLayout && mapState.interface.view === 'closed')
     mapState.interface.showResults();
   applyPlaceSearch();
 }
@@ -870,7 +873,7 @@ function registerSelectionControls() {
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
-      const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
+      const isDesktop = mapState.interface.isDesktop;
       if (!elementById('place-card').hidden) {
         // On Flip, Escape follows the Icon Button: Fullscreen returns to Peek, then Peek closes.
         if (mapState.interface.hasFlipCard) mapState.interface.stepBackOrCloseFlipCard();
@@ -979,7 +982,7 @@ function initializeInterface() {
       }
     },
     // Recompute selection framing only after keyboard and camera changes have settled.
-    onViewport: () => placeSelection.viewportChanged(),
+    onViewport: reason => placeSelection.viewportChanged(reason),
     onCardSwipedAway: () => placeSelection.close(),
     onResultsClosed: () => placeSelection.close(),
     onRemoveCategory: removeCategory,

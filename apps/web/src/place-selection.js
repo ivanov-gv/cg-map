@@ -32,6 +32,7 @@ export class PlaceSelection {
     requestedPlace: null,
     pendingReveal: null,
     revealOnlyWhenNeeded: false,
+    holdCameraAfterDeviceChange: false,
     requestedMarkerKey: null,
     resolvedBuildingAddress: '',
     renderedInsideKey: '',
@@ -275,6 +276,7 @@ export class PlaceSelection {
   // Requires a ready map and initialized selection layers; opens a known listing and defers camera
   // framing until the keyboard is closed, preserving the originating control for focus restoration.
   showPlace(placeId, trigger) {
+    this.clearDeviceChangeCameraHold();
     const feature = this.#directory.placesById.get(String(placeId));
     if (!feature) return;
     const card = elementById('place-card');
@@ -372,6 +374,7 @@ export class PlaceSelection {
   // Selection uses the existing details card and original footprint; entrance bounds keep the arrows visible.
   // Search results pass reveal: true so they follow the focus-zone rule instead of recentring on every choice.
   showPoint(point, feature = null, {trigger = null, reveal = false, streetName = null} = {}) {
+    this.clearDeviceChangeCameraHold();
     const card = elementById('place-card');
     const wasCardHidden = card.hidden;
     this.close(false, {preserveFlipCardOrigin: !wasCardHidden});
@@ -423,8 +426,21 @@ export class PlaceSelection {
     this.#interface.focusCardControl();
   }
 
+  // A new explicit selection resumes the normal reframing after a fold held the camera still.
+  clearDeviceChangeCameraHold() {
+    this.#state.holdCameraAfterDeviceChange = false;
+  }
+
   // Reframe only after keyboard and camera changes settle; entrance bounds already include the card.
-  viewportChanged() {
+  // A device-class change only reshapes the panels: the map camera stays exactly where it was.
+  viewportChanged({isDeviceClassChange = false} = {}) {
+    if (isDeviceClassChange) {
+      // Resize callbacks can keep arriving after the fold; only a new selection resumes reframing.
+      this.#state.holdCameraAfterDeviceChange = true;
+      this.#state.pendingReveal = null;
+      return;
+    }
+    if (this.#state.holdCameraAfterDeviceChange) return;
     const hasSelection = Boolean(this.#state.selectedPoint || this.#state.pendingReveal);
     if (!this.#context.isMapReady() || !hasSelection || this.#interface.keyboardOpen()) return;
     // Building bounds already account for the card; an intermediate zoom would undo their fit.

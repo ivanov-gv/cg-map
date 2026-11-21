@@ -52,7 +52,13 @@ The [interface feature](../../docs/ui-ux/features/interface.md) defines the impl
 viewport and starts with the dock closed. A single burger/search header keeps its geometry when the dock opens, and the
 × keeps its slot in every search-bar state so the input never changes width. [interface.js](src/interface.js) owns
 closed/dock/mobile-search states, the shared result panel, Empty/Open/Filled search bar states, phone card states and
-swipes, focus restoration, and visible-viewport geometry. It has no dependency on data producers or backend code.
+swipes, focus restoration, visible-viewport geometry, and live device-class mapping. It has no dependency on data
+producers or backend code.
+
+When a foldable phone crosses the Flip breakpoint, `interface.js` maps the current view and card state into the new
+layout instead of rebuilding them: Mobile search or dock becomes the Flip list, any Flip dock becomes the Mobile dock,
+and card steps follow the issue #290 mapping. Camera, query, category, result highlights, selection and the open card
+stay. The outgoing search controls are hidden while a card covers its mapped dock, then return when the card closes.
 
 The burger opens the full left dock. Its bottom area holds Satellite/Transport tiles and the offline action; results
 scroll above it.
@@ -526,8 +532,11 @@ window made narrow does not reproduce an Android GPU or browser lifecycle.
 
 The app distinguishes three viewport categories. The single definition lives in
 [src/device-class.js](src/device-class.js) as exported media query strings; the CSS `@media` rules in
-[style.css](public/style.css) must use the same conditions. At startup, `app.js` sets `data-device` on `<body>`
-(`"flip"`, `"mobile"`, or `"desktop"`) and keeps it updated when the viewport crosses a breakpoint.
+[style.css](public/style.css) must use the same conditions. At startup and on each matching media-query or resize event,
+`app.js` and `interface.js` derive `body[data-device]`, the cached `interface.deviceClass`, the dock screen, card
+presentation and history steps from that one class. Runtime code reads the shared `deviceClass(matchMedia)` helper and
+its live `isFlip`, `isMobilePhone`, `isPhoneLayout` and `isDesktop` getters; no layout reads a media query directly or
+keeps a stale class after a fold.
 
 | Class   | Rule                                     | Examples                                 |
 | ------- | ---------------------------------------- | ---------------------------------------- |
@@ -539,10 +548,17 @@ The 400 px limit on both axes separates Flip from phones: a phone in portrait (e
 and a phone in landscape (e.g. 840×412) exceeds 400 px in width. The thresholds are chosen so that a future Flip variant
 with a slightly larger cover screen still matches, without catching a phone in any orientation.
 
-Later UI tasks (search bar, left dock, scale bar) will use `data-device` for styling and `deviceClass(matchMedia)` from
-device-class.js for runtime logic. Browser tests can run a scenario at a Flip viewport using `withFlipViewport()` from
-[tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without adding a separate Playwright project; pass a viewport object for
-a real cover screen or use the exported `FLIP_VIEWPORTS` list. The default remains 340×340 for earlier scenarios.
+Folding between 412×840 and 340×250 is a live class change covered by [fold.spec.mjs](tests/e2e/fold.spec.mjs).
+`viewForDeviceClass()` maps Mobile search/dock to the Flip list and Flip panels to their Mobile owners, while an open
+card keeps the Flip screen to itself; `cardStateForDeviceClass()` maps Peek/Full/Fullscreen as the interface rule
+states. Both are pure helpers with unit tests in [interface.test.mjs](tests/interface.test.mjs).
+`applyViewForDeviceClass()` and `applyCardForDeviceClass()` apply that mapping and keep the Flip card's dock origin, and
+`onViewportResize()` also handles a resize that arrives before the media-query listener. `app.js` passes the
+device-change reason to `PlaceSelection.viewportChanged()`, which holds reframing until an explicit selection;
+`window.kompasDebug.deviceClass` and `flipDockScreen` expose the cached values for browser checks. Browser tests can run
+a scenario at a Flip viewport using `withFlipViewport()` from [tests/e2e/helpers.mjs](tests/e2e/helpers.mjs) without
+adding a separate Playwright project; pass a viewport object for a real cover screen or use the exported
+`FLIP_VIEWPORTS` list. The default remains 340×340 for earlier scenarios.
 
 ## 12. How to make common changes
 
@@ -650,6 +666,8 @@ The app exposes window.kompasDebug for inspection:
 ```js
 window.kompasDebug.placeCount
 window.kompasDebug.selected
+window.kompasDebug.deviceClass
+window.kompasDebug.flipDockScreen
 window.kompasDebug.satellite
 window.kompasDebug.offline
 window.kompasDebug.map.getCenter()
