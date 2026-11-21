@@ -139,6 +139,10 @@ the bar Open, but Flip shows no × in Open; typing makes it Filled and reveals �
 the dock and its results open. It never closes the dock or the place card: dock closing belongs to the header Icon
 Button, whose three-state cycle is described below. The categories row follows the same dock-open behavior as on mobile.
 
+Current behavior: an active query or category marks every in-view result exactly as on Mobile, both while the dock is
+open and after its Close step hides the list. Closing the dock keeps the query and category; clearing the query alone
+keeps an active category's marks, and removing the category then clears them.
+
 ### Active category chip (issue #268)
 
 An active category (never **All**) shows a × inside one green pill in every category row: the desktop floating row, the

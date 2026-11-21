@@ -53,7 +53,7 @@ import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
-import {MapInterface} from './interface.js';
+import {MapInterface, shouldKeepHighlightsWhenResultsHidden} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 import {renderMapAttribution} from './attribution.js';
 
@@ -318,8 +318,17 @@ function renderSearchResults() {
 // every result place; choosing a hidden match reveals it later.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
-  const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
-  if ((!searchQuery() && directoryState.activeCategory === null) || resultsHidden) {
+  const hasQuery = Boolean(searchQuery());
+  const hasCategory = directoryState.activeCategory !== null;
+  const resultsHidden =
+    Boolean(mapState.interface) &&
+    !mapState.interface.areResultsVisible() &&
+    !shouldKeepHighlightsWhenResultsHidden({
+      isFlipLayout: Boolean(mapState.interface?.isFlip),
+      hasQuery,
+      hasCategory
+    });
+  if ((!hasQuery && !hasCategory) || resultsHidden) {
     mapState.searchHighlights.clear();
     return;
   }
