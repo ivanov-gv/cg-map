@@ -167,8 +167,8 @@ checks because the PR run already tested the content). `ci-publish` has its own 
 `ci-pr-checks` through a composite action at `.github/actions/plan`). The `pages` job in `ci-publish` builds the dev
 site from source and pushes `$IMAGE_REPOSITORY/dev-pages:<sha>`. When `ci-publish` completes successfully on `main`,
 `cd-dev-pages` is triggered via `workflow_run` — it pulls the image by commit SHA, extracts the site, and deploys it to
-GitHub Pages. The nightly run of `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`. To see
-what a branch would select:
+GitHub Pages. `ci-nightly` checks everything by calling `ci-pr-checks` with `run_all: true`; its nightly schedule is
+paused (issue #319), so it runs only when dispatched until the cron is uncommented. To see what a branch would select:
 
 ```sh
 make ci-plan BASE=origin/main

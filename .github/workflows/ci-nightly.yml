@@ -2,8 +2,9 @@ name: ci-nightly
 # Nightly full run: catches planning mistakes and PRs that pass alone but break together.
 # Reuses ci-pr-checks so there is only one job list to maintain — no copies, no drift.
 on:
-  schedule:
-    - cron: '0 3 * * *'
+  # Paused by the owner on 2026-11-21 (issue #319): not needed yet. Uncomment both lines to run nightly again.
+  # schedule:
+  #   - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       test_run:
