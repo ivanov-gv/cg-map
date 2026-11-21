@@ -29,8 +29,8 @@ class TurnRestrictionsLayer(Layer):
 
     filename = SOURCE_FILE
 
-    def __init__(self, options):
-        super().__init__(options)
+    def __init__(self):
+        super().__init__()
         self._way_ids = set()
         self._restrictions = []
 

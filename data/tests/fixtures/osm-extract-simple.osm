@@ -117,22 +117,6 @@
     <tag k="building" v="yes"/>
   </way>
 
-  <!-- Address join roads (for building address lookup) -->
-  <node id="5101" version="1" lat="42.435" lon="19.27"/>
-  <node id="5102" version="1" lat="42.435" lon="19.28"/>
-  <way id="2015" version="2">
-    <nd ref="5101"/><nd ref="5102"/>
-    <tag k="highway" v="residential"/>
-    <tag k="name" v="Second Street"/>
-  </way>
-  <node id="5103" version="1" lat="42.425" lon="19.24"/>
-  <node id="5104" version="1" lat="42.425" lon="19.26"/>
-  <way id="2016" version="1">
-    <nd ref="5103"/><nd ref="5104"/>
-    <tag k="highway" v="service"/>
-    <tag k="name" v="  test   street "/>
-  </way>
-
   <!-- Road with bridge attributes -->
   <node id="2091" version="1" lat="42.44" lon="19.26"/>
   <node id="2092" version="1" lat="42.441" lon="19.261"/>
@@ -164,6 +148,22 @@
     <tag k="highway" v="path"/>
     <tag k="sac_scale" v="hiking_mountains"/>
     <tag k="surface" v="gravel"/>
+  </way>
+
+  <!-- Address join roads (for building address lookup) -->
+  <node id="5101" version="1" lat="42.435" lon="19.27"/>
+  <node id="5102" version="1" lat="42.435" lon="19.28"/>
+  <way id="2015" version="2">
+    <nd ref="5101"/><nd ref="5102"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Second Street"/>
+  </way>
+  <node id="5103" version="1" lat="42.425" lon="19.24"/>
+  <node id="5104" version="1" lat="42.425" lon="19.26"/>
+  <way id="2016" version="1">
+    <nd ref="5103"/><nd ref="5104"/>
+    <tag k="highway" v="service"/>
+    <tag k="name" v="  test   street "/>
   </way>
 
   <!-- Traffic signal node -->

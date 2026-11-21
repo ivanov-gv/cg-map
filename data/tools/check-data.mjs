@@ -518,7 +518,6 @@ export function validateRoads(data) {
   }
   requireValue(count > 0, 'Empty roads snapshot');
   return count;
->>>>>>> d54d18e (Feature #325: regenerate roads, validate the road graph)
 }
 
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {

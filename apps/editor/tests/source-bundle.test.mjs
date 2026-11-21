@@ -27,7 +27,7 @@ test('manifest accepts both bundle versions and requires one entry per supported
     'transport-stops.geojson',
     'water.geojson'
   ]);
-  assert.deepEqual(bundleFilesByVersion[2], ['building-entrances.geojson', ...bundleFilesByVersion[1]]);
+  assert.deepEqual(bundleFilesByVersion[2], ['building-entrances.geojson', 'road-nodes.geojson', ...bundleFilesByVersion[1]]);
   for (const version of [1, 2]) {
     assert.equal(
       validateBundleManifest(manifest(version)).layers.length,
@@ -36,13 +36,13 @@ test('manifest accepts both bundle versions and requires one entry per supported
   }
   const duplicate = manifest();
   duplicate.layers[1] = duplicate.layers[0];
-  assert.throws(() => validateBundleManifest(duplicate), /exactly the 9/);
+  assert.throws(() => validateBundleManifest(duplicate), /exactly the 10/);
   const v1WithEntrance = manifest(1);
   v1WithEntrance.layers.push(metadata('building-entrances.geojson'));
   assert.throws(() => validateBundleManifest(v1WithEntrance), /exactly the 8/);
   const v2WithoutEntrance = manifest(2);
   v2WithoutEntrance.layers.shift();
-  assert.throws(() => validateBundleManifest(v2WithoutEntrance), /exactly the 9/);
+  assert.throws(() => validateBundleManifest(v2WithoutEntrance), /exactly the 10/);
   for (const invalid of [
     {version: 3, layers: sourceFiles.map(metadata)},
     {version: 1, layers: []},

@@ -14,7 +14,7 @@ const version1Files = [
 ];
 export const bundleFilesByVersion = {
   1: version1Files,
-  2: ['building-entrances.geojson', ...version1Files]
+  2: ['building-entrances.geojson', 'road-nodes.geojson', ...version1Files]
 };
 
 export const currentBundleVersion = 2;
