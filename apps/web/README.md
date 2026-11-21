@@ -168,15 +168,17 @@ in Fullscreen, and the screen-reader close button and the named card handle rema
 switches to this compact view with the query and category kept. See
 [the interface requirements](../../docs/ui-ux/features/interface.md#ui-03-results-scroll-options-stay-at-the-bottom).
 
-**Flip place card** (issue #252): on Flip, every place opens a two-step card. Peek shows only the header with 12 px
-gutters and no grab-handle bar, so the picked object remains visible above it; tapping the header or handle opens
-Fullscreen, where details can scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in
-Fullscreen it returns to Peek, and in Peek it closes the card and clears the red selection. Locate stays hidden through
-both card steps and reappears only when the card closes. Back, Escape and the screen-reader close button share that
-step-back method. It returns to the dock list when the place came from there, preserving the query, category, order and
+**Flip place card** (issues #252, #289): on Flip, every place opens a two-step card. Peek shows only the header with 12
+px gutters, so the picked object remains visible above it; the 36×4 grab bar sits 4 px from the card edge in both steps
+and uses the Mobile handle colour. Tapping the header or handle, or pulling up, opens Fullscreen, where details can
+scroll and the Icon Button sits beside the header. The Icon Button turns into ×: in Fullscreen it returns to Peek, and
+in Peek it closes the card and clears the red selection. A downward pull does the same through those button methods,
+starting in Fullscreen only at `scrollTop 0` so scrolling never steps the card. Locate stays hidden through both card
+steps and reappears only when the card closes. Back, Escape and the screen-reader close button share that step-back
+method. It returns to the dock list when the place came from there, preserving the query, category, order and
 originating row; a later map pick replaces the card without changing that origin. Back takes the same history step as
-the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek. Swipes and wheel
-input never change a Flip card.
+the Icon Button, and the active-category chip stays hidden under every open Flip state, including Peek. Wheel input
+never changes a Flip card.
 
 Location is a single icon in the bottom-right corner;
 [UI-05](../../docs/ui-ux/features/interface.md#ui-05-honest-state-with-minimal-interruption) owns its size, offsets and
