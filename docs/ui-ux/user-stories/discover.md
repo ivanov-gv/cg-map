@@ -346,7 +346,9 @@ no distance, so the camera is never presented as the person's position; see
 [the current interface](../features/interface.md#distance-comes-from-the-person-not-the-camera) and
 [ADR 0018](../../decisions/0018-search-result-kinds-and-highlights.md#distance-rule-issue-262). Existing key/banner
 behavior below is historical baseline evidence; see [the current interface](../features/interface.md) for control
-behavior. Data coverage and default POI importance gaps remain.
+behavior. On a foldable phone, search, dock and result highlights follow the screen live between Mobile and Flip; the
+state mapping is owned by [the fold/unfold rule](../features/interface.md#fold-and-unfold-issue-290). Data coverage and
+default POI importance gaps remain.
 
 | Requirement       | Current evidence                                                                                                                                                                                                                                                                                                                                                                                                                                  | Work needed to meet the target                                                                                                                                                                                                                        |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

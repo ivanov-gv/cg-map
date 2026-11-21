@@ -7,7 +7,8 @@ became a bottom panel (issue #250) and then a fixed floating card (issue #282), 
 geometry. On 20 November 2026 the phone card gained Peek, Full and Fullscreen (issue #251) and its drag became a
 continuous, top-edge-driven model (issue #265); Flip gained its own two-step card (issue #252), and the Desktop floating
 card stayed unchanged. On 21 November 2026, issue #288 gave Flip a top-row query chip beside the active category chip,
-and issue #294 kept the Mobile chip visible through Peek and Full, hiding it only in Fullscreen with the header. This
+issue #294 kept the Mobile chip visible through Peek and Full, hiding it only in Fullscreen with the header, and the
+foldable-phone rule (issue #290) made Mobile and Flip follow the screen live while keeping and mapping their state. This
 does not claim deployment or completion of Discover’s missing geographic data. Browser acceptance and physical-device
 evidence are recorded separately below.
 
@@ -222,6 +223,26 @@ label in one row, ~40 px high) and the Download button is ~40 px so Satellite, T
 line all fit without scrolling. At 374×241 and 340×250 the footer keeps the app version and the full licence on one
 line, dropping the short commit because the full text cannot fit. These sizes are tested at 374×241, 340×250 and
 340×340.
+
+### Fold and unfold (issue #290)
+
+Current behavior: folding or unfolding between Mobile (for example 412×840) and Flip (340×250) changes the layout live,
+in both directions and any number of times, without a reload. The camera, query, active category, visible result
+highlights, selected object and open place card are kept. One device class from the shared media queries drives the
+visible controls, dock screen, card step and history steps, so nothing from the outgoing layout stays on screen. A
+viewport change does not move the camera and drops a pending result reveal; a later explicit selection resumes ordinary
+result framing.
+
+- The opening view maps to the other layout's opening view.
+- Mobile search or dock maps to the Flip dock's list screen. Unfolding the Flip list **or** modes menu maps to the
+  Mobile dock. The query, category, result order and highlights continue from the same state.
+- Active category and query state continue in whichever layout shows them. With the dock closed and no card, Flip shows
+  both top-row chips; unfolding shows Mobile's standalone category chip instead. A panel or card hides both Flip chips.
+- A card stays open through the switch. Mobile Peek becomes Flip Peek, Mobile Full becomes Flip Peek, and Fullscreen
+  survives in both directions as Fullscreen. Flip Peek becomes Mobile Peek, and Flip Fullscreen becomes Mobile
+  Fullscreen, including when the Flip step was reached by a pull. On Flip the card owns the screen and its dock is only
+  the return target; unfolding restores Mobile's results behind a card that came from search or dock, or its bare map
+  behind a card picked from the map.
 
 ## UI-03 Results scroll; options stay at the bottom
 
@@ -482,6 +503,7 @@ and reduced motion.
 | UI-A17 | Search with no fix, then with a live fix, a changed fix and a stale fix; open a card during a fix change.                                                                                                                                         | With a usable fix, every result kind, including streets, is ordered and labelled from that fix. Without one, rows keep centre order and show no distance. Changed fixes refresh after a throttle, never while a card is open; the deferred order appears when it closes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | UI-A18 | On Desktop with no card, the wide card, the search panel and the dock; on phone Peek and Full; and under the Flip dock, inspect the scale bar and credit.                                                                                         | The scale and credit boxes stay at the map's bottom-left within 1 px. At each centre, a covering card, panel or dock is the hit target; otherwise the map control is.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | UI-A19 | At 340×250 and 374×241, pick a map place, a building and a dock result; tap Peek and use Back, the Icon Button, Escape and the screen-reader close button; pull the card up and down, try wheel input, then replace the card with another object. | Every pick opens header-only Peek with the picked object visible; tapping or pulling up opens Fullscreen, and every step-back control, including a downward pull, follows the same Fullscreen → Peek → closed → dock (for a dock pick) or bare map path with matching focus. Fullscreen pulls wait for `scrollTop 0`; wheel input never changes the Flip card state. The grab bar is 36×4 with a 4 px top offset in both steps, both standalone chips stay hidden for every open Flip state, and a dock result returns to the unchanged list with focus on its row, including after that row's origin survives a replacement selection.                                                                                                                    |
+| UI-A20 | Fold and unfold 412×840 ↔ 340×250 repeatedly through the opening view, search with a query and category, the dock, Flip modes, standalone chips, and a card in Peek, Full, Fullscreen and after a Flip pull.                                      | The new layout’s own controls appear and the old ones disappear. Camera, query, category, highlights, selection and the open card are kept; Mobile search/dock maps to the Flip list, any Flip dock maps to the Mobile dock, and card steps follow the fold/unfold mapping above. Flip shows the category and query chips only with the dock closed and no card; Mobile shows its standalone category chip instead. A pulled Flip Fullscreen card folds and unfolds as Fullscreen.                                                                                                                                                                                                                                                                         |
 
 Automated coverage in [the web browser suite](../../../apps/web/tests/e2e/interface.spec.mjs) checks initial chrome,
 unchanged header geometry, anchored options, fixed categories over scrolling results, query preservation, projected
@@ -513,6 +535,12 @@ The Flip checks also cover the 36×4 grab bar with its 4 px top offset and Mobil
 pointer cursor and clipped action row in Peek, building picks, and the shared step-back paths used by pulls, the Icon
 Button, Escape and screen-reader close. A replacement selection keeps the originating dock row, and both standalone
 chips stay hidden under every open Flip state.
+
+Fold/unfold acceptance lives in [fold.spec.mjs](../../../apps/web/tests/e2e/fold.spec.mjs): it switches 412×840 ↔
+340×250 repeatedly through the opening view, a queried and categorised search, the dock, Flip modes, standalone chips
+and every card step, including a pulled Flip Fullscreen card. It checks the visible controls, preserved
+query/category/highlights/selection, mapped view and card state, and an unchanged camera. Pure mapping tests in
+[interface.test.mjs](../../../apps/web/tests/interface.test.mjs) cover the view and card state helpers.
 
 [The search results suite](../../../apps/web/tests/e2e/search-results.spec.mjs) checks that rows identify places,
 buildings, addresses and streets, that a street appears once with a green road outline, a red Road card with the same
