@@ -60,6 +60,7 @@
       "geometries": ["LineString"],
       "properties": {
         "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
         "kind": {
           "required": true,
           "enum": [
@@ -80,10 +81,36 @@
             "path",
             "track",
             "cycleway",
-            "steps"
+            "steps",
+            "living_street"
           ]
-        }
+        },
+        "bridge": {"maxLength": 64},
+        "tunnel": {"maxLength": 64},
+        "layer": {"maxLength": 16},
+        "oneway": {"maxLength": 16},
+        "access": {"maxLength": 64},
+        "motor_vehicle": {"maxLength": 64},
+        "foot": {"maxLength": 64},
+        "bicycle": {"maxLength": 64},
+        "maxspeed": {"maxLength": 32},
+        "surface": {"maxLength": 64},
+        "lit": {"maxLength": 16},
+        "sac_scale": {"maxLength": 64},
+        "smoothness": {"maxLength": 64},
+        "parking:left": {"maxLength": 128},
+        "parking:right": {"maxLength": 128},
+        "parking:both": {"maxLength": 128},
+        "junction": {"maxLength": 64},
+        "ref": {"maxLength": 120},
+        "pathClass": {"enum": ["main", "trail"]}
       }
+    },
+    "road-nodes.geojson": {
+      "operations": [],
+      "geometries": ["Point"],
+      "readOnlyReason": "Extracted from OSM; edit through a data-owned refresh.",
+      "properties": {}
     },
     "land.geojson": {
       "operations": ["modify"],

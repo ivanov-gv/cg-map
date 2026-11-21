@@ -20,7 +20,9 @@ from .country import CountryLayer
 from .identity import adopt_collection
 from .land import LandLayer
 from .places import PlacesLayer
+from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
+from .turn_restrictions import TurnRestrictionsLayer
 from .water import WaterLayer
 from .writing import read_collection, write_collection
 
@@ -35,7 +37,7 @@ LAYER_GROUPS = {
         BuildingGeometryLayer, BuildingsLayer, RoadNameCollector,
         EntrancesLayer
     ),
-    'roads': (RoadsLayer,),
+    'roads': (RoadsLayer, RoadNodesLayer, TurnRestrictionsLayer),
     'land': (CountryLayer, LandLayer),
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
@@ -87,6 +89,21 @@ class ExtractHandler(osmium.SimpleHandler):
     def area(self, area):
         for layer in self.layers:
             layer.area(area, self.options, self.state)
+
+
+class RelationHandler(osmium.SimpleHandler):
+    """Second pass that dispatches relations to layers that need them."""
+
+    def __init__(self, layers, options, state):
+        super().__init__()
+        self.layers = layers
+        self.options = options
+        self.state = state
+
+    def relation(self, relation):
+        for layer in self.layers:
+            if hasattr(layer, 'relation'):
+                layer.relation(relation, self.options, self.state)
 
 
 def parse_args(argv=None):
@@ -191,16 +208,27 @@ def adopt_static_files(sources_directory):
     provenance['bytes'] = len(bytes_of_stops)
     provenance['sha256'] = hashlib.sha256(bytes_of_stops).hexdigest()
     provenance_path.write_text(
-        json.dumps(provenance, indent=2) + '\n', encoding='utf-8'
+        json.dumps(provenance, indent=2, sort_keys=True) + '\n',
+        encoding='utf-8'
     )
     return [context_path.name, stops_path.name]
+
+
+def count_features(source_bytes):
+    """Count features or restrictions in a source file."""
+    data = json.loads(source_bytes)
+    if 'features' in data:
+        return len(data['features'])
+    if 'restrictions' in data:
+        return len(data['restrictions'])
+    return 0
 
 
 def layer_checksum(root, filename):
     """Return the reviewed inventory entry for one generated source file."""
     source_bytes = (root / 'data/sources' / filename).read_bytes()
     return {
-        'features': len(json.loads(source_bytes)['features']),
+        'features': count_features(source_bytes),
         'bytes': len(source_bytes),
         'sha256': hashlib.sha256(source_bytes).hexdigest(),
     }
@@ -237,7 +265,8 @@ def updated_provenance(root, options, filenames, input_hash, is_partial, details
         })
     provenance_path = root / 'data/sources/provenance.json'
     provenance_path.write_text(
-        json.dumps(provenance, indent=2) + '\n', encoding='utf-8'
+        json.dumps(provenance, indent=2, sort_keys=True) + '\n',
+        encoding='utf-8'
     )
 
 
@@ -265,17 +294,34 @@ def finish_layers(group_layers, selected_groups, options, state):
 
 
 def write_layer_files(layers, sources_directory, filenames):
-    """Write each finished source file from its contributing layers."""
+    """Write each finished source file from its contributing layers.
+
+    Handles both GeoJSON feature lists and non-GeoJSON structured output
+    (e.g., turn-restrictions.json returns a dict from finish()).
+    """
     for filename in sorted(filenames):
-        features = [
-            feature
-            for layer in layers
-            if layer.filename == filename
-            for feature in layer.features
+        owning_layers = [
+            layer for layer in layers if layer.filename == filename
         ]
-        write_collection(sources_directory / filename, features)
-        size = (sources_directory / filename).stat().st_size
-        print(f'{filename} {len(features)} bytes={size}')
+        first_result = owning_layers[0].features
+        if isinstance(first_result, dict):
+            # Non-GeoJSON output (e.g., turn-restrictions.json)
+            output_path = sources_directory / filename
+            text = json.dumps(first_result, indent=2, ensure_ascii=False) + '\n'
+            output_path.write_text(text, encoding='utf-8')
+            size = output_path.stat().st_size
+            count = len(first_result.get('restrictions', []))
+            print(f'{filename} {count} restrictions bytes={size}')
+        else:
+            # GeoJSON features from all layers sharing this filename
+            features = [
+                feature
+                for layer in owning_layers
+                for feature in layer.features
+            ]
+            write_collection(sources_directory / filename, features)
+            size = (sources_directory / filename).stat().st_size
+            print(f'{filename} {len(features)} bytes={size}')
 
 
 def stage_repository(root, staging_root, sources_directory):

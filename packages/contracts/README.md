@@ -86,6 +86,21 @@ both versions and verifies the entire bundle before enabling modes. Feature indi
 stable upstream identities. This contract does not define editing or changesets; the formats below do. The bundle is
 built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md).
 
+`roads.geojson` carries OSM road attributes copied from the source: `bridge`, `tunnel`, `layer`, `oneway`, `access`,
+`motor_vehicle`, `foot`, `bicycle`, `maxspeed`, `surface`, `lit`, `sac_scale`, `smoothness`, `parking:left`,
+`parking:right`, `parking:both`, `parking:lane:left`, `parking:lane:right`, `parking:lane:both`, `junction`, `ref`, and
+`name:en`. Walking routes get a computed `pathClass`: `main` for paved footways, pedestrian ways, cycleways and paved
+paths; `trail` for unpaved paths, tracks, bridleways, or any way with `sac_scale`. Detail-area roads record the OSM node
+IDs at both ends (`startNode`, `endNode`) and a level at each end (`startLevel`, `endLevel`): the `layer` tag as
+integer, default 0; bridges without explicit layer get +1, tunnels get −1.
+
+`road-nodes.geojson` contains OSM nodes in the detail area with `highway=traffic_signals`, `crossing`, `stop`,
+`give_way`, `mini_roundabout` or `turning_circle`. The editor cannot edit this file yet (`operations: []`).
+
+`turn-restrictions.json` records every `type=restriction` relation touching the detail area with its OSM identity,
+`restriction` value, `from`/`to` way IDs and `via` nodes or ways. It is not GeoJSON because restrictions are topological
+relations, not geometries.
+
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
 types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and
 the source value of a new place. Anything unlisted is locked, which is what preserves unknown fields, attribution and
