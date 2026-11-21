@@ -804,7 +804,7 @@ function syncCategoryButtons() {
   categoryButtons
     .find(button => button.dataset.category === activeCategory)
     ?.scrollIntoView({block: 'nearest', inline: 'nearest'});
-  mapState.interface?.syncActiveChip();
+  mapState.interface?.syncStandaloneChips();
 }
 
 // Move the shared pill around the active chip; All parks it inert at the row's end.

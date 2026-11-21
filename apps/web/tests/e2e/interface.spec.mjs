@@ -5010,7 +5010,7 @@ test.describe('Active category chip', () => {
     await expect(mapChip(page)).toBeHidden();
   });
 
-  test('flip chip sits under the icon button and a tap opens the dock', {tag: '@phone'}, async ({
+  test('flip chip sits right of the icon button and a tap opens the dock', {tag: '@phone'}, async ({
     page,
     isMobile
   }) => {
@@ -5026,8 +5026,8 @@ test.describe('Active category chip', () => {
       await expect(mapChip(page)).toBeVisible();
       const menu = await page.locator('#menu-toggle').boundingBox();
       const chip = await mapChip(page).boundingBox();
-      expect(chip.x).toBe(menu.x);
-      expect(chip.y).toBe(menu.y + menu.height + 8);
+      expect(chip.x).toBe(menu.x + menu.width + 8);
+      expect(chip.y).toBe(menu.y + (menu.height - chip.height) / 2);
       expect(chip.height).toBe(40);
 
       await page.locator('#active-category-chip-label').click();
@@ -5090,6 +5090,200 @@ test.describe('Active category chip', () => {
       expect(geometry.resultsBottom).toBeGreaterThan(geometry.chipBottom);
       expect(geometry.visibleResults).toBeGreaterThanOrEqual(3);
     });
+  });
+});
+
+test.describe('Flip top-row chips', () => {
+  // The fixture must reach the page rather than a service-worker cache from the real build.
+  test.use({serviceWorkers: 'block'});
+  test.beforeEach(async ({page}) => {
+    // Keep startup's update handle without a registration the blocked worker cannot provide.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator.serviceWorker, 'register', {
+        configurable: true,
+        value: async () => ({update: async () => {}})
+      });
+    });
+  });
+
+  const categoryChip = page => page.locator('#active-category-chip');
+  const queryChip = page => page.locator('#query-chip');
+  const categoryRemove = page => page.locator('#active-category-chip-remove');
+  const queryLabel = page => page.locator('#query-chip-label');
+  const queryRemove = page => page.locator('#query-chip-remove');
+  const longQuery = 'a very long museum search query that cannot fit on a Flip cover screen';
+
+  const chooseShops = async page => {
+    const shops = page.locator('#categories button[data-category="shops"]');
+    if ((await shops.getAttribute('aria-pressed')) !== 'true') await shops.click();
+    await expect(shops).toHaveAttribute('aria-pressed', 'true');
+  };
+  // A closed dock hides the marker layer but keeps the highlight source in step with the active filters.
+  const ringCount = page =>
+    page.evaluate(
+      () => window.kompasDebug.map.queryRenderedFeatures({layers: ['search-place-rings']}).length
+    );
+
+  test('both chips sit beside the Icon Button and a long query ellipsises', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    for (const {viewport} of FLIP_VIEWPORTS) {
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await expect(queryChip(page)).toBeHidden();
+        // With All active the query chip occupies the first slot beside the menu button.
+        await openMenu(page);
+        await page.locator('#search').fill('Nearby place 0');
+        await expect(page.locator('#results .result')).toHaveCount(1);
+        await closeMenu(page);
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeVisible();
+        const allMenu = await page.locator('#menu-toggle').boundingBox();
+        const allQuery = await queryChip(page).boundingBox();
+        expect(allQuery.x).toBeCloseTo(allMenu.x + allMenu.width + 8, 0);
+        expect(allQuery.x + allQuery.width).toBeLessThanOrEqual(viewport.width - 12 + 0.5);
+
+        await openMenu(page);
+        await page.locator('#clear-search').click();
+        await expect(page.locator('#search')).toHaveValue('');
+        await chooseShops(page);
+        await closeMenu(page);
+        await expect(categoryChip(page)).toBeVisible();
+        await expect(queryChip(page)).toBeHidden();
+
+        await openMenu(page);
+        await page.locator('#search').fill('Nearby place 0');
+        await expect(page.locator('#results .result')).toHaveCount(1);
+        await closeMenu(page);
+        await expect(categoryChip(page)).toBeVisible();
+        await expect(queryChip(page)).toBeVisible();
+        await expect(queryLabel(page)).toHaveText('“Nearby place 0”');
+        await expect(queryLabel(page)).toHaveAttribute('aria-label', 'Search: Nearby place 0');
+        await expect(queryRemove(page)).toHaveAttribute('aria-label', 'Clear search Nearby place 0');
+
+        const menu = await page.locator('#menu-toggle').boundingBox();
+        const category = await categoryChip(page).boundingBox();
+        const query = await queryChip(page).boundingBox();
+        expect(category.height).toBe(40);
+        expect(query.height).toBe(40);
+        expect(category.x).toBeCloseTo(menu.x + menu.width + 8, 0);
+        expect(category.y).toBeCloseTo(menu.y + (menu.height - category.height) / 2, 0);
+        expect(query.x).toBeCloseTo(category.x + category.width + 8, 0);
+        expect(query.y).toBeCloseTo(category.y, 0);
+        expect(query.x + query.width).toBeLessThanOrEqual(viewport.width - 12 + 0.5);
+        for (const chip of [categoryChip(page), queryChip(page)])
+          expect(await chip.evaluate(element => getComputedStyle(element).borderRadius)).toBe('20px');
+
+        await openMenu(page);
+        await page.locator('#search').fill(longQuery);
+        await closeMenu(page);
+        const longChip = await queryChip(page).boundingBox();
+        const unchangedCategory = await categoryChip(page).boundingBox();
+        expect(unchangedCategory.width).toBeCloseTo(category.width, 0);
+        expect(longChip.x + longChip.width).toBeCloseTo(viewport.width - 12, 0);
+        const labelStyle = await queryLabel(page).evaluate(element => ({
+          textOverflow: getComputedStyle(element).textOverflow,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth
+        }));
+        expect(labelStyle.textOverflow).toBe('ellipsis');
+        expect(labelStyle.scrollWidth).toBeGreaterThan(labelStyle.clientWidth);
+      });
+    }
+  });
+
+  test('each × clears only its own filter and refreshes the result highlights', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    for (const {viewport} of FLIP_VIEWPORTS) {
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.27, 42.44], zoom: 12}));
+        await openMenu(page);
+        await chooseShops(page);
+        await page.locator('#search').fill('Nearby place 0');
+        await expect(page.locator('#results .result')).toHaveCount(1);
+        await expect.poll(() => ringCount(page)).toBe(1);
+        await closeMenu(page);
+
+        await queryRemove(page).click();
+        await expect(queryChip(page)).toBeHidden();
+        await expect(categoryChip(page)).toBeVisible();
+        await expect(page.locator('#search')).toHaveValue('');
+        await openMenu(page);
+        await expect(page.locator('#categories button[data-category="shops"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#results .result')).toHaveCount(3);
+        await expect.poll(() => ringCount(page)).toBe(3);
+
+        await page.locator('#search').fill('Nearby place 2');
+        await expect(page.locator('#results .result')).toHaveCount(1);
+        await closeMenu(page);
+        await expect(queryChip(page)).toBeVisible();
+        await categoryRemove(page).click();
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeVisible();
+        await expect(page.locator('#search')).toHaveValue('Nearby place 2');
+        await openMenu(page);
+        await expect(page.locator('#categories button[data-category=""]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#results .result')).toHaveCount(1);
+        await expect.poll(() => ringCount(page)).toBe(1);
+      });
+    }
+  });
+
+  test('tapping either chip opens the dock list, and cards hide both chips', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    for (const {viewport} of FLIP_VIEWPORTS) {
+      await atViewport(page, viewport, async () => {
+        await ready(page);
+        await openMenu(page);
+        await chooseShops(page);
+        await page.locator('#search').fill('Nearby');
+        await closeMenu(page);
+        await expect(categoryChip(page)).toBeVisible();
+        await expect(queryChip(page)).toBeVisible();
+
+        await page.locator('#active-category-chip-label').click();
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBe('list');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await expect(page.locator('#search')).toHaveValue('Nearby');
+        await expect(page.locator('#categories button[data-category="shops"]')).toHaveAttribute('aria-pressed', 'true');
+        await closeMenu(page);
+
+        await queryLabel(page).click();
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBe('list');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await expect(page.locator('#search')).toHaveValue('Nearby');
+        await closeMenu(page);
+
+        await openMenu(page);
+        await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+        const card = page.locator('#place-card');
+        await expect(card).toHaveAttribute('data-state', 'peek');
+        await expect(page.locator('body')).not.toHaveAttribute('data-view', 'dock');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await page.locator('#card-handle').click();
+        await expect(card).toHaveAttribute('data-state', 'fullscreen');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await closeCard(page);
+        await expect(card).toHaveAttribute('data-state', 'peek');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await closeCard(page);
+        await expect(card).toBeHidden();
+        // A dock pick returns to the unchanged list; the chips reappear once it closes.
+        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+        await expect(categoryChip(page)).toBeHidden();
+        await expect(queryChip(page)).toBeHidden();
+        await closeMenu(page);
+        await expect(categoryChip(page)).toBeVisible();
+        await expect(queryChip(page)).toBeVisible();
+      });
+    }
   });
 });
 

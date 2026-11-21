@@ -13,6 +13,7 @@ import {
   isClearButtonVisible,
   isDockFooterVisible,
   isInFocusZone,
+  isQueryChipVisible,
   phoneCardSteps,
   searchBarState,
   searchBounds,
@@ -70,6 +71,16 @@ test('the map chip replaces the category row only where search and the dock are 
     false,
     'a Flip peek covers it too'
   );
+});
+
+test('the Flip query chip only stands in for the search row beside an unobstructed map', () => {
+  const onCoverScreen = {hasQuery: true, view: 'closed', cardHidden: true, isFlipLayout: true};
+  assert.equal(isQueryChipVisible(onCoverScreen), true);
+  assert.equal(isQueryChipVisible({...onCoverScreen, hasQuery: false}), false, 'no query, no chip');
+  assert.equal(isQueryChipVisible({...onCoverScreen, view: 'dock'}), false, 'dock has its own row');
+  assert.equal(isQueryChipVisible({...onCoverScreen, view: 'search'}), false, 'bubble has its own row');
+  assert.equal(isQueryChipVisible({...onCoverScreen, cardHidden: false}), false, 'a card covers it');
+  assert.equal(isQueryChipVisible({...onCoverScreen, isFlipLayout: false}), false, 'Mobile is unchanged');
 });
 
 test('the Flip list screen never shows the dock footer, whatever the keyboard does', () => {

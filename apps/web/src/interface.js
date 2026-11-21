@@ -28,6 +28,11 @@ export function isActiveChipVisible({
   return !isExpandedCard;
 }
 
+// Flip uses the top row for a query only where the map is visible; the dock's own bar shows it otherwise.
+export function isQueryChipVisible({hasQuery, view, cardHidden, isFlipLayout}) {
+  return isFlipLayout && hasQuery && view === 'closed' && cardHidden;
+}
+
 // The Flip screen owns the footer: only ◇ Modes shows it, regardless of results or keyboard.
 // Elsewhere the footer stays available unless the keyboard would cover it.
 export function isDockFooterVisible({isFlipLayout, isDockOpen, flipDockScreen, isKeyboardOpen}) {
@@ -344,6 +349,9 @@ export class MapInterface {
     this.activeChip = document.getElementById('active-category-chip');
     this.activeChipLabel = document.getElementById('active-category-chip-label');
     this.activeChipRemove = document.getElementById('active-category-chip-remove');
+    this.queryChip = document.getElementById('query-chip');
+    this.queryChipLabel = document.getElementById('query-chip-label');
+    this.queryChipRemove = document.getElementById('query-chip-remove');
     this.desktopSearchPanel = document.getElementById('desktop-search-panel');
     this.footer = document.querySelector('.dock-footer');
   }
@@ -387,6 +395,8 @@ export class MapInterface {
     this.clearButton.addEventListener('click', () => this.clearQueryOrCloseResults());
     this.activeChipLabel.addEventListener('click', () => this.openChipTarget());
     this.activeChipRemove.addEventListener('click', () => this.onRemoveCategory?.());
+    this.queryChipLabel.addEventListener('click', () => this.openChipTarget());
+    this.queryChipRemove.addEventListener('click', () => this.clearQuery());
     this.strip.addEventListener('click', () => {
       if (this.isResultsCompacted && this.card.hidden) {
         this.restoreSearchBubble();
@@ -435,6 +445,7 @@ export class MapInterface {
       if (this.flipLayoutQuery.matches && this.flipDockScreen === 'modes') this.showFlipList();
       this.syncClearButton();
       this.syncDesktopSearchUI();
+      this.syncStandaloneChips();
     });
   }
 
@@ -445,13 +456,13 @@ export class MapInterface {
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
     this.syncViewport();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.reconcile();
   }
 
   handleFlipLayoutChange() {
     this.syncClearButton();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.syncDockContent();
     this.syncMenuIcon();
     if (!this.card.hidden) this.syncCardForLayout();
@@ -472,7 +483,7 @@ export class MapInterface {
     this.syncPanelPosition();
     this.syncDesktopSearchUI();
     this.syncViewport(false);
-    this.syncActiveChip();
+    this.syncStandaloneChips();
   }
 
   // --- History reconciler ---
@@ -765,7 +776,7 @@ export class MapInterface {
     document.body.dataset.view = view;
     this.menu.setAttribute('aria-expanded', String(view === 'dock'));
     this.syncSearchExpanded();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.syncDockContent();
     this.syncMenuIcon();
     this.syncLocateClearance();
@@ -926,6 +937,12 @@ export class MapInterface {
     this.openSearch();
   }
 
+  // Both standalone chips follow the same state changes, even when only one is visible.
+  syncStandaloneChips() {
+    this.syncActiveChip();
+    this.syncQueryChip();
+  }
+
   // The chip mirrors the active category and only shows where the category row is off screen.
   syncActiveChip() {
     const label = this.activeCategoryLabel?.() ?? '';
@@ -937,6 +954,20 @@ export class MapInterface {
       cardState: this.card.dataset.state,
       cardHidden: this.card.hidden,
       isDesktopLayout: !this.mobileLayoutQuery.matches,
+      isFlipLayout: this.flipLayoutQuery.matches
+    });
+  }
+
+  // The query chip mirrors the trimmed query; its label keeps the quotes and its names stay quote-free.
+  syncQueryChip() {
+    const query = this.search.value.trim();
+    this.queryChipLabel.textContent = query ? `“${query}”` : '';
+    this.queryChipLabel.setAttribute('aria-label', query ? `Search: ${query}` : 'Search');
+    this.queryChipRemove.setAttribute('aria-label', query ? `Clear search ${query}` : 'Clear search');
+    this.queryChip.hidden = !isQueryChipVisible({
+      hasQuery: Boolean(query),
+      view: this.view,
+      cardHidden: this.card.hidden,
       isFlipLayout: this.flipLayoutQuery.matches
     });
   }
@@ -956,6 +987,7 @@ export class MapInterface {
     this.syncClearButton();
     this.syncDesktopSearchUI();
     this.syncSearchExpanded();
+    this.syncStandaloneChips();
     this.onResultsRefreshed?.();
   }
 
@@ -967,7 +999,7 @@ export class MapInterface {
     this.isResultsCompacted = true;
     this.areResultsMinimized = true;
     this.syncResultsVisibility();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.syncLocateClearance();
     this.reconcile();
     return true;
@@ -978,7 +1010,7 @@ export class MapInterface {
     this.isResultsCompacted = false;
     this.areResultsMinimized = false;
     this.syncResultsVisibility();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.syncLocateClearance();
     this.reconcile();
     return true;
@@ -1078,7 +1110,7 @@ export class MapInterface {
     this.card.style.setProperty('--card-head', `${this.cardHeadBottom()}px`);
     this.card.style.setProperty('--card-peek', `${this.cardPeekHeight()}px`);
     this.syncCardTouch();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     if (notify) this.onViewport?.();
     if (!skipReconcile) this.reconcile();
   }
@@ -1102,7 +1134,7 @@ export class MapInterface {
     this.syncMobileCardPresentation();
     this.syncFlipCardPresentation();
     this.syncResultsVisibility();
-    this.syncActiveChip();
+    this.syncStandaloneChips();
     this.syncLocateClearance();
     if (restoreDock) this.setView('dock');
     else this.reconcile();
