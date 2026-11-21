@@ -729,10 +729,13 @@ test('ci-publish triggers on push to main and workflow dispatch', () => {
   assert.deepEqual(on.push.branches, ['main'], 'ci-publish must only trigger on main');
 });
 
-test('ci-nightly triggers on schedule and workflow dispatch', () => {
+// The nightly schedule is paused (issue #319): only a dispatch runs it, and the commented cron stays ready to restore.
+test('ci-nightly runs on dispatch while its nightly schedule is paused', () => {
   const {on} = load('ci-nightly.yml');
-  assert.deepEqual(Object.keys(on).sort(), ['schedule', 'workflow_dispatch'], 'ci-nightly trigger set');
-  assert.ok(on.schedule.length > 0, 'ci-nightly must have a schedule trigger');
+  assert.deepEqual(Object.keys(on).sort(), ['workflow_dispatch'], 'ci-nightly trigger set');
+  const text = fs.readFileSync(path.join(workflowDir, 'ci-nightly.yml'), 'utf8');
+  assert.match(text, /^\s*#\s*schedule:\s*$/m, 'the paused schedule must stay in the file, commented out');
+  assert.match(text, /^\s*#\s*- cron: '[^']+'\s*$/m, 'the paused cron must stay in the file, commented out');
 });
 
 test('runs on main never share a concurrency group', () => {

@@ -3,7 +3,8 @@
 ## Status
 
 Partially superseded. The "push to main updates dev" part is replaced by [ADR 0017](0017-ci-cd-model.md). All other
-parts remain accepted.
+parts remain accepted. The nightly run is paused from 21 November 2026 (issue #319): its cron is commented out in
+`ci-nightly.yml` and it runs only when dispatched, until the owner turns it back on.
 
 ## Context
 

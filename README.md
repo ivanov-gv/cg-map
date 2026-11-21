@@ -54,7 +54,7 @@ requires [optional Python dependencies](docs/runbooks/data.md). Do not rebuild g
 reports one `CI gate`. A merge to main runs no checks: [ci-publish](.github/workflows/ci-publish.yml) builds what it
 changed and pushes the dev site image, and [cd-dev-pages](.github/workflows/cd-dev-pages.yml) pulls that image and
 deploys it to GitHub Pages: see [release](docs/runbooks/release.md). Pull requests never deploy, a nightly run checks
-everything, and a Markdown-only change runs no code checks.
+everything (paused for now, issue #319; dispatch `ci-nightly` by hand), and a Markdown-only change runs no code checks.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitHub Actions**; no branch-folder setting
 or committed deployment copy is needed.
