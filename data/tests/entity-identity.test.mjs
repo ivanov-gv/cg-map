@@ -123,7 +123,8 @@ test('check-data enforces adopted metadata in all nine source files before prove
   const sourceFiles = Object.keys(fixture.sources);
   const supportingFiles = [
     'building-labels.provenance.json', 'transport-stops.provenance.json', 'transit-network.json',
-    'transit-network.provenance.json', 'provenance.json', 'place-visibility-policy.json'
+    'transit-network.provenance.json', 'provenance.json', 'place-visibility-policy.json',
+    'turn-restrictions.json'
   ];
   for (const filename of [...sourceFiles, ...supportingFiles]) {
     symlinkSync(path.join(repositoryRoot, 'data/sources', filename), path.join(sourceDirectory, filename));

@@ -646,6 +646,27 @@
         }
       ]
     },
+    "road-nodes.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.25,
+              42.44
+            ]
+          },
+          "properties": {
+            "kind": "traffic_signals",
+            "entityId": "node/5",
+            "entityVersion": 1
+          }
+        }
+      ]
+    },
     "water.geojson": {
       "type": "FeatureCollection",
       "entitySchemaVersion": 1,

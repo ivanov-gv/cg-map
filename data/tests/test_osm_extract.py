@@ -746,5 +746,67 @@ class RoadLevelTest(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(HAS_OSMIUM, 'osmium not installed')
+class EndNodePreservationTest(unittest.TestCase):
+    """Verify that simplification preserves both end nodes exactly."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-end-node-'
+        )
+        self.addCleanup(temporary.cleanup)
+        temporary_path = Path(temporary.name)
+        self.first_root = prepared_root(temporary_path / 'root')
+
+    def test_simplification_keeps_end_coordinates(self):
+        """A road with many points is simplified; first/last coords match."""
+        from shapely.geometry import LineString
+        # Build a line with many intermediate points
+        coords = [
+            (19.250000, 42.440000),  # Start
+            (19.250010, 42.440010),
+            (19.250020, 42.440005),
+            (19.250030, 42.440015),
+            (19.250040, 42.440008),
+            (19.250050, 42.440012),
+            (19.250060, 42.440003),
+            (19.250070, 42.440018),
+            (19.250080, 42.440007),
+            (19.250090, 42.440014),
+            (19.251000, 42.441000),  # End
+        ]
+        line = LineString(coords)
+        simplified = line.simplify(0.000015, preserve_topology=True)
+        simplified_coords = list(simplified.coords)
+        # Endpoints must be preserved exactly
+        self.assertEqual(simplified_coords[0], coords[0],
+                         'simplification changed start coordinate')
+        self.assertEqual(simplified_coords[-1], coords[-1],
+                         'simplification changed end coordinate')
+
+    def test_end_nodes_match_osm_after_simplification(self):
+        """Extract a road and verify startNode/endNode equal OSM node IDs."""
+        extract(self.first_root, layers=['roads'])
+        _, features = source_features(self.first_root, 'roads.geojson')
+        # The fixture has way/2003 (residential) with nodes 2031, 2032
+        # and way/2007 (primary bridge) with nodes 2091, 2092
+        found_2003 = [f for f in features
+                       if f['properties']['entityId'] == 'way/2003']
+        found_2007 = [f for f in features
+                       if f['properties']['entityId'] == 'way/2007']
+        if found_2003:
+            p = found_2003[0]['properties']
+            self.assertEqual(p['startNode'], 2031,
+                             'way/2003 startNode should be OSM node 2031')
+            self.assertEqual(p['endNode'], 2032,
+                             'way/2003 endNode should be OSM node 2032')
+        if found_2007:
+            p = found_2007[0]['properties']
+            self.assertEqual(p['startNode'], 2091,
+                             'way/2007 startNode should be OSM node 2091')
+            self.assertEqual(p['endNode'], 2092,
+                             'way/2007 endNode should be OSM node 2092')
+
+
 if __name__ == '__main__':
     unittest.main()

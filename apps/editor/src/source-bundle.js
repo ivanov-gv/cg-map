@@ -7,6 +7,7 @@ const version1Files = [
   'context-countries.geojson',
   'land.geojson',
   'places.geojson',
+  'road-nodes.geojson',
   'roads.geojson',
   'transport-stops.geojson',
   'water.geojson'

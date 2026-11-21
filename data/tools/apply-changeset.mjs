@@ -395,9 +395,11 @@ function provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfig
   const bytesOf = filename => nextBytes.get(filename) ?? fs.readFileSync(path.join(root, sourcesPath, filename));
   for (const name of Object.keys(provenance.layers)) {
     const bytes = bytesOf(name);
+    const parsed = JSON.parse(bytes);
+    const count = parsed.features ? parsed.features.length : parsed.restrictions ? parsed.restrictions.length : 0;
     provenance.layers[name] = {
       ...provenance.layers[name],
-      features: JSON.parse(bytes).features.length,
+      features: count,
       bytes: Buffer.byteLength(bytes),
       sha256: sha256(bytes)
     };

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata} from '../tools/check-data.mjs';
+import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata, validateRoads, validateRoadNodes, validateTurnRestrictions} from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const contractsDirectory = 'packages/contracts';
@@ -445,4 +445,101 @@ test('interior entrance points are rejected even when their wall bearing is corr
   entrance.coordinates = [19.2605, 42.4405];
   entrance.bearing = entranceBearing(entrance.coordinates, fixture.buildings.features[0].geometry);
   assert.throws(() => validateBuildingLabels(fixture.labels, fixture.buildings, {contractsDirectory}), /Entrance must lie on a building wall/);
+});
+
+// --- Road graph validation tests ---
+
+test('roads validate pathClass, startNode/endNode, and level integers', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  assert.ok(validateRoads(roads) > 0);
+});
+
+test('roads reject invalid pathClass values', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const bad = structuredClone(roads);
+  // Find a feature with pathClass and corrupt it
+  for (const f of bad.features) {
+    if (f.properties.pathClass) {
+      f.properties.pathClass = 'invalid';
+      break;
+    }
+  }
+  assert.throws(() => validateRoads(bad), /invalid pathClass/);
+});
+
+test('roads reject non-integer startLevel', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const bad = structuredClone(roads);
+  for (const f of bad.features) {
+    if (f.properties.startLevel !== undefined) {
+      f.properties.startLevel = 'not-an-int';
+      break;
+    }
+  }
+  assert.throws(() => validateRoads(bad), /startLevel must be an integer/);
+});
+
+test('roads require startNode/endNode and startLevel/endLevel together', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const bad = structuredClone(roads);
+  for (const f of bad.features) {
+    if (f.properties.startNode !== undefined) {
+      delete f.properties.startLevel;
+      delete f.properties.endLevel;
+      break;
+    }
+  }
+  assert.throws(() => validateRoads(bad), /must appear together/);
+});
+
+test('road-nodes validate kind and OSM identity', () => {
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  assert.ok(validateRoadNodes(nodes) > 0);
+});
+
+test('road-nodes reject unknown kind', () => {
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const bad = structuredClone(nodes);
+  bad.features[0].properties.kind = 'unknown_kind';
+  assert.throws(() => validateRoadNodes(bad), /unknown road node kind/);
+});
+
+test('road-nodes reject duplicate entityId', () => {
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const bad = structuredClone(nodes);
+  bad.features[1].properties.entityId = bad.features[0].properties.entityId;
+  assert.throws(() => validateRoadNodes(bad), /duplicate entityId/);
+});
+
+test('turn-restrictions validate structure and report outside refs', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const restrictions = JSON.parse(fs.readFileSync('data/sources/turn-restrictions.json'));
+  const result = validateTurnRestrictions(restrictions, roads, nodes);
+  assert.ok(result.count > 0);
+  assert.ok(Number.isInteger(result.outsideCount));
+});
+
+test('turn-restrictions reject invalid entityId format', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const restrictions = JSON.parse(fs.readFileSync('data/sources/turn-restrictions.json'));
+  const bad = structuredClone(restrictions);
+  bad.restrictions[0].entityId = 'invalid';
+  assert.throws(() => validateTurnRestrictions(bad, roads, nodes), /invalid entityId/);
+});
+
+test('turn-restrictions reject unknown restriction values', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const restrictions = JSON.parse(fs.readFileSync('data/sources/turn-restrictions.json'));
+  const bad = structuredClone(restrictions);
+  bad.restrictions[0].restriction = 'invalid_restriction';
+  assert.throws(() => validateTurnRestrictions(bad, roads, nodes), /unknown restriction value/);
+});
+
+test('turn-restrictions validate entitySchemaVersion', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  assert.throws(() => validateTurnRestrictions({entitySchemaVersion: 0, restrictions: []}, roads, nodes), /missing entitySchemaVersion/);
 });

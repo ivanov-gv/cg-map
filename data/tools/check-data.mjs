@@ -401,7 +401,124 @@ function sourceGeometryTypes(filename) {
   if (filename === 'roads.geojson') return ['LineString', 'MultiLineString'];
   if (filename === 'water.geojson') return ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'];
   if (filename === 'building-entrances.geojson') return ['Point'];
+  if (filename === 'road-nodes.geojson') return ['Point'];
   return ['Polygon', 'MultiPolygon'];
+}
+// Allowed highway values for road network nodes.
+const ROAD_NODE_KINDS = new Set([
+  'traffic_signals', 'crossing', 'stop', 'give_way',
+  'mini_roundabout', 'turning_circle',
+]);
+// Allowed restriction values from OSM turn restriction relations.
+const RESTRICTION_VALUES = new Set([
+  'no_left_turn', 'no_right_turn', 'no_u_turn',
+  'only_left_turn', 'only_right_turn', 'only_straight_on',
+]);
+// Allowed pathClass values.
+const PATH_CLASS_VALUES = new Set(['main', 'trail']);
+
+// Road nodes: points with OSM identity and a recognised highway kind.
+export function validateRoadNodes(data) {
+  const count = validateCollection(data, {label: 'road-nodes.geojson', geometryTypes: ['Point']});
+  const ids = new Set();
+  for (const [i, f] of data.features.entries()) {
+    const name = `road-nodes.geojson feature ${i}`;
+    const p = f.properties;
+    requireValue(ROAD_NODE_KINDS.has(p.kind), `${name}: unknown road node kind: ${p.kind}`);
+    requireValue(/^node\/\d+$/.test(p.entityId), `${name}: invalid OSM node identity`);
+    requireValue(!ids.has(p.entityId), `${name}: duplicate entityId`);
+    ids.add(p.entityId);
+  }
+  requireValue(count > 0, 'Empty road nodes snapshot');
+  return count;
+}
+
+// Turn restrictions: structured JSON with OSM identity and from/to/via refs.
+export function validateTurnRestrictions(data, roads, roadNodes) {
+  requireValue(data?.entitySchemaVersion === 1, 'turn-restrictions.json: missing entitySchemaVersion');
+  requireValue(Array.isArray(data.restrictions), 'turn-restrictions.json: missing restrictions array');
+  // Build lookup sets from roads and road nodes
+  const roadWayIds = new Set();
+  const roadEndNodes = new Set();
+  for (const f of roads.features) {
+    const p = f.properties;
+    if (p.startNode !== undefined) roadEndNodes.add(p.startNode);
+    if (p.endNode !== undefined) roadEndNodes.add(p.endNode);
+    // Extract way ID from entityId like "way/12345"
+    const match = p.entityId?.match(/^way\/(\d+)$/);
+    if (match) roadWayIds.add(Number(match[1]));
+  }
+  const roadNodeIds = new Set();
+  for (const f of roadNodes.features) {
+    const match = f.properties.entityId?.match(/^node\/(\d+)$/);
+    if (match) roadNodeIds.add(Number(match[1]));
+  }
+  let outsideCount = 0;
+  for (const [i, r] of data.restrictions.entries()) {
+    const label = `restriction ${i} (${r.entityId})`;
+    requireValue(/^relation\/\d+$/.test(r.entityId), `${label}: invalid entityId`);
+    requireValue(Number.isSafeInteger(r.entityVersion) && r.entityVersion >= 1, `${label}: invalid entityVersion`);
+    requireValue(RESTRICTION_VALUES.has(r.restriction), `${label}: unknown restriction value: ${r.restriction}`);
+    requireValue(Number.isSafeInteger(r.from), `${label}: invalid from way ID`);
+    requireValue(Number.isSafeInteger(r.to), `${label}: invalid to way ID`);
+    // Check from/to exist in roads; report those pointing outside
+    if (!roadWayIds.has(r.from)) {
+      outsideCount++;
+    }
+    if (!roadWayIds.has(r.to)) {
+      outsideCount++;
+    }
+    // Check via nodes exist in road-nodes or as end nodes of roads
+    if (Array.isArray(r.viaNodes)) {
+      for (const nid of r.viaNodes) {
+        const found = roadNodeIds.has(nid) || roadEndNodes.has(nid);
+        if (!found) {
+          outsideCount++;
+        }
+      }
+    }
+    if (Array.isArray(r.viaWays)) {
+      for (const wid of r.viaWays) {
+        if (!roadWayIds.has(wid)) {
+          outsideCount++;
+        }
+      }
+    }
+  }
+  return {count: data.restrictions.length, outsideCount};
+}
+
+// Validate road features: pathClass, startNode/endNode on detail roads, levels are integers.
+export function validateRoads(data) {
+  const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString']});
+  for (const [i, f] of data.features.entries()) {
+    const name = `roads.geojson feature ${i}`;
+    const p = f.properties;
+    if (p.pathClass !== undefined) {
+      requireValue(PATH_CLASS_VALUES.has(p.pathClass), `${name}: invalid pathClass: ${p.pathClass}`);
+    }
+    // Detail roads must have startNode/endNode
+    if (p.startNode !== undefined) {
+      requireValue(Number.isSafeInteger(p.startNode), `${name}: startNode must be an integer`);
+    }
+    if (p.endNode !== undefined) {
+      requireValue(Number.isSafeInteger(p.endNode), `${name}: endNode must be an integer`);
+    }
+    // Levels must be integers when present
+    if (p.startLevel !== undefined) {
+      requireValue(Number.isInteger(p.startLevel), `${name}: startLevel must be an integer`);
+    }
+    if (p.endLevel !== undefined) {
+      requireValue(Number.isInteger(p.endLevel), `${name}: endLevel must be an integer`);
+    }
+    // startNode/endNode and startLevel/endLevel must appear together
+    const hasNodes = p.startNode !== undefined && p.endNode !== undefined;
+    const hasLevels = p.startLevel !== undefined && p.endLevel !== undefined;
+    requireValue(hasNodes === hasLevels, `${name}: startNode/endNode and startLevel/endLevel must appear together`);
+  }
+  requireValue(count > 0, 'Empty roads snapshot');
+  return count;
+>>>>>>> d54d18e (Feature #325: regenerate roads, validate the road graph)
 }
 
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
@@ -428,12 +545,38 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {
-    requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');
+    requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
-    const geometryTypes = sourceGeometryTypes(name);
-    const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, requireAdopted: true, contractsDirectory});
-    requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
-      `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
+    if (name.endsWith('.geojson')) {
+      const geometryTypes = sourceGeometryTypes(name);
+      const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, requireAdopted: true, contractsDirectory});
+      requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
+        `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
+    } else {
+      requireValue(bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
+        `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
+    }
+  }
+  // Validate roads specifically (pathClass, graph nodes, levels)
+  const roadsPath = path.join(root, 'data/sources/roads.geojson');
+  if (fs.existsSync(roadsPath)) {
+    const roadsData = JSON.parse(fs.readFileSync(roadsPath));
+    validateRoads(roadsData);
+    // Validate road nodes if present
+    const roadNodesPath = path.join(root, 'data/sources/road-nodes.geojson');
+    if (fs.existsSync(roadNodesPath)) {
+      const roadNodesData = JSON.parse(fs.readFileSync(roadNodesPath));
+      validateRoadNodes(roadNodesData);
+      // Validate turn restrictions against roads and road nodes
+      const restrictionsPath = path.join(root, 'data/sources/turn-restrictions.json');
+      if (fs.existsSync(restrictionsPath)) {
+        const restrictionsData = JSON.parse(fs.readFileSync(restrictionsPath));
+        const restrictionResult = validateTurnRestrictions(restrictionsData, roadsData, roadNodesData);
+        if (restrictionResult.outsideCount > 0) {
+          console.log(`turn-restrictions.json: ${restrictionResult.outsideCount} restriction(s) reference nodes/ways outside the extract`);
+        }
+      }
+    }
   }
   validateBuildingSources(
     buildings,

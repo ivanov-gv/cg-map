@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/turn-restrictions/v1",
+  "title": "Turn restrictions v1",
+  "description": "OSM turn restriction relations touching the detail area. Not GeoJSON — restrictions are topological relations, not geometries. Each record carries the OSM relation identity, restriction type, from/to way IDs, and optional via nodes or ways.",
+  "type": "object",
+  "required": [
+    "entitySchemaVersion",
+    "restrictions"
+  ],
+  "properties": {
+    "entitySchemaVersion": {
+      "const": 1
+    },
+    "restrictions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/restriction"
+      }
+    }
+  },
+  "$defs": {
+    "restriction": {
+      "type": "object",
+      "required": [
+        "entityId",
+        "entityVersion",
+        "restriction",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "entityId": {
+          "type": "string",
+          "pattern": "^relation/\\d+$",
+          "description": "OSM relation identity"
+        },
+        "entityVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "OSM relation version"
+        },
+        "restriction": {
+          "type": "string",
+          "enum": [
+            "no_left_turn",
+            "no_right_turn",
+            "no_u_turn",
+            "only_left_turn",
+            "only_right_turn",
+            "only_straight_on"
+          ],
+          "description": "OSM restriction tag value"
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "OSM way ID of the from-way"
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "OSM way ID of the to-way"
+        },
+        "viaNodes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "OSM node IDs in the via role"
+        },
+        "viaWays": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "OSM way IDs in the via role"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
