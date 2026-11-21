@@ -2,6 +2,16 @@
 export function mapStyle(basemapURL, assetBaseURL) {
   const source = 'basemap';
   const roadKind = ['get', 'kind'];
+  const greenLandKinds = [
+    'park', 'garden', 'woods', 'meadow', 'grass',
+    'scrub', 'sports', 'cemetery', 'playground'
+  ];
+  // Coastlines are separate source lines, so the ocean fill shows the shore without a river stroke.
+  const waterwayLineFilter = [
+    'all',
+    ['==', ['geometry-type'], 'LineString'],
+    ['!=', ['get', 'kind'], 'coastline']
+  ];
   const majorRoadFilter = [
     'in',
     roadKind,
@@ -78,7 +88,12 @@ export function mapStyle(basemapURL, assetBaseURL) {
         source,
         'source-layer': 'land',
         paint: {
-          'fill-color': ['match', ['get', 'kind'], 'park', '#dce6c9', '#efeee2']
+          'fill-color': [
+            'case',
+            ['in', ['get', 'kind'], ['literal', greenLandKinds]],
+            '#dce6c9',
+            '#efeee2'
+          ]
         }
       },
       {
@@ -94,7 +109,7 @@ export function mapStyle(basemapURL, assetBaseURL) {
         type: 'line',
         source,
         'source-layer': 'water',
-        filter: ['==', ['geometry-type'], 'LineString'],
+        filter: waterwayLineFilter,
         paint: {
           'line-color': '#a9ced6',
           'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.6, 13, 3, 18, 12]

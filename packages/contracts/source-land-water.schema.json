@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/source-land-water/v1",
+  "title": "Extracted land and water source properties v1",
+  "description": "Domain properties added by the OSM land and water extractors. Identity stays under source-entities v1. check-data reads the kind enums and property limits, checks RFC 7946 ring order for extracted land-cover and water polygons, and preserves the source winding of country and context outlines. Ring order is not a substitute for GIS topology validation.",
+  "type": "object",
+  "properties": {
+    "type": {"const": "FeatureCollection"},
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"const": "Feature"},
+          "properties": {
+            "oneOf": [
+              {"$ref": "#/$defs/landProperties"},
+              {"$ref": "#/$defs/waterProperties"}
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "landKind": {
+      "type": "string",
+      "enum": [
+        "country",
+        "context",
+        "park",
+        "garden",
+        "woods",
+        "meadow",
+        "grass",
+        "scrub",
+        "sports",
+        "cemetery",
+        "playground"
+      ]
+    },
+    "waterKind": {
+      "type": "string",
+      "enum": [
+        "ocean",
+        "lake",
+        "river",
+        "reservoir",
+        "pond",
+        "basin",
+        "water",
+        "stream",
+        "canal",
+        "ditch",
+        "drain",
+        "coastline"
+      ]
+    },
+    "osmTag": {
+      "description": "The exact OSM key=value that determined kind, or natural=coastline for a coastline line.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[^\\s=]+=[^\\s=]+$"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "destination": {
+      "description": "True only where a documented destination rule applies; otherwise the property is absent.",
+      "type": "boolean",
+      "const": true
+    },
+    "tunnel": {
+      "description": "Verbatim OSM tunnel tag on a waterway line; absent when unmapped.",
+      "type": "string",
+      "maxLength": 32
+    },
+    "intermittent": {
+      "description": "Verbatim OSM intermittent tag on a waterway line; absent when unmapped.",
+      "type": "string",
+      "maxLength": 32
+    },
+    "landProperties": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/landKind"},
+        "osmTag": {"$ref": "#/$defs/osmTag"},
+        "name": {"$ref": "#/$defs/name"},
+        "name:en": {"$ref": "#/$defs/name"},
+        "destination": {"$ref": "#/$defs/destination"}
+      }
+    },
+    "waterProperties": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/waterKind"},
+        "osmTag": {"$ref": "#/$defs/osmTag"},
+        "name": {"$ref": "#/$defs/name"},
+        "name:en": {"$ref": "#/$defs/name"},
+        "tunnel": {"$ref": "#/$defs/tunnel"},
+        "intermittent": {"$ref": "#/$defs/intermittent"}
+      }
+    }
+  }
+}

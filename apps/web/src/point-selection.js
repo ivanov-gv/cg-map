@@ -9,6 +9,31 @@ const ENTRANCE_LAYERS = [
   'entrance-selection-numbers',
   'entrance-selection-arrows'
 ];
+const LAND_KIND_LABELS = {
+  park: 'Park',
+  garden: 'Garden',
+  woods: 'Woods',
+  meadow: 'Meadow',
+  grass: 'Grass',
+  scrub: 'Scrub',
+  sports: 'Sports ground',
+  cemetery: 'Cemetery',
+  playground: 'Playground'
+};
+const WATER_KIND_LABELS = {
+  ocean: 'Ocean',
+  lake: 'Lake',
+  river: 'River',
+  reservoir: 'Reservoir',
+  pond: 'Pond',
+  basin: 'Basin',
+  water: 'Water',
+  stream: 'Stream',
+  canal: 'Canal',
+  ditch: 'Ditch',
+  drain: 'Drain',
+  coastline: 'Coastline'
+};
 
 // Number placeholders describe missing information and must never become map labels.
 function isMissingNumber(value) {
@@ -286,8 +311,8 @@ function pointKind(layer, properties) {
   if (layer === 'transport-stops') return 'Bus stop';
   if (ENTRANCE_LAYERS.includes(layer)) return 'Entrance';
   if (['buildings', 'building-numbers'].includes(layer)) return 'Building';
-  if (layer === 'land') return properties.kind === 'park' ? 'Park' : 'Land';
-  if (['water', 'rivers'].includes(layer)) return 'Water';
+  if (layer === 'land') return LAND_KIND_LABELS[properties.kind] ?? 'Land';
+  if (['water', 'rivers'].includes(layer)) return WATER_KIND_LABELS[properties.kind] ?? 'Water';
   if (!layer) return 'Map point';
   return properties.bridge && properties.bridge !== 'no' ? 'Bridge' : 'Road';
 }

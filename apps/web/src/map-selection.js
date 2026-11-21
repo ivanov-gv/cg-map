@@ -1,6 +1,11 @@
 // Resolve map taps using explicit current directory state and selection callbacks.
 import {describePoint} from './point-selection.js';
 
+const GREEN_LAND_KINDS = new Set([
+  'park', 'garden', 'woods', 'meadow', 'grass',
+  'scrub', 'sports', 'cemetery', 'playground'
+]);
+
 function activeIdsFromHit(hit) {
   try {
     const activeIds = JSON.parse(hit.properties.activeIds ?? '[]');
@@ -82,7 +87,7 @@ export function selectTappedFeature(map, event, context) {
     features.find(feature => feature.layer.id === 'buildings') ??
     features.find(feature => feature.layer.id === 'building-numbers') ??
     features.find(feature => roadLayers.includes(feature.layer.id)) ??
-    features.find(feature => feature.layer.id === 'land' && feature.properties.kind === 'park') ??
+    features.find(feature => feature.layer.id === 'land' && GREEN_LAND_KINDS.has(feature.properties.kind)) ??
     features.find(feature => feature.layer.id === 'water' || feature.layer.id === 'rivers');
   if (!selectedFeature && onEmptyTap?.()) return;
   showPoint(describePoint(selectedFeature, event.lngLat.toArray(), buildingAddresses), selectedFeature);

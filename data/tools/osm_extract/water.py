@@ -1,4 +1,4 @@
-"""Water lines, OSM water areas and the derived ocean polygon."""
+"""Water lines, OSM water areas, coastlines and the derived ocean polygon."""
 
 from shapely.geometry import LineString, box, mapping, shape
 from shapely.ops import unary_union
@@ -12,14 +12,37 @@ from .geometry import (
     way_coordinates,
 )
 from .identity import content_version, make_feature, osm_identity
+from .rings import orient_feature, rfc7946_geometry
 from .writing import read_collection
 
 SOURCE_FILE = 'water.geojson'
 LAND_FILE = 'land.geojson'
-WATERWAY_KINDS = {'river', 'canal'}
+WATERWAY_KINDS = frozenset({'river', 'stream', 'canal', 'ditch', 'drain'})
+WATER_AREA_RULES = (
+    (('waterway', 'riverbank'), 'river'),
+    (('water', 'river'), 'river'),
+    (('water', 'lake'), 'lake'),
+    (('water', 'reservoir'), 'reservoir'),
+    (('landuse', 'reservoir'), 'reservoir'),
+    (('water', 'pond'), 'pond'),
+    (('water', 'basin'), 'basin'),
+)
+WATER_LINE_TAGS = ('tunnel', 'intermittent')
 OCEAN_BOUNDS = (17.5, 41.0, 21.5, 44.2)
 OCEAN_SIMPLIFY_DEGREES = 0.0001
 WATER_SIMPLIFY_DEGREES = 0.0001
+
+
+def water_area_rule(tags):
+    """Return the OSM tag and published kind for one mapped water area."""
+    for (tag_key, tag_value), kind in WATER_AREA_RULES:
+        if tags.get(tag_key) == tag_value:
+            return f'{tag_key}={tag_value}', kind
+    if tags.get('natural') == 'water':
+        if tags.get('water'):
+            return f"water={tags['water']}", 'water'
+        return 'natural=water', 'water'
+    return None
 
 
 class WaterLayer(Layer):
@@ -31,28 +54,52 @@ class WaterLayer(Layer):
         coordinates = way_coordinates(way)
         if len(coordinates) < 2:
             return
-        if way.tags.get('natural') == 'coastline':
+        tags = way.tags
+        if tags.get('natural') == 'coastline':
             state.coastlines.append(LineString(coordinates))
-        kind = way.tags.get('waterway', '')
+            self.add_line(way, coordinates, 'natural=coastline', 'coastline')
+        kind = tags.get('waterway', '')
         if kind in WATERWAY_KINDS:
-            properties = {'kind': 'river', 'name': way.tags.get('name', '')}
-            identity = osm_identity('way', way.id, way.version)
-            line = {'type': 'LineString', 'coordinates': coordinates}
-            self.features.extend(geometry_features(line, identity, properties))
+            self.add_line(way, coordinates, f'waterway={kind}', kind)
+
+    def add_line(self, way, coordinates, osm_tag, kind):
+        """Publish one OSM way as one line, keeping its downstream order."""
+        tags = way.tags
+        properties = {
+            'kind': kind,
+            'osmTag': osm_tag,
+            'name': tags.get('name', ''),
+            'name:en': tags.get('name:en', '')
+        }
+        for tag_name in WATER_LINE_TAGS:
+            if tag_name in tags:
+                properties[tag_name] = tags[tag_name]
+        identity = osm_identity('way', way.id, way.version)
+        line = {'type': 'LineString', 'coordinates': coordinates}
+        self.features.extend(geometry_features(line, identity, properties))
 
     def area(self, area, options, state):
-        if area.tags.get('natural') != 'water':
+        tags = area.tags
+        rule = water_area_rule(tags)
+        if rule is None:
             return
         geometry = usable_area_geometry(area)
         if geometry is None:
             return
-        properties = {'kind': 'water'}
-        kind, osm_id = area_source(area)
-        identity = osm_identity(kind, osm_id, area.version)
-        self.features.extend(geometry_features(
+        osm_tag, kind = rule
+        properties = {
+            'kind': kind,
+            'osmTag': osm_tag,
+            'name': tags.get('name', ''),
+            'name:en': tags.get('name:en', '')
+        }
+        area_kind, osm_id = area_source(area)
+        identity = osm_identity(area_kind, osm_id, area.version)
+        features = geometry_features(
             geometry, identity, properties,
             simplify_tolerance=WATER_SIMPLIFY_DEGREES
-        ))
+        )
+        self.features.extend(orient_feature(feature) for feature in features)
 
     def finish(self, options, state):
         self.features.insert(0, self.ocean_feature(options, state))
@@ -78,7 +125,9 @@ class WaterLayer(Layer):
         simplified = ocean.simplify(
             OCEAN_SIMPLIFY_DEGREES, preserve_topology=True
         )
-        geometry = rounded_geometry(mapping(simplified))
+        geometry = rounded_geometry(
+            rfc7946_geometry(mapping(simplified))
+        )
         properties = {'kind': 'ocean'}
         return make_feature(geometry, properties, {
             'entityId': 'derived:ocean',

@@ -19,6 +19,46 @@ test('unnamed buildings and empty map points do not acquire invented metadata', 
   const park = describePoint({layer: {id: 'land'}, properties: {kind: 'park', name: 'Park'}}, [19, 42]);
   assert.equal(park.kind, 'Park');
 });
+test('green land kinds use their recorded type in the detail card', () => {
+  const expected = {
+    garden: 'Garden',
+    woods: 'Woods',
+    meadow: 'Meadow',
+    grass: 'Grass',
+    scrub: 'Scrub',
+    sports: 'Sports ground',
+    cemetery: 'Cemetery',
+    playground: 'Playground'
+  };
+  for (const [kind, label] of Object.entries(expected)) {
+    const point = describePoint({layer: {id: 'land'}, properties: {kind}}, [19, 42]);
+    assert.equal(point.kind, label, kind);
+    assert.equal(point.name, label, kind);
+  }
+});
+test('water kinds use their recorded type in the detail card', () => {
+  const expected = {
+    ocean: 'Ocean',
+    lake: 'Lake',
+    river: 'River',
+    reservoir: 'Reservoir',
+    pond: 'Pond',
+    basin: 'Basin',
+    water: 'Water',
+    stream: 'Stream',
+    canal: 'Canal',
+    ditch: 'Ditch',
+    drain: 'Drain',
+    coastline: 'Coastline'
+  };
+  for (const [kind, label] of Object.entries(expected)) {
+    for (const layer of ['water', 'rivers']) {
+      const point = describePoint({layer: {id: layer}, properties: {kind}}, [19, 42]);
+      assert.equal(point.kind, label, `${layer}: ${kind}`);
+      assert.equal(point.name, label, `${layer}: ${kind}`);
+    }
+  }
+});
 test('stop selection keeps source identity and point coordinates', () => {
   const stop = describePoint(
     {

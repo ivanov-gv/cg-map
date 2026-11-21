@@ -18,6 +18,25 @@ function placeRules(contractsDirectory) {
     visibilityLevels: new Set(visibilityConfig.levels.map(entry => entry.level))
   };
 }
+function landWaterRules(contractsDirectory) {
+  const definitions = readContract(contractsDirectory, 'source-land-water.schema.json').$defs;
+  const landKinds = new Set(definitions.landKind.enum);
+  const waterKinds = new Set(definitions.waterKind.enum);
+  const preservedLandKinds = new Set(['country', 'context']);
+  const extractedLandKinds = new Set([...landKinds].filter(kind => !preservedLandKinds.has(kind)));
+  const derivedWaterKinds = new Set(['ocean']);
+  return {
+    definitions,
+    landKinds,
+    waterKinds,
+    extractedLandKinds,
+    requiredOsmTagKinds: new Set([
+      ...extractedLandKinds,
+      ...[...waterKinds].filter(kind => !derivedWaterKinds.has(kind))
+    ]),
+    osmTagPattern: new RegExp(definitions.osmTag.pattern)
+  };
+}
 function position(point, label) {
   requireValue(Array.isArray(point) && point.length >= 2 && point.every(Number.isFinite), `${label}: invalid position`);
   requireValue(Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 90, `${label}: coordinates must be WGS84 longitude, latitude`);
@@ -39,18 +58,65 @@ function geometry(g, label) {
     default: throw new Error(`${label}: unsupported geometry ${g.type}`);
   }
 }
+// Shoelace area is positive for counterclockwise rings in longitude/latitude axes.
+function signedRingArea(ring) {
+  let twiceArea = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const [longitude, latitude] = ring[index];
+    const [nextLongitude, nextLatitude] = ring[index + 1];
+    twiceArea += longitude * nextLatitude - nextLongitude * latitude;
+  }
+  return twiceArea / 2;
+}
+
+function validateRingWinding(geometryValue, label) {
+  const polygons = geometryValue.type === 'Polygon'
+    ? [geometryValue.coordinates]
+    : geometryValue.coordinates;
+  polygons.forEach((rings, index) => {
+    requireValue(signedRingArea(rings[0]) > 0, `${label}: polygon ${index} exterior must be counterclockwise`);
+    rings.slice(1).forEach((ring, holeIndex) => {
+      requireValue(signedRingArea(ring) < 0, `${label}: polygon ${index} hole ${holeIndex} must be clockwise`);
+    });
+  });
+}
+
+function validateLandWaterProperties(properties, label, rules, expectedOsmTagKinds) {
+  const definitions = rules.definitions;
+  const {osmTag, name, 'name:en': englishName, destination, tunnel, intermittent} = properties;
+  if ((expectedOsmTagKinds ?? rules.requiredOsmTagKinds)?.has(properties.kind)) {
+    requireValue(typeof osmTag === 'string' && osmTag.length > 0, `${label}: missing osmTag`);
+  }
+  if (osmTag !== undefined) {
+    requireValue(typeof osmTag === 'string' && osmTag.length <= definitions.osmTag.maxLength && rules.osmTagPattern.test(osmTag), `${label}: invalid osmTag`);
+  }
+  for (const [field, value] of [['name', name], ['name:en', englishName], ['tunnel', tunnel], ['intermittent', intermittent]]) {
+    if (value === undefined) continue;
+    const definition = field === 'tunnel' || field === 'intermittent' ? definitions[field] : definitions.name;
+    requireValue(typeof value === 'string' && value.length <= definition.maxLength, `${label}: invalid ${field}`);
+  }
+  if (destination !== undefined) requireValue(destination === true, `${label}: destination must be true when present`);
+}
+
 export function validateCollection(data, {
   places = false,
   label = 'GeoJSON',
   geometryTypes,
   requireKind = false,
   requireAdopted = false,
-  contractsDirectory
+  contractsDirectory,
+  allowedKinds,
+  ringKinds,
+  requireRfc7946Rings = false,
+  landWater = false,
+  requiredOsmTagKinds,
+  landWaterContractRules: suppliedLandWaterRules
 } = {}) {
   requireValue(data?.type === 'FeatureCollection' && Array.isArray(data.features), `${label}: expected FeatureCollection`);
   if (requireAdopted) requireValue(data.entitySchemaVersion === 1, `${label}: requires entitySchemaVersion 1`);
   validateSourceEntities(data, {label, contractsDirectory});
   const rules = places ? placeRules(contractsDirectory) : null;
+  const landWaterContractRules = landWater ? suppliedLandWaterRules ?? landWaterRules(contractsDirectory) : null;
   const ids = new Set();
   for (const [i, f] of data.features.entries()) {
     const name = `${label} feature ${i}`;
@@ -58,6 +124,10 @@ export function validateCollection(data, {
     geometry(f.geometry, name);
     if (geometryTypes) requireValue(geometryTypes.includes(f.geometry.type), `${name}: geometry type violates layer contract`);
     if (requireKind) requireValue(typeof f.properties.kind === 'string' && f.properties.kind.length > 0, `${name}: missing kind`);
+    if (allowedKinds) requireValue(allowedKinds.has(f.properties.kind), `${name}: unsupported kind ${f.properties.kind}`);
+    if (landWater) validateLandWaterProperties(f.properties, name, landWaterContractRules, requiredOsmTagKinds);
+    const requiresRings = requireRfc7946Rings && (!ringKinds || ringKinds.has(f.properties.kind));
+    if (requiresRings && ['Polygon', 'MultiPolygon'].includes(f.geometry.type)) validateRingWinding(f.geometry, name);
     if (places) {
       const p = f.properties;
       requireValue(f.geometry.type === 'Point' && f.geometry.coordinates.length === 2, `${name}: places must be points`);
@@ -566,14 +636,30 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
+  const landWaterContractRules = landWaterRules(contractsDirectory);
   requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
     if (name.endsWith('.geojson')) {
+      const isLand = name === 'land.geojson';
+      const isWater = name === 'water.geojson';
+      const allowedKinds = isLand ? landWaterContractRules.landKinds : isWater ? landWaterContractRules.waterKinds : undefined;
       const geometryTypes = sourceGeometryTypes(name);
-      const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, requireAdopted: true, contractsDirectory});
+      const count = validateCollection(JSON.parse(bytes), {
+        label: name,
+        geometryTypes,
+        requireKind: true,
+        requireAdopted: true,
+        contractsDirectory,
+        allowedKinds,
+        ringKinds: isLand ? landWaterContractRules.extractedLandKinds : undefined,
+        requireRfc7946Rings: Boolean(allowedKinds),
+        landWater: Boolean(allowedKinds),
+        requiredOsmTagKinds: landWaterContractRules.requiredOsmTagKinds,
+        landWaterContractRules
+      });
       requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
         `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
     } else {

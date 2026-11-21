@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata, validateRoads, validateRoadNodes, validateTurnRestrictions} from '../tools/check-data.mjs';
+import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata, checkData, validateRoads, validateRoadNodes, validateTurnRestrictions} from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const contractsDirectory = 'packages/contracts';
@@ -29,6 +29,126 @@ test('invalid coordinates, duplicate identities, and unknown categories are reje
 test('unclosed polygon rings are rejected', () => {
   assert.throws(() => validateCollection({type: 'FeatureCollection', features: [{type: 'Feature', properties: {},
     geometry: {type: 'Polygon', coordinates: [[[19,42],[20,42],[20,43],[19,43]]]}}]}, {contractsDirectory}), /not closed/);
+});
+
+test('land and water domain properties, kinds and RFC 7946 ring order are validated', () => {
+  const counterClockwiseHole = [[19.2, 42.2], [19.4, 42.2], [19.4, 42.4], [19.2, 42.4], [19.2, 42.2]];
+  const data = {
+    type: 'FeatureCollection',
+    entitySchemaVersion: 1,
+    features: [{
+      type: 'Feature',
+      properties: {
+        entityId: 'way/1',
+        entityVersion: 1,
+        kind: 'meadow',
+        osmTag: 'landuse=meadow',
+        name: 'Test Meadow',
+        'name:en': 'Test Meadow EN',
+        destination: true
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [[19, 42], [20, 42], [20, 43], [19, 43], [19, 42]],
+          [...counterClockwiseHole].reverse()
+        ]
+      }
+    }]
+  };
+  const options = {
+    contractsDirectory,
+    allowedKinds: new Set(['meadow']),
+    ringKinds: new Set(['meadow']),
+    requireRfc7946Rings: true,
+    landWater: true,
+    requiredOsmTagKinds: new Set(['meadow'])
+  };
+  assert.equal(validateCollection(data, options), 1);
+  for (const [mutate, expected] of [
+    [value => {value.features[0].properties.kind = 'forest';}, /unsupported kind forest/],
+    [value => {value.features[0].geometry.coordinates[0].reverse();}, /exterior must be counterclockwise/],
+    [value => {value.features[0].geometry.coordinates[1] = counterClockwiseHole;}, /hole 0 must be clockwise/],
+    [value => {delete value.features[0].properties.osmTag;}, /missing osmTag/],
+    [value => {value.features[0].properties.osmTag = 'not a tag';}, /invalid osmTag/],
+    [value => {value.features[0].properties.destination = false;}, /destination must be true/]
+  ]) {
+    const bad = structuredClone(data);
+    mutate(bad);
+    assert.throws(() => validateCollection(bad, options), expected);
+  }
+});
+
+function reviewedCheckRoot(testContext) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-source-domain-'));
+  testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const repositoryRoot = path.resolve(import.meta.dirname, '../..');
+  fs.mkdirSync(path.join(root, 'data/sources'), {recursive: true});
+  fs.mkdirSync(path.join(root, 'packages'), {recursive: true});
+  fs.symlinkSync(path.join(repositoryRoot, 'packages/contracts'), path.join(root, 'packages/contracts'));
+  fs.symlinkSync(path.join(repositoryRoot, 'data/artifacts'), path.join(root, 'data/artifacts'));
+  const provenance = JSON.parse(
+    fs.readFileSync(
+      path.join(repositoryRoot, 'data/sources/provenance.json'), 'utf8'
+    )
+  );
+  const sourceFiles = [...new Set([
+    ...Object.keys(provenance.layers), 'building-labels.geojson',
+    'places.geojson', 'transport-stops.geojson'
+  ])];
+  const supportingFiles = [
+    'building-labels.provenance.json', 'transport-stops.provenance.json',
+    'transit-network.json', 'transit-network.provenance.json',
+    'provenance.json', 'place-visibility-policy.json'
+  ];
+  for (const filename of [...sourceFiles, ...supportingFiles]) {
+    fs.symlinkSync(
+      path.join(repositoryRoot, 'data/sources', filename),
+      path.join(root, 'data/sources', filename)
+    );
+  }
+  return root;
+}
+
+test('check-data rejects unsupported kinds and reversed rings in land and water sources', testContext => {
+  const root = reviewedCheckRoot(testContext);
+  for (const filename of ['land.geojson', 'water.geojson']) {
+    const sourcePath = path.join(root, 'data/sources', filename);
+    const originalBytes = fs.readFileSync(sourcePath);
+    const collection = JSON.parse(originalBytes);
+    const featureIndex = collection.features.findIndex(feature => {
+      const isPolygon = ['Polygon', 'MultiPolygon'].includes(feature.geometry.type);
+      const kind = feature.properties.kind;
+      const isPreserved = kind === 'country' || kind === 'context';
+      return isPolygon && (filename === 'water.geojson' || !isPreserved);
+    });
+    assert.ok(featureIndex >= 0, filename);
+    const taggedIndex = collection.features.findIndex(feature => {
+      const isPolygon = ['Polygon', 'MultiPolygon'].includes(feature.geometry.type);
+      return isPolygon && typeof feature.properties.osmTag === 'string';
+    });
+    assert.ok(taggedIndex >= 0, filename);
+    const writeSource = data => {
+      fs.unlinkSync(sourcePath);
+      fs.writeFileSync(sourcePath, JSON.stringify(data));
+    };
+    const badKind = structuredClone(collection);
+    badKind.features[featureIndex].properties.kind = 'unsupported';
+    writeSource(badKind);
+    assert.throws(() => checkData(root, {contractsDirectory}), /unsupported kind unsupported/, filename);
+    const badRing = structuredClone(collection);
+    const geometry = badRing.features[featureIndex].geometry;
+    const polygon = geometry.type === 'Polygon' ? geometry.coordinates : geometry.coordinates[0];
+    polygon[0].reverse();
+    writeSource(badRing);
+    assert.throws(() => checkData(root, {contractsDirectory}), /exterior must be counterclockwise/, filename);
+    const badTag = structuredClone(collection);
+    delete badTag.features[taggedIndex].properties.osmTag;
+    writeSource(badTag);
+    assert.throws(() => checkData(root, {contractsDirectory}), /missing osmTag/, filename);
+    fs.unlinkSync(sourcePath);
+    fs.writeFileSync(sourcePath, originalBytes);
+  }
 });
 
 test('bus stops preserve unique source IDs and reject invalid locations or names', () => {

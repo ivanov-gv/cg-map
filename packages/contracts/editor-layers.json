@@ -115,16 +115,44 @@
     "land.geojson": {
       "operations": ["modify"],
       "geometries": ["Polygon"],
-      "editableKinds": ["park"],
-      "inspectOnlyReason": "Country shapes in this file mirror their source context and need a data-owned refresh.",
-      "properties": {"name": {"maxLength": 120}}
+      "editableKinds": [
+        "park",
+        "garden",
+        "woods",
+        "meadow",
+        "grass",
+        "scrub",
+        "sports",
+        "cemetery",
+        "playground"
+      ],
+      "inspectOnlyReason": "Country and context outlines mirror their sources and need a data-owned refresh.",
+      "properties": {
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120}
+      }
     },
     "water.geojson": {
       "operations": ["modify"],
       "geometries": ["Polygon", "LineString"],
-      "editableKinds": ["water", "river"],
+      "editableKinds": [
+        "lake",
+        "river",
+        "reservoir",
+        "pond",
+        "basin",
+        "water",
+        "stream",
+        "canal",
+        "ditch",
+        "drain",
+        "coastline"
+      ],
       "inspectOnlyReason": "The ocean polygon is derived by the data pipeline.",
-      "properties": {"name": {"maxLength": 120}}
+      "properties": {
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120}
+      }
     },
     "context-countries.geojson": {
       "operations": [],

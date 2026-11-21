@@ -92,6 +92,30 @@ for (const prefix of ['/', '/cg-map/']) {
   });
 }
 
+test('every extracted green kind keeps the park fill', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const land = style.layers.find(layer => layer.id === 'land');
+  assert.deepEqual(land.paint['fill-color'], [
+    'case',
+    ['in', ['get', 'kind'], ['literal', [
+      'park', 'garden', 'woods', 'meadow', 'grass',
+      'scrub', 'sports', 'cemetery', 'playground'
+    ]]],
+    '#dce6c9',
+    '#efeee2'
+  ]);
+});
+
+test('coastline lines are not styled as waterways', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const rivers = style.layers.find(layer => layer.id === 'rivers');
+  assert.deepEqual(rivers.filter, [
+    'all',
+    ['==', ['geometry-type'], 'LineString'],
+    ['!=', ['get', 'kind'], 'coastline']
+  ]);
+});
+
 test('map lifecycle installs shared controls and tears down observers/listeners', async t => {
   let resizeCallback;
   let didDisconnect = false;

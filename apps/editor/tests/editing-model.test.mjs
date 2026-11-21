@@ -120,12 +120,19 @@ test('files and kinds outside the rules stay inspect-only, with a reason', () =>
   const country = {type: 'Feature', properties: {kind: 'context'}, geometry: {type: 'Polygon', coordinates: [square]}};
   const land = featureCapabilities(country, rules.layers['land.geojson']);
   assert.equal(land.canModify, false);
-  assert.match(land.lockReason, /Country shapes/);
-  const park = {...country, properties: {kind: 'park'}};
-  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canModify, true);
+  assert.match(land.lockReason, /Country and context/);
+  for (const kind of ['park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground']) {
+    assert.equal(featureCapabilities({...country, properties: {kind}}, rules.layers['land.geojson']).canModify, true);
+  }
+  const namedMeadow = {...country, properties: {kind: 'meadow', name: 'Meadow', 'name:en': 'Meadow EN'}};
+  assert.equal(featureProblem(namedMeadow, rules.layers['land.geojson'], levels), null);
+  const waterKinds = ['lake', 'river', 'reservoir', 'pond', 'basin', 'water', 'stream', 'canal', 'ditch', 'drain', 'coastline'];
+  for (const kind of waterKinds) {
+    assert.equal(featureCapabilities({...country, properties: {kind}}, rules.layers['water.geojson']).canModify, true);
+  }
   const ocean = {type: 'Feature', properties: {kind: 'ocean'}, geometry: {type: 'MultiPolygon', coordinates: []}};
   assert.equal(featureCapabilities(ocean, rules.layers['water.geojson']).canModify, false);
-  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canDelete, false);
+  assert.equal(featureCapabilities(country, rules.layers['land.geojson']).canDelete, false);
 });
 
 test('an edit keeps unknown fields, and returning to the source state leaves no change', () => {
