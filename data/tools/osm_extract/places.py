@@ -1,4 +1,4 @@
-"""Point directory: local POIs, countrywide attractions and standalone points."""
+"""Point directory: local POIs, attractions and standalone points."""
 
 from shapely.geometry import shape
 from shapely.strtree import STRtree
@@ -16,10 +16,6 @@ OSM_SOURCE = 'OpenStreetMap'
 FOOD_AMENITIES = {
     'restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'ice_cream'
 }
-SIGHT_TOURISM = {
-    'attraction', 'museum', 'viewpoint', 'artwork', 'gallery'
-}
-SIGHT_HISTORIC = {'castle', 'monument', 'ruins', 'memorial'}
 STAY_TOURISM = {
     'hotel', 'hostel', 'guest_house', 'motel', 'camp_site'
 }
@@ -36,10 +32,15 @@ STANDALONE_HISTORIC = {
 STANDALONE_TOURISM = {
     'viewpoint', 'artwork', 'attraction', 'museum', 'gallery', 'information',
 }
-STANDALONE_AMENITY = {
-    'fountain', 'place_of_worship', 'townhall', 'theatre',
+# amenity=* values that are standalone points and map to 'sights'.
+STANDALONE_AMENITY_SIGHTS = {'fountain'}
+# These need categories the contract does not have (culture, worship,
+# public), so they stay out of the extract unless sight tags promote them.
+STANDALONE_AMENITY_NO_CATEGORY = {
+    'place_of_worship', 'townhall', 'theatre',
     'cinema', 'library', 'arts_centre', 'community_centre',
 }
+STANDALONE_AMENITY = STANDALONE_AMENITY_SIGHTS | STANDALONE_AMENITY_NO_CATEGORY
 STANDALONE_BARRIER = {'gate'}
 STANDALONE_MAN_MADE = {'tower', 'lighthouse', 'bridge'}
 STANDALONE_KEYS = {
@@ -49,6 +50,19 @@ STANDALONE_KEYS = {
     'barrier': STANDALONE_BARRIER,
     'man_made': STANDALONE_MAN_MADE,
 }
+
+# Tags that promote certain amenity kinds to 'sights' even when their
+# default category is not yet defined.
+SIGHT_PROMOTION_TAGS = {'tourism', 'heritage', 'historic'}
+
+
+def has_sight_promotion(tags):
+    """Check if a place has a tag that promotes it to 'sights'."""
+    for key in SIGHT_PROMOTION_TAGS:
+        if tags.get(key):
+            return True
+    return False
+
 
 # Facts copied from OSM tags. contact:* keys normalise onto the plain key
 # only when the plain key is absent (e.g. contact:phone -> phone).
@@ -67,19 +81,24 @@ CONTACT_NORMALISATION = {
 def category_for(tags):
     """Return the display category an OSM feature supports, or a blank.
 
-    Standalone points keep the five existing categories: they are sights to
-    a visitor, so extending the published category contract is unnecessary.
+    Only the five contract categories are used. Public and cultural amenity
+    kinds would need new categories, so they drop out unless a sight tag
+    (tourism=attraction, heritage=*, historic=*) promotes them to sights.
     """
     amenity = tags.get('amenity', '')
     tourism = tags.get('tourism', '')
     historic = tags.get('historic', '')
+    barrier = tags.get('barrier', '')
+    man_made = tags.get('man_made', '')
 
+    is_standalone_sight = (
+        historic in STANDALONE_HISTORIC or tourism in STANDALONE_TOURISM
+        or barrier in STANDALONE_BARRIER or man_made in STANDALONE_MAN_MADE
+        or amenity in STANDALONE_AMENITY_SIGHTS
+    )
     if amenity in FOOD_AMENITIES:
         return 'food'
-    is_standalone = any(
-        tags.get(key) in values for key, values in STANDALONE_KEYS.items()
-    )
-    if tourism in SIGHT_TOURISM or historic in SIGHT_HISTORIC or is_standalone:
+    if is_standalone_sight:
         return 'sights'
     if tags.get('shop'):
         return 'shops'
@@ -87,6 +106,8 @@ def category_for(tags):
         return 'stay'
     if amenity in ESSENTIAL_AMENITIES:
         return 'essentials'
+    if amenity in STANDALONE_AMENITY_NO_CATEGORY and has_sight_promotion(tags):
+        return 'sights'
     return ''
 
 

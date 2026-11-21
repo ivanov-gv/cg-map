@@ -69,6 +69,7 @@
   <node id="1012" version="1" lat="42.443" lon="19.253">
     <tag k="name" v="Test Library"/>
     <tag k="amenity" v="library"/>
+    <tag k="heritage" v="yes"/>
     <tag k="opening_hours" v="Mo-Fr 09:00-18:00"/>
     <tag k="contact:phone" v="+382 20 123 456"/>
     <tag k="wheelchair" v="yes"/>
@@ -86,6 +87,7 @@
     <tag k="name" v="Test Church"/>
     <tag k="amenity" v="place_of_worship"/>
     <tag k="religion" v="christian"/>
+    <tag k="heritage" v="yes"/>
     <tag k="website" v="https://example.com"/>
     <tag k="contact:email" v="info@example.com"/>
   </node>

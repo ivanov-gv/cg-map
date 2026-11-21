@@ -27,9 +27,12 @@ from osm_extract.places import (  # noqa: E402
     collect_facts,
     is_standalone_kind,
     get_kind,
+    has_sight_promotion,
     STANDALONE_HISTORIC,
     STANDALONE_TOURISM,
     STANDALONE_AMENITY,
+    STANDALONE_AMENITY_SIGHTS,
+    STANDALONE_AMENITY_NO_CATEGORY,
     STANDALONE_BARRIER,
     STANDALONE_MAN_MADE,
 )
@@ -1147,11 +1150,38 @@ class StandalonePlacesTest(unittest.TestCase):
                 tags = {'name': 'Test', 'tourism': kind}
                 self.assertEqual(category_for(tags), 'sights')
 
-    def test_standalone_amenity_kinds_map_to_sights(self):
-        for kind in STANDALONE_AMENITY:
+    def test_standalone_amenity_sights_map_to_sights(self):
+        """Only fountain maps to sights without extra tags."""
+        for kind in STANDALONE_AMENITY_SIGHTS:
             with self.subTest(kind=kind):
                 tags = {'name': 'Test', 'amenity': kind}
                 self.assertEqual(category_for(tags), 'sights')
+
+    def test_standalone_amenity_no_category_returns_empty(self):
+        """cinema, library, etc. return no category without sight promotion."""
+        for kind in STANDALONE_AMENITY_NO_CATEGORY:
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'amenity': kind}
+                self.assertEqual(category_for(tags), '')
+
+    def test_standalone_amenity_promoted_to_sights(self):
+        """place_of_worship/theatre/arts_centre become sights with heritage."""
+        for kind in ('place_of_worship', 'theatre', 'arts_centre'):
+            for promo_tag, promo_value in [
+                ('tourism', 'attraction'),
+                ('heritage', 'yes'),
+                ('historic', 'yes'),
+            ]:
+                with self.subTest(kind=kind, tag=promo_tag):
+                    tags = {'name': 'Test', 'amenity': kind, promo_tag: promo_value}
+                    self.assertEqual(category_for(tags), 'sights')
+
+    def test_has_sight_promotion_detects_promotion_tags(self):
+        self.assertTrue(has_sight_promotion({'tourism': 'attraction'}))
+        self.assertTrue(has_sight_promotion({'heritage': 'yes'}))
+        self.assertTrue(has_sight_promotion({'historic': 'monument'}))
+        self.assertFalse(has_sight_promotion({'amenity': 'library'}))
+        self.assertFalse(has_sight_promotion({}))
 
     def test_standalone_barrier_kinds_map_to_sights(self):
         for kind in STANDALONE_BARRIER:
