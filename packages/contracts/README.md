@@ -29,9 +29,16 @@ Version breaking changes deliberately. This package is a contract boundary, not 
 implementation helpers.
 
 `stops.schema.json` defines static stop snapshot features. Preserve upstream stopId as feature id; IDs must be unique
-within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro.
-data/tools/check-data.mjs enforces these rules and provenance integrity; browser acceptance verifies selection and
-offline rendering.
+within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro. Each stop may
+carry optional `lines` (sorted route numbers serving the stop), `side` (`left` or `right` of the nearest road), and
+`name:en` (only where a source publishes it). data/tools/check-data.mjs enforces these rules and provenance integrity;
+browser acceptance verifies selection and offline rendering.
+
+`transit-routes.schema.json` defines the published bus route network: version, retrieval time, source, and an array of
+routes. Each route has a number, name, network type (`bus` for city lines, `intercity` for OSM intercity routes),
+optional colour (hex format), and ordered directions with stop IDs. City routes use ePodgorica stop IDs; intercity
+routes use OSM node IDs (`node/N`). The producer validates that city route stops exist in the stops file and that stop
+`lines` match the routes. Intercity routes carry OSM relation identity and version.
 
 `transit-network.schema.json` describes the published version-1 representative bus network: source date, a stop-ID
 dictionary (names and WGS84 coordinates), and forward ordered stop IDs with equally sized monotonic relative seconds per

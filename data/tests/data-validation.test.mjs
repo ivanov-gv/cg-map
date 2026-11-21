@@ -15,7 +15,9 @@ import {
   validateRoadNodes,
   validateRoads,
   validateStops,
+  validateStopsAndRoutes,
   validateTransitNetwork,
+  validateTransitRoutes,
   validateTurnRestrictions
 } from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
@@ -882,4 +884,63 @@ test('the editor bundle keeps its thirteen editable sources and excludes relief 
   assert.equal(manifest.layers.length, 13);
   assert.ok(manifest.layers.every(layer => !reliefFiles.includes(layer.filename)));
   assert.deepEqual(fs.readdirSync(directory).filter(name => name.endsWith('.geojson')).sort(),
-    manifest.layers.map(layer => layer.filename).sort());});
+    manifest.layers.map(layer => layer.filename).sort());
+});
+
+// --- Transit route validation tests ---
+
+test('transit routes validate structure, network types, and direction stops', () => {
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  assert.ok(validateTransitRoutes(routes) > 0);
+  // Check city and intercity routes exist
+  const cityRoutes = routes.routes.filter(r => r.network === 'bus');
+  const intercityRoutes = routes.routes.filter(r => r.network === 'intercity');
+  assert.ok(cityRoutes.length > 0, 'Expected city routes');
+  assert.ok(intercityRoutes.length > 0, 'Expected intercity routes');
+  // Intercity routes must have OSM identity
+  for (const route of intercityRoutes) {
+    assert.match(route.osm_id, /^relation\/\d+$/, 'Intercity route must have OSM relation ID');
+    assert.ok(Number.isInteger(route.osm_version) && route.osm_version >= 1, 'Intercity route must have OSM version');
+  }
+});
+
+test('transit routes reject duplicate numbers, invalid colours, and missing fields', () => {
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  for (const mutate of [
+    data => { data.routes.push(structuredClone(data.routes[0])); }, // duplicate number
+    data => { data.routes[0].colour = 'red'; }, // invalid colour format
+    data => { delete data.routes[0].number; }, // missing number
+    data => { data.routes[0].network = 'tram'; }, // invalid network
+    data => { data.routes[0].directions[0].stops = ['a']; }, // fewer than 2 stops
+  ]) {
+    const bad = structuredClone(routes);
+    mutate(bad);
+    assert.throws(() => validateTransitRoutes(bad));
+  }
+});
+
+test('stop lines match routes and route stops exist in stops file', () => {
+  const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  // This should not throw — data is consistent
+  validateStopsAndRoutes(stops, routes);
+});
+
+test('stop-routes cross-check catches mismatched lines', () => {
+  const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  // Add a fake line to a stop
+  const stopWithFakeLine = structuredClone(stops);
+  const firstStopWithLines = stopWithFakeLine.features.find(f => f.properties?.lines);
+  if (firstStopWithLines) {
+    firstStopWithLines.properties.lines.push('FAKE99');
+    assert.throws(() => validateStopsAndRoutes(stopWithFakeLine, routes), /has line FAKE99/);
+  }
+  // Remove a line from a stop
+  const stopMissingLine = structuredClone(stops);
+  const firstStopWithLines2 = stopMissingLine.features.find(f => f.properties?.lines && f.properties.lines.length > 0);
+  if (firstStopWithLines2) {
+    firstStopWithLines2.properties.lines.shift();
+    assert.throws(() => validateStopsAndRoutes(stopMissingLine, routes), /missing line/);
+  }
+});

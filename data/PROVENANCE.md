@@ -94,10 +94,12 @@ m² and 10,000 m² tolerances. The edge-construction rule is recorded in
 ## Bus stops
 
 `data/sources/transport-stops.geojson` contains 719 ePodgorica stops retrieved 2026-10-18 from the public stops/all
-endpoint. Source IDs and coordinates are retained; only the published stopId, stopName (as name), longitude and latitude
-are kept. Its independent provenance JSON records the endpoint, retrieval time, hash and count. It is a static snapshot,
-separate from the OSM layers and live vehicles. No explicit reuse license was found; attribution is retained without
-assigning MIT or ODbL to this source.
+endpoint, enriched with route lines from the transit network, side-of-road position from the nearest road, and `name:en`
+where a source publishes one. Source IDs and coordinates are retained; each stop carries `stopId`, `name`, optional
+`lines` (sorted route numbers serving the stop), optional `side` (`left` or `right` of the nearest road within 30 m),
+and optional `name:en`. Its independent provenance JSON records the endpoint, retrieval time, hash and count. It is a
+static snapshot, separate from the OSM layers and live vehicles. No explicit reuse license was found; attribution is
+retained without assigning MIT or ODbL to this source.
 
 ## Transit route patterns
 
@@ -106,6 +108,16 @@ stop coordinates and representative ordered route patterns with relative running
 direction/headsign/stop count from weekday, Saturday, and Sunday trips. They are not an exhaustive timetable or service
 calendar. Refresh with data/tools/import-transit.py; raw API responses are temporary and excluded from Git. Source URLs,
 sampling limits, counts, hash, and license status are recorded.
+
+## Transit routes
+
+`data/sources/transit-routes.json` and `transit-routes.provenance.json` record the published bus lines with their
+directions and ordered stops. City routes (network `bus`) come from the ePodgorica data: 29 lines with bidirectional
+patterns. Intercity routes (network `intercity`) come from OSM `route=bus` relations that run outside Podgorica: 12
+lines with OSM relation IDs and versions. Each route records number, name, network type, optional colour (from OSM
+`colour` tag; none currently published), and ordered stop IDs per direction. City route stops use ePodgorica stop IDs;
+intercity route stops use OSM node IDs. Build with data/tools/build-transit-routes.py. No explicit reuse license was
+found; attribution is retained.
 
 ## Building address labels
 

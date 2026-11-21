@@ -378,6 +378,81 @@ export function validateTransitNetwork(data) {
   }
   return data.patterns.length;
 }
+
+export function validateTransitRoutes(data) {
+  requireValue(data?.version === 1 && Array.isArray(data.routes) && data.routes.length > 0, 'Invalid transit routes');
+  requireValue(Number.isFinite(Date.parse(data.retrievedAt)) && typeof data.source === 'string' && data.source.length > 0, 'Transit routes metadata missing');
+  const routeNumbers = new Set();
+  for (const route of data.routes) {
+    const routeLabel = `route ${route.number || '(unknown)'}`;
+    requireValue(typeof route.number === 'string' && route.number.length > 0, `${routeLabel}: missing number`);
+    requireValue(!routeNumbers.has(route.number), `${routeLabel}: duplicate route number`);
+    routeNumbers.add(route.number);
+    requireValue(typeof route.name === 'string', `${routeLabel}: missing name`);
+    requireValue(route.network === 'bus' || route.network === 'intercity', `${routeLabel}: invalid network type`);
+    if (route.colour) {
+      requireValue(/^#[0-9a-fA-F]{6}$/.test(route.colour), `${routeLabel}: invalid colour format`);
+    }
+    if (route.network === 'intercity') {
+      requireValue(typeof route.osm_id === 'string' && /^relation\/\d+$/.test(route.osm_id), `${routeLabel}: missing OSM ID`);
+      requireValue(Number.isInteger(route.osm_version) && route.osm_version >= 1, `${routeLabel}: invalid OSM version`);
+    }
+    requireValue(Array.isArray(route.directions) && route.directions.length >= 1, `${routeLabel}: missing directions`);
+    for (const direction of route.directions) {
+      requireValue(typeof direction.headsign === 'string', `${routeLabel}: direction missing headsign`);
+      requireValue(Array.isArray(direction.stops) && direction.stops.length >= 2, `${routeLabel}: direction has fewer than 2 stops`);
+      for (const stopId of direction.stops) {
+        requireValue(typeof stopId === 'string' && stopId.length > 0, `${routeLabel}: empty stop ID in direction`);
+      }
+    }
+  }
+  return data.routes.length;
+}
+
+// Cross-validate that stop lines match routes and route stops exist in the stops file.
+export function validateStopsAndRoutes(stopsData, routesData) {
+  // Build set of stop IDs from the stops GeoJSON
+  const stopIds = new Set();
+  for (const feature of stopsData.features) {
+    stopIds.add(feature.id);
+  }
+
+  // Build expected lines per stop from routes
+  const expectedLines = {};
+  for (const route of routesData.routes) {
+    for (const direction of route.directions) {
+      for (const stopId of direction.stops) {
+        // Only check city route stops (epodgorica IDs) against the stops file
+        if (stopId.startsWith('node/')) {
+          continue; // Intercity OSM node IDs are not in transport-stops.geojson
+        }
+        expectedLines[stopId] = expectedLines[stopId] || new Set();
+        expectedLines[stopId].add(route.number);
+      }
+    }
+  }
+
+  // Check that every city route stop exists in the stops file
+  for (const stopId of Object.keys(expectedLines)) {
+    requireValue(stopIds.has(stopId), `Route references stop ${stopId} not in transport-stops.geojson`);
+  }
+
+  // Check that lines on stops match the routes
+  for (const feature of stopsData.features) {
+    const stopId = feature.id;
+    const stopLines = feature.properties?.lines;
+    if (!stopLines) continue;
+    const expected = expectedLines[stopId];
+    if (!expected) continue;
+    const actual = new Set(stopLines);
+    for (const line of expected) {
+      requireValue(actual.has(line), `Stop ${stopId} missing line ${line} from routes`);
+    }
+    for (const line of actual) {
+      requireValue(expected.has(line), `Stop ${stopId} has line ${line} not in routes`);
+    }
+  }
+}
 function insideRing(point, ring) {
   let inside=false;
   for(let i=0,j=ring.length-1;i<ring.length;j=i++) {
@@ -852,8 +927,16 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 
   const stopBytes = fs.readFileSync(path.join(root, 'data/sources/transport-stops.geojson'));
   const stopProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transport-stops.provenance.json')));
-  const stopCount = validateStops(JSON.parse(stopBytes), {requireAdopted: true, contractsDirectory});
+  const stopsData = JSON.parse(stopBytes);
+  const stopCount = validateStops(stopsData, {requireAdopted: true, contractsDirectory});
   requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
+
+  // Validate transit routes and cross-check with stops
+  const routesBytes = fs.readFileSync(path.join(root, 'data/sources/transit-routes.json'));
+  const routesProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transit-routes.provenance.json')));
+  const routesData = JSON.parse(routesBytes);
+  requireValue(validateTransitRoutes(routesData) === routesProvenance.routes && routesBytes.length === routesProvenance.bytes && crypto.createHash('sha256').update(routesBytes).digest('hex') === routesProvenance.sha256, 'Transit routes provenance mismatch');
+  validateStopsAndRoutes(stopsData, routesData, transit);
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
   const landWaterContractRules = landWaterRules(contractsDirectory);
