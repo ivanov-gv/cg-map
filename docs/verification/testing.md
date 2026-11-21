@@ -112,14 +112,14 @@ Browser tests are split by area. CI builds once, then runs each selected area as
 Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests:
 see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
 
-| Area        | Specs in apps/web/tests/e2e                     | Covers                                                  | Code it depends on most                                                       |
-| ----------- | ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| shell       | shell.spec.mjs, updates.spec.mjs                | Startup, offline download, updates, hosting, data modes | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts       |
-| journeys    | journeys.spec.mjs, in three jobs                | Point selection, routes, transport, buildings, map taps | routing, transport, point-selection, object-selection, map-taps, data transit |
-| interface   | interface.spec.mjs, in eight jobs               | Search, dock, place card, phone keyboard, focus zone    | interface.js, index.html, style.css                                           |
-| discover    | discover.spec.mjs                               | First view, scale, location states                      | position.js, data/sources/places*, contracts                                  |
-| poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs | POI levels, chooser                                     | data/sources/places*, contracts                                               |
-| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project   | POI levels, chooser                                     | data/sources/places*, contracts                                               |
+| Area        | Specs in apps/web/tests/e2e                                | Covers                                                                      | Code it depends on most                                                                                  |
+| ----------- | ---------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| shell       | shell.spec.mjs, updates.spec.mjs                           | Startup, offline download, updates, hosting, data modes                     | sw.js, offline.js, data-mode.js, tools/, platform/pages, data/artifacts                                  |
+| journeys    | journeys.spec.mjs, in three jobs                           | Point selection, routes, transport, buildings, map taps                     | routing, transport, point-selection, object-selection, map-taps, data transit                            |
+| interface   | interface.spec.mjs, search-results.spec.mjs, in eight jobs | Search results and highlights, dock, place card, phone keyboard, focus zone | core.js, public-map-layers.js, place-details.js, place-selection.js, interface.js, index.html, style.css |
+| discover    | discover.spec.mjs                                          | First view, scale, location states                                          | position.js, data/sources/places*, contracts                                                             |
+| poi-desktop | poi-visibility.spec.mjs, root-desktop, two jobs            | POI levels, chooser                                                         | data/sources/places*, contracts                                                                          |
+| poi-mobile  | poi-visibility.spec.mjs, pages-mobile project              | POI levels, chooser                                                         | data/sources/places*, contracts                                                                          |
 
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
 every area, because every browser test boots them.

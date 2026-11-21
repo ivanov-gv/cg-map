@@ -1,0 +1,684 @@
+import {test, expect} from '@playwright/test';
+import {matchesStreetName, normalizeSearchText} from '../../src/core.js';
+import {
+  CAMERA_HOLD_MILLISECONDS,
+  camera,
+  closeCard,
+  closeMenu,
+  expectCameraToHold,
+  expectToHold,
+  mapIdle,
+  ready,
+  settled,
+  stubRouting,
+  tapMapCenter
+} from './helpers.mjs';
+
+const CENTRE = [19.2607, 42.4419];
+const JEREVANSKA_CENTRE = [19.250864, 42.422188];
+const JEREVANSKA_LABEL = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: JEREVANSKA_CENTRE},
+  properties: {
+    kind: 'building',
+    footprintIndex: 7,
+    'addr:housenumber': '4',
+    'addr:street': 'Jerevanska'
+  }
+};
+const ADDRESS = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: CENTRE},
+  properties: {
+    kind: 'building',
+    footprintIndex: 4,
+    'addr:housenumber': '18',
+    'addr:street': 'Bulevar Stanka Dragojevića'
+  }
+};
+// The uncovered focus zone differs by viewport, so each project places its unique building at that zone's centre.
+const FOCUS_COORDINATES = {
+  'root-desktop': [19.26266069478649, 42.44174956782041],
+  'pages-mobile': [19.26054979629413, 42.44126264012965]
+};
+const secondAddress = () => ({
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: FOCUS_COORDINATES[test.info().project.name]},
+  properties: {
+    kind: 'building',
+    footprintIndex: 5,
+    'addr:housenumber': '13',
+    'addr:street': 'Njegoševa ulica'
+  }
+});
+const PLACE = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26065, 42.44195]},
+  properties: {id: 'node/1', name: 'Bulevar Cafe', category: 'food', kind: 'cafe'}
+};
+const SECOND_PLACE = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26085, 42.44205]},
+  properties: {id: 'node/2', name: 'Bulevar Market', category: 'food', kind: 'market'}
+};
+const LOW_LEVEL_MATCH = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26068, 42.44192]},
+  properties: {
+    id: 'node/3',
+    name: 'Threshold Cafe',
+    category: 'food',
+    kind: 'cafe',
+    visibilityLevel: 1
+  }
+};
+const HIGH_LEVEL_MATCH = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.26095, 42.44208]},
+  properties: {
+    id: 'node/4',
+    name: 'Threshold Market',
+    category: 'food',
+    kind: 'market',
+    visibilityLevel: 5
+  }
+};
+const FAR_ADDRESS = {
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.8, 42.8]},
+  properties: {
+    kind: 'building',
+    footprintIndex: 6,
+    'addr:housenumber': '77',
+    'addr:street': 'Planinska ulica'
+  }
+};
+const MANY_ADDRESSES = Array.from({length: 45}, (_, index) => ({
+  type: 'Feature',
+  geometry: {type: 'Point', coordinates: [19.2607 + index * 0.00002, 42.4419]},
+  properties: {
+    kind: 'building',
+    footprintIndex: 1000 + index,
+    'addr:housenumber': '900',
+    'addr:street': 'Testna ulica'
+  }
+}));
+
+const highlightState = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    return {
+      buildings: map.queryRenderedFeatures({layers: ['search-building-outline']}).map(feature => feature.id),
+      rings: map
+        .queryRenderedFeatures({layers: ['search-place-rings']})
+        .map(feature => feature.properties.markerKey),
+      buildingFilter: map.getFilter('search-building-outline'),
+      buildingColor: map.getPaintProperty('search-building-outline', 'line-color'),
+      ringColor: map.getPaintProperty('search-place-rings', 'circle-stroke-color'),
+      searchGreen: getComputedStyle(document.documentElement).getPropertyValue('--search-highlight').trim()
+    };
+  });
+// Expands the rendered marker layers to the listing identities used by the result list and the ring comparison.
+const renderedPlaceIds = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    const layers = map
+      .getStyle()
+      .layers.map(layer => layer.id)
+      .filter(id => id.startsWith('place-icons-') || id === 'search-place');
+    return [
+      ...new Set(map.queryRenderedFeatures({layers}).flatMap(feature => JSON.parse(feature.properties.activeIds)))
+    ].sort();
+  });
+const ROAD_LAYERS = [
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+];
+// Street candidates come from rendered road lines and loaded address labels; the app's matcher decides which names
+// become rows, so the expected set follows both the view and the query.
+const streetNamesForQuery = async (page, query) => {
+  const renderedRoadNames = await page.evaluate(
+    ({layers}) => [
+      ...new Set(
+        window.kompasDebug.map
+          .queryRenderedFeatures({layers})
+          .filter(feature => ['LineString', 'MultiLineString'].includes(feature.geometry?.type))
+          .map(feature => feature.properties.name)
+          .filter(name => typeof name === 'string')
+      )
+    ],
+    {layers: ROAD_LAYERS}
+  );
+  const labelStreetNames = [
+    ADDRESS,
+    secondAddress(),
+    FAR_ADDRESS,
+    JEREVANSKA_LABEL,
+    ...MANY_ADDRESSES
+  ].map(feature => feature.properties['addr:street']);
+  return [...new Set([...renderedRoadNames, ...labelStreetNames])]
+    .filter(name => matchesStreetName(name, query))
+    .sort();
+};
+// Mirrors the row id rule in core.js so a matching street name still pins its exact Street row identity.
+const streetRowIds = names =>
+  names
+    .map(name => `street/${normalizeSearchText(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`)
+    .sort();
+// The explicit-filter marker layer is absent on older builds, so report an empty set instead of throwing there.
+const renderedResultMarkerIds = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    if (!map.getLayer('search-result-places')) return [];
+    return [
+      ...new Set(
+        map
+          .queryRenderedFeatures({layers: ['search-result-places']})
+          .flatMap(feature => JSON.parse(feature.properties.activeIds))
+      )
+    ].sort();
+  });
+// Mirrors the app's footprint filter contract without relying on the expression's position in the array.
+const footprintFilter = footprints => ['in', ['id'], ['literal', footprints]];
+const isInView = (page, coordinates) =>
+  page.evaluate(point => window.kompasDebug.map.getBounds().contains(point), coordinates);
+const detailsLines = page => page.locator('#place-details p.detail').allInnerTexts();
+// Existing place/building ordering assertions stay meaningful when a street row joins the same result set.
+const nonStreetRowIds = page =>
+  page.locator('.result:not([data-kind="street"])').evaluateAll(rows => rows.map(row => row.dataset.id));
+const streetHighlight = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    return {
+      filter: map.getFilter('search-street-outline'),
+      color: map.getPaintProperty('search-street-outline', 'line-color'),
+      names: [
+        ...new Set(
+          map
+            .queryRenderedFeatures({layers: ['search-street-outline']})
+            .map(feature => feature.properties.name)
+        )
+      ]
+    };
+  });
+const selectedRoad = page =>
+  page.evaluate(() => {
+    const map = window.kompasDebug.map;
+    return {
+      filter: map.getFilter('selected-roads-outline'),
+      color: map.getPaintProperty('selected-roads-outline', 'line-color'),
+      names: [
+        ...new Set(
+          map
+            .queryRenderedFeatures({layers: ['selected-roads-outline']})
+            .map(feature => feature.properties.name)
+        )
+      ]
+    };
+  });
+// A rendered segment gives the same kind, name and details as a tap on the street itself.
+const renderedRoadPoint = page =>
+  page.evaluate(
+    ({name, layers}) => {
+      const map = window.kompasDebug.map;
+      const bounds = map.getCanvas().getBoundingClientRect();
+      for (const feature of map.queryRenderedFeatures({layers})) {
+        if (feature.properties.name !== name) continue;
+        if (!['LineString', 'MultiLineString'].includes(feature.geometry.type)) continue;
+        const lines =
+          feature.geometry.type === 'LineString'
+            ? [feature.geometry.coordinates]
+            : feature.geometry.coordinates;
+        for (const coordinates of lines.flat()) {
+          const point = map.project(coordinates);
+          const canvas = map.getCanvas();
+          const isOnCanvas =
+            point.x >= 0 && point.y >= 0 && point.x <= canvas.clientWidth && point.y <= canvas.clientHeight;
+          if (!isOnCanvas) continue;
+          const screenPoint = {x: bounds.left + point.x, y: bounds.top + point.y};
+          if (document.elementFromPoint(screenPoint.x, screenPoint.y) !== map.getCanvas()) continue;
+          const hits = map.queryRenderedFeatures([point.x, point.y], {
+            layers: ['buildings', ...layers]
+          });
+          const hasRoad = hits.some(hit => layers.includes(hit.layer.id) && hit.properties.name === name);
+          const hasBuilding = hits.some(hit => hit.layer.id === 'buildings');
+          if (hasRoad && !hasBuilding) return screenPoint;
+        }
+      }
+      return null;
+    },
+    {name: 'Jerevanska', layers: ROAD_LAYERS}
+  );
+
+test.use({serviceWorkers: 'block'});
+
+test.beforeEach(async ({page}) => {
+  const address = secondAddress();
+  await page.addInitScript(() => {
+    localStorage.clear();
+    // Keep startup's update handle without installing a shell that can re-navigate mid-test.
+    Object.defineProperty(navigator.serviceWorker, 'register', {
+      configurable: true,
+      value: async () => ({update: async () => {}})
+    });
+  });
+  await stubRouting(page);
+  await page.route('**/data/building-labels.geojson', route =>
+    route.fulfill({
+      json: {
+        type: 'FeatureCollection',
+        features: [ADDRESS, address, FAR_ADDRESS, JEREVANSKA_LABEL, ...MANY_ADDRESSES]
+      }
+    })
+  );
+  await page.route('**/data/places.geojson', route =>
+    route.fulfill({
+      json: {
+        type: 'FeatureCollection',
+        features: [PLACE, SECOND_PLACE, LOW_LEVEL_MATCH, HIGH_LEVEL_MATCH]
+      }
+    })
+  );
+  await ready(page);
+  await page.evaluate(coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 17}), CENTRE);
+});
+
+test('result rows identify places, buildings and addresses and list the nearest first', {tag: '@phone'}, async ({
+  page
+}) => {
+  await mapIdle(page);
+  const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+  expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
+  await page.locator('#search').fill('bulevar');
+  await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
+  await expect(page.locator('.result[data-id="footprint/4"]')).toHaveAttribute('data-kind', 'address');
+  await expect(page.locator('.result[data-id="footprint/4"] .symbol')).toHaveText('📍');
+  await expect(page.locator('.result[data-id="node/1"]')).toHaveAttribute('data-kind', 'place');
+  await expect(page.locator('.result[data-id="node/1"] .symbol')).toHaveText('C');
+  await expect(page.locator('.result[data-id="node/2"]')).toHaveAttribute('data-kind', 'place');
+  await expect(page.locator('.result[data-id="node/2"] .symbol')).toHaveText('M');
+  expect((await page.locator('.result[data-kind="street"] strong').allInnerTexts()).sort()).toEqual(
+    expectedStreetNames
+  );
+  expect(
+    await page.locator('.result[data-kind="street"]').evaluateAll(rows => rows.map(row => row.dataset.id).sort())
+  ).toEqual(streetRowIds(expectedStreetNames));
+  expect(await nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+
+  await page.locator('#search').fill('13');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await expect(page.locator('.result')).toHaveAttribute('data-kind', 'building');
+  await expect(page.locator('.result').locator('.symbol')).toHaveText('🏢');
+  await expect(page.locator('.result').locator('small')).toHaveText('Building');
+});
+
+test('one street row highlights its road green and opens the red Road card', async ({page}) => {
+  await page.evaluate(center => window.kompasDebug.map.jumpTo({center, zoom: 17}), JEREVANSKA_CENTRE);
+  await mapIdle(page);
+  await closeMenu(page);
+  const roadPoint = await renderedRoadPoint(page);
+  expect(roadPoint).not.toBeNull();
+  // The map ignores taps for 500 ms after a camera move; wait out that tap-drag window before the reference tap.
+  await page.waitForTimeout(550);
+  await page.mouse.click(roadPoint.x, roadPoint.y);
+  await expect(page.locator('#place-name')).toHaveText('Jerevanska');
+  await expect(page.locator('#place-category')).toHaveText('Road');
+  // The last line is the tap's pixel-derived coordinate; the row uses the road segment's recorded coordinate.
+  const tappedDetails = (await detailsLines(page)).slice(0, -1);
+  await closeCard(page);
+
+  await page.locator('#search').fill('jerevanska');
+  const row = page.locator('.result[data-kind="street"]');
+  await expect(row).toHaveCount(1);
+  await expect(row).toHaveAttribute('data-id', 'street/jerevanska');
+  await expect(row.locator('strong')).toHaveText('Jerevanska');
+  await expect(row.locator('small')).toHaveText('Street');
+  expect(await row.locator('.symbol').textContent()).toContain('🛣');
+
+  await expect
+    .poll(async () => (await streetHighlight(page)).names)
+    .toEqual(['Jerevanska']);
+  const green = await streetHighlight(page);
+  expect(green.filter).toEqual(['in', ['get', 'name'], ['literal', ['Jerevanska']]]);
+  expect(green.color).toBe('#2e7d32');
+
+  await row.click();
+  await expect(page.locator('#place-name')).toHaveText('Jerevanska');
+  await expect(page.locator('#place-category')).toHaveText('Road');
+  expect((await detailsLines(page)).slice(0, -1)).toEqual(tappedDetails);
+  await expect.poll(async () => (await selectedRoad(page)).filter).toEqual([
+    '==',
+    ['get', 'name'],
+    'Jerevanska'
+  ]);
+  expect((await selectedRoad(page)).color).toBe('#c43f3f');
+  await expect.poll(async () => (await selectedRoad(page)).names).toEqual(['Jerevanska']);
+  await expect.poll(async () => (await streetHighlight(page)).names).toEqual([]);
+});
+
+test('choosing an off-screen street reveals it at street zoom', async ({page}) => {
+  const before = await camera(page);
+  await closeMenu(page);
+  await page.locator('#search').fill('jerevanska');
+  const row = page.locator('.result[data-id="street/jerevanska"]');
+  await expect(row).toHaveCount(1);
+  await expect.poll(() => isInView(page, JEREVANSKA_CENTRE)).toBe(false);
+  await row.click();
+  await expect.poll(() => isInView(page, JEREVANSKA_CENTRE)).toBe(true);
+  await settled(page);
+  const after = await camera(page);
+  expect(after.center).not.toEqual(before.center);
+  expect(after.zoom).toBeGreaterThanOrEqual(15);
+});
+
+test('visible results get green highlights and the camera stays still', async ({page}) => {
+  const before = await camera(page);
+  await page.locator('#search').fill('bulevar');
+  await expect
+    .poll(async () => (await highlightState(page)).buildings)
+    .toEqual([4]);
+  await expect
+    .poll(async () => (await highlightState(page)).rings.sort())
+    .toEqual(['node/1', 'node/2']);
+  const highlights = await highlightState(page);
+  expect(highlights.searchGreen).toBe('#2e7d32');
+  expect(highlights.buildingColor).toBe(highlights.searchGreen);
+  expect(highlights.ringColor).toBe(highlights.searchGreen);
+  await expectCameraToHold(page, before);
+
+  // Moving the view drops highlights for results that are no longer visible; the camera is not pulled back.
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.3, 42.5], zoom: 17}));
+  await expect
+    .poll(async () => (await highlightState(page)).buildings)
+    .toEqual([]);
+  await expect
+    .poll(async () => (await highlightState(page)).rings)
+    .toEqual([]);
+  expect(await camera(page)).not.toEqual(before);
+});
+
+test('an active query draws and rings below-threshold places at zoom 12', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
+  await mapIdle(page);
+  await page.locator('#search').fill('threshold');
+  await expect(page.locator('.result')).toHaveCount(2);
+  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(['node/3', 'node/4']);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/3', 'node/4']);
+});
+
+test('a picked category draws and rings every in-view result at zoom 12', async ({page}) => {
+  const coordinates = [
+    PLACE.geometry.coordinates,
+    SECOND_PLACE.geometry.coordinates,
+    LOW_LEVEL_MATCH.geometry.coordinates,
+    HIGH_LEVEL_MATCH.geometry.coordinates
+  ];
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
+  await mapIdle(page);
+  await page.locator('#search').click();
+  await page.locator('#categories button[data-category="food"]').click();
+  await expect(page.locator('.result')).toHaveCount(4);
+  const visible = await Promise.all(coordinates.map(point => isInView(page, point)));
+  expect(visible).toEqual([true, true, true, true]);
+
+  const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
+  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(expected);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+});
+
+test('without a query or category, below-threshold places keep their normal visibility', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
+  await mapIdle(page);
+  await expect.poll(() => renderedPlaceIds(page)).toEqual(['node/3']);
+  expect(await renderedResultMarkerIds(page)).toEqual([]);
+  expect((await highlightState(page)).rings).toEqual([]);
+});
+
+test('choosing a building result replaces its green outline with the red selection', async ({page}) => {
+  await page.locator('#search').fill('bulevar');
+  await expect(page.locator('.result[data-kind="address"]')).toHaveCount(1);
+  await page.locator('.result[data-kind="address"]').click();
+  await expect(page.locator('#place-name')).toHaveText('Building 18');
+  await expect(page.locator('#place-details')).toContainText('Bulevar Stanka Dragojevića 18');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.stringify(window.kompasDebug.map.getFilter('selected-buildings-outline')))
+    )
+    .toBe(JSON.stringify(['==', ['id'], 4]));
+  await expect
+    .poll(async () => (await highlightState(page)).buildings)
+    .toEqual([]);
+  // Places' green rings are still there: only the chosen result turned red.
+  expect((await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+});
+
+test('clearing the search removes every green highlight', async ({page}) => {
+  await page.locator('#search').fill('bulevar');
+  await expect
+    .poll(async () => (await highlightState(page)).buildings)
+    .toEqual([4]);
+  await page.locator('#clear-search').click();
+  await expect
+    .poll(async () => (await highlightState(page)).buildings)
+    .toEqual([]);
+  await expect
+    .poll(async () => (await highlightState(page)).rings)
+    .toEqual([]);
+
+  // The next × closes Open results; it must not bring any green mark back.
+  await page.locator('#clear-search').click();
+  await expect(page.locator('#search')).toHaveValue('');
+  expect(await highlightState(page)).toMatchObject({buildings: [], rings: []});
+});
+
+test('closing Open results clears category highlights and keeps the category filter', {tag: '@phone'}, async ({page}) => {
+  await page.locator('#search').fill('bulevar');
+  await page.locator('#categories button[data-category="food"]').click();
+  await expect(page.locator('.result')).toHaveCount(2);
+  await expect
+    .poll(async () => (await highlightState(page)).rings.sort())
+    .toEqual(['node/1', 'node/2']);
+
+  // Clearing a Filled query keeps the category and expands its marks to every in-view food place.
+  await page.locator('#clear-search').click();
+  await expect(page.locator('#search')).toHaveValue('');
+  await expect
+    .poll(async () => (await highlightState(page)).rings.sort())
+    .toEqual(['node/1', 'node/2', 'node/3', 'node/4']);
+
+  // Closing Open results removes the marks without resetting the category.
+  await page.locator('#clear-search').click();
+  await expect
+    .poll(async () => (await highlightState(page)).rings)
+    .toEqual([]);
+  await expect(page.locator('#categories button[data-category="food"]')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the leading place stays green after a pan with no red preview', async ({page}) => {
+  await page.locator('#search').fill('bulevar');
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+  const preview = () =>
+    page.evaluate(() =>
+      Boolean(window.kompasDebug.map.getFeatureState({source: 'places', id: 'node/1'}).preview)
+    );
+  // The leading match is only chosen once its row is used; a plain search must never reserve a red preview,
+  // including after the debounced filter settles.
+  await expectToHold(async () => expect(await preview()).toBe(false), CAMERA_HOLD_MILLISECONDS);
+  // Wait for the app's moveend handler, which is where it refreshes highlights after a camera move.
+  const moved = page.evaluate(
+    () => new Promise(resolve => window.kompasDebug.map.once('moveend', () => resolve(true)))
+  );
+  await page.evaluate(() => window.kompasDebug.map.panBy([40, -25], {duration: 0}));
+  await moved;
+  await settled(page);
+  await mapIdle(page);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+});
+
+test('choosing an off-screen address reveals it and zooms to street level', async ({page}) => {
+  const target = FAR_ADDRESS.geometry.coordinates;
+  await page.evaluate(center => window.kompasDebug.map.jumpTo({center, zoom: 12}), CENTRE);
+  await settled(page);
+  const before = await camera(page);
+  await page.locator('#search').fill('77');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await expect.poll(() => isInView(page, target)).toBe(false);
+  await page.locator('.result').click();
+  await expect.poll(() => isInView(page, target)).toBe(true);
+  await settled(page);
+  const after = await camera(page);
+  expect(after.center).not.toEqual(before.center);
+  expect(after.zoom).toBeGreaterThanOrEqual(15);
+});
+
+test('an address in the focus zone opens the map-tap card without moving the camera', async ({page}) => {
+  await page.locator('#search').fill('13');
+  await expect(page.locator('.result')).toHaveCount(1);
+  await settled(page);
+  await mapIdle(page);
+  const before = await camera(page);
+  await page.locator('.result').click();
+  await expect(page.locator('#place-name')).toHaveText('Building 13');
+  await expect(page.locator('#place-details')).toContainText('Njegoševa ulica 13');
+  const fromResult = await page.locator('#place-name').innerText();
+  const detailsFromResult = await detailsLines(page);
+  await expectCameraToHold(page, before);
+  await closeCard(page);
+  await tapMapCenter(page, secondAddress().geometry.coordinates);
+  await expect(page.locator('#place-name')).toHaveText(fromResult);
+  expect(await detailsLines(page)).toEqual(detailsFromResult);
+});
+
+test('the list order survives a building card', async ({page}) => {
+  await page.locator('#search').fill('bulevar');
+  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/4');
+  await page.locator('.result[data-kind="address"]').click();
+  await expect(page.locator('#place-name')).toBeVisible();
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26085, 42.44205], zoom: 17}));
+  await settled(page);
+  await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/4');
+});
+
+test('green outlines cover every match beyond the 40-row list limit', async ({page}) => {
+  await page.locator('#search').fill('900');
+  await expect(page.locator('.result')).toHaveCount(40);
+  const expected = footprintFilter(MANY_ADDRESSES.map(feature => feature.properties.footprintIndex));
+  await expect.poll(async () => (await highlightState(page)).buildingFilter).toEqual(expected);
+});
+
+test('an unchanged visible set reuses the highlight source', async ({page}) => {
+  await page.locator('#search').fill('13');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([5]);
+  await mapIdle(page);
+  await page.evaluate(() => {
+    window.__highlightUpdates = 0;
+    window.kompasDebug.map.on('sourcedata', event => {
+      if (event.sourceId === 'search-place-highlights' && event.sourceDataType === 'content')
+        window.__highlightUpdates += 1;
+    });
+  });
+  await page.evaluate(() => window.kompasDebug.map.panBy([1, 1], {duration: 0}));
+  await settled(page);
+  await mapIdle(page);
+  expect(await page.evaluate(() => window.__highlightUpdates)).toBe(0);
+});
+
+test('tapping a highlighted building removes its green fringe', async ({page}) => {
+  await page.locator('#search').fill('13');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([5]);
+  await tapMapCenter(page, secondAddress().geometry.coordinates);
+  await expect(page.locator('#place-name')).toBeVisible();
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// GPS distances (issue #262): a row's distance is from the fix, never the map centre.
+// ---------------------------------------------------------------------------
+
+const FIRST_GPS_FIX = {latitude: 42.44205, longitude: 19.26085, accuracy: 18};
+const SECOND_GPS_FIX = {latitude: 42.4419, longitude: 19.2607, accuracy: 19};
+test('GPS distances: without a usable fix rows keep centre order and show no distance', {tag: '@phone'}, async ({
+  page
+}) => {
+  await expect
+    .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+    .not.toBe('live');
+  await mapIdle(page);
+  const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+  expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
+  await page.locator('#search').fill('bulevar');
+  await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
+  await expect(page.locator('.result .distance')).toHaveCount(0);
+});
+
+test.describe('GPS distances with a fix', () => {
+  test.use({permissions: ['geolocation'], geolocation: FIRST_GPS_FIX});
+
+  test('GPS distances: a live fix supplies the order and the distance text', {tag: '@phone'}, async ({
+    page,
+    context
+  }) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await mapIdle(page);
+    const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
+    expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
+    await page.locator('#search').fill('bulevar');
+    await expect(page.locator('.result')).toHaveCount(3 + expectedStreetNames.length);
+    // The fix sits on node/2: it becomes nearest even though the map centre sits on footprint/4.
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await expect(page.locator('.result .distance')).toHaveCount(3 + expectedStreetNames.length);
+    await expect(page.locator('.result[data-id="node/2"] .distance')).toHaveText('0 m');
+    await expect(page.locator('.result[data-id="footprint/4"] .distance')).toHaveText(/^\d+ m$/);
+  });
+
+  test('GPS distances: a changed fix refreshes rows but a card freezes them', async ({page, context}) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await page.locator('#search').fill('bulevar');
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await page.locator('.result[data-id="node/2"]').click();
+    await expect(page.locator('#place-name')).toBeVisible();
+
+    await context.setGeolocation(SECOND_GPS_FIX);
+    await expect(page.locator('#position-status')).toHaveText(/±19 m/);
+    await expectToHold(
+      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      CAMERA_HOLD_MILLISECONDS
+    );
+
+    await closeCard(page);
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+    await expect(page.locator('.result[data-id="footprint/4"] .distance')).toHaveText('0 m');
+  });
+
+  test('GPS distances: switching cards keeps the deferred order frozen until the card closes', async ({
+    page,
+    context
+  }) => {
+    await context.setGeolocation(FIRST_GPS_FIX);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'live');
+    await page.locator('#search').fill('bulevar');
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']);
+    await page.locator('.result[data-id="node/2"]').click();
+    await expect(page.locator('#place-name')).toHaveText('Bulevar Market');
+
+    await context.setGeolocation(SECOND_GPS_FIX);
+    await expect(page.locator('#position-status')).toHaveText(/±19 m/);
+    await page.locator('.result[data-id="node/1"]').click();
+    await expect(page.locator('#place-name')).toHaveText('Bulevar Cafe');
+    await expectToHold(
+      async () => expect(await nonStreetRowIds(page)).toEqual(['node/2', 'node/1', 'footprint/4']),
+      CAMERA_HOLD_MILLISECONDS
+    );
+
+    await closeCard(page);
+    await expect.poll(() => nonStreetRowIds(page)).toEqual(['footprint/4', 'node/1', 'node/2']);
+  });
+});

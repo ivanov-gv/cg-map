@@ -89,6 +89,17 @@ dock or card. Closing the dock belongs to the header icon button, whose three-st
 category row starts with **All**, as on other devices. With the dock closed, the active category gets a green chip 8 px
 below the ☰ icon button, aligned with it; tapping it opens the dock's list screen, and its × returns to All.
 
+**Search result kinds and highlights** (issues #248, #263): with **All** active (no category filter), a query lists
+matching places, buildings and addresses, nearest first. An active category narrows the list to places in that category;
+buildings and addresses are not searchable while a category is selected. Every matching building or address inside the
+current view gets a green outline. While a query or a non-**All** category is active, every place result inside the view
+gets a marker drawn and a green ring at any zoom, even below its usual POI threshold; names may collide, markers may
+not. With no query and **All**, the ordinary visibility thresholds still decide which markers appear. Marks include
+matches past the 40-row list limit; an unchosen result never gets the red preview. Choosing a row uses the red selection
+and reveals an off-screen result by the focus-zone rule below. The × in Filled clears only the query and keeps an active
+category's results and highlights. The × in Open clears those highlights and closes the results without resetting the
+category. See [ADR 0018](../../docs/decisions/0018-search-result-kinds-and-highlights.md).
+
 **Full-screen dock on Mobile and Flip** (issue #104): on Mobile (≤ 720 px) and Flip (≤ 400×400 px), opening the dock
 makes it cover the entire layout viewport (top 0, 100dvh) — full width, with no map visible around it. The search bar
 stays at the top, full width with its gutters. The menu button closes the dock on Mobile and Desktop; on Flip the icon
@@ -117,8 +128,9 @@ Source-level details:
 Mobile search started with the dock closed uses a bubble capped at half the visible viewport, with fixed categories
 above the independently scrolling list. The nearest result of an explicit search or category uses the `search-place`
 layer, so it can appear below its level's zoom. Searching and choosing categories do not move the camera. Choosing a
-place moves it only when the place is outside the focus zone, the inner 75% of the map area left uncovered by the dock,
-search panel, keyboard, and details card (`isInFocusZone`).
+place, building or address result moves it only when the result is outside the focus zone, the inner 75% of the map area
+left uncovered by the dock, search panel, keyboard, and details card (`isInFocusZone`), raising zoom to at least 15 when
+needed.
 
 A chosen place's card opens beside the desktop search panel or dock, which stays open. On phones it opens as a
 header-only peek under the open results. Pulling it up gives the full card and shrinks results to a strip; swiping down
@@ -186,7 +198,7 @@ transient state with the behavior that changes it:
 | `startupState`                               | Host data mode, endpoint URLs, service-worker registration and offline adapters                              |
 | `routeEndpoints`                             | In-memory From/To points passed to the route planner                                                         |
 | [PlaceSelection](src/place-selection.js)     | The selected listing or point, chooser, leading preview, deferred camera framing and return-focus target     |
-| [LocationControls](src/location-controls.js) | The in-memory fix, location following, explicit requests and first-fix recentering                           |
+| [LocationControls](src/location-controls.js) | The in-memory fix, its distance origin, location following, explicit requests and first-fix recentering      |
 | [core.js](src/core.js)                       | Pure utilities: search, distance, scale, and position helpers                                                |
 | [OfflineControls](src/offline-controls.js)   | Download/cancel/remove actions, progress, storage notes and the connection badge                             |
 
@@ -219,20 +231,24 @@ Suppose the user types "museum".
 5. matchesPlaceSearch() normalizes text: lower case, diacritic folding and supported Cyrillic transliteration.
 6. Search checks name, name:en, kind and addr:street.
 7. It assigns the resulting array to directoryState.filteredPlaces.
-8. If the map is ready, it calls setData() on the places GeoJSON source.
+8. If the map is ready, it calls setData() on the places GeoJSON source and on the explicit-filter result marker source.
 9. It closes the current place card if that place no longer matches.
-10. renderSearchResults() sorts matching places by approximate distance from the map center and creates up to 40 result
-    buttons. The camera does not move, and map moves do not reorder the list while a chosen place's card is open.
+10. collectSearchResults() collects matching places and labelled buildings once, then rankSearchCandidates() sorts those
+    candidates by approximate distance from the usable GPS fix when one exists, otherwise from the map center, and
+    renderSearchResults() creates up to 40 result buttons. In-view highlights come from the full candidate set, not the
+    40 rows. The camera does not move, and map moves do not reorder the list while any card is open.
 
 This is substring search over an in-memory dataset. It is not fuzzy search, a full-text index or a server request.
 
-Distance is an approximation in kilometers from the map center, not a route length or necessarily distance from the
-user.
+Distance is an approximation in kilometres from a fresh or approximate GPS fix, not a route length. Without such a fix,
+rows keep center ordering but show no distance: the camera is never presented as the person's location. Changed fixes
+re-rank after a 200 ms throttle; a card freezes the row order until it closes.
 
 Selecting a category updates category and calls the same applyPlaceSearch() path.
 
-Panning calls renderSearchResults() on moveend. It changes nearest ordering, not the text/category filters. It does not
-restrict the search dataset to the visible rectangle.
+Panning re-ranks candidates on moveend and renders only when no card is open. Without a usable fix that changes nearest
+ordering; with one, the fix keeps the order while the list and highlights refresh. Panning does not change the
+text/category filters or restrict the search dataset to the visible rectangle.
 
 ## 6. Two rendering systems share the screen
 
@@ -248,13 +264,15 @@ This distinction keeps thousands of map features out of the DOM.
 Sources hold geometry or imagery. Layers apply rendering rules to a source; changing a layer does not replace its data.
 
 [Stable POI visibility](../../docs/ui-ux/features/poi-visibility.md) decides which markers exist. The `places` source
-holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes:
+holds marker features built by map-core/place-visibility.js, and is only rebuilt when the filter changes. During an
+explicit query or category, `search-result-markers` adds one app-owned marker per result location without a minzoom:
 
 | Layer                | Purpose                                                                                                     |
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | place-icons-`<band>` | Icon only, one layer per zoom band, ignoring all collisions. Earlier levels draw above later ones           |
 | place-names-`<band>` | Name only, collision-aware, below road names and house numbers. A missing name never affects its icon       |
 | search-place         | The selected listing or leading explicit result, from `requested-place`, shown only below its marker's zoom |
+| search-result-places | Every result location during an explicit filter, from `search-result-markers`, at any zoom                  |
 | place-highlight      | Invisible ring that becomes the selection highlight through feature state                                   |
 
 A band is a zoom range: `4-open` starts at level 4's zoom and never ends. Layer `minzoom`/`maxzoom` are compared with
@@ -579,19 +597,19 @@ testing what users see.
 
 Common symptoms:
 
-| Symptom                                  | Check first                                                       |
-| ---------------------------------------- | ----------------------------------------------------------------- |
-| Old UI after deployment                  | Reload while online; inspect worker update/install failures       |
-| Satellite button remains disabled        | Map startup failed or load did not finish                         |
-| WebGL initialization error               | Browser/device graphics support; this is before layer interaction |
-| Satellite disappears outside a rectangle | Expected sample coverage                                          |
-| Photos blur at very high zoom            | Native raster resolution                                          |
-| New script fails only offline            | Missing shell entry or stale manifests                            |
-| Fonts/labels missing                     | Glyph URL, requested character blocks and network responses       |
-| Blank map after layout change            | Container dimensions and map.resize()                             |
-| Place exists but is absent from list     | Text/category filter or nearest-40 limit                          |
-| Place is listed but has no map icon      | Its visibilityLevel's zoom has not been reached                   |
-| Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch    |
+| Symptom                                  | Check first                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| Old UI after deployment                  | Reload while online; inspect worker update/install failures                           |
+| Satellite button remains disabled        | Map startup failed or load did not finish                                             |
+| WebGL initialization error               | Browser/device graphics support; this is before layer interaction                     |
+| Satellite disappears outside a rectangle | Expected sample coverage                                                              |
+| Photos blur at very high zoom            | Native raster resolution                                                              |
+| New script fails only offline            | Missing shell entry or stale manifests                                                |
+| Fonts/labels missing                     | Glyph URL, requested character blocks and network responses                           |
+| Blank map after layout change            | Container dimensions and map.resize()                                                 |
+| Place exists but is absent from list     | Text/category filter or nearest-40 limit                                              |
+| Place is listed but has no map icon      | Its visibilityLevel's zoom has not been reached without an explicit query or category |
+| Download fails after changing files      | Stale manifest, incomplete assets, quota or integrity mismatch                        |
 
 Observe the actual error before changing rendering code. A 404, stale cached script, disabled WebGL and malformed
 geometry need different fixes.

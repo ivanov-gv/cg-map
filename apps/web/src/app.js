@@ -1,14 +1,21 @@
 import {createElement, elementById, isReducedMotionPreferred} from './dom.js';
 import {renderPlaceResults} from './place-details.js';
 import {PlaceSelection} from './place-selection.js';
-import {installCityNames, installPublicPlaceLayers} from './public-map-layers.js';
+import {
+  installCityNames,
+  installPublicPlaceLayers,
+  searchResultMarkerData,
+  SearchHighlights
+} from './public-map-layers.js';
 import {selectTappedFeature} from './map-selection.js';
 import {OfflineControls, renderConnectionBadge} from './offline-controls.js';
 import {transportStatusText} from './status-messages.js';
 import {
   categories,
+  collectSearchResults,
+  indexBuildingLabels,
   matchesPlaceSearch,
-  selectNearestPlaces,
+  rankSearchResults,
   featureCollection,
   DEFAULT_CENTER,
   DISCOVER_ZOOM
@@ -30,6 +37,7 @@ import {installTransport, TransportFeed} from './transport.js';
 import {
   buildingAddressIndex,
   buildingMapFeatures,
+  describePoint,
   entranceFeatures,
   installEntranceLayers,
   selectBuildingEntrances,
@@ -88,6 +96,7 @@ const mapState = {
   isSatelliteVisible: false,
   interface: null,
   objectSelection: null,
+  searchHighlights: null,
   routePlanner: null,
   transportFeed: null,
   errorTimer: null
@@ -100,11 +109,19 @@ const directoryState = {
   placesById: new Map(),
   activeCategory: null,
   buildingAddresses: new Map(),
+  buildingLabelIndex: [],
+  visibleRoads: [],
+  roadNamesInView: new Set(),
+  searchCandidates: [],
+  results: [],
   loadingError: null,
   visibilityConfig: null,
   markerKeysByPlaceId: new Map(),
-  placeHitLayers: ['search-place'],
-  searchTimer: null
+  placeHitLayers: ['search-place', 'search-result-places'],
+  searchTimer: null,
+  distanceRefreshTimer: null,
+  lastDistanceRefreshAt: 0,
+  hasPendingDistanceRerank: false
 };
 
 // Host and offline adapters are created during startup and shared with their UI controller.
@@ -120,12 +137,24 @@ const startupState = {
 const routeEndpoints = {from: null, to: null};
 
 const prefersReducedMotion = isReducedMotionPreferred();
+const distanceRefreshDelayMilliseconds = 200;
+// Road lines, not road labels: a label's point geometry cannot supply a street segment for the highlight or the card.
+const roadNameLayers = [
+  'steps',
+  'cycleways',
+  'paths',
+  'footways',
+  'pedestrian-streets',
+  'minor-roads',
+  'major-roads'
+];
 
 const placeSelection = new PlaceSelection({
   map: () => mapState.map,
   interface: () => mapState.interface,
   directory: () => directoryState,
   objectSelection: () => mapState.objectSelection,
+  describePoint: (feature, coordinates) => describePoint(feature, coordinates, directoryState.buildingAddresses),
   isMapReady: () => mapState.isMapReady,
   onExploreMap: () => {
     mapState.hasExploredMap = true;
@@ -143,6 +172,7 @@ const locationControls = new LocationControls({
     mapState.shouldIgnoreNextMove = true;
   },
   closeSelection: () => placeSelection.close(false),
+  onDistanceOriginChanged: scheduleDistanceRefresh,
   notify,
   prefersReducedMotion
 });
@@ -178,10 +208,16 @@ function notify(message) {
 }
 
 function syncPanels() {
+  updateSearchHighlights();
   elementById('route-endpoints').hidden =
     (!routeEndpoints.from && !routeEndpoints.to) ||
     mapState.interface?.view !== 'closed' ||
     !elementById('place-card').hidden;
+  // Choosing another place card does not close the card, so only a real close consumes the deferred ranking.
+  if (directoryState.hasPendingDistanceRerank && elementById('place-card').hidden) {
+    directoryState.hasPendingDistanceRerank = false;
+    refreshSearchResults();
+  }
 }
 
 function renderRouteEndpoints() {
@@ -211,26 +247,128 @@ function setRouteEndpoint(role) {
   placeSelection.close();
 }
 
-// Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
-function renderSearchResults() {
-  if (!mapState.map) return;
-  const center = mapState.map.getCenter().toArray();
-  const nearestPlaces = selectNearestPlaces(directoryState.filteredPlaces, center);
-  const currentPlace = placeSelection.selectedPlace ?? placeSelection.previewPlace;
-  renderPlaceResults({
-    nearestPlaces,
-    currentPlace,
-    loadingError: directoryState.loadingError,
-    onChoose: placeSelection.showPlace
+// The list and both highlight layers share one candidate set; row order and distance text follow the view center or a
+// usable fix, while highlights always follow the view.
+function searchQuery() {
+  return elementById('search').value.trim();
+}
+
+function computeSearchCandidates() {
+  const referencePoint = locationControls.distanceOrigin ?? mapState.map?.getCenter().toArray() ?? null;
+  return collectSearchResults({
+    places: directoryState.filteredPlaces,
+    buildingLabels: directoryState.buildingLabelIndex,
+    roads: directoryState.visibleRoads,
+    query: searchQuery(),
+    category: directoryState.activeCategory,
+    markerKeys: directoryState.markerKeysByPlaceId,
+    referencePoint
   });
 }
 
-// A search or category narrows the candidates; matching icons keep their thresholds.
+// Query the current tile view once per settled camera change. Segment identity and name dedupe repeated tile copies.
+function collectVisibleRoads() {
+  if (!mapState.isMapReady || !mapState.map) return [];
+  const seen = new Set();
+  const features = [];
+  for (const feature of mapState.map.queryRenderedFeatures({layers: roadNameLayers})) {
+    const name = feature.properties?.name;
+    if (typeof name !== 'string' || !name.trim()) continue;
+    if (!['LineString', 'MultiLineString'].includes(feature.geometry?.type)) continue;
+    const firstCoordinate = JSON.stringify(feature.geometry.coordinates[0] ?? null);
+    const identity = `${name}\u0000${feature.id ?? ''}\u0000${firstCoordinate}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    features.push(feature);
+  }
+  return features;
+}
+
+// Street candidates depend on the current view; rebuilding them keeps a moved map's green roads and row order in step.
+function refreshVisibleRoads() {
+  const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+  directoryState.visibleRoads = hasExplicitFilter ? collectVisibleRoads() : [];
+  directoryState.roadNamesInView = new Set(directoryState.visibleRoads.map(feature => feature.properties.name));
+  directoryState.searchCandidates = computeSearchCandidates();
+}
+
+function rankSearchCandidates() {
+  if (!mapState.map) return [];
+  return rankSearchResults(directoryState.searchCandidates, mapState.map.getCenter().toArray(), {
+    origin: locationControls.distanceOrigin
+  });
+}
+
+// Rendering preserves focus when a camera move rebuilds rows after the selected card closes.
+function renderSearchResults() {
+  renderPlaceResults({
+    results: directoryState.loadingError ? [] : directoryState.results,
+    currentId: placeSelection.currentResultId,
+    loadingError: directoryState.loadingError,
+    onChoose: placeSelection.showSearchResult
+  });
+}
+
+// Every in-view match is marked, including those past the 40-row list limit. An active filter supplies a marker for
+// every result place; choosing a hidden match reveals it later.
+function updateSearchHighlights() {
+  if (!mapState.isMapReady || !mapState.searchHighlights) return;
+  const resultsHidden = Boolean(mapState.interface) && !mapState.interface.areResultsVisible();
+  if ((!searchQuery() && directoryState.activeCategory === null) || resultsHidden) {
+    mapState.searchHighlights.clear();
+    return;
+  }
+  const bounds = mapState.map.getBounds();
+  const selectedId = String(placeSelection.currentResultId ?? '');
+  const selectedFootprintIndex = placeSelection.selectedFootprintIndex;
+  const visible = directoryState.searchCandidates.filter(result => {
+    if (String(result.id) === selectedId) return false;
+    if (selectedFootprintIndex !== null && result.footprintIndex === selectedFootprintIndex) return false;
+    if (result.kind === 'street') return directoryState.roadNamesInView.has(result.streetName);
+    return bounds.contains(result.coordinates);
+  });
+  mapState.searchHighlights.update(visible);
+}
+
+function refreshSearchResults() {
+  directoryState.results = rankSearchCandidates();
+  renderSearchResults();
+  updateSearchHighlights();
+}
+
+function applyDistanceRefresh() {
+  directoryState.lastDistanceRefreshAt = Date.now();
+  if (placeSelection.hasOpenCard) {
+    directoryState.hasPendingDistanceRerank = true;
+    return;
+  }
+  // The representative point of a multi-segment street also follows a new fix, not only the row's ranking.
+  directoryState.searchCandidates = computeSearchCandidates();
+  refreshSearchResults();
+}
+
+// A new fix arrives independently of camera moves. Refresh at most once per interval with a final trailing run, and
+// keep the open card's row order frozen until syncPanels() applies the deferred ranking when that card closes.
+function scheduleDistanceRefresh() {
+  if (directoryState.distanceRefreshTimer !== null) return;
+  const elapsedMilliseconds = Date.now() - directoryState.lastDistanceRefreshAt;
+  if (elapsedMilliseconds >= distanceRefreshDelayMilliseconds) {
+    applyDistanceRefresh();
+    return;
+  }
+  directoryState.distanceRefreshTimer = setTimeout(() => {
+    directoryState.distanceRefreshTimer = null;
+    applyDistanceRefresh();
+  }, distanceRefreshDelayMilliseconds - elapsedMilliseconds);
+}
+
+// A search or category narrows the candidates once. Its own marker source bypasses POI thresholds; unfiltered places
+// keep their level bands.
 function applyPlaceSearch() {
   directoryState.filteredPlaces = directoryState.allPlaces.filter(feature =>
-    matchesPlaceSearch(feature, elementById('search').value, directoryState.activeCategory)
+    matchesPlaceSearch(feature, searchQuery(), directoryState.activeCategory)
   );
-  if (mapState.isMapReady && !directoryState.loadingError)
+  if (mapState.isMapReady && !directoryState.loadingError) {
     mapState.map
       .getSource('places')
       .setData(
@@ -238,9 +376,17 @@ function applyPlaceSearch() {
           buildPlaceMarkers(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
         )
       );
+    const hasExplicitFilter = Boolean(searchQuery()) || directoryState.activeCategory !== null;
+    mapState.searchHighlights.setResultMarkers(
+      hasExplicitFilter
+        ? searchResultMarkerData(directoryState.filteredPlaces, directoryState.markerKeysByPlaceId)
+        : featureCollection([])
+    );
+  }
   placeSelection.onFilterChanged();
-  renderSearchResults();
-  placeSelection.previewResults();
+  refreshVisibleRoads();
+  refreshSearchResults();
+  placeSelection.updateRequestedPlace();
   // Update desktop search UI after results change.
   mapState.interface.syncDesktopSearchUI();
   mapState.interface.syncClearButton();
@@ -324,6 +470,7 @@ function loadDirectoryData() {
   const labelsReady = loadJSON('data/building-labels.geojson', 'House numbers')
     .then(labels => {
       directoryState.buildingAddresses = buildingAddressIndex(labels);
+      directoryState.buildingLabelIndex = indexBuildingLabels(labels);
       return labels;
     })
     .catch(error => {
@@ -446,6 +593,7 @@ function installPositionBadge() {
 function installPublicLayers(placesReady, labelsReady) {
   elementById('satellite-toggle').disabled = false;
   installPublicPlaceLayers(mapState.map);
+  mapState.searchHighlights = new SearchHighlights(mapState.map);
   installCityNames(mapState.map);
   installTransport(mapState.map);
   installRoutePoints(mapState.map);
@@ -477,6 +625,7 @@ function installPublicLayers(placesReady, labelsReady) {
       for (const layer of [...names, ...icons]) mapState.map.addLayer(layer, 'road-labels');
       directoryState.placeHitLayers = [
         'search-place',
+        'search-result-places',
         ...icons.map(layer => layer.id),
         ...names.map(layer => layer.id)
       ];
@@ -510,10 +659,20 @@ function registerPublicMapEvents() {
   // MapLibre resize() fires synchronously: movestart, move, resize, moveend.
   // The resize event cancels the pending foreign move so following is not stopped by a viewport change.
   mapState.map.on('resize', () => locationControls.noteMapResize());
-  // The list keeps its order while a chosen place is open, so the row just used does not jump.
+  // The list keeps its order while any card is open, so the row just used does not jump.
   mapState.map.on('moveend', () => {
-    if (!placeSelection.selectedPlace) renderSearchResults();
+    refreshVisibleRoads();
+    if (!placeSelection.hasOpenCard) {
+      directoryState.results = rankSearchCandidates();
+      renderSearchResults();
+    }
+    updateSearchHighlights();
     placeSelection.flushPendingReveal();
+  });
+  // Symbol placement can finish after moveend, so settle the rings once the final marker set is drawn.
+  mapState.map.on('idle', () => {
+    refreshVisibleRoads();
+    updateSearchHighlights();
   });
   installMapTaps(mapState.map, event =>
     selectTappedFeature(mapState.map, event, {
@@ -802,7 +961,7 @@ function initializeInterface() {
         locationControls.refresh();
       }
       if (mapState.interface?.view === 'closed') {
-        placeSelection.clearPreview();
+        placeSelection.clearRequestedPlace();
       }
     },
     // Recompute selection framing only after keyboard and camera changes have settled.

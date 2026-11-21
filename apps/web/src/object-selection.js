@@ -32,11 +32,7 @@ export class ObjectSelection {
         const original = map.getPaintProperty(layer, property) ?? 1;
         map.setPaintProperty(layer, property, [
           'case',
-          [
-            'any',
-            ['boolean', ['feature-state', 'selected'], false],
-            ['boolean', ['feature-state', 'preview'], false]
-          ],
+          ['boolean', ['feature-state', 'selected'], false],
           value,
           original
         ]);
@@ -67,14 +63,6 @@ export class ObjectSelection {
     }
     map.on('idle', () => this.resolveAnchor());
   }
-  // The leading search match keeps the same ring, at any zoom, until a listing is chosen or the filter clears.
-  setPreview(markerKey) {
-    if (this.previewKey === markerKey) return;
-    if (this.previewKey != null)
-      this.map.setFeatureState({source: 'places', id: this.previewKey}, {preview: false});
-    this.previewKey = markerKey;
-    if (markerKey != null) this.map.setFeatureState({source: 'places', id: markerKey}, {preview: true});
-  }
   clearPoint() {
     if (this.pointTarget) this.map.setFeatureState(this.pointTarget, {selected: false});
     this.pointTarget = null;
@@ -93,6 +81,21 @@ export class ObjectSelection {
     this.onBuilding(target?.sourceLayer === 'buildings' ? target.id : null);
     for (const sourceLayer of selectableSourceLayers) {
       const filter = target?.sourceLayer === sourceLayer ? ['==', ['id'], target.id] : emptyFilter;
+      this.map.setFilter(`selected-${sourceLayer}-fill`, [
+        'all',
+        filter,
+        ['==', ['geometry-type'], 'Polygon']
+      ]);
+      this.map.setFilter(`selected-${sourceLayer}-outline`, filter);
+    }
+  }
+
+  // A street names many tile segments, so select them by name instead of one feature id. The red filter spans every
+  // matching segment, including the parts outside the tile that supplied the result row.
+  selectStreet(name) {
+    this.clear();
+    for (const sourceLayer of selectableSourceLayers) {
+      const filter = sourceLayer === 'roads' ? ['==', ['get', 'name'], name] : emptyFilter;
       this.map.setFilter(`selected-${sourceLayer}-fill`, [
         'all',
         filter,
