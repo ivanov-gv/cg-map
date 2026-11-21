@@ -8,6 +8,7 @@ import {
   expectCameraToHold,
   expectToHold,
   mapIdle,
+  pointOnMap,
   ready,
   settled,
   stubRouting,
@@ -434,6 +435,86 @@ test('Flip keeps category highlights after the dock closes', {tag: '@phone'}, as
   });
 });
 
+test('a Mobile map pick keeps result highlights while its card is open and after it closes', {tag: '@phone'}, async ({
+  page
+}) => {
+  await mapIdle(page);
+  await page.locator('#search').fill('bulevar');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+
+  // Tap a building that is not itself a result, so its red card must not replace a green mark.
+  const otherBuilding = secondAddress().geometry.coordinates;
+  expect(await isInView(page, otherBuilding)).toBe(true);
+  const point = await pointOnMap(page, otherBuilding);
+  await page.mouse.click(point.x, point.y);
+  await expect(page.locator('#place-name')).toHaveText('Building 13');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#search')).toHaveValue('bulevar');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+});
+
+test('closing Mobile search keeps result highlights while the query stays in the bar', {tag: '@phone'}, async ({
+  page,
+  isMobile
+}) => {
+  test.skip(!isMobile, 'phone layout');
+  await page.locator('#search').fill('bulevar');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+
+  // Blur first: Escape on the focused search input natively clears it and reopens the bubble.
+  await page.locator('#search').evaluate(element => element.blur());
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect(page.locator('#search')).toHaveValue('bulevar');
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+});
+
+test('category highlights stay on Mobile with search closed', {tag: '@phone'}, async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
+  await page.locator('#search').click();
+  await page.locator('#categories button[data-category="food"]').click();
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect(page.locator('#categories button[data-category="food"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+
+  // Clearing both the category and the empty query removes the marks.
+  await page.locator('#active-category-chip-remove').click();
+  await expect.poll(async () => (await highlightState(page)).rings).toEqual([]);
+});
+
+test('a Desktop map pick keeps category highlights with search closed', async ({page}) => {
+  const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
+  await page.locator('#search').click();
+  await page.locator('#categories button[data-category="food"]').click();
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+
+  await page.locator('#clear-search').click();
+  await expect(page.locator('#search')).toHaveValue('');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+
+  // Pick a building that is not itself a result, so the red card must not replace a green ring.
+  const otherBuilding = secondAddress().geometry.coordinates;
+  const point = await pointOnMap(page, otherBuilding);
+  await page.mouse.click(point.x, point.y);
+  await expect(page.locator('#place-name')).toHaveText('Building 13');
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+  await closeCard(page);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
+});
+
 test('an active query draws and rings below-threshold places at zoom 12', async ({page}) => {
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
   await mapIdle(page);
@@ -529,7 +610,7 @@ test('clearing the search removes every green highlight', async ({page}) => {
   expect(await highlightState(page)).toMatchObject({buildings: [], rings: []});
 });
 
-test('closing Open results clears category highlights and keeps the category filter', {tag: '@phone'}, async ({page}) => {
+test('closing Open results keeps category highlights and the category filter', {tag: '@phone'}, async ({page}) => {
   await page.locator('#search').fill('bulevar');
   await page.locator('#categories button[data-category="food"]').click();
   await expect(page.locator('.result')).toHaveCount(2);
@@ -544,11 +625,12 @@ test('closing Open results clears category highlights and keeps the category fil
     .poll(async () => (await highlightState(page)).rings.sort())
     .toEqual(['node/1', 'node/2', 'node/3', 'node/4']);
 
-  // Closing Open results removes the marks without resetting the category.
+  // Closing Open results leaves the category active, so its marks stay with the search state.
   await page.locator('#clear-search').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   await expect
-    .poll(async () => (await highlightState(page)).rings)
-    .toEqual([]);
+    .poll(async () => (await highlightState(page)).rings.sort())
+    .toEqual(['node/1', 'node/2', 'node/3', 'node/4']);
   await expect(page.locator('#categories button[data-category="food"]')).toHaveAttribute('aria-pressed', 'true');
 });
 

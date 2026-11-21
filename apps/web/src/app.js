@@ -53,7 +53,7 @@ import {resolveDataMode, dataEndpoints, basemapURL} from './data-mode.js';
 import {installMapTaps} from './map-taps.js';
 import {installPositionLayers} from './position.js';
 import {LocationControls} from './location-controls.js';
-import {MapInterface, shouldKeepHighlightsWhenResultsHidden} from './interface.js';
+import {MapInterface, hasActiveSearchFilter} from './interface.js';
 import {deviceClass, FLIP_MEDIA_QUERY, MOBILE_MEDIA_QUERY} from './device-class.js';
 import {renderMapAttribution} from './attribution.js';
 
@@ -315,20 +315,13 @@ function renderSearchResults() {
 }
 
 // Every in-view match is marked, including those past the 40-row list limit. An active filter supplies a marker for
-// every result place; choosing a hidden match reveals it later.
+// every result place; choosing a hidden match reveals it later. Search, selection and view handlers all call this, so
+// a card or closed list never decides which marks the map shows.
 function updateSearchHighlights() {
   if (!mapState.isMapReady || !mapState.searchHighlights) return;
   const hasQuery = Boolean(searchQuery());
   const hasCategory = directoryState.activeCategory !== null;
-  const resultsHidden =
-    Boolean(mapState.interface) &&
-    !mapState.interface.areResultsVisible() &&
-    !shouldKeepHighlightsWhenResultsHidden({
-      isFlipLayout: Boolean(mapState.interface?.isFlip),
-      hasQuery,
-      hasCategory
-    });
-  if ((!hasQuery && !hasCategory) || resultsHidden) {
+  if (!hasActiveSearchFilter({hasQuery, hasCategory})) {
     mapState.searchHighlights.clear();
     return;
   }
