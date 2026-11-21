@@ -46,8 +46,9 @@ export const BROWSER_AREAS = {
   },
   interface: {
     specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs',
-    // 8 shards: interface-1..3 averaged 271, 249, 202 s (max 349 s) with 3 shards; 8 keep each under ~180 s (measured 177 s max).
-    jobs: 8,
+    // 12 shards: run 44906522239 measured 406, 300, 292, 236, 220, 216, 201 and 193 s across the 8 shards, about 2060 s
+    // in total. 2060/12 is about 172 s per shard, leaving margin under the 300 s aim; 8 left the slowest at 406 s.
+    jobs: 12,
     specFiles: ['interface.spec.mjs', 'search-results.spec.mjs', 'history.spec.mjs', 'fold.spec.mjs'],
     sources: ['interface.js', 'history-steps.js']
   },
