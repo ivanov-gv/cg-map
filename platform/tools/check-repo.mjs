@@ -80,7 +80,7 @@ const imports = {
   'place-selection.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './place-details.js', './interface.js'],
   'attribution.js': [],
   'device-class.js': [],
-  'interface.js': [],
+  'interface.js': ['./device-class.js'],
   'core.js': [],
   'offline.js': ['./core.js'],
   'transport.js': ['./vehicle-direction.js', './data-mode.js'],

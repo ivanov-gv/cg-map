@@ -46,6 +46,8 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 /* This one header has identical geometry in every interface state. */
 .search-bar { position: fixed; top: calc(var(--visible-top) + var(--bar-inset)); left: var(--bar-inset); width: calc(var(--dock-width) - 2 * var(--bar-inset)); height: 54px; display: flex; align-items: center; border: 1px solid #dce0d5; border-radius: 15px; background: white; box-shadow: 0 4px 20px #243f3710; pointer-events: auto; }
 .icon-button { display: grid; place-items: center; width: 48px; height: 48px; flex: none; background: transparent; border-radius: 12px; }
+/* Keep × in the flex layout in every state; only its visibility changes, so the input keeps its width. */
+.clear-button[data-clear-visible='false'] { visibility: hidden; }
 /* On touch screens :hover sticks to the last tapped element, so the menu button
  * looks pressed after closing the dock. Guard hover feedback so it only applies
  * on devices that can actually hover (issue #155). */
@@ -69,8 +71,37 @@ body[data-view=dock] .sidebar { background: var(--paper); border-right: 1px soli
 .browse-panel { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 #categories { display: flex; flex-wrap: nowrap; flex-shrink: 0; gap: 7px; padding: 4px var(--bar-inset) 10px; overflow-x: auto; scrollbar-width: none; }
 #categories::-webkit-scrollbar, .place-card::-webkit-scrollbar { display: none; }
-#categories button { min-height: 40px; flex-shrink: 0; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
+/* Short All label still needs a full-width touch target beside the longer category chips. */
+#categories button { min-width: 40px; min-height: 40px; flex-shrink: 0; border: 1px solid var(--line); background: transparent; border-radius: 22px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
 #categories button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: white; }
+/* The active chip and its × are two buttons inside one green pill; the map chip shares this appearance. */
+.category-pill, .active-category-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px 0 14px;
+  border-radius: 20px;
+  background: var(--green);
+  color: white;
+}
+#categories .category-pill { flex-shrink: 0; }
+.active-category-chip-label, .active-category-chip-remove {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: inherit;
+}
+.active-category-chip-label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.active-category-chip-remove { display: grid; place-items: center; }
+.category-remove .icon, .active-category-chip-remove .icon { width: 16px; height: 16px; stroke-width: 2.4; }
+/* Keep the unused slot in flow so clearing a scrolled filter cannot clamp scrollLeft. */
+#categories .category-pill.is-placeholder { visibility: hidden; pointer-events: none; }
+/* The map chip stands in for the category row on phones and Flip while search and the dock are closed. */
+.active-category-chip { position: fixed; top: calc(var(--visible-top) + var(--bar-inset) + 52px); left: var(--bar-inset); z-index: 6; box-shadow: 0 4px 20px #243f3718; pointer-events: auto; }
 .text-button { min-height: 40px; background: none; padding: 4px; text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .result { width: 100%; min-height: 76px; padding: 14px var(--bar-inset); display: flex; gap: 12px; align-items: center; background: transparent; text-align: left; border-bottom: 1px solid #eceee7; }
@@ -116,8 +147,11 @@ progress { width: 100%; accent-color: var(--green); margin-top: 8px; }
 summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .control, .maplibregl-ctrl-group { background: white; border-radius: 12px; box-shadow: 0 4px 20px #243f3715 !important; }
 .position-control { position: absolute; right: 12px; bottom: 148px; z-index: 3; }
-.position-control.maplibregl-ctrl { position: relative; right: auto; bottom: auto; z-index: auto; }
-#position-action { position: relative; }
+.position-control.maplibregl-ctrl { position: relative; right: auto; bottom: auto; z-index: auto; margin-bottom: 20px; }
+/* MapLibre sizes .maplibregl-ctrl-group button to 29×29; the ID wins without !important (issue #272). */
+#position-action { position: relative; width: 48px; height: 48px; border-radius: 14px; }
+/* The white group and the pressed green fill need the same corners. */
+.position-control.maplibregl-ctrl-group { border-radius: 14px; }
 #position-indicator { position: absolute; right: 3px; bottom: 2px; min-width: 16px; height: 16px; border-radius: 50%; background: white; color: #8c571b; font-size: 12px; font-weight: 700; line-height: 16px; }
 .position-control[data-state=live] #position-action { color: #1f6fd1; }
 .position-control[data-state=live] #position-indicator { visibility: hidden; }
@@ -133,7 +167,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     filter: brightness(1.15);
   }
 }
-.maplibregl-ctrl-bottom-right { right: 2px; }
+/* MapLibre adds a 10 px right margin to bottom-right controls: 10 + 10 = 20 px from the edge. */
+.maplibregl-ctrl-bottom-right { right: 10px; }
 /* map-core adds NavigationControl with no option to omit it. */
 .maplibregl-ctrl-group:has(> .maplibregl-ctrl-zoom-in) { display: none; }
 .maplibregl-ctrl-scale { font-size: 11px; }
@@ -215,13 +250,14 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     --desktop-chips-bottom: calc(var(--desktop-bar-height) + 48px + 16px);
   }
 
-  body[data-view=dock] .place-card, body:has(.desktop-search-panel[data-has-query="true"]:not([hidden])) .place-card {
+  body[data-view=dock] .place-card,
+  body:has(.desktop-search-panel:is([data-state=open], [data-state=filled]):not([hidden])) .place-card {
     top: 20px;
     left: calc(var(--dock-width) + 12px);
     width: min(375px, calc(100% - var(--dock-width) - 96px));
     max-height: calc(100% - 40px);
   }
-  body:has(.desktop-search-panel[data-has-query="false"]:not([hidden])) .place-card {
+  body:has(.desktop-search-panel[data-state=empty]:not([hidden])) .place-card {
     top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-chips-bottom));
     left: 20px;
     max-height: calc(100% - var(--visible-top) - var(--bar-inset) - var(--desktop-chips-bottom) - 20px);
@@ -236,8 +272,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .clear-button .icon { width: 18px; height: 18px; }
 
   /* Desktop search panel: always positioned under the bar.
-   * data-has-query="false" → floating category chips (no background, no border, no shadow).
-   * data-has-query="true"  → joined card with categories row + scrollable results. */
+   * data-state="empty"         → floating category chips (no background, no border, no shadow).
+   * data-state="open"/"filled" → joined card with categories row + scrollable results. */
   .desktop-search-panel {
     position: fixed;
     top: calc(var(--visible-top) + var(--bar-inset) + var(--desktop-bar-height));
@@ -251,45 +287,45 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     z-index: 5;
   }
   /* Floating mode: no query — categories float, results hidden. */
-  .desktop-search-panel[data-has-query="false"] {
+  .desktop-search-panel[data-state=empty] {
     background: transparent;
     border: none;
     border-radius: 0;
     box-shadow: none;
     max-height: none;
   }
-  .desktop-search-panel[data-has-query="false"] #results { display: none; }
-  .desktop-search-panel[data-has-query="false"] #categories {
+  .desktop-search-panel[data-state=empty] #results { display: none; }
+  .desktop-search-panel[data-state=empty] #categories {
     gap: 8px;
     padding: 4px 0;
   }
-  .desktop-search-panel[data-has-query="false"] #categories::-webkit-scrollbar { display: none; }
-  .desktop-search-panel[data-has-query="false"] #categories button {
+  .desktop-search-panel[data-state=empty] #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel[data-state=empty] #categories button {
     background: white;
     padding-left: 14px;
     padding-right: 14px;
     box-shadow: 0 2px 8px #243f3710;
     pointer-events: auto;
   }
-  .desktop-search-panel[data-has-query="false"] #categories button[aria-pressed=true] {
+  .desktop-search-panel[data-state=empty] #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
   /* Joined card mode: with query — categories + results as one card. */
-  .desktop-search-panel[data-has-query="true"] {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) {
     border: 1px solid var(--line);
     border-top: none;
     border-radius: 0 0 15px 15px;
     background: var(--paper);
     box-shadow: 0 8px 24px #243f3718;
   }
-  .desktop-search-panel[data-has-query="true"] #categories {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories {
     gap: 7px;
     padding: 6px var(--bar-inset) 8px;
   }
-  .desktop-search-panel[data-has-query="true"] #categories::-webkit-scrollbar { display: none; }
-  .desktop-search-panel[data-has-query="true"] #categories button {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories::-webkit-scrollbar { display: none; }
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories button {
     min-height: 40px;
     border: 1px solid var(--line);
     background: transparent;
@@ -298,12 +334,12 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     font-size: 12px;
     white-space: nowrap;
   }
-  .desktop-search-panel[data-has-query="true"] #categories button[aria-pressed=true] {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #categories button[aria-pressed=true] {
     background: var(--green);
     border-color: var(--green);
     color: white;
   }
-  .desktop-search-panel[data-has-query="true"] #results {
+  .desktop-search-panel:is([data-state=open], [data-state=filled]) #results {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -316,9 +352,16 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     flex-direction: column;
     min-height: 0;
   }
+  /* Desktop uses the floating row, so it never shows the standalone chip. */
+  .active-category-chip { display: none; }
 }
 @media (max-width: 720px) {
   :root { --bar-inset: 12px; }
+
+  /* Mobile and Flip keep the 12 px right edge: 2 + MapLibre's 10 px margin. */
+  .maplibregl-ctrl-bottom-right { right: 2px; }
+  /* The design keeps the Mobile button 24 px above the bottom edge. */
+  .position-control.maplibregl-ctrl { margin-bottom: 24px; }
 
   /* Mobile search bar: smaller than desktop, full screen width minus 12 px gutter. */
   .search-bar {
@@ -370,6 +413,11 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
  * This block comes after the Mobile block so it overrides the Mobile rules for Flip viewports.
  * When the dock is open, the Mobile rules apply again (full-width bar with search). */
 @media (max-width: 400px) and (max-height: 400px) {
+  /* Flip keeps the 21 px icon and 14 px radius in a 40 px target. */
+  #position-action { width: 40px; height: 40px; }
+  /* The design keeps the Flip button 12 px above the bottom edge, as on its right. */
+  .position-control.maplibregl-ctrl { margin-bottom: 12px; }
+
   /* When the dock is closed, shrink the bar to the menu button and hide all search elements. */
   body:not([data-view=dock]) .search-bar { right: auto; }
   body:not([data-view=dock]) .search-bar .search-divider,
@@ -391,21 +439,24 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
    * separators need 123 px, so we shave the category row to gain room. */
   body[data-view=dock] #categories {
     gap: 5px;
-    padding-top: 2px;
-    padding-bottom: 0;
+    /* Reserve room for the × target's invisible 10 px extension, then cancel it so the row stays compact. */
+    padding-top: 7px;
+    padding-bottom: 10px;
+    margin-top: -5px;
+    margin-bottom: -10px;
   }
   body[data-view=dock] #categories button {
     min-height: 30px;
     padding: 3px 10px;
     font-size: 11px;
   }
-  /* Compact result rows on Flip so at least three fit in the visible area.
-   * Target: 41 px per row (40 px min-height + 1 px separator, 24 px symbol,
-   * single-line name, smaller kind/distance). Three rows × 41 px = 123 px fits
-   * the measured 130 px between categories and the handle. */
+  /* Compact result rows on Flip so at least three fit below the 40 px active pill.
+   * Target: 37 px per row (36 px min-height + 1 px separator, 24 px symbol,
+   * single-line name, smaller kind/distance). Three rows × 37 px = 111 px fits
+   * the space left between the pill and the handle. */
   body[data-view=dock] .result {
-    min-height: 40px;
-    padding: 3px var(--bar-inset);
+    min-height: 36px;
+    padding: 2px var(--bar-inset);
     gap: 8px;
     border-bottom: 1px solid #eceee7;
     align-items: center;
@@ -529,5 +580,35 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   body[data-view=dock] #footer-toggle[aria-expanded=true]::before {
     transform: rotate(180deg);
   }
+  /* Match the icon button's 3 px margin plus the bar's 1 px border. */
+  .active-category-chip {
+    top: calc(var(--visible-top) + var(--bar-inset) + 50px);
+    left: calc(var(--bar-inset) + 4px);
+  }
+}
+/* Row chips inherit #categories button styles in every panel; the pill's two buttons keep the map chip's look. */
+#categories .category-pill button,
+.desktop-search-panel[data-state=empty] #categories .category-pill button,
+.desktop-search-panel:is([data-state=open], [data-state=filled]) #categories .category-pill button,
+body[data-view=dock] #categories .category-pill button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: none;
+}
+#categories .category-pill button[aria-pressed=true],
+.desktop-search-panel[data-state=empty] #categories .category-pill button[aria-pressed=true],
+.desktop-search-panel:is([data-state=open], [data-state=filled]) #categories .category-pill button[aria-pressed=true],
+body[data-view=dock] #categories .category-pill button[aria-pressed=true] {
+  border-color: transparent;
+  background: transparent;
+  color: white;
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } .place-card { transition: none !important; } }

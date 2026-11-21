@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   cardStateAfterSwipe,
+  isActiveChipVisible,
+  isClearButtonVisible,
   isInFocusZone,
+  searchBarState,
   searchBounds,
   uncoveredMapArea,
   uncoveredMapOffset
@@ -14,6 +17,46 @@ import {
   FLIP_MEDIA_QUERY,
   MOBILE_MEDIA_QUERY
 } from '../src/device-class.js';
+
+test('search bar state follows the query and whether results are open', () => {
+  assert.equal(searchBarState({hasQuery: false, resultsVisible: false}), 'empty');
+  assert.equal(searchBarState({hasQuery: false, resultsVisible: true}), 'open');
+  assert.equal(searchBarState({hasQuery: true, resultsVisible: true}), 'filled');
+  // A query still shown after leaving a dock stays Filled until it is cleared.
+  assert.equal(searchBarState({hasQuery: true, resultsVisible: false}), 'filled');
+});
+
+test('the clear button is Filled-only on Flip and Open as well as Filled elsewhere', () => {
+  assert.equal(isClearButtonVisible({state: 'empty', isFlipLayout: false}), false);
+  assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: false}), true);
+  assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: false}), true);
+  assert.equal(isClearButtonVisible({state: 'open', isFlipLayout: true}), false);
+  assert.equal(isClearButtonVisible({state: 'filled', isFlipLayout: true}), true);
+});
+
+test('the map chip replaces the category row only where search and the dock are closed', () => {
+  const onMap = {hasCategory: true, view: 'closed', cardState: undefined, cardHidden: true};
+  assert.equal(isActiveChipVisible({...onMap, isDesktopLayout: false}), true);
+  assert.equal(isActiveChipVisible({...onMap, isDesktopLayout: true}), false, 'desktop row stays visible');
+  assert.equal(isActiveChipVisible({...onMap, hasCategory: false}), false, 'All has no chip');
+  assert.equal(isActiveChipVisible({...onMap, view: 'dock'}), false, 'dock row shows it');
+  assert.equal(isActiveChipVisible({...onMap, view: 'search'}), false, 'bubble row shows it');
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'full'}),
+    false,
+    'a full card covers it'
+  );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'fullscreen'}),
+    false,
+    'a fullscreen card covers it'
+  );
+  assert.equal(
+    isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),
+    true,
+    'a peek leaves it available'
+  );
+});
 
 test('search bubble stays within half the visible viewport, including keyboard and scroll offsets', () => {
   for (const height of [840, 500, 420, 240, 100]) {

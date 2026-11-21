@@ -549,30 +549,113 @@ function warnAboutSlowStartup() {
   }, startupTimeoutMilliseconds);
 }
 
-// Category toggles share the same filter and never move the camera.
-// Pressing a category selects it; pressing it again clears the filter.
+// UI-only key for the row's first chip; the shared category contract has no "all" entry.
+const ALL_CATEGORIES_KEY = '';
+
+// The row's first chip returns to all categories without changing the search query.
 function registerCategoryControls() {
+  const allButton = createElement('button', 'All');
+  allButton.type = 'button';
+  allButton.dataset.category = ALL_CATEGORIES_KEY;
+  allButton.setAttribute('aria-label', 'All categories');
+  allButton.addEventListener('click', () => selectCategory(null));
+  const container = elementById('categories');
+  container.append(allButton);
+
   for (const [key, label] of Object.entries(categories)) {
     const button = createElement('button', label);
     button.type = 'button';
     button.dataset.category = key;
-    button.setAttribute('aria-pressed', String(key === directoryState.activeCategory));
-    button.addEventListener('click', () => {
-      toggleCategory(key);
-    });
-    elementById('categories').append(button);
+    button.addEventListener('click', () => selectCategory(key));
+    container.append(button);
   }
+  // One shared pill and × follow the active chip, so every category row has the same control.
+  const pill = createElement('span');
+  pill.id = 'active-category-pill';
+  pill.className = 'category-pill is-placeholder';
+  const removeButton = document.createElement('button');
+  removeButton.id = 'remove-category';
+  removeButton.className = 'category-remove active-category-chip-remove';
+  removeButton.type = 'button';
+  removeButton.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>';
+  removeButton.addEventListener('click', removeCategory);
+  // Keep one control in flow even for All: removing it would shrink scrollWidth and clamp the saved scroll position.
+  removeButton.classList.add('is-placeholder');
+  removeButton.setAttribute('aria-hidden', 'true');
+  removeButton.disabled = true;
+  removeButton.tabIndex = -1;
+  pill.append(removeButton);
+  container.append(pill);
+  syncCategoryButtons();
 }
 
-function toggleCategory(key) {
-  directoryState.activeCategory =
-    directoryState.activeCategory === key ? null : key;
-  const container = elementById('categories');
-  for (const button of container.children) {
-    const isActiveCategory = button.dataset.category === directoryState.activeCategory;
-    button.setAttribute('aria-pressed', String(isActiveCategory));
-    if (isActiveCategory) button.scrollIntoView({block: 'nearest', inline: 'nearest'});
+// Clearing a category must not scroll the shared row back to All.
+function removeCategory() {
+  const categoriesRow = elementById('categories');
+  const scrollLeft = categoriesRow.scrollLeft;
+  selectCategory(null);
+  categoriesRow.scrollLeft = scrollLeft;
+}
+
+function syncCategoryButtons() {
+  const activeCategory = directoryState.activeCategory ?? ALL_CATEGORIES_KEY;
+  const categoryButtons = [...elementById('categories').querySelectorAll('button[data-category]')];
+  for (const button of categoryButtons)
+    button.setAttribute('aria-pressed', String(button.dataset.category === activeCategory));
+  syncCategoryPill(activeCategory, categoryButtons);
+  categoryButtons
+    .find(button => button.dataset.category === activeCategory)
+    ?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  mapState.interface?.syncActiveChip();
+}
+
+// Move the shared pill around the active chip; All parks it inert at the row's end.
+function syncCategoryPill(activeCategory, categoryButtons) {
+  const row = elementById('categories');
+  const pill = elementById('active-category-pill');
+  const removeButton = elementById('remove-category');
+  const activeButton = categoryButtons.find(button => button.dataset.category === activeCategory);
+  const previousButton = pill.querySelector('button[data-category]');
+
+  if (previousButton && previousButton !== activeButton) {
+    previousButton.classList.remove('active-category-chip-label');
+    insertBeforeFollowingChip(row, previousButton, previousButton, categoryButtons);
   }
+  if (!activeCategory || !activeButton) {
+    row.append(pill);
+    pill.classList.add('is-placeholder');
+    removeButton.classList.add('is-placeholder');
+    removeButton.setAttribute('aria-hidden', 'true');
+    removeButton.removeAttribute('aria-label');
+    removeButton.disabled = true;
+    removeButton.tabIndex = -1;
+    return;
+  }
+
+  activeButton.classList.add('active-category-chip-label');
+  pill.insertBefore(activeButton, removeButton);
+  insertBeforeFollowingChip(row, pill, activeButton, categoryButtons);
+  pill.classList.remove('is-placeholder');
+  removeButton.classList.remove('is-placeholder');
+  removeButton.removeAttribute('aria-hidden');
+  removeButton.setAttribute('aria-label', `Remove category ${categories[activeCategory]}`);
+  removeButton.disabled = false;
+  removeButton.tabIndex = 0;
+}
+
+// Keep the row's original chip order while one chip lives inside the shared pill.
+function insertBeforeFollowingChip(row, element, referenceButton, categoryButtons) {
+  const index = categoryButtons.indexOf(referenceButton);
+  const followingChip = categoryButtons.slice(index + 1).find(button => button.parentElement === row);
+  row.insertBefore(element, followingChip ?? null);
+}
+
+function selectCategory(key) {
+  directoryState.activeCategory = directoryState.activeCategory === key ? null : key;
+  syncCategoryButtons();
+  // A floating desktop chip reveals the same results the dock row would show.
+  if (!mapState.interface.mobileLayoutQuery.matches && mapState.interface.view === 'closed')
+    mapState.interface.showResults();
   applyPlaceSearch();
 }
 
@@ -593,14 +676,18 @@ function registerSelectionControls() {
   elementById('close-place').addEventListener('click', () => placeSelection.close());
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
+      const isDesktop = !mapState.interface.mobileLayoutQuery.matches;
       if (!elementById('place-card').hidden) placeSelection.close();
       else if (mapState.interface.view === 'dock') {
         // When the dock is open, Escape closes it.
         mapState.interface.close(true);
-      } else if (!mapState.interface.mobileLayoutQuery.matches && elementById('search').value.trim()) {
-        // On desktop with dock closed, Escape clears the query and refocuses the input.
+      } else if (isDesktop && mapState.interface.state === 'filled') {
+        // On desktop with dock closed, Escape clears the query and refocuses the input; results stay Open.
         mapState.interface.clearQuery();
-        elementById('search').focus();
+        mapState.interface.restoreFocus(elementById('search'));
+      } else if (isDesktop && mapState.interface.state === 'open') {
+        // A second Escape leaves the Open state, matching the × action.
+        mapState.interface.closeResults();
       } else if (mapState.interface.view !== 'closed') {
         // On mobile with search view (not dock), Escape closes the search.
         mapState.interface.close(true);
@@ -678,6 +765,10 @@ function initializeInterface() {
       placeSelection.close(false);
       applyPlaceSearch();
     },
+    onResultsRefreshed: () => {
+      // Opening results or clearing a query is not a new search: keep the chosen place and refresh the list.
+      applyPlaceSearch();
+    },
     onChange: () => {
       syncPanels();
       if (mapState.interface && mapState.interface.view !== 'closed' && !mapState.hasExploredMap) {
@@ -691,6 +782,9 @@ function initializeInterface() {
     // Recompute selection framing only after keyboard and camera changes have settled.
     onViewport: () => placeSelection.viewportChanged(),
     onCardSwipedAway: () => placeSelection.close(),
+    onResultsClosed: () => placeSelection.close(),
+    onRemoveCategory: removeCategory,
+    activeCategoryLabel: () => categories[directoryState.activeCategory] ?? '',
     resultsLabel: () => {
       const query = elementById('search').value.trim();
       if (query) return `“${query}”`;
