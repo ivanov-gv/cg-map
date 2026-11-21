@@ -112,6 +112,34 @@ async function flickCard(page, touch, deltaY) {
   await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
 }
 
+// The visible grab bar is a pseudo-element of the card handle button.
+async function flipHandleBar(page) {
+  return page.locator('#card-handle').evaluate(element => {
+    const style = getComputedStyle(element, '::before');
+    return {
+      display: style.display,
+      top: style.top,
+      width: style.width,
+      height: style.height,
+      radius: style.borderRadius,
+      color: style.backgroundColor,
+      left: style.left,
+      marginLeft: style.marginLeft
+    };
+  });
+}
+
+async function handleBarColor(page) {
+  return page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = 'var(--line-strong)';
+    document.body.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+}
+
 async function wheelOverCard(page, deltaY) {
   await page.locator('#place-card').evaluate((element, amount) => {
     element.dispatchEvent(new WheelEvent('wheel', {deltaY: amount, bubbles: true, cancelable: true}));
@@ -1249,7 +1277,7 @@ test(
 );
 
 test(
-  'Flip keeps its two-step card instead of the phone card drag',
+  'Flip wheel input still leaves its two-step card alone',
   {tag: '@phone'},
   async ({page, isMobile}) => {
     test.skip(!isMobile, 'touch emulation');
@@ -1260,22 +1288,18 @@ test(
       await page.locator('.result', {hasText: 'Nearby place 0'}).click();
       const menu = page.locator('#menu-toggle');
       await cardSettled(page, 'peek');
-      const touch = await page.context().newCDPSession(page);
 
-      // Flip keeps its two card steps, but touch gestures never drive them.
-      await swipeCard(page, touch, -80);
+      // Buttons and pulls share steps; a wheel is still never a card action.
+      await wheelOverCard(page, -220);
       await cardSettled(page, 'peek');
       await page.locator('#card-handle').click();
       await cardSettled(page, 'fullscreen');
-
-      await swipeCard(page, touch, -80);
-      await cardSettled(page, 'fullscreen');
-      await swipeCard(page, touch, 80);
+      await wheelOverCard(page, 220);
       await cardSettled(page, 'fullscreen');
 
       await menu.click();
       await cardSettled(page, 'peek');
-      await swipeCard(page, touch, 80);
+      await wheelOverCard(page, 220);
       await cardSettled(page, 'peek');
     });
   }
@@ -5682,7 +5706,7 @@ test('scale bar stays in the bottom-left corner under the Flip dock', {tag: '@ph
   });
 });
 
-// Flip card: the cover screen uses a two-step card instead of the phone's swipe steps.
+// Flip card: the cover screen keeps two steps, with buttons and pulls reaching the same states.
 for (const {name, viewport} of FLIP_VIEWPORTS) {
   test(`Flip map pick opens Peek, taps to Fullscreen, and closes through the Icon Button at ${name}`, {
     tag: '@phone'
@@ -5715,10 +5739,8 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
       expect(pickedPoint.y).toBeLessThan(peek.y - 8);
       expect(pickedPoint.y).toBeGreaterThan(52);
 
-      // Flip has no swipe or wheel card states: both inputs leave Peek alone.
+      // The wheel still never changes a Flip card.
       await wheelOverCard(page, -220);
-      await expect(card).toHaveAttribute('data-state', 'peek');
-      await swipeCard(page, touch, -120);
       await expect(card).toHaveAttribute('data-state', 'peek');
 
       await page.locator('#card-handle').click();
@@ -5734,6 +5756,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
       expect(fullscreen.height).toBeCloseTo(viewport.height, 0);
       await expect(menu).toBeVisible();
 
+      // Fullscreen has no higher step, so an upward pull leaves it alone.
       await swipeCard(page, touch, -120);
       await expect(card).toHaveAttribute('data-state', 'fullscreen');
 
@@ -5758,6 +5781,106 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
           'nearby/0'
         )
       ).toBe(false);
+    }, viewport);
+  });
+}
+
+for (const {name, viewport} of FLIP_VIEWPORTS) {
+  test(`Flip pulls open Fullscreen and step back from a map pick at ${name}`, {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+    await withFlipViewport(page, async () => {
+      await ready(page);
+      const touch = await page.context().newCDPSession(page);
+      const card = page.locator('#place-card');
+      const menu = page.locator('#menu-toggle');
+
+      await tapRenderedPlace(page, nearbyPlaces.features[0].geometry.coordinates, 'nearby/0');
+      await cardSettled(page, 'peek');
+      await expect(menu).toBeFocused();
+
+      await swipeCard(page, touch, -120);
+      await cardSettled(page, 'fullscreen');
+      await expect(menu).toHaveAttribute('aria-label', 'Back to summary');
+      await expect(menu).toBeFocused();
+
+      await swipeCard(page, touch, 120);
+      await cardSettled(page, 'peek');
+      await expect(menu).toHaveAttribute('aria-label', 'Close details');
+      await expect(menu).toBeFocused();
+
+      await swipeCard(page, touch, 120);
+      await expect(card).toBeHidden();
+      await expect(menu).toHaveAttribute('aria-label', 'Open menu');
+      await expect.poll(() => page.evaluate(() => window.kompasDebug.selected)).toBeNull();
+    }, viewport);
+  });
+}
+
+for (const {name, viewport} of FLIP_VIEWPORTS) {
+  test(`Flip pulls return a dock pick to its originating row at ${name}`, {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
+    await withFlipViewport(page, async () => {
+      await ready(page);
+      const touch = await page.context().newCDPSession(page);
+      await openFlipDock(page);
+      const order = await page.locator('#dock-content .result strong').allTextContents();
+      const row = page.locator('.result', {hasText: 'Nearby place 0'});
+      await row.click();
+      const card = page.locator('#place-card');
+      const menu = page.locator('#menu-toggle');
+
+      await cardSettled(page, 'peek');
+      await swipeCard(page, touch, -120);
+      await cardSettled(page, 'fullscreen');
+      await swipeCard(page, touch, 120);
+      await cardSettled(page, 'peek');
+      await expect(page.locator('#dock-content')).toBeHidden();
+
+      await swipeCard(page, touch, 120);
+      await expect(card).toBeHidden();
+      await expect(page.locator('#dock-content')).toBeVisible();
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      await expect.poll(() => page.evaluate(() => window.kompasDebug.flipDockScreen)).toBe('list');
+      await expect(page.locator('#search')).toHaveValue('Nearby');
+      expect(await page.locator('#dock-content .result strong').allTextContents()).toEqual(order);
+      await expect(row).toBeFocused();
+      await expect(menu).toHaveAttribute('aria-label', 'Show map modes');
+    }, viewport);
+  });
+}
+
+for (const {name, viewport} of FLIP_VIEWPORTS) {
+  test(`Flip ignores a downward pull while Fullscreen content is scrolled at ${name}`, {
+    tag: '@phone'
+  }, async ({page}) => {
+    const tall = structuredClone(nearbyPlaces);
+    tall.features[0].properties.opening_hours = Array.from({length: 40}, () => 'Mo-Fr 08:00-17:00').join('; ');
+    await page.route('**/data/places.geojson', (route) => route.fulfill({json: tall}));
+    await withFlipViewport(page, async () => {
+      await ready(page);
+      const touch = await page.context().newCDPSession(page);
+      const card = page.locator('#place-card');
+      await tapRenderedPlace(page, tall.features[0].geometry.coordinates, 'nearby/0');
+      await page.locator('#card-handle').click();
+      await cardSettled(page, 'fullscreen');
+      expect(
+        await card.evaluate(element => {
+          element.scrollTop = 80;
+          return element.scrollTop;
+        })
+      ).toBeGreaterThan(0);
+
+      // Keep the pull shorter than the scroll range: the details scroll first and the card stays put.
+      await swipeCard(page, touch, 40, {fromHeader: false});
+      await expect(card).toHaveAttribute('data-state', 'fullscreen');
+      await expectToHold(async () => expect(card).toHaveAttribute('data-state', 'fullscreen'), 200);
+      expect(await card.evaluate(element => element.scrollTop)).toBeLessThan(80);
+
+      await card.evaluate(element => {
+        element.scrollTop = 0;
+      });
+      await swipeCard(page, touch, 120);
+      await cardSettled(page, 'peek');
     }, viewport);
   });
 }
@@ -5807,21 +5930,28 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
   });
 }
 
-test('Flip Peek hides the grab handle, uses a pointer cursor and clips the card body', {
-  tag: '@phone'
-}, async ({page}) => {
+test('Flip shows the grab bar in Peek and Fullscreen', {tag: '@phone'}, async ({page}) => {
   await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
   await withFlipViewport(page, async () => {
     await ready(page);
     await tapRenderedPlace(page, nearbyPlaces.features[0].geometry.coordinates, 'nearby/0');
     const card = page.locator('#place-card');
-    await expect(card).toHaveAttribute('data-state', 'peek');
+    await cardSettled(page, 'peek');
 
-    // The handle stays a tap target, but Flip has no swipe affordance to show.
-    const handleBar = await page.locator('#card-handle').evaluate(
-      element => getComputedStyle(element, '::before').display
-    );
-    expect(handleBar).toBe('none');
+    const expectedColor = await handleBarColor(page);
+    const expectGrabBar = async () => {
+      const bar = await flipHandleBar(page);
+      const handleBox = await page.locator('#card-handle').boundingBox();
+      expect(bar.display).not.toBe('none');
+      expect(bar.top).toBe('4px');
+      expect(bar.width).toBe('36px');
+      expect(bar.height).toBe('4px');
+      expect(bar.radius).toBe('2px');
+      expect(bar.color).toBe(expectedColor);
+      expect(parseFloat(bar.left)).toBeCloseTo(handleBox.width / 2, 0);
+      expect(bar.marginLeft).toBe('-18px');
+    };
+    await expectGrabBar();
     expect(await card.evaluate(element => getComputedStyle(element).cursor)).toBe('pointer');
 
     const cardBox = await card.boundingBox();
@@ -5830,23 +5960,29 @@ test('Flip Peek hides the grab handle, uses a pointer cursor and clips the card 
     expect(actionsBox.y).toBeGreaterThanOrEqual(cardBox.y + cardBox.height - 2);
 
     await page.locator('#card-handle').click();
-    await expect(card).toHaveAttribute('data-state', 'fullscreen');
+    await cardSettled(page, 'fullscreen');
+    await expectGrabBar();
+    // The bar marks the pull target but is not a second fullscreen button.
+    expect(
+      await page.locator('#card-handle').evaluate(element => getComputedStyle(element).pointerEvents)
+    ).toBe('none');
   });
 });
 
-test('Flip Peek ignores a downward touch swipe', {tag: '@phone'}, async ({page}) => {
+test('Flip Peek closes on a downward pull', {tag: '@phone'}, async ({page}) => {
   await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
   await withFlipViewport(page, async () => {
     await ready(page);
     const touch = await page.context().newCDPSession(page);
     await tapRenderedPlace(page, nearbyPlaces.features[0].geometry.coordinates, 'nearby/0');
     const card = page.locator('#place-card');
+    const menu = page.locator('#menu-toggle');
     await expect(card).toHaveAttribute('data-state', 'peek');
 
     await swipeCard(page, touch, 140);
-    await expect(card).toBeVisible();
-    await expectToHold(async () => expect(card).toHaveAttribute('data-state', 'peek'), 200);
-    expect(await page.evaluate(() => document.body.dataset.flipCardState)).toBeUndefined();
+    await expect(card).toBeHidden();
+    await expect(menu).toHaveAttribute('aria-label', 'Open menu');
+    await expect.poll(() => page.evaluate(() => window.kompasDebug.selected)).toBeNull();
   });
 });
 

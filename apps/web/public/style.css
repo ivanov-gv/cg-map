@@ -691,8 +691,14 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     overflow: hidden;
     cursor: pointer;
   }
-  /* Flip has no swipes: keep the header tappable, but show no grab-handle bar. */
-  body[data-device=flip] .place-card .card-handle::before { display: none; }
+  /* Flip shows the same 36×4 pull bar as Mobile, 4 px from the card edge in Peek and Fullscreen. */
+  body[data-device=flip] .place-card .card-handle::before {
+    top: 4px;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
+  }
   /* Locate would cover the card on a cover screen; the same Card controls remain available. */
   body[data-device=flip]:has(.place-card:not([hidden])) .position-control {
     display: none;
@@ -712,8 +718,9 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
     touch-action: pan-y;
     cursor: default;
   }
+  /* The Fullscreen bar marks a pull target but adds no second button over the header. */
   body[data-device=flip] .place-card[data-state=fullscreen] .card-handle {
-    display: none;
+    pointer-events: none;
   }
   body[data-device=flip] .place-card[data-state=fullscreen] .place-head {
     min-height: 44px;

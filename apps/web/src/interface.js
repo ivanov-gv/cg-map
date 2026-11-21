@@ -169,10 +169,14 @@ export function cardStateAfterSwipeWithoutFullscreen({state, direction, resultsB
 
 const PHONE_CARD_INSET_PIXELS = 12;
 const PHONE_CARD_BOTTOM_GAP_PIXELS = 20;
+// Flip Peek keeps the 12 px gutter from its CSS; only the phone card leaves 20 px.
+const FLIP_CARD_BOTTOM_GAP_PIXELS = 12;
 // Only the last moments of a gesture decide whether it was a flick.
 const FLICK_VELOCITY_WINDOW_MILLISECONDS = 100;
 // A quick flick moves one step even when the finger barely travelled.
 export const CARD_FLICK_VELOCITY_PIXELS_PER_MILLISECOND = 0.35;
+// A slow pull or non-touch drag must cross this gap before it counts as an action.
+const CARD_PULL_THRESHOLD_PIXELS = 24;
 
 // All settled steps share one coordinate system: the map container, whose top is the phone screen top.
 // The bottom anchor is the card's resting edge; fullscreen has no gutter and reaches the screen bottom.
@@ -186,14 +190,9 @@ export function phoneCardSteps({viewportHeight, bottomInset, peekHeight, fullHei
   };
 }
 
-// Interpolates the card's whole rectangle towards the adjacent step. Fullscreen grows upward under the finger;
+// Interpolates the card's whole rectangle towards an adjacent step. Fullscreen grows upward under the finger;
 // coming back it sinks downward, so its top edge uncovers the map instead of its bottom edge rising.
-export function cardDragFrame({state, deltaYPixels, resultsBehind, steps}) {
-  const direction = deltaYPixels < 0 ? 'up' : 'down';
-  const targetState = cardStateAfterSwipe({state, direction, resultsBehind});
-  if (targetState === state) return null;
-  const from = steps[state];
-  const to = steps[targetState];
+function interpolatedCardDragFrame(from, to, deltaYPixels, targetState) {
   const travelPixels = Math.abs(from.top - to.top);
   const progress = travelPixels ? Math.min(1, Math.abs(deltaYPixels) / travelPixels) : 1;
   const interpolate = (start, end) => start + (end - start) * progress;
@@ -206,6 +205,24 @@ export function cardDragFrame({state, deltaYPixels, resultsBehind, steps}) {
       inset: interpolate(from.inset, to.inset)
     }
   };
+}
+
+export function cardDragFrame({state, deltaYPixels, resultsBehind, steps}) {
+  const direction = deltaYPixels < 0 ? 'up' : 'down';
+  const targetState = cardStateAfterSwipe({state, direction, resultsBehind});
+  if (targetState === state) return null;
+  return interpolatedCardDragFrame(steps[state], steps[targetState], deltaYPixels, targetState);
+}
+
+// Flip has only Peek and Fullscreen: up opens, down closes Peek, and down from Fullscreen steps back to Peek.
+export function flipCardDragFrame({state, deltaYPixels, steps}) {
+  if (state === 'peek') {
+    const targetState = deltaYPixels < 0 ? 'fullscreen' : 'closed';
+    return interpolatedCardDragFrame(steps[state], steps[targetState], deltaYPixels, targetState);
+  }
+  if (state === 'fullscreen' && deltaYPixels >= 0)
+    return interpolatedCardDragFrame(steps.fullscreen, steps.peek, deltaYPixels, 'peek');
+  return null;
 }
 
 // Velocity is measured over the recent part of a gesture, so a short final pause cannot hide a flick.
@@ -234,7 +251,17 @@ export function cardStateAfterDrag({
   return Math.abs(deltaYPixels) >= travelPixels / 2 ? targetState : state;
 }
 
-// Flip replaces swipes with two controls: tapping Peek opens Fullscreen, and the Icon Button steps back or closes.
+// A Flip pull asks for one of the same steps as the handle and Icon Button. A short slow pull is not an action;
+// a flick moves a step from a short travel, just as it does on a phone.
+export function flipCardActionAfterPull({state, deltaYPixels, velocityPixelsPerMillisecond}) {
+  const isFlick = Math.abs(velocityPixelsPerMillisecond) >= CARD_FLICK_VELOCITY_PIXELS_PER_MILLISECOND;
+  if (!isFlick && Math.abs(deltaYPixels) < CARD_PULL_THRESHOLD_PIXELS) return null;
+  const movementPixels = isFlick ? velocityPixelsPerMillisecond : deltaYPixels;
+  if (movementPixels < 0) return state === 'peek' ? 'open' : null;
+  return state === 'peek' || state === 'fullscreen' ? 'back' : null;
+}
+
+// Tapping Peek opens Fullscreen; the handle stays inert in Fullscreen.
 export function flipCardStateAfterTap(state) {
   return state === 'peek' ? 'fullscreen' : state;
 }
@@ -257,7 +284,6 @@ export function detailsGeometryForMap(detailsRect, mapRect, {detailsTop, isFulls
 }
 
 const DRAG_START_PIXELS = 6;
-const FLIP_SWIPE_THRESHOLD_PIXELS = 24;
 // One trackpad gesture fires many wheel events; it may change the card state only once.
 const WHEEL_GESTURE_MILLISECONDS = 600;
 // A smaller gap can be browser chrome rather than an on-screen keyboard.
@@ -1099,7 +1125,7 @@ export class MapInterface {
     return state === 'peek' || (state === 'full' && this.isMobilePhone);
   }
 
-  // Tapping the header or handle steps the phone card; Flip has its own two-step control.
+  // The handle and header step the phone card; Flip pulls reuse this action and the Icon Button's step-back.
   activateCardHandle() {
     const state = this.card.dataset.state;
     if (this.flipLayoutQuery.matches) {
@@ -1240,6 +1266,17 @@ export class MapInterface {
     });
   }
 
+  flipCardSteps() {
+    const viewportHeight = this.card.parentElement.getBoundingClientRect().height;
+    const bottom = viewportHeight - FLIP_CARD_BOTTOM_GAP_PIXELS;
+    const peekHeight = this.cardPeekHeight();
+    return {
+      peek: {top: bottom - peekHeight, height: peekHeight, bottom, inset: PHONE_CARD_INSET_PIXELS},
+      fullscreen: {top: 0, height: viewportHeight, bottom: viewportHeight, inset: 0},
+      closed: {top: bottom, height: 0, bottom, inset: PHONE_CARD_INSET_PIXELS}
+    };
+  }
+
   applyCardDragFrame(frame) {
     const style = this.card.style;
     style.top = `${frame.rect.top}px`;
@@ -1266,7 +1303,7 @@ export class MapInterface {
   }
 
   swipeCard(direction) {
-    // Flip has no swipe states; its visible Icon Button is the only way back.
+    // Flip touches call the button steps directly; pointer and wheel input never swipe its card.
     if (this.flipLayoutQuery.matches) return;
     const state = this.card.dataset.state;
     const next = this.isMobilePhone
@@ -1283,7 +1320,7 @@ export class MapInterface {
     this.wireCardWheel();
   }
 
-  // Pointer events keep Flip and non-touch drags; phone touches use a continuous rectangle.
+  // Pointer events handle non-touch drags; phone and Flip touches use the shared pull listener below.
   wirePointerCardGestures() {
     let pointerDrag = null;
     this.card.addEventListener('pointerdown', (event) => {
@@ -1332,53 +1369,60 @@ export class MapInterface {
       this.card.style.removeProperty('transform');
       if (event.type === 'pointercancel') return;
       const deltaYPixels = event.clientY - startYPixels;
-      if (deltaYPixels > FLIP_SWIPE_THRESHOLD_PIXELS) this.swipeCard('down');
-      else if (deltaYPixels < -FLIP_SWIPE_THRESHOLD_PIXELS && this.canStepCardUp()) this.swipeCard('up');
+      if (deltaYPixels > CARD_PULL_THRESHOLD_PIXELS) this.swipeCard('down');
+      else if (deltaYPixels < -CARD_PULL_THRESHOLD_PIXELS && this.canStepCardUp()) this.swipeCard('up');
     };
     this.card.addEventListener('pointerup', finish);
     this.card.addEventListener('pointercancel', finish);
   }
 
+  // Phone and Flip touches share the drag listener. Only their steps and settle actions differ.
   wireTouchCardGestures() {
-    let phoneDrag = null;
+    let cardDrag = null;
     const cancel = () => {
-      if (!phoneDrag) return;
-      phoneDrag = null;
+      if (!cardDrag) return;
+      cardDrag = null;
       this.card.classList.remove('dragging');
       this.clearCardDragGeometry();
     };
     this.card.addEventListener('touchstart', (event) => {
-      if (!this.isMobilePhone || this.card.hidden || event.touches.length !== 1) {
+      const hasPullLayout = this.isMobilePhone || this.isFlip;
+      if (!hasPullLayout || this.card.hidden || event.touches.length !== 1) {
         cancel();
         return;
       }
       const touch = event.touches[0];
-      if (!touch.target.closest('a, .point-actions')) phoneDrag = this.newPhoneCardDrag(touch, event.timeStamp);
+      // The Flip handle is both a Peek button and a pull target; other controls keep their tap behavior.
+      const isControl = touch.target.closest('a, .point-actions, button:not(#card-handle)');
+      if (!isControl) cardDrag = this.newCardDrag(touch, event.timeStamp);
     }, {passive: true});
     this.card.addEventListener('touchmove', (event) => {
-      const touch = this.matchingTouch(event.touches, phoneDrag?.identifier);
+      const touch = this.matchingTouch(event.touches, cardDrag?.identifier);
       if (!touch) return;
-      const wasMoving = phoneDrag.hasMoved;
-      if (!this.advancePhoneCardDrag(phoneDrag, touch)) return;
+      const wasMoving = cardDrag.hasMoved;
+      if (!this.advanceCardDrag(cardDrag, touch)) return;
       event.preventDefault();
-      phoneDrag.lastYPixels = touch.clientY;
-      this.recordCardVelocitySample(phoneDrag, touch.clientY, event.timeStamp, wasMoving);
-      const frame = cardDragFrame({
-        state: phoneDrag.state,
-        deltaYPixels: touch.clientY - phoneDrag.pullStartYPixels,
-        resultsBehind: phoneDrag.resultsBehind,
-        steps: phoneDrag.steps
-      });
+      cardDrag.lastYPixels = touch.clientY;
+      this.recordCardVelocitySample(cardDrag, touch.clientY, event.timeStamp, wasMoving);
+      const deltaYPixels = touch.clientY - cardDrag.pullStartYPixels;
+      const frame = cardDrag.isFlip
+        ? flipCardDragFrame({state: cardDrag.state, deltaYPixels, steps: cardDrag.steps})
+        : cardDragFrame({
+            state: cardDrag.state,
+            deltaYPixels,
+            resultsBehind: cardDrag.resultsBehind,
+            steps: cardDrag.steps
+          });
       if (frame) {
-        phoneDrag.lastFrame = frame;
+        cardDrag.lastFrame = frame;
         this.applyCardDragFrame(frame);
       }
     }, {passive: false});
     const finish = event => {
-      const touch = this.matchingTouch(event.changedTouches, phoneDrag?.identifier);
-      const drag = phoneDrag;
+      const touch = this.matchingTouch(event.changedTouches, cardDrag?.identifier);
+      const drag = cardDrag;
       cancel();
-      if (drag) this.settlePhoneCardDrag(drag, touch, event.type === 'touchcancel');
+      if (drag) this.settleCardDrag(drag, touch, event.type === 'touchcancel');
     };
     this.card.addEventListener('touchend', finish);
     this.card.addEventListener('touchcancel', finish);
@@ -1390,12 +1434,14 @@ export class MapInterface {
       : Array.from(touchList).find(candidate => candidate.identifier === identifier);
   }
 
-  newPhoneCardDrag(touch, timeMilliseconds) {
+  newCardDrag(touch, timeMilliseconds) {
+    const isFlip = this.isFlip;
     return {
       identifier: touch.identifier,
+      isFlip,
       state: this.card.dataset.state,
       resultsBehind: this.view === 'search',
-      steps: this.phoneCardSteps(),
+      steps: isFlip ? this.flipCardSteps() : this.phoneCardSteps(),
       hasMoved: false,
       startYPixels: touch.clientY,
       lastYPixels: touch.clientY,
@@ -1416,7 +1462,7 @@ export class MapInterface {
   }
 
   // Fullscreen owns vertical touches until its content is back at the top; then a downward pull moves the card.
-  advancePhoneCardDrag(drag, touch) {
+  advanceCardDrag(drag, touch) {
     if (drag.hasMoved) return true;
     const deltaYPixels = touch.clientY - drag.startYPixels;
     if (drag.state === 'fullscreen' && (this.card.scrollTop > 0 || deltaYPixels <= 0)) return false;
@@ -1428,20 +1474,30 @@ export class MapInterface {
     return true;
   }
 
-  settlePhoneCardDrag(drag, touch, isCancelled) {
+  settleCardDrag(drag, touch, isCancelled) {
     if (!drag.hasMoved) return;
     const lastYPixels = touch?.clientY ?? drag.lastYPixels;
     const deltaYPixels = lastYPixels - drag.pullStartYPixels;
+    const velocityPixelsPerMillisecond = touchVelocityPixelsPerMillisecond(drag.samples);
+    this.card.classList.remove('dragging');
+    if (drag.isFlip) {
+      const action = isCancelled
+        ? null
+        : flipCardActionAfterPull({state: drag.state, deltaYPixels, velocityPixelsPerMillisecond});
+      // Reuse the button paths so a pull has their focus and history behavior, not a parallel state change.
+      if (action === 'open') this.activateCardHandle();
+      else if (action === 'back') this.stepBackOrCloseFlipCard();
+      return;
+    }
     const nextState = isCancelled
       ? drag.state
       : cardStateAfterDrag({
           state: drag.state,
           deltaYPixels,
-          velocityPixelsPerMillisecond: touchVelocityPixelsPerMillisecond(drag.samples),
+          velocityPixelsPerMillisecond,
           resultsBehind: drag.resultsBehind,
           steps: drag.steps
         });
-    this.card.classList.remove('dragging');
     if (nextState === 'closed') {
       this.onCardSwipedAway?.();
       return;
