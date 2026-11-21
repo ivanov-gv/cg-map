@@ -45,11 +45,11 @@ export const BROWSER_AREAS = {
     ]
   },
   interface: {
-    specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs',
+    specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs',
     // 8 shards: interface-1..3 averaged 271, 249, 202 s (max 349 s) with 3 shards; 8 keep each under ~180 s (measured 177 s max).
     jobs: 8,
-    specFiles: ['interface.spec.mjs', 'search-results.spec.mjs'],
-    sources: ['interface.js']
+    specFiles: ['interface.spec.mjs', 'search-results.spec.mjs', 'history.spec.mjs'],
+    sources: ['interface.js', 'history-steps.js']
   },
   discover: {
     specs: 'tests/e2e/discover.spec.mjs',
