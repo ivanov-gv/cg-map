@@ -53,13 +53,13 @@ test('the map chip replaces the category row only where search and the dock are 
   assert.equal(isActiveChipVisible({...onMap, view: 'search'}), false, 'bubble row shows it');
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'full'}),
-    false,
-    'a full card covers it'
+    true,
+    'a phone full card leaves the chip above it'
   );
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'fullscreen'}),
     false,
-    'a fullscreen card covers it'
+    'a fullscreen card hides it with the header'
   );
   assert.equal(
     isActiveChipVisible({...onMap, cardHidden: false, cardState: 'peek'}),

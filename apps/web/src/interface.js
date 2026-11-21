@@ -13,7 +13,7 @@ export function isClearButtonVisible({state, isFlipLayout}) {
   return state !== 'empty';
 }
 
-// The map chip replaces the category row while that row is off screen; an open card covers the map.
+// The map chip replaces the category row while that row is off screen; Fullscreen covers the map.
 export function isActiveChipVisible({
   hasCategory,
   view,
@@ -24,8 +24,9 @@ export function isActiveChipVisible({
 }) {
   if (isDesktopLayout || !hasCategory || view !== 'closed') return false;
   if (isFlipLayout && !cardHidden) return false;
-  const isExpandedCard = !cardHidden && (cardState === 'full' || cardState === 'fullscreen');
-  return !isExpandedCard;
+  // A phone Peek or Full card sits below the header, so the chip stays above the card with it.
+  // Only Fullscreen hides the header, and Flip's own chips hide under every card state above.
+  return cardHidden || cardState !== 'fullscreen';
 }
 
 // Flip uses the top row for a query only where the map is visible; the dock's own bar shows it otherwise.
