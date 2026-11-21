@@ -800,10 +800,36 @@ test('every relief collection satisfies its read-only domain contract', () => {
   }
   const contours = readRelief('contours.geojson');
   assert.ok(contours.features.every(feature => feature.properties.index === (feature.properties.elevation % 100 === 0)));
+  const ridges = readRelief('ridges.geojson');
+  assert.ok(ridges.features.length > 0 && ridges.features.length < 200,
+    'ridge boundaries must stay in the tens, not thousands');
   const rims = readRelief('canyon-rims.geojson');
   assert.ok(rims.features.length > 0);
   assert.ok(rims.features.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
     .includes(`${feature.properties.river}:${feature.properties.bank}`)));
+});
+
+test('relief features carry facts only and build parameters live in provenance', () => {
+  const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
+  const parameters = provenance.relief.buildParameters;
+  assert.deepEqual(parameters.greenKindsPresentInLand, ['park']);
+  assert.equal(parameters.minimumAreaSquareMetres, 2500);
+  assert.equal(parameters.ridgeMinimumLengthMetres, 100);
+  assert.equal(parameters.summitLinkDistanceMetres, 50);
+  assert.equal(parameters.canyonRimJoinGapMetres, 60);
+  assert.equal(parameters.canyonRimMinimumLengthMetres, 100);
+  assert.equal(provenance.relief.retiredBuildParameters.radiusMetres, 400);
+  for (const filename of reliefFiles) {
+    for (const feature of readRelief(filename).features) {
+      const properties = feature.properties;
+      assert.equal(properties.source, undefined, `${filename}: source belongs in provenance`);
+      assert.equal(properties.greenKinds, undefined, `${filename}: greenKinds belongs in provenance`);
+      assert.equal(properties.greenKindsPresentInLand, undefined, `${filename}: discovered green kinds belong in provenance`);
+      assert.equal(properties.minimumAreaSquareMetres, undefined, `${filename}: minimum area belongs in provenance`);
+      assert.equal(properties.radiusMetres, undefined, `${filename}: ridge radius belongs in provenance`);
+      assert.equal('summit' in properties, 'summitName' in properties, `${filename}: summit link and name must appear together`);
+    }
+  }
 });
 
 test('every relief file has sorted keys, sorted identities, and one geometry per feature', () => {
@@ -828,9 +854,9 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
   const mutations = {
     'contours.geojson': [data => {data.features[0].properties.elevation = 25;}, data => {data.features[0].properties.index = !data.features[0].properties.index;}],
     'summits.geojson': [data => {data.features[0].properties.heightCheck = 'unknown';}, data => {data.features[0].properties.mismatch = !data.features[0].properties.mismatch;}, data => {data.features[0].properties.demElevation = 'high';}],
-    'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}],
-    'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}],
-    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}]
+    'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}, data => {data.features[0].properties.greenKinds = ['park'];}],
+    'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}, data => {data.features[0].properties.radiusMetres = 400;}],
+    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}]
   };
   for (const [filename, changes] of Object.entries(mutations)) {
     for (const change of changes) {

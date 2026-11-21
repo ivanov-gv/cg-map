@@ -7,13 +7,23 @@ from pathlib import Path
 
 from . import derivations
 from .sources import TerrainModel, read_geojson, read_osm, sha256_file
-from .terrain import serialize_collection
+from .terrain import (
+    CANYON_RIM_JOIN_GAP_METRES,
+    CANYON_RIM_MINIMUM_LENGTH_METRES,
+    RIDGE_MINIMUM_LENGTH_METRES,
+    RIDGE_SIMPLIFY_TOLERANCE_DEGREES,
+    RIDGE_SUMMIT_LINK_DISTANCE_METRES,
+    serialize_collection,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 DETAIL_BOUNDS = (19.15, 42.37, 19.34, 42.51)
 OSM_SHA256 = '70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b'
 REPORT_PATH = '.build/relief-report.json'
 MAX_CONTOUR_BYTES = 5_000_000
+# The round-one ridge builder searched this radius around each summit. That definition is
+# retired, but the value stays in provenance so a reviewer can trace the replacement lines.
+RETIRED_RIDGE_RADIUS_METRES = 400
 OUTPUT_NAMES = (
     'contours.geojson',
     'summits.geojson',
@@ -91,10 +101,11 @@ def build(root=ROOT, paths=None, osm_sha256=None):
         osm = read_osm(paths['osm'], osm_sha256, DETAIL_BOUNDS)
         contours, contour_report = derivations.build_contours(grid)
         summits, summit_report = derivations.build_summits(model, osm, land, contours)
-        slopes, slope_report = derivations.build_slopes(
+        areas = derivations.slope_areas(
             grid, land, derivations.GREEN_KINDS, DETAIL_BOUNDS
         )
-        ridges, ridge_report = derivations.build_ridges(grid, summits)
+        slopes, slope_report = derivations.build_slopes(areas)
+        ridges, ridge_report = derivations.build_ridges(areas, summits)
         canyon_rims, rim_report = derivations.build_canyon_rims(
             model, water, osm['cliffs'], DETAIL_BOUNDS
         )
@@ -157,6 +168,20 @@ def _updated_provenance(provenance, outputs, report_bytes):
         'osmSnapshot': report['osmSnapshot'],
         'inputs': report['inputs'],
         'license': report['license'],
+        'sources': derivations.LAYER_SOURCES,
+        'buildParameters': {
+            'greenKinds': report['slopes']['configuredGreenKinds'],
+            'greenKindsPresentInLand': report['slopes']['presentGreenKindsInLand'],
+            'minimumAreaSquareMetres': report['slopes']['minimumAreaSquareMetres'],
+            'ridgeSimplificationToleranceDegrees': RIDGE_SIMPLIFY_TOLERANCE_DEGREES,
+            'ridgeMinimumLengthMetres': RIDGE_MINIMUM_LENGTH_METRES,
+            'summitLinkDistanceMetres': RIDGE_SUMMIT_LINK_DISTANCE_METRES,
+            'canyonRimJoinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
+            'canyonRimMinimumLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
+        },
+        'retiredBuildParameters': {
+            'radiusMetres': RETIRED_RIDGE_RADIUS_METRES,
+        },
         'summary': {
             'contourFeatures': report['contours']['features'],
             'summitFeatures': report['summits']['features'],

@@ -145,6 +145,7 @@ OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-
 and `method: "dem-canyon-bank"`. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
 elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
 
+
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and
 `street`. Node IDs must be unique across buildings, appear in `address_sources`, and lie on the referenced footprint

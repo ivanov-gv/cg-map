@@ -168,7 +168,7 @@ export function validateRelief(data, {label}) {
   for (const feature of data.features) {
     const properties = feature.properties;
     requireValue(properties.kind === kind, `${label}: wrong relief kind ${properties.kind}`);
-    requireValue(typeof properties.source === 'string' && properties.source.length > 0, `${label}: missing source`);
+    requireValue(!('source' in properties), `${label}: feature properties must not repeat build provenance`);
     if (kind === 'contour') {
       const coordinates = feature.geometry.coordinates;
       requireValue(Number.isInteger(properties.elevation) && properties.elevation % 20 === 0, `${label}: elevation is not a 20 m contour`);
@@ -189,14 +189,18 @@ export function validateRelief(data, {label}) {
     }
     if (kind === 'slope') {
       requireValue(['sunlit', 'shaded'].includes(properties.aspect), `${label}: invalid aspect class`);
-      requireValue(Array.isArray(properties.greenKinds) && properties.greenKinds.length > 0 && properties.greenKinds.every(name => typeof name === 'string'), `${label}: missing green kinds`);
-      requireValue(Array.isArray(properties.greenKindsPresentInLand) && properties.greenKindsPresentInLand.every(name => properties.greenKinds.includes(name)), `${label}: unknown green kind in land.geojson`);
-      requireValue(Number.isFinite(properties.areaSquareMetres) && Number.isFinite(properties.minimumAreaSquareMetres), `${label}: invalid slope area`);
+      requireValue(Number.isFinite(properties.areaSquareMetres), `${label}: invalid slope area`);
+      requireValue(!('greenKinds' in properties) && !('greenKindsPresentInLand' in properties) && !('minimumAreaSquareMetres' in properties), `${label}: slope build parameters belong in provenance`);
     }
     if (kind === 'ridge') {
-      requireValue(/^(node|way|relation)\/[1-9][0-9]*$/.test(properties.summit), `${label}: invalid summit identity`);
-      requireValue(typeof properties.summitName === 'string' && typeof properties.sunlitSide === 'string' && typeof properties.shadedSide === 'string', `${label}: incomplete ridge sides`);
-      requireValue(Number.isFinite(properties.radiusMetres), `${label}: invalid ridge radius`);
+      requireValue(typeof properties.sunlitSide === 'string' && typeof properties.shadedSide === 'string', `${label}: incomplete ridge sides`);
+      requireValue(!('radiusMetres' in properties), `${label}: ridge build parameters belong in provenance`);
+      const hasSummit = 'summit' in properties || 'summitName' in properties;
+      requireValue(!hasSummit || ('summit' in properties && 'summitName' in properties), `${label}: summit link and name must appear together`);
+      if (hasSummit) {
+        requireValue(/^(node|way|relation)\/[1-9][0-9]*$/.test(properties.summit), `${label}: invalid summit identity`);
+        requireValue(typeof properties.summitName === 'string', `${label}: invalid summit name`);
+      }
     }
     if (kind === 'canyon-rim') {
       requireValue(['Morača', 'Ribnica'].includes(properties.river) && ['left', 'right'].includes(properties.bank), `${label}: invalid river bank`);
@@ -919,6 +923,14 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const heightChecks = summary.summitHeightChecks;
   requireValue(heightChecks && heightChecks.ok + heightChecks.mismatch + heightChecks.missing === summary.summitFeatures, 'Relief summit height check counts disagree');
   requireValue(Array.isArray(summary.greenKindsPresentInLand) && summary.greenKindsPresentInLand.every(kind => typeof kind === 'string'), 'Invalid green kinds in relief summary');
+  const parameters = relief.buildParameters;
+  requireValue(parameters && Array.isArray(parameters.greenKinds) && parameters.greenKinds.length > 0 && parameters.greenKinds.every(kind => typeof kind === 'string'), 'Relief green kinds missing from provenance build parameters');
+  requireValue(Array.isArray(parameters.greenKindsPresentInLand) && parameters.greenKindsPresentInLand.every(kind => parameters.greenKinds.includes(kind)), 'Relief green kinds in land disagree with build parameters');
+  requireValue(parameters.minimumAreaSquareMetres === 2500, 'Relief minimum slope area changed without review');
+  requireValue(parameters.ridgeMinimumLengthMetres === 100 && parameters.summitLinkDistanceMetres === 50 && parameters.ridgeSimplificationToleranceDegrees > 0, 'Relief ridge parameters changed without review');
+  requireValue(parameters.canyonRimJoinGapMetres === 60 && parameters.canyonRimMinimumLengthMetres === 100, 'Relief rim parameters changed without review');
+  requireValue(relief.retiredBuildParameters?.radiusMetres === 400, 'Retired ridge radius missing from relief provenance');
+  requireValue(relief.sources && ['contour', 'summit', 'slope', 'ridge', 'canyon-rim'].every(kind => typeof relief.sources[kind] === 'string' && relief.sources[kind].length > 0), 'Relief layer sources missing from provenance');
   const reportPath = path.join(root, relief.reportFile);
   if (fs.existsSync(reportPath)) {
     const reportBytes = fs.readFileSync(reportPath);

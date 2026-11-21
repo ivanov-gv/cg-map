@@ -1,4 +1,5 @@
 ROOT := ..
+PYTHON ?= python3
 
 .PHONY: verify lint check check-topology build-data build-relief apply-changeset test python-test python-check
 
@@ -19,7 +20,7 @@ build-data:
 
 # Rebuilds the five reviewed relief sources from external inputs outside Git.
 build-relief:
-	cd $(ROOT) && python3 data/tools/build-relief.py
+	cd $(ROOT) && $(PYTHON) data/tools/build-relief.py
 
 # Applies a reviewed editor export to data/sources: make -C data apply-changeset CHANGESET=<absolute path>. Never commits.
 apply-changeset:

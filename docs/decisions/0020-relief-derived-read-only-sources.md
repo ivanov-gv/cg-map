@@ -28,3 +28,15 @@ Rebuilding relief needs optional GIS dependencies and local external inputs, but
 source change is reviewable by byte hash, and a bad aspect or crossing contour can be reproduced in unit tests without
 the full GIS stack. Computed layers cannot be corrected in the editor; fixes belong in the producer, the reviewed source
 geometry or upstream OSM. Contour size and mismatch counts depend on the pinned DEM and OSM snapshot.
+
+## Decision refinement (2026-11-21)
+
+The second round of Feature #329 keeps this read-only ownership boundary but replaces the ridge definition. Radial lines
+around each summit produced 2,095 noisy parts, so a ridge is now one simplified connected segment of the boundary that
+sunlit and shaded slope polygons share inside green areas. A summit link is added only when the finished line passes
+within 50 m of that summit; `radiusMetres` remains in provenance as a retired build parameter, not as a feature fact.
+Canyon rims first join one bank across gaps under 60 m and then drop parts under 100 m. Green kinds, discovered kinds,
+minimum slope area, layer sources and those thresholds are build parameters in the relief provenance block; features
+keep only object facts. The full build uses pinned GIS packages in `~/.cache/cg-map/venv` through `PYTHON=...`, while
+plain-system-Python unit tests stay NumPy-only. Current procedures and the authoritative property rules are in the
+[data runbook](../runbooks/data.md#relief-sources) and [contracts README](../../packages/contracts/README.md).

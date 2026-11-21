@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/relief/v1",
   "title": "Relief source features v1",
-  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
+  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
   "type": "object",
   "required": ["type", "entitySchemaVersion", "features"],
   "properties": {
@@ -22,10 +22,11 @@
         "geometry": {"type": "object", "required": ["type", "coordinates"]},
         "properties": {
           "type": "object",
-          "required": ["entityId", "entityVersion", "kind", "source"],
+          "required": ["entityId", "entityVersion", "kind"],
           "properties": {
             "kind": {"enum": ["contour", "summit", "slope", "ridge", "canyon-rim"]},
-            "entityPart": {"type": "integer", "minimum": 0}
+            "entityPart": {"type": "integer", "minimum": 0},
+            "source": false
           },
           "allOf": [
             {"$ref": "#/$defs/contour"},
@@ -70,26 +71,27 @@
     "slope": {
       "if": {"properties": {"kind": {"const": "slope"}}, "required": ["kind"]},
       "then": {
-        "required": ["aspect", "greenKinds", "greenKindsPresentInLand", "areaSquareMetres", "minimumAreaSquareMetres"],
+        "required": ["aspect", "areaSquareMetres"],
         "properties": {
           "aspect": {"enum": ["sunlit", "shaded"]},
-          "greenKinds": {"type": "array", "items": {"type": "string"}},
-          "greenKindsPresentInLand": {"type": "array", "items": {"type": "string"}},
           "areaSquareMetres": {"type": "number"},
-          "minimumAreaSquareMetres": {"type": "number"}
+          "greenKinds": false,
+          "greenKindsPresentInLand": false,
+          "minimumAreaSquareMetres": false
         }
       }
     },
     "ridge": {
       "if": {"properties": {"kind": {"const": "ridge"}}, "required": ["kind"]},
       "then": {
-        "required": ["summit", "summitName", "sunlitSide", "shadedSide", "radiusMetres"],
+        "required": ["sunlitSide", "shadedSide"],
+        "dependentRequired": {"summit": ["summitName"], "summitName": ["summit"]},
         "properties": {
           "summit": {"type": "string", "pattern": "^(node|way|relation)/[1-9][0-9]*$"},
           "summitName": {"type": "string"},
           "sunlitSide": {"type": "string"},
           "shadedSide": {"type": "string"},
-          "radiusMetres": {"type": "number"}
+          "radiusMetres": false
         }
       }
     },

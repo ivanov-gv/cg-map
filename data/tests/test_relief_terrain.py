@@ -36,6 +36,41 @@ class ReliefTerrainTests(unittest.TestCase):
         self.assertFalse(bool(shaded[1, 1]))
         self.assertTrue(bool(flat_sunlit[1, 1]))
 
+    def test_synthetic_ridge_dem_puts_ridge_on_the_light_class_boundary(self):
+        # An east-west ridge with a steep north face and a steep south face. The crest falls
+        # between two pixel rows, so one row is wholly shaded and the next wholly sunlit.
+        crest_heights = np.array([0, 20, 40, 60, 80, 100, 90, 70, 50, 30, 10, -10], dtype=float)
+        heights = np.tile(crest_heights[:, None], (1, 11))
+        longitudes = np.linspace(19.250, 19.253, 11)
+        latitudes = np.linspace(42.450, 42.447, 12)
+
+        def cell_edges(coordinates):
+            step = coordinates[1] - coordinates[0]
+            return np.linspace(
+                coordinates[0] - step / 2,
+                coordinates[-1] + step / 2,
+                len(coordinates) + 1,
+            )
+
+        x_edges = cell_edges(longitudes)
+        y_edges = cell_edges(latitudes)
+        is_sunlit = TERRAIN.sunlit_mask(heights, 30, 30)
+        cell_classes = np.where(is_sunlit, 1, 0)
+        paths = TERRAIN.aspect_boundary_paths(cell_classes, x_edges, y_edges)
+        crest_latitude = (latitudes[5] + latitudes[6]) / 2
+
+        self.assertEqual(TERRAIN.RIDGE_MINIMUM_LENGTH_METRES, 100)
+        self.assertEqual(TERRAIN.RIDGE_SUMMIT_LINK_DISTANCE_METRES, 50)
+        self.assertEqual(len(paths), len(longitudes))
+        for path in paths:
+            self.assertEqual(len(path), 2)
+            self.assertAlmostEqual(path[0][1], crest_latitude, places=9)
+            self.assertAlmostEqual(path[1][1], crest_latitude, places=9)
+            midpoint_longitude = (path[0][0] + path[1][0]) / 2
+            column = int(np.argmin(np.abs(longitudes - midpoint_longitude)))
+            self.assertFalse(bool(is_sunlit[5, column]))
+            self.assertTrue(bool(is_sunlit[6, column]))
+
     def test_distinct_contour_levels_never_cross(self):
         longitudes = np.linspace(19.24, 19.26, 15)
         latitudes = np.linspace(42.455, 42.435, 15)
@@ -88,6 +123,28 @@ class ReliefTerrainTests(unittest.TestCase):
         self.assertFalse(TERRAIN.is_canyon_bank(100, [105, 107.9]))
         self.assertTrue(TERRAIN.is_canyon_bank(100, [105, 108]))
         self.assertEqual(TERRAIN.bank_rise(100, [105, 107]), 7)
+
+    def test_rim_paths_join_only_gaps_under_sixty_metres(self):
+        self.assertEqual(TERRAIN.CANYON_RIM_JOIN_GAP_METRES, 60)
+        first = [[0.0, 0.0], [10.0, 0.0]]
+        near = [[15.0, 0.0], [25.0, 0.0]]
+        far = [[85.0, 0.0], [95.0, 0.0]]
+        joined = TERRAIN.join_short_gaps(
+            [first, near, far], TERRAIN.CANYON_RIM_JOIN_GAP_METRES, 1, 1
+        )
+        self.assertEqual(joined, [
+            [[0.0, 0.0], [10.0, 0.0], [15.0, 0.0], [25.0, 0.0]],
+            [[85.0, 0.0], [95.0, 0.0]],
+        ])
+
+    def test_rim_paths_under_one_hundred_metres_are_dropped(self):
+        self.assertEqual(TERRAIN.CANYON_RIM_MINIMUM_LENGTH_METRES, 100)
+        short = [[0.0, 0.0], [99.9, 0.0]]
+        long_enough = [[0.0, 1.0], [100.0, 1.0]]
+        kept = TERRAIN.drop_short_paths(
+            [short, long_enough], TERRAIN.CANYON_RIM_MINIMUM_LENGTH_METRES, 1, 1
+        )
+        self.assertEqual(kept, [long_enough])
 
     def test_each_connected_line_path_stays_a_separate_feature(self):
         first = [[19.20, 42.44], [19.21, 42.44]]

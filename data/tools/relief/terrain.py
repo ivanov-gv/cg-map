@@ -17,13 +17,22 @@ FLAT_SLOPE_DEGREES = 3.0
 COORDINATE_DECIMALS = 6
 HEIGHT_MISMATCH_METRES = 25.0
 CONTOUR_SIMPLIFY_TOLERANCE_DEGREES = 0.00001
+RIDGE_SIMPLIFY_TOLERANCE_DEGREES = 0.00001
 
-# A 30 m DEM and river-surface sampling put ordinary bank roughness below 8 m; requiring
-# that rise keeps a canyon rim distinct from a shallow river edge. At offsets beyond 60 m
-# the sampled pixel can belong to an unrelated hillside rather than to the river bank.
+# One DEM pixel is 30 m, so a sub-100 m class boundary is a speckle of one or two pixels.
+# An OSM summit point and the DEM cell that represents the crest are independent samples,
+# so a summit within 50 m still identifies the hill whose shared slope boundary we publish.
+RIDGE_MINIMUM_LENGTH_METRES = 100
+RIDGE_SUMMIT_LINK_DISTANCE_METRES = 50
+
+# A gap under 60 m is usually one bad DEM sample or a small bend in the 30 m raster, not a
+# second rim; joining first keeps one bank as one line. What remains under 100 m after that
+# join is shorter than three pixels and reads as speckle, so it is not published.
 CANYON_BANK_RISE_METRES = 8.0
 CANYON_SEARCH_DISTANCE_METRES = 60
 CANYON_SEARCH_STEP_METRES = 10
+CANYON_RIM_JOIN_GAP_METRES = 60
+CANYON_RIM_MINIMUM_LENGTH_METRES = 100
 
 
 def contour_levels(minimum_height, maximum_height, interval=CONTOUR_INTERVAL_METRES):
@@ -64,6 +73,80 @@ def sunlit_mask(heights, metres_per_column, metres_per_row, flat_degrees=FLAT_SL
     is_flat = slope_degrees <= flat_degrees
     faces_sun = (aspect_degrees >= 90) & (aspect_degrees <= 270)
     return is_flat | faces_sun
+
+
+def aspect_boundary_paths(cell_classes, x_edges, y_edges):
+    """Return cell-edge paths shared by neighbouring sunlit and shaded slope cells.
+
+    ``cell_classes`` is -1 outside the published slopes, 0 for shaded cells and 1 for sunlit
+    cells. Only a neighbouring 0/1 pair emits its common edge, so a returned path is exactly
+    the boundary of the two light classes rather than a line drawn around one summit.
+    """
+    classes = np.asarray(cell_classes, dtype=int)
+    horizontal_edges = np.asarray(x_edges, dtype=float)
+    vertical_edges = np.asarray(y_edges, dtype=float)
+    paths = []
+    for row in range(classes.shape[0]):
+        for column in range(classes.shape[1]):
+            current_class = int(classes[row, column])
+            if current_class not in (0, 1):
+                continue
+            if column + 1 < classes.shape[1]:
+                east_class = int(classes[row, column + 1])
+                if east_class in (0, 1) and east_class != current_class:
+                    boundary_longitude = float(horizontal_edges[column + 1])
+                    paths.append([
+                        [boundary_longitude, float(vertical_edges[row + 1])],
+                        [boundary_longitude, float(vertical_edges[row])],
+                    ])
+            if row + 1 < classes.shape[0]:
+                south_class = int(classes[row + 1, column])
+                if south_class in (0, 1) and south_class != current_class:
+                    boundary_latitude = float(vertical_edges[row + 1])
+                    paths.append([
+                        [float(horizontal_edges[column]), boundary_latitude],
+                        [float(horizontal_edges[column + 1]), boundary_latitude],
+                    ])
+    return paths
+
+
+def path_length_metres(path, longitude_metres_per_degree, latitude_metres_per_degree):
+    """Return the metre length of one WGS84 coordinate path at the build latitude."""
+    if len(path) < 2:
+        return 0.0
+    eastwards = np.diff([point[0] for point in path]) * longitude_metres_per_degree
+    northwards = np.diff([point[1] for point in path]) * latitude_metres_per_degree
+    return float(np.hypot(eastwards, northwards).sum())
+
+
+def join_short_gaps(paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree):
+    """Join ordered paths when the gap between one end and the next start is under a limit."""
+    joined = []
+    for path in paths:
+        coordinates = [list(point) for point in path]
+        if not coordinates:
+            continue
+        if joined:
+            previous_end = joined[-1][-1]
+            next_start = coordinates[0]
+            east = (next_start[0] - previous_end[0]) * longitude_metres_per_degree
+            north = (next_start[1] - previous_end[1]) * latitude_metres_per_degree
+            if math.hypot(east, north) < gap_metres:
+                joined[-1].extend(coordinates)
+                continue
+        joined.append(coordinates)
+    return joined
+
+
+def drop_short_paths(paths, minimum_length_metres, longitude_metres_per_degree,
+                     latitude_metres_per_degree):
+    """Keep only paths at least as long as the published minimum."""
+    return [
+        path for path in paths
+        if path_length_metres(
+            path, longitude_metres_per_degree, latitude_metres_per_degree
+        ) >= minimum_length_metres
+    ]
 
 
 def smooth_heights(heights):

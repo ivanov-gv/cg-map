@@ -17,18 +17,27 @@ from shapely.prepared import prep
 
 from .terrain import (
     CANYON_BANK_RISE_METRES,
+    CANYON_RIM_JOIN_GAP_METRES,
+    CANYON_RIM_MINIMUM_LENGTH_METRES,
     CANYON_SEARCH_DISTANCE_METRES,
     CANYON_SEARCH_STEP_METRES,
     CONTOUR_SIMPLIFY_TOLERANCE_DEGREES,
     HEIGHT_MISMATCH_METRES,
+    RIDGE_MINIMUM_LENGTH_METRES,
+    RIDGE_SIMPLIFY_TOLERANCE_DEGREES,
+    RIDGE_SUMMIT_LINK_DISTANCE_METRES,
     assert_contours_do_not_cross,
+    aspect_boundary_paths,
     bank_rise,
     classify_height_check,
     contour_levels,
     content_hash,
     coordinate_slug,
+    drop_short_paths,
     is_canyon_bank,
     is_index_level,
+    join_short_gaps,
+    path_length_metres,
     rounded_coordinates,
     separate_line_paths,
     smooth_heights,
@@ -61,6 +70,13 @@ ADAPTED_PRODUCT_NOTICE = (
     'Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; '
     'all rights reserved'
 )
+LAYER_SOURCES = {
+    'contour': 'Copernicus DEM GLO-30',
+    'summit': 'OpenStreetMap and Copernicus DEM GLO-30',
+    'slope': 'Copernicus DEM GLO-30 and reviewed land.geojson',
+    'ridge': 'Copernicus DEM GLO-30, reviewed land.geojson and OpenStreetMap summits',
+    'canyon-rim': 'Copernicus DEM GLO-30 and OpenStreetMap cliffs',
+}
 
 
 def entity_slug(value):
@@ -168,7 +184,6 @@ def build_contours(grid, interval=20, index_interval=100):
             'intervalMetres': interval,
             'index': is_index_level(level, index_interval),
             'segments': len(path) - 1,
-            'source': 'Copernicus DEM GLO-30',
         }, geometry))
     assert_contours_do_not_cross(segments)
     report = {
@@ -284,7 +299,6 @@ def build_summits(model, osm, land, contour_features):
             'heightCheck': height_check,
             'mismatch': height_check == 'mismatch',
             'mismatchReasons': reasons,
-            'source': 'OpenStreetMap and Copernicus DEM GLO-30',
         }
         geometry = {'type': 'Point', 'coordinates': rounded_coordinates(summit['coordinates'])}
         features.append({
@@ -343,8 +357,9 @@ def _cell_range(coordinates, low, high):
 
 
 def _green_cells(grid, land, green_kinds, detail_bounds):
-    """Collect DEM cells clipped to the reviewed green areas of the configured kinds."""
+    """Collect clipped DEM cells and their light classes inside reviewed green areas."""
     west, south, east, north = detail_bounds
+    detail_box = box(west, south, east, north)
     green_parts = []
     present_kinds = set()
     for feature in land['features']:
@@ -353,21 +368,33 @@ def _green_cells(grid, land, green_kinds, detail_bounds):
             continue
         polygon = shape(feature['geometry'])
         if polygon.is_valid and not polygon.is_empty:
-            green_parts.append(polygon.intersection(box(west, south, east, north)))
+            green_parts.append(polygon.intersection(detail_box))
             present_kinds.add(kind)
-    if not green_parts:
-        return {'sunlit': [], 'shaded': []}, sorted(present_kinds)
 
-    green = unary_union(green_parts).buffer(0)
-    heights = smooth_heights(smooth_heights(grid['heights']))
-    classes = sunlit_mask(
-        heights, grid['metres_per_column'], grid['metres_per_row']
-    )
     longitudes = grid['longitudes']
     latitudes = grid['latitudes']
     x_edges = _cell_edges(longitudes)
     y_edges = _cell_edges(latitudes)
+    cell_classes = np.full(grid['heights'].shape, -1, dtype=int)
     collected = {'sunlit': [], 'shaded': []}
+    empty_result = {
+        'cellParts': collected,
+        'presentKinds': sorted(present_kinds),
+        'green': None,
+        'cellClasses': cell_classes,
+        'xEdges': x_edges,
+        'yEdges': y_edges,
+    }
+    if not green_parts:
+        return empty_result
+
+    green = unary_union(green_parts).buffer(0)
+    if green.is_empty:
+        return empty_result
+    heights = smooth_heights(smooth_heights(grid['heights']))
+    is_sunlit = sunlit_mask(
+        heights, grid['metres_per_column'], grid['metres_per_row']
+    )
     prepared_green = prep(green)
     column_start, column_end = _cell_range(longitudes, green.bounds[0], green.bounds[2])
     row_start, row_end = _cell_range(latitudes, green.bounds[1], green.bounds[3])
@@ -382,9 +409,17 @@ def _green_cells(grid, land, green_kinds, detail_bounds):
             clipped = green.intersection(cell)
             if clipped.is_empty:
                 continue
-            label = 'sunlit' if classes[row, column] else 'shaded'
-            collected[label].append(clipped)
-    return collected, sorted(present_kinds)
+            label = 'sunlit' if is_sunlit[row, column] else 'shaded'
+            collected[label].append((row, column, clipped))
+            cell_classes[row, column] = 1 if is_sunlit[row, column] else 0
+    return {
+        'cellParts': collected,
+        'presentKinds': sorted(present_kinds),
+        'green': green,
+        'cellClasses': cell_classes,
+        'xEdges': x_edges,
+        'yEdges': y_edges,
+    }
 
 
 def _kept_slope_polygons(cell_parts, minimum_area_degrees):
@@ -399,25 +434,57 @@ def _kept_slope_polygons(cell_parts, minimum_area_degrees):
     return sorted(kept, key=lambda polygon: tuple(polygon.exterior.coords[0]))
 
 
-def build_slopes(grid, land, green_kinds, detail_bounds, minimum_area_m2=2500):
-    """Classify DEM cells inside reviewed green areas as one Polygon feature each."""
-    collected, present_kinds = _green_cells(grid, land, green_kinds, detail_bounds)
+def slope_areas(grid, land, green_kinds, detail_bounds, minimum_area_m2=2500):
+    """Return the retained slope polygons and the class grid they share a boundary on."""
+    cells = _green_cells(grid, land, green_kinds, detail_bounds)
     square_metres_per_degree = (
         grid['metres_per_column'] * 3600 * grid['metres_per_row'] * 3600
     )
     minimum_area_degrees = minimum_area_m2 / square_metres_per_degree
+    polygons = {}
+    for label in ('sunlit', 'shaded'):
+        parts = [part for _, _, part in cells['cellParts'][label]]
+        kept = _kept_slope_polygons(parts, minimum_area_degrees)
+        polygons[label] = kept
+        kept_area = unary_union(kept) if kept else None
+        for row, column, part in cells['cellParts'][label]:
+            if kept_area is None or not kept_area.covers(part.representative_point()):
+                cells['cellClasses'][row, column] = -1
+    return {
+        'polygons': polygons,
+        'greenKinds': list(green_kinds),
+        'presentKinds': cells['presentKinds'],
+        'green': cells['green'],
+        'cellClasses': cells['cellClasses'],
+        'xEdges': cells['xEdges'],
+        'yEdges': cells['yEdges'],
+        'squareMetresPerDegree': square_metres_per_degree,
+        'minimumAreaSquareMetres': minimum_area_m2,
+        'metresPerDegreeLongitude': grid['metres_per_column'] / abs(
+            float(grid['longitudes'][1] - grid['longitudes'][0])
+        ),
+        'metresPerDegreeLatitude': grid['metres_per_row'] / abs(
+            float(grid['latitudes'][0] - grid['latitudes'][1])
+        ),
+    }
+
+
+def build_slopes(areas):
+    """Publish each retained light-class polygon as one Polygon feature."""
     features = []
     used_names = set()
     report = {
-        'configuredGreenKinds': list(green_kinds),
-        'presentGreenKindsInLand': present_kinds,
-        'minimumAreaSquareMetres': minimum_area_m2,
+        'configuredGreenKinds': areas['greenKinds'],
+        'presentGreenKindsInLand': areas['presentKinds'],
+        'minimumAreaSquareMetres': areas['minimumAreaSquareMetres'],
         'features': 0,
         'geometry': 'one Polygon feature per connected slope area',
     }
     for label in ('sunlit', 'shaded'):
-        kept = _kept_slope_polygons(collected[label], minimum_area_degrees)
-        area_m2 = round(sum(polygon.area for polygon in kept) * square_metres_per_degree)
+        kept = areas['polygons'][label]
+        area_m2 = round(
+            sum(polygon.area for polygon in kept) * areas['squareMetresPerDegree']
+        )
         for polygon in kept:
             geometry = _geometry(polygon)
             start = geometry['coordinates'][0][0]
@@ -425,35 +492,36 @@ def build_slopes(grid, land, green_kinds, detail_bounds, minimum_area_m2=2500):
             features.append(derived_feature(_unique_name(base, used_names), {
                 'kind': 'slope',
                 'aspect': label,
-                'greenKinds': list(green_kinds),
-                'greenKindsPresentInLand': present_kinds,
-                'areaSquareMetres': round(polygon.area * square_metres_per_degree),
-                'minimumAreaSquareMetres': minimum_area_m2,
-                'source': 'Copernicus DEM GLO-30 and reviewed land.geojson',
+                'areaSquareMetres': round(
+                    polygon.area * areas['squareMetresPerDegree']
+                ),
             }, geometry))
         report[label] = {'polygons': len(kept), 'areaSquareMetres': area_m2}
     report['features'] = len(features)
     return features, report
 
 
-def _grid_index(coordinates, value):
-    return int(np.argmin(np.abs(np.asarray(coordinates, dtype=float) - value)))
+def _line_components(geometry):
+    """Return every LineString part of a merged or clipped geometry."""
+    if geometry.is_empty:
+        return []
+    if geometry.geom_type == 'LineString':
+        return [geometry]
+    if hasattr(geometry, 'geoms'):
+        return [
+            part for item in geometry.geoms for part in _line_components(item)
+        ]
+    return []
 
 
-def _ridge_sides(longitudes, latitudes, classes, centre_column, centre_row, radius_columns, radius_rows, radius_metres, summit):
-    sunlit_latitudes = []
-    shaded_latitudes = []
-    longitude_metres = 111_320 * math.cos(math.radians(summit[1]))
-    for row in range(max(0, centre_row - radius_rows), min(len(latitudes), centre_row + radius_rows + 1)):
-        for column in range(max(0, centre_column - radius_columns), min(len(longitudes), centre_column + radius_columns + 1)):
-            east = (longitudes[column] - summit[0]) * longitude_metres
-            north = (latitudes[row] - summit[1]) * 111_320
-            if math.hypot(east, north) > radius_metres:
-                continue
-            if classes[row, column]:
-                sunlit_latitudes.append(latitudes[row])
-            else:
-                shaded_latitudes.append(latitudes[row])
+def _light_class_sides(cell_classes, y_edges):
+    """Name the mean north/south side of the retained sunlit and shaded slope cells."""
+    centre_latitudes = (np.asarray(y_edges[:-1]) + np.asarray(y_edges[1:])) / 2
+    classes = np.asarray(cell_classes)
+    sunlit_rows = np.where((classes == 1).any(axis=1))[0]
+    shaded_rows = np.where((classes == 0).any(axis=1))[0]
+    sunlit_latitudes = [float(centre_latitudes[row]) for row in sunlit_rows]
+    shaded_latitudes = [float(centre_latitudes[row]) for row in shaded_rows]
     if not sunlit_latitudes or not shaded_latitudes:
         return 'undetermined', 'undetermined'
     if statistics.mean(sunlit_latitudes) < statistics.mean(shaded_latitudes):
@@ -461,87 +529,92 @@ def _ridge_sides(longitudes, latitudes, classes, centre_column, centre_row, radi
     return 'north', 'south'
 
 
-def _aspect_boundary_lines(grid, classes, summit_coordinates, radius_metres):
-    longitudes = grid['longitudes']
-    latitudes = grid['latitudes']
-    x_edges = _cell_edges(longitudes)
-    y_edges = _cell_edges(latitudes)
-    longitude, latitude = summit_coordinates
-    radius_columns = int(math.ceil(radius_metres / grid['metres_per_column'])) + 1
-    radius_rows = int(math.ceil(radius_metres / grid['metres_per_row'])) + 1
-    longitude_metres = 111_320 * math.cos(math.radians(float(np.mean(latitudes))))
-    centre_column = _grid_index(longitudes, longitude)
-    centre_row = _grid_index(latitudes, latitude)
-    lines = []
-    for row in range(max(0, centre_row - radius_rows), min(len(latitudes) - 1, centre_row + radius_rows + 1)):
-        for column in range(max(0, centre_column - radius_columns), min(len(longitudes) - 1, centre_column + radius_columns + 1)):
-            cell_east = (longitudes[column] - longitude) * longitude_metres
-            cell_north = (latitudes[row] - latitude) * 111_320
-            if math.hypot(cell_east, cell_north) > radius_metres:
-                continue
-            if classes[row, column] != classes[row, column + 1]:
-                x = x_edges[column + 1]
-                lines.append(LineString([(x, y_edges[row + 1]), (x, y_edges[row])]))
-            if classes[row, column] != classes[row + 1, column]:
-                y = y_edges[row + 1]
-                lines.append(LineString([(x_edges[column], y), (x_edges[column + 1], y)]))
-    return lines, (centre_column, centre_row, radius_columns, radius_rows)
+def _metric_distance_to_line(point_coordinates, path, metres_per_column, metres_per_row):
+    """Return the metre distance from a summit point to a ridge path."""
+    def to_metres(longitude, latitude):
+        return longitude * metres_per_column, latitude * metres_per_row
+
+    metric_line = transform(to_metres, LineString(path))
+    metric_point = transform(to_metres, Point(point_coordinates))
+    return metric_line.distance(metric_point)
 
 
-def build_ridges(grid, summit_features, radius_metres=400):
-    """Draw one DEM aspect-class boundary line per feature near each detail-area summit."""
-    heights = smooth_heights(smooth_heights(grid['heights']))
-    classes = sunlit_mask(heights, grid['metres_per_column'], grid['metres_per_row'])
+def _nearest_summit(path, summit_features, metres_per_column, metres_per_row):
+    """Return the closest summit within the link distance, or None when there is none."""
+    candidates = []
+    for summit in summit_features:
+        distance = _metric_distance_to_line(
+            summit['geometry']['coordinates'], path, metres_per_column, metres_per_row
+        )
+        if distance <= RIDGE_SUMMIT_LINK_DISTANCE_METRES:
+            candidates.append((distance, summit['id'], summit))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: (candidate[0], candidate[1]))[2]
+
+
+def build_ridges(areas, summit_features):
+    """Publish each connected sunlit/shaded slope boundary as one simplified ridge."""
+    raw_paths = aspect_boundary_paths(
+        areas['cellClasses'], areas['xEdges'], areas['yEdges']
+    )
+    sunlit_side, shaded_side = _light_class_sides(areas['cellClasses'], areas['yEdges'])
+    report = {
+        'geometry': 'one LineString feature per connected sunlit/shaded slope boundary',
+        'boundarySource': 'shared boundary of retained sunlit and shaded slope polygons inside green areas',
+        'simplificationToleranceDegrees': RIDGE_SIMPLIFY_TOLERANCE_DEGREES,
+        'minimumLengthMetres': RIDGE_MINIMUM_LENGTH_METRES,
+        'summitLinkDistanceMetres': RIDGE_SUMMIT_LINK_DISTANCE_METRES,
+        'features': 0,
+        'summitLinks': 0,
+        'items': [],
+    }
+    if not raw_paths or areas['green'] is None:
+        return [], report
+
+    boundary = unary_union([LineString(path) for path in raw_paths])
+    clipped = boundary.intersection(areas['green'])
+    simplified = unary_union([
+        line.simplify(RIDGE_SIMPLIFY_TOLERANCE_DEGREES, preserve_topology=True)
+        for line in _line_components(clipped)
+    ])
+    paths = [
+        rounded_coordinates(list(line.coords))
+        for line in _line_components(linemerge(simplified))
+    ]
+    paths = drop_short_paths(
+        paths, RIDGE_MINIMUM_LENGTH_METRES,
+        areas['metresPerDegreeLongitude'], areas['metresPerDegreeLatitude'],
+    )
+    paths = separate_line_paths(paths)
+
     features = []
     used_names = set()
-    report = {'radiusMetres': radius_metres, 'features': 0, 'items': []}
-    for summit in summit_features:
-        coordinates = summit['geometry']['coordinates']
-        longitude, latitude = coordinates
-        if not (grid['longitudes'][0] <= longitude <= grid['longitudes'][-1]
-                and grid['latitudes'][-1] <= latitude <= grid['latitudes'][0]):
-            continue
-        lines, ridge_indices = _aspect_boundary_lines(
-            grid, classes, coordinates, radius_metres
+    for path in paths:
+        linked_summit = _nearest_summit(
+            path, summit_features, areas['metresPerDegreeLongitude'], areas['metresPerDegreeLatitude']
         )
-        if not lines:
-            continue
-        merged = unary_union(lines)
-        sunlit_side, shaded_side = _ridge_sides(
-            grid['longitudes'], grid['latitudes'], classes,
-            *ridge_indices, radius_metres, coordinates,
-        )
-        properties = summit['properties']
-        components = list(merged.geoms) if merged.geom_type == 'MultiLineString' else [merged]
-        summit_slug = entity_slug(summit['id'])
-        summit_features_added = 0
-        for line in components:
-            path = rounded_coordinates(list(line.coords))
-            if len(path) < 2:
-                continue
-            base = (
-                f'ridge-{summit_slug}-{coordinate_slug(path[0][0])}-'
-                f'{coordinate_slug(path[0][1])}'
-            )
-            features.append(derived_feature(_unique_name(base, used_names), {
-                'kind': 'ridge',
-                'summit': summit['id'],
-                'summitName': properties.get('name', ''),
-                'sunlitSide': sunlit_side,
-                'shadedSide': shaded_side,
-                'radiusMetres': radius_metres,
-                'source': 'Copernicus DEM GLO-30 and OpenStreetMap summits',
-            }, {'type': 'LineString', 'coordinates': path}))
-            summit_features_added += 1
-        report['items'].append({
-            'summit': summit['id'],
-            'name': properties.get('name', ''),
+        properties = {
+            'kind': 'ridge',
             'sunlitSide': sunlit_side,
             'shadedSide': shaded_side,
-            'segments': len(lines),
-            'features': summit_features_added,
+        }
+        if linked_summit is not None:
+            properties['summit'] = linked_summit['id']
+            properties['summitName'] = linked_summit['properties'].get('name', '')
+        base = f'ridge-{coordinate_slug(path[0][0])}-{coordinate_slug(path[0][1])}'
+        geometry = {'type': 'LineString', 'coordinates': path}
+        feature = derived_feature(_unique_name(base, used_names), properties, geometry)
+        features.append(feature)
+        report['items'].append({
+            'entityId': feature['properties']['entityId'],
+            'lengthMetres': round(path_length_metres(
+                path, areas['metresPerDegreeLongitude'], areas['metresPerDegreeLatitude']
+            )),
+            'summit': linked_summit['id'] if linked_summit else None,
         })
     report['features'] = len(features)
+    report['summitLinks'] = sum(item['summit'] is not None for item in report['items'])
     return features, report
 
 
@@ -707,6 +780,28 @@ def _segments_from_samples(samples, maximum_gap):
     return segments
 
 
+def _clean_rim_segments(segments, latitude_metres, longitude_metres):
+    """Join gap speckle into bank lines and remove the short lines left behind."""
+    if not segments:
+        return []
+    paths = [list(segment.coords) for segment, _ in segments]
+    joined_paths = join_short_gaps(
+        paths, CANYON_RIM_JOIN_GAP_METRES, longitude_metres, latitude_metres
+    )
+    kept_paths = drop_short_paths(
+        joined_paths, CANYON_RIM_MINIMUM_LENGTH_METRES,
+        longitude_metres, latitude_metres,
+    )
+    cleaned = []
+    for path in kept_paths:
+        joined_line = LineString(path)
+        rise = max(
+            rise for segment, rise in segments if joined_line.intersects(segment)
+        )
+        cleaned.append((joined_line, rise))
+    return cleaned
+
+
 def _qualifying_cliffs(cliffs, lines, bank, detail_bounds, latitude_metres,
                        longitude_metres, rim_geometry, near_metres):
     candidates = []
@@ -748,6 +843,8 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
         'minimumBankRiseMetres': CANYON_BANK_RISE_METRES,
         'searchDistanceMetres': CANYON_SEARCH_DISTANCE_METRES,
         'searchStepMetres': CANYON_SEARCH_STEP_METRES,
+        'joinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
+        'minimumSegmentLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
         'geometry': 'one LineString feature per canyon segment with a shared derived identity and entityPart numbers',
     }
     for river_name in river_names:
@@ -758,10 +855,13 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
                     line, bank, model, latitude_metres, longitude_metres,
                     sample_spacing_metres,
                 ))
-            segments = _segments_from_samples(
+            sampled_segments = _segments_from_samples(
                 samples, sample_spacing_metres * 1.5 / latitude_metres
             )
-            segments.sort(key=lambda segment: tuple(segment[0].coords[0]))
+            sampled_segments.sort(key=lambda segment: tuple(segment[0].coords[0]))
+            segments = _clean_rim_segments(
+                sampled_segments, latitude_metres, longitude_metres
+            )
             rim_geometry = unary_union([line for line, _ in segments])
             cliff_parts, cliff_ways = _qualifying_cliffs(
                 cliffs, grouped.get(river_name, []), bank, detail_bounds,
@@ -804,7 +904,6 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
                         'minimumBankRiseMetres': CANYON_BANK_RISE_METRES,
                         'searchDistanceMetres': CANYON_SEARCH_DISTANCE_METRES,
                         'searchStepMetres': CANYON_SEARCH_STEP_METRES,
-                        'source': 'Copernicus DEM GLO-30 and OpenStreetMap cliffs',
                     }, geometry))
                 features.extend(derived_parts(name, parts))
             report['riverBanks'].append({
