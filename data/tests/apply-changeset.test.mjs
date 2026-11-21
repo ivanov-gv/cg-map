@@ -120,12 +120,35 @@ test('a new place keeps its local identity, and a deletion removes the feature',
       after: null
     }
   ];
-  applyChangeset(changeset(root, 'places.geojson', operations), root, {now: reviewedAt, contractsDirectory});
+  applyChangeset(changeset(root, 'places.geojson', operations), root, {
+    now: reviewedAt,
+    contractsDirectory,
+    newEntityId: () => localId
+  });
   const {features} = readSource(root, 'places.geojson');
+  const added = features.find(feature => feature.properties.id === localId);
   assert.equal(features.length, count);
-  assert.equal(features.at(-1).properties.id, localId);
+  assert.ok(added);
+  assert.equal(added.properties.entityId, localId);
+  assert.equal(added.properties.entityVersion, `sha256:${sha256(JSON.stringify(after))}`);
   assert.ok(features.every(feature => feature.properties.id !== before.properties.id));
   assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
+});
+
+test('an added road receives a local source identity and a content version', testContext => {
+  const root = temporaryRoot(testContext);
+  const localId = 'local:22222222-2222-4222-8222-222222222222';
+  const after = road({kind: 'footway'});
+  const operation = addOperation('roads.geojson', localId, after);
+  applyChangeset(changeset(root, 'roads.geojson', [operation]), root, {
+    now: reviewedAt,
+    newEntityId: () => localId
+  });
+  const {features} = readSource(root, 'roads.geojson');
+  const added = features.find(feature => feature.properties.entityId === localId);
+  assert.ok(added);
+  assert.equal(added.properties.entityVersion, `sha256:${sha256(JSON.stringify(after))}`);
+  assert.doesNotThrow(() => checkData(root));
 });
 
 test('level 1 outside the landmark category is refused by name, before anything is written', testContext => {

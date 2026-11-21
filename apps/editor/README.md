@@ -118,8 +118,6 @@ measure a phone, or edits and export at these sizes.
 - Parks and water can be reshaped and renamed, but not added or deleted: the contract allows only modifications there.
 - The preview is not a rebuild: see Preview all edits above. The importer says when tiles need one.
 - Corrections cannot follow a re-extract. References are bound to one snapshot, so an old changeset is refused.
-- Editing water rewrites that whole file through JSON serialization, which normalizes a coordinate written as `41.0` in
-  the ocean feature. Expect that one extra line of difference on the first water edit.
 
 ## Install on your devices
 

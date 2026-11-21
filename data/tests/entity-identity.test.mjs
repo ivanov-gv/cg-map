@@ -132,7 +132,7 @@ test('check-data enforces adopted metadata in all eight source files before prov
     const originalPath = path.join(repositoryRoot, 'data/sources', filename);
     const testPath = path.join(sourceDirectory, filename);
     const collection = JSON.parse(readFileSync(originalPath));
-    collection.entitySchemaVersion = 1;
+    collection.features[0].properties.entityId = 'unknown:1';
     unlinkSync(testPath);
     writeFileSync(testPath, JSON.stringify(collection));
     assert.throws(() => checkData(root, {contractsDirectory}), /feature 0: invalid entityId/, filename);

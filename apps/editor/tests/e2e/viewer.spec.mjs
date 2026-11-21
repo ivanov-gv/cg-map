@@ -275,14 +275,20 @@ async function clickCoordinate(page, coordinate) {
   await page.mouse.click(point.x, point.y);
 }
 
+// A click target shared with another POI can open the chooser or select its neighbour, not the moved feature.
+function isolatedPlaceWithLevel(features, level) {
+  const separationDegrees = 0.001;
+  return features.find(candidate => candidate.properties.visibilityLevel === level && features.every(other => {
+    const distance = Math.hypot(...candidate.geometry.coordinates.map((value, axis) => value - other.geometry.coordinates[axis]));
+    return candidate === other || distance > separationDegrees;
+  }));
+}
+
 // Select an isolated low-priority POI so a hidden-object tap cannot accidentally hit a neighbouring visible marker.
 async function isolatedPlace(page) {
   const response = await page.request.get(new URL('sources/places.geojson', page.url()).href);
   const {features} = await response.json();
-  const feature = features.find(candidate => candidate.properties.visibilityLevel === 4 && features.every(other => {
-    const distance = Math.hypot(...candidate.geometry.coordinates.map((value, axis) => value - other.geometry.coordinates[axis]));
-    return candidate === other || distance > 0.001;
-  }));
+  const feature = isolatedPlaceWithLevel(features, 4);
   expect(feature).toBeTruthy();
   return feature;
 }
@@ -413,9 +419,11 @@ test('a resumed shared-location move installs its public zoom bands with guides 
   ]);
   const {features} = await sourceResponse.json();
   const manifest = await manifestResponse.json();
-  const index = features.findIndex(feature => feature.properties.visibilityLevel === 3);
-  const destination = features.find(feature => feature.properties.visibilityLevel === 4);
-  const before = features[index];
+  const before = isolatedPlaceWithLevel(features, 3);
+  const destination = isolatedPlaceWithLevel(features, 4);
+  expect(before).toBeTruthy();
+  expect(destination).toBeTruthy();
+  const index = features.indexOf(before);
   const after = {...before, geometry: destination.geometry};
   const base = manifest.layers.find(layer => layer.filename === 'places.geojson').sha256;
   const draft = {

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, checkPlaceMetadata} from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
-import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, run as applyCommand} from '../tools/apply-place-visibility.mjs';
+import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const contractsDirectory = 'packages/contracts';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 test('reviewed Podgorica places satisfy the directory contract', () => {
@@ -139,7 +139,7 @@ test('data checks catch level drift, policy changes, and changed facts', () => {
   const placeBytes = fs.readFileSync('data/sources/places.geojson', 'utf8'), policyBytes = fs.readFileSync('data/sources/place-visibility-policy.json', 'utf8');
   const configBytes = fs.readFileSync('packages/contracts/place-visibility.json', 'utf8'), provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
   assert.equal(checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance, {contractsDirectory}), provenance.places_count);
-  const edited = change => { const data = JSON.parse(placeBytes); change(data.features[0]); return JSON.stringify(data); };
+  const edited = change => { const data = JSON.parse(placeBytes); change(data.features[0]); return serializePlaces(data); };
   assert.throws(() => checkPlaceMetadata(edited(f => {f.properties.visibilityLevel = f.properties.visibilityLevel === 2 ? 3 : 2;}), policyBytes, configBytes, provenance, {contractsDirectory}), /differ from the reviewed policy/);
   assert.throws(() => checkPlaceMetadata(edited(f => {f.geometry.coordinates[0] += 0.001;}), policyBytes, configBytes, provenance, {contractsDirectory}), /provenance mismatch: places_bytes|provenance mismatch: places_sha256/);
   assert.throws(() => checkPlaceMetadata(placeBytes, policyBytes + ' ', configBytes, provenance, {contractsDirectory}), /place_visibility_policy_sha256/);

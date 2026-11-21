@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="cg-map-test">
+  <bounds minlat="42.38" minlon="19.18" maxlat="42.52" maxlon="19.32"/>
+  <node id="9001" version="2" lat="42.38" lon="19.18"/>
+  <node id="9002" version="2" lat="42.38" lon="19.32"/>
+  <node id="9003" version="2" lat="42.52" lon="19.32"/>
+  <node id="9004" version="2" lat="42.52" lon="19.18"/>
+
+  <node id="1001" version="3" lat="42.44" lon="19.25">
+    <tag k="name" v="Test Cafe"/>
+    <tag k="amenity" v="cafe"/>
+  </node>
+  <node id="1002" version="2" lat="43.19" lon="19.05">
+    <tag k="name" v="Test Viewpoint"/>
+    <tag k="tourism" v="viewpoint"/>
+  </node>
+  <node id="1003" version="6" lat="42.4405" lon="19.2505">
+    <tag k="addr:housenumber" v="12"/>
+  </node>
+
+  <node id="2011" version="1" lat="42.44" lon="19.25"/>
+  <node id="2012" version="1" lat="42.44" lon="19.251"/>
+  <node id="2013" version="1" lat="42.441" lon="19.251"/>
+  <node id="2014" version="1" lat="42.441" lon="19.25"/>
+  <way id="2001" version="5">
+    <nd ref="2011"/><nd ref="2012"/><nd ref="2013"/><nd ref="2014"/><nd ref="2011"/>
+    <tag k="building" v="yes"/>
+    <tag k="addr:housenumber" v="12"/>
+  </way>
+
+  <node id="2021" version="1" lat="42.445" lon="19.19"/>
+  <node id="2022" version="1" lat="42.445" lon="19.26"/>
+  <node id="2023" version="1" lat="42.446" lon="19.26"/>
+  <node id="2024" version="1" lat="42.446" lon="19.19"/>
+  <way id="2002" version="8">
+    <nd ref="2021"/><nd ref="2022"/><nd ref="2023"/><nd ref="2024"/><nd ref="2021"/>
+    <tag k="building" v="yes"/>
+  </way>
+
+  <node id="2031" version="1" lat="42.43" lon="19.24"/>
+  <node id="2032" version="1" lat="42.435" lon="19.255"/>
+  <way id="2003" version="4">
+    <nd ref="2031"/><nd ref="2032"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Test Street"/>
+  </way>
+
+  <node id="2041" version="1" lat="42.46" lon="19.22"/>
+  <node id="2042" version="1" lat="42.46" lon="19.23"/>
+  <node id="2043" version="1" lat="42.47" lon="19.23"/>
+  <node id="2044" version="1" lat="42.47" lon="19.22"/>
+  <way id="2004" version="7">
+    <nd ref="2041"/><nd ref="2042"/><nd ref="2043"/><nd ref="2044"/><nd ref="2041"/>
+    <tag k="natural" v="water"/>
+  </way>
+
+  <node id="2051" version="1" lat="42.48" lon="19.27"/>
+  <node id="2052" version="1" lat="42.48" lon="19.28"/>
+  <node id="2053" version="1" lat="42.49" lon="19.28"/>
+  <node id="2054" version="1" lat="42.49" lon="19.27"/>
+  <way id="2005" version="11">
+    <nd ref="2051"/><nd ref="2052"/><nd ref="2053"/><nd ref="2054"/><nd ref="2051"/>
+    <tag k="leisure" v="park"/>
+  </way>
+
+  <node id="2061" version="1" lat="42.445" lon="19.14"/>
+  <node id="2062" version="1" lat="42.445" lon="19.16"/>
+  <node id="2063" version="1" lat="42.446" lon="19.16"/>
+  <node id="2064" version="1" lat="42.446" lon="19.14"/>
+  <way id="2006" version="12">
+    <nd ref="2061"/><nd ref="2062"/><nd ref="2063"/><nd ref="2064"/><nd ref="2061"/>
+    <tag k="building" v="yes"/>
+  </way>
+
+  <node id="3011" version="1" lat="42.41" lon="19.28"/>
+  <node id="3012" version="1" lat="42.41" lon="19.29"/>
+  <node id="3013" version="1" lat="42.42" lon="19.29"/>
+  <node id="3014" version="1" lat="42.42" lon="19.28"/>
+  <way id="3002" version="1">
+    <nd ref="3011"/><nd ref="3012"/><nd ref="3013"/><nd ref="3014"/><nd ref="3011"/>
+  </way>
+  <relation id="3001" version="9">
+    <member type="way" ref="3002" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="natural" v="water"/>
+  </relation>
+
+  <node id="2071" version="1" lat="42.500" lon="19.200"/>
+  <node id="2072" version="1" lat="42.500" lon="19.205"/>
+  <node id="2073" version="1" lat="42.505" lon="19.205"/>
+  <node id="2074" version="1" lat="42.505" lon="19.200"/>
+  <way id="3006" version="1">
+    <nd ref="2071"/><nd ref="2072"/><nd ref="2073"/><nd ref="2074"/><nd ref="2071"/>
+  </way>
+  <node id="2075" version="1" lat="42.500" lon="19.220"/>
+  <node id="2076" version="1" lat="42.500" lon="19.225"/>
+  <node id="2077" version="1" lat="42.505" lon="19.225"/>
+  <node id="2078" version="1" lat="42.505" lon="19.220"/>
+  <way id="3007" version="1">
+    <nd ref="2075"/><nd ref="2076"/><nd ref="2077"/><nd ref="2078"/><nd ref="2075"/>
+  </way>
+  <relation id="3003" version="13">
+    <member type="way" ref="3006" role="outer"/>
+    <member type="way" ref="3007" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="natural" v="water"/>
+  </relation>
+
+  <node id="2081" version="1" lat="42.490" lon="19.290"/>
+  <node id="2082" version="1" lat="42.490" lon="19.295"/>
+  <node id="2083" version="1" lat="42.495" lon="19.295"/>
+  <node id="2084" version="1" lat="42.495" lon="19.290"/>
+  <way id="3008" version="1">
+    <nd ref="2081"/><nd ref="2082"/><nd ref="2083"/><nd ref="2084"/><nd ref="2081"/>
+  </way>
+  <node id="2085" version="1" lat="42.490" lon="19.305"/>
+  <node id="2086" version="1" lat="42.490" lon="19.310"/>
+  <node id="2087" version="1" lat="42.495" lon="19.310"/>
+  <node id="2088" version="1" lat="42.495" lon="19.305"/>
+  <way id="3009" version="1">
+    <nd ref="2085"/><nd ref="2086"/><nd ref="2087"/><nd ref="2088"/><nd ref="2085"/>
+  </way>
+  <relation id="3004" version="14">
+    <member type="way" ref="3008" role="outer"/>
+    <member type="way" ref="3009" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="leisure" v="park"/>
+  </relation>
+
+  <way id="4000" version="6">
+    <nd ref="9001"/><nd ref="9002"/><nd ref="9003"/><nd ref="9004"/><nd ref="9001"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="2"/>
+    <tag k="ISO3166-1" v="ME"/>
+    <tag k="name" v="Montenegro"/>
+  </way>
+</osm>

@@ -21,8 +21,8 @@ Viewing/building the web uses the committed reviewed archive instead. The review
 Source provenance is described in [PROVENANCE.md](PROVENANCE.md). The data validator uses
 [shared contracts](../packages/contracts/README.md), never web implementation.
 
-`check-data` also validates the additive
-[source entity contract](../packages/contracts/README.md#source-entity-identity) in every source GeoJSON file. Adoption
-is explicit per collection; the current reviewed snapshots remain unannotated. It checks ID namespaces, base-version
-types and split-part uniqueness without assigning identities to legacy geometry or changing provenance. See the contract
-for the staged migration and the meaning of a content version.
+`check-data` also validates the [source entity contract](../packages/contracts/README.md#source-entity-identity) in the
+adopted source GeoJSON files. The extractor writes one feature per line, sorted by entity ID, part and canonical bytes;
+extracted OSM coordinates use six decimals. Preserved snapshots keep their published precision and source-specific IDs.
+Importer-added features receive a `local:<uuid>` identity and a content version. See the contract for the ID namespaces
+and the meaning of a content version.

@@ -22,7 +22,7 @@ test:
 	cd $(ROOT) && node --test data/tests/*.test.mjs
 
 python-check:
-	cd $(ROOT) && python3 -m py_compile data/tools/*.py
+	cd $(ROOT) && python3 -m py_compile data/tools/*.py data/tools/osm_extract/*.py
 
 python-test:
 	cd $(ROOT) && python3 -m unittest discover -s data/tests -p 'test_*.py'

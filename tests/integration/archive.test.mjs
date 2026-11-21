@@ -5,7 +5,7 @@ import Pbf from 'pbf';
 import {validateStyleMin} from '@maplibre/maplibre-gl-style-spec';
 import {mapStyle} from '../../dist/web/map-core/map-style.js';
 import {dataSourcePath} from '../data-root.mjs';
-const web=path.resolve('dist/web'),manifest=JSON.parse(fs.readFileSync(path.join(web,'data/manifest.json'))),bytes=fs.readFileSync(path.join(web,manifest.archive.path));
+const web=path.resolve('dist/web'),manifest=JSON.parse(fs.readFileSync(path.join(web,'data/manifest.json'))),bytes=fs.readFileSync(path.join(web,manifest.archive.path)),provenance=JSON.parse(fs.readFileSync(dataSourcePath('provenance.json')));
 const source={getKey:()=>manifest.archive.path,getBytes:async(offset,length)=>({data:bytes.buffer.slice(bytes.byteOffset+offset,bytes.byteOffset+Math.min(offset+length,bytes.length))})};
 const archive=new PMTiles(source);const xy=(lon,lat,z)=>[Math.floor((lon+180)/360*2**z),Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*2**z)];
 test('published archive is a valid vector archive with a verified content hash',async()=>{const h=await archive.getHeader();assert.equal(h.tileType,TileType.Mvt);assert.equal(h.minZoom,0);assert.equal(h.maxZoom,16);assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),manifest.archive.sha256);assert.equal(bytes.length,manifest.archive.bytes);assert.ok(h.numAddressedTiles>100000);});
@@ -22,7 +22,7 @@ test('style is valid and uses vector sources, including unescaped glyph tokens',
   assert.ok(style.glyphs.includes('{fontstack}/{range}'));
   assert.ok(Object.values(style.sources).every(source => source.type !== 'raster'));
 });
-test('every required offline asset exists and the glyph ranges cover names',()=>{for(const f of manifest.shell)assert.ok(fs.statSync(path.join(web,f)).size>0,f);const places=JSON.parse(fs.readFileSync(path.join(web,'data/places.geojson')));assert.equal(places.features.length,1811);const ranges=new Set([0]);for(const file of ['dist/web/data/places.geojson',dataSourcePath('roads.geojson')])for(const f of JSON.parse(fs.readFileSync(file)).features)for(const [key,value] of Object.entries(f.properties))if(['name','name:en'].includes(key))for(const c of String(value)){if(c.codePointAt(0)>31)ranges.add(Math.floor(c.codePointAt(0)/256)*256);}for(const start of ranges)assert.ok(fs.existsSync(path.join(web,'fonts/Open Sans Semibold',`${start}-${start+255}.pbf`)),String(start));});
+test('every required offline asset exists and the glyph ranges cover names',()=>{for(const f of manifest.shell)assert.ok(fs.statSync(path.join(web,f)).size>0,f);const places=JSON.parse(fs.readFileSync(path.join(web,'data/places.geojson')));assert.equal(places.features.length,provenance.places_count);const ranges=new Set([0]);for(const file of ['dist/web/data/places.geojson',dataSourcePath('roads.geojson')])for(const f of JSON.parse(fs.readFileSync(file)).features)for(const [key,value] of Object.entries(f.properties))if(['name','name:en'].includes(key))for(const c of String(value)){if(c.codePointAt(0)>31)ranges.add(Math.floor(c.codePointAt(0)/256)*256);}for(const start of ranges)assert.ok(fs.existsSync(path.join(web,'fonts/Open Sans Semibold',`${start}-${start+255}.pbf`)),String(start));});
 
 test('address footprint indices match polygon IDs and locations in the published archive',async()=>{
  const labels=JSON.parse(fs.readFileSync(path.join(web,'data/building-labels.geojson')));

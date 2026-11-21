@@ -61,7 +61,10 @@ category; kind and category rules cannot assign it. `basis: "commercial"` entrie
 placement is not part of this release.
 
 data/tools/extract-osm.py replaces places.geojson and then reapplies the policy, so overrides survive an import. An
-override whose place disappeared stops that step with an error. Fix the policy, then review the new facts as above.
+override whose place disappeared stops that step with an error. The `--layers` groups are `buildings`, `roads`, `water`,
+`land` (land.geojson, including its country geometry), and `places`; each group replaces only its own source file.
+`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
+policy, then review the new facts as above.
 
 ## Editor changesets
 
@@ -78,8 +81,10 @@ properties, geometry and label joins. It then stages its writes, and restores th
 fails. It never commits. A level edit becomes a policy override, so regenerating levels keeps it, and each change is
 recorded with its author, reason and both values in data/sources/editor-corrections.json; see
 [provenance](../../data/PROVENANCE.md). New features use a `local:` reference and claim nothing the rules do not list; a
-new place also takes the contract's local source value, never a fabricated upstream ID. An edit or deletion that would
-replace or remove a commercial override is refused by name: review it in the policy first.
+new place also takes the contract's local source value, never a fabricated upstream ID. In an adopted collection the
+importer assigns the addition a fresh `local:<uuid v4>` source identity and a `sha256:` base version; a changeset must
+not claim those fields. An edit or deletion that would replace or remove a commercial override is refused by name:
+review it in the policy first.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the

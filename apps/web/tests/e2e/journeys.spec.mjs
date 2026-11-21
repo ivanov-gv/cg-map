@@ -414,16 +414,24 @@ test('building house numbers start at the 100m scale and open address details', 
   const places = JSON.parse(
     readPinnedSource('places.geojson')
   );
-  const label = labels.features.find(
-    feature =>
-      !places.features.some(
-        neighboringPlace =>
-          Math.hypot(
-            neighboringPlace.geometry.coordinates[0] - feature.geometry.coordinates[0],
-            neighboringPlace.geometry.coordinates[1] - feature.geometry.coordinates[1]
-          ) < 0.00005
+  // A busy city-wide place snapshot puts markers near many labels. Choose the label farthest from every place so the
+  // click cannot open a neighbouring place card instead of the building card under test.
+  let label;
+  let nearestPlaceDistance = -1;
+  for (const candidate of labels.features) {
+    const distance = Math.min(
+      ...places.features.map(place =>
+        Math.hypot(
+          place.geometry.coordinates[0] - candidate.geometry.coordinates[0],
+          place.geometry.coordinates[1] - candidate.geometry.coordinates[1]
+        )
       )
-  );
+    );
+    if (distance > nearestPlaceDistance) {
+      label = candidate;
+      nearestPlaceDistance = distance;
+    }
+  }
   expect(label).toBeTruthy();
   await ready(page);
   await page.evaluate(
@@ -463,7 +471,10 @@ test('building house numbers start at the 100m scale and open address details', 
   await expect(page.locator('#place-name')).toHaveText(`Building ${label.properties['addr:housenumber']}`);
   const addresses = page.locator('#place-details .details-section--addresses');
   await expect(addresses.locator('.section-title')).toHaveText('Addresses');
-  await expect(addresses.locator('.detail-value')).toHaveText(label.properties['addr:housenumber']);
+  const expectedAddress = label.properties['addr:street']
+    ? `${label.properties['addr:street']} ${label.properties['addr:housenumber']}`
+    : label.properties['addr:housenumber'];
+  await expect(addresses.locator('.detail-value')).toHaveText(expectedAddress);
   await expect(page.locator('#point-from')).toBeVisible();
 });
 
@@ -648,8 +659,8 @@ test.describe('building entrances', () => {
         delete properties['addr:housenumber'];
         properties['addr:street'] = 'Ulica Slobode';
         if (variant.building) properties.building_number = variant.building;
-        // Opposite boundary vertices keep the synthetic doors distinct in the real footprint.
-        const entranceVertexIndexes = [0, 17];
+        // Opposite boundary vertices keep the synthetic doors distinct in any real footprint, whatever its size.
+        const entranceVertexIndexes = [0, Math.floor((ring.length - 1) / 2)];
         properties.entrances = variant.numbers.map((number, index) => ({
           id: `node/${index + 1}`,
           number,
