@@ -2,6 +2,7 @@ const MAX_ENTRANCES_PER_BUILDING = 100;
 const MAX_ADDRESS_TEXT_LENGTH = 128;
 const ENTRANCE_LABEL_ZOOM = 18;
 const SELECTED_ENTRANCE_MIN_ZOOM = 13;
+const busStopSnapshotDate = '2026-10-18';
 const ENTRANCE_LAYERS = [
   'entrance-points',
   'entrance-numbers',
@@ -291,6 +292,96 @@ function pointKind(layer, properties) {
   return properties.bridge && properties.bridge !== 'no' ? 'Bridge' : 'Road';
 }
 
+function readableType(value) {
+  const text = String(value ?? '').replaceAll('_', ' ').trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : '';
+}
+
+// A ray crossing test keeps polygon holes and multiple parts separate without new geometry dependencies.
+function isInsideRing(point, ring) {
+  const [longitude, latitude] = point;
+  let isInside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [vertexLongitude, vertexLatitude] = ring[index];
+    const [previousLongitude, previousLatitude] = ring[previous];
+    const crossesLatitude = vertexLatitude > latitude !== previousLatitude > latitude;
+    if (
+      crossesLatitude &&
+      longitude <
+        ((previousLongitude - vertexLongitude) * (latitude - vertexLatitude)) /
+          (previousLatitude - vertexLatitude) +
+          vertexLongitude
+    )
+      isInside = !isInside;
+  }
+  return isInside;
+}
+
+function isInsidePolygon(point, rings) {
+  if (!rings.length) return false;
+  return isInsideRing(point, rings[0]) && !rings.slice(1).some(hole => isInsideRing(point, hole));
+}
+
+// One building may arrive as several rendered fragments; each contributes its polygon to the union.
+function footprintPolygons(footprints) {
+  const features = Array.isArray(footprints) ? footprints : footprints ? [footprints] : [];
+  return features.flatMap(feature => {
+    const geometry = feature?.geometry;
+    if (geometry?.type === 'Polygon') return [geometry.coordinates];
+    if (geometry?.type === 'MultiPolygon') return geometry.coordinates;
+    return [];
+  });
+}
+
+// Geometry association is explicit: only a point within a recorded footprint is listed.
+export function placesInsideFootprint(footprints, places = []) {
+  const polygons = footprintPolygons(footprints);
+  return places.filter(place => {
+    const point = place?.geometry?.coordinates;
+    if (!Array.isArray(point) || point.length < 2 || !point.every(Number.isFinite)) return false;
+    return polygons.some(polygon => isInsidePolygon(point, polygon));
+  });
+}
+
+function entranceAddress(entrance, properties) {
+  return buildingAddress({
+    ...properties,
+    'addr:street': entrance.street ?? properties['addr:street'],
+    entrances: [entrance]
+  });
+}
+
+function pointDetailRows(kind, properties, addressLine) {
+  const rows = [];
+  if (properties.stopId) rows.push({label: 'Stop ID', value: properties.stopId});
+  if (addressLine) rows.push({label: 'Address', value: addressLine});
+  if (kind === 'Building' && properties['building:levels'])
+    rows.push({label: 'Levels', value: `${properties['building:levels']} levels`});
+  return rows;
+}
+
+function pointFacts({kind, properties, source, sourceDate, addressLine, typeLabel}) {
+  const entrances = (properties.entrances ?? []).map(entrance => ({
+    ...entrance,
+    label: entranceLabel(entrance),
+    address: entranceAddress(entrance, properties)
+  }));
+  // The label address and each distinct entrance address are separate recorded facts, even when the label summarizes them.
+  const addresses = [...new Set([addressLine, ...entrances.map(entrance => entrance.address)].filter(Boolean))];
+  return {
+    kind,
+    properties,
+    addressLine,
+    detailRows: pointDetailRows(kind, properties, addressLine),
+    addresses,
+    entrances,
+    typeLabel: typeLabel ?? readableType(properties.kind ?? kind),
+    source,
+    sourceDate,
+    osmId: properties.id
+  };
+}
+
 // Point descriptions use published attributes and retain original entrance coordinates rather than tile quantization.
 export function describePoint(feature, coordinates, buildingAddresses = new Map()) {
   const original = feature?.properties ?? {};
@@ -311,8 +402,10 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
     ? entranceLabel(entrance)
     : hasName
       ? properties.name
-      : kind === 'Building' && number
-        ? `Building ${number}`
+      : kind === 'Building'
+        ? number
+          ? `Building ${number}`
+          : 'Unnamed building'
         : kind;
   const pointCoordinates = isEntrance
     ? entrance.coordinates
@@ -324,7 +417,14 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
       coordinates: [...pointCoordinates],
       name,
       kind,
-      details: [`Stop ID: ${properties.stopId}`, 'Source: ePodgorica · snapshot 18 October 2026']
+      facts: pointFacts({
+        kind,
+        properties,
+        source: 'ePodgorica',
+        sourceDate: busStopSnapshotDate,
+        addressLine: '',
+        typeLabel: kind
+      })
     };
   const addressLine = entrance
     ? buildingAddress({
@@ -333,22 +433,18 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
         entrances: [entrance]
       })
     : buildingAddress(properties);
-  const entranceDetails =
-    kind === 'Building'
-      ? (properties.entrances ?? []).map(entrance => `Entrance: ${entranceLabel(entrance)}`)
-      : [];
   return {
     coordinates: [...pointCoordinates],
     name,
     kind,
-    details: layer
-      ? [
-          properties.kind ? `Type: ${properties.kind.replaceAll('_', ' ')}` : '',
-          addressLine,
-          ...entranceDetails,
-          'Source: OpenStreetMap · available map attributes only'
-        ]
-      : []
+    facts: pointFacts({
+      kind,
+      properties,
+      source: layer ? 'OpenStreetMap' : '',
+      sourceDate: undefined,
+      addressLine,
+      typeLabel: isEntrance ? kind : undefined
+    })
   };
 }
 

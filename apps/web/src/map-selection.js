@@ -1,10 +1,33 @@
 // Resolve map taps using explicit current directory state and selection callbacks.
-import {listingsAtHits} from '@ivanov-gv/map-core';
 import {describePoint} from './point-selection.js';
+
+function activeIdsFromHit(hit) {
+  try {
+    const activeIds = JSON.parse(hit.properties.activeIds ?? '[]');
+    return Array.isArray(activeIds) ? activeIds : [];
+  } catch {
+    return [];
+  }
+}
+
+// The first rendered hit and its first active identity win; co-located places stay reachable through search and buildings.
+function selectTappedListing(map, event, context) {
+  const {placeHitLayers, placesById, showPlace} = context;
+  const hits = map.queryRenderedFeatures(event.point, {layers: placeHitLayers});
+  for (const hit of hits) {
+    for (const id of activeIdsFromHit(hit)) {
+      const feature = placesById.get(id);
+      if (!feature) continue;
+      showPlace(feature.properties.id);
+      return true;
+    }
+  }
+  return false;
+}
 
 // Route endpoints, stops and listings win over generic geographic objects. Returns whether one was selected.
 function selectTappedMarker(map, event, context) {
-  const {placeHitLayers, placesById, buildingAddresses, showPlace, showPoint, showChooser} = context;
+  const {buildingAddresses, showPoint} = context;
   const routePoints = map.queryRenderedFeatures(event.point, {
     layers: ['route-point-circles']
   });
@@ -14,8 +37,7 @@ function selectTappedMarker(map, event, context) {
       {
         name: feature.properties.name,
         coordinates: [...feature.geometry.coordinates],
-        kind: feature.properties.role === 'from' ? 'From point' : 'To point',
-        details: []
+        kind: feature.properties.role === 'from' ? 'From point' : 'To point'
       },
       feature
     );
@@ -35,19 +57,7 @@ function selectTappedMarker(map, event, context) {
     showPoint(describePoint(stops[0], event.lngLat.toArray()), stops[0]);
     return true;
   }
-  const listings = listingsAtHits(
-    map.queryRenderedFeatures(event.point, {layers: placeHitLayers}),
-    placesById
-  );
-  if (listings.length === 1) {
-    showPlace(listings[0].properties.id);
-    return true;
-  }
-  if (listings.length > 1) {
-    showChooser(listings, event.lngLat.toArray());
-    return true;
-  }
-  return false;
+  return selectTappedListing(map, event, context);
 }
 
 // Listings win over geography; among geographic objects the most specific one under the tap wins.

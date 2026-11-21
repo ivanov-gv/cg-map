@@ -209,7 +209,8 @@ test('building selection provides feature details and point actions', async ({pa
   expect(picked).not.toBeNull();
   await page.mouse.click(picked.x, picked.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-details')).toContainText('Type: building');
+  await expect(page.locator('#place-details .details-section--details')).not.toContainText('Type: Building');
+  await expect(page.locator('#place-details .details-section--details')).toContainText('Coordinates:');
   await expect(page.getByRole('button', {name: 'To', exact: true})).toBeVisible();
   await expect
     .poll(() =>
@@ -460,7 +461,10 @@ test('building house numbers start at the 100m scale and open address details', 
   }, label.geometry.coordinates);
   await page.mouse.click(point.x, point.y);
   await expect(page.locator('#place-category')).toHaveText('Building');
-  await expect(page.locator('#place-name')).toHaveText('Building ' + label.properties['addr:housenumber']);
+  await expect(page.locator('#place-name')).toHaveText(`Building ${label.properties['addr:housenumber']}`);
+  const addresses = page.locator('#place-details .details-section--addresses');
+  await expect(addresses.locator('.section-title')).toHaveText('Addresses');
+  await expect(addresses.locator('.detail-value')).toHaveText(label.properties['addr:housenumber']);
   await expect(page.locator('#point-from')).toBeVisible();
 });
 
@@ -487,14 +491,14 @@ test('same building keeps its address across zooms and with number labels hidden
     await page.mouse.click(point.x, point.y);
     await expect(page.locator('#place-category')).toHaveText('Building');
     await expect(page.locator('#place-name')).toHaveText('Building 105,107');
-    await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
+    await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
+      'Oktobarske revolucije 105,107'
+    );
     await closeCard(page);
   }
 });
 
-test('a place inside a building keeps its marker selected and highlights its footprint across zoom and satellite changes', async ({
-  page
-}) => {
+test('a place inside a building keeps only its marker ring across zoom and satellite changes', async ({page}) => {
   const label = JSON.parse(
     fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
   ).features.find(feature => {
@@ -502,7 +506,6 @@ test('a place inside a building keeps its marker selected and highlights its foo
     return longitude > 19.251 && longitude < 19.261 && latitude > 42.438 && latitude < 42.445;
   });
   const coordinates = label.geometry.coordinates;
-  const footprintId = label.properties.footprintIndex;
   // A single listing's marker key is its source id, so the marker's feature state is read under this id.
   const placeId = 'node/selection-fixture';
   await page.route('**/data/places.geojson', route =>
@@ -529,6 +532,7 @@ test('a place inside a building keeps its marker selected and highlights its foo
   await openMenu(page);
   await page.locator('.result').first().click();
   await expect(page.locator('#place-name')).toHaveText('Building cafe');
+  // A picked POI gets the red ring only, even when its building is rendered underneath.
   for (const zoom of [15, 17, 20]) {
     await page.evaluate(({coordinates, zoom}) => window.kompasDebug.map.jumpTo({center: coordinates, zoom}), {
       coordinates,
@@ -541,15 +545,13 @@ test('a place inside a building keeps its marker selected and highlights its foo
       .toBe(true);
     await expect
       .poll(() =>
-        page.evaluate(id => {
-          const map = window.kompasDebug.map;
-          const features = map.queryRenderedFeatures({
+        page.evaluate(() =>
+          window.kompasDebug.map.queryRenderedFeatures({
             layers: ['selected-buildings-fill', 'selected-buildings-outline']
-          });
-          return features.length > 0 && features.every(feature => feature.id === id);
-        }, footprintId)
+          }).length
+        )
       )
-      .toBe(true);
+      .toBe(0);
     await expect
       .poll(() =>
         page.evaluate(
@@ -559,17 +561,6 @@ test('a place inside a building keeps its marker selected and highlights its foo
       )
       .toBe(true);
   }
-  await expect
-    .poll(() =>
-      page.evaluate(
-        id =>
-          window.kompasDebug.map
-            .queryRenderedFeatures({layers: ['selected-buildings-fill']})
-            .some(feature => feature.id === id),
-        footprintId
-      )
-    )
-    .toBe(true);
   expect(
     await page.evaluate(() =>
       window.kompasDebug.map
@@ -730,9 +721,18 @@ test.describe('building entrances', () => {
         await expect.poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded())).toBe(true);
         await context.setOffline(true);
         await tap(label.geometry.coordinates);
-        await expect(page.locator('#place-name')).toHaveText('Building ' + variant.label);
-        const address = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
-        await expect(page.locator('#place-details')).toContainText(address);
+        await expect(page.locator('#place-name')).toHaveText(`Building ${variant.label}`);
+        const addressPrefix = variant.building
+          ? `Ulica Slobode, Zgrada ${variant.building}, `
+          : 'Ulica Slobode ';
+        const summaryAddress = 'Ulica Slobode' + (variant.building ? ', ' : ' ') + variant.label;
+        const expectedAddresses = [
+          summaryAddress,
+          ...variant.numbers.map(number => `${addressPrefix}${number}`)
+        ].filter((address, index, all) => all.indexOf(address) === index);
+        await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
+          expectedAddresses
+        );
         await expect
           .poll(() =>
             page.evaluate(

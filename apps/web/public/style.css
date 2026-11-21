@@ -217,13 +217,18 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
 .place-card { top: 94px; left: 20px; width: min(375px, calc(100% - 96px)); max-height: calc(100% - 130px); padding: 24px; scrollbar-width: none; }
 .place-head { display: flow-root; }
 .card-handle { display: none; }
-.place-card h1 { font-size: 26px; line-height: 1.2; letter-spacing: -.7px; padding-right: 25px; margin: 10px 0 20px; }
+.place-card h1 { font-size: 26px; line-height: 1.2; letter-spacing: -.7px; padding-right: 25px; margin: 10px 0 0; }
 .eyebrow { font-size: 10px; letter-spacing: 2px; color: #788568; margin: 0; text-transform: uppercase; }
 .close { position: sticky; float: right; top: 0; margin: -12px -10px 0 0; width: 42px; height: 42px; line-height: 1; background: #f0f3e9; border-radius: 50%; font-size: 29px; z-index: 2; }
 .place-card p.detail { font-size: 13px; color: #788174; overflow-wrap: anywhere; margin: 12px 0; }
+.place-subtitle { font-size: 13px; line-height: 16px; color: var(--muted); margin: 4px 0 0; overflow-wrap: anywhere; }
+.details-section { margin: 0 0 20px; }
+.section-title { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: #788568; margin: 0 0 8px; }
+.detail-row { display: flex; gap: 6px; font-size: 13px; color: #788174; margin: 6px 0; overflow-wrap: anywhere; }
+.detail-label { flex: none; color: #51594f; font-weight: 600; }
+.detail-value { min-width: 0; }
 .place-card a { font-size: 13px; display: inline-block; margin: 8px 12px 0 0; }
-.place-chooser .result { min-height: 56px; padding: 8px 4px; }
-.place-card .source-note { font-size: 11px; color: var(--muted); margin-top: 20px; }
+.place-card .source-note { font-size: 11px; color: var(--muted); margin: 0 0 18px; }
 .point-actions { display: flex; gap: 10px; margin-bottom: 18px; }
 .point-actions button { flex: 1; min-height: 44px; border-radius: 10px; background: var(--green); color: white; font-weight: 600; }
 .point-actions button:last-child { background: #a34c35; }
@@ -394,7 +399,8 @@ summary { cursor: pointer; min-height: 40px; padding-top: 8px; }
   .place-card.dragging { cursor: grabbing; transition: none; }
   .place-card[data-state=peek] { max-height: var(--card-peek, 78px); overflow: hidden; }
   .place-card h1 { font-size: 23px; padding-right: 0; }
-  .place-card[data-state=peek] h1 { margin: 4px 0 14px; font-size: 19px; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .place-card[data-state=peek] h1 { margin: 4px 0 0; font-size: 19px; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .place-card[data-state=peek] .place-subtitle { margin-top: -2px; }
   .place-card .close { position: absolute; float: none; top: 0; right: 0; margin: 0; padding: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .card-handle { display: block; position: absolute; top: 0; left: 0; right: 0; height: var(--card-head, 78px); padding: 0; background: transparent; touch-action: none; cursor: inherit; }
   .card-handle::before { content: ""; position: absolute; top: 7px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-strong); }

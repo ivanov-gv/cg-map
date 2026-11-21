@@ -295,7 +295,7 @@ test('an icon on a house number keeps both the icon and the address label', asyn
 });
 
 test(
-  'co-located listings share one stable marker and a keyboard chooser with real identities',
+  'co-located listings share one stable marker and a tap opens its topmost listing',
   {tag: '@phone'},
   async ({page}) => {
     const coordinateOffsetsDegrees = [0.0003, 0.0003];
@@ -329,25 +329,10 @@ test(
     await camera(page, {zoom: 17});
     await expect.poll(marker).toEqual([['place-shared', '3', ['a-museum', 'm-cafe', 'z-shop']]]);
     await tap(page, coordinates);
-    await expect(page.locator('#place-name')).toHaveText('3 places here');
-    await expect(page.locator('#point-actions')).toBeHidden();
-    const options = page.locator('.place-chooser .result');
-    await expect(options).toHaveCount(3);
-    expect(await options.evaluateAll((rows) => rows.map((row) => row.dataset.id))).toEqual([
-      'a-museum',
-      'm-cafe',
-      'z-shop'
-    ]);
-    await expect(options.first()).toBeFocused();
-    for (const box of await options.evaluateAll((rows) =>
-      rows.map((row) => row.getBoundingClientRect().height)
-    ))
-      expect(box).toBeGreaterThanOrEqual(40);
-    await page.keyboard.press('Tab');
-    await expect(options.nth(1)).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#place-name')).toHaveText('Place m-cafe');
+    // The shared marker's active identities are ranked; the first one opens directly.
+    await expect(page.locator('#place-name')).toHaveText('Place a-museum');
     await expect(page.locator('#point-actions')).toBeVisible();
+    await expect(page.locator('.place-chooser')).toHaveCount(0);
     await page.locator('#point-from').click();
     expect((await page.evaluate(() => window.kompasDebug.endpoints)).from.coordinates).toEqual(coordinates);
     // Recenter first: on a phone the endpoint panel now covers where the marker was left.
@@ -358,23 +343,20 @@ test(
   }
 );
 
-test('overlapping nearby markers open a chooser instead of picking the first rendered feature', async ({
-  page
-}) => {
+test('overlapping nearby markers open the first rendered feature directly', async ({page}) => {
   const data = featureCollection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
   await open(page, data);
   await expectIcons(page, ['near-a', 'near-b']);
   await tap(page, data.features[0].geometry.coordinates);
-  await expect(page.locator('#place-name')).toHaveText('2 places here');
-  await page.locator('.place-chooser .result[data-id="near-b"]').click();
   await expect(page.locator('#place-name')).toHaveText('Place near-b');
+  await expect(page.locator('.place-chooser')).toHaveCount(0);
   await expect(page.locator('#place-details')).toContainText(
     data.features[1].geometry.coordinates[1].toFixed(5)
   );
 });
 
 test(
-  'a chooser opened with search open is usable at once and keeps the search',
+  'a marker tapped with search open opens its card and keeps the search',
   {tag: '@phone'},
   async ({page, isMobile}) => {
     const data = featureCollection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
@@ -389,30 +371,26 @@ test(
     );
     await expectIcons(page, ['near-a', 'near-b']);
     await tap(page, coordinates);
-    await expect(page.locator('#place-name')).toHaveText('2 places here');
+    await expect(page.locator('#place-name')).toHaveText('Place near-b');
     await expect(page.locator('body')).toHaveAttribute('data-view', isMobile ? 'search' : 'closed');
-    if (isMobile) await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
-    const first = page.locator('.place-chooser .result').first();
-    await expect(first).toBeVisible();
-    await expect(first).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#place-name')).toHaveText('Place near-a');
+    if (isMobile) await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
+    await expect(page.locator('#point-actions')).toBeVisible();
   }
 );
 
-test('typing closes an open chooser, whose listings may no longer match', async ({page}) => {
+test('typing closes a selected marker card when its listing no longer matches', async ({page}) => {
   const data = featureCollection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
   await open(page, data);
   await expectIcons(page, ['near-a', 'near-b']);
   await tap(page, data.features[0].geometry.coordinates);
-  await expect(page.locator('#place-name')).toHaveText('2 places here');
-  await page.locator('#search').fill('near-b');
+  await expect(page.locator('#place-name')).toHaveText('Place near-b');
+  await page.locator('#search').fill('near-a');
   await expect(page.locator('#place-card')).toBeHidden();
   await expect(page.locator('#results .result')).toHaveCount(1);
 });
 
 test(
-  'the camera holds still for a chooser while the phone keyboard is open',
+  'the camera holds still for a selected marker while the phone keyboard is open',
   {tag: '@phone'},
   async ({page, isMobile}) => {
     test.skip(!isMobile, 'phone keyboard');
@@ -431,7 +409,7 @@ test(
     await expectIcons(page, ['near-a', 'near-b']);
     const before = await page.evaluate(() => window.kompasDebug.map.getCenter().toArray());
     await tap(page, coordinates);
-    await expect(page.locator('#place-name')).toHaveText('2 places here');
+    await expect(page.locator('#place-name')).toHaveText('Place near-b');
     await expectToHold(
       async () => expect(await page.evaluate(() => window.kompasDebug.map.getCenter().toArray())).toEqual(before),
       CAMERA_HOLD_MILLISECONDS

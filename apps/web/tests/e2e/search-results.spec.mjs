@@ -444,6 +444,12 @@ test('choosing a building result replaces its green outline with the red selecti
   await expect(page.locator('.result[data-kind="address"]')).toHaveCount(1);
   await page.locator('.result[data-kind="address"]').click();
   await expect(page.locator('#place-name')).toHaveText('Building 18');
+  await expect(page.locator('#place-category')).toHaveText('Building');
+  await expect(page.locator('#place-details .section-title')).toHaveText([
+    'Addresses',
+    'Inside this building',
+    'Details'
+  ]);
   await expect(page.locator('#place-details')).toContainText('Bulevar Stanka Dragojevića 18');
   await expect
     .poll(() =>
@@ -455,6 +461,21 @@ test('choosing a building result replaces its green outline with the red selecti
     .toEqual([]);
   // Places' green rings are still there: only the chosen result turned red.
   expect((await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
+});
+
+test('an off-screen building result lists places after its reveal', async ({page}) => {
+  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.8, 42.8], zoom: 12}));
+  await mapIdle(page);
+  await page.locator('#search').fill('bulevar');
+  const result = page.locator('.result[data-kind="address"]');
+  await expect(result).toHaveCount(1);
+  await result.click();
+  await expect(page.locator('#place-name')).toHaveText('Building 18');
+  await expect(page.locator('#place-details .details-section--inside-this-building .detail-value')).toHaveText([
+    'Bulevar Cafe · Café',
+    'Bulevar Market · Market',
+    'Threshold Cafe · Café'
+  ]);
 });
 
 test('clearing the search removes every green highlight', async ({page}) => {

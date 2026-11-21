@@ -7,7 +7,6 @@ export class ObjectSelection {
   constructor(map, onBuilding = () => {}) {
     this.map = map;
     this.onBuilding = onBuilding;
-    this.anchor = null;
     this.pointTarget = null;
     map.addSource('point-selection', {type: 'geojson', data: {type: 'FeatureCollection', features: []}});
     map.addLayer({
@@ -61,7 +60,6 @@ export class ObjectSelection {
         'road-labels'
       );
     }
-    map.on('idle', () => this.resolveAnchor());
   }
   clearPoint() {
     if (this.pointTarget) this.map.setFeatureState(this.pointTarget, {selected: false});
@@ -69,7 +67,6 @@ export class ObjectSelection {
     this.map.getSource('point-selection').setData({type: 'FeatureCollection', features: []});
   }
   clear() {
-    this.anchor = null;
     this.clearPoint();
     this.setTarget(null);
   }
@@ -141,22 +138,9 @@ export class ObjectSelection {
       });
     }
   }
-  selectPlace(feature, markerKey) {
+  // A picked listing keeps only its marker ring; a separate building pick owns the footprint highlight.
+  selectPlace(markerKey) {
     this.clear();
     this.selectPoint('places', markerKey);
-    this.anchor = [...feature.geometry.coordinates];
-    this.resolveAnchor();
-  }
-  // Once the selected place's position is on screen, also highlight the building it lies in, a single time.
-  // It sets the target directly because select() starts with clear(), which would drop the place marker's ring.
-  resolveAnchor() {
-    if (!this.anchor || this.map.getZoom() < 13) return;
-    const point = this.map.project(this.anchor);
-    const canvas = this.map.getCanvas();
-    if (point.x < 0 || point.y < 0 || point.x > canvas.clientWidth || point.y > canvas.clientHeight) return;
-    const building = this.map.queryRenderedFeatures(point, {layers: ['buildings']})[0];
-    if (!building || !Number.isInteger(building.id)) return;
-    this.anchor = null;
-    this.setTarget({sourceLayer: 'buildings', id: building.id});
   }
 }

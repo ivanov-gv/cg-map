@@ -109,7 +109,9 @@ test(
     );
     await tapMapCenter(page, [19.26539, 42.43437]);
     await expect(page.locator('#place-name')).toHaveText('Building 105,107');
-    await expect(page.locator('#place-details')).toContainText('Oktobarske revolucije 105,107');
+    await expect(page.locator('#place-details .details-section--addresses .detail-value')).toHaveText(
+      'Oktobarske revolucije 105,107'
+    );
     await expect
       .poll(() =>
         page.evaluate(() =>
