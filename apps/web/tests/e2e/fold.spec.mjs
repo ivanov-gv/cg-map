@@ -1,6 +1,6 @@
 // @phone
 import {expect, test} from '@playwright/test';
-import {camera, mapIdle, ready, stubRouting, tapRenderedPlace} from './helpers.mjs';
+import {camera, closeMenu, mapIdle, ready, stubRouting, tapRenderedPlace} from './helpers.mjs';
 
 const MOBILE_VIEWPORT = {width: 412, height: 840};
 const FLIP_VIEWPORT = {width: 340, height: 250};
@@ -157,6 +157,62 @@ async function expectCard(page, state) {
   }
 }
 
+async function expectMobileStandaloneChips(page) {
+  await expectDevice(page, 'mobile');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect(page.locator('#active-category-chip')).toBeVisible();
+  await expect(page.locator('#active-category-chip-label')).toHaveText('Eat & drink');
+  await expect(page.locator('#query-chip')).toBeHidden();
+  await expectQueryAndCategoryValue(page);
+}
+
+async function expectFlipStandaloneChips(page) {
+  await expectDevice(page, 'flip');
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expect(page.locator('#dock-content')).toBeHidden();
+  await expect(page.locator('#active-category-chip')).toBeVisible();
+  await expect(page.locator('#active-category-chip-label')).toHaveText('Eat & drink');
+  await expect(page.locator('#query-chip')).toBeVisible();
+  await expect(page.locator('#query-chip-label')).toHaveText('“Cafe”');
+  await expectQueryAndCategoryValue(page);
+}
+
+async function expectMobileCategoryChipWithCard(page) {
+  await expect(page.locator('#active-category-chip')).toBeVisible();
+  await expect(page.locator('#active-category-chip-label')).toHaveText('Eat & drink');
+  await expect(page.locator('#query-chip')).toBeHidden();
+}
+
+async function expectFlipChipsHiddenUnderCard(page) {
+  await expect(page.locator('#active-category-chip')).toBeHidden();
+  await expect(page.locator('#query-chip')).toBeHidden();
+}
+
+async function pullFlipCardUp(page) {
+  const box = await page.locator('#place-card').boundingBox();
+  const screenX = box.x + box.width / 2;
+  const screenY = box.y + 24;
+  const touch = await page.context().newCDPSession(page);
+  const start = Date.now() / 1000;
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: screenX, y: screenY, id: 1}],
+    timestamp: start
+  });
+  for (let step = 1; step <= 5; step++)
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: screenX, y: screenY - (120 * step) / 5, id: 1}],
+      timestamp: start + step * 0.012
+    });
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: start + 6 * 0.012
+  });
+  await touch.detach();
+}
+
 async function searchForCafe(page) {
   await page.locator('#search').fill('Cafe');
   await page.locator('#categories button[data-category="food"]').click();
@@ -247,6 +303,39 @@ test.describe('Fold and unfold layout', () => {
     await expect(page.locator('#active-category-chip-label')).toHaveText('Eat & drink');
   });
 
+  test('category and query chips follow the fold while panels stay closed', {tag: '@phone'}, async ({page}) => {
+    await openApp(page);
+    await searchForCafe(page);
+    await page.keyboard.press('Escape');
+    await expectMobileStandaloneChips(page);
+
+    await switchViewport(page, FLIP_VIEWPORT, 'flip');
+    await expectFlipStandaloneChips(page);
+    await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
+    await expectMobileStandaloneChips(page);
+    await switchViewport(page, FLIP_VIEWPORT, 'flip');
+    await expectFlipStandaloneChips(page);
+
+    await page.locator('#active-category-chip-label').click();
+    await expectFlipList(page);
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('#query-chip')).toBeHidden();
+
+    await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
+    await expectMobileDock(page);
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('#query-chip')).toBeHidden();
+    await switchViewport(page, FLIP_VIEWPORT, 'flip');
+    await expectFlipList(page);
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('#query-chip')).toBeHidden();
+
+    await closeMenu(page);
+    await expectFlipStandaloneChips(page);
+    await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
+    await expectMobileStandaloneChips(page);
+  });
+
   test('Mobile Peek folds to Flip Peek and unfolds back', {tag: '@phone'}, async ({page}) => {
     await openApp(page);
     await searchForCafe(page);
@@ -267,19 +356,23 @@ test.describe('Fold and unfold layout', () => {
   test('Mobile Full folds to Flip Peek and unfolds to Mobile Peek', {tag: '@phone'}, async ({page}) => {
     await openApp(page);
     await searchForCafe(page);
-    await openFirstResult(page);
-    await page.locator('#card-handle').click();
+    await page.keyboard.press('Escape');
+    await expectMobileStandaloneChips(page);
+    await tapRenderedPlace(page, [19.2601, 42.4401], 'food/cafe-one');
     await expectCard(page, 'full');
+    await expectMobileCategoryChipWithCard(page);
 
     await switchViewport(page, FLIP_VIEWPORT, 'flip');
     await expectCard(page, 'peek');
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expectFlipChipsHiddenUnderCard(page);
     await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
     await expectCard(page, 'peek');
-    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
-    await expect(page.locator('#search-bubble')).toBeVisible();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expectMobileCategoryChipWithCard(page);
     await switchViewport(page, FLIP_VIEWPORT, 'flip');
     await expectCard(page, 'peek');
+    await expectFlipChipsHiddenUnderCard(page);
   });
 
   test('Mobile Fullscreen folds to Flip Fullscreen and unfolds back', {tag: '@phone'}, async ({page}) => {
@@ -324,6 +417,32 @@ test.describe('Fold and unfold layout', () => {
     await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
     await expectCard(page, 'fullscreen');
     await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await switchViewport(page, FLIP_VIEWPORT, 'flip');
+    await expectCard(page, 'fullscreen');
+  });
+
+  test('a pulled Flip Fullscreen card survives folding and unfolding', {tag: '@phone'}, async ({page}) => {
+    await openApp(page, FLIP_VIEWPORT);
+    await page.locator('#menu-toggle').click();
+    await openFirstResult(page);
+
+    await pullFlipCardUp(page);
+    await expectCard(page, 'fullscreen');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Back to summary');
+    await expect(page.locator('#active-category-chip')).toBeHidden();
+    await expect(page.locator('#query-chip')).toBeHidden();
+    await mapIdle(page);
+
+    await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
+    await expectCard(page, 'fullscreen');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'search');
+    await switchViewport(page, FLIP_VIEWPORT, 'flip');
+    await expectCard(page, 'fullscreen');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+
+    await switchViewport(page, MOBILE_VIEWPORT, 'mobile');
+    await expectCard(page, 'fullscreen');
     await switchViewport(page, FLIP_VIEWPORT, 'flip');
     await expectCard(page, 'fullscreen');
   });

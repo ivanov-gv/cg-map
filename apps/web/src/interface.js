@@ -495,7 +495,7 @@ export class MapInterface {
     }
     this.search.addEventListener('keydown', event => {
       const isSearchKey = event.key === 'Enter' && !event.isComposing;
-      if (!isSearchKey || !this.isMobilePhone) return;
+      if (!isSearchKey || !this.isPhoneLayout) return;
       // The phone keyboard's Search key hides the keyboard; the bubble or dock keeps the results.
       // Enter during IME composition confirms a candidate and must leave the field focused.
       event.preventDefault();
@@ -907,7 +907,6 @@ export class MapInterface {
     else this.flipDockScreen ??= 'list';
 
     this.dock.hidden = view !== 'dock';
-    this.syncDockContent();
     this.syncResultsVisibility();
     this.syncDesktopSearchUI();
     this.movePanelTo(this.#panelTargetFor(view), categoryScrollLeft);
@@ -981,7 +980,6 @@ export class MapInterface {
   syncDockContent() {
     const isFlip = this.isFlip;
     const isDockOpen = this.view === 'dock';
-    this.dock.hidden = !isDockOpen;
     const showResults = !(isFlip && isDockOpen) || this.flipDockScreen === 'list';
     // On the modes screen, hide only the results section so categories remain visible.
     this.dockMain.hidden = false;
