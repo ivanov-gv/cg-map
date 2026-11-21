@@ -69,6 +69,16 @@
                   "minimum": 1,
                   "description": "OSM version of the relation"
                 },
+                "fromMunicipality": {
+                  "type": "string",
+                  "pattern": "^ME-\\d{2}$",
+                  "description": "ISO3166-2 code of the municipality containing the first stop"
+                },
+                "toMunicipality": {
+                  "type": "string",
+                  "pattern": "^ME-\\d{2}$",
+                  "description": "ISO3166-2 code of the municipality containing the last stop"
+                },
                 "headsign": {
                   "type": "string"
                 },

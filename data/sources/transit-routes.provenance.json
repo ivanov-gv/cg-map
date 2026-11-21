@@ -1,12 +1,12 @@
 {
-  "bytes": 35531,
-  "city_routes": 37,
-  "intercity_routes": 7,
+  "bytes": 36378,
+  "city_routes": 42,
+  "intercity_routes": 2,
   "license": "No explicit reuse license found; attribution retained.",
   "osm_source": "/home/ivanov_gv/.cache/cg-map/montenegro-2026-11-21.osm.pbf",
-  "retrieved_at": "2026-11-21T15:07:10.079935+00:00",
+  "retrieved_at": "2026-11-21T15:14:40.447969+00:00",
   "routes": 44,
   "routes_with_colour": 0,
-  "sha256": "288ac00201de4a82cf0ea8481546b1b96aad8fa0c0ff88ca74e0d0709dfeef73",
+  "sha256": "13dee40e9f6999a622e6b9850f6f2275974ef63e67cc06620630df6e8dedf14b",
   "source": "https://epodgorica.me/javniprevoz/mapa"
 }

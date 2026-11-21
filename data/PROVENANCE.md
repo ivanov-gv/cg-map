@@ -114,13 +114,15 @@ sampling limits, counts, hash, and license status are recorded.
 `data/sources/transit-routes.json` and `transit-routes.provenance.json` record the published bus lines with their
 directions and ordered stops. City routes (network `bus`) come from the ePodgorica data, grouped by real direction
 (derived from the `sampleTrip` field: `_AB_` for outward, `_BA_` for return); variants record alternative stop sequences
-within the same direction. OSM routes are classified as `bus` (city line of their own town) or `intercity` using two
-criteria: an OSM `route=bus` relation is `intercity` when its first and last stops are at least 15 km apart, or its
-stops lie in two or more distinct settlements (from OSM `name` tags on stop nodes); otherwise it is `bus`. Each OSM
-relation becomes one direction with `entityId` (`relation/N`) and `entityVersion`; directions sharing the same OSM `ref`
-are grouped into one line. OSM stops carry their node ID, WGS84 position (6 decimals), and name so the file is usable
-without the PBF. Route `number` comes from OSM `ref` and is omitted when not published. Build with
-`data/tools/build_transit_routes.py`. No explicit reuse license was found; attribution is retained.
+within the same direction. OSM routes are classified as `bus` or `intercity` by municipality geography: the PBF provides
+every Montenegrin municipality as a `boundary=administrative`, `admin_level=6` relation with `ISO3166-2` starting `ME-`.
+A route is `intercity` when its first and last stops lie in different municipalities, or either end lies outside
+Montenegro; otherwise it is `bus`. Each direction records the ISO codes of its first and last municipality
+(`fromMunicipality`, `toMunicipality`). Each OSM relation becomes one direction with `entityId` (`relation/N`) and
+`entityVersion`; directions sharing the same OSM `ref` are grouped into one line. OSM stops carry their node ID, WGS84
+position (6 decimals), and name so the file is usable without the PBF. Route `number` comes from OSM `ref` and is
+omitted when not published. Build with `data/tools/build_transit_routes.py`. No explicit reuse license was found;
+attribution is retained.
 
 ## Building address labels
 

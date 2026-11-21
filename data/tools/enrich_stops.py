@@ -240,8 +240,22 @@ def enrich_stops(stops_data, network, roads):
 
 
 def write_stops(path, data):
-    """Write the enriched stops GeoJSON with deterministic formatting."""
-    encoded = (json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
+    """Write the enriched stops GeoJSON with one feature per line for git merges.
+
+    The FeatureCollection wrapper is compact, but each feature appears on its
+    own line so that adding or removing a stop produces a single-line diff.
+    """
+    fc = data.copy()
+    features_text = ',\n'.join(
+        json.dumps(f, ensure_ascii=False, separators=(',', ':'))
+        for f in fc['features']
+    )
+    # Build the FeatureCollection with metadata on one line, features one per line
+    metadata = {k: v for k, v in fc.items() if k != 'features'}
+    header = json.dumps(metadata, ensure_ascii=False, separators=(',', ':'),
+                        sort_keys=True)
+    full_text = header[:-1] + ',"features":[\n' + features_text + '\n]}\n'
+    encoded = full_text.encode('utf-8')
     path.write_bytes(encoded)
     return encoded
 

@@ -1,8 +1,12 @@
 """Build transit-routes.json from ePodgorica data and OSM bus relations.
 
 City routes (network "bus") come from the ePodgorica transit network.
-OSM routes are classified as "bus" (city line of their own town) or "intercity"
-based on distance and settlement count — see classify_relation() for the rule.
+OSM routes are classified as "bus" or "intercity" by municipality geography:
+the PBF provides every Montenegrin municipality as a boundary=administrative,
+admin_level=6 relation with ISO3166-2 starting "ME-". A route is "intercity"
+when its first and last stops lie in different municipalities, or either end
+lies outside Montenegro; otherwise it is "bus". Each direction records the
+ISO codes of its first and last municipality (fromMunicipality, toMunicipality).
 
 Each OSM relation becomes one direction with its own entityId and entityVersion.
 Directions sharing the same OSM ref and route_master relation are grouped into
@@ -11,27 +15,19 @@ one line; without route_master, directions sharing ref are grouped.
 Usage:
     python3 data/tools/build_transit_routes.py [--network FILE] [--pbf FILE]
 
-Requires osmium from data/tools/requirements.txt for OSM parsing.
+Requires osmium and shapely from data/tools/requirements.txt for OSM parsing.
 """
 import argparse
 import collections
 import datetime
 import hashlib
 import json
-import math
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_NETWORK = ROOT / 'data/sources/transit-network.json'
 DEFAULT_PBF = Path.home() / '.cache/cg-map/montenegro-2026-11-21.osm.pbf'
 OUTPUT = ROOT / 'data/sources/transit-routes.json'
-
-# Minimum distance (metres) between first and last stop for intercity classification.
-INTERCITY_MIN_DISTANCE_METRES = 15000
-
-# Minimum number of distinct settlements for intercity classification.
-INTERCITY_MIN_SETTLEMENTS = 2
 
 
 def parse_args():
@@ -213,75 +209,95 @@ def load_osm_nodes_for_ids(pbf_path, node_ids):
 # Intercity classification
 # ---------------------------------------------------------------------------
 
-def haversine_distance_metres(lon1, lat1, lon2, lat2):
-    """Great-circle distance in metres between two WGS84 points."""
-    R = 6371000
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (math.sin(d_lat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(d_lon / 2) ** 2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+# ---------------------------------------------------------------------------
+# Municipality geography — point-in-polygon classification
+# ---------------------------------------------------------------------------
 
+def load_osm_municipalities(pbf_path):
+    """Load Montenegrin municipality boundaries from the OSM PBF.
 
-def _extract_settlements_from_name(name):
-    """Extract settlement names from an OSM route name or ref.
-
-    Route names often encode endpoints: 'Budva -> Sveti Stefan',
-    'Bar -> Budva'. Only arrow-style separators ('->', '=>') are trusted
-    as intercity indicators; plain dashes may separate neighborhoods
-    within one town ('Tivat centar - Gradiošnica').
-
-    Returns a set of settlement name strings, or empty set if the name
-    uses only dash separators (which may be local routes).
+    Reads every admin_level=6 boundary relation with an ISO3166-2 tag
+    starting "ME-" and builds a shapely polygon for each. Returns a dict
+    mapping ISO code (e.g. "ME-16") to a shapely Polygon or MultiPolygon.
     """
-    if not name:
-        return set()
-    # Only trust arrow separators for intercity classification.
-    # Plain dashes may separate neighborhoods within one town.
-    if '->' not in name and '=>' not in name:
-        return set()
-    parts = re.split(r'\s*[-=>]+\s*|,\s*', name)
-    cleaned = set()
-    for part in parts:
-        part = part.strip().strip('"()')
-        if part and len(part) > 1:
-            cleaned.add(part)
-    return cleaned
+    try:
+        import osmium
+    except ImportError:
+        print('Warning: osmium not available, skipping municipality load', flush=True)
+        return {}
+
+    from shapely.geometry import Polygon, MultiPolygon
+
+    class MunicipalityAreaHandler(osmium.SimpleHandler):
+        def __init__(self):
+            super().__init__()
+            self.municipalities = {}
+
+        def area(self, area):
+            tags = dict(area.tags)
+            if (tags.get('boundary') != 'administrative' or
+                    tags.get('admin_level') != '6'):
+                return
+            iso = tags.get('ISO3166-2', '')
+            if not iso.startswith('ME-'):
+                return
+
+            # Build list of (lon, lat) coordinate rings for each outer ring
+            # inner_rings(oring) returns holes for a specific outer ring
+            all_outer_coords = []
+            all_holes = []
+            for oring in area.outer_rings():
+                outer_coords = [(node.location.lon, node.location.lat)
+                                for node in oring]
+                all_outer_coords.append(outer_coords)
+                # Collect inner rings (holes) for this outer ring
+                for iring in area.inner_rings(oring):
+                    hole_coords = [(node.location.lon, node.location.lat)
+                                   for node in iring]
+                    all_holes.append(hole_coords)
+
+            if len(all_outer_coords) == 1:
+                poly = Polygon(all_outer_coords[0], all_holes)
+            elif len(all_outer_coords) > 1:
+                polygons = [Polygon(oc) for oc in all_outer_coords]
+                poly = MultiPolygon(polygons)
+            else:
+                return
+
+            self.municipalities[iso] = poly
+
+    handler = MunicipalityAreaHandler()
+    handler.apply_file(str(pbf_path))
+    return handler.municipalities
 
 
-def classify_relation(stop_coords, relation_name, relation_ref):
-    """Classify an OSM bus relation as 'bus' or 'intercity'.
+def find_municipality(lon, lat, municipalities):
+    """Find which municipality ISO code contains a WGS84 point.
 
-    Rule: a relation is 'intercity' when its first and last stops are at
-    least 15 km apart, or its stops lie in two or more distinct settlements.
-    Settlements are derived from the relation's name/ref (e.g. 'Budva -> Sveti
-    Stefan') since OSM stop node names are stop/landmark names, not settlements.
-    Only arrow-style separators ('->', '=>') are trusted; plain dashes may
-    separate neighborhoods within one town. Short shuttles (under 2 km) are
-    always 'bus' even when the name mentions two places.
+    Returns the ISO code string (e.g. "ME-16") or None if the point
+    lies outside all known municipality areas.
+    """
+    from shapely.geometry import Point
+    point = Point(lon, lat)
+    for iso_code, polygon in municipalities.items():
+        if polygon.contains(point) or polygon.touches(point):
+            return iso_code
+    return None
+
+
+def classify_by_municipality(first_muni, last_muni):
+    """Classify a route direction as 'bus' or 'intercity' by municipality.
+
+    A route is 'intercity' when its first and last stops lie in different
+    municipalities, or either end lies outside Montenegro (no municipality
+    found). Otherwise it is 'bus'.
 
     Returns 'intercity' or 'bus'.
     """
-    # Minimum distance for the settlement-based criterion (metres).
-    # Very short shuttles (e.g. 'Budva -> Lastva' at 1 km) are local.
-    _settlement_min_distance_metres = 2000
-
-    if len(stop_coords) >= 2:
-        first_last_distance = haversine_distance_metres(
-            stop_coords[0][0], stop_coords[0][1],
-            stop_coords[-1][0], stop_coords[-1][1],
-        )
-        if first_last_distance >= INTERCITY_MIN_DISTANCE_METRES:
-            return 'intercity'
-
-        # Settlement criterion: 2+ settlements AND meaningful distance
-        settlements = _extract_settlements_from_name(relation_name)
-        settlements |= _extract_settlements_from_name(relation_ref)
-        if (len(settlements) >= INTERCITY_MIN_SETTLEMENTS and
-                first_last_distance >= _settlement_min_distance_metres):
-            return 'intercity'
-
+    if first_muni is None or last_muni is None:
+        return 'intercity'
+    if first_muni != last_muni:
+        return 'intercity'
     return 'bus'
 
 
@@ -330,7 +346,8 @@ def build_osm_routes(osm_relations, network, pbf_path):
     the same route_master relation (none exist in the current PBF, so grouping
     is by ref alone). Routes without ref are kept as separate lines.
 
-    Classification ('bus' vs 'intercity') uses distance and settlement count.
+    Classification ('bus' vs 'intercity') uses municipality geography:
+    different municipalities or outside Montenegro means intercity.
     OSM routes whose ref matches an ePodgorica city route and whose stops
     fall inside the ePodgorica extent are skipped (already covered).
 
@@ -338,6 +355,11 @@ def build_osm_routes(osm_relations, network, pbf_path):
     """
     city_refs = _get_city_route_refs(network)
     ep_extent = _epodgorica_stops_extent(network)
+
+    # Load municipality boundaries for classification
+    print('  Loading municipality boundaries...')
+    municipalities = load_osm_municipalities(pbf_path)
+    print(f'  {len(municipalities)} municipalities loaded')
 
     # First pass: collect member node IDs
     stop_roles = {'stop', 'platform', 'platform_entry_only', 'platform_exit_only'}
@@ -399,7 +421,14 @@ def build_osm_routes(osm_relations, network, pbf_path):
         if not stops:
             continue
 
-        classification = classify_relation(stop_coords, route_name, route_ref)
+        # Classify by municipality geography
+        first_muni = find_municipality(
+            stop_coords[0][0], stop_coords[0][1], municipalities
+        ) if stop_coords else None
+        last_muni = find_municipality(
+            stop_coords[-1][0], stop_coords[-1][1], municipalities
+        ) if stop_coords else None
+        classification = classify_by_municipality(first_muni, last_muni)
 
         # Derive headsign from name, or from first/last stop names
         first_stop = stops[0].get('name', '') if stops else ''
@@ -418,6 +447,8 @@ def build_osm_routes(osm_relations, network, pbf_path):
             'network': classification,
             'headsign': headsign,
             'stops': stops,
+            'fromMunicipality': first_muni,
+            'toMunicipality': last_muni,
         })
 
     # Group directions into lines by (ref, route_master)
@@ -445,6 +476,10 @@ def build_osm_routes(osm_relations, network, pbf_path):
                 'headsign': d['headsign'],
                 'stops': d['stops'],
             }
+            if d.get('fromMunicipality'):
+                dir_entry['fromMunicipality'] = d['fromMunicipality']
+            if d.get('toMunicipality'):
+                dir_entry['toMunicipality'] = d['toMunicipality']
             route_directions.append(dir_entry)
 
         # Use the first direction's headsign as route name when the OSM
@@ -499,19 +534,23 @@ def build_transit_routes(network, pbf_path):
 
 
 def write_routes(path, routes):
-    """Write the transit routes JSON with deterministic formatting.
+    """Write the transit routes JSON with one route per line for git merges.
 
-    Routes are sorted by network, number, name. Keys are sorted for
-    clean git diffs.
+    Format: {"retrievedAt":...,"routes":[\n<route>,\n<route>\n]}
+    Keys are sorted for clean git diffs. Each route object is compact JSON
+    on its own line so that adding or removing a route produces a single-line
+diff.
     """
-    data = {
-        'version': 1,
+    header = json.dumps({
         'retrievedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'source': 'https://epodgorica.me/javniprevoz/mapa',
-        'routes': routes,
-    }
-    encoded = (json.dumps(data, ensure_ascii=False, separators=(',', ':'),
-                          sort_keys=True) + '\n').encode('utf-8')
+        'version': 1,
+    }, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+    route_lines = [json.dumps(r, ensure_ascii=False, separators=(',', ':'),
+                              sort_keys=True) for r in routes]
+    body = ',\n'.join(route_lines)
+    full_text = header[:-1] + ',"routes":[\n' + body + '\n]}\n'
+    encoded = full_text.encode('utf-8')
     path.write_bytes(encoded)
     return encoded
 
