@@ -110,6 +110,13 @@ omits that pair.
 Every `from`/`to`/`via` reference resolves in `roads.geojson` or `road-nodes.geojson`/road end nodes. It is not GeoJSON
 because restrictions are topological relations, not geometries.
 
+`editor-bundle.schema.json` defines the pinned source viewer bundle: one filename, byte size, feature count and SHA-256
+per source GeoJSON file. Version 1 keeps its original ten files; version 2 adds `border-edges.geojson`,
+`municipalities.geojson` and `settlements.geojson`. The producer emits version 2, while the editor accepts both so an
+older pinned snapshot remains readable. Feature indices are tied to a file's hash and are not stable upstream
+identities. Data-owned assembly preserves bytes; the editor verifies the entire bundle before enabling modes. This
+contract does not define editing or changesets; the formats below do. The bundle is built into dist/editor only.
+
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
 types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and
 the source value of a new place. Anything unlisted is locked, which is what preserves unknown fields, attribution and
@@ -166,12 +173,12 @@ accepting the older `park`, `water` and `river` values.
 
 [entity-identity.schema.json](entity-identity.schema.json) defines source identity in `Feature.properties`, separately
 from display IDs, attribution strings and snapshot indices. [source-entities.schema.json](source-entities.schema.json)
-applies it to every feature in any of the nine source GeoJSON files. Existing geometry and domain contracts still apply;
-these schemas add identity without replacing them.
+applies it to every feature in any of the thirteen source GeoJSON files. Existing geometry and domain contracts still
+apply; these schemas add identity without replacing them.
 
 A file adopts version 1 by adding `entitySchemaVersion: 1` to its FeatureCollection. All its features then require
 `entityId` and `entityVersion`. `check-data` rejects partial adoption, unknown schema versions, or any of these reserved
-identity fields in a file without the marker. All nine reviewed source collections have adopted version 1. An empty
+identity fields in a file without the marker. All thirteen reviewed source collections have adopted version 1. An empty
 adopted collection is valid. The schema describes adopted files; legacy compatibility remains only for fixtures and
 explicitly unannotated test data.
 

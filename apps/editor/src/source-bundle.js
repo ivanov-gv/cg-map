@@ -14,14 +14,17 @@ const version1Files = [
 export const bundleFilesByVersion = {
   1: version1Files,
   2: [
+    'border-edges.geojson',
     'building-entrances.geojson',
     'building-labels.geojson',
     'buildings.geojson',
     'context-countries.geojson',
     'land.geojson',
+    'municipalities.geojson',
     'places.geojson',
     'road-nodes.geojson',
     'roads.geojson',
+    'settlements.geojson',
     'transport-stops.geojson',
     'water.geojson'
   ]

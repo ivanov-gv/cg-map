@@ -13,6 +13,7 @@ from pathlib import Path
 import osmium
 
 from . import ExtractionState
+from .borders import BorderEdgesLayer, MunicipalitiesLayer
 from .buildings import (
     BuildingGeometryLayer, BuildingsLayer, EntrancesLayer, RoadNameCollector
 )
@@ -22,6 +23,7 @@ from .land import LandLayer
 from .places import PlacesLayer
 from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
+from .settlements import SettlementsLayer
 from .turn_restrictions import TurnRestrictionsLayer
 from .water import WaterLayer
 from .writing import read_collection, write_collection
@@ -29,7 +31,7 @@ from .writing import read_collection, write_collection
 DEFAULT_BBOX = (19.15, 42.37, 19.34, 42.51)
 COVERAGE = (
     'Whole-city Podgorica detail; Montenegro major roads, attractions, '
-    'country outline and water.'
+    'settlements, municipality borders, country outline and water.'
 )
 # One selectable name owns every layer that contributes to a source file.
 LAYER_GROUPS = {
@@ -39,6 +41,8 @@ LAYER_GROUPS = {
     ),
     'roads': (RoadsLayer, RoadNodesLayer, TurnRestrictionsLayer),
     'land': (CountryLayer, LandLayer),
+    'borders': (BorderEdgesLayer, MunicipalitiesLayer),
+    'settlements': (SettlementsLayer,),
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
 }

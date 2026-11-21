@@ -63,6 +63,22 @@ upstream version; clipped or split parts keep one identity and gain `entityPart`
 placement and ring order. It is not a full OSM semantic/cartographic pipeline; see
 [architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
+Issue #328 adds three OSM-derived read-only sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009
+named place nodes, `sources/border-edges.geojson` has 113 shared boundaries, and `sources/municipalities.geojson` has 25
+areas. Together they are 2,591,367 bytes; counts, byte sizes and SHA-256 for each file are in `sources/provenance.json`.
+Settlement properties copy the OSM name, population, capital, admin level and Wikidata facts, add the `rank` and
+municipality code, and keep the original `node/N` identity. Suburb, quarter and neighbourhood nodes are limited to the
+whole-city detail box; 34 place nodes outside the country relation were assigned to the nearest municipality, with a
+maximum offset of 0.022826 degrees.
+
+Thirty-two edge features keep an exact `way/N` identity; the other 81 use `derived:edge-<left>-<right>-<n>` and record
+their contributing OSM ways. Each shared edge is simplified once, and the municipality polygons are rebuilt from those
+simplified lines. Coast edges use the OSM coastline as `sea`, with territorial waters reconciled against the
+coastline-cut land; neighbouring countries remain context only. The measured Lake Skadar water gap is excluded from the
+coverage error, leaving 0.002656070 square degrees of tolerated residual. The construction rule is recorded in
+[decision 0021](../docs/decisions/0021-shared-border-edges.md), and existing town labels are compared with the reviewed
+settlements in [hard-coded town coverage](../docs/map-data/hard-coded-towns.md).
+
 ## Bus stops
 
 `data/sources/transport-stops.geojson` contains 719 ePodgorica stops retrieved 2026-10-18 from the public stops/all

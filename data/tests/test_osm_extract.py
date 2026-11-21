@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from shapely.geometry import LinearRing, shape
+from shapely.geometry import LineString, LinearRing, shape
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
@@ -21,6 +21,7 @@ sys.path.insert(0, str(TOOLS))
 from osm_extract import cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
+from osm_extract.shared_edges import coordinate_key, matching_way  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
 from osm_extract.places import (  # noqa: E402
     category_for,
@@ -39,6 +40,10 @@ FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
 FIXTURE_HASH = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
 SOURCE_URL = 'https://example.test/montenegro.osm.pbf'
 SOURCE_DATE = '2026-11-21'
+DUPLICATE_WAY_FIXTURE = {
+    '4300': coordinate_key(LineString([(19.18, 42.38), (19.18, 42.52)])),
+    '4301': coordinate_key(LineString([(19.18, 42.52), (19.18, 42.38)])),
+}
 SNAPSHOT_TIME = '2026-11-20T21:21:21Z'
 REQUIRED_SOURCES = (
     'context-countries.geojson',
@@ -48,14 +53,17 @@ REQUIRED_SOURCES = (
     'place-visibility-policy.json',
 )
 GENERATED_FILES = (
+    'border-edges.geojson',
     'building-entrances.geojson',
     'buildings.geojson',
     'context-countries.geojson',
     'land.geojson',
+    'municipalities.geojson',
     'places.geojson',
     'provenance.json',
     'road-nodes.geojson',
     'roads.geojson',
+    'settlements.geojson',
     'transport-stops.geojson',
     'transport-stops.provenance.json',
     'turn-restrictions.json',
@@ -71,16 +79,18 @@ EXTRACTED_GEOJSON = tuple(
     )
 )
 REVIEWED_GEOJSON = (
-    'building-entrances.geojson', 'buildings.geojson',
-    'building-labels.geojson',
-    'context-countries.geojson', 'land.geojson', 'places.geojson',
-    'road-nodes.geojson', 'roads.geojson', 'transport-stops.geojson',
-    'water.geojson',
+    'border-edges.geojson', 'building-entrances.geojson',
+    'building-labels.geojson', 'buildings.geojson',
+    'context-countries.geojson', 'land.geojson', 'municipalities.geojson',
+    'places.geojson', 'road-nodes.geojson', 'roads.geojson',
+    'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
 )
 LAYER_FILES = {
     'buildings': ('building-entrances.geojson', 'buildings.geojson'),
     'roads': ('roads.geojson', 'road-nodes.geojson', 'turn-restrictions.json'),
     'land': ('land.geojson',),
+    'borders': ('border-edges.geojson', 'municipalities.geojson'),
+    'settlements': ('settlements.geojson',),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
 }
@@ -241,6 +251,20 @@ def node_serialization(filename):
     return result.stdout.decode('utf-8')
 
 
+def features_by_identity(root, filename):
+    """Index generated features by their published entity ID."""
+    _, features = source_features(root, filename)
+    return {
+        feature['properties']['entityId']: feature for feature in features
+    }
+
+
+def settlements_by_name(root):
+    """Index generated settlements by their OSM name."""
+    _, features = source_features(root, 'settlements.geojson')
+    return {feature['properties']['name']: feature for feature in features}
+
+
 class OsmExtractTest(unittest.TestCase):
     """Exercise the extractor without touching the reviewed source files."""
 
@@ -322,6 +346,14 @@ class OsmExtractTest(unittest.TestCase):
             ('relation/3004', 0): 14,
             ('relation/3004', 1): 14,
             ('way/4000', None): 6,
+            ('way/4101', None): 3,
+            ('way/4102', None): 4,
+            ('node/9301', None): 4,
+            ('node/9302', None): 2,
+            ('node/9303', None): 1,
+            ('node/9304', None): 1,
+            ('node/9305', None): 1,
+            ('node/9307', None): 1,
         }
         for key, version in expected.items():
             with self.subTest(key=key):
@@ -1128,6 +1160,90 @@ class EndNodePreservationTest(unittest.TestCase):
                              'way/2007 startNode should be OSM node 2091')
             self.assertEqual(p['endNode'], 2092,
                              'way/2007 endNode should be OSM node 2092')
+
+    def test_settlements_copy_osm_facts_and_assign_municipality(self):
+        extract(self.first_root)
+        settlements = settlements_by_name(self.first_root)
+        self.assertEqual(len(settlements), 6)
+        capital = settlements['Test Capital']['properties']
+        self.assertEqual(capital['entityId'], 'node/9301')
+        self.assertEqual(capital['rank'], 'capital')
+        self.assertEqual(capital['name:en'], 'Test Capital EN')
+        self.assertEqual(capital['population'], 1000)
+        self.assertEqual(capital['capital'], 'yes')
+        self.assertEqual(capital['admin_level'], 2)
+        self.assertEqual(capital['wikidata'], 'Q1')
+        self.assertEqual(capital['municipality'], 'ME-A')
+        self.assertEqual(
+            settlements['Test Town']['properties']['rank'], 'town'
+        )
+        self.assertEqual(
+            settlements['Test Hamlet']['properties']['rank'], 'village'
+        )
+        self.assertEqual(
+            settlements['Test Village']['properties']['municipality'],
+            'ME-B',
+        )
+        self.assertEqual(
+            settlements['Nearby Village']['properties']['municipality'],
+            'ME-A',
+        )
+        self.assertNotIn('Far Neighbourhood', settlements)
+        for feature in settlements.values():
+            properties = feature['properties']
+            self.assertEqual(properties['kind'], 'settlement')
+            self.assertEqual(properties['source'], 'OpenStreetMap')
+
+    def test_municipality_areas_reference_one_shared_edge_each(self):
+        extract(self.first_root)
+        edges = features_by_identity(
+            self.first_root, 'border-edges.geojson'
+        ).values()
+        shared = [
+            feature for feature in edges
+            if feature['properties']['left'] == 'ME-A'
+            and feature['properties']['right'] == 'ME-B'
+        ]
+        self.assertEqual(len(shared), 1)
+        shared_id = shared[0]['properties']['entityId']
+        self.assertTrue(shared_id.startswith('derived:edge-'))
+        self.assertIn(
+            'way/4101', shared[0]['properties']['osmWays']
+        )
+        self.assertIn(
+            'way/4102', shared[0]['properties']['osmWays']
+        )
+        municipalities = {
+            feature['properties']['ISO3166-2']: feature
+            for feature in source_features(
+                self.first_root, 'municipalities.geojson'
+            )[1]
+        }
+        self.assertEqual(
+            set(municipalities), {'ME-A', 'ME-B'}
+        )
+        directions = {}
+        for iso_code, feature in municipalities.items():
+            references = {
+                reference['id']: reference['direction']
+                for reference in feature['properties']['edges']
+            }
+            self.assertIn(shared_id, references)
+            directions[iso_code] = references[shared_id]
+            ring = feature['geometry']['coordinates'][0]
+            self.assertEqual(ring[0], ring[-1])
+        self.assertEqual(directions['ME-A'], 1)
+        self.assertEqual(directions['ME-B'], -1)
+
+    def test_duplicate_geometry_ways_do_not_claim_an_exact_identity(self):
+        line = LineString([(19.18, 42.38), (19.18, 42.52)])
+        reversed_line = LineString([(19.18, 42.52), (19.18, 42.38)])
+        self.assertIsNone(matching_way(line, DUPLICATE_WAY_FIXTURE))
+        self.assertIsNone(matching_way(reversed_line, DUPLICATE_WAY_FIXTURE))
+        self.assertEqual(
+            matching_way(line, {'4300': DUPLICATE_WAY_FIXTURE['4300']}),
+            '4300',
+        )
 
 
 class StandalonePlacesTest(unittest.TestCase):

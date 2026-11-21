@@ -411,7 +411,7 @@ test('make check runs every project, and every project has a pipeline that verif
     'apps/web': ['lint', 'build', 'test-built', 'offline-check'],
     'apps/editor': ['lint', 'build', 'test'],
     'apps/core-demo': ['lint', 'build', 'test'],
-    data: ['lint', 'check', 'test', 'python-test', 'python-check'],
+    data: ['lint', 'check', 'test', 'python-test', 'python-check', 'check-topology'],
     'packages/contracts': ['lint', 'test'],
     'services/transit-relay': ['lint', 'test'],
     platform: ['lint', 'markdown-check', 'repo', 'agents-check', 'build-web', 'test', 'python-test', 'python-check'],

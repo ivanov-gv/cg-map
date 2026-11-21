@@ -95,6 +95,15 @@ test('producer manifest matches the shared bundle contract for its version', asy
   }
 });
 
+test('settlement and border sources join version 2 without changing version 1', () => {
+  const addedFiles = ['border-edges.geojson', 'municipalities.geojson', 'settlements.geojson'];
+  for (const filename of addedFiles) {
+    assert.ok(sourceFiles.includes(filename), filename);
+    assert.ok(!bundleFilesByVersion[1].includes(filename), filename);
+  }
+  assert.equal(bundleFilesByVersion[1].length, 8);
+});
+
 test('producer refuses a source file set that differs from the contract', async t => {
   const sourceDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-sources-'));
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-bundle-'));
@@ -106,7 +115,7 @@ test('producer refuses a source file set that differs from the contract', async 
   assert.deepEqual(await readdir(outputDirectory), []);
 });
 
-test('public artifact includes the shared runtime and excludes editor source bundles', async () => {
+test('public artifact includes the shared runtime and excludes editor source bundles', async t => {
   const manifest = JSON.parse(await readFile(new URL('../../dist/web/data/manifest.json', import.meta.url)));
   for (const filename of ['index.js', 'map.js', 'map-style.js', 'satellite.js', 'place-visibility.js']) {
     assert.ok(manifest.shell.includes(`map-core/${filename}`), filename);

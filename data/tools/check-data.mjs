@@ -146,6 +146,91 @@ export function validateCollection(data, {
   }
   return data.features.length;
 }
+const settlementRanks = new Set(['capital', 'city', 'town', 'village']);
+
+// Validate LineString borders that name two distinct sides and valid OSM contributors.
+export function validateBorderEdges(data, {requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label: 'border edges', geometryTypes: ['LineString'], requireAdopted, contractsDirectory
+  });
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    requireValue(properties.kind === 'border', 'Border edge has an unexpected kind');
+    requireValue(
+      typeof properties.left === 'string' && properties.left.length > 0 &&
+      typeof properties.right === 'string' && properties.right.length > 0 &&
+      properties.left !== properties.right,
+      'Border edge must name two distinct sides'
+    );
+    requireValue(
+      Array.isArray(properties.osmWays) &&
+      properties.osmWays.every(way => typeof way === 'string' && /^way\/\d+$/.test(way)),
+      'Border edge has invalid OSM way references'
+    );
+  }
+  return count;
+}
+
+// Validate municipality polygons with a label point and ordered directed edge references.
+export function validateMunicipalities(data, {requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label: 'municipalities', geometryTypes: ['Polygon', 'MultiPolygon'], requireAdopted, contractsDirectory
+  });
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    requireValue(properties.kind === 'municipality', 'Municipality has an unexpected kind');
+    requireValue(
+      typeof properties['ISO3166-2'] === 'string' &&
+      /^ME-\d+$/.test(properties['ISO3166-2']),
+      'Municipality needs a Montenegrin ISO code'
+    );
+    requireValue(
+      typeof properties.name === 'string' && properties.name.trim().length > 0,
+      'Municipality needs a name'
+    );
+    position(properties.labelPoint, 'municipality labelPoint');
+    requireValue(
+      Array.isArray(properties.edges) && properties.edges.length > 0 &&
+      properties.edges.every(edge => typeof edge?.id === 'string' && edge.id.length > 0 &&
+        (edge.direction === 1 || edge.direction === -1)),
+      'Municipality needs ordered directed edge references'
+    );
+  }
+  return count;
+}
+
+// Validate point settlements with a supported rank, municipality code and source.
+export function validateSettlements(data, {requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label: 'settlements', geometryTypes: ['Point'], requireAdopted, contractsDirectory
+  });
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    requireValue(properties.kind === 'settlement', 'Settlement has an unexpected kind');
+    requireValue(
+      typeof properties.name === 'string' && properties.name.trim().length > 0,
+      'Settlement needs a name'
+    );
+    requireValue(
+      settlementRanks.has(properties.rank),
+      'Settlement has an unsupported rank'
+    );
+    requireValue(
+      typeof properties.place === 'string' && properties.place.length > 0 &&
+      typeof properties.municipality === 'string' &&
+      /^ME-\d+$/.test(properties.municipality) &&
+      typeof properties.source === 'string' && properties.source.length > 0,
+      'Settlement lacks place, municipality or source'
+    );
+    const [longitude, latitude] = feature.geometry.coordinates;
+    requireValue(
+      longitude >= 17.8 && longitude <= 21 && latitude >= 41.3 && latitude <= 44.1,
+      'Settlement outside Montenegro'
+    );
+  }
+  return count;
+}
+
 export function validateStops(data, {requireAdopted = false, contractsDirectory} = {}) {
   const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point'], requireAdopted, contractsDirectory});
   const ids = new Set();
@@ -478,6 +563,8 @@ function sourceGeometryTypes(filename) {
   if (filename === 'water.geojson') return ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'];
   if (filename === 'building-entrances.geojson') return ['Point'];
   if (filename === 'road-nodes.geojson') return ['Point'];
+  if (filename === 'border-edges.geojson') return ['LineString'];
+  if (filename === 'settlements.geojson') return ['Point'];
   return ['Polygon', 'MultiPolygon'];
 }
 // Allowed highway values for road network nodes.
@@ -645,6 +732,11 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const landWaterContractRules = landWaterRules(contractsDirectory);
   requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
+  const specificValidators = {
+    'border-edges.geojson': validateBorderEdges,
+    'municipalities.geojson': validateMunicipalities,
+    'settlements.geojson': validateSettlements,
+  };
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
@@ -653,19 +745,22 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
       const isWater = name === 'water.geojson';
       const allowedKinds = isLand ? landWaterContractRules.landKinds : isWater ? landWaterContractRules.waterKinds : undefined;
       const geometryTypes = sourceGeometryTypes(name);
-      const count = validateCollection(JSON.parse(bytes), {
-        label: name,
-        geometryTypes,
-        requireKind: true,
-        requireAdopted: true,
-        contractsDirectory,
-        allowedKinds,
-        ringKinds: isLand ? landWaterContractRules.extractedLandKinds : undefined,
-        requireRfc7946Rings: Boolean(allowedKinds),
-        landWater: Boolean(allowedKinds),
-        requiredOsmTagKinds: landWaterContractRules.requiredOsmTagKinds,
-        landWaterContractRules
-      });
+      const specificValidator = specificValidators[name];
+      const count = specificValidator
+        ? specificValidator(JSON.parse(bytes), {requireAdopted: true, contractsDirectory})
+        : validateCollection(JSON.parse(bytes), {
+          label: name,
+          geometryTypes,
+          requireKind: true,
+          requireAdopted: true,
+          contractsDirectory,
+          allowedKinds,
+          ringKinds: isLand ? landWaterContractRules.extractedLandKinds : undefined,
+          requireRfc7946Rings: Boolean(allowedKinds),
+          landWater: Boolean(allowedKinds),
+          requiredOsmTagKinds: landWaterContractRules.requiredOsmTagKinds,
+          landWaterContractRules
+        });
       requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
         `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
     } else {
@@ -715,5 +810,5 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const contractsDirectory = contractsDirectoryFrom(process.argv.slice(2), 'check-data.mjs');
-  console.log(`Validated geometry, source hashes, and ${checkData(rootDirectory, {contractsDirectory})} places. This is structural validation, not GIS topology validation.`);
+  console.log(`Validated geometry, source hashes, and ${checkData(rootDirectory, {contractsDirectory})} places. This is structural validation; run make -C data check-topology for GIS topology.`);
 }

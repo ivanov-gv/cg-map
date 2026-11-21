@@ -102,6 +102,41 @@
     <tag k="name:en" v="Test Lighthouse EN"/>
   </node>
 
+  <node id="9301" version="4" lat="42.44" lon="19.24">
+    <tag k="name" v="Test Capital"/>
+    <tag k="name:en" v="Test Capital EN"/>
+    <tag k="place" v="city"/>
+    <tag k="capital" v="yes"/>
+    <tag k="admin_level" v="2"/>
+    <tag k="population" v="1000"/>
+    <tag k="wikidata" v="Q1"/>
+  </node>
+  <node id="9302" version="2" lat="42.45" lon="19.28">
+    <tag k="name" v="Test Village"/>
+    <tag k="place" v="village"/>
+    <tag k="population" v="50"/>
+  </node>
+  <node id="9303" version="1" lat="42.43" lon="19.26">
+    <tag k="name" v="Test Suburb"/>
+    <tag k="place" v="suburb"/>
+  </node>
+  <node id="9304" version="1" lat="42.49" lon="19.20">
+    <tag k="name" v="Test Hamlet"/>
+    <tag k="place" v="hamlet"/>
+  </node>
+  <node id="9305" version="1" lat="42.40" lon="19.30">
+    <tag k="name" v="Test Town"/>
+    <tag k="place" v="town"/>
+  </node>
+  <node id="9306" version="1" lat="43.19" lon="19.05">
+    <tag k="name" v="Far Neighbourhood"/>
+    <tag k="place" v="neighbourhood"/>
+  </node>
+  <node id="9307" version="1" lat="42.39" lon="19.17">
+    <tag k="name" v="Nearby Village"/>
+    <tag k="place" v="village"/>
+  </node>
+
   <node id="2011" version="1" lat="42.44" lon="19.25"/>
   <node id="2012" version="1" lat="42.44" lon="19.251"/>
   <node id="2013" version="1" lat="42.441" lon="19.251"/>
@@ -295,6 +330,17 @@
     <tag k="highway" v="residential"/>
     <tag k="name" v="Outside Detail"/>
   </way>
+
+  <node id="9101" version="1" lat="42.38" lon="19.18"/>
+  <node id="9102" version="1" lat="42.38" lon="19.25"/>
+  <node id="9103" version="1" lat="42.52" lon="19.25"/>
+  <node id="9104" version="1" lat="42.52" lon="19.18"/>
+  <node id="9105" version="1" lat="42.38" lon="19.32"/>
+  <node id="9106" version="1" lat="42.52" lon="19.32"/>
+
+  <node id="9201" version="1" lat="42.38" lon="19.18"/>
+  <node id="9202" version="1" lat="42.39" lon="19.25"/>
+  <node id="9203" version="1" lat="42.38" lon="19.32"/>
 
   <way id="4000" version="6">
     <nd ref="9001"/><nd ref="9002"/><nd ref="9003"/><nd ref="9004"/><nd ref="9001"/>
@@ -808,4 +854,25 @@
     <tag k="name" v="Lake With Island"/>
     <tag k="name:en" v="Lake With Island EN"/>
   </relation>
+
+  <way id="4101" version="3">
+    <nd ref="9101"/><nd ref="9102"/><nd ref="9103"/><nd ref="9104"/><nd ref="9101"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="6"/>
+    <tag k="ISO3166-2" v="ME-A"/>
+    <tag k="name" v="Test West"/>
+    <tag k="name:en" v="Test West EN"/>
+    <tag k="population" v="2000"/>
+  </way>
+  <way id="4102" version="4">
+    <nd ref="9102"/><nd ref="9105"/><nd ref="9106"/><nd ref="9103"/><nd ref="9102"/>
+    <tag k="boundary" v="administrative"/>
+    <tag k="admin_level" v="6"/>
+    <tag k="ISO3166-2" v="ME-B"/>
+    <tag k="name" v="Test East"/>
+  </way>
+  <way id="4200" version="2">
+    <nd ref="9201"/><nd ref="9202"/><nd ref="9203"/>
+    <tag k="natural" v="coastline"/>
+  </way>
 </osm>

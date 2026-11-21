@@ -381,26 +381,34 @@
     }
   ],
   "sources": {
-    "building-entrances.geojson": {
+    "border-edges.geojson": {
       "type": "FeatureCollection",
       "entitySchemaVersion": 1,
       "features": [
         {
           "type": "Feature",
           "geometry": {
-            "type": "Point",
+            "type": "LineString",
             "coordinates": [
-              19.2505,
-              42.44
+              [
+                19.25,
+                42.44
+              ],
+              [
+                19.251,
+                42.44
+              ]
             ]
           },
           "properties": {
-            "kind": "entrance",
-            "entrance": "yes",
-            "ref": "A",
-            "buildingEntityId": "way/2",
-            "entityId": "node/4",
-            "entityVersion": 1
+            "kind": "border",
+            "left": "ME-1",
+            "right": "ME-2",
+            "osmWays": [
+              "way/5"
+            ],
+            "entityId": "derived:edge-me-1-me-2-1",
+            "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           }
         }
       ]
@@ -568,6 +576,59 @@
         }
       ]
     },
+    "municipalities.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  19.25,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.44
+                ],
+                [
+                  19.251,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.441
+                ],
+                [
+                  19.25,
+                  42.44
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "kind": "municipality",
+            "name": "Municipality",
+            "ISO3166-2": "ME-1",
+            "labelPoint": [
+              19.2505,
+              42.4405
+            ],
+            "edges": [
+              {
+                "id": "derived:edge-me-1-me-2-1",
+                "direction": 1
+              }
+            ],
+            "entityId": "relation/5",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
     "places.geojson": {
       "type": "FeatureCollection",
       "entitySchemaVersion": 1,
@@ -588,7 +649,6 @@
             "category": "food",
             "visibilityLevel": 4,
             "source": "OpenStreetMap",
-            "buildingEntityId": "way/2",
             "entityId": "node/1",
             "entityVersion": 2
           }
@@ -623,6 +683,32 @@
         }
       ]
     },
+    "settlements.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.4405
+            ]
+          },
+          "properties": {
+            "kind": "settlement",
+            "name": "Town",
+            "place": "town",
+            "rank": "town",
+            "municipality": "ME-1",
+            "source": "OpenStreetMap",
+            "entityId": "node/6",
+            "entityVersion": 2
+          }
+        }
+      ]
+    },
     "transport-stops.geojson": {
       "type": "FeatureCollection",
       "entitySchemaVersion": 1,
@@ -643,27 +729,6 @@
             "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
           "id": "17"
-        }
-      ]
-    },
-    "road-nodes.geojson": {
-      "type": "FeatureCollection",
-      "entitySchemaVersion": 1,
-      "features": [
-        {
-          "type": "Feature",
-          "geometry": {
-            "type": "Point",
-            "coordinates": [
-              19.25,
-              42.44
-            ]
-          },
-          "properties": {
-            "kind": "traffic_signals",
-            "entityId": "node/5",
-            "entityVersion": 1
-          }
         }
       ]
     },
@@ -704,6 +769,51 @@
             "kind": "ocean",
             "entityId": "derived:ocean",
             "entityVersion": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
+    },
+    "building-entrances.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.44
+            ]
+          },
+          "properties": {
+            "kind": "entrance",
+            "entrance": "yes",
+            "ref": "A",
+            "buildingEntityId": "way/2",
+            "entityId": "node/4",
+            "entityVersion": 1
+          }
+        }
+      ]
+    },
+    "road-nodes.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.25,
+              42.44
+            ]
+          },
+          "properties": {
+            "kind": "traffic_signals",
+            "entityId": "node/5",
+            "entityVersion": 1
           }
         }
       ]

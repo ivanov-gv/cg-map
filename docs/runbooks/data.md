@@ -2,7 +2,7 @@
 
 ## Sources and releases
 
-- Geometry and places: data/sources/.
+- Geometry, places, settlements and municipality borders: data/sources/.
 - Reviewed counts, SHA-256, snapshot timestamp, coverage: data/sources/provenance.json.
 - Place contract: [places.schema.json](../../packages/contracts/places.schema.json).
 - Source context: [PROVENANCE.md](../../data/PROVENANCE.md).
@@ -11,7 +11,8 @@
 
 make -C data check validates supported geometry structure, WGS84 ranges, polygon closure, place
 IDs/names/categories/levels, provenance, and the recorded release checksum. It is not GIS topology validation or a
-guarantee that business listings are current.
+guarantee that business listings are current. make -C data check-topology adds the Shapely-backed municipality,
+shared-edge and settlement checks; make verify PKG=data and make -C data verify run both groups.
 
 ## Place-only edits
 
@@ -70,10 +71,10 @@ placement is not part of this release.
 
 data/tools/extract-osm.py replaces places.geojson and then reapplies the policy, so overrides survive an import. An
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
-run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
-`roads`, `water`, `land` (land.geojson, including its country geometry), and `places`; each group replaces only its own
-source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a
-full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies
+run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`, `roads`, `water`, `land` (land.geojson, including its country geometry),
+`borders` (border-edges.geojson and municipalities.geojson), `settlements`, and `places`; each group replaces only its
+own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks
+for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies
 footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups together when
 refreshing either side of that join; this Feature does not refresh places, so the published snapshot has no such joins.
 `context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
@@ -91,9 +92,9 @@ lists all its members in `addr:streetEntityIds`, and records no-number placehold
 writes `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints. It can add
 `buildingEntityId` to places inside those footprints when the `places` group is refreshed with `buildings`; this Feature
 keeps the reviewed places snapshot from the branch below, so no published place carries that join. The version-2 editor
-bundle lists the new entrance file; the editor can inspect it but cannot change it, and still accepts a version-1 bundle
-with the original eight files. The separate `entrances` array in `building-labels.geojson` remains the runtime
-arrow/label format and is not generated from this source file. See
+bundle lists the new entrance, settlement, municipality and shared-border files; the editor can inspect them but cannot
+change them, and still accepts a version-1 bundle with the original eight files. The separate `entrances` array in
+`building-labels.geojson` remains the runtime arrow/label format and is not generated from this source file. See
 [building addresses](../map-data/building-numbers.md), [decision 0023](../decisions/0023-osm-building-source-details.md)
 and [decision 0024](../decisions/0024-editor-bundle-versions.md).
 
@@ -103,6 +104,29 @@ counts and footprint SHA-256 in its data tests; `make -C data check` validates s
 street join lists every published road with the same name, with its lowest way ID as the representative. A geometry
 change still needs the full archive rebuild below; an attribute-only refresh leaves tile geometry unchanged and needs no
 archive rebuild.
+
+## Settlements and shared municipality edges
+
+The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
+from the reviewed PBF. They are read-only in the editor: refresh them with a full extract or the named `--layers`
+groups, never with a changeset. The shared-edge construction and simplification rule are recorded in
+[decision 0024](../decisions/0024-shared-border-edges.md).
+
+```sh
+python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers borders settlements \
+  --source-url https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf \
+  --source-date 2026-11-21
+make -C data check-topology
+make verify PKG=data
+```
+
+The topology command checks polygon validity, zero-area pairwise intersections, land coverage, edge use from both sides,
+settlement counts and the combined 5 MB budget. It separates the measured inland-water gap from any unexplained gap and
+fails when the unexplained gap exceeds the named tolerance. On the reviewed 2026-11-21 extract it reports 25
+municipalities, 113 edges and 4,009 settlements. The new sources are not inputs to the tile builder, so their first
+release did not change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path
+below. Existing town labels are compared with the new settlement source in
+[hard-coded town coverage](../map-data/hard-coded-towns.md).
 
 ## Editor changesets
 
