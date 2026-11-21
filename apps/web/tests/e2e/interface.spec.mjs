@@ -36,9 +36,42 @@ const SNAPSHOT_DATE = '17 Oct 2026';
 const SCALE_BOX_TOLERANCE_PIXELS = 1;
 const SCALE_CORNER_LIMIT_PIXELS = 24;
 
-// Coordinates always come from the card's visible box: a tall details element can extend off-screen.
-// Explicit CDP timestamps keep flick speed independent of how fast the runner dispatches the events.
+const SWIPE_EDGE_INSET_PIXELS = 8;
+const SWIPE_HEADER_OFFSET_PIXELS = 16;
+const SWIPE_MOVE_STEPS = 5;
+const SWIPE_STEP_SECONDS = 0.012;
+
+// A step swipe is sized from the measured card and the viewport edge, not from a fixed pixel count.
+// Every settled card step lies between that edge and the finger, so the distance alone crosses the
+// half-travel threshold; a slow runner cannot turn the release into a non-stepping drag.
 async function swipeCard(page, touch, deltaY, {fromHeader = true} = {}) {
+  const box = await page.locator('#place-card').boundingBox();
+  const screenX = box.x + box.width / 2;
+  const screenY = fromHeader ? box.y + SWIPE_HEADER_OFFSET_PIXELS : box.y + box.height / 2;
+  const edgeYPixels =
+    deltaY < 0 ? SWIPE_EDGE_INSET_PIXELS : page.viewportSize().height - SWIPE_EDGE_INSET_PIXELS;
+  const distancePixels = edgeYPixels - screenY;
+  const baseTimestampSeconds = Date.now() / 1000;
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{x: screenX, y: screenY, id: 1}],
+    timestamp: baseTimestampSeconds
+  });
+  for (let step = 1; step <= SWIPE_MOVE_STEPS; step++)
+    await touch.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: screenX, y: screenY + (distancePixels * step) / SWIPE_MOVE_STEPS, id: 1}],
+      timestamp: baseTimestampSeconds + step * SWIPE_STEP_SECONDS
+    });
+  await touch.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: baseTimestampSeconds + (SWIPE_MOVE_STEPS + 1) * SWIPE_STEP_SECONDS
+  });
+}
+
+// A short pull keeps its fixed distance: these assertions are that the card does not step.
+async function shortCardPull(page, touch, deltaY, {fromHeader = true} = {}) {
   const box = await page.locator('#place-card').boundingBox();
   const screenX = box.x + box.width / 2;
   const screenY = fromHeader ? box.y + 30 : box.y + box.height / 2;
@@ -48,16 +81,16 @@ async function swipeCard(page, touch, deltaY, {fromHeader = true} = {}) {
     touchPoints: [{x: screenX, y: screenY, id: 1}],
     timestamp: baseTimestampSeconds
   });
-  for (let step = 1; step <= 5; step++)
+  for (let step = 1; step <= SWIPE_MOVE_STEPS; step++)
     await touch.send('Input.dispatchTouchEvent', {
       type: 'touchMove',
-      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / 5, id: 1}],
-      timestamp: baseTimestampSeconds + step * 0.012
+      touchPoints: [{x: screenX, y: screenY + (deltaY * step) / SWIPE_MOVE_STEPS, id: 1}],
+      timestamp: baseTimestampSeconds + step * SWIPE_STEP_SECONDS
     });
   await touch.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
     touchPoints: [],
-    timestamp: baseTimestampSeconds + 6 * 0.012
+    timestamp: baseTimestampSeconds + (SWIPE_MOVE_STEPS + 1) * SWIPE_STEP_SECONDS
   });
 }
 
@@ -91,25 +124,33 @@ async function releaseCardDrag(touch) {
   await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
 }
 
-// A fast short gesture. CDP timestamps keep it quick even when dispatching the events is slow.
-async function flickCard(page, touch, deltaY) {
-  const box = await page.locator('#place-card').boundingBox();
-  const screenX = box.x + box.width / 2;
-  const screenY = box.y + 24;
-  const baseTimestampSeconds = Date.now() / 1000;
-  await touch.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{x: screenX, y: screenY, id: 1}],
-    timestamp: baseTimestampSeconds
-  });
-  for (const [index, fraction] of [0.25, 0.65, 1].entries()) {
-    await touch.send('Input.dispatchTouchEvent', {
-      type: 'touchMove',
-      touchPoints: [{x: screenX, y: screenY + deltaY * fraction, id: 1}],
-      timestamp: baseTimestampSeconds + (index + 1) * 0.012
-    });
-  }
-  await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+// A flick is about velocity, so dispatch DOM touches with the timeStamp the gesture code actually reads.
+// CDP timestamps are advisory on a busy runner; an explicit value keeps the flick speed deterministic.
+async function flickCard(page, deltaY) {
+  await page.evaluate((distancePixels) => {
+    const card = document.getElementById('place-card');
+    const box = card.getBoundingClientRect();
+    const clientX = box.left + box.width / 2;
+    const startY = box.top + 24;
+    const send = (type, yPixels, timeMilliseconds, isEnd = false) => {
+      const touch = new Touch({identifier: 1, target: card, clientX, clientY: yPixels});
+      const event = new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: isEnd ? [] : [touch],
+        changedTouches: [touch],
+        targetTouches: isEnd ? [] : [touch]
+      });
+      Object.defineProperty(event, 'timeStamp', {value: timeMilliseconds});
+      card.dispatchEvent(event);
+    };
+    const startMilliseconds = 1000;
+    send('touchstart', startY, startMilliseconds);
+    [0.25, 0.65, 1].forEach((fraction, index) =>
+      send('touchmove', startY + distancePixels * fraction, startMilliseconds + (index + 1) * 12)
+    );
+    send('touchend', startY + distancePixels, startMilliseconds + 48, true);
+  }, deltaY);
 }
 
 // The visible grab bar is a pseudo-element of the card handle button.
@@ -1093,12 +1134,22 @@ test(
     expect(rising.height).toBeGreaterThan(peek.height);
     // The Peek max-height must not cap the rectangle while the finger owns it.
     expect(await card.evaluate(element => element.style.maxHeight)).toBe('none');
+    // Capture the release state in the same task; a slow runner can finish the animation before the next CDP reply.
+    await card.evaluate(element => {
+      element.releaseSnapshot = null;
+      element.addEventListener('touchend', () => {
+        element.releaseSnapshot = {
+          animations: element.getAnimations().length,
+          topPixels: element.getBoundingClientRect().top
+        };
+      }, {once: true});
+    });
     await releaseCardDrag(touch);
     // Release animates from the dragged pixels to the settled step, not from auto.
-    expect(await card.evaluate(element => element.getAnimations().length)).toBeGreaterThan(0);
-    const settlingTop = await card.evaluate(element => element.getBoundingClientRect().top);
-    expect(settlingTop).toBeGreaterThanOrEqual(rising.y);
-    expect(settlingTop).toBeLessThan(peek.y);
+    const release = await card.evaluate(element => element.releaseSnapshot);
+    expect(release.animations).toBeGreaterThan(0);
+    expect(release.topPixels).toBeGreaterThanOrEqual(rising.y);
+    expect(release.topPixels).toBeLessThan(peek.y);
     await settled('peek');
     await swipeCard(page, touch, -160);
     await settled('full');
@@ -1259,7 +1310,6 @@ test(
     await page.emulateMedia({reducedMotion: 'reduce'});
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
-    const touch = await page.context().newCDPSession(page);
     const card = page.locator('#place-card');
 
     await page.locator('#search').click();
@@ -1267,11 +1317,11 @@ test(
     await expect(card).toHaveAttribute('data-state', 'peek');
 
     // 20 px is below the slow-drag halfway threshold; only the flick's velocity moves the card.
-    await flickCard(page, touch, -20);
+    await flickCard(page, -20);
     await expect(card).toHaveAttribute('data-state', 'full');
     const durations = await card.evaluate((element) => getComputedStyle(element).transitionDuration);
     expect(durations.split(',').map((value) => value.trim())).toEqual(['0s']);
-    await flickCard(page, touch, 20);
+    await flickCard(page, 20);
     await expect(card).toHaveAttribute('data-state', 'peek');
   }
 );
@@ -6003,7 +6053,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
       await expect(menu).toBeVisible();
 
       // Fullscreen has no higher step, so an upward pull leaves it alone.
-      await swipeCard(page, touch, -120);
+      await shortCardPull(page, touch, -120);
       await expect(card).toHaveAttribute('data-state', 'fullscreen');
 
       // Browser Back and the Icon Button share one history step: both return to Peek.
@@ -6117,7 +6167,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
       ).toBeGreaterThan(0);
 
       // Keep the pull shorter than the scroll range: the details scroll first and the card stays put.
-      await swipeCard(page, touch, 40, {fromHeader: false});
+      await shortCardPull(page, touch, 40, {fromHeader: false});
       await expect(card).toHaveAttribute('data-state', 'fullscreen');
       await expectToHold(async () => expect(card).toHaveAttribute('data-state', 'fullscreen'), 200);
       expect(await card.evaluate(element => element.scrollTop)).toBeLessThan(80);
