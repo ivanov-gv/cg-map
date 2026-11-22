@@ -801,7 +801,7 @@ test('every relief collection satisfies its read-only domain contract', () => {
   const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
   for (const filename of reliefFiles) {
     const collection = readRelief(filename);
-    assert.equal(validateRelief(collection, {label: filename}), provenance.layers[filename].features);
+    assert.equal(validateRelief(collection, {label: filename, contractsDirectory}), provenance.layers[filename].features);
     assert.equal(collection.entitySchemaVersion, 1);
   }
   const contours = readRelief('contours.geojson');
@@ -870,7 +870,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
     for (const change of changes) {
       const bad = structuredClone(readRelief(filename));
       change(bad);
-      assert.throws(() => validateRelief(bad, {label: filename}), undefined, filename);
+      assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
   }
 });
@@ -878,7 +878,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
 test('the editor bundle keeps its thirteen editable sources and excludes relief files', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
-  const manifest = await writeEditorBundle('data/sources', directory);
+  const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
   assert.equal(manifest.layers.length, 13);
   assert.ok(manifest.layers.every(layer => !reliefFiles.includes(layer.filename)));
   assert.deepEqual(fs.readdirSync(directory).filter(name => name.endsWith('.geojson')).sort(),
