@@ -203,7 +203,7 @@ test('ci-publish pages job publishes dev-pages image tagged by commit', () => {
   assert.ok(publishStep, 'pages must use publish-image action');
   assert.equal(publishStep.with.name, 'dev-pages', 'must publish dev-pages image');
   assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
-  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit SHA');
+  assert.equal(publishStep.with.commit, '${{ steps.commit.outputs.commit }}', 'must pass the validated commit SHA');
   // Dockerfile comes from the workflow checkout (first checkout), not from source/.
   // Build context is the site/ directory, because the root .dockerignore excludes it otherwise.
   assert.equal(publishStep.with.dockerfile, 'platform/pages/Dockerfile', 'must use workflow checkout Dockerfile');
@@ -334,6 +334,17 @@ test('the editor browser jobs cover every spec in both projects', () => {
   }
 });
 
+test('cd-map-data shares its publish env and steps with the test-run twin', () => {
+  const raw = fs.readFileSync(path.join(workflowDir, 'cd-map-data.yml'), 'utf8');
+  assert.match(raw, /env: &publish-env/);
+  assert.match(raw, /steps: &publish-steps/);
+  assert.match(raw, /env: \*publish-env/);
+  assert.match(raw, /steps: \*publish-steps/);
+  const {jobs} = load('cd-map-data.yml');
+  assert.deepEqual(jobs['publish-test-run'].env, jobs.publish.env);
+  assert.deepEqual(jobs['publish-test-run'].steps, jobs.publish.steps);
+});
+
 test('CD refuses a commit that is not on main', () => {
   for (const file of Object.keys(CD_TAGS)) {
     const step = load(file).jobs.switch.steps.find(({id}) => id === 'release');
@@ -386,9 +397,55 @@ test('cd-dev-pages find uses environment dev', () => {
   assert.equal(jobs.find.environment, 'dev');
 });
 
-test('ci-publish pages job validates commit as 40-character SHA', () => {
-  const stepsText = JSON.stringify(load('ci-publish.yml').jobs.pages.steps);
-  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+const validateCommitStep = './.github/actions/validate-commit';
+
+function stepIndexWhere(steps, predicate) {
+  const index = steps.findIndex(predicate);
+  assert.notEqual(index, -1);
+  return index;
+}
+
+test('validate-commit action accepts only a full SHA and reports what it validated', () => {
+  const actionPath = path.join(repoRoot, '.github/actions/validate-commit/action.yml');
+  const raw = fs.readFileSync(actionPath, 'utf8');
+  const action = parseYaml(raw);
+  assert.equal(action.runs.using, 'composite');
+  assert.equal(action.outputs.commit.value, '${{ steps.validate.outputs.commit }}');
+  assert.match(raw, /\[0-9a-f\]\{40\}/, 'must validate a 40-char hex SHA');
+  assert.match(raw, /::error::/);
+  assert.match(raw, /tee -a "\$GITHUB_STEP_SUMMARY"/, 'must duplicate its report to stdout for act');
+  assert.equal(action.runs.steps[0].shell, 'bash');
+});
+
+test('every job that uses a requested commit validates it before using it', () => {
+  const ciJobs = load('ci-publish.yml').jobs;
+  for (const name of ['data-package', 'pages']) {
+    const steps = ciJobs[name].steps;
+    const validation = stepIndexWhere(steps, step => step.uses === validateCommitStep);
+    const checkout = stepIndexWhere(
+      steps,
+      (step, index) =>
+        index > validation &&
+        step.uses?.startsWith('actions/checkout') &&
+        step.with?.ref === '${{ steps.commit.outputs.commit }}'
+    );
+    assert.ok(checkout > validation, `${name} must check out the validated commit, not an unchecked input`);
+  }
+  const findSteps = load('cd-dev-pages.yml').jobs.find.steps;
+  const validation = stepIndexWhere(findSteps, step => step.uses === validateCommitStep);
+  const pull = stepIndexWhere(
+    findSteps,
+    (step, index) => index > validation && JSON.stringify(step).includes('steps.resolve.outputs.commit')
+  );
+  assert.ok(pull > validation, 'CD must pull only after the commit is validated');
+  assert.equal(findSteps[0].with['sparse-checkout'], '.github/actions', 'CD must check out only the local action');
+});
+
+test('ci-publish pages job validates commit before it checks out source', () => {
+  const steps = load('ci-publish.yml').jobs.pages.steps;
+  const validation = stepIndexWhere(steps, step => step.uses === validateCommitStep);
+  const source = stepIndexWhere(steps, (step, index) => index > validation && step.with?.path === 'source');
+  assert.ok(source > validation);
 });
 
 test('ci-publish has commit input for workflow_dispatch', () => {
@@ -399,8 +456,10 @@ test('ci-publish has commit input for workflow_dispatch', () => {
 });
 
 test('cd-dev-pages find validates commit as 40-character SHA', () => {
-  const stepsText = JSON.stringify(load('cd-dev-pages.yml').jobs.find.steps);
-  assert.match(stepsText, /\[0-9a-f\]\{40\}/, 'must validate commit as 40-char hex SHA');
+  const steps = load('cd-dev-pages.yml').jobs.find.steps;
+  const validation = steps.find(step => step.uses === validateCommitStep);
+  assert.ok(validation, 'must validate commit through the shared action');
+  assert.equal(validation.with.commit, '${{ env.COMMIT }}');
 });
 
 test('cd-dev-pages find errors when image is not found', () => {
@@ -631,6 +690,29 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
 
 // setup-web is checked by the ci-publish test-run-evidence check because ci-publish builds the site.
 
+test('ci-workflows: validate-commit changed needs both ci-publish and cd-dev-pages runs', async () => {
+  const otherRuns = {
+    'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+    'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+    'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]'
+  };
+  const missing = await runEvidenceTest(['.github/actions/validate-commit/action.yml'], {
+    ...otherRuns,
+    'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
+    'runs-cd-dev-pages.yml': '[{"displayTitle":"other run"}]'
+  });
+  assert.equal(missing.code, 1);
+  assert.match(missing.stdout, /gh workflow run ci-publish\.yml/);
+  assert.match(missing.stdout, /gh workflow run cd-dev-pages\.yml/);
+
+  const found = await runEvidenceTest(['.github/actions/validate-commit/action.yml'], {
+    ...otherRuns,
+    'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
+    'runs-cd-dev-pages.yml': '[{"displayTitle":"cd-dev-pages test_run=true"}]'
+  });
+  assert.equal(found.code, 0);
+});
+
 test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
   const result = await runEvidenceTest(
     ['.github/workflows/ci-apps-web.yml'],
@@ -779,10 +861,13 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
   const checkouts = publish.steps.filter(step => step.uses === 'actions/checkout@v7');
   assert.equal(checkouts.length, 2, 'the action revision and source commit need separate checkouts');
   assert.equal(checkouts[0].with.ref, undefined, 'local actions must come from the workflow revision');
-  assert.equal(checkouts[1].with.ref, '${{ env.PACKAGE_COMMIT }}', 'the data job must check out that commit');
+  assert.equal(checkouts[1].with.ref, '${{ steps.commit.outputs.commit }}', 'the data job must check out that commit');
   assert.equal(checkouts[1].with.path, 'source');
-  assert.equal(packageStep.with.commit, '${{ env.PACKAGE_COMMIT }}', 'the package identity must use that commit');
-  assert.match(publish.steps.map(step => step.run ?? '').join('\n'), /\[0-9a-f\]\{40\}/, 'commit must be a full SHA');
+  assert.equal(
+    packageStep.with.commit,
+    '${{ steps.commit.outputs.commit }}',
+    'the package identity must use that commit'
+  );
   assert.deepEqual(jobs['data-package-test-run'].steps, publish.steps);
   assert.equal(jobs['data-package-test-run'].environment, 'test-run');
 });
@@ -1284,7 +1369,7 @@ test('ci-publish pages job passes dev-pages name and commit from env', () => {
   const publishStep = jobs.pages.steps.find(s => s.uses?.includes('publish-image'));
   assert.ok(publishStep, 'pages must use publish-image action');
   assert.equal(publishStep.with.name, 'dev-pages', 'must pass the dev-pages image name');
-  assert.equal(publishStep.with.commit, '${{ env.COMMIT }}', 'must pass commit from env, not github.sha');
+  assert.equal(publishStep.with.commit, '${{ steps.commit.outputs.commit }}', 'must pass the validated commit');
   assert.equal(publishStep.with.repository, '${{ env.IMAGE_REPOSITORY }}', 'must use IMAGE_REPOSITORY');
   assert.equal(publishStep.with.token, '${{ github.token }}', 'must pass token');
 });

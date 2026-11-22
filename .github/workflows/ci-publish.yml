@@ -195,26 +195,23 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Validate commit
+        id: commit
+        uses: ./.github/actions/validate-commit
+        with:
+          commit: ${{ env.PACKAGE_COMMIT }}
       - name: Check out source
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.PACKAGE_COMMIT }}
+          ref: ${{ steps.commit.outputs.commit }}
           path: source
           persist-credentials: false
-      - name: Validate commit input
-        if: ${{ inputs.commit != '' }}
-        shell: bash
-        run: |
-          if [[ ! "$PACKAGE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: $PACKAGE_COMMIT"
-            exit 1
-          fi
       - uses: ./.github/actions/publish-dev-package
         with:
           directory: source/data
           flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
           token: ${{ github.token }}
-          commit: ${{ env.PACKAGE_COMMIT }}
+          commit: ${{ steps.commit.outputs.commit }}
   data-package-test-run:
     name: (test-run) Publish map-data dev package
     needs: [switch, plan, plan-test-run]
@@ -283,20 +280,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Validate commit
+        id: commit
+        uses: ./.github/actions/validate-commit
+        with:
+          commit: ${{ env.COMMIT }}
       - name: Check out source
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-          ref: ${{ env.COMMIT }}
+          ref: ${{ steps.commit.outputs.commit }}
           path: source
-      - name: Validate commit input
-        if: ${{ inputs.commit != '' }}
-        shell: bash
-        run: |
-          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
-            exit 1
-          fi
       - uses: ./source/.github/actions/setup-web
       - name: Build each app
         run: |
@@ -328,7 +322,7 @@ jobs:
           repository: ${{ env.IMAGE_REPOSITORY }}
           dockerfile: platform/pages/Dockerfile
           context: 'site'
-          commit: ${{ env.COMMIT }}
+          commit: ${{ steps.commit.outputs.commit }}
           token: ${{ github.token }}
           skip_main_tag: 'true'
   # Keep only the last N dev-pages versions — the rollback window.

@@ -107,12 +107,12 @@ jobs:
             echo "::error::Run: gh workflow run cd-map-data.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
             missing=1
           fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\)/' \
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\|validate-commit\)/' \
             && ! has_qualifying_run ci-publish.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."
             missing=1
           fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-dev-pages\.yml$\|^\.github/actions/test_run/' \
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-dev-pages\.yml$\|^\.github/actions/\(test_run\|validate-commit\)/' \
             && ! has_qualifying_run cd-dev-pages.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run cd-dev-pages.yml --ref $BRANCH -f test_run=true -f commit=<SHA on main with a ci-publish run>, then re-run this check."
             missing=1
