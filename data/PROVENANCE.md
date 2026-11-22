@@ -88,8 +88,8 @@ and the published gaps are then recomputed from the filled areas. Each derived a
 `derived:unassigned-water-1` with no `ISO3166-2`, and its shoreline and those of its municipal neighbours share one
 cleaned six-decimal boundary. The reviewed sources leave 14,815 m² uncovered and 3,048 m² extra, inside the named 20,000
 m² and 10,000 m² tolerances. The edge-construction rule is recorded in
-[decision 0027](../docs/decisions/0027-shared-border-edges.md), and the current gap partition rule in
-[decision 0028](../docs/decisions/0028-derived-unassigned-water-areas.md).
+[decision 0028](../docs/decisions/0028-shared-border-edges.md), and the current gap partition rule in
+[decision 0029](../docs/decisions/0029-derived-unassigned-water-areas.md).
 
 ## Bus stops
 

@@ -48,7 +48,7 @@ test('unclosed polygon rings are rejected', () => {
 test('municipality file accepts derived unassigned-water areas', () => {
   const collection = structuredClone(municipalityAreas.municipality);
   collection.features.push(structuredClone(municipalityAreas.unassignedWater.features[0]));
-  assert.equal(validateMunicipalities(collection), 2);
+  assert.equal(validateMunicipalities(collection, {contractsDirectory}), 2);
 
   for (const [field, expected] of [
     ['ISO3166-2', /ISO code/],
@@ -61,7 +61,7 @@ test('municipality file accepts derived unassigned-water areas', () => {
     } else {
       delete bad.features[1].properties[field];
     }
-    assert.throws(() => validateMunicipalities(bad), expected);
+    assert.throws(() => validateMunicipalities(bad, {contractsDirectory}), expected);
   }
 });
 

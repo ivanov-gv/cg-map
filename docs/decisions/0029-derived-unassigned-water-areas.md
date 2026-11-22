@@ -1,4 +1,4 @@
-# 0028: Derived unassigned water areas
+# 0029: Derived unassigned water areas
 
 ## Status
 
@@ -6,7 +6,7 @@ Accepted.
 
 ## Context
 
-[Decision 0027](0027-shared-border-edges.md) assigned every material country gap, including Lake Skadar, to an adjacent
+[Decision 0028](0028-shared-border-edges.md) assigned every material country gap, including Lake Skadar, to an adjacent
 municipality so the reviewed outline could be checked without subtracting water. Lead review found that a cross-border
 lake is not municipal land: touching the country boundary is not a reason to exclude it. Small exterior coastline
 residue, however, collapses under six-decimal coordinate rounding, so it still has to join a municipality to keep the
@@ -33,7 +33,7 @@ share that precision. When side sampling cannot classify an edge beside a very n
 representative interior point's side of the directed line.
 
 Producer validation accepts the `municipality` and `unassigned-water` kinds together, and the topology check rebuilds
-both from their ordered edge references. This supersedes only ADR 0027's rule that assigned Lake Skadar and other
+both from their ordered edge references. This supersedes only ADR 0028's rule that assigned Lake Skadar and other
 material gaps to municipalities; its shared-edge construction rules remain in force. Current counts and refresh commands
 stay in [source provenance](../../data/PROVENANCE.md) and
 [the data runbook](../runbooks/data.md#settlements-and-shared-municipality-edges).

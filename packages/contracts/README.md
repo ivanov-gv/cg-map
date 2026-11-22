@@ -111,7 +111,7 @@ Every `from`/`to`/`via` reference resolves in `roads.geojson` or `road-nodes.geo
 because restrictions are topological relations, not geometries.
 
 `editor-bundle.schema.json` defines the pinned source viewer bundle: one filename, byte size, feature count and SHA-256
-per source GeoJSON file. Version 1 keeps its original ten files; version 2 adds `border-edges.geojson`,
+per source GeoJSON file. Version 1 keeps its original eight files; version 2 adds `border-edges.geojson`,
 `municipalities.geojson` and `settlements.geojson`. The producer emits version 2, while the editor accepts both so an
 older pinned snapshot remains readable. Feature indices are tied to a file's hash and are not stable upstream
 identities. Data-owned assembly preserves bytes; the editor verifies the entire bundle before enabling modes. This
