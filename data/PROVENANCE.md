@@ -15,17 +15,18 @@ tags are omitted rather than published as empty strings. The place snapshot has 
 standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 20,985,409
 bytes.
 
-The current version-2 reviewed source bundle has nine GeoJSON files; the frozen version-1 bundle has the original eight
-without `building-entrances.geojson`. `sources/building-entrances.geojson` is a read-only OSM extract of 157 tagged
-entrance nodes on or within one metre of a published footprint, with 28 nearby candidates left unjoined. The refreshed
-`sources/buildings.geojson` carries 43,978 `building` values, 445 `building:levels`, three `building:material`, one
-`start_date`, 265 `name`, 142 `roof:levels`, 896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number
-placeholders were omitted and recorded as `nohousenumber: "yes"`. A street name joins to a road entity only when case-
-and whitespace-folded text matches exactly one connected group of same-named road ways; `addr:streetEntityId` names the
-group's lowest way ID and `addr:streetEntityIds` lists its members: 321 joined and 575 did not. There are 1,090 places
-inside a footprint and 887 outside. Counts per copied tag and entrance kind live in `sources/provenance.json` under
-`building_details`. No energy-class field is published: no open OSM source in this extract supports one, and marking
-that gap here avoids presenting an inferred value as a source fact.
+The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
+eight without `building-entrances.geojson` or the later settlement and border files.
+`sources/building-entrances.geojson` is a read-only OSM extract of 157 tagged entrance nodes on or within one metre of a
+published footprint, with 28 nearby candidates left unjoined. The refreshed `sources/buildings.geojson` carries 43,978
+`building` values, 445 `building:levels`, three `building:material`, one `start_date`, 265 `name`, 142 `roof:levels`,
+896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number placeholders were omitted and recorded as
+`nohousenumber: "yes"`. A street name joins to a road entity only when case- and whitespace-folded text matches exactly
+one connected group of same-named road ways; `addr:streetEntityId` names the group's lowest way ID and
+`addr:streetEntityIds` lists its members: 321 joined and 575 did not. There are 1,090 places inside a footprint and 887
+outside. Counts per copied tag and entrance kind live in `sources/provenance.json` under `building_details`. No
+energy-class field is published: no open OSM source in this extract supports one, and marking that gap here avoids
+presenting an inferred value as a source fact.
 
 The land/water-only refresh for issue #326 changed `sources/land.geojson` to 493,167 bytes (SHA-256
 `530ad7b2f2fd05eb1a59bd9a8b688b591746f476d2b9ac7733c5da56f6799f36`) and `sources/water.geojson` to 2,097,403 bytes
@@ -64,20 +65,26 @@ placement and ring order. It is not a full OSM semantic/cartographic pipeline; s
 [architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
 Issue #328 adds three OSM-derived read-only sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009
-named place nodes, `sources/border-edges.geojson` has 113 shared boundaries, and `sources/municipalities.geojson` has 25
-areas. Together they are 2,591,367 bytes; counts, byte sizes and SHA-256 for each file are in `sources/provenance.json`.
+named place nodes, `sources/border-edges.geojson` has 110 shared boundaries, and `sources/municipalities.geojson` has 25
+areas. Together they are 2,475,315 bytes; counts, byte sizes and SHA-256 for each file are in `sources/provenance.json`.
 Settlement properties copy the OSM name, population, capital, admin level and Wikidata facts, add the `rank` and
 municipality code, and keep the original `node/N` identity. Suburb, quarter and neighbourhood nodes are limited to the
-whole-city detail box; 34 place nodes outside the country relation were assigned to the nearest municipality, with a
-maximum offset of 0.022826 degrees.
+whole-city detail box; 34 place nodes outside the reviewed country outline were assigned to the nearest municipality,
+with a maximum offset of 0.022884 degrees. The fallback is bounded at 0.025 degrees.
 
-Thirty-two edge features keep an exact `way/N` identity; the other 81 use `derived:edge-<left>-<right>-<n>` and record
-their contributing OSM ways. Each shared edge is simplified once, and the municipality polygons are rebuilt from those
-simplified lines. Coast edges use the OSM coastline as `sea`, with territorial waters reconciled against the
-coastline-cut land; neighbouring countries remain context only. The measured Lake Skadar water gap is excluded from the
-coverage error, leaving 0.002656070 square degrees of tolerated residual. The construction rule is recorded in
-[decision 0021](../docs/decisions/0021-shared-border-edges.md), and existing town labels are compared with the reviewed
-settlements in [hard-coded town coverage](../docs/map-data/hard-coded-towns.md).
+Twenty-nine edge features keep an exact `way/N` identity; the other 81 use `derived:edge-<left>-<right>-<n>` and record
+their contributing OSM ways. Each shared edge is simplified once, and the municipality polygons are rebuilt in edge
+traversal order from those simplified lines. Exterior sides take their authority from OSM coastline or `admin_level=2`
+boundary way tags, matched to the reviewed outline within 0.00001 degrees and over 0.1% segment overlap so an endpoint
+touch cannot claim an edge; a segment spanning two authorities splits where supported coverage intervals of different
+authorities end and begin together. Local border names map to the reviewed context names, and Kosovo is accepted from
+OSM ways because it has no Natural Earth context polygon. Territorial-water ways count as `sea`; neighbouring countries
+remain context only. The country outline is the coverage authority, and water is not subtracted: internal gaps larger
+than 100 m², including the Lake Skadar area omitted from published municipality relations, are assigned to an adjacent
+municipality. The reviewed sources leave 14,840 m² uncovered and 3,048 m² extra, inside the named 20,000 m² and 10,000
+m² tolerances. The construction rule is recorded in [decision 0024](../docs/decisions/0024-shared-border-edges.md), and
+existing town labels are compared with the reviewed settlements in
+[hard-coded town coverage](../docs/map-data/hard-coded-towns.md).
 
 ## Bus stops
 

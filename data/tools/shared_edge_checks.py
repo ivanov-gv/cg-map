@@ -7,19 +7,26 @@ from pathlib import Path
 from shapely.geometry import LineString, shape
 from shapely.ops import unary_union
 
+from geo_area import (
+    EXTRA_AREA_TOLERANCE_SQM, MISSING_AREA_TOLERANCE_SQM,
+    SQUARE_DEGREES_TO_SQUARE_METRES,
+)
+from osm_extract.shared_edges import (
+    OSM_ONLY_AUTHORITIES, edge_lines, ordered_edge_references,
+    rebuild_municipality
+)
+
 EDGE_FILE = 'border-edges.geojson'
 MUNICIPALITY_FILE = 'municipalities.geojson'
 LAND_FILE = 'land.geojson'
 SETTLEMENT_FILE = 'settlements.geojson'
-WATER_FILE = 'water.geojson'
 CONTEXT_FILE = 'context-countries.geojson'
 MUNICIPALITY_PREFIX = 'ME-'
 INSIDE_COUNTRY = 'ME'
 SEA = 'sea'
 
 OVERLAP_AREA_TOLERANCE = 1e-10
-EXTRA_AREA_TOLERANCE = 1e-6
-MISSING_AREA_TOLERANCE = 0.003
+RECONSTRUCTION_AREA_TOLERANCE = 1e-10
 MAX_COMBINED_BYTES = 5 * 1024 * 1024
 
 
@@ -49,45 +56,34 @@ def check_pairwise_intersections(polygons):
     return len(polygons)
 
 
-def check_coverage(polygons, country, water=None):
-    """Compare the municipality union with the coastline-cut country outline.
+def check_coverage(polygons, country):
+    """Compare the municipality union with the reviewed country outline.
 
-    Inland water is not municipality land: Lake Skadar's gap is expected. A
-    small residual remains where the water and outline sources are simplified
-    differently, so only non-water gaps are bounded by the tolerance. Extra
-    municipality area must stay at coordinate-rounding scale.
+    The extractor assigns every internal country gap, including inland water,
+    to a municipality. Only the coordinate-rounding residue may remain, so the
+    check bounds both uncovered and extra land in local square metres.
     """
     union = unary_union(polygons)
-    missing = country.difference(union)
-    unexplained = missing if water is None else missing.difference(water)
-    missing_area = missing.area
-    unexplained_area = unexplained.area
-    extra_area = union.difference(country).area
-    if unexplained_area > MISSING_AREA_TOLERANCE:
+    missing_area_sqm = (
+        country.difference(union).area * SQUARE_DEGREES_TO_SQUARE_METRES
+    )
+    extra_area_sqm = (
+        union.difference(country).area * SQUARE_DEGREES_TO_SQUARE_METRES
+    )
+    if missing_area_sqm > MISSING_AREA_TOLERANCE_SQM:
         raise ValueError(
-            f'municipality union leaves {unexplained_area} square degrees '
-            'outside water uncovered'
+            f'municipality union leaves {missing_area_sqm:.1f} square metres '
+            'uncovered'
         )
-    if extra_area > EXTRA_AREA_TOLERANCE:
+    if extra_area_sqm > EXTRA_AREA_TOLERANCE_SQM:
         raise ValueError(
-            f'municipality union extends {extra_area} square degrees outside land'
+            f'municipality union extends {extra_area_sqm:.1f} square metres '
+            'outside land'
         )
     return {
-        'missing_area': missing_area,
-        'unexplained_gap_area': unexplained_area,
-        'extra_area': extra_area,
+        'missing_area_sqm': missing_area_sqm,
+        'extra_area_sqm': extra_area_sqm,
     }
-
-
-def water_polygons(collection):
-    """Return the polygon water bodies used to explain inland gaps."""
-    geometries = [
-        shape(feature['geometry']) for feature in collection['features']
-    ]
-    return unary_union([
-        geometry for geometry in geometries
-        if geometry.geom_type in ('Polygon', 'MultiPolygon')
-    ])
 
 
 def check_edge_usage(edges, municipalities, context_names):
@@ -109,7 +105,9 @@ def check_edge_usage(edges, municipalities, context_names):
             )
 
     edge_ids = set()
-    outside_names = {INSIDE_COUNTRY, SEA, *context_names}
+    outside_names = {
+        INSIDE_COUNTRY, SEA, *context_names, *OSM_ONLY_AUTHORITIES
+    }
     for feature in edges:
         properties = feature['properties']
         edge_id = properties['entityId']
@@ -143,6 +141,28 @@ def check_edge_usage(edges, municipalities, context_names):
     return len(edges)
 
 
+def check_reconstruction(edges, municipalities):
+    """Rebuild every polygon from its edge references and check their order."""
+    lines = edge_lines(edges)
+    for feature in municipalities:
+        code = feature['properties']['ISO3166-2']
+        references = feature['properties']['edges']
+        try:
+            expected = ordered_edge_references(references, lines)
+            rebuilt = rebuild_municipality(feature, lines)
+        except ValueError as error:
+            raise ValueError(f'{code}: {error}') from error
+        if references != expected:
+            raise ValueError(f'{code}: edge references are not in traversal order')
+        stored = shape(feature['geometry'])
+        difference = rebuilt.symmetric_difference(stored).area
+        if difference > RECONSTRUCTION_AREA_TOLERANCE:
+            raise ValueError(
+                f'{code}: stored polygon does not rebuild from its edges'
+            )
+    return len(municipalities)
+
+
 def check_size(sources_dir):
     """Keep the three new source files below the reviewed combined limit."""
     paths = [
@@ -174,9 +194,8 @@ def check_sources(sources_dir):
     settlements = read_collection(sources / SETTLEMENT_FILE)
     context = read_collection(sources / CONTEXT_FILE)
     polygons = polygons_in(municipalities, MUNICIPALITY_FILE)
-    water = water_polygons(read_collection(sources / WATER_FILE))
     metrics = check_coverage(
-        polygons, country_geometry(read_collection(sources / LAND_FILE)), water
+        polygons, country_geometry(read_collection(sources / LAND_FILE))
     )
     return {
         'edges': check_edge_usage(
@@ -185,6 +204,9 @@ def check_sources(sources_dir):
                 feature['properties']['name']
                 for feature in context['features']
             },
+        ),
+        'reconstructed': check_reconstruction(
+            edges['features'], municipalities['features']
         ),
         'municipalities': check_pairwise_intersections(polygons),
         'settlements': len(settlements['features']),

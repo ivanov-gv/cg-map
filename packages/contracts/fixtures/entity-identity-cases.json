@@ -649,6 +649,7 @@
             "category": "food",
             "visibilityLevel": 4,
             "source": "OpenStreetMap",
+            "buildingEntityId": "way/2",
             "entityId": "node/1",
             "entityVersion": 2
           }

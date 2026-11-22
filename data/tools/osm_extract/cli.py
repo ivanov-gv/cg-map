@@ -46,9 +46,12 @@ LAYER_GROUPS = {
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
 }
-# Country geometry is finalised before water so the ocean uses this run's
-# outline; static snapshots are adopted before land appends their features.
-FINISH_ORDER = ('buildings', 'roads', 'land', 'water', 'places')
+# Country geometry is finalised before borders clip municipalities to land;
+# settlements then use those areas to assign their municipality. Water and
+# places finish last with the reviewed outline and building footprints.
+FINISH_ORDER = (
+    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places'
+)
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
 })

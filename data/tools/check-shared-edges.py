@@ -19,9 +19,8 @@ def main():
     metrics = check_sources(args.root / 'data/sources')
     print(
         'Validated {municipalities} municipality polygons, {edges} shared '
-        'edges and {settlements} settlements. Inland water gap '
-        '{missing_area:.9f}, unexplained gap {unexplained_gap_area:.9f}, '
-        'extra {extra_area:.9f} square degrees; new sources '
+        'edges and {settlements} settlements. Uncovered area '
+        '{missing_area_sqm:.0f} m2, extra {extra_area_sqm:.0f} m2; new sources '
         '{combined_bytes} bytes.'.format(**metrics)
     )
     return 0

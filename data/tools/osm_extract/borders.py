@@ -1,6 +1,9 @@
 """Municipality areas built from OSM boundaries as shared edges."""
 
 from shapely.geometry import mapping, shape
+from shapely.ops import unary_union
+
+from geo_area import SQUARE_DEGREES_TO_SQUARE_METRES
 
 from . import Layer
 from .geometry import (
@@ -22,8 +25,10 @@ from .writing import read_collection
 EDGE_FILE = 'border-edges.geojson'
 MUNICIPALITY_FILE = 'municipalities.geojson'
 CONTEXT_FILE = 'context-countries.geojson'
+LAND_FILE = 'land.geojson'
 MUNICIPALITY_ISO_PREFIX = 'ME-'
 BOUNDARY_LEVELS = {'2', '6'}
+MIN_ASSIGNED_GAP_SQM = 100
 
 
 def rounded_coordinates(way):
@@ -61,6 +66,24 @@ def context_areas(options):
     ]
 
 
+def reviewed_country_geometry(options):
+    """Read the published coastline-cut outline for a borders-only run."""
+    land = read_collection(options.sources_directory / LAND_FILE)
+    for feature in land['features']:
+        if feature['properties'].get('kind') == 'country':
+            return shape(feature['geometry'])
+    raise RuntimeError('land.geojson has no country feature')
+
+
+def country_geometry(options, state):
+    """Use this run's finished outline, or the reviewed one for a partial run."""
+    if not options.uses_fresh_country:
+        return reviewed_country_geometry(options)
+    if state.country_geometry is None:
+        raise RuntimeError('Country outline missing from the OSM pass.')
+    return shape(state.country_geometry)
+
+
 def clipped_areas(collected, land):
     """Remove territorial water and keep every municipality part on land."""
     areas = []
@@ -74,6 +97,58 @@ def clipped_areas(collected, land):
             )
         areas.append((municipality_source['iso'], geometry))
     return areas
+
+
+def polygon_parts(geometry):
+    """Return the polygon pieces of a shapely difference, if any."""
+    if geometry.is_empty:
+        return []
+    if geometry.geom_type == 'Polygon':
+        return [geometry]
+    if hasattr(geometry, 'geoms'):
+        return [
+            part for child in geometry.geoms for part in polygon_parts(child)
+        ]
+    return []
+
+
+def adjacent_municipality(gap, areas):
+    """Pick the neighbour sharing the longest boundary with one country gap."""
+    candidates = [
+        (
+            -gap.boundary.intersection(area.boundary).length,
+            gap.distance(area),
+            iso_code,
+        )
+        for iso_code, area in areas
+    ]
+    return min(candidates)[2]
+
+
+def fill_country_gaps(areas, land):
+    """Give each material internal country gap to one adjacent municipality."""
+    covered = unary_union([area for _, area in areas])
+    gaps = polygon_parts(land.difference(covered))
+    additions = {}
+    for gap in sorted(gaps, key=lambda part: (-part.area, part.bounds)):
+        if (
+            gap.area * SQUARE_DEGREES_TO_SQUARE_METRES
+            <= MIN_ASSIGNED_GAP_SQM
+        ):
+            continue
+        iso_code = adjacent_municipality(gap, areas)
+        additions[iso_code] = (
+            gap if iso_code not in additions
+            else unary_union([additions[iso_code], gap])
+        )
+    return [
+        (
+            iso_code,
+            unary_union([area, additions[iso_code]])
+            if iso_code in additions else area,
+        )
+        for iso_code, area in areas
+    ]
 
 
 class BorderEdgesLayer(Layer):
@@ -93,7 +168,9 @@ class BorderEdgesLayer(Layer):
         if len(coordinates) < 2:
             return
         self.boundary_ways[way.id] = {
-            'version': way.version, 'coordinates': coordinates
+            'version': way.version,
+            'coordinates': coordinates,
+            'tags': dict(way.tags),
         }
 
     def area(self, area, options, state):
@@ -116,15 +193,16 @@ class BorderEdgesLayer(Layer):
     def finish(self, options, state):
         if not self.collected_areas:
             raise RuntimeError('No Montenegrin municipality relations found.')
-        if state.country_geometry is None:
-            raise RuntimeError('Country outline missing from the OSM pass.')
-        land = shape(state.country_geometry)
-        areas = clipped_areas(self.collected_areas, land)
+        land = country_geometry(options, state)
+        areas = fill_country_gaps(clipped_areas(self.collected_areas, land), land)
         codes = [code for code, _ in areas]
         if len(codes) != len(set(codes)):
             raise RuntimeError('Duplicate municipality ISO3166-2 codes.')
         state.municipality_areas = areas
-        state.municipality_sources = self.collected_areas
+        state.municipality_sources = [
+            {**source, 'geometry': mapping(area)}
+            for source, (_, area) in zip(self.collected_areas, areas)
+        ]
         edges = build_edges(
             areas, land, context_areas(options), self.boundary_ways
         )
@@ -155,7 +233,10 @@ def municipality_features(areas, edges, collected):
     for iso_code, _ in sorted(areas, key=lambda area: area[0]):
         references = directed_references(iso_code, edges)
         placeholder = {'properties': {'edges': references}}
-        geometry = rebuild_municipality(placeholder, lines)
+        try:
+            geometry = rebuild_municipality(placeholder, lines)
+        except ValueError as error:
+            raise ValueError(f'{iso_code}: {error}') from error
         properties = {
             'kind': 'municipality',
             'name': by_code[iso_code]['name'],

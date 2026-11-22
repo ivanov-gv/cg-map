@@ -5,10 +5,13 @@ from shapely.geometry import Point, shape
 from . import Layer
 from .identity import make_feature, osm_identity
 from .tags import PLACE_RANKS, population_value, rank_for
+from .writing import read_collection
 
 SOURCE_FILE = 'settlements.geojson'
+MUNICIPALITY_FILE = 'municipalities.geojson'
 OSM_SOURCE = 'OpenStreetMap'
 DETAIL_PLACES = {'suburb', 'quarter', 'neighbourhood'}
+NEAREST_MUNICIPALITY_LIMIT_DEGREES = 0.025
 
 
 def optional_tag(tags, name):
@@ -27,16 +30,31 @@ def municipality_at(point, areas):
     """Find the ISO code of the municipality containing one settlement.
 
     A few OSM place nodes sit just outside their relation's boundary. They stay
-    in the extract and use the nearest municipality rather than being dropped.
+    in the extract, but only a near miss can use the nearest municipality; a
+    distant point would hide a broken boundary or a node outside the country.
     """
     containing = [
         iso_code for iso_code, area in areas if area.covers(point)
     ]
     if containing:
         return min(containing)
-    return min(
+    distance, iso_code = min(
         (point.distance(area), iso_code) for iso_code, area in areas
-    )[1]
+    )
+    if distance > NEAREST_MUNICIPALITY_LIMIT_DEGREES:
+        raise ValueError(
+            f'settlement is {distance:.6f} degrees from every municipality'
+        )
+    return iso_code
+
+
+def reviewed_municipality_areas(options):
+    """Read published areas when a settlement-only run has no OSM relations."""
+    collection = read_collection(options.sources_directory / MUNICIPALITY_FILE)
+    return [
+        (feature['properties']['ISO3166-2'], shape(feature['geometry']))
+        for feature in collection['features']
+    ]
 
 
 class SettlementsLayer(Layer):
@@ -63,18 +81,17 @@ class SettlementsLayer(Layer):
         ))
 
     def finish(self, options, state):
-        if not state.municipality_sources:
-            raise RuntimeError('Municipality areas missing from the OSM pass.')
-        areas = sorted(
-            (
+        if state.municipality_sources:
+            areas = [
                 (
                     municipality_source['iso'],
                     shape(municipality_source['geometry']),
                 )
                 for municipality_source in state.municipality_sources
-            ),
-            key=lambda area: area[0]
-        )
+            ]
+        else:
+            areas = reviewed_municipality_areas(options)
+        areas.sort(key=lambda area: area[0])
         for coordinate, tags, identity in self.nodes:
             try:
                 municipality = municipality_at(Point(*coordinate), areas)

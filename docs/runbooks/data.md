@@ -71,12 +71,15 @@ placement is not part of this release.
 
 data/tools/extract-osm.py replaces places.geojson and then reapplies the policy, so overrides survive an import. An
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
-run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`, `roads`, `water`, `land` (land.geojson, including its country geometry),
-`borders` (border-edges.geojson and municipalities.geojson), `settlements`, and `places`; each group replaces only its
-own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks
-for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies
-footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups together when
-refreshing either side of that join; this Feature does not refresh places, so the published snapshot has no such joins.
+run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
+`roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
+municipalities.geojson), `settlements`, and `places`; each group replaces only its own source files. A partial run must
+use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a full extract. The `buildings`
+group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places`
+group in the same run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that
+join; this Feature does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed
+`land.geojson` as its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point.
+Run them together when refreshing either source.
 `context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
 policy, then review the new facts as above.
 
@@ -120,13 +123,17 @@ make -C data check-topology
 make verify PKG=data
 ```
 
-The topology command checks polygon validity, zero-area pairwise intersections, land coverage, edge use from both sides,
-settlement counts and the combined 5 MB budget. It separates the measured inland-water gap from any unexplained gap and
-fails when the unexplained gap exceeds the named tolerance. On the reviewed 2026-11-21 extract it reports 25
-municipalities, 113 edges and 4,009 settlements. The new sources are not inputs to the tile builder, so their first
-release did not change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path
-below. Existing town labels are compared with the new settlement source in
-[hard-coded town coverage](../map-data/hard-coded-towns.md).
+The topology command checks polygon validity, zero-area pairwise intersections, land coverage, polygon reconstruction
+from traversal-ordered edge references, edge use from both sides, settlement counts and the combined 5 MB budget.
+Exterior sides come from matched OSM coastline or `admin_level=2` way tags, with over 0.1% segment overlap so an
+endpoint touch cannot claim an edge; a boundary chain splits where supported coverage intervals of different authorities
+end and begin together. It compares the municipality union with the country outline without subtracting water: the
+extractor assigns internal gaps larger than 100 m², including Lake Skadar, to the adjacent municipality with the longest
+shared boundary. Remaining slivers are measured in local square metres, and the check fails above 20,000 m² uncovered or
+10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25 municipalities, 110 edges, 4,009 settlements, 14,840
+m² uncovered and 3,048 m² extra. The new sources are not inputs to the tile builder, so their first release did not
+change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path below. Existing
+town labels are compared with the new settlement source in [hard-coded town coverage](../map-data/hard-coded-towns.md).
 
 ## Editor changesets
 

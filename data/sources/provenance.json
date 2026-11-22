@@ -60,6 +60,11 @@
   "input_pbf_sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b",
   "input_url": "https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf",
   "layers": {
+    "border-edges.geojson": {
+      "bytes": 576382,
+      "features": 110,
+      "sha256": "e1c1e9d4c701e0e2727160be232adb6d79dd1bf0767db97ee1467839a840870a"
+    },
     "building-entrances.geojson": {
       "bytes": 41359,
       "features": 157,
@@ -80,6 +85,11 @@
       "features": 612,
       "sha256": "530ad7b2f2fd05eb1a59bd9a8b688b591746f476d2b9ac7733c5da56f6799f36"
     },
+    "municipalities.geojson": {
+      "bytes": 796410,
+      "features": 25,
+      "sha256": "f5fd9513d16db2b2c7660657a3e43578c957bfe91b77f43e1f0273f17b9f5d61"
+    },
     "road-nodes.geojson": {
       "bytes": 462217,
       "features": 2534,
@@ -89,6 +99,11 @@
       "bytes": 7110391,
       "features": 21247,
       "sha256": "6c7876a10f851669e89a4d037fcd66f1f7fe4f4ae370b93d2aecaf7661047c2a"
+    },
+    "settlements.geojson": {
+      "bytes": 1102523,
+      "features": 4009,
+      "sha256": "29dbae0026b665014cc0dd28a4614b231c610afcf05ccddc7bc427757ecdd2af"
     },
     "turn-restrictions.json": {
       "bytes": 9471,
