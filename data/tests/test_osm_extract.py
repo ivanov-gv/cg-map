@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from shapely.geometry import LinearRing, shape
+
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
 SOURCES = ROOT / 'data/sources'
@@ -179,6 +181,43 @@ def feature_with(features, entity_id):
         feature for feature in features
         if feature['properties']['entityId'] == entity_id
     )
+
+
+def features_by_entity_id(root, filename):
+    """Group generated features by their preserved source identity."""
+    _, features = source_features(root, filename)
+    grouped = {}
+    for feature in features:
+        entity_id = feature['properties']['entityId']
+        grouped.setdefault(entity_id, []).append(feature)
+    return grouped
+
+
+def single_feature(grouped, entity_id):
+    """Return the one feature expected for an unsplit source object."""
+    features = grouped[entity_id]
+    if len(features) != 1:
+        raise AssertionError(f'{entity_id}: expected one feature, got {len(features)}')
+    return features[0]
+
+
+def assert_osm_names(test_case, properties, name=None, english_name=None):
+    """Check that only mapped, nonblank OSM names are published."""
+    if name is None:
+        test_case.assertNotIn('name', properties)
+    else:
+        test_case.assertEqual(properties.get('name'), name)
+    if english_name is None:
+        test_case.assertNotIn('name:en', properties)
+    else:
+        test_case.assertEqual(properties.get('name:en'), english_name)
+
+
+def polygon_rings(geometry):
+    """Return the coordinate rings of every polygon in a GeoJSON geometry."""
+    if geometry['type'] == 'Polygon':
+        return [geometry['coordinates']]
+    return geometry['coordinates']
 
 
 def node_serialization(filename):
@@ -412,6 +451,198 @@ class OsmExtractTest(unittest.TestCase):
                     for number in coordinate_values(coordinates):
                         self.assertEqual(number, round(number, 6))
 
+    def assert_rfc7946_rings(self, geometry, label):
+        """Check counterclockwise exteriors and clockwise holes."""
+        for index, rings in enumerate(polygon_rings(geometry)):
+            self.assertTrue(LinearRing(rings[0]).is_ccw, f'{label} exterior {index}')
+            for hole_index, hole in enumerate(rings[1:]):
+                self.assertFalse(
+                    LinearRing(hole).is_ccw,
+                    f'{label} hole {index}.{hole_index}'
+                )
+
+    def test_green_areas_carry_osm_tag_kind_and_destination(self):
+        extract(self.first_root)
+        land = features_by_entity_id(self.first_root, 'land.geojson')
+        expected = {
+            'way/5001': ('garden', 'leisure=garden', None, 'Test Garden'),
+            'way/5002': ('woods', 'natural=wood', None, None),
+            'way/5003': ('meadow', 'landuse=meadow', True, 'Test Meadow'),
+            'way/5004': ('meadow', 'landuse=meadow', True, None),
+            'way/5010': ('meadow', 'natural=grassland', True, None),
+            'way/5012': ('grass', 'landuse=grass', None, None),
+            'way/5005': ('grass', 'leisure=common', True, 'Test Common'),
+            'way/5006': ('scrub', 'natural=scrub', None, None),
+            'way/5007': ('sports', 'leisure=pitch', None, None),
+            'way/5008': ('cemetery', 'landuse=cemetery', None, None),
+            'way/5009': ('playground', 'leisure=playground', None, None),
+            'relation/5200': ('park', 'leisure=park', None, 'Park With Hole'),
+        }
+        for entity_id, (kind, osm_tag, destination, name) in expected.items():
+            with self.subTest(entity_id=entity_id):
+                properties = single_feature(land, entity_id)['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], osm_tag)
+                self.assertEqual(properties.get('destination'), destination)
+                assert_osm_names(self, properties, name)
+                self.assertIsInstance(properties['entityVersion'], int)
+
+    def test_protected_areas_and_localities_are_not_land_cover(self):
+        extract(self.first_root)
+        land = features_by_entity_id(self.first_root, 'land.geojson')
+        for entity_id in ('way/5011', 'way/5013'):
+            with self.subTest(entity_id=entity_id, no_land_cover=True):
+                self.assertNotIn(entity_id, land)
+        grass = single_feature(land, 'way/5012')['properties']
+        self.assertEqual(grass['kind'], 'grass')
+        self.assertEqual(grass['osmTag'], 'landuse=grass')
+        self.assertNotIn('destination', grass)
+
+    def test_absent_and_blank_names_are_omitted(self):
+        extract(self.first_root)
+        cases = (
+            ('way/5002', features_by_entity_id(self.first_root, 'land.geojson')),
+            ('way/6003', features_by_entity_id(self.first_root, 'water.geojson')),
+        )
+        for entity_id, grouped in cases:
+            with self.subTest(entity_id=entity_id):
+                properties = single_feature(grouped, entity_id)['properties']
+                assert_osm_names(self, properties)
+
+    def test_water_kinds_names_and_waterway_line_tags(self):
+        extract(self.first_root)
+        water = features_by_entity_id(self.first_root, 'water.geojson')
+        areas = {
+            'way/6001': ('lake', 'water=lake', 'Test Lake', 'Test Lake EN'),
+            'way/6002': ('river', 'water=river', 'Test River Area', None),
+            'way/6003': ('reservoir', 'water=reservoir', None, None),
+            'way/6004': ('pond', 'water=pond', None, None),
+            'way/6005': ('basin', 'water=basin', None, None),
+            'way/6006': ('river', 'waterway=riverbank', 'Test Bank', None),
+            'relation/6100': (
+                'lake', 'water=lake', 'Lake With Island', 'Lake With Island EN'
+            ),
+        }
+        for entity_id, (kind, osm_tag, name, english_name) in areas.items():
+            with self.subTest(entity_id=entity_id, area=True):
+                properties = single_feature(water, entity_id)['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], osm_tag)
+                assert_osm_names(self, properties, name, english_name)
+        lines = {
+            'way/7001': ('river', 'Test River', 'Test River EN', 'yes', 'no'),
+            'way/7002': ('stream', 'Test Stream', None, None, None),
+            'way/7003': ('canal', None, None, None, 'yes'),
+            'way/7004': ('ditch', None, None, None, None),
+            'way/7005': ('drain', None, None, None, None),
+        }
+        for entity_id, (kind, name, english_name, tunnel, intermittent) in lines.items():
+            with self.subTest(entity_id=entity_id, line=True):
+                properties = single_feature(water, entity_id)['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], f'waterway={kind}')
+                assert_osm_names(self, properties, name, english_name)
+                self.assertEqual(properties.get('tunnel'), tunnel)
+                self.assertEqual(properties.get('intermittent'), intermittent)
+                self.assertNotIn('entityPart', properties)
+        river = single_feature(water, 'way/7001')['geometry']['coordinates']
+        self.assertEqual(river[0], [19.2, 42.4])
+        self.assertEqual(river[-1], [19.22, 42.4])
+        coastline = single_feature(water, 'way/8001')['geometry']['coordinates']
+        self.assertEqual(coastline, [[19.315, 42.4], [19.315, 42.41]])
+        for entity_id in ('way/8001', 'way/8002'):
+            with self.subTest(entity_id=entity_id, coastline=True):
+                feature = single_feature(water, entity_id)
+                self.assertEqual(feature['properties']['kind'], 'coastline')
+                self.assertEqual(
+                    feature['properties']['osmTag'], 'natural=coastline'
+                )
+        self.assertNotEqual(
+            single_feature(water, 'way/8001')['geometry'],
+            single_feature(water, 'way/8002')['geometry']
+        )
+
+    def test_minor_waterways_are_clipped_to_the_detail_box(self):
+        extract(self.first_root)
+        water = features_by_entity_id(self.first_root, 'water.geojson')
+        for entity_id in ('way/7006', 'way/7007', 'way/7008'):
+            with self.subTest(entity_id=entity_id, outside=True):
+                self.assertNotIn(entity_id, water)
+        clipped = {
+            'way/7009': ('stream', 42.39),
+            'way/7010': ('ditch', 42.395),
+            'way/7011': ('drain', 42.4),
+        }
+        for entity_id, (kind, latitude) in clipped.items():
+            with self.subTest(entity_id=entity_id, clipped=True):
+                feature = single_feature(water, entity_id)
+                properties = feature['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], f'waterway={kind}')
+                self.assertEqual(properties['entityPart'], 0)
+                self.assertEqual(
+                    feature['geometry']['coordinates'],
+                    [[19.15, latitude], [19.2, latitude]],
+                )
+        for entity_id in ('way/7001', 'way/7003'):
+            with self.subTest(entity_id=entity_id, countrywide=True):
+                self.assertNotIn(
+                    'entityPart', single_feature(water, entity_id)['properties']
+                )
+
+    def test_multipolygon_holes_survive_with_rfc7946_rings(self):
+        extract(self.first_root)
+        cases = (
+            ('land.geojson', 'relation/5200'),
+            ('water.geojson', 'relation/6100'),
+        )
+        for filename, entity_id in cases:
+            with self.subTest(entity_id=entity_id):
+                feature = single_feature(
+                    features_by_entity_id(self.first_root, filename), entity_id
+                )
+                rings = polygon_rings(feature['geometry'])
+                self.assertTrue(
+                    any(len(part_rings) > 1 for part_rings in rings),
+                    f'{entity_id}: inner ring missing'
+                )
+                self.assertTrue(shape(feature['geometry']).is_valid, entity_id)
+                self.assert_rfc7946_rings(feature['geometry'], entity_id)
+
+    def test_every_extracted_polygon_is_valid_and_rightly_wound(self):
+        extract(self.first_root)
+        cases = (
+            (
+                'land.geojson',
+                {
+                    'park', 'garden', 'woods', 'meadow', 'grass', 'scrub',
+                    'sports', 'cemetery', 'playground'
+                }
+            ),
+            (
+                'water.geojson',
+                {
+                    'lake', 'river', 'reservoir', 'pond', 'basin', 'water',
+                    'ocean'
+                }
+            ),
+        )
+        for filename, kinds in cases:
+            _, features = source_features(self.first_root, filename)
+            checked = 0
+            for feature in features:
+                kind = feature['properties']['kind']
+                is_polygon = feature['geometry']['type'] in (
+                    'Polygon', 'MultiPolygon'
+                )
+                if kind not in kinds or not is_polygon:
+                    continue
+                checked += 1
+                geometry = feature['geometry']
+                self.assertTrue(shape(geometry).is_valid, f'{filename}: {kind}')
+                self.assert_rfc7946_rings(geometry, f'{filename}: {kind}')
+            self.assertGreater(checked, 0, filename)
+
     def test_python_and_node_writers_agree(self):
         for name in REVIEWED_GEOJSON:
             with self.subTest(name=name):
@@ -539,11 +770,14 @@ class OsmExtractTest(unittest.TestCase):
             by_name['Inside Bakery']['buildingEntityId'], 'way/2002'
         )
         self.assertNotIn('buildingEntityId', by_name['Outside Pharmacy'])
+        # The green-area fixture adds a named viewpoint as a destination marker;
+        # it is published as a place outside every building footprint.
+        self.assertNotIn('buildingEntityId', by_name['Test Lookout'])
         details = json.loads(
             (self.first_root / 'data/sources/provenance.json').read_text()
         )['building_details']
         self.assertEqual(details['placesInsideBuildings'], 2)
-        self.assertEqual(details['placesOutsideBuildings'], 3)
+        self.assertEqual(details['placesOutsideBuildings'], 4)
 
     def test_partial_run_refuses_a_different_input_pbf(self):
         extract(self.first_root)

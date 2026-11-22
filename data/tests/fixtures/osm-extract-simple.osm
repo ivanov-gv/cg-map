@@ -337,4 +337,428 @@
     <member type="way" ref="2007" role="to"/>
     <tag k="type" v="restriction"/>
   </relation>
+
+  <!-- Green areas: one feature per documented OSM tag, including mapped clearings. -->
+  <!-- Nodes for the added green, water and coastline objects. -->
+  <node id="5011" version="1" lat="42.45" lon="19.20"/>
+  <node id="5012" version="1" lat="42.46" lon="19.20"/>
+  <node id="5013" version="1" lat="42.46" lon="19.21"/>
+  <node id="5014" version="1" lat="42.45" lon="19.21"/>
+  <node id="5021" version="1" lat="42.45" lon="19.21"/>
+  <node id="5022" version="1" lat="42.46" lon="19.21"/>
+  <node id="5023" version="1" lat="42.46" lon="19.22"/>
+  <node id="5024" version="1" lat="42.45" lon="19.22"/>
+  <node id="5031" version="1" lat="42.45" lon="19.22"/>
+  <node id="5032" version="1" lat="42.46" lon="19.22"/>
+  <node id="5033" version="1" lat="42.46" lon="19.23"/>
+  <node id="5034" version="1" lat="42.45" lon="19.23"/>
+  <node id="5041" version="1" lat="42.45" lon="19.23"/>
+  <node id="5042" version="1" lat="42.46" lon="19.23"/>
+  <node id="5043" version="1" lat="42.46" lon="19.24"/>
+  <node id="5044" version="1" lat="42.45" lon="19.24"/>
+  <node id="5051" version="1" lat="42.45" lon="19.24"/>
+  <node id="5052" version="1" lat="42.46" lon="19.24"/>
+  <node id="5053" version="1" lat="42.46" lon="19.25"/>
+  <node id="5054" version="1" lat="42.45" lon="19.25"/>
+  <node id="5061" version="1" lat="42.45" lon="19.25"/>
+  <node id="5062" version="1" lat="42.46" lon="19.25"/>
+  <node id="5063" version="1" lat="42.46" lon="19.26"/>
+  <node id="5064" version="1" lat="42.45" lon="19.26"/>
+  <node id="5071" version="1" lat="42.47" lon="19.20"/>
+  <node id="5072" version="1" lat="42.48" lon="19.20"/>
+  <node id="5073" version="1" lat="42.48" lon="19.21"/>
+  <node id="5074" version="1" lat="42.47" lon="19.21"/>
+  <node id="5081" version="1" lat="42.47" lon="19.21"/>
+  <node id="5082" version="1" lat="42.48" lon="19.21"/>
+  <node id="5083" version="1" lat="42.48" lon="19.22"/>
+  <node id="5084" version="1" lat="42.47" lon="19.22"/>
+  <node id="5091" version="1" lat="42.47" lon="19.22"/>
+  <node id="5092" version="1" lat="42.48" lon="19.22"/>
+  <node id="5093" version="1" lat="42.48" lon="19.23"/>
+  <node id="5094" version="1" lat="42.47" lon="19.23"/>
+  <node id="5105" version="2" lat="42.455" lon="19.235">
+    <tag k="natural" v="peak"/>
+    <tag k="name" v="Test Peak"/>
+    <tag k="ele" v="312"/>
+  </node>
+  <node id="5121" version="1" lat="42.45" lon="19.26"/>
+  <node id="5122" version="1" lat="42.47" lon="19.26"/>
+  <node id="5123" version="1" lat="42.47" lon="19.28"/>
+  <node id="5124" version="1" lat="42.45" lon="19.28"/>
+  <node id="5131" version="1" lat="42.455" lon="19.265"/>
+  <node id="5132" version="1" lat="42.465" lon="19.265"/>
+  <node id="5133" version="1" lat="42.465" lon="19.275"/>
+  <node id="5134" version="1" lat="42.455" lon="19.275"/>
+  <node id="5151" version="1" lat="42.47" lon="19.23"/>
+  <node id="5152" version="1" lat="42.48" lon="19.23"/>
+  <node id="5153" version="1" lat="42.48" lon="19.24"/>
+  <node id="5154" version="1" lat="42.47" lon="19.24"/>
+  <node id="5161" version="1" lat="42.47" lon="19.25"/>
+  <node id="5162" version="1" lat="42.48" lon="19.25"/>
+  <node id="5163" version="1" lat="42.48" lon="19.26"/>
+  <node id="5164" version="1" lat="42.47" lon="19.26"/>
+  <node id="5171" version="1" lat="42.47" lon="19.27"/>
+  <node id="5172" version="1" lat="42.48" lon="19.27"/>
+  <node id="5173" version="1" lat="42.48" lon="19.28"/>
+  <node id="5174" version="1" lat="42.47" lon="19.28"/>
+  <node id="5181" version="1" lat="42.47" lon="19.29"/>
+  <node id="5182" version="1" lat="42.48" lon="19.29"/>
+  <node id="5183" version="1" lat="42.48" lon="19.30"/>
+  <node id="5184" version="1" lat="42.47" lon="19.30"/>
+  <node id="5155" version="3" lat="42.475" lon="19.235">
+    <tag k="tourism" v="viewpoint"/>
+    <tag k="name" v="Test Lookout"/>
+  </node>
+  <node id="6011" version="1" lat="42.41" lon="19.20"/>
+  <node id="6012" version="1" lat="42.42" lon="19.20"/>
+  <node id="6013" version="1" lat="42.42" lon="19.21"/>
+  <node id="6014" version="1" lat="42.41" lon="19.21"/>
+  <node id="6021" version="1" lat="42.41" lon="19.21"/>
+  <node id="6022" version="1" lat="42.42" lon="19.21"/>
+  <node id="6023" version="1" lat="42.42" lon="19.22"/>
+  <node id="6024" version="1" lat="42.41" lon="19.22"/>
+  <node id="6031" version="1" lat="42.41" lon="19.22"/>
+  <node id="6032" version="1" lat="42.42" lon="19.22"/>
+  <node id="6033" version="1" lat="42.42" lon="19.23"/>
+  <node id="6034" version="1" lat="42.41" lon="19.23"/>
+  <node id="6041" version="1" lat="42.41" lon="19.23"/>
+  <node id="6042" version="1" lat="42.42" lon="19.23"/>
+  <node id="6043" version="1" lat="42.42" lon="19.24"/>
+  <node id="6044" version="1" lat="42.41" lon="19.24"/>
+  <node id="6051" version="1" lat="42.41" lon="19.24"/>
+  <node id="6052" version="1" lat="42.42" lon="19.24"/>
+  <node id="6053" version="1" lat="42.42" lon="19.25"/>
+  <node id="6054" version="1" lat="42.41" lon="19.25"/>
+  <node id="6061" version="1" lat="42.41" lon="19.25"/>
+  <node id="6062" version="1" lat="42.42" lon="19.25"/>
+  <node id="6063" version="1" lat="42.42" lon="19.26"/>
+  <node id="6064" version="1" lat="42.41" lon="19.26"/>
+  <node id="6111" version="1" lat="42.44" lon="19.28"/>
+  <node id="6112" version="1" lat="42.46" lon="19.28"/>
+  <node id="6113" version="1" lat="42.46" lon="19.30"/>
+  <node id="6114" version="1" lat="42.44" lon="19.30"/>
+  <node id="6121" version="1" lat="42.445" lon="19.285"/>
+  <node id="6122" version="1" lat="42.455" lon="19.285"/>
+  <node id="6123" version="1" lat="42.455" lon="19.295"/>
+  <node id="6124" version="1" lat="42.445" lon="19.295"/>
+  <node id="7305" version="1" lat="42.40" lon="19.20"/>
+  <node id="7306" version="1" lat="42.40" lon="19.21"/>
+  <node id="7307" version="1" lat="42.40" lon="19.22"/>
+  <node id="7111" version="1" lat="42.39" lon="19.20"/>
+  <node id="7112" version="1" lat="42.39" lon="19.21"/>
+  <node id="7121" version="1" lat="42.39" lon="19.22"/>
+  <node id="7122" version="1" lat="42.39" lon="19.23"/>
+  <node id="7131" version="1" lat="42.39" lon="19.24"/>
+  <node id="7132" version="1" lat="42.39" lon="19.25"/>
+  <node id="7141" version="1" lat="42.39" lon="19.26"/>
+  <node id="7142" version="1" lat="42.39" lon="19.27"/>
+  <node id="7151" version="1" lat="42.30" lon="19.10"/>
+  <node id="7152" version="1" lat="42.30" lon="19.20"/>
+  <node id="7153" version="1" lat="42.31" lon="19.10"/>
+  <node id="7154" version="1" lat="42.31" lon="19.20"/>
+  <node id="7155" version="1" lat="42.32" lon="19.10"/>
+  <node id="7156" version="1" lat="42.32" lon="19.20"/>
+  <node id="7161" version="1" lat="42.39" lon="19.10"/>
+  <node id="7162" version="1" lat="42.39" lon="19.20"/>
+  <node id="7163" version="1" lat="42.395" lon="19.10"/>
+  <node id="7164" version="1" lat="42.395" lon="19.20"/>
+  <node id="7165" version="1" lat="42.40" lon="19.10"/>
+  <node id="7166" version="1" lat="42.40" lon="19.20"/>
+  <node id="8011" version="1" lat="42.40" lon="19.315"/>
+  <node id="8012" version="1" lat="42.41" lon="19.315"/>
+  <node id="8013" version="1" lat="42.42" lon="19.315"/>
+
+  <!-- Ways for the added areas and lines. -->
+  <way id="5001" version="21">
+    <nd ref="5011"/>
+    <nd ref="5012"/>
+    <nd ref="5013"/>
+    <nd ref="5014"/>
+    <nd ref="5011"/>
+    <tag k="leisure" v="garden"/>
+    <tag k="name" v="Test Garden"/>
+  </way>
+  <way id="5002" version="22">
+    <nd ref="5021"/>
+    <nd ref="5022"/>
+    <nd ref="5023"/>
+    <nd ref="5024"/>
+    <nd ref="5021"/>
+    <tag k="natural" v="wood"/>
+    <tag k="name" v=""/>
+    <tag k="name:en" v="   "/>
+  </way>
+  <way id="5003" version="23">
+    <nd ref="5031"/>
+    <nd ref="5032"/>
+    <nd ref="5033"/>
+    <nd ref="5034"/>
+    <nd ref="5031"/>
+    <tag k="landuse" v="meadow"/>
+    <tag k="name" v="Test Meadow"/>
+  </way>
+  <way id="5004" version="24">
+    <nd ref="5041"/>
+    <nd ref="5042"/>
+    <nd ref="5043"/>
+    <nd ref="5044"/>
+    <nd ref="5041"/>
+    <tag k="landuse" v="meadow"/>
+  </way>
+  <way id="5005" version="25">
+    <nd ref="5051"/>
+    <nd ref="5052"/>
+    <nd ref="5053"/>
+    <nd ref="5054"/>
+    <nd ref="5051"/>
+    <tag k="leisure" v="common"/>
+    <tag k="name" v="Test Common"/>
+  </way>
+  <way id="5006" version="26">
+    <nd ref="5061"/>
+    <nd ref="5062"/>
+    <nd ref="5063"/>
+    <nd ref="5064"/>
+    <nd ref="5061"/>
+    <tag k="natural" v="scrub"/>
+  </way>
+  <way id="5007" version="27">
+    <nd ref="5071"/>
+    <nd ref="5072"/>
+    <nd ref="5073"/>
+    <nd ref="5074"/>
+    <nd ref="5071"/>
+    <tag k="leisure" v="pitch"/>
+  </way>
+  <way id="5008" version="28">
+    <nd ref="5081"/>
+    <nd ref="5082"/>
+    <nd ref="5083"/>
+    <nd ref="5084"/>
+    <nd ref="5081"/>
+    <tag k="landuse" v="cemetery"/>
+  </way>
+  <way id="5009" version="29">
+    <nd ref="5091"/>
+    <nd ref="5092"/>
+    <nd ref="5093"/>
+    <nd ref="5094"/>
+    <nd ref="5091"/>
+    <tag k="leisure" v="playground"/>
+  </way>
+  <way id="5010" version="38">
+    <nd ref="5151"/>
+    <nd ref="5152"/>
+    <nd ref="5153"/>
+    <nd ref="5154"/>
+    <nd ref="5151"/>
+    <tag k="natural" v="grassland"/>
+  </way>
+  <way id="5011" version="39">
+    <nd ref="5161"/>
+    <nd ref="5162"/>
+    <nd ref="5163"/>
+    <nd ref="5164"/>
+    <nd ref="5161"/>
+    <tag k="boundary" v="protected_area"/>
+    <tag k="leisure" v="nature_reserve"/>
+    <tag k="name" v="Test Forest Park"/>
+    <tag k="protect_class" v="5"/>
+    <tag k="protection_title" v="Park šuma"/>
+  </way>
+  <way id="5012" version="40">
+    <nd ref="5171"/>
+    <nd ref="5172"/>
+    <nd ref="5173"/>
+    <nd ref="5174"/>
+    <nd ref="5171"/>
+    <tag k="landuse" v="grass"/>
+    <tag k="place" v="locality"/>
+  </way>
+  <way id="5013" version="41">
+    <nd ref="5181"/>
+    <nd ref="5182"/>
+    <nd ref="5183"/>
+    <nd ref="5184"/>
+    <nd ref="5181"/>
+    <tag k="place" v="locality"/>
+    <tag k="name" v="Test Locality"/>
+  </way>
+  <way id="5201" version="1">
+    <nd ref="5121"/>
+    <nd ref="5122"/>
+    <nd ref="5123"/>
+    <nd ref="5124"/>
+    <nd ref="5121"/>
+  </way>
+  <way id="5202" version="1">
+    <nd ref="5131"/>
+    <nd ref="5132"/>
+    <nd ref="5133"/>
+    <nd ref="5134"/>
+    <nd ref="5131"/>
+  </way>
+  <way id="6001" version="31">
+    <nd ref="6011"/>
+    <nd ref="6012"/>
+    <nd ref="6013"/>
+    <nd ref="6014"/>
+    <nd ref="6011"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="lake"/>
+    <tag k="name" v="Test Lake"/>
+    <tag k="name:en" v="Test Lake EN"/>
+  </way>
+  <way id="6002" version="32">
+    <nd ref="6021"/>
+    <nd ref="6022"/>
+    <nd ref="6023"/>
+    <nd ref="6024"/>
+    <nd ref="6021"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="river"/>
+    <tag k="name" v="Test River Area"/>
+  </way>
+  <way id="6003" version="33">
+    <nd ref="6031"/>
+    <nd ref="6032"/>
+    <nd ref="6033"/>
+    <nd ref="6034"/>
+    <nd ref="6031"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="reservoir"/>
+    <tag k="name" v=""/>
+  </way>
+  <way id="6004" version="34">
+    <nd ref="6041"/>
+    <nd ref="6042"/>
+    <nd ref="6043"/>
+    <nd ref="6044"/>
+    <nd ref="6041"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="pond"/>
+  </way>
+  <way id="6005" version="35">
+    <nd ref="6051"/>
+    <nd ref="6052"/>
+    <nd ref="6053"/>
+    <nd ref="6054"/>
+    <nd ref="6051"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="basin"/>
+  </way>
+  <way id="6006" version="36">
+    <nd ref="6061"/>
+    <nd ref="6062"/>
+    <nd ref="6063"/>
+    <nd ref="6064"/>
+    <nd ref="6061"/>
+    <tag k="waterway" v="riverbank"/>
+    <tag k="name" v="Test Bank"/>
+  </way>
+  <way id="6101" version="1">
+    <nd ref="6111"/>
+    <nd ref="6112"/>
+    <nd ref="6113"/>
+    <nd ref="6114"/>
+    <nd ref="6111"/>
+  </way>
+  <way id="6102" version="1">
+    <nd ref="6121"/>
+    <nd ref="6122"/>
+    <nd ref="6123"/>
+    <nd ref="6124"/>
+    <nd ref="6121"/>
+  </way>
+  <way id="7001" version="41">
+    <nd ref="7305"/>
+    <nd ref="7306"/>
+    <nd ref="7307"/>
+    <tag k="waterway" v="river"/>
+    <tag k="name" v="Test River"/>
+    <tag k="name:en" v="Test River EN"/>
+    <tag k="tunnel" v="yes"/>
+    <tag k="intermittent" v="no"/>
+  </way>
+  <way id="7002" version="42">
+    <nd ref="7111"/>
+    <nd ref="7112"/>
+    <tag k="waterway" v="stream"/>
+    <tag k="name" v="Test Stream"/>
+  </way>
+  <way id="7003" version="43">
+    <nd ref="7121"/>
+    <nd ref="7122"/>
+    <tag k="waterway" v="canal"/>
+    <tag k="intermittent" v="yes"/>
+  </way>
+  <way id="7004" version="44">
+    <nd ref="7131"/>
+    <nd ref="7132"/>
+    <tag k="waterway" v="ditch"/>
+  </way>
+  <way id="7005" version="45">
+    <nd ref="7141"/>
+    <nd ref="7142"/>
+    <tag k="waterway" v="drain"/>
+  </way>
+  <!-- Minor waterways outside the detail box, and ones crossing its west edge. -->
+  <way id="7006" version="46">
+    <nd ref="7151"/>
+    <nd ref="7152"/>
+    <tag k="waterway" v="stream"/>
+  </way>
+  <way id="7007" version="47">
+    <nd ref="7153"/>
+    <nd ref="7154"/>
+    <tag k="waterway" v="ditch"/>
+  </way>
+  <way id="7008" version="48">
+    <nd ref="7155"/>
+    <nd ref="7156"/>
+    <tag k="waterway" v="drain"/>
+  </way>
+  <way id="7009" version="49">
+    <nd ref="7161"/>
+    <nd ref="7162"/>
+    <tag k="waterway" v="stream"/>
+  </way>
+  <way id="7010" version="50">
+    <nd ref="7163"/>
+    <nd ref="7164"/>
+    <tag k="waterway" v="ditch"/>
+  </way>
+  <way id="7011" version="51">
+    <nd ref="7165"/>
+    <nd ref="7166"/>
+    <tag k="waterway" v="drain"/>
+  </way>
+  <way id="8001" version="51">
+    <nd ref="8011"/>
+    <nd ref="8012"/>
+    <tag k="natural" v="coastline"/>
+  </way>
+  <way id="8002" version="52">
+    <nd ref="8012"/>
+    <nd ref="8013"/>
+    <tag k="natural" v="coastline"/>
+  </way>
+
+  <!-- Multipolygons with inner rings. -->
+  <relation id="5200" version="30">
+    <member type="way" ref="5201" role="outer"/>
+    <member type="way" ref="5202" role="inner"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="leisure" v="park"/>
+    <tag k="name" v="Park With Hole"/>
+  </relation>
+  <relation id="6100" version="37">
+    <member type="way" ref="6101" role="outer"/>
+    <member type="way" ref="6102" role="inner"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="natural" v="water"/>
+    <tag k="water" v="lake"/>
+    <tag k="name" v="Lake With Island"/>
+    <tag k="name:en" v="Lake With Island EN"/>
+  </relation>
 </osm>

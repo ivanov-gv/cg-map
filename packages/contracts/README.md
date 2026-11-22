@@ -112,7 +112,9 @@ identity. `editor-changeset.schema.json` defines the export: base hash per chang
 revision-bound reference, a fingerprint and full before/after features. `fixtures/editor-geometry-cases.json` and
 `fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
 against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied.
+`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. For land and water,
+`properties.kind` repeats `editableKinds` as a required enum, so an edit can neither remove a published kind nor invent
+one outside the reviewed source contract.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and
@@ -130,6 +132,30 @@ validation rejects a direction more than 0.1 degrees from that normal. Consumers
 `bearing - 180` because its unrotated icon points south, align it with the map, and keep the arrow tip at the entrance.
 The shared [orientation cases](fixtures/entrance-orientation-cases.json) are checked by the Python producer and Node
 validator; browser tests verify the rotation binding and map/pitch alignment.
+
+## Extracted land and water properties
+
+`source-land-water.schema.json` defines the domain properties produced for `data/sources/land.geojson` and
+`data/sources/water.geojson`. Identity remains under [source entities](#source-entity-identity); attribution and
+geometry stay in the source collections. `kind` is required and is the published display kind, not a raw OSM tag.
+
+`landKind` covers `country` and preserved Natural Earth `context` outlines, plus extracted `park`, `garden`, `woods`,
+`meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground` areas. `waterKind` covers the derived `ocean`, lake,
+river, reservoir, pond, basin and generic `water` areas, the `stream`, `canal`, `ditch` and `drain` lines, and separate
+`coastline` lines. Coastlines are features in `water.geojson`, not a ninth source file; the ocean polygon is still
+`derived:ocean` and is computed from the reviewed land outline and the OSM coastline.
+
+`osmTag` is the exact lower-case OSM `key=value` that determined the kind; the first rule in the producer's priority
+list wins when an object carries several candidate tags. It is required on extracted features and absent only on
+preserved outlines and the derived ocean. `name` and `name:en` are verbatim OSM names, copied only when mapped and
+nonblank; absent or blank OSM tags produce no property. `destination: true` is additive and appears only when a
+documented green-area destination rule matches; it is never `false`. `tunnel` and `intermittent` carry verbatim OSM tag
+values on waterway lines and are absent when unmapped.
+
+`check-data` rejects unsupported kinds, malformed new properties, and clockwise exteriors or counterclockwise holes in
+extracted land-cover and water polygons. Preserved country and context outlines keep their source winding. Multipolygon
+holes remain part of the geometry; ring order is structural validation, not a GIS topology guarantee. Consumers keep
+accepting the older `park`, `water` and `river` values.
 
 ## Source entity identity
 

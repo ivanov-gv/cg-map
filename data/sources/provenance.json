@@ -74,9 +74,9 @@
       "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
     },
     "land.geojson": {
-      "bytes": 399430,
-      "features": 332,
-      "sha256": "54ab7200d0107a24568c326dffab7ed9a578e56bc00d61c1e6acc640155296b8"
+      "bytes": 493167,
+      "features": 612,
+      "sha256": "530ad7b2f2fd05eb1a59bd9a8b688b591746f476d2b9ac7733c5da56f6799f36"
     },
     "road-nodes.geojson": {
       "bytes": 462217,
@@ -94,9 +94,9 @@
       "sha256": "a6365518a1982ea02ee474ff887b59d49d846ad23c61d56502074ca7525bff4e"
     },
     "water.geojson": {
-      "bytes": 1574917,
-      "features": 1491,
-      "sha256": "be7f78e3536c543a7291192bc8e1b7f91ea269d9af907398ba64a8dfb986be40"
+      "bytes": 2097403,
+      "features": 1795,
+      "sha256": "edb1d55efc5c79333cc2c9355cb2ac4bf8a169e473850c56d2f444c452b7f2be"
     }
   },
   "notes": [
