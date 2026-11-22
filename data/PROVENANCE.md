@@ -116,3 +116,34 @@ footprint way ID and OSM way version as its source identity; real way IDs are re
 matching, and point addresses are joined only through unambiguous node membership or containment. No-number placeholders
 and ambiguous joins are excluded. The runtime label layer is bundled for offline use. See
 [building numbers](../docs/map-data/building-numbers.md).
+
+## Relief
+
+`contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived,
+read-only vectors. See [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md).
+`make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the
+reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and are
+not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are recorded
+in `sources/provenance.json`.
+
+The current build has 5,411 Montenegro summits (4,541 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
+levels, 152 slope polygons, 28 ridge lines, and 46 canyon-rim segments across the four river banks. The full report is
+written to `.build/relief-report.json`; each summit already carries its `heightCheck`, enclosing contour, DEM facts and
+reasons. OSM names and elevations are never overwritten by DEM values. A summit is checked only when both its OSM point
+and its published six-decimal coordinate lie inside or on the `kind=country` boundary in `land.geojson`; the report
+records 216 summit points rejected by those checks. A mismatch needs a closed contour above OSM height around the summit
+or an OSM/DEM difference over 25 m. A missing OSM elevation keeps its DEM facts and is not a mismatch.
+
+A ridge is one simplified, connected `LineString` on the shared boundary between sunlit and shaded slope polygons inside
+green areas; pieces under 100 m are dropped. `summit` and `summitName` appear only on a ridge that passes within 50 m of
+that summit, and the retired 400 m search radius stays in the relief provenance block as build lineage. Canyon rims keep
+only banks rising at least 8 m above the river surface within 60 m of the channel, join one bank across gaps under 60 m,
+then drop segments under 100 m; each remaining segment is a separate `LineString` with numbered `entityPart` values on
+one derived river-bank identity. River banks are named relative to the DEM-oriented downstream centreline. The slope
+builder reads the single `GREEN_KINDS` constant in `data/tools/relief/derivations.py`, aligned with the land-kind enum.
+The nine configured kinds are `park`, `garden`, `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and
+`playground`; eight occur in the current `land.geojson` (`garden` is absent). Green kinds, discovered kinds, minimum
+slope area, layer sources and the ridge/rim thresholds are recorded under `relief` in `sources/provenance.json`; relief
+features carry object facts only. Derived contour, slope, ridge and rim IDs are deterministic for the pinned inputs but
+are not stable across a DEM or green-area change. See [relief sources](../docs/runbooks/data.md#relief-sources) and
+[data licensing](../docs/map-data/data-license.md).

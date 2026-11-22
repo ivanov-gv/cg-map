@@ -126,7 +126,25 @@ revision-bound reference, a fingerprint and full before/after features. `fixture
 against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
 `editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. For land and water,
 `properties.kind` repeats `editableKinds` as a required enum, so an edit can neither remove a published kind nor invent
-one outside the reviewed source contract.
+one outside the reviewed source contract. The five relief collections are also read-only editor layers: their reasons
+are recorded in `editor-layers.json`, but they stay out of the versioned, exact-file-set `editor-bundle.schema.json` and
+its editing modes.
+
+`relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
+object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those
+values live in the `relief` block of `data/sources/provenance.json`, together with layer sources, and the full build
+report stays in temporary `.build/relief-report.json`. The data validator checks the recorded green kinds against this
+contract's land-kind enum and the discovered kinds against `land.geojson`. Contours, ridges and canyon-rim features are
+`LineString` features; slopes are `Polygon` features. A ridge is one simplified `LineString` on the shared boundary of
+adjacent sunlit and shaded slope polygons inside green areas; it carries a summit link and name only when a summit is
+within 50 m of the line. Derived ridge/slope/contour/DEM-rim IDs are deterministic for pinned inputs but are not stable
+across a DEM or green-area change. Summit `heightCheck` is `missing`, `mismatch` or `ok`: a mismatch needs a closed
+contour above OSM height around the summit or an OSM/DEM difference over 25 m, and a missing OSM height keeps its DEM
+fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
+OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
+and `method: "dem-canyon-bank"`. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
+elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology
+proof.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and
@@ -179,14 +197,14 @@ both fixtures, and the Python topology check rebuilds their polygons from the sa
 
 [entity-identity.schema.json](entity-identity.schema.json) defines source identity in `Feature.properties`, separately
 from display IDs, attribution strings and snapshot indices. [source-entities.schema.json](source-entities.schema.json)
-applies it to every feature in any of the thirteen source GeoJSON files. Existing geometry and domain contracts still
-apply; these schemas add identity without replacing them.
+applies it to every feature in each reviewed source GeoJSON file. Existing geometry and domain contracts still apply;
+these schemas add identity without replacing them.
 
 A file adopts version 1 by adding `entitySchemaVersion: 1` to its FeatureCollection. All its features then require
 `entityId` and `entityVersion`. `check-data` rejects partial adoption, unknown schema versions, or any of these reserved
-identity fields in a file without the marker. All thirteen reviewed source collections have adopted version 1. An empty
-adopted collection is valid. The schema describes adopted files; legacy compatibility remains only for fixtures and
-explicitly unannotated test data.
+identity fields in a file without the marker. Reviewed source collections that carry `entitySchemaVersion: 1` adopt this
+identity; an empty adopted collection is valid. The schema describes adopted files; legacy compatibility remains only
+for fixtures and explicitly unannotated test data.
 
 | `entityId` prefix               | Meaning                                                                    | `entityVersion`                                         |
 | ------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |

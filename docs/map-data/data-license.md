@@ -43,3 +43,24 @@ panel.
 Building address labels in data/sources/building-labels.geojson are derived from the same reviewed OpenStreetMap extract
 and remain under ODbL 1.0 with OpenStreetMap attribution. Their provenance retains footprint, input and source identity
 information.
+
+## Copernicus DEM GLO-30 relief
+
+The relief vectors in data/sources are adapted products of the Copernicus DEM GLO-30. The raster tiles stay outside Git;
+only derived vectors and checksummed provenance are committed. Keep the Article 6(a) source notice with any use of the
+relief sources:
+
+> © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and
+> ESA; all rights reserved
+
+The derived vectors also carry the Article 6(b) adapted-product notice:
+
+> produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided
+> under COPERNICUS by the European Union and ESA; all rights reserved
+
+The source references recorded in data/sources/provenance.json are the
+[bucket](https://copernicus-dem-30m.s3.amazonaws.com/), the
+[licence PDF](https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E019_00_DEM/INFO/eula_F.pdf) and
+the
+[CDSE collection description](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
+They are not relicensed as MIT, ODbL or Natural Earth public-domain data.

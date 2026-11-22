@@ -75,10 +75,20 @@
       "features": 43978,
       "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
     },
+    "canyon-rims.geojson": {
+      "bytes": 44838,
+      "features": 50,
+      "sha256": "5ea56b05baba340c59095a61b2ec0af00ebc0f7c503a11da3bc2cab7f275ffc1"
+    },
     "context-countries.geojson": {
       "bytes": 6535,
       "features": 6,
       "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
+    },
+    "contours.geojson": {
+      "bytes": 950066,
+      "features": 445,
+      "sha256": "915aaf0a501882d4024882013ba7566c2f21db52c58ed3ef3cfbca94da49beb0"
     },
     "land.geojson": {
       "bytes": 493167,
@@ -89,6 +99,11 @@
       "bytes": 878446,
       "features": 26,
       "sha256": "8cc7e03b55ee5d99246dd37eba6f4b387496cae3d50647891bb03faf5d0d7a86"
+    },
+    "ridges.geojson": {
+      "bytes": 19666,
+      "features": 31,
+      "sha256": "d04fa4e32fdbf898ca6b505cd03616836cb65cd974bc88d0d38c73c2b6c5bbe7"
     },
     "road-nodes.geojson": {
       "bytes": 462217,
@@ -104,6 +119,16 @@
       "bytes": 1102523,
       "features": 4009,
       "sha256": "29dbae0026b665014cc0dd28a4614b231c610afcf05ccddc7bc427757ecdd2af"
+    },
+    "slopes.geojson": {
+      "bytes": 456808,
+      "features": 186,
+      "sha256": "a8b950bcd7e9a7436ace6318cf06a7a9e84d29008421a7c21162481b5189c459"
+    },
+    "summits.geojson": {
+      "bytes": 2030185,
+      "features": 5411,
+      "sha256": "916f40724f43304d6861efe152f219487d826b3521f1f100a2a3d27d9ac206af"
     },
     "turn-restrictions.json": {
       "bytes": 9471,
@@ -127,5 +152,126 @@
   "places_facts_sha256": "e82f8c70b516abeeb14568547ec3f7787de29c5b80b65e69edb1106f2ab399f8",
   "places_file": "data/sources/places.geojson",
   "places_sha256": "cf9ca4f17327472d748f5eba2c86b1213cfd954b054b595d5e2d533db68677c6",
+  "relief": {
+    "buildParameters": {
+      "canyonRimJoinGapMetres": 60,
+      "canyonRimMinimumBankRiseMetres": 8.0,
+      "canyonRimMinimumLengthMetres": 100,
+      "canyonRimSearchDistanceMetres": 60,
+      "canyonRimSearchStepMetres": 10,
+      "contourIndexIntervalMetres": 100,
+      "contourIntervalMetres": 20,
+      "greenKinds": [
+        "park",
+        "garden",
+        "woods",
+        "meadow",
+        "grass",
+        "scrub",
+        "sports",
+        "cemetery",
+        "playground"
+      ],
+      "greenKindsPresentInLand": [
+        "cemetery",
+        "grass",
+        "meadow",
+        "park",
+        "playground",
+        "scrub",
+        "sports",
+        "woods"
+      ],
+      "minimumAreaSquareMetres": 2500,
+      "ridgeMinimumLengthMetres": 100,
+      "ridgeSimplificationToleranceDegrees": 1e-05,
+      "summitLinkDistanceMetres": 50
+    },
+    "detailBounds": [
+      19.15,
+      42.37,
+      19.34,
+      42.51
+    ],
+    "inputs": {
+      "contracts": {
+        "editor-layers.json": "6ff57bdc418d273a700133dfb45996b1858e52c48099e212f6659e63eec3382f"
+      },
+      "dem": {
+        "bucket": "https://copernicus-dem-30m.s3.amazonaws.com/",
+        "sha256OfChecksumList": "e742c240f5508416a01c62c2e4c1fa4bdb93e7f179032b39f2e77c00d8a061ff",
+        "tiles": {
+          "Copernicus_DSM_COG_10_N41_00_E019_00_DEM.tif": "51faf559c4de2ded1a6d9a5e98b24b8e708bdcc6d91fe4815e552ef7569b6270",
+          "Copernicus_DSM_COG_10_N42_00_E018_00_DEM.tif": "38c4a938faaf6f66cfdb3872a292b3ef6258ac46b288e8a141eefa4a6e59fd7a",
+          "Copernicus_DSM_COG_10_N42_00_E019_00_DEM.tif": "841296595124b9e97f84c9b3f5d583d84990c7a7890f88b24737f6040fd17b46",
+          "Copernicus_DSM_COG_10_N42_00_E020_00_DEM.tif": "b13b40faf245461acca2025fbcdc0b11c16a2a5f9a6d2f4f6b15f21b536dc770",
+          "Copernicus_DSM_COG_10_N43_00_E018_00_DEM.tif": "0af258e5e75f77b7063ad4c43b6339dacb179d46998e8498bf9ac073a2d66241",
+          "Copernicus_DSM_COG_10_N43_00_E019_00_DEM.tif": "022bf283c9f3e2c226182fd65463a93b1864fb62d77796138acc1e5bed1b5275",
+          "Copernicus_DSM_COG_10_N43_00_E020_00_DEM.tif": "3b1b4a297590d5dfddbeb5549b95b981e860a225c9817e46edc3eba077b9caf4"
+        }
+      },
+      "osm": {
+        "fileName": "montenegro-2026-11-21.osm.pbf",
+        "sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b"
+      },
+      "reviewedSources": {
+        "land.geojson": "530ad7b2f2fd05eb1a59bd9a8b688b591746f476d2b9ac7733c5da56f6799f36",
+        "water.geojson": "edb1d55efc5c79333cc2c9355cb2ac4bf8a169e473850c56d2f444c452b7f2be"
+      },
+      "tools": {
+        "data/tools/build-relief.py": "011eb29bb9870208fc29e78dba153e8c9896a21f6afefa9b918c013fb01323f8",
+        "data/tools/relief/__init__.py": "881d2d0cf67afa43aeff67501d72a8c63065925f4e2c6c2754917da260d92963",
+        "data/tools/relief/build.py": "0cbfe21fa3c08c71284489836182792bf9e34efdc61d626a2353e778761baf78",
+        "data/tools/relief/derivations.py": "d543a125132c6eb2ebbf75bf6d5c8de90e6be9ab61b1ee081b0b949ac58df3c1",
+        "data/tools/relief/sources.py": "ec83ae43f165a834fc3d00d41041ea9557c3c8a8ddeb3902194971be0beb19cc",
+        "data/tools/relief/terrain.py": "7cce114335a3698f514dc0aab343836b14349b17b82e9f2addb4321fcaed8630"
+      }
+    },
+    "license": {
+      "adaptedProductNotice": "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "attribution": "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "bucket": "https://copernicus-dem-30m.s3.amazonaws.com/",
+      "collection": "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM",
+      "eula": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E019_00_DEM/INFO/eula_F.pdf"
+    },
+    "osmSnapshot": "2026-11-20T21:21:21Z",
+    "reportBytes": 156310,
+    "reportFile": ".build/relief-report.json",
+    "reportSha256": "43f01e1da5bc2f1fb017f775aa861773db9829a2ca02ab58aca9fc594dfc402a",
+    "retiredBuildParameters": {
+      "radiusMetres": 400
+    },
+    "sources": {
+      "canyon-rim": "Copernicus DEM GLO-30 and OpenStreetMap cliffs",
+      "contour": "Copernicus DEM GLO-30",
+      "ridge": "Copernicus DEM GLO-30, reviewed land.geojson and OpenStreetMap summits",
+      "slope": "Copernicus DEM GLO-30 and reviewed land.geojson",
+      "summit": "OpenStreetMap and Copernicus DEM GLO-30"
+    },
+    "summary": {
+      "canyonRimFeatures": 50,
+      "contourCrossingPairs": 0,
+      "contourFeatures": 445,
+      "greenKindsPresentInLand": [
+        "cemetery",
+        "grass",
+        "meadow",
+        "park",
+        "playground",
+        "scrub",
+        "sports",
+        "woods"
+      ],
+      "ridgeFeatures": 31,
+      "slopeFeatures": 186,
+      "summitFeatures": 5411,
+      "summitHeightChecks": {
+        "mismatch": 418,
+        "missing": 451,
+        "ok": 4542
+      },
+      "summitsOutsideCountry": 216
+    }
+  },
   "upstream_snapshot": "2026-11-20T21:21:21Z"
 }

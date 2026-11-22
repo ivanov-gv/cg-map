@@ -1,0 +1,139 @@
+"""Summit clipping needs the GIS packages pinned in data/tools/requirements.txt."""
+import os
+import sys
+import unittest
+from pathlib import Path
+
+from shapely.geometry import box, mapping
+
+TOOLS_PATH = Path(os.environ.get(
+    'RELIEF_TOOLS_PATH', Path(__file__).resolve().parents[1] / 'tools'
+))
+sys.path.insert(0, str(TOOLS_PATH))
+
+from relief import derivations  # noqa: E402
+
+
+class ConstantTerrainModel:
+    """Return one elevation so height checks do not depend on a DEM."""
+
+    def sample(self, longitude, latitude):
+        return 120.0
+
+    def surrounding_height(self, longitude, latitude):
+        return 120.0
+
+
+def summit(entity_id, coordinates, name):
+    """Build the OSM-shaped summit record consumed by the relief builder."""
+    return {
+        'entityId': entity_id,
+        'entityVersion': 1,
+        'coordinates': coordinates,
+        'kind': 'peak',
+        'tags': {'ele': '120', 'name': name},
+    }
+
+
+class ReliefDerivationTests(unittest.TestCase):
+    def test_summits_outside_synthetic_country_are_excluded(self):
+        country = box(0, 0, 20, 10).difference(box(9.9999999, 1, 10.00000005, 9))
+        land = {'features': [{
+            'properties': {'kind': 'country', 'entityId': 'relation/53296'},
+            'geometry': mapping(country),
+        }]}
+        osm = {'summits': [
+            summit('node/1', [5.0, 5.0], 'Inside'),
+            summit('node/2', [20.0, 5.0], 'Boundary'),
+            summit('node/3', [30.0, 5.0], 'Outside'),
+            summit('node/4', [20.0000001, 5.0], 'Rounds inside'),
+            summit('node/5', [10.0000001, 5.0], 'Rounds outside'),
+        ]}
+
+        features, report = derivations.build_summits(
+            ConstantTerrainModel(), osm, land, []
+        )
+
+        self.assertEqual(
+            [feature['properties']['entityId'] for feature in features],
+            ['node/1', 'node/2'],
+        )
+        self.assertEqual(report['features'], 2)
+        self.assertEqual(report['summitsOutsideCountry'], 3)
+        self.assertEqual(
+            report['heightCheckCounts'], {'ok': 2, 'mismatch': 0, 'missing': 0}
+        )
+
+    def test_absent_summit_name_tags_are_omitted(self):
+        land = {'features': [{
+            'properties': {'kind': 'country', 'entityId': 'relation/53296'},
+            'geometry': mapping(box(0, 0, 20, 10)),
+        }]}
+        osm = {'summits': [{
+            'entityId': 'node/10',
+            'entityVersion': 1,
+            'coordinates': [5.0, 5.0],
+            'kind': 'peak',
+            'tags': {'ele': '120'},
+        }]}
+        features, _ = derivations.build_summits(ConstantTerrainModel(), osm, land, [])
+        properties = features[0]['properties']
+        self.assertNotIn('name', properties)
+        self.assertNotIn('name:en', properties)
+
+    def test_parse_elevation_accepts_units_and_rejects_ambiguous_values(self):
+        self.assertEqual(derivations._parse_elevation('1234 m'), 1234.0)
+        self.assertEqual(derivations._parse_elevation('1,234 m'), 1234.0)
+        self.assertEqual(derivations._parse_elevation('1.234'), 1.234)
+        self.assertEqual(derivations._parse_elevation('1,234,567'), 1234567.0)
+        self.assertIsNone(derivations._parse_elevation('1,23'))
+        self.assertIsNone(derivations._parse_elevation('12m34'))
+        self.assertIsNone(derivations._parse_elevation(''))
+
+    def test_enclosing_contour_uses_highest_enclosing_level(self):
+        land = {'features': [{
+            'properties': {'kind': 'country', 'entityId': 'relation/53296'},
+            'geometry': mapping(box(0, 0, 20, 10)),
+        }]}
+        contours = [
+            {'properties': {'elevation': 100}, 'geometry': {'type': 'LineString', 'coordinates': list(box(1, 1, 9, 9).exterior.coords)}},
+            {'properties': {'elevation': 120}, 'geometry': {'type': 'LineString', 'coordinates': list(box(2, 2, 8, 8).exterior.coords)}},
+        ]
+        osm = {'summits': [summit('node/1', [5.0, 5.0], 'Peak')]}
+        features, _ = derivations.build_summits(ConstantTerrainModel(), osm, land, contours)
+        self.assertEqual(features[0]['properties']['enclosingContourElevation'], 120)
+
+    def test_canyon_rim_keeps_osm_cliff_identity_separate_from_dem(self):
+        class RiverBankModel:
+            def sample(self, longitude, latitude):
+                if abs(latitude - 5.0) < 0.0002:
+                    return 100.0
+                if latitude > 5.0:
+                    return 100.0 + (latitude - 5.0) * 200000
+                return 100.0 + (5.0 - latitude) * 200000
+
+        bounds = (0.0, 4.99, 0.01, 5.01)
+        water = {'features': [{
+            'properties': {'kind': 'river', 'name': 'Ribnica'},
+            'geometry': {'type': 'LineString', 'coordinates': [[0.0, 5.0], [0.005, 5.0], [0.01, 5.0]]},
+        }]}
+        cliffs = [{
+            'entityId': 'way/7',
+            'entityVersion': 3,
+            'kind': 'cliff',
+            'coordinates': [[0.002, 5.0003], [0.008, 5.0003]],
+        }]
+        features, _ = derivations.build_canyon_rims(
+            RiverBankModel(), water, cliffs, bounds, river_names=('Ribnica',), sample_spacing_metres=20
+        )
+        cliff_features = [f for f in features if f['properties'].get('method') == 'osm-cliff']
+        dem_features = [f for f in features if f['properties'].get('method') == 'dem-canyon-bank']
+        self.assertTrue(cliff_features)
+        self.assertTrue(dem_features)
+        self.assertEqual({f['properties']['entityId'] for f in cliff_features}, {'way/7'})
+        self.assertEqual({f['properties']['entityVersion'] for f in cliff_features}, {3})
+        self.assertTrue(all(f['properties']['kind'] == 'canyon-rim' for f in cliff_features))
+        self.assertNotIn('cliffWays', cliff_features[0]['properties'])
+        self.assertNotIn('minimumBankRiseMetres', cliff_features[0]['properties'])
+        self.assertIn('lengthMetres', cliff_features[0]['properties'])
+        self.assertTrue(all(f['properties']['entityId'].startswith('derived:canyon-rim-') for f in dem_features))
