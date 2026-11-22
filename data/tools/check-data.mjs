@@ -391,7 +391,9 @@ export function validateTransitRoutes(data) {
       requireValue(!routeNumbers.has(route.number), `${routeLabel}: duplicate route number`);
       routeNumbers.add(route.number);
     }
-    requireValue(typeof route.name === 'string' && route.name.length > 0, `${routeLabel}: missing name`);
+    if (route.name !== undefined) {
+      requireValue(typeof route.name === 'string' && route.name.length > 0, `${routeLabel}: name must be a nonempty string`);
+    }
     requireValue(route.network === 'bus' || route.network === 'intercity', `${routeLabel}: invalid network type`);
     if (route.colour) {
       requireValue(/^#[0-9a-fA-F]{6}$/.test(route.colour), `${routeLabel}: invalid colour format`);

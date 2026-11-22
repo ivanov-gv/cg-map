@@ -162,5 +162,23 @@ class TestWriteRoutesFormat(unittest.TestCase):
             tmp_path.unlink()
 
 
+class TestUnnamedRouteRule(unittest.TestCase):
+    """Test that OSM routes without a name omit name rather than using relation/N."""
+
+    def test_unnamed_route_omits_name(self):
+        """Routes without an OSM name tag must not have name set to relation/N."""
+        routes_data = json.loads(
+            Path('data/sources/transit-routes.json').read_text(encoding='utf-8')
+        )
+        for route in routes_data['routes']:
+            if route.get('name'):
+                # Name must never be an OSM ID
+                self.assertNotRegex(
+                    route['name'],
+                    r'^relation/\d+$',
+                    f"Route {route.get('number', '?')} has name as OSM ID",
+                )
+
+
 if __name__ == '__main__':
     unittest.main()

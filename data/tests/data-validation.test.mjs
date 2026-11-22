@@ -169,6 +169,7 @@ function reviewedCheckRoot(testContext) {
   const supportingFiles = [
     'building-labels.provenance.json', 'transport-stops.provenance.json',
     'transit-network.json', 'transit-network.provenance.json',
+    'transit-routes.json', 'transit-routes.provenance.json',
     'provenance.json', 'place-visibility-policy.json'
   ];
   for (const filename of [...sourceFiles, ...supportingFiles]) {

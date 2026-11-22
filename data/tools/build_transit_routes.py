@@ -435,7 +435,7 @@ def build_osm_routes(osm_relations, network, pbf_path):
         last_stop = stops[-1].get('name', '') if stops else ''
         headsign = (route_name or
                     f'{first_stop} - {last_stop}' if first_stop and last_stop else
-                    f'relation/{relation["id"]}')
+                    '')
 
         raw_directions.append({
             'relation_id': relation['id'],
@@ -482,14 +482,14 @@ def build_osm_routes(osm_relations, network, pbf_path):
                 dir_entry['toMunicipality'] = d['toMunicipality']
             route_directions.append(dir_entry)
 
-        # Use the first direction's headsign as route name when the OSM
-        # relation has no name tag.
-        route_name = first['name'] or first['headsign']
+        # Never put an OSM ID into `name`. Omit `name` when the source
+        # has none; the consumer can fall back to `number` or `headsign`.
         route = {
-            'name': route_name,
             'network': group_network,
             'directions': route_directions,
         }
+        if first['name']:
+            route['name'] = first['name']
         if route_number:
             route['number'] = route_number
         if first['colour']:
@@ -507,7 +507,8 @@ def _route_sort_key(route):
     """Sort routes by network, then number (empty last), then name."""
     net_order = 0 if route['network'] == 'bus' else 1
     number = route.get('number', '') or ''
-    return (net_order, number, route['name'])
+    name = route.get('name', '') or ''
+    return (net_order, number, name)
 
 
 def build_transit_routes(network, pbf_path):
