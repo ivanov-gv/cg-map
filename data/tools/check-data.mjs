@@ -7,6 +7,7 @@ import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const nameFields = new Set(['name', 'name:en']);
 
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
 
@@ -94,6 +95,7 @@ function validateLandWaterProperties(properties, label, rules, expectedOsmTagKin
     if (value === undefined) continue;
     const definition = field === 'tunnel' || field === 'intermittent' ? definitions[field] : definitions.name;
     requireValue(typeof value === 'string' && value.length <= definition.maxLength, `${label}: invalid ${field}`);
+    if (nameFields.has(field)) requireValue(value.trim().length > 0, `${label}: blank ${field}`);
   }
   if (destination !== undefined) requireValue(destination === true, `${label}: destination must be true when present`);
 }

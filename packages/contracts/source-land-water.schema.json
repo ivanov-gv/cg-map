@@ -64,7 +64,9 @@
       "pattern": "^[^\\s=]+=[^\\s=]+$"
     },
     "name": {
+      "description": "Verbatim OSM name; absent when the OSM tag is unmapped or blank.",
       "type": "string",
+      "minLength": 1,
       "maxLength": 120
     },
     "destination": {

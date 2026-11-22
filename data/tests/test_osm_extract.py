@@ -201,6 +201,18 @@ def single_feature(grouped, entity_id):
     return features[0]
 
 
+def assert_osm_names(test_case, properties, name=None, english_name=None):
+    """Check that only mapped, nonblank OSM names are published."""
+    if name is None:
+        test_case.assertNotIn('name', properties)
+    else:
+        test_case.assertEqual(properties.get('name'), name)
+    if english_name is None:
+        test_case.assertNotIn('name:en', properties)
+    else:
+        test_case.assertEqual(properties.get('name:en'), english_name)
+
+
 def polygon_rings(geometry):
     """Return the coordinate rings of every polygon in a GeoJSON geometry."""
     if geometry['type'] == 'Polygon':
@@ -454,16 +466,16 @@ class OsmExtractTest(unittest.TestCase):
         land = features_by_entity_id(self.first_root, 'land.geojson')
         expected = {
             'way/5001': ('garden', 'leisure=garden', None, 'Test Garden'),
-            'way/5002': ('woods', 'natural=wood', None, ''),
+            'way/5002': ('woods', 'natural=wood', None, None),
             'way/5003': ('meadow', 'landuse=meadow', True, 'Test Meadow'),
-            'way/5004': ('meadow', 'landuse=meadow', True, ''),
-            'way/5010': ('meadow', 'natural=grassland', True, ''),
-            'way/5012': ('grass', 'landuse=grass', None, ''),
+            'way/5004': ('meadow', 'landuse=meadow', True, None),
+            'way/5010': ('meadow', 'natural=grassland', True, None),
+            'way/5012': ('grass', 'landuse=grass', None, None),
             'way/5005': ('grass', 'leisure=common', True, 'Test Common'),
-            'way/5006': ('scrub', 'natural=scrub', None, ''),
-            'way/5007': ('sports', 'leisure=pitch', None, ''),
-            'way/5008': ('cemetery', 'landuse=cemetery', None, ''),
-            'way/5009': ('playground', 'leisure=playground', None, ''),
+            'way/5006': ('scrub', 'natural=scrub', None, None),
+            'way/5007': ('sports', 'leisure=pitch', None, None),
+            'way/5008': ('cemetery', 'landuse=cemetery', None, None),
+            'way/5009': ('playground', 'leisure=playground', None, None),
             'relation/5200': ('park', 'leisure=park', None, 'Park With Hole'),
         }
         for entity_id, (kind, osm_tag, destination, name) in expected.items():
@@ -472,8 +484,7 @@ class OsmExtractTest(unittest.TestCase):
                 self.assertEqual(properties['kind'], kind)
                 self.assertEqual(properties['osmTag'], osm_tag)
                 self.assertEqual(properties.get('destination'), destination)
-                self.assertEqual(properties['name'], name)
-                self.assertEqual(properties['name:en'], '')
+                assert_osm_names(self, properties, name)
                 self.assertIsInstance(properties['entityVersion'], int)
 
     def test_protected_areas_and_localities_are_not_land_cover(self):
@@ -487,16 +498,27 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(grass['osmTag'], 'landuse=grass')
         self.assertNotIn('destination', grass)
 
+    def test_absent_and_blank_names_are_omitted(self):
+        extract(self.first_root)
+        cases = (
+            ('way/5002', features_by_entity_id(self.first_root, 'land.geojson')),
+            ('way/6003', features_by_entity_id(self.first_root, 'water.geojson')),
+        )
+        for entity_id, grouped in cases:
+            with self.subTest(entity_id=entity_id):
+                properties = single_feature(grouped, entity_id)['properties']
+                assert_osm_names(self, properties)
+
     def test_water_kinds_names_and_waterway_line_tags(self):
         extract(self.first_root)
         water = features_by_entity_id(self.first_root, 'water.geojson')
         areas = {
             'way/6001': ('lake', 'water=lake', 'Test Lake', 'Test Lake EN'),
-            'way/6002': ('river', 'water=river', 'Test River Area', ''),
-            'way/6003': ('reservoir', 'water=reservoir', '', ''),
-            'way/6004': ('pond', 'water=pond', '', ''),
-            'way/6005': ('basin', 'water=basin', '', ''),
-            'way/6006': ('river', 'waterway=riverbank', 'Test Bank', ''),
+            'way/6002': ('river', 'water=river', 'Test River Area', None),
+            'way/6003': ('reservoir', 'water=reservoir', None, None),
+            'way/6004': ('pond', 'water=pond', None, None),
+            'way/6005': ('basin', 'water=basin', None, None),
+            'way/6006': ('river', 'waterway=riverbank', 'Test Bank', None),
             'relation/6100': (
                 'lake', 'water=lake', 'Lake With Island', 'Lake With Island EN'
             ),
@@ -506,22 +528,20 @@ class OsmExtractTest(unittest.TestCase):
                 properties = single_feature(water, entity_id)['properties']
                 self.assertEqual(properties['kind'], kind)
                 self.assertEqual(properties['osmTag'], osm_tag)
-                self.assertEqual(properties['name'], name)
-                self.assertEqual(properties['name:en'], english_name)
+                assert_osm_names(self, properties, name, english_name)
         lines = {
             'way/7001': ('river', 'Test River', 'Test River EN', 'yes', 'no'),
-            'way/7002': ('stream', 'Test Stream', '', None, None),
-            'way/7003': ('canal', '', '', None, 'yes'),
-            'way/7004': ('ditch', '', '', None, None),
-            'way/7005': ('drain', '', '', None, None),
+            'way/7002': ('stream', 'Test Stream', None, None, None),
+            'way/7003': ('canal', None, None, None, 'yes'),
+            'way/7004': ('ditch', None, None, None, None),
+            'way/7005': ('drain', None, None, None, None),
         }
         for entity_id, (kind, name, english_name, tunnel, intermittent) in lines.items():
             with self.subTest(entity_id=entity_id, line=True):
                 properties = single_feature(water, entity_id)['properties']
                 self.assertEqual(properties['kind'], kind)
                 self.assertEqual(properties['osmTag'], f'waterway={kind}')
-                self.assertEqual(properties['name'], name)
-                self.assertEqual(properties['name:en'], english_name)
+                assert_osm_names(self, properties, name, english_name)
                 self.assertEqual(properties.get('tunnel'), tunnel)
                 self.assertEqual(properties.get('intermittent'), intermittent)
                 self.assertNotIn('entityPart', properties)

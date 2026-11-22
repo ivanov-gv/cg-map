@@ -79,6 +79,37 @@ test('land and water domain properties, kinds and RFC 7946 ring order are valida
   }
 });
 
+test('blank extracted names are rejected while absent names are accepted', () => {
+  const data = {
+    type: 'FeatureCollection',
+    entitySchemaVersion: 1,
+    features: [{
+      type: 'Feature',
+      properties: {
+        entityId: 'way/1',
+        entityVersion: 1,
+        kind: 'meadow',
+        osmTag: 'landuse=meadow'
+      },
+      geometry: {type: 'Point', coordinates: [19, 42]}
+    }]
+  };
+  const options = {
+    allowedKinds: new Set(['meadow']),
+    landWater: true,
+    requiredOsmTagKinds: new Set(['meadow'])
+  };
+  assert.equal(validateCollection(data, options), 1);
+  for (const field of ['name', 'name:en']) {
+    const blank = structuredClone(data);
+    blank.features[0].properties[field] = '';
+    assert.throws(
+      () => validateCollection(blank, options),
+      new RegExp(`blank ${field}`)
+    );
+  }
+});
+
 function reviewedCheckRoot(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-source-domain-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));

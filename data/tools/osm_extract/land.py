@@ -7,6 +7,7 @@ from .geometry import (
     area_source, geometry_features, usable_area_geometry
 )
 from .identity import osm_identity
+from .names import copy_name_tags
 from .rings import orient_feature
 from .writing import read_collection
 
@@ -88,12 +89,7 @@ class LandLayer(Layer):
         ):
             return
         osm_tag, kind = rule
-        properties = {
-            'kind': kind,
-            'osmTag': osm_tag,
-            'name': tags.get('name', ''),
-            'name:en': tags.get('name:en', '')
-        }
+        properties = {'kind': kind, 'osmTag': osm_tag, **copy_name_tags(tags)}
         if self.is_destination(kind, tags, geometry):
             properties['destination'] = True
         area_kind, osm_id = area_source(area)

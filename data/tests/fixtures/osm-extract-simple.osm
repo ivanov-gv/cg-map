@@ -486,6 +486,8 @@
     <nd ref="5024"/>
     <nd ref="5021"/>
     <tag k="natural" v="wood"/>
+    <tag k="name" v=""/>
+    <tag k="name:en" v="   "/>
   </way>
   <way id="5003" version="23">
     <nd ref="5031"/>
@@ -626,6 +628,7 @@
     <nd ref="6031"/>
     <tag k="natural" v="water"/>
     <tag k="water" v="reservoir"/>
+    <tag k="name" v=""/>
   </way>
   <way id="6004" version="34">
     <nd ref="6041"/>

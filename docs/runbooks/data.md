@@ -135,10 +135,10 @@ multipolygons keep their holes.
 
 The `water` layer publishes lake, river, reservoir, pond, basin and generic water areas. River and canal lines stay
 countrywide; stream, ditch and drain lines are clipped to the detail box and gain `entityPart` when clipped. Waterway
-and coastline features retain upstream node order; `name`, `name:en`, `tunnel` and `intermittent` are copied when
-mapped. Coastline lines are features in `water.geojson`, not a separate source file, and consumers exclude them from the
-waterway stroke so the ocean fill shows the shore. The derived `derived:ocean` polygon is still computed from the
-reviewed land outline and the OSM coastline.
+and coastline features retain upstream node order; `name` and `name:en` are copied only when mapped and nonblank, while
+`tunnel` and `intermittent` are copied when mapped. Coastline lines are features in `water.geojson`, not a separate
+source file, and consumers exclude them from the waterway stroke so the ocean fill shows the shore. The derived
+`derived:ocean` polygon is still computed from the reviewed land outline and the OSM coastline.
 
 Extracted green and water polygons are written with counterclockwise exteriors and clockwise holes. Preserved country
 and context outlines keep their source winding. `make -C data check` enforces the shared kind enums, requires `osmTag`

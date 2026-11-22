@@ -13,6 +13,7 @@ from .geometry import (
     way_coordinates,
 )
 from .identity import content_version, make_feature, osm_identity
+from .names import copy_name_tags
 from .rings import orient_feature, rfc7946_geometry
 from .writing import read_collection
 
@@ -87,12 +88,7 @@ class WaterLayer(Layer):
     def line_properties(self, way, osm_tag, kind):
         """Return the published properties copied from one waterway way."""
         tags = way.tags
-        properties = {
-            'kind': kind,
-            'osmTag': osm_tag,
-            'name': tags.get('name', ''),
-            'name:en': tags.get('name:en', '')
-        }
+        properties = {'kind': kind, 'osmTag': osm_tag, **copy_name_tags(tags)}
         for tag_name in WATER_LINE_TAGS:
             if tag_name in tags:
                 properties[tag_name] = tags[tag_name]
@@ -107,12 +103,7 @@ class WaterLayer(Layer):
         if geometry is None:
             return
         osm_tag, kind = rule
-        properties = {
-            'kind': kind,
-            'osmTag': osm_tag,
-            'name': tags.get('name', ''),
-            'name:en': tags.get('name:en', '')
-        }
+        properties = {'kind': kind, 'osmTag': osm_tag, **copy_name_tags(tags)}
         area_kind, osm_id = area_source(area)
         identity = osm_identity(area_kind, osm_id, area.version)
         features = geometry_features(

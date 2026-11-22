@@ -145,9 +145,10 @@ river, reservoir, pond, basin and generic `water` areas, the `stream`, `canal`, 
 
 `osmTag` is the exact lower-case OSM `key=value` that determined the kind; the first rule in the producer's priority
 list wins when an object carries several candidate tags. It is required on extracted features and absent only on
-preserved outlines and the derived ocean. `name` and `name:en` are verbatim OSM names, empty strings when unmapped.
-`destination: true` is additive and appears only when a documented green-area destination rule matches; it is never
-`false`. `tunnel` and `intermittent` carry verbatim OSM tag values on waterway lines and are absent when unmapped.
+preserved outlines and the derived ocean. `name` and `name:en` are verbatim OSM names, copied only when mapped and
+nonblank; absent or blank OSM tags produce no property. `destination: true` is additive and appears only when a
+documented green-area destination rule matches; it is never `false`. `tunnel` and `intermittent` carry verbatim OSM tag
+values on waterway lines and are absent when unmapped.
 
 `check-data` rejects unsupported kinds, malformed new properties, and clockwise exteriors or counterclockwise holes in
 extracted land-cover and water polygons. Preserved country and context outlines keep their source winding. Multipolygon

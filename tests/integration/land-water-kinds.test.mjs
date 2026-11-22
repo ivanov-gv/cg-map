@@ -87,3 +87,23 @@ test('extracted land and water kinds stay in step with validation and consumers'
     assert.equal(point.name, `Named ${kind}`, kind);
   }
 });
+
+test('reviewed land and water omit blank names and consumers tolerate absent names', () => {
+  for (const filename of ['land.geojson', 'water.geojson']) {
+    const collection = readJson(
+      new URL(`../../data/sources/${filename}`, import.meta.url)
+    );
+    for (const feature of collection.features) {
+      for (const field of ['name', 'name:en']) {
+        const value = feature.properties[field];
+        if (value === undefined) continue;
+        assert.equal(typeof value, 'string', `${filename} ${field}`);
+        assert.ok(value.trim().length > 0, `${filename} ${field} is blank`);
+      }
+    }
+  }
+  const unnamed = describePoint(
+    {layer: {id: 'land'}, properties: {kind: 'meadow'}}, [19, 42]
+  );
+  assert.ok(unnamed.name.trim().length > 0);
+});
