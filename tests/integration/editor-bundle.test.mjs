@@ -5,10 +5,11 @@ import {mkdtemp, rm, readFile, readdir, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {dataSourceDirectory, dataSourceURL, dataToolURL} from '../data-root.mjs';
+import {contractURL, readContractJSON} from '../contracts-root.mjs';
 import {sourceFiles, validateBundleManifest, decodeSource} from '../../apps/editor/src/source-bundle.js';
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
-const editorBundleContractURL = new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url);
+const editorBundleContractURL = contractURL('editor-bundle.schema.json');
 
 // Real producer/consumer integration proves that revision-bound indices refer to unchanged source bytes.
 test('reviewed source bundle round trips byte-for-byte through the editor consumer', async t => {
@@ -33,9 +34,7 @@ test('producer manifest matches the shared bundle contract', async t => {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-bundle-'));
   t.after(() => rm(outputDirectory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle(dataSourceDirectory, outputDirectory, editorBundleContractURL);
-  const schema = JSON.parse(
-    await readFile(new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url))
-  );
+  const schema = readContractJSON('editor-bundle.schema.json');
   const layerSchema = schema.properties.layers.items;
   const contractFiles = layerSchema.properties.filename.enum;
   assert.equal(manifest.version, schema.properties.version.const);

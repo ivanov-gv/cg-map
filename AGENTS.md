@@ -10,7 +10,7 @@ Each project below is mostly independent: it owns its Makefile, build, run, lint
 Projects connect only through the [concrete contracts](docs/system-architecture/architecture.md#independent-projects).
 The root Makefile never runs a project's build or run targets, and no project runs another project's checks. A project's
 tests read only its own files or an exact published version of another project (such as `@ivanov-gv/map-data`), never
-its HEAD; only [tests](tests/AGENTS.md) reads HEAD. Add a project the way that section describes.
+its HEAD; only [tests](tests/AGENTS.md) and data's contract checks read HEAD. Add projects as that section describes.
 
 ## Repo map and language rules
 
@@ -59,8 +59,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,
   on any path. All code you add or change must meet it: meaningful whole-word names, short functions that read as steps,
   and comments that explain why. Do not match a denser surrounding style.
-- Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
-  consumer tests together.
+- Cross-boundary changes need explicit contract/ownership consideration; a contract change updates producer validation,
+  tests/, and the next `@ivanov-gv/map-contracts` release, while consumers pin that release.
 - No application copies, binaries, or temporary assets in repository root.
 
 ## Ownership and generated output

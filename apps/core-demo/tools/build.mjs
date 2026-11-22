@@ -2,11 +2,12 @@
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {assembleStaticApplication} from '@ivanov-gv/map-core/tools/assemble.mjs';
+import {resolveContractsRoot} from './contracts-root.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../../../dist/core-demo/', import.meta.url));
-// Dev builds use HEAD; a future app production release pins every dependency. Test targets set MAP_DATA_ROOT to the
-// pinned package, tools included.
+// Dev builds use HEAD; a future app production release pins every dependency. Test targets set both roots to the pinned
+// data and contracts packages.
 function resolveDataRoot(defaultRoot) {
   if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
     throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');
@@ -15,11 +16,12 @@ function resolveDataRoot(defaultRoot) {
 }
 
 const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
+const contractsRoot = resolveContractsRoot();
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const {copyMapData} = await import(dataToolsURL);
 assembleStaticApplication(fileURLToPath(new URL('..', import.meta.url)), outputDirectory);
 copyMapData(outputDirectory, {
   dataRoot,
-  contractPath: path.join(repositoryRoot, 'packages/contracts/place-visibility.json')
+  contractPath: path.join(contractsRoot, 'place-visibility.json')
 });
 console.log('Built dist/core-demo/');

@@ -1,5 +1,5 @@
-// The same ring and line rules as the data importer, kept honest by the shared fixture
-// packages/contracts/fixtures/editor-geometry-cases.json. The importer stays the final authority.
+// The same ring and line rules as the data importer, kept honest by the shared geometry fixture in the pinned contracts
+// package. The importer stays the final authority.
 
 // Source coordinates have at most six or so decimals, so a smaller cross product can only mean collinear points.
 const collinearToleranceDegreesSquared = 1e-13;

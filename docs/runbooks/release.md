@@ -27,6 +27,23 @@ Every merge to main updates it, with no tags or releases:
    commit SHA, extracts the site, and deploys. CD only runs for a successful push build on main, never for a CI test run
    or any other run. A deploy replaces the whole site, so it always takes all three.
 
+### Contracts in app builds and tests
+
+Contracts follow the same dependency modes as data:
+
+- **Dev builds:** local `make -C apps/<name> build` and `dev`, plus ci-publish's `pages` build and the site cd-dev-pages
+  deploys, read repository `packages/contracts` at HEAD. Each app has one build resolver that defaults there and honours
+  `MAP_CONTRACTS_ROOT`; do not add another relative contracts path.
+- **Tests:** unit, built, browser and offline-check targets read the app's exact `@ivanov-gv/map-contracts` pin. The
+  app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT`.
+  Platform's `build-web` does the same from platform's pin. A contract-only change therefore selects no app pipeline.
+- **Future app production release:** every dependency, contracts included, will be pinned. No app production release
+  exists yet, so this is a rule for future CD rather than a current command.
+
+Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
+installs that package and points the shared integration helper at it. See
+[Releasing map-contracts](#releasing-map-contracts).
+
 To put back an older build, dispatch cd-dev-pages with the commit to roll back to (within the last 10 builds — the
 rollback window). A failed deploy does not affect `CI gate`, so check it after merging. To republish after a failed
 merge run, use "Re-run failed jobs" on that run.
@@ -125,6 +142,35 @@ and therefore selects every pipeline. The three-app command is only an optional 
 npm install --workspace apps/web --workspace apps/editor --workspace apps/core-demo \
   --save-exact @ivanov-gv/map-data@0.2.0
 ```
+
+## Releasing map-contracts
+
+A contract change publishes a dev package when ci-publish's plan selects contracts, then a versioned release promotes it
+without rebuilding. The repository package stays `0.0.0-dev`, so it can never satisfy a consumer's exact pin. Before
+tagging a release, test the exact dev package with the integration suite:
+
+```sh
+make -C tests verify MAP_CONTRACTS_VERSION=0.0.0-dev.<commit on main>
+```
+
+That command installs the package from GitHub Packages and points every contract read in the suite, including the web
+build, at it. Data validation still reads contracts at HEAD by default; a contract that fails against the promoted
+package is a release finding, not a test to skip.
+
+```sh
+git tag map-contracts/v0.1.0 <commit on main>
+git push origin map-contracts/v0.1.0
+gh release create map-contracts/v0.1.0 --verify-tag --generate-notes
+```
+
+The release starts [cd-map-contracts](../../.github/workflows/cd-map-contracts.yml). A tag push alone starts nothing.
+Use a prerelease such as `map-contracts/v0.2.0-rc.1` with `--prerelease` to publish under `next`; a final version
+publishes under `latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
+
+`0.1.0` is the one exception: it was published by hand once on 2026-11-22, because the pinned consumers need a version
+that exists before CI can publish a contracts release. It was packed from `feature/340-contracts-package`; its schemas,
+fixtures and proto are identical to main `0a74bd8`. A contract-only change selects contracts, data, tests and platform,
+not app pipelines.
 
 ## Releasing the browser image
 

@@ -50,6 +50,7 @@ jobs:
     outputs:
       map-core: ${{ steps.plan.outputs.map-core }}
       data: ${{ steps.plan.outputs.data }}
+      contracts: ${{ steps.plan.outputs.contracts }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: &plan-env
@@ -74,6 +75,7 @@ jobs:
     outputs:
       map-core: ${{ steps.plan.outputs.map-core }}
       data: ${{ steps.plan.outputs.data }}
+      contracts: ${{ steps.plan.outputs.contracts }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: *plan-env
@@ -190,7 +192,8 @@ jobs:
     env: &data-package-env
       PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
       PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
-    steps: &data-package-steps
+      PACKAGE_DIRECTORY: source/data
+    steps: &publish-package-steps
       # The first checkout keeps this revision's publishing action. The second gets the requested source commit.
       - uses: actions/checkout@v7
         with:
@@ -208,7 +211,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/publish-dev-package
         with:
-          directory: source/data
+          directory: ${{ env.PACKAGE_DIRECTORY }}
           flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
           token: ${{ github.token }}
           commit: ${{ steps.commit.outputs.commit }}
@@ -223,7 +226,35 @@ jobs:
       contents: read
       packages: read
     env: *data-package-env
-    steps: *data-package-steps
+    steps: *publish-package-steps
+  # A release promotes what this publishes, and consumers pin that release. The steps are the data job's shared anchor.
+  contracts-package:
+    name: Publish map-contracts dev package
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &contracts-package-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+      PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
+      PACKAGE_DIRECTORY: source/packages/contracts
+    steps: *publish-package-steps
+  contracts-package-test-run:
+    name: (test-run) Publish map-contracts dev package
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *contracts-package-env
+    steps: *publish-package-steps
   # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
   browser-image:
     name: Publish browser image

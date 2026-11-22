@@ -17,7 +17,7 @@ import (
 // cacheTTL is the feed's fresh window, as these tests observe it from outside the package.
 const cacheTTL = 13 * time.Second
 
-// limits from packages/contracts/vehicles.schema.json
+// limits from the pinned vehicles contract
 const (
 	contractMaxFeatures        = 2000
 	contractMaxRouteCharacters = 32
@@ -474,7 +474,7 @@ func decodeFeed(t *testing.T, body []byte) FeatureCollection {
 	return collection
 }
 
-// validateContract checks a success body against packages/contracts/vehicles.schema.json.
+// validateContract checks a success body against the pinned vehicles contract.
 func validateContract(t *testing.T, body []byte) {
 	t.Helper()
 	var document map[string]any

@@ -32,7 +32,7 @@ import {
 } from '../src/layer-rules.js';
 
 const readContract = name =>
-  JSON.parse(fileSystem.readFileSync(new URL(`../../../packages/contracts/${name}`, import.meta.url)));
+  JSON.parse(fileSystem.readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${name}`))));
 const rules = readContract('editor-layers.json');
 const geometryCases = readContract('fixtures/editor-geometry-cases.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));

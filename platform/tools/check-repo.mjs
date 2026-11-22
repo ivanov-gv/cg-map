@@ -150,6 +150,55 @@ for (const file of integrationTestFiles) {
   if (file === integrationDataHelper) continue;
   assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
 }
+// Consumers resolve contracts from their pinned package in tests. Each app build has one HEAD-root resolver; data and
+// tests/ own their own HEAD exceptions.
+const CONTRACT_PATH_HELPER = 'tests/contracts-root.mjs';
+const DEV_CONTRACT_ROOTS = new Set([
+  'apps/web/tools/contracts-root.mjs',
+  'apps/editor/tools/contracts-root.mjs',
+  'apps/core-demo/tools/contracts-root.mjs'
+]);
+// Platform's planner, verifier, guard and their tests name repository contract paths as data, not as consumer reads.
+const contractPathMetadata = new Set([
+  'platform/tools/check-repo.mjs',
+  'platform/tools/ci-plan.mjs',
+  'platform/tools/verify.mjs',
+  'platform/tests/agents.test.mjs',
+  'platform/tests/ci-plan.test.mjs',
+  'platform/tests/makefiles.test.mjs',
+  'platform/tests/package-pins.test.mjs',
+  'platform/tests/workflows.test.mjs'
+]);
+// Match the directory itself: any extension, interpolation or join style still reads unreleased contracts.
+const repositoryContractsPattern = new RegExp(
+  [
+    '(?<![\\w-])(?:\\.\\.\\/)*packages\\/contracts\\b',
+    '(?<![\\w-])(?:\\.\\.\\/)+contracts\\/',
+    "['\"]packages['\"]\\s*,\\s*['\"]contracts['\"]"
+  ].join('|')
+);
+const pinnedContractsRule = 'relative contract paths must go through the pinned @ivanov-gv/map-contracts package or a sanctioned app build resolver';
+// These probes keep the guard honest about the paths and join styles earlier versions missed.
+const contractPathProbes = [
+  ['template literal', '`../../packages/contracts/${name}`'],
+  ['directory join', "path.join(root, 'packages/contracts')"],
+  ['split join', "path.join(root, 'packages', 'contracts')"],
+  ['map-core relative', "'../../contracts/schema.json'"],
+  ['Makefile proto', '$(ROOT)/packages/contracts/proto/vehicles.proto']
+];
+for (const [form, probe] of contractPathProbes) {
+  assert.match(probe, repositoryContractsPattern, `${form} must be rejected by ${pinnedContractsRule}`);
+}
+const contractConsumers = ['apps/web', 'apps/editor', 'apps/core-demo', 'packages/map-core', 'platform', 'services/backend', 'services/transit-relay', 'tests'];
+for (const component of contractConsumers) {
+  const files = walk(component).filter(
+    file => (/\.(?:mjs|js|json|go|py)$/.test(file) || file.endsWith('/Makefile')) && !file.includes('/node_modules/')
+  );
+  for (const file of files) {
+    if (file === CONTRACT_PATH_HELPER || contractPathMetadata.has(file) || DEV_CONTRACT_ROOTS.has(file)) continue;
+    assert.ok(!repositoryContractsPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${pinnedContractsRule}`);
+  }
+}
 const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);

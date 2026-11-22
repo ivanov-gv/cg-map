@@ -16,6 +16,9 @@
     "maplibre-gl": "5.12.0",
     "pmtiles": "4.3.0"
   },
+  "devDependencies": {
+    "@ivanov-gv/map-contracts": "0.1.0"
+  },
   "description": "Shared map runtime, assets and build helpers for Kompas map applications.",
   "license": "MIT",
   "repository": {

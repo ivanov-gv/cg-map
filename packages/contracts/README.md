@@ -3,6 +3,13 @@
 Published formats shared by data producers and application consumers. Changes require producer and consumer review; see
 [ownership](../../docs/system-architecture/ownership.md).
 
+This folder is a published GitHub Package, `@ivanov-gv/map-contracts`. Its schemas, editor rules, fixtures, proto files
+and `package.json` are exported; consumers import them by package path and pin an exact release such as `0.1.0`. The
+repository version stays `0.0.0-dev` and is not an npm workspace, so it can never satisfy a pin. Merging a contract
+change publishes a dev package; a [release](../../docs/runbooks/release.md#releasing-map-contracts) promotes it without
+rebuilding. Data validation reads HEAD sources against HEAD contracts, and `tests/` reads HEAD through one helper by
+default; a release run points that helper at the exact package being promoted.
+
 `places.schema.json` defines the published place feature: a stable nonempty string identity, nonempty name, supported
 category, WGS84 longitude/latitude point, and a visibility level. The data validator enforces this contract and
 directory-wide uniqueness. Integration tests check that web categories agree with it.

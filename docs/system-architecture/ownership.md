@@ -21,7 +21,8 @@ CODEOWNER; substitute real team handles as people join.
   vehicle APIs, and answers `config.json` so the web app uses them; do not create placeholder microservices.
 - Platform runs domain-owned build/check commands and manages deployment permissions. It does not own product semantics.
 - Shared contract changes need affected producers and consumers reviewed together. Document breaking changes and
-  migration paths.
+  migration paths. Publish a contracts release before bumping a consumer's pin; the release and the bump are separate
+  reviewed changes.
 - Cross-component contract and artifact integration tests live in tests/. Each browser app owns the browser acceptance
   of its own artifact, under its tests/e2e; apps/web includes offline and mocked server-mode journeys. Local tests and
   instructions live with their component.

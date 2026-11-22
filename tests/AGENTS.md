@@ -9,6 +9,9 @@ Read [README.md](README.md), [JavaScript](../docs/engineering/javascript.md) and
 - Read every data source, artifact and tool through [data-root.mjs](data-root.mjs). It uses repository `data/` at HEAD
   by default and honours `MAP_DATA_ROOT`. No other file here may build a repository data path; the repository check
   enforces this.
+- Contracts follow the same pattern through [contracts-root.mjs](contracts-root.mjs): HEAD by default, the exact package
+  being promoted with `make -C tests verify MAP_CONTRACTS_VERSION=<version>`. No other file here may resolve a
+  repository contracts root.
 - A normal run tests data at HEAD. A release run tests the exact package being promoted with
   `make -C tests verify MAP_DATA_VERSION=<version>`; the Makefile installs that version and points the whole suite,
   including the web build, at it.

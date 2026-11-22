@@ -1,0 +1,30 @@
+{
+  "name": "@ivanov-gv/map-contracts",
+  "version": "0.0.0-dev",
+  "type": "module",
+  "description": "Versioned formats shared by Kompas map producers and consumers.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivanov-gv/cg-map.git",
+    "directory": "packages/contracts"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "*.json",
+    "fixtures",
+    "proto",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./*.schema.json": "./*.schema.json",
+    "./editor-layers.json": "./editor-layers.json",
+    "./place-visibility.json": "./place-visibility.json",
+    "./fixtures/*": "./fixtures/*",
+    "./proto/*": "./proto/*"
+  }
+}

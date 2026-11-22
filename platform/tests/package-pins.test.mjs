@@ -10,9 +10,18 @@ import {fileURLToPath} from 'node:url';
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const corePackageName = '@ivanov-gv/map-core';
 const dataPackageName = '@ivanov-gv/map-data';
+const contractsPackageName = '@ivanov-gv/map-contracts';
 const exactVersionPattern = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
 const readJSON = relativePath => JSON.parse(fileSystem.readFileSync(`${repositoryRoot}${relativePath}`));
 const lockedPackages = readJSON('package-lock.json').packages;
+
+// Returns the lock key for a workspace's installed package, preferring its local copy over the hoisted root copy.
+function lockedPackagePath(workspace, packageName) {
+  const rootLockPath = `node_modules/${packageName}`;
+  if (!workspace) return rootLockPath;
+  const workspaceLockPath = `${workspace}/node_modules/${packageName}`;
+  return lockedPackages[workspaceLockPath] ? workspaceLockPath : rootLockPath;
+}
 
 function assertRegistryPin(manifestPath, lockPath, packageName, section) {
   const pinnedVersion = readJSON(manifestPath)[section][packageName];
@@ -45,6 +54,74 @@ test('apps/core-demo uses local core, because it is core dev environment', () =>
 
 test('core in this repository can never satisfy an app pin', () => {
   assert.equal(readJSON('packages/map-core/package.json').version, '0.0.0-dev');
+});
+
+test('every consumer pins its own exact published contracts release, never the local package', () => {
+  const consumerWorkspaces = [
+    '',
+    'apps/web',
+    'apps/editor',
+    'apps/core-demo',
+    'packages/map-core',
+    'platform'
+  ];
+  for (const workspace of consumerWorkspaces) {
+    const manifest = workspace ? `${workspace}/package.json` : 'package.json';
+    assertRegistryPin(
+      manifest,
+      lockedPackagePath(workspace, contractsPackageName),
+      contractsPackageName,
+      'devDependencies'
+    );
+  }
+  assert.equal(readJSON('packages/contracts/package.json').version, '0.0.0-dev');
+  assert.ok(
+    !readJSON('package.json').workspaces.includes('packages/contracts'),
+    'npm must not link the unpublished HEAD package into consumers'
+  );
+});
+
+const pinnedContractsAssignment = 'MAP_CONTRACTS_ROOT="$(node tests/pinned-contracts.mjs)"';
+
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  test(`${application} builds HEAD contracts and tests resolve the app pin`, () => {
+    const makefile = fileSystem.readFileSync(path.join(repositoryRoot, application, 'Makefile'), 'utf8');
+    const dataTargets = makefile.match(/^(.+): export MAP_DATA_ROOT/m)?.[1];
+    const contractsTargets = makefile.match(/^(.+): export MAP_CONTRACTS_ROOT/m)?.[1];
+    assert.ok(dataTargets, `${application}/Makefile must pin data in test targets`);
+    assert.equal(contractsTargets, dataTargets, 'contracts and data must use the same test targets');
+
+    const appPackage = readJSON(`${application}/package.json`);
+    assert.equal(appPackage.scripts.build, 'node tools/build.mjs', 'dev builds must keep repository contracts');
+    const buildSource = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tools/build.mjs'), 'utf8');
+    assert.match(buildSource, /resolveContractsRoot\(\)/);
+    assert.doesNotMatch(buildSource, /import\.meta\.resolve\(['"]@ivanov-gv\/map-contracts/);
+
+    const helper = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tests/pinned-contracts.mjs'), 'utf8');
+    assert.match(helper, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
+    const browserConfig = fileSystem.readFileSync(path.join(repositoryRoot, application, 'playwright.config.mjs'), 'utf8');
+    assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
+    const lifecycleBuilds = ['pretest', 'pretest:built', 'pretest:e2e'].filter(name => appPackage.scripts[name]);
+    assert.ok(lifecycleBuilds.length > 0, 'a test lifecycle must build from the pinned contracts');
+    for (const name of lifecycleBuilds) {
+      assert.ok(
+        appPackage.scripts[name].includes(pinnedContractsAssignment),
+        `${application} ${name} must set MAP_CONTRACTS_ROOT before building`
+      );
+    }
+    if (appPackage.scripts['check:offline']) {
+      assert.ok(appPackage.scripts['check:offline'].includes(pinnedContractsAssignment));
+    }
+  });
+}
+
+test('platform resolves contracts from the pinned package, not repository sources', () => {
+  const resolved = execFileSync('node', ['platform/tools/pinned-contracts-root.mjs'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8'
+  }).trim();
+  assert.match(resolved, /node_modules\/@ivanov-gv\/map-contracts$/);
+  assert.notEqual(resolved, path.join(repositoryRoot, 'packages/contracts'));
 });
 
 test('the map-data package ships every path its consumers read', () => {

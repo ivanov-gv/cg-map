@@ -7,7 +7,8 @@ import {EditSession} from '../src/edit-session.js';
 import {buildChangeset} from '../src/changeset.js';
 import {operationProblem} from '../src/layer-rules.js';
 
-const readContract = filename => JSON.parse(readFileSync(new URL(`../../../packages/contracts/${filename}`, import.meta.url)));
+const readContract = filename =>
+  JSON.parse(readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${filename}`))));
 const fixture = readContract('fixtures/entity-identity-cases.json');
 const rules = readContract('editor-layers.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(entry => entry.level));

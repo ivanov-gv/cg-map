@@ -127,6 +127,57 @@ test('integration repo boundary rejects repository data paths outside the shared
   assert.match(output, /tests\/data-root\.mjs/, output);
 });
 
+test('repo boundary rejects relative contract paths outside the shared helper', t => {
+  const probe = path.join(repoRoot, 'apps/editor/tests', `__contract-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  const relativePath = ['..', '..', 'packages', 'contracts', 'editor-layers.json'].join('/');
+  fs.writeFileSync(probe, `export const schema = '${relativePath}';\n`);
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+});
+
+test('repo boundary rejects bare repository contract paths outside the shared helper', t => {
+  const probe = path.join(repoRoot, 'apps/web/tests', `__contract-path-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  const repositoryPath = ['packages', 'contracts', 'editor-layers.json'].join('/');
+  fs.writeFileSync(probe, `export const schema = '${repositoryPath}';\n`);
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+});
+
+test('each app build has one sanctioned repository contracts root', () => {
+  const guard = fs.readFileSync(path.join(repoRoot, 'platform/tools/check-repo.mjs'), 'utf8');
+  const cleanEnv = {...process.env};
+  delete cleanEnv.MAP_CONTRACTS_ROOT;
+  for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+    const resolver = `${application}/tools/contracts-root.mjs`;
+    assert.ok(fs.existsSync(path.join(repoRoot, resolver)), resolver);
+    assert.ok(guard.includes(resolver), `the repo guard must allow ${resolver}`);
+    const result = spawnSync('node', [resolver], {cwd: repoRoot, encoding: 'utf8', env: cleanEnv});
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), path.join(repoRoot, 'packages/contracts'));
+  }
+});
+
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  test(`${application} repo boundary rejects a second repository contracts root`, t => {
+    const probe = path.join(repoRoot, application, 'tools', `__contract-root-probe-${process.pid}.mjs`);
+    t.after(() => fs.rmSync(probe, {force: true}));
+    fs.writeFileSync(probe, "export const root = '../../../packages/contracts';\n");
+    const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+    assert.notEqual(result.status, 0);
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    assert.ok(output.includes(path.basename(probe)), output);
+    assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+  });
+}
+
 test('the integration data helper defaults to HEAD and honours MAP_DATA_ROOT', () => {
   const helper = path.join(repoRoot, 'tests', 'data-root.mjs');
   const cleanEnv = {...process.env};
@@ -203,9 +254,10 @@ test('each application owns its build and run targets, and the root Makefile has
   }
 });
 
-test("platform's build-web builds the web artifact from its own map-data pin", () => {
+test("platform's build-web builds the web artifact from its own pinned data and contracts", () => {
   const makefile = fs.readFileSync(path.join(repoRoot, 'platform/Makefile'), 'utf8');
   assert.match(makefile, /MAP_DATA_ROOT=.*tools\/pinned-data-root\.mjs/);
+  assert.match(makefile, /MAP_CONTRACTS_ROOT=.*tools\/pinned-contracts-root\.mjs/);
   assert.doesNotMatch(makefile, /apps\/web\/node_modules/);
 });
 
@@ -214,7 +266,6 @@ test('project Makefiles reach other projects only through listed contracts', () 
     'apps/web': ['platform/tools/dev-port.mjs', 'services/backend'],
     'apps/editor': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py', 'platform/tools/lan_certificate.py'],
     'apps/core-demo': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
-    'services/backend': ['packages/contracts/proto'],
     data: ['packages/contracts'],
     platform: ['apps/web'],
     tests: ['apps/web']

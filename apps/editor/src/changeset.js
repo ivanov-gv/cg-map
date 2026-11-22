@@ -1,7 +1,7 @@
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
 
-// Builds the reviewable export described by packages/contracts/editor-changeset.schema.json.
+// Builds the reviewable export described by the pinned editor-changeset schema.
 export async function buildChangeset(session, sources, {id, createdAt, author, reason}) {
   const bases = {};
   const operations = [];

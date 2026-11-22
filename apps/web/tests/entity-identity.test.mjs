@@ -4,8 +4,9 @@ import {readFileSync} from 'node:fs';
 import {normalizePlaces, parseVisibilityConfig, markerKeys} from '@ivanov-gv/map-core';
 import {matchesPlaceSearch, selectNearestPlaces} from '../src/core.js';
 
-const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/entity-identity-cases.json', import.meta.url)));
-const levels = parseVisibilityConfig(JSON.parse(readFileSync(new URL('../../../packages/contracts/place-visibility.json', import.meta.url))));
+const readContract = name => JSON.parse(readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${name}`))));
+const fixture = readContract('fixtures/entity-identity-cases.json');
+const levels = parseVisibilityConfig(readContract('place-visibility.json'));
 
 // Source metadata must not replace the public directory's ID or disappear during normalization and search.
 for (const {name, properties} of fixture.valid) {

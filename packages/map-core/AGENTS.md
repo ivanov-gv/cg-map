@@ -6,7 +6,8 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
 - Runtime imports only sibling package modules and consumes injected engines, URLs and data. No application, pipeline,
   backend, storage or service-worker imports. Export reusable capabilities through src/index.js.
 - This package is a contract for every map application. tools/ and assets/ are part of it; keep them free of any one
-  application's knowledge.
+  application's knowledge. Tests read shared formats from the exact `@ivanov-gv/map-contracts` devDependency; runtime
+  src/ never imports contracts.
 - Keep source GeoJSON immutable; source identity and editing permissions belong to consumers.
 - New capabilities need a control in apps/core-demo and consumer coverage. Preserve the public app's offline module
   inventory.

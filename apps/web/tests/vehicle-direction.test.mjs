@@ -52,7 +52,7 @@ test('compass direction is clockwise from north and distances are local', () => 
 test('movement rules match the Go server tracker (shared fixture)', () => {
   const {cases} = JSON.parse(
     fileSystem.readFileSync(
-      new URL('../../../packages/contracts/fixtures/vehicle-direction-cases.json', import.meta.url)
+      new URL(import.meta.resolve('@ivanov-gv/map-contracts/fixtures/vehicle-direction-cases.json'))
     )
   );
   for (const {name, checks, want} of cases) {
