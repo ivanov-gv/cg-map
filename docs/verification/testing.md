@@ -83,7 +83,7 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | `data/tools` changeset importer, data check, level policy   | `data`, `tests`                                                                             |
 | `data/tests/fixtures`                                       | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
 | `data/sources`, `artifacts`, `imagery`                      | `data`, every map application, `tests`, `platform`, every browser area                      |
-| `packages/contracts`                                        | Those, plus `map-core`, `contracts` and `backend`                                           |
+| `packages/contracts`                                        | `contracts`, `data`, `tests`, `platform`: no browser areas                                  |
 | `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
 | Root files such as `package-lock.json`, or unknown paths    | Everything                                                                                  |
 

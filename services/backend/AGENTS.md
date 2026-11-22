@@ -1,13 +1,14 @@
 # Backend module
 
 Read [README.md](README.md). Run Go commands from services/backend or use make check-go at the repository root. This
-module must remain independently buildable without npm or raw geography. The server serves an explicitly selected
-artifact directory and the PMTiles archive inside it (or one passed with -archive); it does not embed web source. API
-formats follow the exact `@ivanov-gv/map-contracts` pin installed at the repository root: the vehicles endpoint keeps
-services/transit-relay's normalization, cache and headers, except that a failed refresh is not retried for 13 s (the
-relay retries on the next request), plus the optional movement `bearing`/`heading` the relay does not produce. Keep
-direction.go in step with apps/web/src/vehicle-direction.js; the browser reads the pinned fixture and the Go test reads
-a local copy that `tests/` verifies byte-for-byte against that pin. Tests never call the live upstream.
+module must remain independently buildable without raw geography, and its regular checks need no npm. Binding generation
+is the one exception: it needs the root's pinned contracts package from `make setup`. The server serves an explicitly
+selected artifact directory and the PMTiles archive inside it (or one passed with -archive); it does not embed web
+source. API formats follow the exact `@ivanov-gv/map-contracts` pin installed at the repository root: the vehicles
+endpoint keeps services/transit-relay's normalization, cache and headers, except that a failed refresh is not retried
+for 13 s (the relay retries on the next request), plus the optional movement `bearing`/`heading` the relay does not
+produce. Keep direction.go in step with apps/web/src/vehicle-direction.js; the browser reads the pinned fixture and the
+Go test reads a local copy that `tests/` verifies byte-for-byte against that pin. Tests never call the live upstream.
 
 Transport RPCs use ConnectRPC v2 and the versioned protobuf from the pinned contracts package. Keep protocol mapping in
 internal/server/transport; both APIs read the same `vehicles.Observer` until browser migration. Generated bindings in

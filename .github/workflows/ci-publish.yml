@@ -189,10 +189,11 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env: &data-package-env
+    env: &publish-package-env
       PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
       PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
-    steps: &data-package-steps
+      PACKAGE_DIRECTORY: source/data
+    steps: &publish-package-steps
       # The first checkout keeps this revision's publishing action. The second gets the requested source commit.
       - uses: actions/checkout@v7
         with:
@@ -210,7 +211,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/publish-dev-package
         with:
-          directory: source/data
+          directory: ${{ env.PACKAGE_DIRECTORY }}
           flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
           token: ${{ github.token }}
           commit: ${{ steps.commit.outputs.commit }}
@@ -224,9 +225,9 @@ jobs:
     permissions:
       contents: read
       packages: read
-    env: *data-package-env
-    steps: *data-package-steps
-  # A release promotes what this publishes, and consumers pin that release.
+    env: *publish-package-env
+    steps: *publish-package-steps
+  # A release promotes what this publishes, and consumers pin that release. The steps are the data job's shared anchor.
   contracts-package:
     name: Publish map-contracts dev package
     needs: [switch, plan, plan-test-run]
@@ -240,28 +241,8 @@ jobs:
     env: &contracts-package-env
       PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
       PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
-    steps: &contracts-package-steps
-      # The first checkout keeps this revision's publishing action. The second gets the requested source commit.
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Validate commit
-        id: commit
-        uses: ./.github/actions/validate-commit
-        with:
-          commit: ${{ env.PACKAGE_COMMIT }}
-      - name: Check out source
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.commit.outputs.commit }}
-          path: source
-          persist-credentials: false
-      - uses: ./.github/actions/publish-dev-package
-        with:
-          directory: source/packages/contracts
-          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
-          token: ${{ github.token }}
-          commit: ${{ steps.commit.outputs.commit }}
+      PACKAGE_DIRECTORY: source/packages/contracts
+    steps: *publish-package-steps
   contracts-package-test-run:
     name: (test-run) Publish map-contracts dev package
     needs: [switch, plan, plan-test-run]
@@ -273,7 +254,7 @@ jobs:
       contents: read
       packages: read
     env: *contracts-package-env
-    steps: *contracts-package-steps
+    steps: *publish-package-steps
   # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
   browser-image:
     name: Publish browser image

@@ -94,18 +94,21 @@ within the stale window they receive the existing snapshot with `stale: true`. R
 
 ### Regenerate bindings
 
-Install Buf CLI 1.75.0 and use the backend module's pinned generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11):
+Install Buf CLI 1.75.0 and use the backend module's pinned generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11).
+`generate` and `generate-check` read the proto from the root's pinned `@ivanov-gv/map-contracts` package, so install
+that dependency once from the repository root first:
 
 ```sh
+make setup
 make -C services/backend generate
 make -C services/backend generate-check
 ```
 
 Run these from the repository root. `generate` lints the pinned proto package and writes `gen/`; `generate-check`
 generates into a temporary directory and compares it with the committed bindings. Do not edit generated files. Regular
-Go builds and tests consume those bindings and do not need Buf, Node, the shared proto sources or raw geography. The
-explicit ConnectRPC dependency follows the requirement for a protobuf-defined server API; its Go 1.26 minimum is also
-the module's minimum.
+Go builds and tests consume those bindings and need neither Buf nor raw geography; they still need no npm. The explicit
+ConnectRPC dependency follows the requirement for a protobuf-defined server API; its Go 1.26 minimum is also the
+module's minimum.
 
 ## Layout
 

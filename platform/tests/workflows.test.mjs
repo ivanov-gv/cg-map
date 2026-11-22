@@ -900,7 +900,8 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
   assert.match(publish.if, /github\.ref == 'refs\/heads\/main'/, 'the data package could be published from a branch');
   const packageStep = publish.steps.find(step => step.uses?.includes('publish-dev-package'));
   assert.ok(packageStep, 'the data package job must use publish-dev-package');
-  assert.equal(packageStep.with.directory, 'source/data', 'the requested source must be published');
+  assert.equal(packageStep.with.directory, '${{ env.PACKAGE_DIRECTORY }}', 'the step must use the job\'s package root');
+  assert.equal(publish.env.PACKAGE_DIRECTORY, 'source/data', 'the requested source must be published');
   assert.equal(publish.env.PACKAGE_COMMIT, '${{ inputs.commit || github.sha }}', 'dispatch must select a commit');
   const checkouts = publish.steps.filter(step => step.uses === 'actions/checkout@v7');
   assert.equal(checkouts.length, 2, 'the action revision and source commit need separate checkouts');
@@ -913,15 +914,20 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
     'the package identity must use that commit'
   );
   assert.deepEqual(jobs['data-package-test-run'].steps, publish.steps);
+  assert.deepEqual(jobs['data-package-test-run'].env, publish.env);
   assert.equal(jobs['data-package-test-run'].environment, 'test-run');
 });
 
 test('ci-publish publishes a map-contracts dev package when the plan selects contracts', () => {
   const raw = fs.readFileSync(path.join(workflowDir, 'ci-publish.yml'), 'utf8');
-  assert.match(raw, /env: &contracts-package-env/);
-  assert.match(raw, /steps: &contracts-package-steps/);
-  assert.match(raw, /env: \*contracts-package-env/);
-  assert.match(raw, /steps: \*contracts-package-steps/);
+  assert.match(raw, /env: &publish-package-env/);
+  assert.equal((raw.match(/steps: &publish-package-steps/g) || []).length, 1, 'the publishing steps need one anchor');
+  assert.equal(
+    (raw.match(/steps: \*publish-package-steps/g) || []).length,
+    3,
+    'every other package job must share the steps'
+  );
+  assert.doesNotMatch(raw, /&data-package-steps|&contracts-package-steps|\*data-package-steps|\*contracts-package-steps/);
   const {jobs} = load('ci-publish.yml');
   assert.equal(jobs.plan.outputs.contracts, '${{ steps.plan.outputs.contracts }}');
   assert.equal(jobs['plan-test-run'].outputs.contracts, '${{ steps.plan.outputs.contracts }}');
@@ -930,7 +936,8 @@ test('ci-publish publishes a map-contracts dev package when the plan selects con
   assert.match(publish.if, /github\.ref == 'refs\/heads\/main'/, 'the contracts package could be published from a branch');
   const packageStep = publish.steps.find(step => step.uses?.includes('publish-dev-package'));
   assert.ok(packageStep, 'the contracts package job must use publish-dev-package');
-  assert.equal(packageStep.with.directory, 'source/packages/contracts', 'the requested source must be published');
+  assert.equal(packageStep.with.directory, '${{ env.PACKAGE_DIRECTORY }}', 'the step must use the job\'s package root');
+  assert.equal(publish.env.PACKAGE_DIRECTORY, 'source/packages/contracts', 'the requested source must be published');
   assert.equal(publish.env.PACKAGE_COMMIT, '${{ inputs.commit || github.sha }}', 'dispatch must select a commit');
   const checkouts = publish.steps.filter(step => step.uses === 'actions/checkout@v7');
   assert.equal(checkouts.length, 2, 'the action revision and source commit need separate checkouts');
@@ -942,6 +949,7 @@ test('ci-publish publishes a map-contracts dev package when the plan selects con
     '${{ steps.commit.outputs.commit }}',
     'the package identity must use that commit'
   );
+  assert.deepEqual(publish.steps, jobs['data-package'].steps, 'both packages must share the publishing steps');
   assert.deepEqual(jobs['contracts-package-test-run'].steps, publish.steps);
   assert.deepEqual(jobs['contracts-package-test-run'].env, publish.env);
   assert.equal(jobs['contracts-package-test-run'].environment, 'test-run');
