@@ -1,20 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {sourceFiles, validateBundleManifest, decodeSource, loadSourceBundle} from '../src/source-bundle.js';
+import {
+  bundleFilesByVersion,
+  currentBundleVersion,
+  sourceFiles,
+  validateBundleManifest,
+  decodeSource,
+  loadSourceBundle
+} from '../src/source-bundle.js';
 
 const collection = {type: 'FeatureCollection', features: []};
 const bytes = new TextEncoder().encode(JSON.stringify(collection));
 const sha256 = createHash('sha256').update(bytes).digest('hex');
 const metadata = filename => ({filename, sha256, bytes: bytes.length, featureCount: 0});
-const manifest = () => ({version: 1, layers: sourceFiles.map(metadata)});
+const manifest = (version = currentBundleVersion) => ({version, layers: bundleFilesByVersion[version].map(metadata)});
 
-test('manifest requires exactly one entry per source filename and valid metadata', () => {
-  assert.equal(validateBundleManifest(manifest()).layers.length, 9);
+test('manifest accepts both bundle versions and requires one entry per supported filename', () => {
+  assert.deepEqual(bundleFilesByVersion[1], [
+    'building-labels.geojson',
+    'buildings.geojson',
+    'context-countries.geojson',
+    'land.geojson',
+    'places.geojson',
+    'roads.geojson',
+    'transport-stops.geojson',
+    'water.geojson'
+  ]);
+  assert.deepEqual(bundleFilesByVersion[2], ['building-entrances.geojson', ...bundleFilesByVersion[1]]);
+  for (const version of [1, 2]) {
+    assert.equal(
+      validateBundleManifest(manifest(version)).layers.length,
+      bundleFilesByVersion[version].length
+    );
+  }
   const duplicate = manifest();
   duplicate.layers[1] = duplicate.layers[0];
-  assert.throws(() => validateBundleManifest(duplicate), /exactly the nine/);
-  for (const invalid of [{version: 2}, {version: 1, layers: []}]) {
+  assert.throws(() => validateBundleManifest(duplicate), /exactly the 9/);
+  const v1WithEntrance = manifest(1);
+  v1WithEntrance.layers.push(metadata('building-entrances.geojson'));
+  assert.throws(() => validateBundleManifest(v1WithEntrance), /exactly the 8/);
+  const v2WithoutEntrance = manifest(2);
+  v2WithoutEntrance.layers.shift();
+  assert.throws(() => validateBundleManifest(v2WithoutEntrance), /exactly the 9/);
+  for (const invalid of [
+    {version: 3, layers: sourceFiles.map(metadata)},
+    {version: 1, layers: []},
+    {version: 1, layers: bundleFilesByVersion[2].map(metadata)}
+  ]) {
     assert.throws(() => validateBundleManifest(invalid));
   }
   const invalidHash = manifest();

@@ -7,11 +7,12 @@ Run `make -C apps/editor dev` and open the printed local URL. The standalone art
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest
 place to install it from. It has no access control, and its data is already public.
 
-The build assembles all nine reviewed source GeoJSON files through data-owned tooling. The editor verifies version,
-filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes bind revision-local indices; they
-are not invented upstream IDs. Selecting a feature reads full source geometry/properties, never simplified tiles.
-Unknown properties, provenance and any source feature ID are displayed unchanged. Source files are never written.
-Hashing needs a secure context, so anything but `localhost` must use HTTPS.
+The build assembles the nine reviewed source GeoJSON files of bundle version 2 through data-owned tooling. The editor
+also accepts version 1, the original eight files without entrance points, from older reviewed bundles. It verifies the
+manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes bind
+revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source geometry/properties,
+never simplified tiles. Unknown properties, provenance and any source feature ID are displayed unchanged. Source files
+are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an
@@ -27,8 +28,8 @@ icons using its working features. Browse restores the reviewed release. Hollow g
 amber guides identify applied changes. A blue outer outline marks selection independently. Tools can hide guides without
 closing the inspector or discarding an edit. Guides appear from zoom 15 and can reveal POIs below their public
 threshold; with guides off, only normally rendered objects can be selected, using public thresholds and label collision
-rules. Country outlines, bus stops and OSM entrance points remain read-only; entrance points are inspectable in the
-source list and inspector.
+rules. Country outlines and bus stops remain read-only. In version 2 bundles, OSM entrance points are also read-only,
+inspectable in the source list and inspector.
 
 When a click or tap hits several objects, a named chooser lets you select each one. Objects in the toolbar lists visible
 objects in the current map view, including co-located POIs; use Tab and Enter or Space to select one. Names include

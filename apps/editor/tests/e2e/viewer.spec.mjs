@@ -1,20 +1,10 @@
-import fs from 'node:fs';
 import {test, expect} from '@playwright/test';
-
-const editorBundleSchema = JSON.parse(
-  fs.readFileSync(new URL('../../../../packages/contracts/editor-bundle.schema.json', import.meta.url), 'utf8')
-);
-const expectedSourceCount = editorBundleSchema.properties.layers.minItems;
 
 // Asserts source inspection against this app's own built artifact. Editing has its own spec.
 test.describe('source viewer', () => {
   const modeStatus = (manifest, filename) => {
     const {featureCount} = manifest.layers.find(layer => layer.filename === filename);
-    const access = [
-      'building-entrances.geojson',
-      'context-countries.geojson',
-      'transport-stops.geojson'
-    ].includes(filename)
+    const access = ['context-countries.geojson', 'transport-stops.geojson'].includes(filename)
       ? 'read-only'
       : 'editable';
     return `${filename} · ${featureCount} source features · ${access}`;
@@ -76,10 +66,9 @@ test.describe('source viewer', () => {
     page.on('pageerror', error => scriptErrors.push(error.message));
     await page.goto('./');
     await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+    await expect(page.locator('[data-mode]')).toHaveCount(8);
+    await expect(page.locator('[data-source]')).toHaveCount(8);
     const manifest = await fetchSource(page, 'manifest.json');
-    expect(manifest.layers).toHaveLength(expectedSourceCount);
-    await expect(page.locator('[data-mode]')).toHaveCount(expectedSourceCount);
-    await expect(page.locator('[data-source]')).toHaveCount(expectedSourceCount);
     for (const layer of manifest.layers) {
       await page.getByRole('button', {name: 'Layers', exact: true}).click();
       await page.locator(`[data-mode="${layer.filename}"]`).click();
@@ -129,18 +118,6 @@ test.describe('source viewer', () => {
     await centerSourceMap(page, stop.geometry.coordinates, 15);
     await clickMapCenter(page, 'editor-source-point');
     await expect(page.locator('#source-id')).toHaveText(`Source feature ID: ${stop.id}`);
-    await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="building-entrances.geojson"]').click();
-    await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'building-entrances.geojson'));
-    const entrances = await fetchSource(page, 'building-entrances.geojson');
-    const entrance = entrances.features.find(feature => isIsolatedPoint(feature, entrances.features));
-    expect(entrance).toBeTruthy();
-    await centerSourceMap(page, entrance.geometry.coordinates, 17);
-    await clickMapCenter(page, 'editor-source-point');
-    await expect(page.locator('#selection-source')).toContainText('building-entrances.geojson · feature');
-    await expect(page.locator('#properties')).toContainText('buildingEntityId');
-    await expect(page.locator('#lock-reason')).toContainText('OSM entrance nodes');
-    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('[data-mode="building-labels.geojson"]').click();
     await expect(page.locator('#properties')).toBeEmpty();

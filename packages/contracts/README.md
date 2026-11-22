@@ -77,10 +77,12 @@ explicit UI migration. See [backend generation and API usage](../../services/bac
 `make verify PKG=packages/contracts` checks these files only. When a contract changes, CI also runs each producer's and
 consumer's own pipeline.
 
-`editor-bundle.schema.json` defines the version-1 source viewer bundle: one filename, byte size, feature count and
-SHA-256 per source GeoJSON file. Data-owned assembly preserves bytes; the editor verifies the entire bundle before
-enabling modes. Feature indices are tied to that hash and are not stable upstream identities. This contract does not
-define editing or changesets; the formats below do. The bundle is built into dist/editor only.
+`editor-bundle.schema.json` defines the source viewer bundle: one filename, byte size, feature count and SHA-256 per
+source GeoJSON file. Version 1 is frozen at the original eight files; version 2 adds `building-entrances.geojson` and
+stays open until the Feature stack merges. Data-owned assembly writes version 2 and preserves bytes; the editor accepts
+both versions and verifies the entire bundle before enabling modes. Feature indices are tied to that hash and are not
+stable upstream identities. This contract does not define editing or changesets; the formats below do. The bundle is
+built into dist/editor only. See [decision 0022](../../docs/decisions/0022-editor-bundle-versions.md).
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
 types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and

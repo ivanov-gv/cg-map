@@ -27,6 +27,32 @@ test('the level table has consecutive levels with increasing zooms and an admitt
   assert.ok(levels.some(entry => entry.level === legacyFallbackLevel));
 });
 
+test('editor bundle versions keep version 1 frozen and version 2 additive', () => {
+  const schema = readJSON('editor-bundle.schema.json');
+  assert.deepEqual(schema.properties.version.enum, [1, 2]);
+  const [version1, version2] = schema.oneOf;
+  assert.equal(version1.properties.version.const, 1);
+  assert.equal(version2.properties.version.const, 2);
+  const originalFiles = [
+    'building-labels.geojson',
+    'buildings.geojson',
+    'context-countries.geojson',
+    'land.geojson',
+    'places.geojson',
+    'roads.geojson',
+    'transport-stops.geojson',
+    'water.geojson'
+  ];
+  const version1Files = version1.properties.layers.items.properties.filename.enum;
+  const version2Files = version2.properties.layers.items.properties.filename.enum;
+  assert.deepEqual(version1Files, originalFiles);
+  assert.deepEqual(version2Files, [...originalFiles, 'building-entrances.geojson'].sort());
+  assert.equal(version1.properties.layers.minItems, version1Files.length);
+  assert.equal(version1.properties.layers.maxItems, version1Files.length);
+  assert.equal(version2.properties.layers.minItems, version2Files.length);
+  assert.equal(version2.properties.layers.maxItems, version2Files.length);
+});
+
 test('shared fixtures are valid JSON', () => {
   for (const filename of readdirSync(new URL('fixtures/', contractsDirectory))) {
     assert.doesNotThrow(() => readJSON(`fixtures/${filename}`), filename);

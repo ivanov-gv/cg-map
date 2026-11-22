@@ -79,11 +79,12 @@ place-only command above with `--update-provenance --accept-new-facts`. Never pa
 The reviewed extract copies OSM building tags into `buildings.geojson`, folds only case and whitespace when joining
 `addr:street` to one road group, and records no-number placeholders as `nohousenumber: "yes"`. It also writes
 `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints, and adds
-`buildingEntityId` to places inside those footprints. The nine-source editor bundle lists the new entrance file; the
-editor can inspect it but cannot change it. The separate `entrances` array in `building-labels.geojson` remains the
-runtime arrow/label format and is not generated from this source file. See
-[building addresses](../map-data/building-numbers.md) and
-[decision 0021](../decisions/0021-osm-building-source-details.md).
+`buildingEntityId` to places inside those footprints. The version-2 editor bundle lists the new entrance file; the
+editor can inspect it but cannot change it, and still accepts a version-1 bundle with the original eight files. The
+separate `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is not generated from
+this source file. See [building addresses](../map-data/building-numbers.md),
+[decision 0021](../decisions/0021-osm-building-source-details.md) and
+[decision 0022](../decisions/0022-editor-bundle-versions.md).
 
 Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
 `building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed
