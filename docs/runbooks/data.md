@@ -113,7 +113,8 @@ archive rebuild.
 The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
 from the reviewed PBF. They are read-only in the editor: refresh them with a full extract or the named `--layers`
 groups, never with a changeset. The shared-edge construction and simplification rule are recorded in
-[decision 0024](../decisions/0024-shared-border-edges.md).
+[decision 0024](../decisions/0024-shared-border-edges.md); the current gap partition rule is in
+[decision 0025](../decisions/0025-derived-unassigned-water-areas.md).
 
 ```sh
 python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers borders settlements \
@@ -124,16 +125,18 @@ make verify PKG=data
 ```
 
 The topology command checks polygon validity, zero-area pairwise intersections, land coverage, polygon reconstruction
-from traversal-ordered edge references, edge use from both sides, settlement counts and the combined 5 MB budget.
-Exterior sides come from matched OSM coastline or `admin_level=2` way tags, with over 0.1% segment overlap so an
-endpoint touch cannot claim an edge; a boundary chain splits where supported coverage intervals of different authorities
-end and begin together. It compares the municipality union with the country outline without subtracting water: the
-extractor assigns internal gaps larger than 100 m², including Lake Skadar, to the adjacent municipality with the longest
-shared boundary. Remaining slivers are measured in local square metres, and the check fails above 20,000 m² uncovered or
-10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25 municipalities, 110 edges, 4,009 settlements, 14,840
-m² uncovered and 3,048 m² extra. The new sources are not inputs to the tile builder, so their first release did not
-change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path below. Existing
-town labels are compared with the new settlement source in [hard-coded town coverage](../map-data/hard-coded-towns.md).
+from traversal-ordered edge references, edge use from both sides, settlement counts, the derived-water kind and the
+combined 5 MB budget. Exterior sides come from matched OSM coastline or `admin_level=2` way tags, with over 0.1% segment
+overlap so an endpoint touch cannot claim an edge; a boundary chain splits where supported coverage intervals of
+different authorities end and begin together. It compares the published area union with the country outline without
+subtracting water: internal gaps larger than 100 m² and exterior water larger than 1,000,000 m² remain
+`unassigned-water` areas, while smaller exterior residue joins the adjacent municipality with the longest shared
+boundary (nearest distance, then ISO code, on ties). Published gaps are recomputed after that fill, and Lake Skadar and
+its municipal neighbours share a cleaned six-decimal shoreline. Remaining slivers are measured in local square metres,
+and the check fails above 20,000 m² uncovered or 10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25
+municipalities, one unassigned-water area, 141 edges, 4,009 settlements, 14,815 m² uncovered and 3,048 m² extra. The new
+sources are not inputs to the tile builder, so their first release did not change the reviewed archive; a refresh of
+land, water, roads or buildings still follows the rebuild path below.
 
 ## Editor changesets
 
