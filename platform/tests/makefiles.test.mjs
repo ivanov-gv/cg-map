@@ -143,6 +143,12 @@ test('each application owns its build and run targets, and the root Makefile has
   }
 });
 
+test("platform's build-web builds the web artifact from its own map-data pin", () => {
+  const makefile = fs.readFileSync(path.join(repoRoot, 'platform/Makefile'), 'utf8');
+  assert.match(makefile, /MAP_DATA_ROOT=.*tools\/pinned-data-root\.mjs/);
+  assert.doesNotMatch(makefile, /apps\/web\/node_modules/);
+});
+
 test('project Makefiles reach other projects only through listed contracts', () => {
   const allowedReaches = {
     'apps/web': ['platform/tools/dev-port.mjs', 'services/backend'],

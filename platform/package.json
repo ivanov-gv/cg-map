@@ -1,0 +1,9 @@
+{
+  "name": "@cg-map/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@ivanov-gv/map-data": "0.1.0"
+  }
+}

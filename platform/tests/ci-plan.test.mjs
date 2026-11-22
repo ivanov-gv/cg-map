@@ -40,9 +40,9 @@ const cases = [
   ['transit relay', ['services/transit-relay/relay.mjs'], ['transit-relay'], []],
   ['integration tests', ['tests/integration/archive.test.mjs'], ['tests'], []],
   ['data tools', ['data/tools/pack.py'], ['data'], []],
-  ['data sources', ['data/sources/places.geojson'], ['platform', 'data', 'tests'], []],
-  ['released artifact', ['data/artifacts/release.json'], ['platform', 'data', 'tests'], []],
-  ['shared data tool', ['data/tools/app-data.mjs'], ['platform', 'data', 'tests'], []],
+  ['data sources', ['data/sources/places.geojson'], ['data', 'tests'], []],
+  ['released artifact', ['data/artifacts/release.json'], ['data', 'tests'], []],
+  ['shared data tool', ['data/tools/app-data.mjs'], ['data', 'tests'], []],
   [
     'contracts',
     ['packages/contracts/places.schema.json'],
@@ -111,6 +111,13 @@ for (const [name, files, folders, areas] of cases) {
     assert.deepEqual(new Set(plan.areas), new Set(areas));
   });
 }
+
+test('a data-only change selects only data and cross-project tests', () => {
+  const plan = planChanges(['data/sources/places.geojson', 'data/artifacts/release.json']);
+  assert.deepEqual(new Set(plan.folders), new Set(['data', 'tests']));
+  assert.deepEqual(plan.areas, []);
+  assert.deepEqual(plan.editorAreas, []);
+});
 
 test('every data path selects no app pipeline or browser area', () => {
   const samples = [

@@ -165,9 +165,8 @@ const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 const MAP_CONTRACT_DEPENDENTS = ['map-core', ...MAP_APPLICATIONS, 'tests', 'platform'];
-// App tests pin a published map-data release. HEAD data still reaches the integration project and the platform's own
-// web build, so those two pipelines follow data changes; no app test needs to run.
-const HEAD_DATA_CONSUMERS = ['tests', 'platform'];
+// App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
+const HEAD_DATA_CONSUMERS = ['tests'];
 
 // Returns the areas of one project that a changed file needs. Anything not known to be narrower runs every area.
 function areasForFile(file, {project, areaTable, sharedSources}) {
