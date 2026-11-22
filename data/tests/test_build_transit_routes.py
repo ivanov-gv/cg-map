@@ -5,6 +5,8 @@ import unittest
 import sys
 from pathlib import Path
 
+from shapely.geometry import Polygon
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
 from build_transit_routes import (
     classify_by_municipality,
@@ -52,15 +54,6 @@ class TestClassifyByMunicipality(unittest.TestCase):
         )
 
 
-_shapely_available = False
-try:
-    from shapely.geometry import Polygon as _ShapelyPolygon
-    _shapely_available = True
-except ImportError:
-    pass
-
-
-@unittest.skipUnless(_shapely_available, 'shapely not installed')
 class TestFindMunicipality(unittest.TestCase):
     """Test point-in-municipality with synthetic polygons."""
 
@@ -68,29 +61,29 @@ class TestFindMunicipality(unittest.TestCase):
         """A point inside a synthetic municipality polygon is found."""
         # Simple rectangle covering (0,0) to (1,1)
         municipalities = {
-            'ME-01': _ShapelyPolygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+            'ME-01': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
         }
         self.assertEqual(find_municipality(0.5, 0.5, municipalities), 'ME-01')
 
     def test_point_outside_all_polygons(self):
         """A point outside all polygons returns None."""
         municipalities = {
-            'ME-01': _ShapelyPolygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+            'ME-01': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
         }
         self.assertIsNone(find_municipality(5, 5, municipalities))
 
     def test_point_on_boundary_is_found(self):
         """A point on the boundary of a polygon is considered inside."""
         municipalities = {
-            'ME-01': _ShapelyPolygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+            'ME-01': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
         }
         self.assertEqual(find_municipality(0.0, 0.5, municipalities), 'ME-01')
 
     def test_two_disjoint_municipalities(self):
         """Two disjoint polygons return the correct one for each point."""
         municipalities = {
-            'ME-01': _ShapelyPolygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
-            'ME-02': _ShapelyPolygon([(2, 0), (3, 0), (3, 1), (2, 1), (2, 0)]),
+            'ME-01': Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]),
+            'ME-02': Polygon([(2, 0), (3, 0), (3, 1), (2, 1), (2, 0)]),
         }
         self.assertEqual(find_municipality(0.5, 0.5, municipalities), 'ME-01')
         self.assertEqual(find_municipality(2.5, 0.5, municipalities), 'ME-02')

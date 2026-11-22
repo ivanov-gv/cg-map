@@ -534,16 +534,40 @@ def build_transit_routes(network, pbf_path):
     return all_routes
 
 
-def write_routes(path, routes):
+def _existing_retrieved_at(path):
+    """Return the retrievedAt value from an existing routes file, if present.
+
+    Preserving this timestamp keeps reruns deterministic when the route data
+    itself has not changed.
+    """
+    if not path.exists():
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as existing_file:
+            data = json.load(existing_file)
+    except (OSError, json.JSONDecodeError):
+        return None
+    retrieved_at = data.get('retrievedAt')
+    if isinstance(retrieved_at, str) and retrieved_at:
+        return retrieved_at
+    return None
+
+
+def write_routes(path, routes, retrieved_at=None):
     """Write the transit routes JSON with one route per line for git merges.
 
     Format: {"retrievedAt":...,"routes":[\n<route>,\n<route>\n]}
     Keys are sorted for clean git diffs. Each route object is compact JSON
     on its own line so that adding or removing a route produces a single-line
-diff.
+    diff. When *retrieved_at* is not provided, the existing file's value is
+    preserved so reruns stay byte-identical.
     """
+    if retrieved_at is None:
+        retrieved_at = _existing_retrieved_at(path)
+    if retrieved_at is None:
+        retrieved_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     header = json.dumps({
-        'retrievedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'retrievedAt': retrieved_at,
         'source': 'https://epodgorica.me/javniprevoz/mapa',
         'version': 1,
     }, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
@@ -556,16 +580,38 @@ diff.
     return encoded
 
 
+def _existing_provenance_retrieved_at(path):
+    """Return retrieved_at from an existing provenance file, if present."""
+    if not path.exists():
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as existing_file:
+            data = json.load(existing_file)
+    except (OSError, json.JSONDecodeError):
+        return None
+    retrieved_at = data.get('retrieved_at')
+    if isinstance(retrieved_at, str) and retrieved_at:
+        return retrieved_at
+    return None
+
+
 def write_provenance(provenance_path, file_bytes, routes):
-    """Write the provenance JSON for transit routes."""
+    """Write the provenance JSON for transit routes.
+
+    Preserves an existing retrieved_at timestamp so reruns stay deterministic
+    when the route data itself has not changed.
+    """
     city_count = sum(1 for r in routes if r['network'] == 'bus')
     intercity_count = sum(1 for r in routes if r['network'] == 'intercity')
     with_colour = sum(1 for r in routes if 'colour' in r)
+    retrieved_at = _existing_provenance_retrieved_at(provenance_path)
+    if retrieved_at is None:
+        retrieved_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     provenance = {
         'source': 'https://epodgorica.me/javniprevoz/mapa',
         'osm_source': str(DEFAULT_PBF),
-        'retrieved_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'retrieved_at': retrieved_at,
         'bytes': len(file_bytes),
         'sha256': hashlib.sha256(file_bytes).hexdigest(),
         'routes': len(routes),
