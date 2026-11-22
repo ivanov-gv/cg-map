@@ -25,7 +25,7 @@
       "attribution": "© OpenStreetMap contributors (municipality boundaries from reviewed source)",
       "fileName": "municipalities.geojson",
       "license": "Open Database License 1.0 (ODbL)",
-      "sha256": "f5fd9513d16db2b2c7660657a3e43578c957bfe91b77f43e1f0273f17b9f5d61",
+      "sha256": "8cc7e03b55ee5d99246dd37eba6f4b387496cae3d50647891bb03faf5d0d7a86",
       "source": "data/sources/municipalities.geojson"
     }
   ]
