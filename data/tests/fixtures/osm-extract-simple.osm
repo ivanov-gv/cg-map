@@ -194,4 +194,53 @@
     <tag k="ISO3166-1" v="ME"/>
     <tag k="name" v="Montenegro"/>
   </way>
+
+  <!-- A street split into two ways that share node 7102 is one connected group. -->
+  <node id="7101" version="1" lat="42.455" lon="19.24"/>
+  <node id="7102" version="1" lat="42.455" lon="19.25"/>
+  <node id="7103" version="1" lat="42.455" lon="19.26"/>
+  <way id="4101" version="1">
+    <nd ref="7101"/><nd ref="7102"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Joined Street"/>
+  </way>
+  <way id="4102" version="2">
+    <nd ref="7102"/><nd ref="7103"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="joined   street"/>
+  </way>
+  <node id="7201" version="1" lat="42.4555" lon="19.244"/>
+  <node id="7202" version="1" lat="42.4555" lon="19.246"/>
+  <node id="7203" version="1" lat="42.4565" lon="19.246"/>
+  <node id="7204" version="1" lat="42.4565" lon="19.244"/>
+  <way id="4103" version="1">
+    <nd ref="7201"/><nd ref="7202"/><nd ref="7203"/><nd ref="7204"/><nd ref="7201"/>
+    <tag k="building" v="yes"/>
+    <tag k="addr:street" v="Joined Street"/>
+  </way>
+
+  <!-- Two disconnected groups carry this name, so neither building may join. -->
+  <node id="7301" version="1" lat="42.46" lon="19.24"/>
+  <node id="7302" version="1" lat="42.46" lon="19.25"/>
+  <node id="7303" version="1" lat="42.465" lon="19.24"/>
+  <node id="7304" version="1" lat="42.465" lon="19.25"/>
+  <way id="4104" version="1">
+    <nd ref="7301"/><nd ref="7302"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Remote Street"/>
+  </way>
+  <way id="4105" version="1">
+    <nd ref="7303"/><nd ref="7304"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Remote Street"/>
+  </way>
+  <node id="7401" version="1" lat="42.461" lon="19.244"/>
+  <node id="7402" version="1" lat="42.461" lon="19.246"/>
+  <node id="7403" version="1" lat="42.462" lon="19.246"/>
+  <node id="7404" version="1" lat="42.462" lon="19.244"/>
+  <way id="4106" version="1">
+    <nd ref="7401"/><nd ref="7402"/><nd ref="7403"/><nd ref="7404"/><nd ref="7401"/>
+    <tag k="building" v="yes"/>
+    <tag k="addr:street" v="Remote Street"/>
+  </way>
 </osm>

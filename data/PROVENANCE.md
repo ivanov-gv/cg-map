@@ -16,7 +16,8 @@ entrance nodes on or within one metre of a published footprint, with 28 nearby c
 `sources/buildings.geojson` carries 43,978 `building` values, 445 `building:levels`, three `building:material`, one
 `start_date`, 265 `name`, 142 `roof:levels`, 896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number
 placeholders were omitted and recorded as `nohousenumber: "yes"`. A street name joins to a road entity only when case-
-and whitespace-folded text matches exactly one published road group: 108 joined and 788 did not. There are 1,088 places
+and whitespace-folded text matches exactly one connected group of same-named road ways; `addr:streetEntityId` names the
+group's lowest way ID and `addr:streetEntityIds` lists its members: 321 joined and 575 did not. There are 1,088 places
 inside a footprint and 788 outside. Counts per copied tag and entrance kind live in `sources/provenance.json` under
 `building_details`. No energy-class field is published: no open OSM source in this extract supports one, and marking
 that gap here avoids presenting an inferred value as a source fact.

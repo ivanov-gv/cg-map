@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/buildings/v1",
   "title": "Building footprint source v1",
-  "description": "OSM footprints with copied building attributes and address joins. Placeholders become nohousenumber instead of a house number; street joins use the road entity ID when the normalised name matches exactly one published road group.",
+  "description": "OSM footprints with copied building attributes and address joins. Placeholders become nohousenumber instead of a house number; a street joins to the representative (lowest way ID) and all member IDs of one connected group of same-named published roads.",
   "type": "object",
   "required": ["type", "entitySchemaVersion", "features"],
   "properties": {
@@ -42,7 +42,13 @@
                   "addr:street": {"type": "string", "minLength": 1, "maxLength": 120},
                   "addr:housenumber": {"type": "string", "minLength": 1, "maxLength": 128},
                   "nohousenumber": {"const": "yes"},
-                  "addr:streetEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"}
+                  "addr:streetEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"},
+                  "addr:streetEntityIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"}
+                  }
                 }
               }
             ]

@@ -2,7 +2,7 @@
   "source": "OpenStreetMap / Geofabrik Montenegro",
   "upstream_snapshot": "2026-11-20T21:21:21Z",
   "input_pbf_sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b",
-  "buildings_sha256": "cbab5e11b10a46adab8e4378dade669b7c296adf436ee4b2cf5af834ee94c045",
+  "buildings_sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9",
   "generated_at": "2026-11-21T16:13:46.865171+00:00",
   "features": 1207,
   "direct_building_addresses": 1003,

@@ -53,9 +53,11 @@ imply complete address coverage.
 `start_date`, `name`, `addr:street`, `addr:housenumber` and `roof:levels` tags. A house number that only says "no
 number" is omitted and replaced by `nohousenumber: "yes"`; the placeholder list comes from the editor's
 `addr:housenumber` rule. `addr:streetEntityId` is added only when case- and whitespace-folded `addr:street` matches
-exactly one published road group; an unmatched or ambiguous name has no join field. Street folding never transliterates
-or removes punctuation. Its `addr:housenumber` placeholder rule is identical to the building-label rule, and a data
-contract test keeps the two copies in step. There is no energy-class property: no open OSM source supports one.
+exactly one connected group of same-named published road ways (ways sharing an end node). It names the group's lowest
+way ID, and `addr:streetEntityIds` lists every way in that group; an unmatched name or several disconnected groups has
+no join field. Street folding never transliterates or removes punctuation. Its `addr:housenumber` placeholder rule is
+identical to the building-label rule, and a data contract test keeps the two copies in step. There is no energy-class
+property: no open OSM source supports one.
 
 `building-entrances.schema.json` defines `building-entrances.geojson`: one adopted point feature per OSM `entrance=*`
 node on or within one metre of a published footprint in the detail box. Its `entrance`, `ref`, `level`, `wheelchair`,

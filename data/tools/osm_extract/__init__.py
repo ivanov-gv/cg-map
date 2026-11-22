@@ -16,7 +16,7 @@ class ExtractionState:
     coastlines: list = field(default_factory=list)
     # Published building parts, keyed by identity and part, for joins after the pass.
     buildings: dict = field(default_factory=dict)
-    # Normalised street name to the distinct road entity IDs that carry it.
+    # Normalised street name to published roads as (entity ID, first node, last node).
     road_names: dict = field(default_factory=dict)
     # Counts written beside the reviewed source provenance.
     building_counts: dict = field(default_factory=dict)

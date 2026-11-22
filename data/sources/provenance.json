@@ -11,8 +11,8 @@
     },
     "buildings.geojson": {
       "features": 43978,
-      "bytes": 14560904,
-      "sha256": "cbab5e11b10a46adab8e4378dade669b7c296adf436ee4b2cf5af834ee94c045"
+      "bytes": 14601929,
+      "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
     },
     "land.geojson": {
       "features": 332,
@@ -66,9 +66,9 @@
   },
   "building_details": {
     "addr:street": 896,
-    "addr:streetUnjoined": 788,
+    "addr:streetUnjoined": 575,
     "addr:housenumberPresent": 1003,
-    "addr:streetEntityId": 108,
+    "addr:streetEntityId": 321,
     "nohousenumber": 6,
     "building": 43978,
     "building:levels": 445,
@@ -95,6 +95,8 @@
     "entrance:door": 1,
     "entrance:addr:floor": 1,
     "placesInsideBuildings": 1088,
-    "placesOutsideBuildings": 788
+    "placesOutsideBuildings": 788,
+    "addr:streetEntityIds": 321,
+    "entrance:nohousenumber": 0
   }
 }

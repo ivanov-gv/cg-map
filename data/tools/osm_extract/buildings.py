@@ -32,6 +32,37 @@ def normalize_street_name(value):
     return ' '.join(value.split()).casefold()
 
 
+def connected_street_groups(road_ways):
+    """Group same-named ways sharing an end node; order groups by lowest way ID."""
+    parent = list(range(len(road_ways)))
+
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def join(first, second):
+        first_root, second_root = find(first), find(second)
+        if first_root != second_root:
+            parent[max(first_root, second_root)] = min(first_root, second_root)
+
+    node_owners = {}
+    for index, (_, first_node, last_node) in enumerate(road_ways):
+        for node in (first_node, last_node):
+            if node in node_owners:
+                join(index, node_owners[node])
+            else:
+                node_owners[node] = index
+    groups = {}
+    for index, (entity_id, _, _) in enumerate(road_ways):
+        groups.setdefault(find(index), []).append(entity_id)
+    return [
+        tuple(sorted(group, key=lambda entity_id: int(entity_id.split('/')[1])))
+        for group in groups.values()
+    ]
+
+
 def number_rules(sources_dir):
     """Read the address placeholder rule the editor contract already enforces."""
     contract_path = (
@@ -114,6 +145,10 @@ class BuildingsLayer(Layer):
         forbidden_values, ignored_characters = number_rules(
             options.sources_directory
         )
+        street_groups = {
+            name: connected_street_groups(ways)
+            for name, ways in state.road_names.items()
+        }
         counts = Counter()
         for feature in self.features:
             properties = feature['properties']
@@ -131,10 +166,13 @@ class BuildingsLayer(Layer):
             if street is None:
                 continue
             counts['addr:street'] += 1
-            road_ids = state.road_names.get(normalize_street_name(street), set())
-            if len(road_ids) == 1:
-                properties['addr:streetEntityId'] = next(iter(road_ids))
+            groups = street_groups.get(normalize_street_name(street), [])
+            if len(groups) == 1:
+                entity_ids = groups[0]
+                properties['addr:streetEntityId'] = entity_ids[0]
+                properties['addr:streetEntityIds'] = list(entity_ids)
                 counts['addr:streetEntityId'] += 1
+                counts['addr:streetEntityIds'] += 1
             else:
                 counts['addr:streetUnjoined'] += 1
         for tag in NAME_TAGS:
@@ -159,8 +197,13 @@ class RoadNameCollector(Layer):
         )
         if not (is_local or kind in MAJOR_KINDS):
             return
+        nodes = list(way.nodes)
+        if len(nodes) < 2:
+            return
         key = normalize_street_name(name)
-        state.road_names.setdefault(key, set()).add(f'way/{way.id}')
+        state.road_names.setdefault(key, []).append(
+            (f'way/{way.id}', nodes[0].ref, nodes[-1].ref)
+        )
 
 
 def metric_geometry(geometry, origin):
@@ -211,6 +254,7 @@ class EntrancesLayer(Layer):
         ]
         tree = STRtree([footprint for _, footprint in footprints])
         counts = Counter()
+        counts['entrance:nohousenumber'] = 0
         for candidate in self.candidates:
             point = metric_geometry(
                 shape({'type': 'Point', 'coordinates': candidate['coordinate']}),

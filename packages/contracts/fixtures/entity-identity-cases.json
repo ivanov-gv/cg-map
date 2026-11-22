@@ -477,6 +477,7 @@
             "addr:street": "Street",
             "addr:housenumber": "1",
             "addr:streetEntityId": "way/4",
+            "addr:streetEntityIds": ["way/4"],
             "entityId": "way/2",
             "entityVersion": 2
           }

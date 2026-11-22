@@ -291,6 +291,10 @@ function countCopiedBuildingTags(properties, counts, rules) {
   }
 }
 
+function wayNumber(entityId) {
+  return Number.parseInt(String(entityId).split('/')[1], 10);
+}
+
 function validateBuildingStreetJoin(properties, streetGroups, counts, rules) {
   const hasStreet = copiedText(properties, 'addr:street', rules.building, 'building');
   const matchingRoads = hasStreet
@@ -298,15 +302,23 @@ function validateBuildingStreetJoin(properties, streetGroups, counts, rules) {
     : new Set();
   incrementCount(counts, 'addr:street', Number(hasStreet));
   const streetEntityId = properties['addr:streetEntityId'];
-  if (streetEntityId !== undefined) {
+  const streetEntityIds = properties['addr:streetEntityIds'];
+  if (streetEntityId !== undefined || streetEntityIds !== undefined) {
     requireValue(hasStreet, 'building: street join without a street name');
-    const hasUniqueMatch = matchingRoads.size === 1 && matchingRoads.has(streetEntityId);
-    requireValue(hasUniqueMatch, 'building: street join must match exactly one published road with the same name');
+    // Published roads carry no OSM node IDs, so the source must declare its whole connected group.
+    const expectedIds = [...matchingRoads].sort((first, second) => wayNumber(first) - wayNumber(second));
+    const isWholeGroup = Array.isArray(streetEntityIds) &&
+      streetEntityIds.length > 0 &&
+      streetEntityIds.length === expectedIds.length &&
+      streetEntityIds.every((entityId, index) => entityId === expectedIds[index]) &&
+      streetEntityId === expectedIds[0];
+    requireValue(isWholeGroup, 'building: street join must list every published road with the same name');
     incrementCount(counts, 'addr:streetEntityId');
+    incrementCount(counts, 'addr:streetEntityIds');
     return;
   }
   if (hasStreet) {
-    requireValue(matchingRoads.size !== 1, 'building: a unique street name must be joined to its road entity');
+    requireValue(matchingRoads.size !== 1, 'building: a street name with one published road must be joined');
     incrementCount(counts, 'addr:streetUnjoined');
   }
 }

@@ -386,12 +386,20 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(house['nohousenumber'], 'yes')
         self.assertNotIn('addr:housenumber', house)
         self.assertEqual(house['addr:streetEntityId'], 'way/2015')
+        self.assertEqual(house['addr:streetEntityIds'], ['way/2015'])
+        # Two ways share an endpoint, so the case- and whitespace-folded name joins as one group.
+        joined = by_id['way/4103']
+        self.assertEqual(joined['addr:streetEntityId'], 'way/4101')
+        self.assertEqual(joined['addr:streetEntityIds'], ['way/4101', 'way/4102'])
+        # Two disconnected groups still leave the address unjoined.
+        self.assertNotIn('addr:streetEntityId', by_id['way/4106'])
         details = json.loads(
             (self.first_root / 'data/sources/provenance.json').read_text()
         )['building_details']
         self.assertEqual(details['nohousenumber'], 1)
-        self.assertEqual(details['addr:streetUnjoined'], 1)
-        self.assertEqual(details['addr:streetEntityId'], 1)
+        self.assertEqual(details['addr:streetUnjoined'], 2)
+        self.assertEqual(details['addr:streetEntityId'], 2)
+        self.assertEqual(details['addr:streetEntityIds'], 2)
 
     def test_entrances_keep_osm_tags_and_join_to_a_nearby_building(self):
         extract(self.first_root)

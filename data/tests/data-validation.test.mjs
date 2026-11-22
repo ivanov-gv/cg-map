@@ -96,11 +96,12 @@ test('building sources validate copied tags, identity joins and no-number rules'
     sources['building-entrances.geojson'], sources['places.geojson'],
     {contractsDirectory}
   );
-  const streetJoinError = /building: street join must match exactly one published road with the same name/;
+  const streetJoinError = /building: street join must list every published road with the same name/;
   const counts = validate(identitySources);
   assert.equal(counts.entrances, 1);
   assert.equal(counts.placesInsideBuildings, 1);
   assert.equal(counts['addr:streetEntityId'], 1);
+  assert.equal(counts['addr:streetEntityIds'], 1);
   const invalidCases = [
     {
       name: 'a placeholder house number',
@@ -141,9 +142,32 @@ test('building sources validate copied tags, identity joins and no-number rules'
     },
     {
       name: 'a unique street name without a join',
-      expected: /building: a unique street name must be joined to its road entity/,
+      expected: /building: a street name with one published road must be joined/,
       mutate: sources => {
-        delete sources['buildings.geojson'].features[0].properties['addr:streetEntityId'];
+        const properties = sources['buildings.geojson'].features[0].properties;
+        delete properties['addr:streetEntityId'];
+        delete properties['addr:streetEntityIds'];
+      }
+    },
+    {
+      name: 'a join that omits a same-named road',
+      expected: streetJoinError,
+      mutate: sources => {
+        const duplicateRoad = structuredClone(sources['roads.geojson'].features[0]);
+        duplicateRoad.properties.entityId = 'way/5';
+        sources['roads.geojson'].features.push(duplicateRoad);
+      }
+    },
+    {
+      name: 'a representative that is not the lowest member ID',
+      expected: streetJoinError,
+      mutate: sources => {
+        const properties = sources['buildings.geojson'].features[0].properties;
+        const duplicateRoad = structuredClone(sources['roads.geojson'].features[0]);
+        duplicateRoad.properties.entityId = 'way/5';
+        sources['roads.geojson'].features.push(duplicateRoad);
+        properties['addr:streetEntityId'] = 'way/5';
+        properties['addr:streetEntityIds'] = ['way/4', 'way/5'];
       }
     },
     {
@@ -217,13 +241,31 @@ test('building sources validate copied tags, identity joins and no-number rules'
   const duplicateRoad = structuredClone(ambiguous['roads.geojson'].features[0]);
   duplicateRoad.properties.entityId = 'way/5';
   ambiguous['roads.geojson'].features.push(duplicateRoad);
-  delete ambiguous['buildings.geojson'].features[0].properties['addr:streetEntityId'];
+  const ambiguousProperties = ambiguous['buildings.geojson'].features[0].properties;
+  delete ambiguousProperties['addr:streetEntityId'];
+  delete ambiguousProperties['addr:streetEntityIds'];
   let ambiguousCounts;
   assert.doesNotThrow(() => {
     ambiguousCounts = validate(ambiguous);
   });
   assert.equal(ambiguousCounts['addr:streetUnjoined'], 1);
   assert.ok(!('addr:streetEntityId' in ambiguousCounts));
+});
+
+test('a building joins to every road of a same-named group', () => {
+  const sources = structuredClone(identitySources);
+  const duplicateRoad = structuredClone(sources['roads.geojson'].features[0]);
+  duplicateRoad.properties.entityId = 'way/5';
+  sources['roads.geojson'].features.push(duplicateRoad);
+  const properties = sources['buildings.geojson'].features[0].properties;
+  properties['addr:streetEntityId'] = 'way/4';
+  properties['addr:streetEntityIds'] = ['way/4', 'way/5'];
+  const counts = validateBuildingSources(
+    sources['buildings.geojson'], sources['roads.geojson'],
+    sources['building-entrances.geojson'], sources['places.geojson']
+  );
+  assert.equal(counts['addr:streetEntityId'], 1);
+  assert.equal(counts['addr:streetEntityIds'], 1);
 });
 
 test('building and label placeholder rules stay identical', () => {
