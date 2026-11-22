@@ -16,7 +16,7 @@ category, WGS84 longitude/latitude point, and a visibility level. Optional facts
 `website` (normalised from `contact:website`), `email` (normalised from `contact:email`), `opening_hours` (OSM format),
 `wheelchair`, `addr:street`, `addr:housenumber`, `level`, `cuisine`, `wikidata`, `wikipedia`. The data validator
 enforces this contract and directory-wide uniqueness. Integration tests check that web categories agree with it. See
-[ADR 0025](../../docs/decisions/0025-place-categories-and-standalone-points.md) for which OSM kinds are extracted and
+[ADR 0026](../../docs/decisions/0026-place-categories-and-standalone-points.md) for which OSM kinds are extracted and
 which are excluded as category gaps.
 
 `place-visibility.json` (shape in `place-visibility.schema.json`) is the one level-to-zoom table. Level 1 appears
