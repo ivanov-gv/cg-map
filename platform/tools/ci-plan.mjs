@@ -216,12 +216,12 @@ export function classify(file) {
   }
   // Web browser tests read this fixture from the pinned package, so it belongs to data's own pipeline.
   if (file.startsWith('data/tests/fixtures/')) return {folders: ['data'], areas: []};
-  // Dev builds use this tool at HEAD, but app tests do not: they pin the published package.
-  if (file === 'data/tools/app-data.mjs') return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
+  // Dev builds use this tool and the data project files at HEAD, but app tests pin the published package instead.
+  if (file === 'data/tools/app-data.mjs' || file === 'data/Makefile' || file === 'data/package.json')
+    return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
   if (/^data\/(tools|tests)\//.test(file)) return {folders: ['data'], areas: []};
   if (/^data\/(sources|artifacts|imagery)\//.test(file))
     return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
-  if (file === 'data/Makefile' || file === 'data/package.json') return {folders: ['data', 'platform'], areas: []};
 
   if (file.startsWith('packages/contracts/'))
     return {folders: ['contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};

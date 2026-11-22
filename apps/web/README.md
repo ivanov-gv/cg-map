@@ -644,11 +644,11 @@ make e2e E2E_ARGS='--project=pages-mobile --grep="transport toggles"'
 ```
 
 `--grep` is a regular expression over test titles; combine it with a file and `--project` to narrow the selection. Both
-projects run when `--project` is omitted. Standalone `npm test`, `npm run test:built` and `npm run test:e2e` build the
-artifact first from the pinned data package. `npm run test:e2e:built -- <filters>` reuses an already built artifact and
-lists selected tests without a rebuild when passed `--list`. It tests whatever `dist/web` holds: build that artifact
-from the pin first, otherwise it tests an older or development-data build. Browser traces/screenshots and the last-run
-record are in apps/web/test-results (not the repository root).
+projects run when `--project` is omitted. Standalone `npm test` and `npm run test:e2e` build the artifact first from the
+pinned data package. The built-artifact variants, `npm run test:built` and `npm run test:e2e:built -- <filters>`, reuse
+whatever `dist/web` holds and never rebuild, including with `--list`. Build that artifact from the pin first, otherwise
+they test a stale or development-data build. Browser traces/screenshots and the last-run record are in
+apps/web/test-results (not the repository root).
 
 Root npm aliases forward to these workspace scripts, including browser arguments. Root Make aliases forward to the web
 Makefile; `make -C apps/web e2e` builds first and `make -C apps/web e2e-built` reuses the artifact from `make check` in

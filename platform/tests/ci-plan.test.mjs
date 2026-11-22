@@ -119,18 +119,20 @@ test('a data-only change selects only data and cross-project tests', () => {
   assert.deepEqual(plan.editorAreas, []);
 });
 
-test('every data path selects no app pipeline or browser area', () => {
+test('every data path selects its own pipeline and no app or platform pipeline', () => {
   const samples = [
-    'data/sources/source.geojson',
-    'data/imagery/place.jpg',
-    'data/artifacts/releases/manifest.json',
-    'data/tools/app-data.mjs',
-    'data/tests/data.test.mjs',
-    'data/package.json'
+    ['data/sources/source.geojson', ['data', 'tests']],
+    ['data/imagery/place.jpg', ['data', 'tests']],
+    ['data/artifacts/releases/manifest.json', ['data', 'tests']],
+    ['data/tools/app-data.mjs', ['data', 'tests']],
+    ['data/Makefile', ['data', 'tests']],
+    ['data/package.json', ['data', 'tests']],
+    ['data/tests/data.test.mjs', ['data']],
+    ['data/tests/fixtures/places.geojson', ['data']]
   ];
-  for (const path of samples) {
+  for (const [path, expectedFolders] of samples) {
     const result = planChanges([path]);
-    assert.deepEqual(result.folders.filter(folder => folder.startsWith('apps-')), [], path);
+    assert.deepEqual(new Set(result.folders), new Set(expectedFolders), path);
     assert.deepEqual(result.areas, [], path);
     assert.deepEqual(result.editorAreas, [], path);
   }
