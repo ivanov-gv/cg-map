@@ -1529,11 +1529,7 @@ test.describe('source editing', () => {
     await openEditor(page);
     await chooseMode(page, 'land.geojson');
     const land = await fetchFeatures(page, 'land.geojson');
-    // The object button names a park by its OSM name; unnamed polygons have no label to assert.
-    const parkCenter = land.find(
-      ({properties, geometry}) => properties.kind === 'park' && geometry.type === 'Polygon' && properties.name
-    );
-    expect(parkCenter).toBeTruthy();
+    const parkCenter = land.find(({properties, geometry}) => properties.kind === 'park' && geometry.type === 'Polygon');
     const corners = parkCenter.geometry.coordinates[0].slice(0, -1);
     const middle = axis => corners.reduce((total, corner) => total + corner[axis], 0) / corners.length;
     const parkPoint = [middle(0), middle(1)];

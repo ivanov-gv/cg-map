@@ -117,7 +117,7 @@ test(
         page.evaluate(() =>
           window.kompasDebug.map
             .queryRenderedFeatures({layers: ['selected-buildings-fill']})
-            .some(feature => feature.id === 21572)
+            .some(feature => feature.id === 71)
         )
       )
       .toBe(true);

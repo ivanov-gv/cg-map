@@ -35,7 +35,7 @@ snapshot outside the repository when a reproducible refresh matters.
 later Features can add their own. A fresh complete extract, label rebuild and archive rebuild were run from the reviewed
 PBF. Full runs give preserved Natural Earth and ePodgorica snapshots their own identity namespaces; `--layers` replaces
 only the named source files. OSM features keep the object's type, ID and upstream version; clipped or split parts keep
-one identity and gain `entityPart`. See [decision 0020](../docs/decisions/0020-extract-source-identity.md) for the
+one identity and gain `entityPart`. See [decision 0021](../docs/decisions/0021-extract-source-identity.md) for the
 constraints behind this design. It is not a full OSM semantic/cartographic pipeline; see
 [architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
