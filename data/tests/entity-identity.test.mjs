@@ -123,7 +123,8 @@ test('check-data enforces adopted metadata in all thirteen source files before p
   const sourceFiles = Object.keys(fixture.sources);
   const supportingFiles = [
     'building-labels.provenance.json', 'transport-stops.provenance.json', 'transit-network.json',
-    'transit-network.provenance.json', 'provenance.json', 'place-visibility-policy.json',
+    'transit-network.provenance.json', 'transit-routes.json', 'transit-routes.provenance.json',
+    'provenance.json', 'place-visibility-policy.json',
     'turn-restrictions.json',
     'contours.geojson', 'summits.geojson', 'slopes.geojson', 'ridges.geojson',
     'canyon-rims.geojson'

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Transit route network v1",
+  "type": "object",
+  "required": [
+    "version",
+    "retrievedAt",
+    "source",
+    "routes"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "retrievedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "network",
+          "directions"
+        ],
+        "properties": {
+          "number": {
+            "type": "string",
+            "minLength": 1,
+            "description": "OSM ref; omitted when the source does not publish one"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "enum": [
+              "bus",
+              "intercity"
+            ]
+          },
+          "colour": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "directions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "headsign",
+                "stops"
+              ],
+              "properties": {
+                "entityId": {
+                  "type": "string",
+                  "pattern": "^relation/\\d+$",
+                  "description": "OSM relation identity for this direction"
+                },
+                "entityVersion": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "OSM version of the relation"
+                },
+                "fromMunicipality": {
+                  "type": "string",
+                  "pattern": "^ME-\\d{2}$",
+                  "description": "ISO3166-2 code of the municipality containing the first stop"
+                },
+                "toMunicipality": {
+                  "type": "string",
+                  "pattern": "^ME-\\d{2}$",
+                  "description": "ISO3166-2 code of the municipality containing the last stop"
+                },
+                "headsign": {
+                  "type": "string"
+                },
+                "stops": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "ePodgorica stop ID for city routes"
+                      },
+                      {
+                        "type": "object",
+                        "required": ["id", "coordinates"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^node/\\d+$",
+                            "description": "OSM node ID"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Stop name from OSM, may be empty"
+                          },
+                          "coordinates": {
+                            "type": "array",
+                            "prefixItems": [
+                              {"type": "number"},
+                              {"type": "number"}
+                            ],
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "WGS84 [longitude, latitude] rounded to 6 decimals"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "variants": {
+                  "type": "array",
+                  "description": "Alternative stop sequences for the same direction",
+                  "items": {
+                    "type": "object",
+                    "required": ["headsign", "stops"],
+                    "properties": {
+                      "headsign": {"type": "string"},
+                      "stops": {
+                        "type": "array",
+                        "minItems": 2,
+                        "items": {"type": "string", "minLength": 1}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

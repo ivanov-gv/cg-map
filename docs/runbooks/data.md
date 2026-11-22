@@ -304,5 +304,27 @@ deploy. Upstream extraction replaces snapshots rather than merging local correct
 Git and provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend
 implementation.
 
+## Transit stops and routes
+
+`data/sources/transport-stops.geojson` enriches the ePodgorica stop snapshot with route lines, side-of-road position,
+and `name:en` (where published). `data/sources/transit-routes.json` records every bus line with its directions and
+ordered stops. City routes (network `bus`) come from ePodgorica; OSM routes are classified as `bus` or `intercity` by
+municipality geography: the PBF provides every Montenegrin municipality as a `boundary=administrative`, `admin_level=6`
+relation with `ISO3166-2` starting `ME-`. A route is `intercity` when its first and last stops lie in different
+municipalities, or either end lies outside Montenegro. Each direction records `fromMunicipality` and `toMunicipality`
+ISO codes.
+
+To refresh after updating transit-network.json or the OSM PBF:
+
+```sh
+make -C data transit-routes
+make -C data check
+```
+
+The tools are `data/tools/enrich_stops.py` (enriches stops) and `data/tools/build_transit_routes.py` (builds routes).
+They require the Python venv with osmium and shapely: `~/.cache/cg-map/venv/bin/python`. Each OSM relation becomes one
+direction with `entityId` and `entityVersion`; directions sharing OSM `ref` are grouped into one line. OSM stops carry
+their node ID, WGS84 position, and name so the file is usable without the PBF.
+
 Current artifacts are committed for convenient clean-checkout builds. Move large/frequent releases to immutable artifact
 storage when needed; local tooling is not a production archive retention policy.

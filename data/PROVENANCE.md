@@ -94,10 +94,13 @@ m² and 10,000 m² tolerances. The edge-construction rule is recorded in
 ## Bus stops
 
 `data/sources/transport-stops.geojson` contains 719 ePodgorica stops retrieved 2026-10-18 from the public stops/all
-endpoint. Source IDs and coordinates are retained; only the published stopId, stopName (as name), longitude and latitude
-are kept. Its independent provenance JSON records the endpoint, retrieval time, hash and count. It is a static snapshot,
-separate from the OSM layers and live vehicles. No explicit reuse license was found; attribution is retained without
-assigning MIT or ODbL to this source.
+endpoint, enriched with route lines from the transit network, side-of-road position from the nearest road, and `name:en`
+where a source publishes one. Source IDs and coordinates are retained; each stop carries `stopId`, `name`, optional
+`lines` (sorted route numbers serving the stop), optional `side` (`left` or `right` of the nearest road within 30 m),
+and optional `name:en`. Domain enrichment updates those properties but keeps the adopted `entityVersion` content token
+as the base-revision token, the same rule editor/import edits follow. Its independent provenance JSON records the
+endpoint, retrieval time, hash and count. It is a static snapshot, separate from the OSM layers and live vehicles. No
+explicit reuse license was found; attribution is retained without assigning MIT or ODbL to this source.
 
 ## Transit route patterns
 
@@ -106,6 +109,28 @@ stop coordinates and representative ordered route patterns with relative running
 direction/headsign/stop count from weekday, Saturday, and Sunday trips. They are not an exhaustive timetable or service
 calendar. Refresh with data/tools/import-transit.py; raw API responses are temporary and excluded from Git. Source URLs,
 sampling limits, counts, hash, and license status are recorded.
+
+## Transit routes
+
+`data/sources/transit-routes.json` and `transit-routes.provenance.json` record the published bus lines with their
+directions and ordered stops. City routes (network `bus`) come from the ePodgorica data, grouped by real direction
+(derived from the `sampleTrip` field: `_AB_` for outward, `_BA_` for return); variants record alternative stop sequences
+within the same direction. OSM routes are classified as `bus` or `intercity` by municipality geography: the reviewed
+municipalities GeoJSON, or the reviewed PBF when that source is absent, provides every Montenegrin municipality with
+`ISO3166-2` starting `ME-`. A route is `intercity` when its first and last stops lie in different municipalities, or
+either end lies outside Montenegro; otherwise it is `bus`. Each direction records the ISO codes of its first and last
+municipality (`fromMunicipality`, `toMunicipality`). Each OSM relation becomes one direction with `entityId`
+(`relation/N`) and `entityVersion`; directions are grouped only by route_master membership, and relations without a
+route_master are each their own line. OSM stops carry their node ID, WGS84 position (6 decimals), and name so the file
+is usable without the PBF. Route `number` comes from OSM `ref` and is omitted when not published. When an OSM route
+shares a number with an ePodgorica city route but lies outside the ePodgorica extent, the OSM number is kept and
+uniqueness is validated per network, municipality scope and source.
+
+Build with `data/tools/build_transit_routes.py`. The provenance records each source separately: ePodgorica keeps its own
+retrieved time and license status, OSM bus relations are attributed to OpenStreetMap contributors under ODbL 1.0 with
+the PBF file name, SHA-256 and replication timestamp, and municipality boundaries are attributed to OpenStreetMap
+contributors under ODbL 1.0. The routes file `retrievedAt` is deterministic from input provenance, not copied from a
+previous output.
 
 ## Building address labels
 
