@@ -449,6 +449,18 @@
   <node id="7132" version="1" lat="42.39" lon="19.25"/>
   <node id="7141" version="1" lat="42.39" lon="19.26"/>
   <node id="7142" version="1" lat="42.39" lon="19.27"/>
+  <node id="7151" version="1" lat="42.30" lon="19.10"/>
+  <node id="7152" version="1" lat="42.30" lon="19.20"/>
+  <node id="7153" version="1" lat="42.31" lon="19.10"/>
+  <node id="7154" version="1" lat="42.31" lon="19.20"/>
+  <node id="7155" version="1" lat="42.32" lon="19.10"/>
+  <node id="7156" version="1" lat="42.32" lon="19.20"/>
+  <node id="7161" version="1" lat="42.39" lon="19.10"/>
+  <node id="7162" version="1" lat="42.39" lon="19.20"/>
+  <node id="7163" version="1" lat="42.395" lon="19.10"/>
+  <node id="7164" version="1" lat="42.395" lon="19.20"/>
+  <node id="7165" version="1" lat="42.40" lon="19.10"/>
+  <node id="7166" version="1" lat="42.40" lon="19.20"/>
   <node id="8011" version="1" lat="42.40" lon="19.315"/>
   <node id="8012" version="1" lat="42.41" lon="19.315"/>
   <node id="8013" version="1" lat="42.42" lon="19.315"/>
@@ -670,6 +682,37 @@
   <way id="7005" version="45">
     <nd ref="7141"/>
     <nd ref="7142"/>
+    <tag k="waterway" v="drain"/>
+  </way>
+  <!-- Minor waterways outside the detail box, and ones crossing its west edge. -->
+  <way id="7006" version="46">
+    <nd ref="7151"/>
+    <nd ref="7152"/>
+    <tag k="waterway" v="stream"/>
+  </way>
+  <way id="7007" version="47">
+    <nd ref="7153"/>
+    <nd ref="7154"/>
+    <tag k="waterway" v="ditch"/>
+  </way>
+  <way id="7008" version="48">
+    <nd ref="7155"/>
+    <nd ref="7156"/>
+    <tag k="waterway" v="drain"/>
+  </way>
+  <way id="7009" version="49">
+    <nd ref="7161"/>
+    <nd ref="7162"/>
+    <tag k="waterway" v="stream"/>
+  </way>
+  <way id="7010" version="50">
+    <nd ref="7163"/>
+    <nd ref="7164"/>
+    <tag k="waterway" v="ditch"/>
+  </way>
+  <way id="7011" version="51">
+    <nd ref="7165"/>
+    <nd ref="7166"/>
     <tag k="waterway" v="drain"/>
   </way>
   <way id="8001" version="51">

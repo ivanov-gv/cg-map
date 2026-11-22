@@ -132,11 +132,12 @@ tags, the first rule in `data/tools/osm_extract/land.py` wins. A meadow or grass
 is named, is a mapped clearing, or contains a named place, POI or peak node in the detail box. Green multipolygons keep
 their holes.
 
-The `water` layer publishes lake, river, reservoir, pond, basin and generic water areas, plus river, stream, canal,
-ditch and drain lines. Waterway and coastline features stay one per OSM way and retain upstream node order; `name`,
-`name:en`, `tunnel` and `intermittent` are copied when mapped. Coastline lines are features in `water.geojson`, not a
-separate source file, and consumers exclude them from the waterway stroke so the ocean fill shows the shore. The derived
-`derived:ocean` polygon is still computed from the reviewed land outline and the OSM coastline.
+The `water` layer publishes lake, river, reservoir, pond, basin and generic water areas. River and canal lines stay
+countrywide; stream, ditch and drain lines are clipped to the detail box and gain `entityPart` when clipped. Waterway
+and coastline features retain upstream node order; `name`, `name:en`, `tunnel` and `intermittent` are copied when
+mapped. Coastline lines are features in `water.geojson`, not a separate source file, and consumers exclude them from the
+waterway stroke so the ocean fill shows the shore. The derived `derived:ocean` polygon is still computed from the
+reviewed land outline and the OSM coastline.
 
 Extracted green and water polygons are written with counterclockwise exteriors and clockwise holes. Preserved country
 and context outlines keep their source winding. `make -C data check` enforces the shared kind enums, requires `osmTag`

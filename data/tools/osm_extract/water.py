@@ -6,6 +6,7 @@ from shapely.ops import unary_union
 from . import Layer
 from .geometry import (
     area_source,
+    clipped_features,
     geometry_features,
     rounded_geometry,
     usable_area_geometry,
@@ -18,6 +19,8 @@ from .writing import read_collection
 SOURCE_FILE = 'water.geojson'
 LAND_FILE = 'land.geojson'
 WATERWAY_KINDS = frozenset({'river', 'stream', 'canal', 'ditch', 'drain'})
+COUNTRYWIDE_WATERWAY_KINDS = frozenset({'river', 'canal'})
+DETAIL_WATERWAY_KINDS = frozenset({'stream', 'ditch', 'drain'})
 WATER_AREA_RULES = (
     (('waterway', 'riverbank'), 'river'),
     (('water', 'river'), 'river'),
@@ -59,11 +62,30 @@ class WaterLayer(Layer):
             state.coastlines.append(LineString(coordinates))
             self.add_line(way, coordinates, 'natural=coastline', 'coastline')
         kind = tags.get('waterway', '')
-        if kind in WATERWAY_KINDS:
+        if kind in COUNTRYWIDE_WATERWAY_KINDS:
             self.add_line(way, coordinates, f'waterway={kind}', kind)
+        elif kind in DETAIL_WATERWAY_KINDS:
+            self.add_detail_line(way, coordinates, options, f'waterway={kind}', kind)
 
     def add_line(self, way, coordinates, osm_tag, kind):
         """Publish one OSM way as one line, keeping its downstream order."""
+        line = {'type': 'LineString', 'coordinates': coordinates}
+        identity = osm_identity('way', way.id, way.version)
+        self.features.extend(
+            geometry_features(line, identity, self.line_properties(way, osm_tag, kind))
+        )
+
+    def add_detail_line(self, way, coordinates, options, osm_tag, kind):
+        """Clip a minor waterway to the detail box, numbering each clipped part."""
+        line = {'type': 'LineString', 'coordinates': coordinates}
+        identity = osm_identity('way', way.id, way.version)
+        self.features.extend(clipped_features(
+            line, options.detail_bbox, identity,
+            self.line_properties(way, osm_tag, kind)
+        ))
+
+    def line_properties(self, way, osm_tag, kind):
+        """Return the published properties copied from one waterway way."""
         tags = way.tags
         properties = {
             'kind': kind,
@@ -74,9 +96,7 @@ class WaterLayer(Layer):
         for tag_name in WATER_LINE_TAGS:
             if tag_name in tags:
                 properties[tag_name] = tags[tag_name]
-        identity = osm_identity('way', way.id, way.version)
-        line = {'type': 'LineString', 'coordinates': coordinates}
-        self.features.extend(geometry_features(line, identity, properties))
+        return properties
 
     def area(self, area, options, state):
         tags = area.tags

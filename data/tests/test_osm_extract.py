@@ -532,6 +532,34 @@ class OsmExtractTest(unittest.TestCase):
             single_feature(water, 'way/8002')['geometry']
         )
 
+    def test_minor_waterways_are_clipped_to_the_detail_box(self):
+        extract(self.first_root)
+        water = features_by_entity_id(self.first_root, 'water.geojson')
+        for entity_id in ('way/7006', 'way/7007', 'way/7008'):
+            with self.subTest(entity_id=entity_id, outside=True):
+                self.assertNotIn(entity_id, water)
+        clipped = {
+            'way/7009': ('stream', 42.39),
+            'way/7010': ('ditch', 42.395),
+            'way/7011': ('drain', 42.4),
+        }
+        for entity_id, (kind, latitude) in clipped.items():
+            with self.subTest(entity_id=entity_id, clipped=True):
+                feature = single_feature(water, entity_id)
+                properties = feature['properties']
+                self.assertEqual(properties['kind'], kind)
+                self.assertEqual(properties['osmTag'], f'waterway={kind}')
+                self.assertEqual(properties['entityPart'], 0)
+                self.assertEqual(
+                    feature['geometry']['coordinates'],
+                    [[19.15, latitude], [19.2, latitude]],
+                )
+        for entity_id in ('way/7001', 'way/7003'):
+            with self.subTest(entity_id=entity_id, countrywide=True):
+                self.assertNotIn(
+                    'entityPart', single_feature(water, entity_id)['properties']
+                )
+
     def test_multipolygon_holes_survive_with_rfc7946_rings(self):
         extract(self.first_root)
         cases = (
