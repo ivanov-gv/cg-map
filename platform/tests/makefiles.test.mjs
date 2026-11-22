@@ -151,6 +151,33 @@ test('repo boundary rejects bare repository contract paths outside the shared he
   assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
 });
 
+test('each app build has one sanctioned repository contracts root', () => {
+  const guard = fs.readFileSync(path.join(repoRoot, 'platform/tools/check-repo.mjs'), 'utf8');
+  const cleanEnv = {...process.env};
+  delete cleanEnv.MAP_CONTRACTS_ROOT;
+  for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+    const resolver = `${application}/tools/contracts-root.mjs`;
+    assert.ok(fs.existsSync(path.join(repoRoot, resolver)), resolver);
+    assert.ok(guard.includes(resolver), `the repo guard must allow ${resolver}`);
+    const result = spawnSync('node', [resolver], {cwd: repoRoot, encoding: 'utf8', env: cleanEnv});
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), path.join(repoRoot, 'packages/contracts'));
+  }
+});
+
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  test(`${application} repo boundary rejects a second repository contracts root`, t => {
+    const probe = path.join(repoRoot, application, 'tools', `__contract-root-probe-${process.pid}.mjs`);
+    t.after(() => fs.rmSync(probe, {force: true}));
+    fs.writeFileSync(probe, "export const root = '../../../packages/contracts';\n");
+    const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+    assert.notEqual(result.status, 0);
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    assert.ok(output.includes(path.basename(probe)), output);
+    assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+  });
+}
+
 test('the integration data helper defaults to HEAD and honours MAP_DATA_ROOT', () => {
   const helper = path.join(repoRoot, 'tests', 'data-root.mjs');
   const cleanEnv = {...process.env};

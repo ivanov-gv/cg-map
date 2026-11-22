@@ -150,8 +150,14 @@ for (const file of integrationTestFiles) {
   if (file === integrationDataHelper) continue;
   assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
 }
-// Consumers must resolve contracts through the pinned package; data and tests/ own the one HEAD exception.
+// Consumers resolve contracts from their pinned package in tests. Each app build has one HEAD-root resolver; data and
+// tests/ own their own HEAD exceptions.
 const CONTRACT_PATH_HELPER = 'tests/contracts-root.mjs';
+const DEV_CONTRACT_ROOTS = new Set([
+  'apps/web/tools/contracts-root.mjs',
+  'apps/editor/tools/contracts-root.mjs',
+  'apps/core-demo/tools/contracts-root.mjs'
+]);
 // Platform's planner, verifier, guard and their tests name repository contract paths as data, not as consumer reads.
 const contractPathMetadata = new Set([
   'platform/tools/check-repo.mjs',
@@ -171,7 +177,7 @@ const repositoryContractsPattern = new RegExp(
     "['\"]packages['\"]\\s*,\\s*['\"]contracts['\"]"
   ].join('|')
 );
-const pinnedContractsRule = 'relative contract paths must go through the pinned @ivanov-gv/map-contracts package';
+const pinnedContractsRule = 'relative contract paths must go through the pinned @ivanov-gv/map-contracts package or a sanctioned app build resolver';
 // These probes keep the guard honest about the paths and join styles earlier versions missed.
 const contractPathProbes = [
   ['template literal', '`../../packages/contracts/${name}`'],
@@ -189,7 +195,7 @@ for (const component of contractConsumers) {
     file => (/\.(?:mjs|js|json|go|py)$/.test(file) || file.endsWith('/Makefile')) && !file.includes('/node_modules/')
   );
   for (const file of files) {
-    if (file === CONTRACT_PATH_HELPER || contractPathMetadata.has(file)) continue;
+    if (file === CONTRACT_PATH_HELPER || contractPathMetadata.has(file) || DEV_CONTRACT_ROOTS.has(file)) continue;
     assert.ok(!repositoryContractsPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${pinnedContractsRule}`);
   }
 }

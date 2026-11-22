@@ -81,11 +81,39 @@ test('every consumer pins its own exact published contracts release, never the l
   );
 });
 
-test('the web build resolves contracts through its own pin, not a root-hoisted path', () => {
-  const source = fileSystem.readFileSync(path.join(repositoryRoot, 'apps/web/tools/build.mjs'), 'utf8');
-  assert.match(source, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
-  assert.doesNotMatch(source, /node_modules\/@ivanov-gv\/map-contracts/);
-});
+const pinnedContractsAssignment = 'MAP_CONTRACTS_ROOT="$(node tests/pinned-contracts.mjs)"';
+
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  test(`${application} builds HEAD contracts and tests resolve the app pin`, () => {
+    const makefile = fileSystem.readFileSync(path.join(repositoryRoot, application, 'Makefile'), 'utf8');
+    const dataTargets = makefile.match(/^(.+): export MAP_DATA_ROOT/m)?.[1];
+    const contractsTargets = makefile.match(/^(.+): export MAP_CONTRACTS_ROOT/m)?.[1];
+    assert.ok(dataTargets, `${application}/Makefile must pin data in test targets`);
+    assert.equal(contractsTargets, dataTargets, 'contracts and data must use the same test targets');
+
+    const appPackage = readJSON(`${application}/package.json`);
+    assert.equal(appPackage.scripts.build, 'node tools/build.mjs', 'dev builds must keep repository contracts');
+    const buildSource = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tools/build.mjs'), 'utf8');
+    assert.match(buildSource, /resolveContractsRoot\(\)/);
+    assert.doesNotMatch(buildSource, /import\.meta\.resolve\(['"]@ivanov-gv\/map-contracts/);
+
+    const helper = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tests/pinned-contracts.mjs'), 'utf8');
+    assert.match(helper, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
+    const browserConfig = fileSystem.readFileSync(path.join(repositoryRoot, application, 'playwright.config.mjs'), 'utf8');
+    assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
+    const lifecycleBuilds = ['pretest', 'pretest:built', 'pretest:e2e'].filter(name => appPackage.scripts[name]);
+    assert.ok(lifecycleBuilds.length > 0, 'a test lifecycle must build from the pinned contracts');
+    for (const name of lifecycleBuilds) {
+      assert.ok(
+        appPackage.scripts[name].includes(pinnedContractsAssignment),
+        `${application} ${name} must set MAP_CONTRACTS_ROOT before building`
+      );
+    }
+    if (appPackage.scripts['check:offline']) {
+      assert.ok(appPackage.scripts['check:offline'].includes(pinnedContractsAssignment));
+    }
+  });
+}
 
 test('platform resolves contracts from the pinned package, not repository sources', () => {
   const resolved = execFileSync('node', ['platform/tools/pinned-contracts-root.mjs'], {

@@ -9,8 +9,8 @@ import {resolveDataRoot} from './data-root.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
-// Dev builds default to the repository's HEAD; a future app production release pins every dependency, including data.
-// Test targets set MAP_DATA_ROOT, so the data tools come from that same root as the data snapshot.
+// Dev builds default to the repository's HEAD; a future app production release pins every dependency, data included.
+// Test targets set MAP_DATA_ROOT and MAP_CONTRACTS_ROOT, so tools and contracts come from the pinned releases.
 const dataRoot = resolveDataRoot(path.join(root, 'data'));
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const {readVerifiedRelease} = await import(dataToolsURL);
@@ -30,11 +30,8 @@ for (const filename of webModules) {
 fileSystem.mkdirSync(path.join(output, 'data'), {recursive: true});
 fileSystem.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
 const places = JSON.parse(fileSystem.readFileSync(path.join(dataRoot, 'sources/places.geojson')));
-// Resolve from this app so its own pin wins; a release build overrides the root with MAP_CONTRACTS_ROOT.
-const pinnedContractsRoot = path.dirname(
-  fileURLToPath(import.meta.resolve('@ivanov-gv/map-contracts/package.json'))
-);
-const contractsRoot = resolveContractsRoot(pinnedContractsRoot);
+// Dev builds resolve contracts at HEAD; test targets override the root with this app's pin.
+const contractsRoot = resolveContractsRoot();
 const visibilityContractPath = path.join(contractsRoot, 'place-visibility.json');
 const visibilityConfig = JSON.parse(fileSystem.readFileSync(visibilityContractPath));
 assertPublishedPlaces(places.features, parseVisibilityConfig(visibilityConfig));

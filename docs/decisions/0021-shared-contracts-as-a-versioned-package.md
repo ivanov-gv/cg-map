@@ -48,6 +48,19 @@ publishes a dev package for the change, and a `map-contracts/v<version>` release
 - GitHub Packages requires a token for installation, as it already does for map-core and map-data. Published versions
   are immutable; fixes go forward in a new version.
 
-Current guidance is in [system architecture](../system-architecture/architecture.md#contract-modes),
+## Outcome note: dev and test modes (2026-11-22)
+
+The owner clarified the pin rule using the same model as [ADR 0020](0020-data-package-pinned-in-app-tests.md): a pinned
+release keeps tests independent, but a main-HEAD dev build must combine HEAD data with HEAD contracts. This supersedes
+only the original dev-build default above; tests stay pinned. Each of web, editor and core-demo now has one build
+resolver whose `MAP_CONTRACTS_ROOT` default is the repository contracts directory, and one test helper that resolves the
+app's own pin with `import.meta.resolve`. The same test targets that set `MAP_DATA_ROOT` set `MAP_CONTRACTS_ROOT` from
+that helper, so unit, built, browser and offline-check tests remain independent. A future app production release pins
+every dependency, contracts included, and is still only a documented rule.
+
+`map-core` and `services/backend` only read contracts from tests or generation, so they stay pinned. The repository
+check allows a repository contracts path only in the three app build resolvers, the shared integration helper, data and
+its metadata; every other consumer path must use the published package. Current guidance is in
+[system architecture](../system-architecture/architecture.md#contract-modes),
 [ownership](../system-architecture/ownership.md) and
 [the release runbook](../runbooks/release.md#releasing-map-contracts).

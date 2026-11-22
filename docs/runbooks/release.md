@@ -27,6 +27,23 @@ Every merge to main updates it, with no tags or releases:
    commit SHA, extracts the site, and deploys. CD only runs for a successful push build on main, never for a CI test run
    or any other run. A deploy replaces the whole site, so it always takes all three.
 
+### Contracts in app builds and tests
+
+Contracts follow the same dependency modes as data:
+
+- **Dev builds:** local `make -C apps/<name> build` and `dev`, plus ci-publish's `pages` build and the site cd-dev-pages
+  deploys, read repository `packages/contracts` at HEAD. Each app has one build resolver that defaults there and honours
+  `MAP_CONTRACTS_ROOT`; do not add another relative contracts path.
+- **Tests:** unit, built, browser and offline-check targets read the app's exact `@ivanov-gv/map-contracts` pin. The
+  app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT`.
+  Platform's `build-web` does the same from platform's pin. A contract-only change therefore selects no app pipeline.
+- **Future app production release:** every dependency, contracts included, will be pinned. No app production release
+  exists yet, so this is a rule for future CD rather than a current command.
+
+Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
+installs that package and points the shared integration helper at it. See
+[Releasing map-contracts](#releasing-map-contracts).
+
 To put back an older build, dispatch cd-dev-pages with the commit to roll back to (within the last 10 builds — the
 rollback window). A failed deploy does not affect `CI gate`, so check it after merging. To republish after a failed
 merge run, use "Re-run failed jobs" on that run.
