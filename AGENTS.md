@@ -6,11 +6,11 @@ not every agent loads nested files. This is a read-only map PoC; do not invent b
 
 ## Monorepo of independent projects
 
-Each project owns its Makefile, build, run, lint, tests, instructions and CI pipeline. Projects connect only through the
-[concrete contracts](docs/system-architecture/architecture.md#independent-projects). The root Makefile never runs a
-project's build or run target, and no project runs another's checks. A project's tests read only its own files or exact
-published versions (`@ivanov-gv/map-data`, `@ivanov-gv/map-contracts`), never HEAD; [tests](tests/AGENTS.md) reads HEAD
-for cross-component checks, and data validates contracts at HEAD. Add a project as described.
+Each project below is mostly independent: it owns its Makefile, build, run, lint, tests, instructions and CI pipeline.
+Projects connect only through the [concrete contracts](docs/system-architecture/architecture.md#independent-projects).
+The root Makefile never runs a project's build or run targets, and no project runs another project's checks. A project's
+tests read only its own files or an exact published version of another project (such as `@ivanov-gv/map-data`), never
+its HEAD; only [tests](tests/AGENTS.md) and data's contract checks read HEAD. Add projects as that section describes.
 
 ## Repo map and language rules
 
