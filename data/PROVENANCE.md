@@ -4,9 +4,11 @@
 `sources/provenance-legacy.json` preserves the predecessor's metadata; its raster-runtime fields are historical and do
 not describe the current application.
 
-The OSM extract timestamp is 2026-10-17T20:20:51Z. Current display layers have limited coverage and simplified/rounded
-geometry. There are 25,213 buildings in central Podgorica, 17,881 road features, 284 land features, and 1,491 water
-features including one derived ocean polygon. The place snapshot has 1,811 entries.
+The reviewed OSM extract timestamp is 2026-11-20T21:21:21Z. Display geometry remains simplified and rounded, but detail
+now covers the whole city within `[19.15, 42.37, 19.34, 42.51]`, alongside countrywide major roads, water, attractions
+and the country outline. There are 43,978 buildings, 21,247 road features, 332 land features and 1,491 water features
+including one derived ocean polygon. The place snapshot has 1,876 entries. No source file exceeds 40 MB; the reviewed
+archive is 20,985,409 bytes.
 
 `sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
 `packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full
@@ -20,19 +22,22 @@ field and still equals the hash of the pre-level snapshot. See the
 [data runbook](../docs/runbooks/data.md#place-visibility-levels).
 
 `sources/context-countries.geojson` preserves the supplied Natural Earth public-domain surrounding-country features
-independently of extraction. The OSM and Natural Earth licenses remain separate.
+independently of extraction. Its features carry `ne:<code>` identities and content-hash versions; the OSM and Natural
+Earth licenses remain separate.
 
-The original input PBF is not included in Git: it is an external downloadable dataset, not application source. Basemap
-rebuilding from the included GeoJSON needs no PBF. The original 34,575,491-byte input had SHA-256
-`574423f1685e7b0a82a14166ba492376fc824294680ea0c576426ff408230397`. Geofabrik's dated download was
-`https://download.geofabrik.de/europe/montenegro-261017.osm.pbf`; dated extracts may not remain available indefinitely.
-The current extract is at `https://download.geofabrik.de/europe/montenegro-latest.osm.pbf` and will have different
-content/checksum. Retain input snapshots outside the source repository when reproducible refreshes matter.
+The input PBF is not included in Git: it is an external downloadable dataset, not application source. Basemap rebuilding
+from the included GeoJSON needs no PBF. This release used the 34,780,415-byte
+`https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf` downloaded 2026-11-21, with SHA-256
+`70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b`; the URL serves changing data. Retain the exact
+snapshot outside the repository when a reproducible refresh matters.
 
-The added `data/tools/extract-osm.py` is an adaptation of the original small extractor. Its CLI and Python syntax have
-been checked. A fresh complete PBF extraction was not rerun during this documentation/export task. It is not a full OSM
-semantic/cartographic pipeline; see [architecture](../docs/system-architecture/architecture.md) before using it to
-expand coverage.
+`data/tools/extract-osm.py` is now a thin entry point to `data/tools/osm_extract/`, with one module per layer group so
+later Features can add their own. A fresh complete extract, label rebuild and archive rebuild were run from the reviewed
+PBF. Full runs give preserved Natural Earth and ePodgorica snapshots their own identity namespaces; `--layers` replaces
+only the named source files. OSM features keep the object's type, ID and upstream version; clipped or split parts keep
+one identity and gain `entityPart`. See [decision 0022](../docs/decisions/0022-extract-source-identity.md) for the
+constraints behind this design. It is not a full OSM semantic/cartographic pipeline; see
+[architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
 ## Bus stops
 
@@ -52,9 +57,10 @@ sampling limits, counts, hash, and license status are recorded.
 
 ## Building address labels
 
-`building-labels.geojson` recovers published OSM house numbers for existing building footprints from the same reviewed
-2026-10-17 extract. Its independent provenance file binds labels to the unchanged buildings.geojson hash and records
-direct/node-derived counts. Real way IDs are recovered by exact rounded footprint matching; point addresses are joined
-only through unambiguous node membership or containment. No-number placeholders and ambiguous joins are excluded. The
-runtime label layer is separate from the unchanged geography archive; it is bundled for offline use. See
+`building-labels.geojson` recovers published OSM house numbers for the refreshed footprints from the same reviewed
+2026-11-20 extract. Its independent provenance file binds 1,207 labels to the new buildings.geojson hash and records
+1,003 direct building addresses, 204 node-derived addresses and 43,923 matched footprints. Each label keeps the matched
+footprint way ID and OSM way version as its source identity; real way IDs are recovered by exact rounded footprint
+matching, and point addresses are joined only through unambiguous node membership or containment. No-number placeholders
+and ambiguous joins are excluded. The runtime label layer is bundled for offline use. See
 [building numbers](../docs/map-data/building-numbers.md).

@@ -9,6 +9,7 @@ import {checkData, validateCollection, validateStops, validateBuildingLabels} fr
 
 const contractsDirectory = path.join(import.meta.dirname, '../../packages/contracts');
 const fixture = JSON.parse(readFileSync(new URL('../../packages/contracts/fixtures/entity-identity-cases.json', import.meta.url)));
+const identityFields = ['entityId', 'entityVersion', 'entityPart'];
 const collectionWith = properties => ({
   type: 'FeatureCollection',
   entitySchemaVersion: 1,
@@ -132,10 +133,24 @@ test('check-data enforces adopted metadata in all eight source files before prov
     const originalPath = path.join(repositoryRoot, 'data/sources', filename);
     const testPath = path.join(sourceDirectory, filename);
     const collection = JSON.parse(readFileSync(originalPath));
-    collection.entitySchemaVersion = 1;
+    collection.features[0].properties.entityId = 'unknown:1';
     unlinkSync(testPath);
     writeFileSync(testPath, JSON.stringify(collection));
     assert.throws(() => checkData(root, {contractsDirectory}), /feature 0: invalid entityId/, filename);
+    unlinkSync(testPath);
+    symlinkSync(originalPath, testPath);
+  }
+  for (const filename of sourceFiles) {
+    const originalPath = path.join(repositoryRoot, 'data/sources', filename);
+    const testPath = path.join(sourceDirectory, filename);
+    const collection = JSON.parse(readFileSync(originalPath));
+    delete collection.entitySchemaVersion;
+    for (const feature of collection.features) {
+      for (const field of identityFields) delete feature.properties[field];
+    }
+    unlinkSync(testPath);
+    writeFileSync(testPath, JSON.stringify(collection));
+    assert.throws(() => checkData(root, {contractsDirectory}), /requires entitySchemaVersion/, filename);
     unlinkSync(testPath);
     symlinkSync(originalPath, testPath);
   }

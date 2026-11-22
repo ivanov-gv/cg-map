@@ -54,12 +54,35 @@ function recordValidEdit(session, filename, key, feature) {
 }
 
 // Exports through a JSON round trip, because that is the only way a changeset leaves the browser.
-async function exportAndApply(session, sources, root) {
+async function exportAndApply(session, sources, root, newEntityId) {
   const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope)));
-  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt, contractsDirectory})};
+  const options = {now: envelope.createdAt, contractsDirectory};
+  if (newEntityId) options.newEntityId = newEntityId;
+  return {changeset, result: applyChangeset(changeset, root, options)};
 }
 
 const indexOfFirst = (features, isWanted) => features.findIndex(isWanted);
+
+// The importer assigns identity to additions and writes adopted files in identity order. The editor's working view has
+// neither yet, so account for exactly those two differences before comparing the reviewed content.
+function expectImportedLayer(written, expected, addedOperation, assignedEntityId) {
+  const addedVersion = `sha256:${crypto.createHash('sha256').update(JSON.stringify(addedOperation.after)).digest('hex')}`;
+  const withIdentity = expected.features.map(feature => {
+    if (JSON.stringify(feature) !== JSON.stringify(addedOperation.after)) return feature;
+    return {
+      ...feature,
+      properties: {...feature.properties, entityId: assignedEntityId, entityVersion: addedVersion}
+    };
+  });
+  const identityOrder = [...withIdentity].sort((first, second) => {
+    const firstId = first.properties.entityId ?? '';
+    const secondId = second.properties.entityId ?? '';
+    if (firstId !== secondId) return firstId < secondId ? -1 : 1;
+    return (first.properties.entityPart ?? -1) - (second.properties.entityPart ?? -1);
+  });
+  assert.deepEqual(written.features, identityOrder);
+  return addedVersion;
+}
 
 test('POI details, level, position, creation and deletion survive the importer unchanged', async testContext => {
   const root = temporaryRoot(testContext);
@@ -88,14 +111,18 @@ test('POI details, level, position, creation and deletion survive the importer u
     geometry: {type: 'Point', coordinates: [19.2602, 42.4403]}
   });
   const expected = materializedLayer(session, 'places.geojson');
-  const {result} = await exportAndApply(session, sources, root);
+  const importedEntityId = 'local:22222222-2222-4222-8222-222222222222';
+  const {changeset, result} = await exportAndApply(session, sources, root, () => importedEntityId);
   assert.deepEqual(result.files, ['places.geojson']);
   assert.equal(result.needsTileRebuild, false);
   const written = readSource(root, 'places.geojson');
   assert.equal(written.features.length, features.length);
-  assert.equal(written.features[0].properties.name, 'Renamed by the editor');
-  assert.equal(written.features.at(-1).properties.id, localId);
-  assert.deepEqual(written.features, expected.features);
+  assert.equal(written.features.find(({properties}) => properties.name === 'Renamed by the editor').properties.id, features[0].properties.id);
+  const added = written.features.find(({properties}) => properties.id === localId);
+  assert.equal(added.properties.entityId, importedEntityId);
+  const addOperation = changeset.operations.find(operation => operation.operation === 'add');
+  const addedVersion = expectImportedLayer(written, expected, addOperation, importedEntityId);
+  assert.equal(added.properties.entityVersion, addedVersion);
   const policy = JSON.parse(fs.readFileSync(stagedSourcePath(root, 'place-visibility-policy.json')));
   assert.ok(
     policy.overrides.some(({id}) => id === promoted.properties.id),
@@ -119,9 +146,11 @@ test('a road drawn in the editor is accepted, and asks for a tile rebuild', asyn
     }
   });
   const expected = materializedLayer(session, 'roads.geojson');
-  const {result} = await exportAndApply(session, sources, root);
+  const importedEntityId = 'local:33333333-3333-4333-8333-333333333333';
+  const {changeset, result} = await exportAndApply(session, sources, root, () => importedEntityId);
   assert.equal(result.needsTileRebuild, true);
-  assert.deepEqual(readSource(root, 'roads.geojson').features, expected.features);
+  const addOperation = changeset.operations.find(operation => operation.operation === 'add');
+  expectImportedLayer(readSource(root, 'roads.geojson'), expected, addOperation, importedEntityId);
 });
 
 test('moving an unnamed road keeps its blank source name, and the importer accepts it', async testContext => {

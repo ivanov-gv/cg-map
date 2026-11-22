@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {contractPath, contractsDirectoryFrom} from './contracts.mjs';
+import {serializeSourceCollection} from './source-json.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PLACES = 'data/sources/places.geojson', POLICY = 'data/sources/place-visibility-policy.json', PROVENANCE = 'data/sources/provenance.json';
@@ -69,7 +70,7 @@ export function withoutVisibility(collection) {
   return {...collection, features: collection.features.map(feature => ({...feature, properties: withoutLevel(feature.properties)}))};
 }
 
-export const serializePlaces = collection => JSON.stringify(collection);
+export const serializePlaces = collection => serializeSourceCollection(collection);
 export const placeFactsHash = collection => sha256(serializePlaces(withoutVisibility(collection)));
 
 export function placesProvenance(bytes, collection, policyBytes, configBytes) {
@@ -98,5 +99,11 @@ export function run(argv, {root = rootDirectory, contractsDirectory} = {}) {
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
-  run(argv, {contractsDirectory: contractsDirectoryFrom(argv, 'apply-place-visibility.mjs')});
+  const rootFlag = argv.indexOf('--root');
+  if (rootFlag !== -1 && !argv[rootFlag + 1]) throw new Error('--root needs a repository path');
+  const root = rootFlag === -1 ? rootDirectory : path.resolve(argv[rootFlag + 1]);
+  run(
+    rootFlag === -1 ? argv : argv.filter((value, index) => index !== rootFlag && index !== rootFlag + 1),
+    {root, contractsDirectory: contractsDirectoryFrom(argv, 'apply-place-visibility.mjs')}
+  );
 }

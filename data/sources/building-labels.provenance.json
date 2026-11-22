@@ -1,16 +1,16 @@
 {
   "source": "OpenStreetMap / Geofabrik Montenegro",
-  "upstream_snapshot": "2026-10-17T20:20:51Z",
-  "input_pbf_sha256": "574423f1685e7b0a82a14166ba492376fc824294680ea0c576426ff408230397",
-  "buildings_sha256": "d887d10fec733cdbe06b0e343973042f84d87e1d0451dd4a73bf99e360e3acb8",
-  "generated_at": "2026-10-18T20:30:38.908598+00:00",
-  "features": 1076,
-  "direct_building_addresses": 890,
-  "node_derived_addresses": 186,
+  "upstream_snapshot": "2026-11-20T21:21:21Z",
+  "input_pbf_sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b",
+  "buildings_sha256": "4ab18071fa2241bb860c2cbef5d170dd44797ecc87dd71945edb9addabb29b66",
+  "generated_at": "2026-11-21T16:13:46.865171+00:00",
+  "features": 1207,
+  "direct_building_addresses": 1003,
+  "node_derived_addresses": 204,
   "ambiguous_address_nodes_skipped": 0,
-  "matched_footprints": 25213,
-  "bytes": 309592,
-  "sha256": "31acf4afdd8b98ca83d457bfd936e3cfc322424fbe62ed440d1de193865fbd16",
+  "matched_footprints": 43923,
+  "bytes": 403046,
+  "sha256": "1987802515df50de99baa9002e8290bf847a0b60967b8bf1692a82db75835356",
   "license": "ODbL 1.0",
-  "method": "Exact footprint match at existing six-decimal precision. Direct building number preferred; otherwise unique address-node membership/containment. Anchor is inside the polygon. No inferred numbering or nearest-building assignment; no-number placeholders (bb/bez broja) are excluded."
+  "method": "Exact footprint match at existing six-decimal precision. Separate way numbers and explicitly tagged entrance nodes; unambiguous node membership/containment only. Non-entrance addresses remain legacy labels. Anchor is inside the polygon. No inferred entrances, numbering or nearest-building assignment; no-number placeholders (bb/bez broja) are excluded. Labels keep the matched footprint way ID and OSM version as source identity."
 }

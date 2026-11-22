@@ -44,9 +44,11 @@ export function validateCollection(data, {
   label = 'GeoJSON',
   geometryTypes,
   requireKind = false,
+  requireAdopted = false,
   contractsDirectory
 } = {}) {
   requireValue(data?.type === 'FeatureCollection' && Array.isArray(data.features), `${label}: expected FeatureCollection`);
+  if (requireAdopted) requireValue(data.entitySchemaVersion === 1, `${label}: requires entitySchemaVersion 1`);
   validateSourceEntities(data, {label, contractsDirectory});
   const rules = places ? placeRules(contractsDirectory) : null;
   const ids = new Set();
@@ -68,8 +70,8 @@ export function validateCollection(data, {
   }
   return data.features.length;
 }
-export function validateStops(data, {contractsDirectory} = {}) {
-  const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point'], contractsDirectory});
+export function validateStops(data, {requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point'], requireAdopted, contractsDirectory});
   const ids = new Set();
   for (const f of data.features) {
     const {stopId, name} = f.properties;
@@ -165,11 +167,12 @@ function validateEntrances(properties, polygon, sourceIDs, houseNumber) {
 }
 
 // Labels retain reviewed source identities and interior anchors; entrance points must be on a wall.
-export function validateBuildingLabels(data, buildings, {contractsDirectory} = {}) {
+export function validateBuildingLabels(data, buildings, {requireAdopted = false, contractsDirectory} = {}) {
   const count = validateCollection(data, {
     label: 'building labels',
     geometryTypes: ['Point'],
     requireKind: true,
+    requireAdopted,
     contractsDirectory
   });
   const houseNumber = houseNumberRule(contractsDirectory);
@@ -206,9 +209,9 @@ export function validateBuildingLabels(data, buildings, {contractsDirectory} = {
   requireValue(count > 0, 'Empty building address snapshot');
   return count;
 }
-export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance, {contractsDirectory} = {}) {
+export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance, {requireAdopted = false, contractsDirectory} = {}) {
   const places = JSON.parse(placeBytes);
-  const count = validateCollection(places, {places: true, label: 'places', contractsDirectory});
+  const count = validateCollection(places, {places: true, label: 'places', requireAdopted, contractsDirectory});
   requireValue(count === provenance.places_count, 'Place count differs from reviewed provenance');
   requireValue(serializePlaces(applyVisibility(places, JSON.parse(policyBytes), JSON.parse(configBytes))) === placeBytes, 'Place visibility levels differ from the reviewed policy. Run data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts.');
   for (const [key, value] of Object.entries(placesProvenance(placeBytes, places, policyBytes, configBytes))) requireValue(provenance[key] === value, `Place provenance mismatch: ${key}. Review the change and update data/sources/provenance.json.`);
@@ -219,8 +222,9 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
   const labelProvenance=JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-labels.provenance.json')));
   const buildings = JSON.parse(buildingBytes);
+  requireValue(buildings.entitySchemaVersion === 1, 'buildings.geojson: requires entitySchemaVersion 1');
   validateSourceEntities(buildings, {label: 'buildings.geojson', contractsDirectory});
-  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),buildings,{contractsDirectory});
+  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),buildings,{requireAdopted: true, contractsDirectory});
   requireValue(labelCount===labelProvenance.features && labelBytes.length===labelProvenance.bytes && crypto.createHash('sha256').update(labelBytes).digest('hex')===labelProvenance.sha256 && crypto.createHash('sha256').update(buildingBytes).digest('hex')===labelProvenance.buildings_sha256, 'Building label provenance mismatch');
 
   const transitBytes = fs.readFileSync(path.join(root, 'data/sources/transit-network.json'));
@@ -230,7 +234,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 
   const stopBytes = fs.readFileSync(path.join(root, 'data/sources/transport-stops.geojson'));
   const stopProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transport-stops.provenance.json')));
-  const stopCount = validateStops(JSON.parse(stopBytes), {contractsDirectory});
+  const stopCount = validateStops(JSON.parse(stopBytes), {requireAdopted: true, contractsDirectory});
   requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
@@ -240,7 +244,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
     const geometryTypes = name === 'roads.geojson' ? ['LineString', 'MultiLineString'] : name === 'water.geojson' ? ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'] : ['Polygon', 'MultiPolygon'];
-    const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, contractsDirectory});
+    const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, requireAdopted: true, contractsDirectory});
     requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
       `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
   }
@@ -250,7 +254,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     fs.readFileSync(path.join(root, 'data/sources/place-visibility-policy.json'), 'utf8'),
     fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8'),
     provenance,
-    {contractsDirectory}
+    {requireAdopted: true, contractsDirectory}
   );
   const release=JSON.parse(fs.readFileSync(path.join(root,'data/artifacts/release.json')));
   requireValue(/^montenegro-[a-f0-9]{16}\.pmtiles$/.test(release.archive.file), 'Unsafe archive filename');

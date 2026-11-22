@@ -61,7 +61,16 @@ category; kind and category rules cannot assign it. `basis: "commercial"` entrie
 placement is not part of this release.
 
 data/tools/extract-osm.py replaces places.geojson and then reapplies the policy, so overrides survive an import. An
-override whose place disappeared stops that step with an error. Fix the policy, then review the new facts as above.
+override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
+run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
+`roads`, `water`, `land` (land.geojson, including its country geometry), and `places`; each group replaces only its own
+source file. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a
+full extract. `context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full
+run. Fix the policy, then review the new facts as above.
+
+The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
+import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
+place-only command above with `--update-provenance --accept-new-facts`. Never pass that flag just to turn a check green.
 
 ## Editor changesets
 
@@ -78,8 +87,10 @@ properties, geometry and label joins. It then stages its writes, and restores th
 fails. It never commits. A level edit becomes a policy override, so regenerating levels keeps it, and each change is
 recorded with its author, reason and both values in data/sources/editor-corrections.json; see
 [provenance](../../data/PROVENANCE.md). New features use a `local:` reference and claim nothing the rules do not list; a
-new place also takes the contract's local source value, never a fabricated upstream ID. An edit or deletion that would
-replace or remove a commercial override is refused by name: review it in the policy first.
+new place also takes the contract's local source value, never a fabricated upstream ID. In an adopted collection the
+importer assigns the addition a fresh `local:<uuid v4>` source identity and a `sha256:` base version; a changeset must
+not claim those fields. An edit or deletion that would replace or remove a commercial override is refused by name:
+review it in the policy first.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the
@@ -92,7 +103,8 @@ changing it. Browser tests also exercise the actual reviewed archive and imagery
 
 ## Geometry edits or refreshes
 
-Install optional dependencies:
+`make verify PKG=data` and `make -C data build-data` need the pinned Python packages in `data/tools/requirements.txt`
+(`pmtiles`, `shapely` and `osmium`). Use a virtualenv:
 
 ```sh
 python3 -m venv .venv
@@ -100,21 +112,49 @@ python3 -m venv .venv
 python3 -m pip install -r data/tools/requirements.txt
 ```
 
-After reviewing geometry and updating source provenance hashes/counts:
+When the system Python has no `ensurepip`, create the environment without it and install into that interpreter:
 
 ```sh
+python3 -m venv --without-pip .venv
+python3 -m pip --python .venv/bin/python install -r data/tools/requirements.txt
+. .venv/bin/activate
+```
+
+CI installs the same pinned requirements before running `make verify PKG=data`; tests are never skipped when `osmium` is
+absent.
+
+### Full OSM refresh
+
+Keep the exact PBF outside Git. From the repository root, with the virtualenv active:
+
+```sh
+python3 data/tools/extract-osm.py /path/to/montenegro-2026-11-21.osm.pbf \
+  --root . \
+  --source-url https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf \
+  --source-date 2026-11-21 \
+  --source-timestamp 2026-11-20T21:21:21Z \
+  --detail-bbox 19.15 42.37 19.34 42.51
+python3 data/tools/build-building-labels.py /path/to/montenegro-2026-11-21.osm.pbf
 make -C data build-data
 make -C data check
 make check
 make test-e2e
 ```
 
+The extractor computes all outputs before replacing reviewed files. It applies the existing visibility policy but does
+not accept changed place facts: review the diff, then either rerun the extract with `--accept-new-place-facts` or follow
+the place-only procedure above. Only that deliberate review may update the place provenance hashes. Omit
+`--source-timestamp` when the PBF header carries its replication time, and omit `--detail-bbox` for the reviewed box.
+
+For a reviewed partial refresh, add the same required source options and restrict the run, for example
+`--layers buildings roads`. It must use the PBF hash already in provenance.json; a different input is refused. Without
+`land` in the selection, water's ocean polygon is recomputed from the reviewed land.geojson rather than a fresh country
+outline. Finish with `make -C data build-data` when geometry changed, then the same checks.
+
 make -C data build-data clips/encodes MVT into .build/tiles, packages PMTiles into data/artifacts, and writes
 checksummed release metadata. It can create about 230K temporary files and need around 1 GB of space. It does not
-deploy.
-
-Upstream extraction replaces snapshots rather than merging local corrections. Preserve original inputs outside Git and
-provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend
+deploy. Upstream extraction replaces snapshots rather than merging local corrections. Preserve original inputs outside
+Git and provenance before refreshing. Do topology checks with GIS tooling. Data producers must not import UI/backend
 implementation.
 
 Current artifacts are committed for convenient clean-checkout builds. Move large/frequent releases to immutable artifact

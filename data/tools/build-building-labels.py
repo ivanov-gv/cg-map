@@ -8,13 +8,21 @@ import datetime
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
+
+# Tests load this script by path, so its sibling package is not automatically importable.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from osm_extract.identity import osm_identity
+from osm_extract.writing import serialize_collection
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_ENTRANCES = 100
 MAX_ADDRESS_TEXT_LENGTH = 128
 COORDINATE_TOLERANCE_DEGREES = 0.000001
-REVIEWED_PBF_HASH = '574423f1685e7b0a82a14166ba492376fc824294680ea0c576426ff408230397'
+REVIEWED_PBF_HASH = '70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b'
+UPSTREAM_SNAPSHOT = '2026-11-20T21:21:21Z'
 
 
 def house_number(raw):
@@ -153,6 +161,8 @@ def read_addresses(input_pbf, footprint_indexes):
             footprint_index = candidates[0]
             self.matches.setdefault(footprint_index, []).append({
                 'osm_id': 'way/' + str(building.id),
+                'way_id': building.id,
+                'version': building.version,
                 'number': house_number(building.tags.get('addr:housenumber', '')),
                 'street': building.tags.get('addr:street', ''),
             })
@@ -188,7 +198,10 @@ def associate_nodes(addresses, matched_buildings, polygons):
             node_addresses.setdefault(footprint_index, []).append(node)
         if not node['entrance']:
             continue
-        entrance = {'id': node['osm_id'], 'coordinates': [point.x, point.y]}
+        entrance = {
+            'id': node['osm_id'],
+            'coordinates': [round(point.x, 6), round(point.y, 6)],
+        }
         for field in ['number', 'ref', 'street']:
             if node[field]:
                 entrance[field] = node[field]
@@ -218,8 +231,9 @@ def build_labels(matched_buildings, polygons, node_addresses, entrances):
         if len('; '.join(numbers)) > MAX_ADDRESS_TEXT_LENGTH:
             continue
         anchor = polylabel(polygon, tolerance=COORDINATE_TOLERANCE_DEGREES)
-        if not polygon.covers(anchor):
-            raise ValueError('Label anchor outside its footprint')
+        anchor_coordinates = [round(anchor.x, 6), round(anchor.y, 6)]
+        if not polygon.covers(Point(*anchor_coordinates)):
+            raise ValueError('Rounded label anchor outside its footprint')
         polygon_coordinates = [list(polygon.exterior.coords)]
         polygon_coordinates.extend(list(ring.coords) for ring in polygon.interiors)
         oriented_entrances = [
@@ -229,12 +243,14 @@ def build_labels(matched_buildings, polygons, node_addresses, entrances):
         ]
         properties = building_properties(
             building, address_nodes, oriented_entrances, footprint_index)
-        # Retain sub-metre anchor precision so tiny footprints stay valid.
+        # Six decimals retain sub-metre precision for tiny footprints.
         labels.append({
             'type': 'Feature',
             'id': building['osm_id'],
-            'geometry': {'type': 'Point', 'coordinates': [anchor.x, anchor.y]},
-            'properties': properties,
+            'geometry': {
+                'type': 'Point', 'coordinates': anchor_coordinates
+            },
+            'properties': {**properties, **osm_identity('way', building['way_id'], building['version'])},
         })
         direct_count += bool(building['number'])
         node_count += not bool(building['number'])
@@ -265,11 +281,10 @@ def main():
     }
     node_addresses, entrances, ambiguous_count = associate_nodes(addresses, matched_buildings, polygons)
     labels, direct_count, node_count = build_labels(matched_buildings, polygons, node_addresses, entrances)
-    collection = {'type': 'FeatureCollection', 'features': labels}
-    data = (json.dumps(collection, ensure_ascii=False, separators=(',', ':')) + '\n').encode()
+    data = serialize_collection(labels).encode('utf-8')
     metadata = {
         'source': 'OpenStreetMap / Geofabrik Montenegro',
-        'upstream_snapshot': '2026-10-17T20:20:51Z',
+        'upstream_snapshot': UPSTREAM_SNAPSHOT,
         'input_pbf_sha256': input_hash,
         'buildings_sha256': hashlib.sha256(source_bytes).hexdigest(),
         'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -285,7 +300,7 @@ def main():
                    'and explicitly tagged entrance nodes; unambiguous node membership/containment only. '
                    'Non-entrance addresses remain legacy labels. Anchor is inside the polygon. '
                    'No inferred entrances, numbering or nearest-building assignment; '
-                   'no-number placeholders (bb/bez broja) are excluded.'),
+                   'no-number placeholders (bb/bez broja) are excluded. Labels keep the matched footprint way ID and OSM version as source identity.'),
     }
     (ROOT / 'data/sources/building-labels.geojson').write_bytes(data)
     (ROOT / 'data/sources/building-labels.provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')

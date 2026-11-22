@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
 import {checkData, validateBuildingLabels, validateCollection} from './check-data.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
+import {serializeSourceCollection} from './source-json.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sourcesPath = 'data/sources';
@@ -18,6 +19,8 @@ const ledgerPath = 'data/sources/editor-corrections.json';
 const collinearToleranceDegreesSquared = 1e-13;
 const placeIdentityFields = ['id', 'source'];
 const newFeatureFields = ['type', 'properties', 'geometry'];
+const sourceIdentityFields = ['entityId', 'entityVersion', 'entityPart'];
+const localEntityIdPattern = /^local:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fingerprint = feature => sha256(JSON.stringify(feature));
@@ -209,11 +212,31 @@ function checkAddedFeature(operation, rule, localPlaceSource) {
   requireThat(!unlistedField, `${filename}: a new feature must not claim a feature ${unlistedField}`);
   const isPlace = filename === 'places.geojson';
   const allowedNames = new Set([...Object.keys(rule.properties), ...(isPlace ? placeIdentityFields : [])]);
+  const claimedIdentity = sourceIdentityFields.find(name => Object.hasOwn(after.properties, name));
+  requireThat(!claimedIdentity, `${filename}: a new feature must not claim ${claimedIdentity}`);
   const unlistedName = Object.keys(after.properties).find(name => !allowedNames.has(name));
   requireThat(!unlistedName, `${filename}: a new feature must not claim ${unlistedName}`);
   if (!isPlace) return;
   requireThat(after.properties.id === localId, 'a new place must use its local ID as its id');
   requireThat(after.properties.source === localPlaceSource, `a new place must have source "${localPlaceSource}"`);
+}
+
+// An adopted file requires identity on every feature, so the importer assigns it to additions. The version is a
+// content hash of the reviewed export: it is a base token, not a claim about an upstream object.
+function adoptAddedFeature(feature, source, newEntityId, usedIds) {
+  if (source.entitySchemaVersion !== 1) return feature;
+  const entityId = newEntityId(feature);
+  requireThat(localEntityIdPattern.test(entityId), `invalid local entity ID ${entityId}`);
+  requireThat(!usedIds.has(entityId), `duplicate local entity ID ${entityId}`);
+  usedIds.add(entityId);
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      entityId,
+      entityVersion: `sha256:${sha256(JSON.stringify(feature))}`
+    }
+  };
 }
 
 function checkExistingFeature(operation, source) {
@@ -343,11 +366,6 @@ function policyWithLevelEdits(policy, operations, changeset) {
   return {...policy, overrides: [...overrides.values()]};
 }
 
-function serializeLayer(collection, originalBytes) {
-  const hasFinalNewline = originalBytes.at(-1) === 0x0a;
-  return JSON.stringify(collection) + (hasFinalNewline ? '\n' : '');
-}
-
 // Keeps the values as well as the hashes: this ledger is what tells a local correction from an imported upstream fact.
 function ledgerEntries(changeset, appliedAt) {
   return changeset.operations.map(({filename, operation, reference, beforeFingerprint, before, after}) => ({
@@ -474,7 +492,7 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
         requireKind: filename !== 'transport-stops.geojson',
         contractsDirectory
       });
-      nextBytes.set(filename, serializeLayer(nextSource, originalBytes.get(filename)));
+      nextBytes.set(filename, serializeSourceCollection(nextSource));
     }
   }
   return {nextBytes, policyBytes, places};
@@ -485,7 +503,12 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
 export function applyChangeset(
   changeset,
   root = rootDirectory,
-  {now = new Date().toISOString(), checkFinalData = checkData, contractsDirectory} = {}
+  {
+    now = new Date().toISOString(),
+    checkFinalData = checkData,
+    contractsDirectory,
+    newEntityId = () => `local:${crypto.randomUUID()}`
+  } = {}
 ) {
   checkEnvelope(changeset);
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -495,8 +518,17 @@ export function applyChangeset(
   const levels = new Set(levelConfig.levels.map(entry => entry.level));
   const {sources, originalBytes} = readPinnedSources(changeset, root);
   for (const operation of changeset.operations) checkOperation(operation, sources, rules, levels);
+  const usedIds = new Set(
+    [...sources.values()].flatMap(source =>
+      source.features.map(feature => feature.properties.entityId).filter(Boolean))
+  );
+  const appliedOperations = changeset.operations.map(operation => operation.operation === 'add' ? {
+    ...operation,
+    after: adoptAddedFeature(operation.after, sources.get(operation.filename), newEntityId, usedIds)
+  } : operation);
+  const appliedChangeset = {...changeset, operations: appliedOperations};
   const {nextBytes, policyBytes, places} = serializedResults(
-    changeset,
+    appliedChangeset,
     sources,
     originalBytes,
     read(policyPath),
@@ -512,7 +544,7 @@ export function applyChangeset(
   if (places) writes.push([policyPath, policyBytes]);
   writes.push(...provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfigBytes));
   const ledger = readLedger(root);
-  ledger.corrections.push(...ledgerEntries(changeset, now));
+  ledger.corrections.push(...ledgerEntries(appliedChangeset, now));
   writes.push([ledgerPath, JSON.stringify(ledger, null, 2) + '\n']);
 
   const restore = writeStaged(root, writes);
