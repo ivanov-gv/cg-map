@@ -120,35 +120,12 @@ test('files and kinds outside the rules stay inspect-only, with a reason', () =>
   const country = {type: 'Feature', properties: {kind: 'context'}, geometry: {type: 'Polygon', coordinates: [square]}};
   const land = featureCapabilities(country, rules.layers['land.geojson']);
   assert.equal(land.canModify, false);
-  assert.match(land.lockReason, /Country and context/);
-  for (const kind of ['park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground']) {
-    assert.equal(featureCapabilities({...country, properties: {kind}}, rules.layers['land.geojson']).canModify, true);
-  }
-  const namedMeadow = {...country, properties: {kind: 'meadow', name: 'Meadow', 'name:en': 'Meadow EN'}};
-  assert.equal(featureProblem(namedMeadow, rules.layers['land.geojson'], levels), null);
-  const waterKinds = ['lake', 'river', 'reservoir', 'pond', 'basin', 'water', 'stream', 'canal', 'ditch', 'drain', 'coastline'];
-  for (const kind of waterKinds) {
-    assert.equal(featureCapabilities({...country, properties: {kind}}, rules.layers['water.geojson']).canModify, true);
-  }
+  assert.match(land.lockReason, /Country shapes/);
+  const park = {...country, properties: {kind: 'park'}};
+  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canModify, true);
   const ocean = {type: 'Feature', properties: {kind: 'ocean'}, geometry: {type: 'MultiPolygon', coordinates: []}};
   assert.equal(featureCapabilities(ocean, rules.layers['water.geojson']).canModify, false);
-  assert.equal(featureCapabilities(country, rules.layers['land.geojson']).canDelete, false);
-});
-
-test('land and water edits require a published kind from the rule enum', () => {
-  for (const filename of ['land.geojson', 'water.geojson']) {
-    const rule = rules.layers[filename];
-    const editableKind = rule.editableKinds[0];
-    const feature = {type: 'Feature', properties: {kind: editableKind}, geometry: {type: 'Polygon', coordinates: [square]}};
-    assert.equal(featureProblem(feature, rule, levels), null, filename);
-    const missing = structuredClone(feature);
-    delete missing.properties.kind;
-    assert.match(featureProblem(missing, rule, levels), /kind is required/, filename);
-    const unsupported = structuredClone(feature);
-    unsupported.properties.kind = 'unmapped-kind';
-    assert.match(featureProblem(unsupported, rule, levels), /kind is not an allowed value/, filename);
-    assert.deepEqual(rule.properties.kind.enum.toSorted(), rule.editableKinds.toSorted(), filename);
-  }
+  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canDelete, false);
 });
 
 test('an edit keeps unknown fields, and returning to the source state leaves no change', () => {

@@ -95,6 +95,7 @@ test('blank extracted names are rejected while absent names are accepted', () =>
     }]
   };
   const options = {
+    contractsDirectory,
     allowedKinds: new Set(['meadow']),
     landWater: true,
     requiredOsmTagKinds: new Set(['meadow'])

@@ -4,18 +4,14 @@ import fs from 'node:fs';
 import {mapStyle} from '../../packages/map-core/src/map-style.js';
 import {selectTappedFeature} from '../../apps/web/src/map-selection.js';
 import {describePoint} from '../../apps/web/src/point-selection.js';
+import {readContractJSON} from '../contracts-root.mjs';
+import {dataSourcePath} from '../data-root.mjs';
 
-const contractUrl = new URL(
-  '../../packages/contracts/source-land-water.schema.json', import.meta.url
-);
-const editorRulesUrl = new URL(
-  '../../packages/contracts/editor-layers.json', import.meta.url
-);
 const preservedLandKinds = new Set(['country', 'context']);
 const derivedWaterKinds = new Set(['ocean']);
 
-function readJson(url) {
-  return JSON.parse(fs.readFileSync(url, 'utf8'));
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
 function greenKindsFromStyle() {
@@ -51,8 +47,8 @@ function selectedName(kind) {
 }
 
 test('extracted land and water kinds stay in step with validation and consumers', () => {
-  const contract = readJson(contractUrl);
-  const editorRules = readJson(editorRulesUrl);
+  const contract = readContractJSON('source-land-water.schema.json');
+  const editorRules = readContractJSON('editor-layers.json');
   const landKinds = contract.$defs.landKind.enum.filter(
     kind => !preservedLandKinds.has(kind)
   );
@@ -92,9 +88,7 @@ test('extracted land and water kinds stay in step with validation and consumers'
 
 test('reviewed land and water omit blank names and consumers tolerate absent names', () => {
   for (const filename of ['land.geojson', 'water.geojson']) {
-    const collection = readJson(
-      new URL(`../../data/sources/${filename}`, import.meta.url)
-    );
+    const collection = readJson(dataSourcePath(filename));
     for (const feature of collection.features) {
       for (const field of ['name', 'name:en']) {
         const value = feature.properties[field];
