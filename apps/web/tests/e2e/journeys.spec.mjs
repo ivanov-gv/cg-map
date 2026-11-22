@@ -1,6 +1,5 @@
 import {test, expect} from '@playwright/test';
-import fileSystem from 'node:fs';
-import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
+import {entranceBearing, readPinnedSource} from '../pinned-data.mjs';
 import {
   closeCard,
   closeMenu,
@@ -410,10 +409,10 @@ test(
 
 test('building house numbers start at the 100m scale and open address details', async ({page}) => {
   const labels = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
+    readPinnedSource('building-labels.geojson')
   );
   const places = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url))
+    readPinnedSource('places.geojson')
   );
   const label = labels.features.find(
     feature =>
@@ -500,7 +499,7 @@ test('same building keeps its address across zooms and with number labels hidden
 
 test('a place inside a building keeps only its marker ring across zoom and satellite changes', async ({page}) => {
   const label = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
+    readPinnedSource('building-labels.geojson')
   ).features.find(feature => {
     const [longitude, latitude] = feature.geometry.coordinates;
     return longitude > 19.251 && longitude < 19.261 && latitude > 42.438 && latitude < 42.445;
@@ -586,7 +585,7 @@ test('a place inside a building keeps only its marker ring across zoom and satel
 test('point-only places highlight their existing markers and restore them on close', async ({page}) => {
   await ready(page);
   const places = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url))
+    readPinnedSource('places.geojson')
   ).features;
   for (const sourceId of ['node/13719099734', 'node/309892487']) {
     const place = places.find(feature => feature.properties.id === sourceId);
@@ -638,12 +637,10 @@ test.describe('building entrances', () => {
       async ({page, context}) => {
         // Real archive geometry, synthetic address facts; no invented published source data.
         const labels = JSON.parse(
-          fileSystem.readFileSync(
-            new URL('../../../../data/sources/building-labels.geojson', import.meta.url)
-          )
+          readPinnedSource('building-labels.geojson')
         );
         const buildings = JSON.parse(
-          fileSystem.readFileSync(new URL('../../../../data/sources/buildings.geojson', import.meta.url))
+          readPinnedSource('buildings.geojson')
         );
         const label = labels.features[0];
         const properties = label.properties;
@@ -849,7 +846,7 @@ test.describe('building entrances', () => {
 
   test('invalid entrance data shows a visible address-load error', async ({page}) => {
     const labels = JSON.parse(
-      fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
+      readPinnedSource('building-labels.geojson')
     );
     labels.features[0].properties.entrances = [{id: 'node/1', coordinates: [200, 42]}];
     await page.route('**/data/building-labels.geojson', route => route.fulfill({json: labels}));

@@ -102,6 +102,30 @@ test('repo boundary rejects forbidden imports whose list spans several lines', t
   assert.match(result.stderr, /forbidden dependency \.\.\/\.\.\/web\/src\/core\.js/);
 });
 
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  test(`${application} repo boundary rejects repository data paths in tests`, t => {
+    const probe = path.join(repoRoot, application, 'tests', `__data-probe-${process.pid}.mjs`);
+    t.after(() => fs.rmSync(probe, {force: true}));
+    fs.writeFileSync(probe, "export const source = '../../../../data/sources/places.geojson';\n");
+    const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+    assert.notEqual(result.status, 0);
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    assert.ok(output.includes(path.basename(probe)), output);
+    assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
+  });
+}
+
+test('repo boundary rejects path builders that target repository data', t => {
+  const probe = path.join(repoRoot, 'apps/web/tests', `__data-join-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  fs.writeFileSync(probe, "export const source = path.join(repositoryRoot, 'data', 'sources', 'places.geojson');\n");
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
+});
+
 test('each application owns its build and run targets, and the root Makefile has neither', () => {
   const rootMakefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
   const rootTargets = [...rootMakefile.matchAll(/^([a-z][\w-]*)\s*:(?!=)/gm)].map(match => match[1]);
@@ -141,6 +165,7 @@ test('every local workflow run uses the published image', () => {
   assert.match(makefile, /-P ubuntu-24\.04=\$\(ACT_IMAGE\) -P ubuntu-latest=\$\(ACT_IMAGE\)/);
   assert.match(makefile, /^test-ci-pr-checks .*: test-%: act-image$/m);
   assert.match(makefile, /^test-cd-map-core: act-image$/m);
+  assert.match(makefile, /^test-cd-map-data: act-image$/m);
   assert.match(makefile, /--var BROWSER_CONTAINER_OPTIONS="--device \/dev\/dri"/, 'a job container needs the GPU passed itself');
   assert.match(makefile, /^test-cd-browser-image: act-image$/m);
 });

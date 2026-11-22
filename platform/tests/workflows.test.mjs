@@ -21,6 +21,7 @@ const NO_TWIN = {
   'ci-nightly.yml': ['run'],
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
+  'cd-map-data.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'cd-dev-pages.yml': ['switch', 'deploy'],
   'ci-publish.yml': ['switch', 'select']
@@ -111,7 +112,11 @@ test('CI workflows never touch production', () => {
   }
 });
 
-const CD_TAGS = {'cd-map-core.yml': 'map-core/v', 'cd-browser-image.yml': 'browser-image/v'};
+const CD_TAGS = {
+  'cd-map-core.yml': 'map-core/v',
+  'cd-map-data.yml': 'map-data/v',
+  'cd-browser-image.yml': 'browser-image/v'
+};
 
 for (const [file, tagPrefix] of Object.entries(CD_TAGS))
   test(`${file}: CD checks out no application source, and only a release or a manual run can start it`, () => {
@@ -264,7 +269,10 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
 test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
   const {jobs} = load('ci-publish.yml');
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
-  assert.deepEqual(writers.map(([name]) => name).toSorted(), ['browser-image', 'image', 'package', 'pages', 'pages-cleanup']);
+  assert.deepEqual(
+    writers.map(([name]) => name).toSorted(),
+    ['browser-image', 'data-package', 'image', 'package', 'pages', 'pages-cleanup']
+  );
   for (const [name, writer] of writers) {
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
     const twin = jobs[`${name}-test-run`];
@@ -576,6 +584,33 @@ test('ci-workflows: ci-publish.yml changed, with qualifying run must pass', asyn
   assert.equal(result.code, 0, 'ci-publish.yml changed with qualifying run must exit 0');
 });
 
+test('ci-workflows: cd-map-data.yml changed, no qualifying run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/cd-map-data.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-map-data.yml': '[{"displayTitle":"other run"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'cd-map-data.yml changed without qualifying run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run cd-map-data\.yml --ref.*-f test_run=true/,
+    'error must name the cd-map-data dispatch command'
+  );
+});
+
+test('ci-workflows: cd-map-data.yml changed, with qualifying run must pass', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/cd-map-data.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 0, 'cd-map-data.yml changed with qualifying run must exit 0');
+});
+
 test('ci-workflows: setup-web changed, no ci-publish run must fail', async () => {
   const result = await runEvidenceTest(
     ['.github/actions/setup-web/action.yml'],
@@ -583,6 +618,7 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
       'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
       'runs-cd-browser-image.yml': '[]',
       'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
+      'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
     }
   );
   assert.equal(result.code, 1, 'setup-web changed without ci-publish run must exit 1');
@@ -727,6 +763,37 @@ test('ci-publish triggers on push to main and workflow dispatch', () => {
   const {on} = load('ci-publish.yml');
   assert.deepEqual(Object.keys(on).sort(), ['push', 'workflow_dispatch'], 'ci-publish trigger set');
   assert.deepEqual(on.push.branches, ['main'], 'ci-publish must only trigger on main');
+});
+
+test('ci-publish publishes a map-data dev package when the plan selects data', () => {
+  const {jobs} = load('ci-publish.yml');
+  assert.equal(jobs.plan.outputs.data, '${{ steps.plan.outputs.data }}');
+  assert.equal(jobs['plan-test-run'].outputs.data, '${{ steps.plan.outputs.data }}');
+  const publish = jobs['data-package'];
+  assert.match(publish.if, /needs\.plan\.outputs\.data == 'true' \|\| needs\.plan-test-run\.outputs\.data == 'true'/);
+  assert.match(publish.if, /github\.ref == 'refs\/heads\/main'/, 'the data package could be published from a branch');
+  const packageStep = publish.steps.find(step => step.uses?.includes('publish-dev-package'));
+  assert.ok(packageStep, 'the data package job must use publish-dev-package');
+  assert.equal(packageStep.with.directory, 'source/data', 'the requested source must be published');
+  assert.equal(publish.env.PACKAGE_COMMIT, '${{ inputs.commit || github.sha }}', 'dispatch must select a commit');
+  const checkouts = publish.steps.filter(step => step.uses === 'actions/checkout@v7');
+  assert.equal(checkouts.length, 2, 'the action revision and source commit need separate checkouts');
+  assert.equal(checkouts[0].with.ref, undefined, 'local actions must come from the workflow revision');
+  assert.equal(checkouts[1].with.ref, '${{ env.PACKAGE_COMMIT }}', 'the data job must check out that commit');
+  assert.equal(checkouts[1].with.path, 'source');
+  assert.equal(packageStep.with.commit, '${{ env.PACKAGE_COMMIT }}', 'the package identity must use that commit');
+  assert.match(publish.steps.map(step => step.run ?? '').join('\n'), /\[0-9a-f\]\{40\}/, 'commit must be a full SHA');
+  assert.deepEqual(jobs['data-package-test-run'].steps, publish.steps);
+  assert.equal(jobs['data-package-test-run'].environment, 'test-run');
+});
+
+test('publish-dev-package versions a requested commit, not the workflow ref', () => {
+  const action = fs.readFileSync(
+    path.join(repoRoot, '.github/actions/publish-dev-package/action.yml'),
+    'utf8'
+  );
+  assert.match(action, /^\s{2}commit:$/m, 'the action must accept a source commit');
+  assert.match(action, /COMMIT_SHA: \$\{\{ inputs\.commit \|\| github\.sha \}\}/);
 });
 
 // The nightly schedule is paused (issue #319): only a dispatch runs it, and the commented cron stays ready to restore.

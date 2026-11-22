@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import fileSystem from 'node:fs';
-import {entranceBearing} from '../../../../data/tools/building-entrances.mjs';
+import {entranceBearing, readPinnedSource} from '../pinned-data.mjs';
 import {buildingAddress, placesInsideFootprint} from '../../src/point-selection.js';
 import {
   atViewport,
@@ -195,7 +195,7 @@ async function cardSettled(page, state) {
 }
 
 const readGeoJSON = path =>
-  JSON.parse(fileSystem.readFileSync(new URL(`../../../../data/sources/${path}`, import.meta.url)));
+  JSON.parse(readPinnedSource(path));
 
 // One browser-side box reader for geometry assertions.
 const readBoxes = (page, selectors) =>

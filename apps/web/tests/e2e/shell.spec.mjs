@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import fileSystem from 'node:fs';
+import {readPinnedSource} from '../pinned-data.mjs';
 import {closeCard, fixture, openMenu, ready, stubRouting, tapMapCenter} from './helpers.mjs';
 
 test.beforeEach(({page}) => stubRouting(page));
@@ -75,7 +75,7 @@ test(
     await page.getByRole('button', {name: 'From', exact: true}).click();
     await expect(page.locator('#route-from')).toContainText('Ul. 13. jula (B)');
     const busNetwork = JSON.parse(
-      fileSystem.readFileSync(new URL('../../../../data/sources/transit-network.json', import.meta.url))
+      readPinnedSource('transit-network.json')
     );
     const pattern = busNetwork.patterns.find(pattern => pattern.offsets.at(-1) > 0);
     await tapMapCenter(page, busNetwork.stops[pattern.stops[0]].coordinates);
@@ -87,7 +87,7 @@ test(
     await expect(page.locator('#route-status')).toHaveAttribute('data-state', 'ready');
     await expect(page.locator('#route-status')).toContainText('+ waiting');
     const numbered = JSON.parse(
-      fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
+      readPinnedSource('building-labels.geojson')
     ).features[0];
     await page.evaluate(
       coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 20}),

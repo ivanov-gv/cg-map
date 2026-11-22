@@ -28,11 +28,12 @@ Projects depend on each other only through these concrete contracts:
 | --------------------------------------------- | ------------------ | --------------------------------------------------------- |
 | Published `@ivanov-gv/map-core` package       | packages/map-core  | apps/web, apps/editor, at a pinned version                |
 | Local map-core, unreleased                    | packages/map-core  | apps/core-demo                                            |
-| Map data for an artifact, data/tools/app-data | data               | map applications                                          |
+| Published `@ivanov-gv/map-data` package       | data               | map application tests, at a pinned version                |
+| Map data for an artifact, data/tools/app-data | data               | local and release builds of the map applications          |
 | Shared formats and schemas                    | packages/contracts | data, map-core, map applications, services/backend, tests |
-| Reviewed sources, release archive and imagery | data               | map applications, tests                                   |
-| Editor source bundle                          | data               | apps/editor, tests                                        |
-| Place test fixture                            | data               | apps/web browser tests                                    |
+| Reviewed sources, release archive and imagery | data               | dev and release builds, cross-component integration tests |
+| Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD  |
+| Place test fixture                            | data               | apps/web browser tests via the pin                        |
 | Built web artifact, dist/web                  | apps/web           | platform hosting tests, tests                             |
 | Built web artifact, dist/web                  | apps/web           | the dev Pages site                                        |
 | Go host `run` target                          | services/backend   | apps/web `dev`                                            |
@@ -49,6 +50,26 @@ Rules:
 - A project never runs another project's checks or tests. Applications never import each other.
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception.
+
+### Map data modes
+
+Map data reaches an application in three distinct ways:
+
+1. App tests (unit and browser) read the exact `@ivanov-gv/map-data` release pinned in the app's `package.json`,
+   resolved by that app's `tests/pinned-data.mjs` helper. A data-only change therefore selects no app pipeline.
+2. Local builds read the repository `data/` at HEAD by default, so developers see unreleased data without publishing it.
+3. Local and CI artifact builds use the repository `data/` at the checked-out commit by default; release CD promotes the
+   dev package from that commit without rebuilding. App test targets override the root with the installed package.
+
+Only the first mode reads the installed package; the other two read repository data and its tools together. An app
+production release must pin every dependency, data included; no app production release exists yet, so that is a rule for
+future CD. See [releasing map data](../runbooks/release.md#releasing-map-data).
+
+### Runtime invariants
+
+- Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay
+  only while enabled; route requests use external car/foot services. Never store live positions or external route
+  responses offline. Dated bus patterns may be bundled.
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
 register it: `PROJECTS` and `test-ci-*` in the root Makefile, `components` in platform/tools/verify.mjs, `FOLDERS` and a

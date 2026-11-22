@@ -61,6 +61,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
+- App tests read map data only from the pinned `@ivanov-gv/map-data` package, never from repository `data/`; see
+  [the release runbook](docs/runbooks/release.md#releasing-map-data).
 - No application copies, binaries, or temporary assets in repository root.
 
 ## Ownership and generated output
@@ -90,9 +92,7 @@ Work starts in the human-written wiki: read it, never edit it; propose changes a
 
 ## Invariants
 
-- Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay
-  only while enabled; route requests use external car/foot services. Never store live positions or external route
-  responses offline. Dated bus patterns may be bundled.
+- Runtime assets follow [the architecture's invariants](docs/system-architecture/architecture.md#runtime-invariants).
 - Range/archive responses stay outside the service-worker shell cache.
 - Existing verified offline downloads survive unsuccessful replacements.
 - Data producers depend on shared contracts, not web implementation.

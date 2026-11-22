@@ -15,7 +15,8 @@ From repository root: `make -C data check`. Full rebuild: `make -C data build-da
 [optional Python dependencies](../docs/runbooks/data.md).
 
 From this workspace: `npm run check`, `npm run build`, `npm test`. The full build is deliberately expensive.
-Viewing/building the web uses the committed reviewed archive instead.
+Viewing/building the web uses the committed reviewed archive instead. The reviewed data is also published as
+[`@ivanov-gv/map-data`](../docs/runbooks/release.md#releasing-map-data) for app tests.
 
 Source provenance is described in [PROVENANCE.md](PROVENANCE.md). The data validator uses
 [shared contracts](../packages/contracts/README.md), never web implementation.

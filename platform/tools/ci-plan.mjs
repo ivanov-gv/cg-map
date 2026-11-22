@@ -162,9 +162,12 @@ const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS, editorAreas: ALL_EDITOR_AREAS};
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
-// Every map application consumes the map-core runtime and the reviewed data release: these are their concrete contracts.
+// Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 const MAP_CONTRACT_DEPENDENTS = ['map-core', ...MAP_APPLICATIONS, 'tests', 'platform'];
+// App tests pin a published map-data release. HEAD data still reaches the integration project and the platform's own
+// web build, so those two pipelines follow data changes; no app test needs to run.
+const HEAD_DATA_CONSUMERS = ['tests', 'platform'];
 
 // Returns the areas of one project that a changed file needs. Anything not known to be narrower runs every area.
 function areasForFile(file, {project, areaTable, sharedSources}) {
@@ -205,20 +208,20 @@ export function classify(file) {
   if (file.startsWith('tests/'))
     return {folders: ['tests', ...(file.endsWith('Makefile') ? ['platform'] : [])], areas: []};
 
-  if (file === 'data/tools/editor-bundle.mjs') return {folders: ['data', 'apps-editor', 'tests'], areas: []};
+  if (file === 'data/tools/editor-bundle.mjs') return {folders: ['data', 'tests'], areas: []};
   // tests/integration proves that whatever the editor exports, this importer accepts.
   if (
     ['apply-changeset.mjs', 'check-data.mjs', 'apply-place-visibility.mjs'].some(tool => file === `data/tools/${tool}`)
   ) {
     return {folders: ['data', 'tests'], areas: []};
   }
-  // The web browser tests search and select against this fixture.
-  if (file.startsWith('data/tests/fixtures/')) return {folders: ['data', ...WEB_DEPENDENTS], areas: ALL_AREAS};
-  // What every map application copies into its artifact.
-  if (file === 'data/tools/app-data.mjs') return {folders: ['data', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
+  // Web browser tests read this fixture from the pinned package, so it belongs to data's own pipeline.
+  if (file.startsWith('data/tests/fixtures/')) return {folders: ['data'], areas: []};
+  // Dev builds use this tool at HEAD, but app tests do not: they pin the published package.
+  if (file === 'data/tools/app-data.mjs') return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
   if (/^data\/(tools|tests)\//.test(file)) return {folders: ['data'], areas: []};
   if (/^data\/(sources|artifacts|imagery)\//.test(file))
-    return {folders: ['data', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
+    return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
   if (file === 'data/Makefile' || file === 'data/package.json') return {folders: ['data', 'platform'], areas: []};
 
   if (file.startsWith('packages/contracts/'))

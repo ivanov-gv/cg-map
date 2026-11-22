@@ -87,6 +87,7 @@ rendering. `ACT_JOBS` sets how many jobs of each workflow run at once.
 make test-ci-docs                       # one workflow
 make test-ci-pr-checks                  # every PR check
 make test-cd-map-core VERSION=0.2.0 COMMIT=<full SHA> # needs a dev package from main
+make test-cd-map-data VERSION=0.1.0 COMMIT=<full SHA> # needs a dev package from main
 make test-cd-dev-pages COMMIT=<full SHA on main> # needs a ci-publish dev-pages image; see below
 make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
 make test-all-workflows ACT="gh act -n" # dry run of every target
@@ -140,18 +141,19 @@ gh workflow run ci-pr-checks.yml --ref <branch> -f test_run=true -f run_all=true
 gh workflow run ci-publish.yml --ref <branch> -f test_run=true
 gh workflow run ci-publish.yml --ref <branch> -f test_run=true -f commit=<full SHA>
 gh workflow run cd-map-core.yml --ref <branch> -f test_run=true -f version=0.2.0 -f commit=<full SHA>
+gh workflow run cd-map-data.yml --ref <branch> -f test_run=true -f version=0.1.0 -f commit=<full SHA>
 gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full SHA on main>
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
 `ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful test run of
-`ci-pr-checks` exists for its latest commit, a `cd-map-core` test run when that workflow or a composite action changed,
-a `cd-browser-image` one when that workflow or its actions changed, a `ci-publish` test run when `ci-publish.yml` or the
-publish-related actions (`plan`, `publish-image`, `publish-dev-package`, `publish-browser-image`, `setup-web`,
-`run-check`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml` or `test_run` changed. A workflow not yet on
-`main` cannot be dispatched, so it is exempt. The same exemption applies when a workflow on `main` lacks
-`workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the failed check. CI cannot see local runs,
-so record yours in the PR template.
+`ci-pr-checks` exists for its latest commit, `cd-map-core` and `cd-map-data` test runs when those workflows or a
+composite action changed, a `cd-browser-image` one when that workflow or its actions changed, a `ci-publish` test run
+when `ci-publish.yml` or the publish-related actions (`plan`, `publish-image`, `publish-dev-package`,
+`publish-browser-image`, `setup-web`, `run-check`) changed, and a `cd-dev-pages` test run when `cd-dev-pages.yml` or
+`test_run` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The same exemption applies when
+a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs pass, re-run the failed check.
+CI cannot see local runs, so record yours in the PR template.
 
 `ci-pr-checks.yml`, `ci-nightly.yml`, `ci-publish.yml` and `cd-dev-pages.yml` cannot be dispatched until they land on
 main; until then, test them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and

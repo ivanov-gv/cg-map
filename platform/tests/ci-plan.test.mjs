@@ -40,8 +40,9 @@ const cases = [
   ['transit relay', ['services/transit-relay/relay.mjs'], ['transit-relay'], []],
   ['integration tests', ['tests/integration/archive.test.mjs'], ['tests'], []],
   ['data tools', ['data/tools/pack.py'], ['data'], []],
-  ['data sources', ['data/sources/places.geojson'], ['platform', 'data', ...MAP_CONTRACT_DEPENDENTS], ALL_AREAS],
-  ['released artifact', ['data/artifacts/release.json'], ['platform', 'data', ...MAP_CONTRACT_DEPENDENTS], ALL_AREAS],
+  ['data sources', ['data/sources/places.geojson'], ['platform', 'data', 'tests'], []],
+  ['released artifact', ['data/artifacts/release.json'], ['platform', 'data', 'tests'], []],
+  ['shared data tool', ['data/tools/app-data.mjs'], ['platform', 'data', 'tests'], []],
   [
     'contracts',
     ['packages/contracts/places.schema.json'],
@@ -68,17 +69,12 @@ const cases = [
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
   ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
   ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],
-  ['source bundle producer', ['data/tools/editor-bundle.mjs'], ['data', 'tests', 'apps-editor'], []],
+  ['source bundle producer', ['data/tools/editor-bundle.mjs'], ['data', 'tests'], []],
   ['changeset importer', ['data/tools/apply-changeset.mjs'], ['data', 'tests'], []],
   ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor'], []],
   ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests'], []],
   ['level policy behind the importer', ['data/tools/apply-place-visibility.mjs'], ['data', 'tests'], []],
-  [
-    'web test fixture in data',
-    ['data/tests/fixtures/podgorica-places.geojson'],
-    ['data', 'platform', 'tests', 'apps-web'],
-    ALL_AREAS
-  ],
+  ['web test fixture in data', ['data/tests/fixtures/podgorica-places.geojson'], ['data'], []],
   [
     'preview port tool used by every map application',
     ['platform/tools/dev-port.mjs'],
@@ -115,6 +111,23 @@ for (const [name, files, folders, areas] of cases) {
     assert.deepEqual(new Set(plan.areas), new Set(areas));
   });
 }
+
+test('every data path selects no app pipeline or browser area', () => {
+  const samples = [
+    'data/sources/source.geojson',
+    'data/imagery/place.jpg',
+    'data/artifacts/releases/manifest.json',
+    'data/tools/app-data.mjs',
+    'data/tests/data.test.mjs',
+    'data/package.json'
+  ];
+  for (const path of samples) {
+    const result = planChanges([path]);
+    assert.deepEqual(result.folders.filter(folder => folder.startsWith('apps-')), [], path);
+    assert.deepEqual(result.areas, [], path);
+    assert.deepEqual(result.editorAreas, [], path);
+  }
+});
 
 for (const [name, files] of [
   ['an empty diff', []],
@@ -263,7 +276,7 @@ for (const [name, files, expectedAreas] of [
   ['a unit test', ['apps/editor/tests/offline.test.mjs'], []],
   ['the stylesheet', ['apps/editor/public/style.css'], ALL_EDITOR_AREAS],
   ['the browser config', ['apps/editor/playwright.config.mjs'], ALL_EDITOR_AREAS],
-  ['the source bundle producer, from outside the editor', ['data/tools/editor-bundle.mjs'], ALL_EDITOR_AREAS],
+  ['the source bundle producer, from outside the editor', ['data/tools/editor-bundle.mjs'], []],
   ['a change that does not select the editor', ['services/backend/main.go'], []],
   ['a unit test beside a source', ['apps/editor/tests/offline.test.mjs', 'apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']]
 ]) {
@@ -452,7 +465,8 @@ test('each browser project checks only itself, and only the public app reaches t
   assert.doesNotMatch(webMakefile, /apps\/editor|apps\/core-demo|packages\/map-core/);
   for (const project of ['apps/web', 'apps/editor', 'apps/core-demo']) {
     const packageFile = JSON.parse(fs.readFileSync(path.join(repoRoot, project, 'package.json')));
-    assert.equal(packageFile.scripts['pretest:e2e'], 'npm run build', project);
+    assert.match(packageFile.scripts['pretest:e2e'], /npm run build$/, project);
+    assert.match(packageFile.scripts['pretest:e2e'], /MAP_DATA_ROOT=.*pinned-data\.mjs/, project);
     assert.equal(packageFile.scripts['pretest:e2e:built'], undefined, project);
   }
   const editorWorkflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci-apps-editor.yml'), 'utf8');

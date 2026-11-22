@@ -76,6 +76,47 @@ with a new one.
 
 `0.1.0` is the one exception: it was published by hand once, because releases need core to exist before apps can pin it.
 
+## Releasing map-data
+
+A merge that changes data publishes `@ivanov-gv/map-data` as `0.0.0-dev.<commit>` under the `dev` tag when ci-publish's
+plan selects data. A versioned release promotes that dev package without rebuilding:
+
+```sh
+git tag map-data/v0.1.0 <commit on main>
+git push origin map-data/v0.1.0
+gh release create map-data/v0.1.0 --verify-tag --generate-notes
+```
+
+The release starts [cd-map-data](../../.github/workflows/cd-map-data.yml). A tag push alone starts nothing. Use a
+prerelease such as `map-data/v0.2.0-rc.1` with `--prerelease` to publish under `next`; a final version publishes under
+`latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
+
+`0.1.0` is the one-time bootstrap because the apps pin it before any map-data release can exist. From a clean checkout
+of this change, after CI has published a dev package, publish it once by hand and restore the working file:
+
+```sh
+cd data
+npm pkg set version=0.1.0
+NODE_AUTH_TOKEN="$(gh auth token)" npm publish --ignore-scripts --tag latest
+git restore package.json
+```
+
+That manual publish has no tag and does not start CD. The change that introduces the pins deliberately leaves
+`package-lock.json` untouched. After the publish, the lead regenerates the lockfile in a separate commit so the exact
+pins resolve:
+
+```sh
+NODE_AUTH_TOKEN="$(gh auth token)" npm install --package-lock-only --ignore-scripts
+```
+
+App tests read only that pinned package, so a data-only change selects no app pipeline. To move the applications to a
+later data release, upgrade all three pins in their own change:
+
+```sh
+npm install --workspace apps/web --workspace apps/editor --workspace apps/core-demo \
+  --save-exact @ivanov-gv/map-data@0.2.0
+```
+
 ## Releasing the browser image
 
 [platform/browser-image](../../platform/browser-image/Dockerfile) holds the tools for browser jobs and local runs:

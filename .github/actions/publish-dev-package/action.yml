@@ -11,6 +11,10 @@ inputs:
   token:
     description: Token for GitHub Packages.
     required: true
+  commit:
+    description: Full source commit SHA to identify the package (empty = github.sha).
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -19,7 +23,7 @@ runs:
         PACKAGE_DIRECTORY: ${{ inputs.directory }}
         PUBLISH_FLAGS: ${{ inputs.flags }}
         NODE_AUTH_TOKEN: ${{ inputs.token }}
-        COMMIT_SHA: ${{ github.sha }}
+        COMMIT_SHA: ${{ inputs.commit || github.sha }}
       run: |
         cd "$PACKAGE_DIRECTORY"
         version="0.0.0-dev.$COMMIT_SHA"
