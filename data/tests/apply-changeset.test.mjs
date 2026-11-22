@@ -142,13 +142,14 @@ test('an added road receives a local source identity and a content version', tes
   const operation = addOperation('roads.geojson', localId, after);
   applyChangeset(changeset(root, 'roads.geojson', [operation]), root, {
     now: reviewedAt,
+    contractsDirectory,
     newEntityId: () => localId
   });
   const {features} = readSource(root, 'roads.geojson');
   const added = features.find(feature => feature.properties.entityId === localId);
   assert.ok(added);
   assert.equal(added.properties.entityVersion, `sha256:${sha256(JSON.stringify(after))}`);
-  assert.doesNotThrow(() => checkData(root));
+  assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
 });
 
 test('level 1 outside the landmark category is refused by name, before anything is written', testContext => {
@@ -257,7 +258,7 @@ test('an importer cannot assign an invalid local entity ID', testContext => {
   const operation = addOperation('roads.geojson', 'local:road', road({kind: 'footway'}));
   assert.throws(
     () => applyChangeset(changeset(root, operation.filename, [operation]), root, {
-      now: reviewedAt, newEntityId: () => 'way/999'
+      now: reviewedAt, contractsDirectory, newEntityId: () => 'way/999'
     }),
     /invalid local entity ID way\/999/
   );
@@ -272,7 +273,7 @@ test('an importer cannot reuse a local entity ID', testContext => {
   const duplicateId = 'local:11111111-1111-4111-8111-111111111111';
   assert.throws(
     () => applyChangeset(changeset(root, 'roads.geojson', operations), root, {
-      now: reviewedAt, newEntityId: () => duplicateId
+      now: reviewedAt, contractsDirectory, newEntityId: () => duplicateId
     }),
     new RegExp(`duplicate local entity ID ${duplicateId}`)
   );

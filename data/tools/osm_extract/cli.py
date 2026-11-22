@@ -237,7 +237,10 @@ def apply_visibility(root, accept_new_place_facts):
     script = (
         Path(__file__).resolve().parents[1] / 'apply-place-visibility.mjs'
     )
-    command = ['node', str(script), '--root', str(root)]
+    command = [
+        'node', str(script), '--root', str(root),
+        '--contracts-directory', str(root / 'packages/contracts')
+    ]
     if accept_new_place_facts:
         command.extend(['--update-provenance', '--accept-new-facts'])
     subprocess.run(command, check=True)

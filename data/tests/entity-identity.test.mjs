@@ -150,7 +150,7 @@ test('check-data enforces adopted metadata in all eight source files before prov
     }
     unlinkSync(testPath);
     writeFileSync(testPath, JSON.stringify(collection));
-    assert.throws(() => checkData(root), /requires entitySchemaVersion/, filename);
+    assert.throws(() => checkData(root, {contractsDirectory}), /requires entitySchemaVersion/, filename);
     unlinkSync(testPath);
     symlinkSync(originalPath, testPath);
   }
