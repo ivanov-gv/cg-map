@@ -9,6 +9,7 @@ const ENTRANCE_LAYERS = [
   'entrance-selection-numbers',
   'entrance-selection-arrows'
 ];
+
 // Number placeholders describe missing information and must never become map labels.
 function isMissingNumber(value) {
   const normalized = value.toLowerCase().replace(/[\s./_-]/g, '');
