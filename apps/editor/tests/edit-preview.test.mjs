@@ -5,7 +5,7 @@ import {parseVisibilityConfig} from '@ivanov-gv/map-core';
 import {EditPreview, previewLayers} from '../src/edit-preview.js';
 
 const visibilityConfig = parseVisibilityConfig(
-  JSON.parse(fs.readFileSync(new URL('../../../packages/contracts/place-visibility.json', import.meta.url)))
+  JSON.parse(fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))))
 );
 const road = (name, coordinates) => ({
   type: 'Feature',

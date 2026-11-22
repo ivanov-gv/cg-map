@@ -1,4 +1,4 @@
-.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-cd-map-data test-cd-dev-pages test-cd-dev-pages-dispatch test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
+.PHONY: setup hooks check check-docs ci-plan lint-workflows test-all-workflows test-cd-map-core test-cd-map-data test-cd-map-contracts test-cd-dev-pages test-cd-dev-pages-dispatch test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image test-cd-browser-image test-cd-map-core act-image verify test-e2e check-go agent-rules worktree
 
 # Repository-wide tasks only. Every project builds, runs, lints and tests itself through its own Makefile; this file
 # may call a project's check targets but never its build or run targets. See docs/system-architecture/architecture.md.
@@ -86,7 +86,7 @@ test-ci-pr-checks test-ci-nightly: ACT_JOBS = 1
 ACT_RUN = --input test_run=true --input run_all=true --var-file .github/act/var.env --secret-file .github/act/secret.env --artifact-server-path .build/act-artifacts --network bridge --pull=false --container-options "$(ACT_CONTAINER_OPTIONS)" $(ACT_GPU) --concurrent-jobs $(ACT_JOBS) -P ubuntu-24.04=$(ACT_IMAGE) -P ubuntu-latest=$(ACT_IMAGE)
 
 # The CD targets come first, so a missing VERSION stops the run straight away.
-test-all-workflows: test-cd-map-core test-cd-map-data test-cd-dev-pages test-cd-dev-pages-dispatch test-cd-browser-image test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
+test-all-workflows: test-cd-map-core test-cd-map-data test-cd-map-contracts test-cd-dev-pages test-cd-dev-pages-dispatch test-cd-browser-image test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-publish test-ci-browser-image
 
 test-ci-pr-checks test-ci-nightly test-ci-docs test-ci-workflows test-ci-platform test-ci-contracts test-ci-data test-ci-backend test-ci-transit-relay test-ci-tests test-ci-map-core test-ci-apps-web test-ci-apps-editor test-ci-apps-core-demo test-ci-browser-image: test-%: act-image
 	$(ACT) workflow_dispatch -W .github/workflows/$*.yml $(ACT_RUN)
@@ -106,6 +106,11 @@ test-cd-map-core: act-image
 test-cd-map-data: act-image
 	$(if $(or $(VERSION),$(findstring -n,$(ACT))),,$(error Set VERSION and COMMIT: make test-cd-map-data VERSION=0.1.0 COMMIT=<full SHA>))
 	$(ACT) workflow_dispatch -W .github/workflows/cd-map-data.yml $(ACT_RUN) --input version=$(VERSION) --input commit=$(COMMIT)
+
+# Needs a dev package CI published from main: make test-cd-map-contracts VERSION=0.1.0 COMMIT=<full SHA>
+test-cd-map-contracts: act-image
+	$(if $(or $(VERSION),$(findstring -n,$(ACT))),,$(error Set VERSION and COMMIT: make test-cd-map-contracts VERSION=0.1.0 COMMIT=<full SHA>))
+	$(ACT) workflow_dispatch -W .github/workflows/cd-map-contracts.yml $(ACT_RUN) --input version=$(VERSION) --input commit=$(COMMIT)
 
 # A release version never changes, so an image already here is the right one. A dry run starts no job, so it needs none.
 act-image:

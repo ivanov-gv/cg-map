@@ -4,6 +4,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {copyMapCore, copyRuntimeAssets, relocateCoreImports} from '@ivanov-gv/map-core/tools/assemble.mjs';
 import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/src/place-visibility.js';
+import {resolveContractsRoot} from './contracts-root.mjs';
 import {resolveDataRoot} from './data-root.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -29,18 +30,15 @@ for (const filename of webModules) {
 fileSystem.mkdirSync(path.join(output, 'data'), {recursive: true});
 fileSystem.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
 const places = JSON.parse(fileSystem.readFileSync(path.join(dataRoot, 'sources/places.geojson')));
-const visibilityConfig = JSON.parse(
-  fileSystem.readFileSync(path.join(root, 'packages/contracts/place-visibility.json'))
-);
+const contractsRoot = resolveContractsRoot(path.join(root, 'node_modules/@ivanov-gv/map-contracts'));
+const visibilityContractPath = path.join(contractsRoot, 'place-visibility.json');
+const visibilityConfig = JSON.parse(fileSystem.readFileSync(visibilityContractPath));
 assertPublishedPlaces(places.features, parseVisibilityConfig(visibilityConfig));
 fileSystem.copyFileSync(
   path.join(dataRoot, 'sources/places.geojson'),
   path.join(output, 'data/places.geojson')
 );
-fileSystem.copyFileSync(
-  path.join(root, 'packages/contracts/place-visibility.json'),
-  path.join(output, 'data/place-visibility.json')
-);
+fileSystem.copyFileSync(visibilityContractPath, path.join(output, 'data/place-visibility.json'));
 fileSystem.copyFileSync(
   path.join(dataRoot, 'sources/building-labels.geojson'),
   path.join(output, 'data/building-labels.geojson')

@@ -20,6 +20,6 @@ const {copyMapData} = await import(dataToolsURL);
 assembleStaticApplication(fileURLToPath(new URL('..', import.meta.url)), outputDirectory);
 copyMapData(outputDirectory, {
   dataRoot,
-  contractPath: path.join(repositoryRoot, 'packages/contracts/place-visibility.json')
+  contractPath: fileURLToPath(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))
 });
 console.log('Built dist/core-demo/');

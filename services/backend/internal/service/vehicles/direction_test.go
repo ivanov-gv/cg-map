@@ -35,7 +35,7 @@ func decodeFixtureVehicle(t *testing.T, row [3]json.RawMessage) Vehicle {
 	return vehicleAt(route, longitude, latitude)
 }
 
-// directionCases is packages/contracts/fixtures/vehicle-direction-cases.json, shared with the browser tracker's tests.
+// directionCases is a local copy of the pinned @ivanov-gv/map-contracts fixture. tests/ checks that the copy is current.
 type directionCases struct {
 	Cases []struct {
 		Name   string            `json:"name"`
@@ -67,7 +67,7 @@ func runFixtureChecks(t *testing.T, checks []json.RawMessage) []Vehicle {
 }
 
 func TestDirectionTracker(t *testing.T) {
-	raw, err := os.ReadFile("../../../../../packages/contracts/fixtures/vehicle-direction-cases.json")
+	raw, err := os.ReadFile("testdata/vehicle-direction-cases.json")
 	if err != nil {
 		t.Fatal(err)
 	}

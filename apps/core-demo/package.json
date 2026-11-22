@@ -15,6 +15,7 @@
     "@ivanov-gv/map-core": "0.0.0-dev"
   },
   "devDependencies": {
+    "@ivanov-gv/map-contracts": "0.1.0",
     "@ivanov-gv/map-data": "0.1.0",
     "@playwright/test": "1.56.1"
   }

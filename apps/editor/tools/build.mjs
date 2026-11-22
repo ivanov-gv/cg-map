@@ -24,9 +24,9 @@ const {writeEditorBundle} = await import(editorBundleURL);
 assembleStaticApplication(fileURLToPath(new URL('..', import.meta.url)), outputDirectory);
 copyMapData(outputDirectory, {
   dataRoot,
-  contractPath: path.join(repositoryRoot, 'packages/contracts/place-visibility.json')
+  contractPath: fileURLToPath(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))
 });
-const editorBundleContractURL = new URL('../../../packages/contracts/editor-bundle.schema.json', import.meta.url);
+const editorBundleContractURL = new URL(import.meta.resolve('@ivanov-gv/map-contracts/editor-bundle.schema.json'));
 await writeEditorBundle(
   path.join(dataRoot, 'sources'),
   path.join(outputDirectory, 'sources'),
@@ -34,7 +34,7 @@ await writeEditorBundle(
 );
 // The editing rules are a shared contract: the importer reads the same file.
 fileSystem.copyFileSync(
-  fileURLToPath(new URL('../../../packages/contracts/editor-layers.json', import.meta.url)),
+  fileURLToPath(import.meta.resolve('@ivanov-gv/map-contracts/editor-layers.json')),
   path.join(outputDirectory, 'data/editor-layers.json')
 );
 // Last, because the manifest hashes every other file in the artifact.

@@ -22,6 +22,7 @@ const NO_TWIN = {
   'ci-workflows.yml': ['test-run-evidence'],
   'cd-map-core.yml': ['switch'],
   'cd-map-data.yml': ['switch'],
+  'cd-map-contracts.yml': ['switch'],
   'cd-browser-image.yml': ['switch'],
   'cd-dev-pages.yml': ['switch', 'deploy'],
   'ci-publish.yml': ['switch', 'select']
@@ -115,6 +116,7 @@ test('CI workflows never touch production', () => {
 const CD_TAGS = {
   'cd-map-core.yml': 'map-core/v',
   'cd-map-data.yml': 'map-data/v',
+  'cd-map-contracts.yml': 'map-contracts/v',
   'cd-browser-image.yml': 'browser-image/v'
 };
 
@@ -271,7 +273,7 @@ test('only the publish workflow writes packages, and only from main unless it is
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
   assert.deepEqual(
     writers.map(([name]) => name).toSorted(),
-    ['browser-image', 'data-package', 'image', 'package', 'pages', 'pages-cleanup']
+    ['browser-image', 'contracts-package', 'data-package', 'image', 'package', 'pages', 'pages-cleanup']
   );
   for (const [name, writer] of writers) {
     assert.match(writer.if, /github\.ref == 'refs\/heads\/main'/, `${name} could publish from a branch`);
@@ -334,15 +336,28 @@ test('the editor browser jobs cover every spec in both projects', () => {
   }
 });
 
-test('cd-map-data shares its publish env and steps with the test-run twin', () => {
-  const raw = fs.readFileSync(path.join(workflowDir, 'cd-map-data.yml'), 'utf8');
-  assert.match(raw, /env: &publish-env/);
-  assert.match(raw, /steps: &publish-steps/);
-  assert.match(raw, /env: \*publish-env/);
-  assert.match(raw, /steps: \*publish-steps/);
-  const {jobs} = load('cd-map-data.yml');
-  assert.deepEqual(jobs['publish-test-run'].env, jobs.publish.env);
-  assert.deepEqual(jobs['publish-test-run'].steps, jobs.publish.steps);
+for (const file of ['cd-map-data.yml', 'cd-map-contracts.yml'])
+  test(`${file} shares its publish env and steps with the test-run twin`, () => {
+    const raw = fs.readFileSync(path.join(workflowDir, file), 'utf8');
+    assert.match(raw, /env: &publish-env/);
+    assert.match(raw, /steps: &publish-steps/);
+    assert.match(raw, /env: \*publish-env/);
+    assert.match(raw, /steps: \*publish-steps/);
+    const {jobs} = load(file);
+    assert.deepEqual(jobs['publish-test-run'].env, jobs.publish.env);
+    assert.deepEqual(jobs['publish-test-run'].steps, jobs.publish.steps);
+  });
+
+test('each CD release workflow promotes only its own package', () => {
+  const packagesByFile = {
+    'cd-map-core.yml': '@ivanov-gv/map-core',
+    'cd-map-data.yml': '@ivanov-gv/map-data',
+    'cd-map-contracts.yml': '@ivanov-gv/map-contracts'
+  };
+  for (const [file, packageName] of Object.entries(packagesByFile)) {
+    const promote = load(file).jobs.publish.steps.find(step => step.uses?.includes('promote-package'));
+    assert.equal(promote.with.package, packageName, `${file} would release the wrong package`);
+  }
 });
 
 test('CD refuses a commit that is not on main', () => {
@@ -670,6 +685,33 @@ test('ci-workflows: cd-map-data.yml changed, with qualifying run must pass', asy
   assert.equal(result.code, 0, 'cd-map-data.yml changed with qualifying run must exit 0');
 });
 
+test('ci-workflows: cd-map-contracts.yml changed, no qualifying run must fail', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/cd-map-contracts.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-map-contracts.yml': '[{"displayTitle":"other run"}]',
+    }
+  );
+  assert.equal(result.code, 1, 'cd-map-contracts.yml changed without qualifying run must exit 1');
+  assert.match(
+    result.stdout,
+    /gh workflow run cd-map-contracts\.yml --ref.*-f test_run=true/,
+    'error must name the cd-map-contracts dispatch command'
+  );
+});
+
+test('ci-workflows: cd-map-contracts.yml changed, with qualifying run must pass', async () => {
+  const result = await runEvidenceTest(
+    ['.github/workflows/cd-map-contracts.yml'],
+    {
+      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
+      'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]',
+    }
+  );
+  assert.equal(result.code, 0, 'cd-map-contracts.yml changed with qualifying run must exit 0');
+});
+
 test('ci-workflows: setup-web changed, no ci-publish run must fail', async () => {
   const result = await runEvidenceTest(
     ['.github/actions/setup-web/action.yml'],
@@ -678,6 +720,7 @@ test('ci-workflows: setup-web changed, no ci-publish run must fail', async () =>
       'runs-cd-browser-image.yml': '[]',
       'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
       'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
+      'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]',
     }
   );
   assert.equal(result.code, 1, 'setup-web changed without ci-publish run must exit 1');
@@ -694,7 +737,8 @@ test('ci-workflows: validate-commit changed needs both ci-publish and cd-dev-pag
   const otherRuns = {
     'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
     'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
-    'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]'
+    'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
+    'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]'
   };
   const missing = await runEvidenceTest(['.github/actions/validate-commit/action.yml'], {
     ...otherRuns,
@@ -870,6 +914,37 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
   );
   assert.deepEqual(jobs['data-package-test-run'].steps, publish.steps);
   assert.equal(jobs['data-package-test-run'].environment, 'test-run');
+});
+
+test('ci-publish publishes a map-contracts dev package when the plan selects contracts', () => {
+  const raw = fs.readFileSync(path.join(workflowDir, 'ci-publish.yml'), 'utf8');
+  assert.match(raw, /env: &contracts-package-env/);
+  assert.match(raw, /steps: &contracts-package-steps/);
+  assert.match(raw, /env: \*contracts-package-env/);
+  assert.match(raw, /steps: \*contracts-package-steps/);
+  const {jobs} = load('ci-publish.yml');
+  assert.equal(jobs.plan.outputs.contracts, '${{ steps.plan.outputs.contracts }}');
+  assert.equal(jobs['plan-test-run'].outputs.contracts, '${{ steps.plan.outputs.contracts }}');
+  const publish = jobs['contracts-package'];
+  assert.match(publish.if, /needs\.plan\.outputs\.contracts == 'true' \|\| needs\.plan-test-run\.outputs\.contracts == 'true'/);
+  assert.match(publish.if, /github\.ref == 'refs\/heads\/main'/, 'the contracts package could be published from a branch');
+  const packageStep = publish.steps.find(step => step.uses?.includes('publish-dev-package'));
+  assert.ok(packageStep, 'the contracts package job must use publish-dev-package');
+  assert.equal(packageStep.with.directory, 'source/packages/contracts', 'the requested source must be published');
+  assert.equal(publish.env.PACKAGE_COMMIT, '${{ inputs.commit || github.sha }}', 'dispatch must select a commit');
+  const checkouts = publish.steps.filter(step => step.uses === 'actions/checkout@v7');
+  assert.equal(checkouts.length, 2, 'the action revision and source commit need separate checkouts');
+  assert.equal(checkouts[0].with.ref, undefined, 'local actions must come from the workflow revision');
+  assert.equal(checkouts[1].with.ref, '${{ steps.commit.outputs.commit }}', 'the contracts job must check out that commit');
+  assert.equal(checkouts[1].with.path, 'source');
+  assert.equal(
+    packageStep.with.commit,
+    '${{ steps.commit.outputs.commit }}',
+    'the package identity must use that commit'
+  );
+  assert.deepEqual(jobs['contracts-package-test-run'].steps, publish.steps);
+  assert.deepEqual(jobs['contracts-package-test-run'].env, publish.env);
+  assert.equal(jobs['contracts-package-test-run'].environment, 'test-run');
 });
 
 test('publish-dev-package versions a requested commit, not the workflow ref', () => {

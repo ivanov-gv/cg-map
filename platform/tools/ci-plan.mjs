@@ -164,7 +164,6 @@ const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS, editorAreas: ALL_EDITOR_
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
-const MAP_CONTRACT_DEPENDENTS = ['map-core', ...MAP_APPLICATIONS, 'tests', 'platform'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
 const HEAD_DATA_CONSUMERS = ['tests'];
 
@@ -223,8 +222,8 @@ export function classify(file) {
   if (/^data\/(sources|artifacts|imagery)\//.test(file))
     return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
 
-  if (file.startsWith('packages/contracts/'))
-    return {folders: ['contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS], areas: ALL_AREAS};
+  // A contract change at HEAD is seen by data validation and tests/; published consumers pin a release instead.
+  if (file.startsWith('packages/contracts/')) return {folders: ['contracts', 'data', 'tests', 'platform'], areas: []};
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
   if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];

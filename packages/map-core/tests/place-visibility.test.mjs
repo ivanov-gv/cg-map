@@ -15,7 +15,9 @@ import {
   listingsAtHits
 } from '../src/place-visibility.js';
 
-const rawConfig = JSON.parse(fs.readFileSync(new URL('../../contracts/place-visibility.json', import.meta.url)));
+const rawConfig = JSON.parse(
+  fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json')))
+);
 const config = parseVisibilityConfig(rawConfig);
 const place = (id, visibilityLevel, coordinates = [19.26, 42.44], extra = {}) => ({
   type: 'Feature',

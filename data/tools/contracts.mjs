@@ -1,5 +1,5 @@
 // Packaged data tools read shared contracts from a directory supplied by their caller. The published data package does
-// not contain the repository's packages/contracts folder; Feature #340 will make contracts a separate package.
+// not contain contracts: consumers resolve @ivanov-gv/map-contracts, while data validation passes the repository HEAD.
 import fs from 'node:fs';
 import path from 'node:path';
 

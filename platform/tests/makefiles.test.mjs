@@ -127,6 +127,30 @@ test('integration repo boundary rejects repository data paths outside the shared
   assert.match(output, /tests\/data-root\.mjs/, output);
 });
 
+test('repo boundary rejects relative contract paths outside the shared helper', t => {
+  const probe = path.join(repoRoot, 'apps/editor/tests', `__contract-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  const relativePath = ['..', '..', 'packages', 'contracts', 'editor-layers.json'].join('/');
+  fs.writeFileSync(probe, `export const schema = '${relativePath}';\n`);
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+});
+
+test('repo boundary rejects bare repository contract paths outside the shared helper', t => {
+  const probe = path.join(repoRoot, 'apps/web/tests', `__contract-path-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  const repositoryPath = ['packages', 'contracts', 'editor-layers.json'].join('/');
+  fs.writeFileSync(probe, `export const schema = '${repositoryPath}';\n`);
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /pinned @ivanov-gv\/map-contracts package/, output);
+});
+
 test('the integration data helper defaults to HEAD and honours MAP_DATA_ROOT', () => {
   const helper = path.join(repoRoot, 'tests', 'data-root.mjs');
   const cleanEnv = {...process.env};

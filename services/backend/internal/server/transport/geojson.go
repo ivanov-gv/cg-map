@@ -1,6 +1,6 @@
 package transport
 
-// FeatureCollection is the GeoJSON feed body (packages/contracts/vehicles.schema.json v1).
+// FeatureCollection is the GeoJSON feed body from the pinned v1 vehicles contract.
 // Field order matches relay.mjs output.
 type FeatureCollection struct {
 	Type     string    `json:"type"`

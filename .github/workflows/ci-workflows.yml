@@ -107,6 +107,11 @@ jobs:
             echo "::error::Run: gh workflow run cd-map-data.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
             missing=1
           fi
+          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-contracts\.yml$\|^\.github/actions/' \
+            && ! has_qualifying_run cd-map-contracts.yml 'test_run=true'; then
+            echo "::error::Run: gh workflow run cd-map-contracts.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
+            missing=1
+          fi
           if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\|validate-commit\)/' \
             && ! has_qualifying_run ci-publish.yml 'test_run=true'; then
             echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."

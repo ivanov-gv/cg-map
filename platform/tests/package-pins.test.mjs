@@ -10,6 +10,8 @@ import {fileURLToPath} from 'node:url';
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const corePackageName = '@ivanov-gv/map-core';
 const dataPackageName = '@ivanov-gv/map-data';
+const contractsPackageName = '@ivanov-gv/map-contracts';
+const contractsVersion = '0.1.0';
 const exactVersionPattern = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
 const readJSON = relativePath => JSON.parse(fileSystem.readFileSync(`${repositoryRoot}${relativePath}`));
 const lockedPackages = readJSON('package-lock.json').packages;
@@ -45,6 +47,30 @@ test('apps/core-demo uses local core, because it is core dev environment', () =>
 
 test('core in this repository can never satisfy an app pin', () => {
   assert.equal(readJSON('packages/map-core/package.json').version, '0.0.0-dev');
+});
+
+// The 0.1.0 entry does not exist in the registry until the lead publishes it, so these pins deliberately do not read
+// package-lock.json. The lead must regenerate that lockfile after publishing; the map-core and map-data pins below can
+// still assert registry entries because those releases already exist.
+test('every consumer pins the exact published contracts release, never the local package', () => {
+  const consumers = [
+    'package.json',
+    'apps/web/package.json',
+    'apps/editor/package.json',
+    'apps/core-demo/package.json',
+    'packages/map-core/package.json',
+    'platform/package.json'
+  ];
+  for (const manifest of consumers) {
+    const pinned = readJSON(manifest).devDependencies?.[contractsPackageName];
+    assert.equal(pinned, contractsVersion, `${manifest} must pin ${contractsPackageName} ${contractsVersion}`);
+    assert.match(pinned, exactVersionPattern);
+  }
+  assert.equal(readJSON('packages/contracts/package.json').version, '0.0.0-dev');
+  assert.ok(
+    !readJSON('package.json').workspaces.includes('packages/contracts'),
+    'npm must not link the unpublished HEAD package into consumers'
+  );
 });
 
 test('the map-data package ships every path its consumers read', () => {

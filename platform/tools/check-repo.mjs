@@ -150,6 +150,20 @@ for (const file of integrationTestFiles) {
   if (file === integrationDataHelper) continue;
   assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
 }
+// Consumers must resolve contracts through the pinned package; data and tests/ own the one HEAD exception.
+const CONTRACT_PATH_HELPER = 'tests/contracts-root.mjs';
+// Platform's planner and pin tests name repository contract paths as data, not as consumer reads.
+const contractPathMetadata = new Set(['platform/tests/ci-plan.test.mjs', 'platform/tests/package-pins.test.mjs']);
+const repositoryContractsPattern = /(?:\.\.\/)*packages\/contracts\/[^'"`\s)]+\.(?:json|mjs|js)/;
+const pinnedContractsRule = 'relative contract paths must go through the pinned @ivanov-gv/map-contracts package';
+const contractConsumers = ['apps/web', 'apps/editor', 'apps/core-demo', 'packages/map-core', 'platform', 'services/backend', 'services/transit-relay', 'tests'];
+for (const component of contractConsumers) {
+  const files = walk(component).filter(file => /\.(?:mjs|js|json|go|py)$/.test(file) && !file.includes('/node_modules/'));
+  for (const file of files) {
+    if (file === CONTRACT_PATH_HELPER || contractPathMetadata.has(file)) continue;
+    assert.ok(!repositoryContractsPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${pinnedContractsRule}`);
+  }
+}
 const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);

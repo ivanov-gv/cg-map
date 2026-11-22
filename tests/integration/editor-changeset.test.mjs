@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {dataToolURL, stageDataInto, stagedSourcePath} from '../data-root.mjs';
+import {contractsDirectory, readContractJSON} from '../contracts-root.mjs';
 import {buildChangeset, importChangeset, materializedLayer} from '../../apps/editor/src/changeset.js';
 import {labelJoinProblems} from '../../apps/editor/src/cross-file-checks.js';
 import {EditSession} from '../../apps/editor/src/edit-session.js';
@@ -16,15 +16,13 @@ const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 
 // The contract between the editor and the importer, end to end: whatever the editor exports, the data-owned
 // importer must accept, and the result must equal what the editor showed.
-const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
-const contractsDirectory = path.join(repositoryRoot, 'packages/contracts');
 const envelope = {
   id: 'integration-changeset',
   createdAt: '2026-11-06T10:00:00.000Z',
   author: 'Integration Test',
   reason: 'Editor and importer agree'
 };
-const readContract = filename => JSON.parse(fs.readFileSync(path.join(contractsDirectory, filename)));
+const readContract = readContractJSON;
 const rules = readContract('editor-layers.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));
 
@@ -32,9 +30,7 @@ const levels = new Set(readContract('place-visibility.json').levels.map(({level}
 function temporaryRoot(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-editor-changeset-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  for (const directory of ['packages/contracts']) {
-    fs.cpSync(path.join(repositoryRoot, directory), path.join(root, directory), {recursive: true});
-  }
+  fs.cpSync(contractsDirectory, path.join(root, 'packages/contracts'), {recursive: true});
   stageDataInto(root);
   return root;
 }

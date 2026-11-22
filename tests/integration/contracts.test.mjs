@@ -3,20 +3,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {dataSourcePath, dataToolURL} from '../data-root.mjs';
+import {
+  contractPath,
+  contractsDirectory,
+  publishedContractsRoot,
+  readContractJSON
+} from '../contracts-root.mjs';
 import {categories} from '../../apps/web/src/core.js';
 import {parseVisibilityConfig, normalizePlaces, assertPublishedPlaces} from '../../dist/web/map-core/place-visibility.js';
 
-const contractsDirectory = path.join(import.meta.dirname, '../../packages/contracts');
-
 test('web categories agree with the published place contract', () => {
-  const contract = JSON.parse(fs.readFileSync('packages/contracts/places.schema.json'));
+  const contract = readContractJSON('places.schema.json');
   assert.deepEqual(Object.keys(categories).filter(key => key !== 'all').sort(), contract.properties.properties.properties.category.enum.slice().sort());
 });
 
+test('the backend keeps a byte-identical copy of the pinned direction fixture', () => {
+  const pinnedFixture = path.join(publishedContractsRoot(), 'fixtures/vehicle-direction-cases.json');
+  const backendCopy = new URL(
+    '../../services/backend/internal/service/vehicles/testdata/vehicle-direction-cases.json',
+    import.meta.url
+  );
+  assert.deepEqual(fs.readFileSync(backendCopy), fs.readFileSync(pinnedFixture));
+});
+
 test('producer and consumer share one visibility configuration and the published snapshot satisfies it', () => {
-  const raw = fs.readFileSync('packages/contracts/place-visibility.json');
+  const raw = fs.readFileSync(contractPath('place-visibility.json'));
   const config = parseVisibilityConfig(JSON.parse(raw));
-  const levelSchema = JSON.parse(fs.readFileSync('packages/contracts/places.schema.json')).properties.properties.properties.visibilityLevel;
+  const levelSchema = readContractJSON('places.schema.json').properties.properties.properties.visibilityLevel;
   assert.deepEqual([levelSchema.minimum, levelSchema.maximum], [config.levels[0], config.levels.at(-1)]);
   const places = JSON.parse(fs.readFileSync(dataSourcePath('places.geojson'))).features;
   assert.doesNotThrow(() => assertPublishedPlaces(places, config));
@@ -36,9 +49,7 @@ test('producer and browser agree on separate building numbers and located entran
     entranceFeatures,
     describePoint,
   } = await import('../../apps/web/src/point-selection.js');
-  const fixture = JSON.parse(
-    fs.readFileSync('packages/contracts/fixtures/building-entrances.json'),
-  );
+  const fixture = readContractJSON('fixtures/building-entrances.json');
   assert.equal(validateBuildingLabels(fixture.labels, fixture.buildings, {contractsDirectory}), 1);
   const index = buildingAddressIndex(fixture.labels);
   assert.equal(buildingAddress(index.get(0)), fixture.address);

@@ -1,14 +1,14 @@
 import {isValidCoordinate, lineProblem, polygonProblem} from './geometry-validation.js';
 
 // The same checks as data/tools/apply-changeset.mjs, so a refusal happens at the edit and not after the export.
-// The shared fixtures in packages/contracts/fixtures and tests/integration keep the two in step; the importer stays
-// the final authority.
+// The shared fixtures in the pinned @ivanov-gv/map-contracts package and tests/integration keep the two in step; the
+// importer stays the final authority.
 const placesFile = 'places.geojson';
 const placeIdentityFields = ['id', 'source'];
 const newFeatureFields = ['type', 'properties', 'geometry'];
 const isSameJSON = (first, second) => JSON.stringify(first) === JSON.stringify(second);
 
-// Reads packages/contracts/editor-layers.json. A file without rules could never be exported, so fail at startup.
+// Reads the pinned editor-layers contract. A file without rules could never be exported, so fail at startup.
 export function validateLayerRules(rules, sourceFiles) {
   if (rules?.version !== 1 || !rules.layers) throw new Error('Unsupported editing rules.');
   for (const filename of sourceFiles) {

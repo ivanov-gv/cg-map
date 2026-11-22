@@ -126,6 +126,35 @@ npm install --workspace apps/web --workspace apps/editor --workspace apps/core-d
   --save-exact @ivanov-gv/map-data@0.2.0
 ```
 
+## Releasing map-contracts
+
+A contract change publishes a dev package when ci-publish's plan selects contracts, then a versioned release promotes it
+without rebuilding. The repository package stays `0.0.0-dev`, so it can never satisfy a consumer's exact pin. Before
+tagging a release, test the exact dev package with the integration suite:
+
+```sh
+make -C tests verify MAP_CONTRACTS_VERSION=0.0.0-dev.<commit on main>
+```
+
+That command installs the package from GitHub Packages and points every contract read in the suite, including the web
+build, at it. Data validation still reads contracts at HEAD by default; a contract that fails against the promoted
+package is a release finding, not a test to skip.
+
+```sh
+git tag map-contracts/v0.1.0 <commit on main>
+git push origin map-contracts/v0.1.0
+gh release create map-contracts/v0.1.0 --verify-tag --generate-notes
+```
+
+The release starts [cd-map-contracts](../../.github/workflows/cd-map-contracts.yml). A tag push alone starts nothing.
+Use a prerelease such as `map-contracts/v0.2.0-rc.1` with `--prerelease` to publish under `next`; a final version
+publishes under `latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
+
+`0.1.0` is the bootstrap exception: the lead publishes it by hand from this change because the pinned consumers must
+exist before CI can plan and publish a contracts release. The change leaves `package-lock.json` untouched; after `0.1.0`
+exists, the lead runs `make setup` to regenerate it. A contract-only change selects contracts, data, tests and platform,
+not app pipelines.
+
 ## Releasing the browser image
 
 [platform/browser-image](../../platform/browser-image/Dockerfile) holds the tools for browser jobs and local runs:

@@ -30,7 +30,8 @@ Projects depend on each other only through these concrete contracts:
 | Local map-core, unreleased                    | packages/map-core  | apps/core-demo                                                                                         |
 | Published `@ivanov-gv/map-data` package       | data               | map application and platform hosting tests, pinned                                                     |
 | Map data for an artifact, data/tools/app-data | data               | dev and CI artifact builds on main                                                                     |
-| Shared formats and schemas                    | packages/contracts | data, map-core, map applications, services/backend, tests                                              |
+| Published `@ivanov-gv/map-contracts` package  | packages/contracts | map-core, map applications and services/backend, pinned                                                |
+| Shared formats and schemas at HEAD            | packages/contracts | data validation, tests/ integration                                                                    |
 | Reviewed sources, release archive and imagery | data               | dev and CI artifact builds, cross-component tests                                                      |
 | Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion |
 | Place test fixture                            | data               | apps/web browser tests via the pin                                                                     |
@@ -52,8 +53,9 @@ Rules:
   when the producer changes. Runtime-only contracts are the exception.
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
-  `@ivanov-gv/map-data`. The scoped exception is `tests/`, the cross-project integration project: it tests HEAD
-  contracts by default, and a release is tested against the exact version it publishes by setting the data version.
+  `@ivanov-gv/map-data`, and every other consumer pins `@ivanov-gv/map-contracts`. The scoped exception is `tests/`, the
+  cross-project integration project: it reads contracts at HEAD through one helper by default, and a release is tested
+  against the exact version it publishes by setting the data and contracts versions.
 
 ### Map data modes
 
@@ -74,6 +76,15 @@ App and platform test modes read the installed package; dev, CI artifact builds 
 repository data and its tools together. The published package ships every tool those modes import. Tools that validate
 or bundle sources take their contract location from the caller and never resolve a repository-only contract path. See
 [releasing map data](../runbooks/release.md#releasing-map-data).
+
+### Contract modes
+
+Shared formats reach consumers in two ways. A
+[published `@ivanov-gv/map-contracts` release](../runbooks/release.md#releasing-map-contracts) is pinned by map-core,
+every map application and services/backend; those consumers never read `packages/contracts` by relative path. Data
+validates against contracts at HEAD, and `tests/` reads them through one helper that defaults to HEAD. Before a release,
+`tests/` installs the exact package and sets `MAP_CONTRACTS_VERSION` so the whole suite tests the candidate. A
+contract-only change therefore reaches data validation and integration tests, not app pipelines.
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
 register it: `PROJECTS` and `test-ci-*` in the root Makefile, `components` in platform/tools/verify.mjs, `FOLDERS` and a

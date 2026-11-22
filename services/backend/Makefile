@@ -6,6 +6,8 @@ PORT ?= 8080
 export GOLANGCI_LINT_CACHE ?= $(abspath $(ROOT)/.build/golangci-lint-cache)
 # Pinned here, not in go.mod, so the linter's dependencies stay out of the server module.
 GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+# The shared formats and proto arrive through the root's pinned @ivanov-gv/map-contracts package, not repository sources.
+CONTRACTS_ROOT := $(abspath $(ROOT)/node_modules/@ivanov-gv/map-contracts)
 
 .PHONY: verify check format-check vet lint test build run generate generate-check
 
@@ -35,12 +37,12 @@ run: build
 
 # Buf 1.75.0 compiles the shared schema; generator versions come from go.mod.
 generate:
-	buf lint $(ROOT)/packages/contracts/proto
-	buf generate $(ROOT)/packages/contracts/proto --template buf.gen.yaml
+	buf lint $(CONTRACTS_ROOT)/proto
+	buf generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml
 
 # Regenerate outside the source tree to catch stale committed bindings.
 generate-check:
 	@set -eu; generated=$$(mktemp -d); trap 'rm -rf "$$generated"' EXIT; \
-	buf lint $(ROOT)/packages/contracts/proto; \
-	buf generate $(ROOT)/packages/contracts/proto --template buf.gen.yaml --output "$$generated"; \
+	buf lint $(CONTRACTS_ROOT)/proto; \
+	buf generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml --output "$$generated"; \
 	diff -ru gen "$$generated/gen"

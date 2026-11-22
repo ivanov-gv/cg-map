@@ -25,7 +25,6 @@ delete plannerEnv.GITHUB_OUTPUT;
 delete plannerEnv.GITHUB_STEP_SUMMARY;
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const WEB = ['platform', 'tests', 'apps-web'];
-const MAP_CONTRACT_DEPENDENTS = ['tests', 'map-core', 'apps-web', 'apps-editor', 'apps-core-demo'];
 
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs'], []],
@@ -46,8 +45,8 @@ const cases = [
   [
     'contracts',
     ['packages/contracts/places.schema.json'],
-    ['platform', 'contracts', 'data', 'backend', ...MAP_CONTRACT_DEPENDENTS],
-    ALL_AREAS
+    ['platform', 'contracts', 'data', 'tests'],
+    []
   ],
   ['mapped web source', ['apps/web/src/interface.js'], WEB, ['interface']],
   ['POI spec runs both projects', ['apps/web/tests/e2e/poi-visibility.spec.mjs'], WEB, ['poi-desktop', 'poi-mobile']],
@@ -361,7 +360,7 @@ test('a merge publishes the image of each app it selected, and no other', () => 
   assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);
   assert.deepEqual(appsFor('apps/editor/src/sw.js'), ['editor']);
   assert.deepEqual(appsFor('packages/map-core/src/map.js'), ['core-demo'], 'only core-demo runs unreleased core');
-  assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), ['web', 'editor', 'core-demo']);
+  assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), [], 'consumers pin a published release');
   assert.deepEqual(appsFor('docs/README.md'), []);
 });
 
