@@ -84,7 +84,7 @@ source GeoJSON file. Version 1 is frozen at the original eight files; version 2 
 stays open until the Feature stack merges. Data-owned assembly writes version 2 and preserves bytes; the editor accepts
 both versions and verifies the entire bundle before enabling modes. Feature indices are tied to that hash and are not
 stable upstream identities. This contract does not define editing or changesets; the formats below do. The bundle is
-built into dist/editor only. See [decision 0023](../../docs/decisions/0023-editor-bundle-versions.md).
+built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md).
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
 types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and

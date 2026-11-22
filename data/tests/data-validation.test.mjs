@@ -94,7 +94,8 @@ test('a reviewed places snapshot without building joins adds no place counts', (
   const readSource = name => JSON.parse(fs.readFileSync(`data/sources/${name}`));
   const counts = validateBuildingSources(
     readSource('buildings.geojson'), readSource('roads.geojson'),
-    readSource('building-entrances.geojson'), readSource('places.geojson')
+    readSource('building-entrances.geojson'), readSource('places.geojson'),
+    {contractsDirectory}
   );
   assert.equal(counts.placesInsideBuildings, undefined);
   assert.equal(counts.placesOutsideBuildings, undefined);
@@ -272,7 +273,8 @@ test('a building joins to every road of a same-named group', () => {
   properties['addr:streetEntityIds'] = ['way/4', 'way/5'];
   const counts = validateBuildingSources(
     sources['buildings.geojson'], sources['roads.geojson'],
-    sources['building-entrances.geojson'], sources['places.geojson']
+    sources['building-entrances.geojson'], sources['places.geojson'],
+    {contractsDirectory}
   );
   assert.equal(counts['addr:streetEntityId'], 1);
   assert.equal(counts['addr:streetEntityIds'], 1);

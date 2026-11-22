@@ -40,7 +40,7 @@ node's own identity, copied tags and `buildingEntityId`. When the `places` group
 whose point lies inside a footprint also gains that footprint's `buildingEntityId`; this Feature keeps the reviewed
 places snapshot from the branch below, so no published place carries that join yet. The source file is read-only in the
 editor; see the data runbook for the refresh groups and
-[decision 0022](../decisions/0022-osm-building-source-details.md) for why source entrances and display entrances remain
+[decision 0023](../decisions/0023-osm-building-source-details.md) for why source entrances and display entrances remain
 separate.
 
 The `entrances` array described below is still produced and reviewed through `building-labels.geojson`. It carries

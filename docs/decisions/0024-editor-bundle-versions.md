@@ -1,4 +1,4 @@
-# 0023: Versioned editor source bundles
+# 0024: Versioned editor source bundles
 
 ## Status
 
