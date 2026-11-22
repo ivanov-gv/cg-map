@@ -43,7 +43,7 @@ STANDALONE_AMENITY_NO_CATEGORY = {
 STANDALONE_AMENITY = STANDALONE_AMENITY_SIGHTS | STANDALONE_AMENITY_NO_CATEGORY
 # Named towers and lighthouses are sights. man_made=bridge stays excluded:
 # a bridge is a linear feature, not a standalone place point. barrier=gate
-# also stays excluded until the contract has a public category. See ADR 0023.
+# also stays excluded until the contract has a public category. See ADR 0025.
 STANDALONE_MAN_MADE_SIGHTS = {'tower', 'lighthouse'}
 STANDALONE_KEYS = {
     'historic': STANDALONE_HISTORIC,

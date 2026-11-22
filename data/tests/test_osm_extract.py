@@ -1188,7 +1188,7 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertFalse(has_sight_promotion({'tourism': 'drinking_water'}))
 
     def test_standalone_barrier_kinds_not_extracted(self):
-        """barrier=gate is not extracted — no category for it (ADR 0023)."""
+        """barrier=gate is not extracted — no category for it (ADR 0025)."""
         tags = {'name': 'Test', 'barrier': 'gate'}
         self.assertEqual(category_for(tags), '')
         self.assertFalse(is_standalone_kind(tags))
@@ -1203,7 +1203,7 @@ class StandalonePlacesTest(unittest.TestCase):
                 self.assertEqual(get_kind(tags), kind)
 
     def test_man_made_bridge_not_extracted(self):
-        """A bridge is linear, not a standalone place point (ADR 0023)."""
+        """A bridge is linear, not a standalone place point (ADR 0025)."""
         tags = {'name': 'Test', 'man_made': 'bridge'}
         self.assertEqual(category_for(tags), '')
         self.assertFalse(is_standalone_kind(tags))
@@ -1226,7 +1226,7 @@ class StandalonePlacesTest(unittest.TestCase):
         )
 
     def test_tourism_information_not_extracted(self):
-        """tourism=information is not extracted — too many non-sights (ADR 0023)."""
+        """tourism=information is not extracted — too many non-sights (ADR 0025)."""
         tags = {'name': 'Summit Travel Agency', 'tourism': 'information'}
         self.assertEqual(category_for(tags), '')
         self.assertFalse(is_standalone_kind(tags))
@@ -1239,7 +1239,7 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertTrue(is_standalone_kind({'man_made': 'lighthouse'}))
 
     def test_is_standalone_kind_returns_false_for_gaps(self):
-        """Gate, bridge and information remain category gaps (ADR 0023)."""
+        """Gate, bridge and information remain category gaps (ADR 0025)."""
         self.assertFalse(is_standalone_kind({'barrier': 'gate'}))
         self.assertFalse(is_standalone_kind({'man_made': 'bridge'}))
         self.assertFalse(is_standalone_kind({'tourism': 'information'}))
