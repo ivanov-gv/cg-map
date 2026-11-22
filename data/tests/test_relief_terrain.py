@@ -93,22 +93,39 @@ class ReliefTerrainTests(unittest.TestCase):
             TERRAIN.assert_contours_do_not_cross([first, second])
 
     def test_serialisation_and_content_versions_are_deterministic(self):
-        feature = {
-            'type': 'Feature',
-            'properties': {'entityId': 'derived:ridge-gorica', 'kind': 'ridge', 'name': 'Gorica'},
-        }
-        self.assertEqual(TERRAIN.serialize_collection([feature]), TERRAIN.serialize_collection([feature]))
+        features = [
+            {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [19.26, 42.44]},
+                'properties': {'entityId': 'derived:ridge-b', 'entityVersion': 1, 'kind': 'ridge'},
+            },
+            {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [19.25, 42.44]},
+                'properties': {'entityId': 'derived:ridge-a', 'entityVersion': 1, 'kind': 'ridge'},
+            },
+        ]
+        text = TERRAIN.serialize_collection(features)
+        self.assertEqual(text, TERRAIN.serialize_collection(list(reversed(features))))
+        self.assertTrue(text.endswith('\n'))
+        lines = text.splitlines()
+        self.assertEqual(lines[0], '{"entitySchemaVersion":1,"features":[')
+        self.assertEqual(lines[-1], '],"type":"FeatureCollection"}')
+        self.assertEqual(len(lines), 4)
+        self.assertTrue(lines[1].startswith('{"geometry"'))
+        self.assertTrue(lines[1].endswith(','))
+        self.assertTrue(lines[2].endswith('}'))
         self.assertEqual(
-            TERRAIN.content_hash(feature),
+            TERRAIN.content_hash(features[0]),
             TERRAIN.content_hash({
                 'type': 'Feature',
-                'properties': {'entityId': 'derived:ridge-gorica', 'kind': 'ridge', 'name': 'Gorica'},
+                'geometry': {'type': 'Point', 'coordinates': [19.26, 42.44]},
+                'properties': {'entityId': 'derived:ridge-b', 'entityVersion': 1, 'kind': 'ridge'},
             }),
         )
         versioned = TERRAIN.versioned_properties({'entityId': 'derived:ridge-gorica', 'kind': 'ridge'},
                                                  {'type': 'Point', 'coordinates': [19.25, 42.44]})
         self.assertTrue(versioned['entityVersion'].startswith('sha256:'))
-        self.assertNotIn('entityVersion', {key: value for key, value in versioned.items() if key == 'kind'})
 
     def test_height_check_uses_contour_or_large_dem_difference_only(self):
         self.assertEqual(TERRAIN.classify_height_check(None, 131.04, None), 'missing')

@@ -197,14 +197,14 @@ both fixtures, and the Python topology check rebuilds their polygons from the sa
 
 [entity-identity.schema.json](entity-identity.schema.json) defines source identity in `Feature.properties`, separately
 from display IDs, attribution strings and snapshot indices. [source-entities.schema.json](source-entities.schema.json)
-applies it to every feature in any of the thirteen source GeoJSON files. Existing geometry and domain contracts still
-apply; these schemas add identity without replacing them.
+applies it to every feature in each reviewed source GeoJSON file. Existing geometry and domain contracts still apply;
+these schemas add identity without replacing them.
 
 A file adopts version 1 by adding `entitySchemaVersion: 1` to its FeatureCollection. All its features then require
 `entityId` and `entityVersion`. `check-data` rejects partial adoption, unknown schema versions, or any of these reserved
-identity fields in a file without the marker. All thirteen reviewed source collections have adopted version 1. An empty
-adopted collection is valid. The schema describes adopted files; legacy compatibility remains only for fixtures and
-explicitly unannotated test data.
+identity fields in a file without the marker. Reviewed source collections that carry `entitySchemaVersion: 1` adopt this
+identity; an empty adopted collection is valid. The schema describes adopted files; legacy compatibility remains only
+for fixtures and explicitly unannotated test data.
 
 | `entityId` prefix               | Meaning                                                                    | `entityVersion`                                         |
 | ------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |

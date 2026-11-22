@@ -120,10 +120,11 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 ## Relief
 
 `contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived,
-read-only vectors. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed
-OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build
-artifacts and are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256
-values are recorded in `sources/provenance.json`.
+read-only vectors. See [ADR 0025](../docs/decisions/0025-relief-derived-read-only-sources.md).
+`make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the
+reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and are
+not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are recorded
+in `sources/provenance.json`.
 
 The current build has 5,411 Montenegro summits (4,541 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
 levels, 152 slope polygons, 28 ridge lines, and 46 canyon-rim segments across the four river banks. The full report is

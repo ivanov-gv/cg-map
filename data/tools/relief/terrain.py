@@ -8,6 +8,8 @@ plain ``python3`` rather than the full GIS environment.
 import hashlib
 import json
 import math
+import sys
+from pathlib import Path
 
 import numpy as np
 
@@ -233,15 +235,15 @@ def versioned_properties(properties, geometry):
 
 
 def serialize_collection(features):
-    """Serialize an adopted collection with sorted keys and features."""
-    collection = {
-        'type': 'FeatureCollection',
-        'entitySchemaVersion': 1,
-        'features': sort_features(features),
-    }
-    return json.dumps(
-        collection, ensure_ascii=False, separators=(',', ':'), sort_keys=True
-    ) + '\n'
+    """Serialize an adopted collection in the extractor's one-feature-per-line format."""
+    try:
+        from osm_extract.writing import serialize_collection as serialize
+    except ModuleNotFoundError:
+        tools_path = Path(__file__).resolve().parents[1]
+        if str(tools_path) not in sys.path:
+            sys.path.insert(0, str(tools_path))
+        from osm_extract.writing import serialize_collection as serialize
+    return serialize(features)
 
 
 def interpolate_on_edge(first, second, level):
@@ -251,6 +253,19 @@ def interpolate_on_edge(first, second, level):
         first[0] + offset * (second[0] - first[0]),
         first[1] + offset * (second[1] - first[1]),
     ]
+
+
+def _cell_contour_paths(corners, level):
+    crossings = []
+    for edge in range(4):
+        first, second = corners[edge], corners[(edge + 1) % 4]
+        if (first[2] <= level < second[2]) or (second[2] <= level < first[2]):
+            crossings.append(interpolate_on_edge(first, second, level))
+    if len(crossings) == 2:
+        return [crossings]
+    if len(crossings) == 4:
+        return [crossings[:2], crossings[2:]]
+    return []
 
 
 def contour_paths_from_grid(heights, longitudes, latitudes, levels):
@@ -272,18 +287,7 @@ def contour_paths_from_grid(heights, longitudes, latitudes, levels):
                     (xs[column + 1], ys[row + 1], grid[row + 1, column + 1]),
                     (xs[column], ys[row + 1], grid[row + 1, column]),
                 ]
-                crossings = []
-                for edge in range(4):
-                    first, second = corners[edge], corners[(edge + 1) % 4]
-                    if (first[2] <= level < second[2]) or (second[2] <= level < first[2]):
-                        crossings.append(interpolate_on_edge(first, second, level))
-                if len(crossings) == 2:
-                    paths = [crossings]
-                elif len(crossings) == 4:
-                    paths = [crossings[:2], crossings[2:]]
-                else:
-                    continue
-                for path in paths:
+                for path in _cell_contour_paths(corners, level):
                     yield {'level': level, 'path': path}
 
 

@@ -179,9 +179,7 @@ def build_contours(grid, interval=20, index_interval=100):
         features.append(derived_feature(_unique_name(base, used_names), {
             'kind': 'contour',
             'elevation': level,
-            'intervalMetres': interval,
             'index': is_index_level(level, index_interval),
-            'segments': len(path) - 1,
         }, geometry))
     assert_contours_do_not_cross(segments)
     report = {
@@ -199,11 +197,26 @@ def build_contours(grid, interval=20, index_interval=100):
     return features, report
 
 
+_ELEVATION_UNIT_RE = re.compile(
+    r'^\s*([+-]?(?:\d+(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?))\s*'
+    r'(m|meter|metre|meters|metres)?\s*$',
+    re.IGNORECASE,
+)
+_THOUSANDS_GROUP_RE = re.compile(r'^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$')
+
+
 def _parse_elevation(value):
     if value is None or value == '':
         return None
+    text = str(value).strip()
+    match = _ELEVATION_UNIT_RE.match(text)
+    if not match:
+        return None
+    number = match.group(1)
+    if ',' in number and not _THOUSANDS_GROUP_RE.match(number):
+        return None
     try:
-        return float(str(value).replace(',', '.'))
+        return float(number.replace(',', ''))
     except ValueError:
         return None
 
@@ -235,7 +248,7 @@ def _contour_rings(contour_features):
 def _enclosing_contour(rings, longitude, latitude):
     point = Point(longitude, latitude)
     levels = [level for level, region in rings if region.covers(point)]
-    return min(levels, default=None)
+    return max(levels, default=None)
 
 
 def _summit_reasons(height_check, osm_elevation, dem_elevation, enclosing_contour):
@@ -250,6 +263,43 @@ def _summit_reasons(height_check, osm_elevation, dem_elevation, enclosing_contou
     if difference > HEIGHT_MISMATCH_METRES:
         reasons.append(f'OSM elevation differs from DEM by {difference} m')
     return reasons
+
+
+def _summit_properties(summit, osm_elevation, dem_elevation, surrounding_elevation,
+                       enclosing_contour, height_check, reasons):
+    properties = {
+        'entityId': summit['entityId'],
+        'entityVersion': summit['entityVersion'],
+        'kind': 'summit',
+        'natural': summit['kind'],
+        'ele': osm_elevation,
+        'demElevation': dem_elevation,
+        'surroundingDemElevation': surrounding_elevation,
+        'enclosingContourElevation': enclosing_contour,
+        'heightCheck': height_check,
+        'mismatch': height_check == 'mismatch',
+        'mismatchReasons': reasons,
+    }
+    for tag in ('name', 'name:en'):
+        value = summit['tags'].get(tag)
+        if value:
+            properties[tag] = value
+    return properties
+
+
+def _summit_mismatch(summit, properties, geometry, osm_elevation, dem_elevation,
+                     enclosing_contour, reasons):
+    mismatch = {
+        'entityId': summit['entityId'],
+        'coordinates': geometry['coordinates'],
+        'osmElevation': osm_elevation,
+        'demElevation': dem_elevation,
+        'enclosingContourElevation': enclosing_contour,
+        'reasons': reasons,
+    }
+    if 'name' in properties:
+        mismatch['name'] = properties['name']
+    return mismatch
 
 
 def build_summits(model, osm, land, contour_features):
@@ -289,22 +339,14 @@ def build_summits(model, osm, land, contour_features):
             height_check, osm_elevation, dem_elevation, enclosing_contour
         )
         counts[height_check] += 1
-        properties = {
-            'entityId': summit['entityId'],
-            'entityVersion': summit['entityVersion'],
-            'kind': 'summit',
-            'natural': summit['kind'],
-            'name': summit['tags'].get('name', ''),
-            'name:en': summit['tags'].get('name:en', ''),
-            'ele': osm_elevation,
-            'demElevation': dem_elevation,
-            'surroundingDemElevation': surrounding_elevation,
-            'enclosingContourElevation': enclosing_contour,
-            'heightCheck': height_check,
-            'mismatch': height_check == 'mismatch',
-            'mismatchReasons': reasons,
+        properties = _summit_properties(
+            summit, osm_elevation, dem_elevation, surrounding_elevation,
+            enclosing_contour, height_check, reasons,
+        )
+        geometry = {
+            'type': 'Point',
+            'coordinates': [published_longitude, published_latitude],
         }
-        geometry = {'type': 'Point', 'coordinates': [published_longitude, published_latitude]}
         features.append({
             'type': 'Feature',
             'id': summit['entityId'],
@@ -312,15 +354,10 @@ def build_summits(model, osm, land, contour_features):
             'properties': properties,
         })
         if height_check == 'mismatch':
-            mismatches.append({
-                'entityId': summit['entityId'],
-                'name': properties['name'],
-                'coordinates': geometry['coordinates'],
-                'osmElevation': osm_elevation,
-                'demElevation': dem_elevation,
-                'enclosingContourElevation': enclosing_contour,
-                'reasons': reasons,
-            })
+            mismatches.append(_summit_mismatch(
+                summit, properties, geometry, osm_elevation, dem_elevation,
+                enclosing_contour, reasons,
+            ))
             contour_rule_mismatches += int(bool(
                 enclosing_contour is not None and enclosing_contour > osm_elevation
             ))
@@ -644,7 +681,7 @@ def _river_centrelines(water, detail_bounds, river_names):
                 )
         if not parts:
             continue
-        merged = linemerge(unary_union(parts))
+        merged = linemerge(parts) if len(parts) == 1 else linemerge(unary_union(parts))
         components = list(merged.geoms) if merged.geom_type == 'MultiLineString' else [merged]
         for component in components:
             if component.geom_type == 'LineString' and component.length > 0:
@@ -690,29 +727,6 @@ def _signed_offset_metres(point, line, latitude_metres, longitude_metres):
     east = (point.x - centre.x) * longitude_metres
     north = (point.y - centre.y) * latitude_metres
     return east * normal[0] + north * normal[1]
-
-
-def _cliff_parts(cliffs, line, bank, detail_bounds, latitude_metres, longitude_metres):
-    west, south, east, north = detail_bounds
-    detail_box = box(west, south, east, north)
-    parts = []
-    for cliff in cliffs:
-        geometry = LineString(cliff['coordinates'])
-        representative = geometry.interpolate(0.5, normalized=True)
-        signed = _signed_offset_metres(representative, line, latitude_metres, longitude_metres)
-        if (bank == 'left' and signed <= 0) or (bank == 'right' and signed >= 0):
-            continue
-        if abs(signed) > CANYON_SEARCH_DISTANCE_METRES:
-            continue
-        clipped = geometry.intersection(detail_box)
-        if clipped.geom_type == 'LineString' and clipped.length > 0:
-            parts.append((clipped, cliff['entityId']))
-        elif clipped.geom_type in ('MultiLineString', 'GeometryCollection'):
-            parts.extend(
-                (part, cliff['entityId']) for part in clipped.geoms
-                if part.geom_type == 'LineString' and part.length > 0
-            )
-    return parts
 
 
 def _river_samples(line, model, latitude_metres, sample_spacing_metres):
@@ -806,18 +820,50 @@ def _clean_rim_segments(segments, latitude_metres, longitude_metres):
     return cleaned
 
 
-def _qualifying_cliffs(cliffs, lines, bank, detail_bounds, latitude_metres,
-                       longitude_metres, rim_geometry, near_metres):
+def _cliff_parts(cliffs, line, bank, detail_bounds, latitude_metres, longitude_metres):
+    west, south, east, north = detail_bounds
+    detail_box = box(west, south, east, north)
+    parts = []
+    for cliff in cliffs:
+        geometry = LineString(cliff['coordinates'])
+        representative = geometry.interpolate(0.5, normalized=True)
+        signed = _signed_offset_metres(representative, line, latitude_metres, longitude_metres)
+        if (bank == 'left' and signed <= 0) or (bank == 'right' and signed >= 0):
+            continue
+        if abs(signed) > CANYON_SEARCH_DISTANCE_METRES:
+            continue
+        clipped = geometry.intersection(detail_box)
+        if clipped.geom_type == 'LineString' and clipped.length > 0:
+            parts.append((clipped, cliff))
+        elif clipped.geom_type in ('MultiLineString', 'GeometryCollection'):
+            parts.extend(
+                (part, cliff) for part in clipped.geoms
+                if part.geom_type == 'LineString' and part.length > 0
+            )
+    return parts
+
+
+def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
+                            longitude_metres, rim_geometry, near_metres):
     candidates = []
     for line in lines:
         candidates.extend(_cliff_parts(
             cliffs, line, bank, detail_bounds, latitude_metres, longitude_metres
         ))
-    kept = [
-        (part, identifier) for part, identifier in candidates
-        if part.distance(rim_geometry) <= near_metres / latitude_metres
-    ]
-    return kept, sorted({identifier for _, identifier in kept})
+    if rim_geometry.is_empty:
+        return []
+    kept = []
+    seen = set()
+    for part, cliff in candidates:
+        if part.distance(rim_geometry) > near_metres / latitude_metres:
+            continue
+        rounded = rounded_coordinates(list(part.coords))
+        key = (cliff['entityId'], tuple(tuple(point) for point in rounded))
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append((part, cliff))
+    return sorted(kept, key=lambda item: (item[1]['entityId'], tuple(item[0].coords[0])))
 
 
 def _metric_length(geometry, latitude_metres, longitude_metres):
@@ -829,107 +875,150 @@ def _metric_length(geometry, latitude_metres, longitude_metres):
     return transform(to_metres, geometry).length
 
 
+def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitude_metres):
+    grouped = {}
+    for part, cliff in cliff_parts:
+        grouped.setdefault(
+            (cliff['entityId'], cliff['entityVersion']), []
+        ).append(part)
+    features = []
+    for (entity_id, entity_version), parts in sorted(grouped.items()):
+        ordered_parts = sorted(parts, key=lambda part: tuple(part.coords[0]))
+        for index, part in enumerate(ordered_parts):
+            geometry = {
+                'type': 'LineString',
+                'coordinates': rounded_coordinates(list(part.coords)),
+            }
+            properties = {
+                'entityId': entity_id,
+                'entityVersion': entity_version,
+                'kind': 'canyon-rim',
+                'river': river_name,
+                'bank': bank,
+                'method': 'osm-cliff',
+                'lengthMetres': round(
+                    _metric_length(part, latitude_metres, longitude_metres)
+                ),
+            }
+            if len(ordered_parts) > 1:
+                properties['entityPart'] = index
+            features.append({
+                'type': 'Feature',
+                'id': entity_id,
+                'geometry': geometry,
+                'properties': properties,
+            })
+    return features
+
+
+def _dem_rim_features(segments, river_name, bank, latitude_metres, longitude_metres):
+    parts = []
+    for segment, _ in segments:
+        geometry = {
+            'type': 'LineString',
+            'coordinates': rounded_coordinates(list(segment.coords)),
+        }
+        parts.append(({
+            'kind': 'canyon-rim',
+            'river': river_name,
+            'bank': bank,
+            'method': 'dem-canyon-bank',
+            'lengthMetres': round(
+                _metric_length(segment, latitude_metres, longitude_metres)
+            ),
+        }, geometry))
+    if not parts:
+        return []
+    return derived_parts(f'canyon-rim-{entity_slug(river_name)}-{bank}', parts)
+
+
+def _bank_report(river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres):
+    dem_length = sum(
+        feature['properties']['lengthMetres'] for feature in dem_features
+    )
+    cliff_length = sum(
+        feature['properties']['lengthMetres'] for feature in cliff_features
+    )
+    return {
+        'river': river_name,
+        'bank': bank,
+        'demFeatureCount': len(dem_features),
+        'cliffFeatureCount': len(cliff_features),
+        'cliffWays': sorted({f['properties']['entityId'] for f in cliff_features}),
+        'demLengthMetres': round(dem_length),
+        'cliffLengthMetres': round(cliff_length),
+        'totalLengthMetres': round(dem_length + cliff_length),
+    }
+
+
+def _river_lines(water, detail_bounds, river_names):
+    grouped = {}
+    for river_name, line in _river_centrelines(water, detail_bounds, river_names):
+        grouped.setdefault(river_name, []).append(line)
+    return grouped
+
+
+def _dem_segments_for_bank(lines, bank, model, latitude_metres, longitude_metres,
+                           sample_spacing_metres):
+    samples = []
+    for line in lines:
+        samples.extend(_bank_samples(
+            line, bank, model, latitude_metres, longitude_metres,
+            sample_spacing_metres,
+        ))
+    sampled_segments = _segments_from_samples(
+        samples, sample_spacing_metres * 1.5 / latitude_metres
+    )
+    sampled_segments.sort(key=lambda segment: tuple(segment[0].coords[0]))
+    return _clean_rim_segments(sampled_segments, latitude_metres, longitude_metres)
+
+
 def build_canyon_rims(model, water, cliffs, detail_bounds,
                       river_names=('Morača', 'Ribnica'), sample_spacing_metres=40):
-    """Keep canyon rims only where the bank rises at least 8 m within 60 m."""
+    """Publish canyon rims as OSM cliff features and DEM-derived bank segments."""
     latitude_metres = 111_320
     longitude_metres = latitude_metres * math.cos(
         math.radians((detail_bounds[1] + detail_bounds[3]) / 2)
     )
-    grouped = {}
-    for river_name, line in _river_centrelines(water, detail_bounds, river_names):
-        grouped.setdefault(river_name, []).append(_orient_downstream(line, model))
+    grouped = _river_lines(water, detail_bounds, river_names)
+    for river_name, lines in grouped.items():
+        grouped[river_name] = [_orient_downstream(line, model) for line in lines]
 
     features = []
+    river_banks = []
+    for river_name in river_names:
+        for bank in ('left', 'right'):
+            lines = grouped.get(river_name, [])
+            dem_segments = _dem_segments_for_bank(
+                lines, bank, model, latitude_metres, longitude_metres, sample_spacing_metres
+            )
+            rim_geometry = unary_union([line for line, _ in dem_segments]) if dem_segments else LineString()
+            cliff_parts = _qualifying_cliff_parts(
+                cliffs, lines, bank, detail_bounds, latitude_metres, longitude_metres,
+                rim_geometry, CANYON_SEARCH_DISTANCE_METRES / 2,
+            )
+            cliff_features = _cliff_rim_features(
+                cliff_parts, river_name, bank, latitude_metres, longitude_metres
+            )
+            dem_features = _dem_rim_features(
+                dem_segments, river_name, bank, latitude_metres, longitude_metres
+            )
+            features.extend(cliff_features)
+            features.extend(dem_features)
+            river_banks.append(_bank_report(
+                river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres
+            ))
+
     report = {
-        'riverBanks': [],
+        'riverBanks': river_banks,
         'sampleSpacingMetres': sample_spacing_metres,
         'minimumBankRiseMetres': CANYON_BANK_RISE_METRES,
         'searchDistanceMetres': CANYON_SEARCH_DISTANCE_METRES,
         'searchStepMetres': CANYON_SEARCH_STEP_METRES,
         'joinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
         'minimumSegmentLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
-        'geometry': 'one LineString feature per canyon segment with a shared derived identity and entityPart numbers',
+        'geometry': 'OSM cliff segments keep way identity; DEM canyon banks are derived parts',
     }
-    for river_name in river_names:
-        for bank in ('left', 'right'):
-            samples = []
-            for line in grouped.get(river_name, []):
-                samples.extend(_bank_samples(
-                    line, bank, model, latitude_metres, longitude_metres,
-                    sample_spacing_metres,
-                ))
-            sampled_segments = _segments_from_samples(
-                samples, sample_spacing_metres * 1.5 / latitude_metres
-            )
-            sampled_segments.sort(key=lambda segment: tuple(segment[0].coords[0]))
-            segments = _clean_rim_segments(
-                sampled_segments, latitude_metres, longitude_metres
-            )
-            rim_geometry = unary_union([line for line, _ in segments])
-            cliff_parts, cliff_ways = _qualifying_cliffs(
-                cliffs, grouped.get(river_name, []), bank, detail_bounds,
-                latitude_metres, longitude_metres, rim_geometry,
-                CANYON_SEARCH_DISTANCE_METRES / 2,
-            ) if segments else ([], [])
-            cliff_length = sum(
-                _metric_length(part, latitude_metres, longitude_metres)
-                for part, _ in cliff_parts
-            )
-            dem_length = sum(
-                _metric_length(line, latitude_metres, longitude_metres)
-                for line, _ in segments
-            )
-            method = (
-                'osm-cliff and dem-canyon-bank' if cliff_ways else 'dem-canyon-bank'
-            )
-            if segments:
-                parts = []
-                name = f'canyon-rim-{entity_slug(river_name)}-{bank}'
-                for index, (segment, rise) in enumerate(segments):
-                    geometry = {
-                        'type': 'LineString',
-                        'coordinates': rounded_coordinates(list(segment.coords)),
-                    }
-                    length_metres = _metric_length(
-                        segment, latitude_metres, longitude_metres
-                    )
-                    parts.append(({
-                        'kind': 'canyon-rim',
-                        'river': river_name,
-                        'bank': bank,
-                        'bankDefinition': 'left and right of the downstream DEM-oriented centreline',
-                        'method': method,
-                        'cliffWays': cliff_ways,
-                        'cliffLengthMetres': round(cliff_length),
-                        'demLengthMetres': round(dem_length),
-                        'segmentLengthMetres': round(length_metres),
-                        'segmentBankRiseMetres': round(rise, 2),
-                        'minimumBankRiseMetres': CANYON_BANK_RISE_METRES,
-                        'searchDistanceMetres': CANYON_SEARCH_DISTANCE_METRES,
-                        'searchStepMetres': CANYON_SEARCH_STEP_METRES,
-                    }, geometry))
-                features.extend(derived_parts(name, parts))
-            report['riverBanks'].append({
-                'river': river_name,
-                'bank': bank,
-                'method': method,
-                'cliffWays': cliff_ways,
-                'cliffLengthMetres': round(cliff_length),
-                'demLengthMetres': round(dem_length),
-                'totalLengthMetres': round(dem_length),
-                'features': len(segments),
-                'segments': [
-                    {
-                        'entityPart': index,
-                        'lengthMetres': round(_metric_length(
-                            line, latitude_metres, longitude_metres
-                        )),
-                        'bankRiseMetres': round(rise, 2),
-                    }
-                    for index, (line, rise) in enumerate(segments)
-                ],
-            })
     return features, report
 
 

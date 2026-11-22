@@ -65,12 +65,11 @@ def _input_record(root, paths, osm_sha256):
     return {
         'dem': {
             'bucket': derivations.LICENSE_BLOCK['bucket'],
-            'directory': str(dem_directory),
             'tiles': tile_hashes,
             'sha256OfChecksumList': _sha256_bytes((dem_directory / 'SHA256SUMS').read_bytes()),
         },
         'osm': {
-            'path': str(paths['osm']),
+            'fileName': Path(paths['osm']).name,
             'sha256': osm_sha256,
         },
         'reviewedSources': {
@@ -170,12 +169,17 @@ def _updated_provenance(provenance, outputs, report_bytes):
         'license': report['license'],
         'sources': derivations.LAYER_SOURCES,
         'buildParameters': {
+            'contourIntervalMetres': report['contours']['intervalMetres'],
+            'contourIndexIntervalMetres': report['contours']['indexIntervalMetres'],
             'greenKinds': report['slopes']['configuredGreenKinds'],
             'greenKindsPresentInLand': report['slopes']['presentGreenKindsInLand'],
             'minimumAreaSquareMetres': report['slopes']['minimumAreaSquareMetres'],
             'ridgeSimplificationToleranceDegrees': RIDGE_SIMPLIFY_TOLERANCE_DEGREES,
             'ridgeMinimumLengthMetres': RIDGE_MINIMUM_LENGTH_METRES,
             'summitLinkDistanceMetres': RIDGE_SUMMIT_LINK_DISTANCE_METRES,
+            'canyonRimMinimumBankRiseMetres': report['canyonRims']['minimumBankRiseMetres'],
+            'canyonRimSearchDistanceMetres': report['canyonRims']['searchDistanceMetres'],
+            'canyonRimSearchStepMetres': report['canyonRims']['searchStepMetres'],
             'canyonRimJoinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
             'canyonRimMinimumLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
         },
@@ -191,7 +195,8 @@ def _updated_provenance(provenance, outputs, report_bytes):
             'greenKindsPresentInLand': report['slopes']['presentGreenKindsInLand'],
             'ridgeFeatures': report['ridges']['features'],
             'canyonRimFeatures': sum(
-                entry['features'] for entry in report['canyonRims']['riverBanks']
+                entry['demFeatureCount'] + entry['cliffFeatureCount']
+                for entry in report['canyonRims']['riverBanks']
             ),
             'contourCrossingPairs': report['contours']['crossingPairs'],
         },
@@ -221,7 +226,10 @@ def main(argv=None):
     outputs = write_outputs()
     report = json.loads(outputs['relief-report.json'])
     checks = report['summits']['heightCheckCounts']
-    rim_parts = sum(entry['features'] for entry in report['canyonRims']['riverBanks'])
+    rim_parts = sum(
+        entry['demFeatureCount'] + entry['cliffFeatureCount']
+        for entry in report['canyonRims']['riverBanks']
+    )
     print(
         f'Relief: {report["contours"]["features"]} contour lines, '
         f'{report["summits"]["features"]} Montenegro summits '

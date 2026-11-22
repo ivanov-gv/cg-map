@@ -170,14 +170,15 @@ export function validateRelief(data, {label}) {
     requireValue(properties.kind === kind, `${label}: wrong relief kind ${properties.kind}`);
     requireValue(!('source' in properties), `${label}: feature properties must not repeat build provenance`);
     if (kind === 'contour') {
-      const coordinates = feature.geometry.coordinates;
       requireValue(Number.isInteger(properties.elevation) && properties.elevation % 20 === 0, `${label}: elevation is not a 20 m contour`);
-      requireValue(properties.intervalMetres === 20 && typeof properties.index === 'boolean' && properties.index === (properties.elevation % 100 === 0), `${label}: wrong contour interval or index flag`);
-      requireValue(Number.isInteger(properties.segments) && properties.segments === coordinates.length - 1, `${label}: contour segment count disagrees with its line`);
+      requireValue(typeof properties.index === 'boolean' && properties.index === (properties.elevation % 100 === 0), `${label}: wrong contour index flag`);
+      requireValue(!('intervalMetres' in properties) && !('segments' in properties), `${label}: contour build parameters belong in provenance`);
     }
     if (kind === 'summit') {
       requireValue(['peak', 'hill'].includes(properties.natural), `${label}: invalid summit natural kind`);
-      requireValue(typeof properties.name === 'string' && typeof properties['name:en'] === 'string', `${label}: missing summit names`);
+      for (const key of ['name', 'name:en']) {
+        requireValue(!(key in properties) || typeof properties[key] === 'string', `${label}: invalid summit name`);
+      }
       requireValue(properties.ele === null || Number.isFinite(properties.ele), `${label}: invalid OSM elevation`);
       requireValue(Number.isFinite(properties.demElevation) && Number.isFinite(properties.surroundingDemElevation), `${label}: missing DEM elevation`);
       requireValue(['missing', 'mismatch', 'ok'].includes(properties.heightCheck), `${label}: invalid heightCheck`);
@@ -204,11 +205,19 @@ export function validateRelief(data, {label}) {
     }
     if (kind === 'canyon-rim') {
       requireValue(['Morača', 'Ribnica'].includes(properties.river) && ['left', 'right'].includes(properties.bank), `${label}: invalid river bank`);
-      requireValue(typeof properties.method === 'string' && typeof properties.bankDefinition === 'string', `${label}: missing rim method`);
-      requireValue(Array.isArray(properties.cliffWays) && properties.cliffWays.every(id => /^way\/[1-9][0-9]*$/.test(id)), `${label}: invalid cliff identity`);
-      requireValue(Number.isInteger(properties.entityPart) && properties.entityPart >= 0, `${label}: invalid rim part`);
-      requireValue(properties.minimumBankRiseMetres === 8 && properties.searchDistanceMetres === 60, `${label}: canyon thresholds changed`);
-      requireValue(Number.isFinite(properties.segmentLengthMetres) && Number.isFinite(properties.demLengthMetres), `${label}: invalid rim lengths`);
+      requireValue(['osm-cliff', 'dem-canyon-bank'].includes(properties.method), `${label}: invalid rim method`);
+      requireValue(Number.isFinite(properties.lengthMetres) && properties.lengthMetres >= 0, `${label}: invalid rim length`);
+      requireValue(!('entityPart' in properties) || (Number.isInteger(properties.entityPart) && properties.entityPart >= 0), `${label}: invalid rim part`);
+      for (const key of ['bankDefinition', 'cliffWays', 'cliffLengthMetres', 'demLengthMetres', 'segmentLengthMetres', 'segmentBankRiseMetres', 'minimumBankRiseMetres', 'searchDistanceMetres', 'searchStepMetres']) {
+        requireValue(!(key in properties), `${label}: rim build parameters belong in provenance`);
+      }
+      if (properties.method === 'osm-cliff') {
+        requireValue(/^way\/[1-9][0-9]*$/.test(properties.entityId), `${label}: osm cliff rim must keep OSM identity`);
+        requireValue(Number.isInteger(properties.entityVersion) && properties.entityVersion > 0, `${label}: osm cliff rim must keep OSM version`);
+      }
+      if (properties.method === 'dem-canyon-bank') {
+        requireValue(/^derived:/.test(properties.entityId), `${label}: dem canyon rim must use derived identity`);
+      }
     }
   }
   return count;

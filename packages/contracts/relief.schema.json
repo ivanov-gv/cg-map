@@ -41,19 +41,17 @@
     "contour": {
       "if": {"properties": {"kind": {"const": "contour"}}, "required": ["kind"]},
       "then": {
-        "required": ["elevation", "intervalMetres", "index", "segments"],
+        "required": ["elevation", "index"],
         "properties": {
           "elevation": {"type": "integer", "multipleOf": 20},
-          "intervalMetres": {"const": 20},
-          "index": {"type": "boolean"},
-          "segments": {"type": "integer", "minimum": 1}
+          "index": {"type": "boolean"}
         }
       }
     },
     "summit": {
       "if": {"properties": {"kind": {"const": "summit"}}, "required": ["kind"]},
       "then": {
-        "required": ["natural", "name", "name:en", "ele", "demElevation", "surroundingDemElevation", "enclosingContourElevation", "heightCheck", "mismatch", "mismatchReasons"],
+        "required": ["natural", "ele", "demElevation", "surroundingDemElevation", "enclosingContourElevation", "heightCheck", "mismatch", "mismatchReasons"],
         "properties": {
           "natural": {"enum": ["peak", "hill"]},
           "name": {"type": "string"},
@@ -98,20 +96,21 @@
     "canyonRim": {
       "if": {"properties": {"kind": {"const": "canyon-rim"}}, "required": ["kind"]},
       "then": {
-        "required": ["river", "bank", "bankDefinition", "method", "cliffWays", "cliffLengthMetres", "demLengthMetres", "segmentLengthMetres", "segmentBankRiseMetres", "minimumBankRiseMetres", "searchDistanceMetres", "searchStepMetres"],
+        "required": ["river", "bank", "method", "lengthMetres"],
         "properties": {
           "river": {"enum": ["Morača", "Ribnica"]},
           "bank": {"enum": ["left", "right"]},
-          "bankDefinition": {"type": "string"},
-          "method": {"type": "string"},
-          "cliffWays": {"type": "array", "items": {"type": "string", "pattern": "^way/[1-9][0-9]*$"}},
-          "cliffLengthMetres": {"type": "number"},
-          "demLengthMetres": {"type": "number"},
-          "segmentLengthMetres": {"type": "number"},
-          "segmentBankRiseMetres": {"type": "number"},
-          "minimumBankRiseMetres": {"const": 8},
-          "searchDistanceMetres": {"const": 60},
-          "searchStepMetres": {"const": 10}
+          "method": {"enum": ["osm-cliff", "dem-canyon-bank"]},
+          "lengthMetres": {"type": "number", "minimum": 0},
+          "bankDefinition": false,
+          "cliffWays": false,
+          "cliffLengthMetres": false,
+          "demLengthMetres": false,
+          "segmentLengthMetres": false,
+          "segmentBankRiseMetres": false,
+          "minimumBankRiseMetres": false,
+          "searchDistanceMetres": false,
+          "searchStepMetres": false
         }
       }
     }
