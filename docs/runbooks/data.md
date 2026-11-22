@@ -84,8 +84,8 @@ writes `building-entrances.geojson`, a read-only source of OSM entrance nodes ne
 editor can inspect it but cannot change it, and still accepts a version-1 bundle with the original eight files. The
 separate `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is not generated from
 this source file. See [building addresses](../map-data/building-numbers.md),
-[decision 0021](../decisions/0021-osm-building-source-details.md) and
-[decision 0022](../decisions/0022-editor-bundle-versions.md).
+[decision 0022](../decisions/0022-osm-building-source-details.md) and
+[decision 0023](../decisions/0023-editor-bundle-versions.md).
 
 Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
 `building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed

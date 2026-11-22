@@ -41,9 +41,9 @@
     "water.geojson includes one derived ocean polygon computed by the extractor from the reviewed land outline and surrounding countries.",
     "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
   ],
-  "places_bytes": 625413,
-  "places_sha256": "9bf0f2cbb09bf58494b81d98684df8e2eb6e5e24dde7a208be4d6435ae4aa856",
-  "places_facts_sha256": "6c1169207f278f511ada66fa8a0e8226ac574e060f213161263ca3ad8a317201",
+  "places_bytes": 587199,
+  "places_sha256": "71456612a5e1b08d8622c67584bf312e5362e07045c8158a8c15f888486d11f3",
+  "places_facts_sha256": "005fd5e3ed8f4d421bf837bed946ffebb66bccaf03a5ed4ee607acfbe2277671",
   "place_visibility_policy_sha256": "58aa75c12b1902801119a9db09c144c90ab3326ceb39080a68836767722d3fcc",
   "place_visibility_config_sha256": "ad76ecf865cbea764fd34ae7571418ad9e1a2434f2bf64e37073af8f0f3269c6",
   "input_url": "https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf",
@@ -59,16 +59,21 @@
     "all_details": false,
     "all_places": false,
     "layers": [
-      "building-entrances.geojson",
       "buildings.geojson",
-      "places.geojson"
+      "context-countries.geojson",
+      "land.geojson",
+      "places.geojson",
+      "roads.geojson",
+      "transport-stops.geojson",
+      "water.geojson"
     ]
   },
   "building_details": {
-    "addr:street": 896,
-    "addr:streetUnjoined": 575,
     "addr:housenumberPresent": 1003,
+    "addr:street": 896,
     "addr:streetEntityId": 321,
+    "addr:streetEntityIds": 321,
+    "addr:streetUnjoined": 575,
     "nohousenumber": 6,
     "building": 43978,
     "building:levels": 445,
@@ -77,6 +82,7 @@
     "name": 265,
     "addr:housenumber": 1003,
     "roof:levels": 142,
+    "entrance:nohousenumber": 0,
     "entrancesUnjoined": 28,
     "entrances": 157,
     "entrance:addr:city": 31,
@@ -93,10 +99,6 @@
     "entranceKind:home": 2,
     "entrance:wheelchair": 3,
     "entrance:door": 1,
-    "entrance:addr:floor": 1,
-    "placesInsideBuildings": 1088,
-    "placesOutsideBuildings": 788,
-    "addr:streetEntityIds": 321,
-    "entrance:nohousenumber": 0
+    "entrance:addr:floor": 1
   }
 }

@@ -38,7 +38,7 @@ road ways; it uses that group's lowest way ID and `addr:streetEntityIds` lists a
 `building-entrances.geojson` from OSM `entrance=*` nodes on or within one metre of a published footprint, with the
 node's own identity, copied tags and `buildingEntityId`. A place whose point lies inside a footprint also gains that
 footprint's `buildingEntityId`. The source file is read-only in the editor; see the data runbook for the refresh groups
-and [decision 0021](../decisions/0021-osm-building-source-details.md) for why source entrances and display entrances
+and [decision 0022](../decisions/0022-osm-building-source-details.md) for why source entrances and display entrances
 remain separate.
 
 The `entrances` array described below is still produced and reviewed through `building-labels.geojson`. It carries
