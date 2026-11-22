@@ -66,6 +66,41 @@ Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the b
 `editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must not change browser editing
 tests. See [data licensing](../map-data/data-license.md) for the required Copernicus attribution.
 
+## Archive layers
+
+`make -C data build-data` encodes one vector layer per published source. `data/tools/tile-layers.mjs` is the single
+definition of each layer's source, fields and zoom ladder; the builder emits it to `.build/tiles/layer-metadata.json`,
+and `data/tools/pack.py` writes that table as the archive's `vector_layers` metadata. Do not add a second hand-written
+layer list to the packager.
+
+| Layer          | Source file                  | Zooms                                         | Fields                                                                                                         |
+| -------------- | ---------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| land           | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                       |
+| water          | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                            |
+| roads          | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel` |
+| buildings      | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                      |
+| contours       | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                           |
+| slopes         | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                       |
+| ridges         | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                       |
+| canyon_rims    | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                |
+| summits        | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                        |
+| settlements    | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                      |
+| borders        | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                |
+| municipalities | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                               |
+| road_nodes     | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                 |
+| entrances      | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                               |
+
+The table lists the fields written into tiles, not every source tag. Index contours start at zoom 12 and all contour
+lines at 14; named summits start at 9 and minor ones at 13; settlement ranks enter at 5, 8, 11 and 13. Paths and
+footways stay hidden below zoom 14. Turn restrictions and transit routes are topological relations and ordered stop
+lists, not display geometry, so they stay JSON sources. Full building attributes stay in the source for the editor;
+tiles carry only `kind` and levels.
+
+Change a source in this table, or a field or zoom rule, and rebuild the archive before reviewing the release. The build
+reports encoded bytes per layer and zoom band; if the release exceeds 45 MB, raise the relevant minimum zoom or simplify
+that layer rather than dropping its metadata. Archive acceptance checks the zooms and fields against the same definition
+in `tests/integration/archive-layers.test.mjs`.
+
 ## Place-only edits
 
 Edit data/sources/places.geojson, review attribution and place count in provenance, then assign levels and record the

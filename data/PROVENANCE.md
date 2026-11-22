@@ -172,3 +172,41 @@ slope area, layer sources and the ridge/rim thresholds are recorded under `relie
 features carry object facts only. Derived contour, slope, ridge and rim IDs are deterministic for the pinned inputs but
 are not stable across a DEM or green-area change. See [relief sources](../docs/runbooks/data.md#relief-sources) and
 [data licensing](../docs/map-data/data-license.md).
+
+## Final Epic #322 source counts
+
+No source file was refreshed for the archive rebuild. These are the reviewed counts and bytes carried into the release;
+the hashes of the GeoJSON files remain in `sources/provenance.json` under `layers`, and the separate snapshot hashes
+remain in their own provenance files.
+
+| Source file                  | Reviewed count                               | Bytes      |
+| ---------------------------- | -------------------------------------------- | ---------- |
+| `buildings.geojson`          | 43,978 footprints                            | 14,560,904 |
+| `building-entrances.geojson` | 157 entrance nodes                           | 41,359     |
+| `building-labels.geojson`    | 1,207 labels                                 | 403,046    |
+| `roads.geojson`              | 21,247 road features                         | 7,092,386  |
+| `road-nodes.geojson`         | 2,534 signal and crossing nodes              | 487,557    |
+| `turn-restrictions.json`     | 381 restriction relations                    | 80,314     |
+| `land.geojson`               | 614 areas and outlines                       | 507,915    |
+| `water.geojson`              | 7,202 areas, waterways and coastlines        | 5,518,817  |
+| `places.geojson`             | 2,112 places                                 | 728,084    |
+| `settlements.geojson`        | 4,009 named places                           | 1,102,523  |
+| `border-edges.geojson`       | 110 shared edges                             | 576,382    |
+| `municipalities.geojson`     | 25 areas                                     | 796,410    |
+| `contours.geojson`           | 445 lines across 32 levels                   | 964,749    |
+| `summits.geojson`            | 5,411 peaks                                  | 2,127,254  |
+| `slopes.geojson`             | 152 polygons                                 | 418,541    |
+| `ridges.geojson`             | 28 lines                                     | 20,352     |
+| `canyon-rims.geojson`        | 46 segments                                  | 55,012     |
+| `transport-stops.geojson`    | 719 stops                                    | 219,913    |
+| `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
+| `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,252     |
+
+The archive released from these sources is `montenegro-e8f3c3d2c74f588d.pmtiles`, 27,576,218 bytes with SHA-256
+`e8f3c3d2c74f588d4331a84e09128da3d2df997b1d70672e3edbc3072f10cdde`; `release.json` is its checksummed index. Its archive
+metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
+`sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land, water
+and buildings cost the most, while relief and road furniture stay detail-only. Turn restrictions, transit routes and the
+full building tags remain source-side because they are topological relations, ordered stop lists and editor attributes,
+not display geometry. The archive attribution carries the Copernicus adapted-product notice required for the DEM-derived
+layers; see [data licensing](../docs/map-data/data-license.md).

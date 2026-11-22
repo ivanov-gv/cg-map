@@ -17,31 +17,44 @@ MAX_LATITUDE_E7 = 436000000
 CENTER_ZOOM = 14
 CENTER_LONGITUDE_E7 = 192600000
 CENTER_LATITUDE_E7 = 424370000
-VECTOR_LAYERS = ['land', 'water', 'roads', 'buildings']
 
 
 def read_provenance():
-    """Read the reviewed snapshot date and coverage for the archive header."""
+    """Read the reviewed snapshot date, coverage and relief licence for the archive header."""
     path = ROOT / 'data/sources/provenance.json'
     return json.loads(path.read_text(encoding='utf-8'))
 
 
+def read_layer_metadata():
+    """Read the layer table emitted by build-tiles from its single shared definition."""
+    path = ROOT / '.build/tiles/layer-metadata.json'
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
 def archive_description(provenance):
-    """Describe the release using the same source record as the validator."""
+    """Describe the source snapshot and the DEM behind the relief layers."""
     snapshot_day = provenance['upstream_snapshot'][:10]
-    return f"{provenance['coverage']} OSM {snapshot_day}."
+    relief_source = provenance['relief']['sources']['contour']
+    return f"{provenance['coverage']} OSM {snapshot_day}. Relief: {relief_source}."
+
+
+def archive_attribution(provenance):
+    """Keep the adapted-product notice required for vectors derived from Copernicus DEM."""
+    relief_notice = provenance['relief']['license']['adaptedProductNotice']
+    return '© OpenStreetMap contributors · ODbL; Natural Earth public domain; ' + relief_notice
 
 
 def main():
     """Write and finalize the temporary archive for the release step."""
-    tiles = json.loads((ROOT / '.build/tiles/tiles.json').read_text())
+    tiles = json.loads((ROOT / '.build/tiles/tiles.json').read_text(encoding='utf-8'))
+    metadata = read_layer_metadata()
     provenance = read_provenance()
+    metadata['description'] = archive_description(provenance)
+    metadata['attribution'] = archive_attribution(provenance)
     archive_path = ROOT / 'data/artifacts/montenegro.pmtiles'
     with write(str(archive_path)) as writer:
         for tile in sorted(
-            tiles, key=lambda value: zxy_to_tileid(
-                value['z'], value['x'], value['y']
-            )
+            tiles, key=lambda value: zxy_to_tileid(value['z'], value['x'], value['y'])
         ):
             tile_id = zxy_to_tileid(tile['z'], tile['x'], tile['y'])
             tile_bytes = (ROOT / '.build/tiles' / tile['file']).read_bytes()
@@ -60,23 +73,7 @@ def main():
                 'center_lon_e7': CENTER_LONGITUDE_E7,
                 'center_lat_e7': CENTER_LATITUDE_E7,
             },
-            {
-                'name': 'Kompas Montenegro vector PoC',
-                'description': archive_description(provenance),
-                'attribution': (
-                    '© OpenStreetMap contributors · ODbL; '
-                    'Natural Earth public domain'
-                ),
-                'vector_layers': [
-                    {
-                        'id': name,
-                        'fields': {},
-                        'minzoom': 13 if name == 'buildings' else 0,
-                        'maxzoom': 17,
-                    }
-                    for name in VECTOR_LAYERS
-                ],
-            }
+            metadata,
         )
     print('PMTiles bytes', archive_path.stat().st_size)
 

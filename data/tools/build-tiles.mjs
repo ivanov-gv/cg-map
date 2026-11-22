@@ -3,32 +3,125 @@ import path from 'node:path';
 import geojsonvt from 'geojson-vt';
 import vtpbf from 'vt-pbf';
 import {fileURLToPath} from 'node:url';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-const out=path.join(root,'.build/tiles');fs.mkdirSync(out,{recursive:true});
-const indexes={};
-for(const name of ['land','water','roads','buildings']){
- const data=JSON.parse(fs.readFileSync(path.join(root,'data/sources',name+'.geojson')));
- indexes[name]=geojsonvt(data,{maxZoom:17,indexMaxZoom:5,indexMaxPoints:50000,tolerance:2,extent:8192,buffer:128,generateId:true});
- console.log(name,data.features.length);
-}
-const x=(lon,z)=>Math.floor((lon+180)/360*2**z);
-const y=(lat,z)=>Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*2**z);
-const manifest=[];
-for(let z=0;z<=16;z++){
- const b=[18.35,41.75,20.4,43.6];
- for(let tx=x(b[0],z);tx<=x(b[2],z);tx++)for(let ty=y(b[3],z);ty<=y(b[1],z);ty++){
-  const layers={};
-  for(const [name,idx] of Object.entries(indexes)){
-   if(name==='buildings'&&z<13)continue;
-   const tile=idx.getTile(z,tx,ty);
-   if(!tile?.features.length)continue;
-   if(name==='roads'&&z<11)tile.features=tile.features.filter(f=>z>=9?!['residential','service','footway','path','steps','track','pedestrian','living_street'].includes(f.tags.kind):['motorway','trunk','primary','secondary','motorway_link','trunk_link','primary_link'].includes(f.tags.kind));
-   if(tile.features.length)layers[name]=tile;
+import {MAX_GENERATED_ZOOM, MAX_TILE_ZOOM, TILE_LAYERS, tileLayerMetadata} from './tile-layers.mjs';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const tileDirectory = path.join(root, '.build/tiles');
+const sourceDirectory = path.join(root, 'data/sources');
+const tileExtent = 8192;
+const tileBounds = [18.35, 41.75, 20.4, 43.6];
+const zoomBands = [[0, 8], [9, 12], [13, 16]];
+
+fs.mkdirSync(tileDirectory, {recursive: true});
+
+// Empty strings would make TileJSON fields look present in a style's `has` expressions.
+function selectedProperties(properties, fields) {
+  const selected = {};
+  for (const field of fields) {
+    const value = properties[field];
+    if (value === undefined || value === null || value === '') continue;
+    selected[field] = value;
   }
-  if(!Object.keys(layers).length)continue;
-  const name=`${z}-${tx}-${ty}.pbf`;fs.writeFileSync(path.join(out,name),vtpbf.fromGeojsonVt(layers,{extent:8192}));
-  manifest.push({z,x:tx,y:ty,file:name});
- }
- console.log('zoom',z,'total tiles',manifest.length);
+  return selected;
 }
-fs.writeFileSync(path.join(out,'tiles.json'),JSON.stringify(manifest));
+
+function municipalityLabel(feature, fields) {
+  return {
+    type: 'Feature',
+    geometry: {type: 'Point', coordinates: feature.properties.labelPoint},
+    properties: selectedProperties(feature.properties, fields)
+  };
+}
+
+function layerFeatures(layer, collection) {
+  if (layer.name === 'municipalities') {
+    return collection.features.map(feature => municipalityLabel(feature, layer.fields));
+  }
+  return collection.features.map(feature => ({
+    type: 'Feature',
+    id: feature.id,
+    geometry: feature.geometry,
+    properties: selectedProperties(feature.properties, layer.fields)
+  }));
+}
+
+function buildIndex(layer) {
+  const sourcePath = path.join(sourceDirectory, layer.sourceFile);
+  const collection = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
+  const features = layerFeatures(layer, collection);
+  const index = geojsonvt({type: 'FeatureCollection', features}, {
+    maxZoom: MAX_TILE_ZOOM,
+    indexMaxZoom: 5,
+    indexMaxPoints: 50000,
+    tolerance: 2,
+    extent: tileExtent,
+    buffer: 128,
+    generateId: true
+  });
+  console.log(layer.name, features.length);
+  return index;
+}
+
+function recordLayerBytes(stats, layerName, zoom, bytes) {
+  const layerStats = stats.layers[layerName] ??= {bytes: 0, byZoom: {}};
+  layerStats.bytes += bytes;
+  layerStats.byZoom[zoom] = (layerStats.byZoom[zoom] ?? 0) + bytes;
+}
+
+function encodeLayer(layer, index, tileX, tileY, zoom, stats) {
+  if (zoom < layer.minZoom) return null;
+  const tile = index.getTile(zoom, tileX, tileY);
+  if (!tile?.features.length) return null;
+  const features = layer.keep ? tile.features.filter(feature => layer.keep(feature.tags, zoom)) : tile.features;
+  if (!features.length) return null;
+  const buffer = vtpbf.fromGeojsonVt({[layer.name]: {...tile, features}}, {extent: tileExtent});
+  recordLayerBytes(stats, layer.name, zoom, buffer.length);
+  return buffer;
+}
+
+function longitudeTile(longitude, zoom) {
+  return Math.floor((longitude + 180) / 360 * 2 ** zoom);
+}
+
+function latitudeTile(latitude, zoom) {
+  const latitudeRadians = latitude * Math.PI / 180;
+  return Math.floor((1 - Math.asinh(Math.tan(latitudeRadians)) / Math.PI) / 2 * 2 ** zoom);
+}
+
+function printLayerBytes(stats) {
+  console.log('Encoded layer bytes by zoom band (0-8, 9-12, 13-16, total):');
+  for (const layer of TILE_LAYERS) {
+    const layerStats = stats.layers[layer.name] ?? {byZoom: {}, bytes: 0};
+    const cells = zoomBands.map(([firstZoom, lastZoom]) => {
+      let bandBytes = 0;
+      for (let zoom = firstZoom; zoom <= lastZoom; zoom++) bandBytes += layerStats.byZoom[zoom] ?? 0;
+      return bandBytes;
+    });
+    console.log(layer.name.padEnd(15), ...cells.map(bytes => String(bytes).padStart(9)), String(layerStats.bytes).padStart(10));
+  }
+}
+
+const indexes = new Map(TILE_LAYERS.map(layer => [layer.name, buildIndex(layer)]));
+const manifest = [];
+const stats = {layers: {}, tiles: 0};
+for (let zoom = 0; zoom <= MAX_GENERATED_ZOOM; zoom++) {
+  const [west, south, east, north] = tileBounds;
+  for (let tileX = longitudeTile(west, zoom); tileX <= longitudeTile(east, zoom); tileX++) {
+    for (let tileY = latitudeTile(north, zoom); tileY <= latitudeTile(south, zoom); tileY++) {
+      const encodedLayers = TILE_LAYERS
+        .map(layer => encodeLayer(layer, indexes.get(layer.name), tileX, tileY, zoom, stats))
+        .filter(Boolean);
+      if (!encodedLayers.length) continue;
+      const fileName = `${zoom}-${tileX}-${tileY}.pbf`;
+      fs.writeFileSync(path.join(tileDirectory, fileName), Buffer.concat(encodedLayers));
+      manifest.push({z: zoom, x: tileX, y: tileY, file: fileName});
+    }
+  }
+  console.log('zoom', zoom, 'total tiles', manifest.length);
+}
+
+stats.tiles = manifest.length;
+fs.writeFileSync(path.join(tileDirectory, 'tiles.json'), JSON.stringify(manifest));
+fs.writeFileSync(path.join(tileDirectory, 'layer-metadata.json'), JSON.stringify(tileLayerMetadata(), null, 2));
+fs.writeFileSync(path.join(tileDirectory, 'layer-stats.json'), JSON.stringify(stats, null, 2));
+printLayerBytes(stats);
