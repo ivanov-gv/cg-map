@@ -78,8 +78,9 @@ with a new one.
 
 ## Releasing map-data
 
-A merge that changes data publishes `@ivanov-gv/map-data` as `0.0.0-dev.<commit>` under the `dev` tag when ci-publish's
-plan selects data. A versioned release promotes that dev package without rebuilding:
+Release only a commit on main whose CI run selected data: a merge that changes data publishes `@ivanov-gv/map-data` as
+`0.0.0-dev.<commit>` under the `dev` tag when ci-publish's plan selects data. A versioned release promotes that dev
+package without rebuilding:
 
 ```sh
 git tag map-data/v0.1.0 <commit on main>
@@ -91,11 +92,12 @@ The release starts [cd-map-data](../../.github/workflows/cd-map-data.yml). A tag
 prerelease such as `map-data/v0.2.0-rc.1` with `--prerelease` to publish under `next`; a final version publishes under
 `latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
 
-`0.1.0` is the one exception: it was published by hand once, from main's data on 2026-11-22, because the apps pin a
-version that must exist before any map-data release can. It has no tag and started no CD.
+`0.1.0` is the one exception: its package was built from commit `51a8feb` of `feature/337-data-package`, its data
+content is identical to main `0a74bd8`, and the lead published it on 2026-11-22. It has no tag and started no CD.
 
-App tests read only that pinned package, so a data-only change selects no app pipeline. To move the applications to a
-later data release, upgrade all three pins in their own change:
+App and platform hosting tests read only that pinned package, so a data-only change selects no app or platform pipeline.
+Each application bumps its own pin in its own change, as map-core upgrades do; a pin bump changes `package-lock.json`
+and therefore selects every pipeline. The three-app command is only an optional example:
 
 ```sh
 npm install --workspace apps/web --workspace apps/editor --workspace apps/core-demo \

@@ -5,7 +5,8 @@ import {assembleStaticApplication} from '@ivanov-gv/map-core/tools/assemble.mjs'
 
 const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../../../dist/core-demo/', import.meta.url));
-// Dev and release builds use HEAD; test targets set MAP_DATA_ROOT to the pinned package, tools included.
+// Dev builds use HEAD; a future app production release pins every dependency. Test targets set MAP_DATA_ROOT to the
+// pinned package, tools included.
 function resolveDataRoot(defaultRoot) {
   if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
     throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');

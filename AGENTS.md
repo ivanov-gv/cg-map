@@ -34,13 +34,11 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
 - `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
-- `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
+- `make check-docs`: all Markdown, repository checks, and agent rules, with no web build. `make lint-workflows`,
+  `make test-<workflow>` / `make test-all-workflows`: lint, run; required for `.github/**`.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
-- `make lint-workflows`, `make test-<workflow>` / `make test-all-workflows`: lint, run; required for `.github/**`.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
-- `make test-e2e`: browser tests of every browser project, each building itself first.
-- `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
-- `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.
+- `make test-e2e`: browser tests of every browser project. `make agent-rules`: regenerate .claude/rules.
 
 ## Project commands, from each project's own Makefile
 
@@ -61,17 +59,17 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
   and comments that explain why. Do not match a denser surrounding style.
 - Cross-boundary changes need explicit contract/ownership consideration; contract changes update producer validation and
   consumer tests together.
-- App tests read map data only from the pinned `@ivanov-gv/map-data` package, never from repository `data/`; see
-  [the release runbook](docs/runbooks/release.md#releasing-map-data).
+- A project's tests read only its own files or an exact published version of another project, never another project's
+  HEAD. A change in one project never requires test changes in another. Map data is published as `@ivanov-gv/map-data`;
+  app tests pin an exact release. The scoped exception is `tests/`, the cross-project integration project: it tests HEAD
+  contracts by design. See [the release runbook](docs/runbooks/release.md#releasing-map-data).
 - No application copies, binaries, or temporary assets in repository root.
 
 ## Ownership and generated output
 
-- apps/web owns public browser code, assets, and web build/tests. packages/map-core owns shared map runtime; apps/editor
-  and apps/core-demo own their internal viewers. services/backend owns the Go module and future backend/editorial
-  implementation.
-- data owns editable sources, imagery, validated releases, and pipeline tools/tests. data/artifacts holds the reviewed
-  snapshot so a clean checkout builds without a geography import.
+- apps/web owns public browser code/assets/build/tests. packages/map-core owns the shared runtime; apps/editor and
+  apps/core-demo own their viewers. services/backend owns the Go module and future editorial implementation.
+- data owns editable sources, imagery, validated releases, and tools; data/artifacts holds the reviewed snapshot.
 - platform owns development/release infrastructure and the agent harness; GitHub-specific config lives in .github.
 - tests/ owns cross-component acceptance; component-specific tests live with their component.
 
@@ -92,7 +90,9 @@ Work starts in the human-written wiki: read it, never edit it; propose changes a
 
 ## Invariants
 
-- Runtime assets follow [the architecture's invariants](docs/system-architecture/architecture.md#runtime-invariants).
+- Libraries, fonts, imagery, and basemap data are local runtime assets. Optional live transport uses a network relay
+  only while enabled; route requests use external car/foot services. Never store live positions or external route
+  responses offline. Dated bus patterns may be bundled.
 - Range/archive responses stay outside the service-worker shell cache.
 - Existing verified offline downloads survive unsuccessful replacements.
 - Data producers depend on shared contracts, not web implementation.

@@ -7,7 +7,8 @@ import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
-// Dev and release builds default to the repository's HEAD. Test targets set MAP_DATA_ROOT to the pinned package, and
+// Dev builds default to the repository's HEAD; a future app production release pins every dependency, including data.
+// Test targets set MAP_DATA_ROOT to the pinned package, and
 // the data tools come from that same root so a test can never mix a pinned snapshot with a different tool revision.
 function resolveDataRoot(defaultRoot) {
   if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {

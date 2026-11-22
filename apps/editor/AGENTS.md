@@ -9,7 +9,8 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
 - tests/ reads data through tests/pinned-data.mjs and the exact `@ivanov-gv/map-data` pin. Bump that pin only in its own
-  change after a release; never point tests at repository data/. Dev and release builds use the repository data root.
+  change after a release; never point tests at repository data/. Dev builds on main use the repository data root; a
+  future app production release pins every dependency, data included (no production release exists yet).
 - Edits stay in the browser until exported as a changeset; only data/tools/apply-changeset.mjs writes reviewed sources.
   What each file allows comes from packages/contracts/editor-layers.json, never from a copy here. Keep editor validation
   in step with the importer: tests/integration/editor-changeset.test.mjs and the shared geometry fixture enforce it. It

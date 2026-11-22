@@ -8,7 +8,8 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - tests/ owns component tests and tests/e2e browser acceptance; playwright.config.mjs owns browser projects and ports.
 - Data inputs belong to data/, not this component. Consume its release and shared contracts.
 - tests/ reads data through tests/pinned-data.mjs and the exact `@ivanov-gv/map-data` pin. Bump that pin only in its own
-  change after a release; never point tests at repository data/. Dev and release builds use the repository data root.
+  change after a release; never point tests at repository data/. Dev builds on main use the repository data root; a
+  future app production release pins every dependency, data included (no production release exists yet).
 - Keep core.js free of DOM/browser state. Preserve one map instance and local runtime assets.
 - Keep archive/range responses outside shell caching and preserve verified downloads on failed replacements.
 - Use relative paths so the built app works at / and /cg-map/.

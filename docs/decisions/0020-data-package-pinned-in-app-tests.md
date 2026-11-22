@@ -12,21 +12,26 @@ repository made every data change select all three app pipelines, even though ap
 the same way they consume map-core. A test that silently used HEAD data could also pass against data that no released
 package contains.
 
-Dev builds still need to show the data in the current commit, and release builds need to use exactly the commit they
-publish. Those uses cannot be forced onto an older test pin.
+Dev builds on main still need to show the data in the current commit. A future app production release pins every
+dependency, data included; no app production release exists yet. Those uses cannot share an older test pin.
 
 ## Decision
+
+A project's tests read only its own files or an exact published version of another project, never another project's
+HEAD. A change in one project never requires test changes in another. Here that means an exact `@ivanov-gv/map-data`
+release. The scoped exception is `tests/`, the cross-project integration project, which tests HEAD contracts by design.
 
 data publishes `@ivanov-gv/map-data` with the reviewed sources, artifacts, imagery, provenance, fixtures, and tools its
 consumers read. Each application has one test helper that resolves the exact version pinned in its `package.json`; app
 unit and browser tests read data only through that helper. A repository guard rejects a direct repository data path in
 app tests and test-only tools.
 
-Local and artifact builds use the repository `data/` and its tools together by default; app test targets set
-`MAP_DATA_ROOT` to the installed package. A data-only change selects the data, tests, and HEAD-consumer pipelines, but
-no app pipeline. CI publishes a dev package for the commit, and `map-data/v<version>` releases promote it through
-`cd-map-data` without rebuilding. Version `0.1.0` is a one-time manual bootstrap;
-[the release runbook](../runbooks/release.md#releasing-map-data) records it and the lockfile follow-up.
+Dev and CI artifact builds on main use the repository `data/` and its tools together; app and platform test targets set
+`MAP_DATA_ROOT` to the installed package. A data-only change selects the data and integration-test pipelines only. CI
+publishes a dev package for the commit, and `map-data/v<version>` releases promote it through `cd-map-data` without
+rebuilding. Version `0.1.0` is a one-time manual bootstrap;
+[the release runbook](../runbooks/release.md#releasing-map-data) records it. A pin bump changes `package-lock.json` and,
+as with a map-core pin bump, selects every pipeline.
 
 ## Consequences
 
@@ -38,6 +43,7 @@ no app pipeline. CI publishes a dev package for the commit, and `map-data/v<vers
   because `packages/contracts` is not shipped in the data package.
 - The package carries source-specific licensing in `PROVENANCE.md`; it is not labelled MIT, which covers original
   application code only.
-- The pins need a version that already exists, so `0.1.0` was published once by hand from main's data, as map-core's
-  `0.1.0` was. Installing dependencies needs a GitHub Packages token, as it already does for map-core. That is the cost
-  of making the tests consume a real published artifact instead of a repository shortcut.
+- The pins need a version that already exists, so `0.1.0` was published once by hand from commit `51a8feb` of
+  `feature/337-data-package`; its data content is identical to main `0a74bd8`. Installing dependencies needs a GitHub
+  Packages token, as it already does for map-core. That is the cost of making the tests consume a real published
+  artifact instead of a repository shortcut.
