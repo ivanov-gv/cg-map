@@ -115,7 +115,7 @@ test('producer refuses a source file set that differs from the contract', async 
   assert.deepEqual(await readdir(outputDirectory), []);
 });
 
-test('public artifact includes the shared runtime and excludes editor source bundles', async t => {
+test('public artifact includes the shared runtime and excludes editor source bundles', async () => {
   const manifest = JSON.parse(await readFile(new URL('../../dist/web/data/manifest.json', import.meta.url)));
   for (const filename of ['index.js', 'map.js', 'map-style.js', 'satellite.js', 'place-visibility.js']) {
     assert.ok(manifest.shell.includes(`map-core/${filename}`), filename);

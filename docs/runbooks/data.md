@@ -79,9 +79,8 @@ group writes both `buildings.geojson` and `building-entrances.geojson`, and supp
 group in the same run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that
 join; this Feature does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed
 `land.geojson` as its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point.
-Run them together when refreshing either source.
-`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
-policy, then review the new facts as above.
+Run them together when refreshing either source. `context-countries.geojson` is a preserved input to the land and water
+layers, refreshed only on a full run. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
@@ -113,8 +112,8 @@ archive rebuild.
 The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
 from the reviewed PBF. They are read-only in the editor: refresh them with a full extract or the named `--layers`
 groups, never with a changeset. The shared-edge construction and simplification rule are recorded in
-[decision 0024](../decisions/0024-shared-border-edges.md); the current gap partition rule is in
-[decision 0025](../decisions/0025-derived-unassigned-water-areas.md).
+[decision 0027](../decisions/0027-shared-border-edges.md); the current gap partition rule is in
+[decision 0028](../decisions/0028-derived-unassigned-water-areas.md).
 
 ```sh
 python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers borders settlements \

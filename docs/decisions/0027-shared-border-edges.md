@@ -1,4 +1,4 @@
-# 0024: Shared border edges
+# 0027: Shared border edges
 
 ## Status
 

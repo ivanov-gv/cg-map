@@ -894,24 +894,4 @@
     <tag k="name:en" v="Lake With Island EN"/>
   </relation>
 
-  <way id="4101" version="3">
-    <nd ref="9101"/><nd ref="9102"/><nd ref="9103"/><nd ref="9104"/><nd ref="9101"/>
-    <tag k="boundary" v="administrative"/>
-    <tag k="admin_level" v="6"/>
-    <tag k="ISO3166-2" v="ME-A"/>
-    <tag k="name" v="Test West"/>
-    <tag k="name:en" v="Test West EN"/>
-    <tag k="population" v="2000"/>
-  </way>
-  <way id="4102" version="4">
-    <nd ref="9102"/><nd ref="9105"/><nd ref="9106"/><nd ref="9103"/><nd ref="9102"/>
-    <tag k="boundary" v="administrative"/>
-    <tag k="admin_level" v="6"/>
-    <tag k="ISO3166-2" v="ME-B"/>
-    <tag k="name" v="Test East"/>
-  </way>
-  <way id="4200" version="2">
-    <nd ref="9201"/><nd ref="9202"/><nd ref="9203"/>
-    <tag k="natural" v="coastline"/>
-  </way>
 </osm>
