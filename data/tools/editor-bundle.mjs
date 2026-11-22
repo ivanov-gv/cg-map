@@ -19,10 +19,9 @@ function contractVersion(contract) {
   return version;
 }
 
-async function readBundleContract(contractLocation) {
-  if (!contractLocation) {
-    throw new Error(`writeEditorBundle: ${contractFilename} path is required`);
-  }
+const defaultContractLocation = new URL(`../../packages/contracts/${contractFilename}`, import.meta.url);
+
+async function readBundleContract(contractLocation = defaultContractLocation) {
   try {
     return JSON.parse(await readFile(contractLocation, 'utf8'));
   } catch (error) {
