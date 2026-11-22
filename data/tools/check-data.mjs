@@ -925,7 +925,20 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(Array.isArray(summary.greenKindsPresentInLand) && summary.greenKindsPresentInLand.every(kind => typeof kind === 'string'), 'Invalid green kinds in relief summary');
   const parameters = relief.buildParameters;
   requireValue(parameters && Array.isArray(parameters.greenKinds) && parameters.greenKinds.length > 0 && parameters.greenKinds.every(kind => typeof kind === 'string'), 'Relief green kinds missing from provenance build parameters');
+  requireValue(
+    JSON.stringify(parameters.greenKinds) === JSON.stringify(landContractGreenKinds),
+    'Relief green kinds disagree with the land contract'
+  );
   requireValue(Array.isArray(parameters.greenKindsPresentInLand) && parameters.greenKindsPresentInLand.every(kind => parameters.greenKinds.includes(kind)), 'Relief green kinds in land disagree with build parameters');
+  const landFeatures = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/land.geojson')));
+  const greenKindsInLand = [...new Set(landFeatures.features.map(feature => feature.properties.kind))]
+    .filter(kind => landContractGreenKinds.includes(kind))
+    .sort();
+  requireValue(
+    JSON.stringify(parameters.greenKindsPresentInLand) === JSON.stringify(greenKindsInLand) &&
+      JSON.stringify(summary.greenKindsPresentInLand) === JSON.stringify(greenKindsInLand),
+    'Relief green kinds in land disagree with land.geojson'
+  );
   requireValue(parameters.minimumAreaSquareMetres === 2500, 'Relief minimum slope area changed without review');
   requireValue(parameters.ridgeMinimumLengthMetres === 100 && parameters.summitLinkDistanceMetres === 50 && parameters.ridgeSimplificationToleranceDegrees > 0, 'Relief ridge parameters changed without review');
   requireValue(parameters.canyonRimJoinGapMetres === 60 && parameters.canyonRimMinimumLengthMetres === 100, 'Relief rim parameters changed without review');

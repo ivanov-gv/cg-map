@@ -770,6 +770,12 @@ test('turn-restrictions validate entitySchemaVersion', () => {
   assert.throws(() => validateTurnRestrictions({entitySchemaVersion: 0, restrictions: []}, roads, nodes), /missing entitySchemaVersion/);
 });
 
+const landContract = JSON.parse(fs.readFileSync('packages/contracts/source-land-water.schema.json'));
+const greenKinds = landContract.$defs.landKind.enum.filter(kind => !['country', 'context'].includes(kind));
+const landFeatures = JSON.parse(fs.readFileSync('data/sources/land.geojson'));
+const greenKindsInLand = [...new Set(landFeatures.features.map(feature => feature.properties.kind))]
+  .filter(kind => greenKinds.includes(kind))
+  .sort();
 const reliefFiles = ['contours.geojson', 'summits.geojson', 'slopes.geojson', 'ridges.geojson', 'canyon-rims.geojson'];
 const singleGeometryTypes = {
   'contours.geojson': 'LineString',
@@ -812,7 +818,9 @@ test('every relief collection satisfies its read-only domain contract', () => {
 test('relief features carry facts only and build parameters live in provenance', () => {
   const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
   const parameters = provenance.relief.buildParameters;
-  assert.deepEqual(parameters.greenKindsPresentInLand, ['park']);
+  assert.deepEqual(parameters.greenKinds, greenKinds);
+  assert.deepEqual(parameters.greenKindsPresentInLand, greenKindsInLand);
+  assert.deepEqual(provenance.relief.summary.greenKindsPresentInLand, greenKindsInLand);
   assert.equal(parameters.minimumAreaSquareMetres, 2500);
   assert.equal(parameters.ridgeMinimumLengthMetres, 100);
   assert.equal(parameters.summitLinkDistanceMetres, 50);

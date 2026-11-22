@@ -45,20 +45,18 @@ from .terrain import (
     versioned_properties,
 )
 
-# Feature #326 adds these kinds to land.geojson; extending this one constant is enough to
-# include them in the slope builder, its provenance and the published feature properties.
+# Keep this list aligned with the green kinds in source-land-water.schema.json.
+# Only these reviewed land kinds feed the slope builder and its provenance.
 GREEN_KINDS = (
     'park',
     'garden',
-    'wood',
-    'forest',
+    'woods',
     'meadow',
     'grass',
     'scrub',
-    'heath',
-    'recreation_ground',
+    'sports',
     'cemetery',
-    'pitch',
+    'playground',
 )
 
 CANONICAL_ATTRIBUTION = (
