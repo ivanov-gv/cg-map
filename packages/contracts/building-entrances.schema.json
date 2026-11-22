@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ivanov-gv/cg-map/contracts/building-entrances/v1",
+  "title": "OSM building entrance source v1",
+  "description": "One point per tagged OSM entrance node on, or within one metre of, a published building footprint in the detail box. The OSM entrance value and optional tags are copied verbatim; a no-number house-number placeholder becomes nohousenumber instead of an empty addr:housenumber; buildingEntityId references the footprint's source identity.",
+  "type": "object",
+  "required": ["type", "entitySchemaVersion", "features"],
+  "properties": {
+    "type": {"const": "FeatureCollection"},
+    "entitySchemaVersion": {"const": 1},
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "geometry", "properties"],
+        "properties": {
+          "type": {"const": "Feature"},
+          "geometry": {
+            "type": "object",
+            "properties": {
+              "type": {"const": "Point"}
+            },
+            "required": ["type"]
+          },
+          "properties": {
+            "allOf": [
+              {
+                "$ref": "https://github.com/ivanov-gv/cg-map/contracts/entity-identity/v1"
+              },
+              {
+                "type": "object",
+                "required": ["kind", "entrance", "buildingEntityId"],
+                "properties": {
+                  "kind": {"const": "entrance"},
+                  "entrance": {"type": "string", "minLength": 1, "maxLength": 64},
+                  "buildingEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"},
+                  "ref": {"type": "string", "minLength": 1, "maxLength": 128},
+                  "level": {"type": "string", "minLength": 1, "maxLength": 64},
+                  "wheelchair": {"type": "string", "minLength": 1, "maxLength": 64},
+                  "door": {"type": "string", "minLength": 1, "maxLength": 128},
+                  "nohousenumber": {"const": "yes"}
+                },
+                "patternProperties": {
+                  "^addr:": {"type": "string", "minLength": 1, "maxLength": 128}
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

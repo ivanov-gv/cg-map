@@ -1,7 +1,7 @@
 import {sha256Hex} from './hashing.js';
 
-// One entry per editing mode, sorted. The shared contract and the bundle producer list the same files.
-export const sourceFiles = [
+// Version 1 is frozen; later Features extend version 2 until the stack merges.
+const version1Files = [
   'building-labels.geojson',
   'buildings.geojson',
   'context-countries.geojson',
@@ -11,14 +11,23 @@ export const sourceFiles = [
   'transport-stops.geojson',
   'water.geojson'
 ];
+export const bundleFilesByVersion = {
+  1: version1Files,
+  2: ['building-entrances.geojson', ...version1Files]
+};
+
+export const currentBundleVersion = 2;
+export const sourceFiles = bundleFilesByVersion[currentBundleVersion];
 
 // Reject unknown/duplicate/missing sources rather than silently providing incomplete editing modes.
 export function validateBundleManifest(manifest) {
-  const isSupportedVersion = manifest?.version === 1 && Array.isArray(manifest.layers);
-  if (!isSupportedVersion) throw new Error('Unsupported source bundle.');
+  const expectedFiles = bundleFilesByVersion[manifest?.version];
+  if (!expectedFiles || !Array.isArray(manifest.layers)) throw new Error('Unsupported source bundle.');
   const filenames = manifest.layers.map(layer => layer.filename).sort();
-  const hasEverySourceOnce = JSON.stringify(filenames) === JSON.stringify(sourceFiles);
-  if (!hasEverySourceOnce) throw new Error('Source bundle must contain exactly the eight supported GeoJSON files.');
+  const hasEverySourceOnce = JSON.stringify(filenames) === JSON.stringify([...expectedFiles].sort());
+  if (!hasEverySourceOnce) {
+    throw new Error(`Source bundle must contain exactly the ${expectedFiles.length} supported GeoJSON files.`);
+  }
   for (const layer of manifest.layers) {
     const hasValidMetadata =
       /^[a-f0-9]{64}$/.test(layer.sha256) &&

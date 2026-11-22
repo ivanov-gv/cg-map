@@ -29,6 +29,26 @@ explicit provenance review and an updated hash gate. Run make check and browser 
 now retains OSM building identity, name, and address tags rather than discarding them. This feature does not promise
 unrecorded numbers or building coverage outside the existing detailed area.
 
+## OSM building source details
+
+The reviewed extractor writes two source inputs for these details. `buildings.geojson` keeps the copied OSM building
+tags and address fields; a number whose only meaning is "no number" becomes `nohousenumber: "yes"`, never a literal
+house number. `addr:streetEntityId` appears only when the folded street name matches one connected group of same-named
+road ways; it uses that group's lowest way ID and `addr:streetEntityIds` lists all its members. The same extract writes
+`building-entrances.geojson` from OSM `entrance=*` nodes on or within one metre of a published footprint, with the
+node's own identity, copied tags and `buildingEntityId`. When the `places` group is refreshed with `buildings`, a place
+whose point lies inside a footprint also gains that footprint's `buildingEntityId`; this Feature keeps the reviewed
+places snapshot from the branch below, so no published place carries that join yet. The source file is read-only in the
+editor; see the data runbook for the refresh groups and
+[decision 0023](../decisions/0023-osm-building-source-details.md) for why source entrances and display entrances remain
+separate.
+
+The `entrances` array described below is still produced and reviewed through `building-labels.geojson`. It carries
+derived inward bearings and display fields for arrows and labels; it is not generated from the OSM entrance source in
+this change. A source refresh therefore does not promise arrows for every newly extracted entrance, and a reviewed label
+annotation is not an OSM fact. Both files use upstream node identities, but their purposes and validation rules stay
+distinct.
+
 ## Entrances and separate building numbers
 
 The building-label contract also accepts an optional `building_number`, a building `lamela`, and an `entrances` array.
@@ -65,10 +85,10 @@ provenance's hash, bytes, counts and method after reviewing the source facts, th
 `make check`, and `make test-e2e`. Changes to footprint geometry still require the geography rebuild described in the
 data runbook.
 
-A deliberate run of `build-building-labels.py` now preserves explicitly tagged OSM entrance nodes, their house numbers
+A deliberate run of `build-building-labels.py` still preserves explicitly tagged OSM entrance nodes, their house numbers
 and `ref` separately from a way's building number. It retains only unambiguous footprint associations. Address nodes
 without an entrance tag keep their legacy address meaning; their locations are never promoted into doors. Such an
-upstream extraction replaces local source annotations, so retain/review them separately before importing again. No
-source data was refreshed for this capability: the existing reviewed snapshot has no explicit entrance records and
-therefore gains no guessed arrows. Entrance data travels in the existing local/offline label asset, without an API or
-changes to the reviewed archive.
+upstream extraction replaces local source annotations, so retain/review them separately before importing again. The
+2026-11-20 OSM source now also records explicitly tagged entrances in `building-entrances.geojson`, but the reviewed
+runtime label asset gains no guessed arrows. Entrance display data travels in the existing local/offline label asset,
+without an API or changes to the reviewed archive.

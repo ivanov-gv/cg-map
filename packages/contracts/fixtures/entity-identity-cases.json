@@ -381,6 +381,30 @@
     }
   ],
   "sources": {
+    "building-entrances.geojson": {
+      "type": "FeatureCollection",
+      "entitySchemaVersion": 1,
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              19.2505,
+              42.44
+            ]
+          },
+          "properties": {
+            "kind": "entrance",
+            "entrance": "yes",
+            "ref": "A",
+            "buildingEntityId": "way/2",
+            "entityId": "node/4",
+            "entityVersion": 1
+          }
+        }
+      ]
+    },
     "building-labels.geojson": {
       "type": "FeatureCollection",
       "entitySchemaVersion": 1,
@@ -444,6 +468,16 @@
           },
           "properties": {
             "kind": "building",
+            "building": "yes",
+            "building:levels": "2",
+            "building:material": "brick",
+            "start_date": "2001",
+            "roof:levels": "1",
+            "name": "Fixture House",
+            "addr:street": "Street",
+            "addr:housenumber": "1",
+            "addr:streetEntityId": "way/4",
+            "addr:streetEntityIds": ["way/4"],
             "entityId": "way/2",
             "entityVersion": 2
           }
@@ -554,6 +588,7 @@
             "category": "food",
             "visibilityLevel": 4,
             "source": "OpenStreetMap",
+            "buildingEntityId": "way/2",
             "entityId": "node/1",
             "entityVersion": 2
           }

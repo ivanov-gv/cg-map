@@ -1,8 +1,8 @@
 """OSM display extractor.
 
 Every layer module owns one source GeoJSON file and the OSM handlers that fill
-it. Shared state carries only the country outline and coastlines between those
-independent modules.
+it. Shared state carries only geometry or counts one layer computes and another
+needs in the same OSM pass.
 """
 
 from dataclasses import dataclass, field
@@ -14,6 +14,12 @@ class ExtractionState:
 
     country_geometry: dict | None = None
     coastlines: list = field(default_factory=list)
+    # Published building parts, keyed by identity and part, for joins after the pass.
+    buildings: dict = field(default_factory=dict)
+    # Normalised street name to published roads as (entity ID, first node, last node).
+    road_names: dict = field(default_factory=dict)
+    # Counts written beside the reviewed source provenance.
+    building_counts: dict = field(default_factory=dict)
 
 
 class Layer:

@@ -10,6 +10,20 @@ and the country outline. There are 43,978 buildings, 21,247 road features, 332 l
 including one derived ocean polygon. The place snapshot has 1,876 entries. No source file exceeds 40 MB; the reviewed
 archive is 20,985,409 bytes.
 
+The current version-2 reviewed source bundle has nine GeoJSON files; the frozen version-1 bundle has the original eight
+without `building-entrances.geojson`. `sources/building-entrances.geojson` is a read-only OSM extract of 157 tagged
+entrance nodes on or within one metre of a published footprint, with 28 nearby candidates left unjoined. The refreshed
+`sources/buildings.geojson` carries 43,978 `building` values, 445 `building:levels`, three `building:material`, one
+`start_date`, 265 `name`, 142 `roof:levels`, 896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number
+placeholders were omitted and recorded as `nohousenumber: "yes"`. A street name joins to a road entity only when case-
+and whitespace-folded text matches exactly one connected group of same-named road ways; `addr:streetEntityId` names the
+group's lowest way ID and `addr:streetEntityIds` lists its members: 321 joined and 575 did not. The reviewed
+`places.geojson` stays with the branch below, so no published place carries a `buildingEntityId` join and
+`building_details` has no place-join counts. The extractor still writes them when a `places` group is refreshed with
+`buildings`. Counts per copied tag and entrance kind live in `sources/provenance.json` under `building_details`. No
+energy-class field is published: no open OSM source in this extract supports one, and marking that gap here avoids
+presenting an inferred value as a source fact.
+
 `sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
 `packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full
 before and after values. It is what tells a local correction from an imported upstream fact: an edited feature keeps its

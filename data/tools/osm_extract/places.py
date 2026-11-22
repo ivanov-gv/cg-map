@@ -1,6 +1,7 @@
 """Point directory: local POIs plus countrywide attractions."""
 
 from shapely.geometry import shape
+from shapely.strtree import STRtree
 
 from . import Layer
 from .geometry import (
@@ -111,3 +112,30 @@ class PlacesLayer(Layer):
             rounded_geometry(geometry), properties, identity
         )
         self.features.append(feature)
+
+    def finish(self, options, state):
+        """Record the smallest building footprint containing each place point."""
+        records = list(state.buildings.values())
+        if not records:
+            return self.features
+        tree = STRtree([record['shape'] for record in records])
+        inside = 0
+        for feature in self.features:
+            # The predicate is tested as point.within(footprint), not the reverse.
+            candidates = tree.query(
+                shape(feature['geometry']), predicate='within'
+            )
+            if len(candidates) == 0:
+                continue
+            containing = [records[int(index)] for index in candidates]
+            chosen = min(
+                containing,
+                key=lambda record: (record['shape'].area, record['entityId'])
+            )
+            feature['properties']['buildingEntityId'] = chosen['entityId']
+            inside += 1
+        state.building_counts.update({
+            'placesInsideBuildings': inside,
+            'placesOutsideBuildings': len(self.features) - inside,
+        })
+        return self.features

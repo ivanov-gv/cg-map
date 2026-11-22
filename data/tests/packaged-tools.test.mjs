@@ -67,10 +67,10 @@ test('packaged tools name a missing contracts input instead of resolving reposit
 
 test('writeEditorBundle reads an injected source directory and contract', async t => {
   const directory = temporaryDirectory(t);
-  const contract = JSON.parse(
-    fileSystem.readFileSync(path.join(contractsDirectory, 'editor-bundle.schema.json'), 'utf8')
-  );
-  const filenames = contract.properties.layers.items.properties.filename.enum;
+  const contractPath = path.join(contractsDirectory, 'editor-bundle.schema.json');
+  const contract = JSON.parse(fileSystem.readFileSync(contractPath, 'utf8'));
+  const version = contract.oneOf.at(-1).properties.version.const;
+  const filenames = contract.oneOf.at(-1).properties.layers.items.properties.filename.enum;
   const sourceDirectory = path.join(directory, 'sources');
   fileSystem.mkdirSync(sourceDirectory);
   for (const filename of filenames) {
@@ -78,12 +78,9 @@ test('writeEditorBundle reads an injected source directory and contract', async 
   }
 
   const outputDirectory = path.join(directory, 'bundle');
-  const manifest = await writeEditorBundle(
-    sourceDirectory,
-    outputDirectory,
-    path.join(contractsDirectory, 'editor-bundle.schema.json')
-  );
+  const manifest = await writeEditorBundle(sourceDirectory, outputDirectory, contractPath);
 
+  assert.equal(manifest.version, version);
   assert.deepEqual(
     manifest.layers.map(layer => layer.filename),
     filenames

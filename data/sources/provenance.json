@@ -11,8 +11,8 @@
     },
     "buildings.geojson": {
       "features": 43978,
-      "bytes": 13785253,
-      "sha256": "4ab18071fa2241bb860c2cbef5d170dd44797ecc87dd71945edb9addabb29b66"
+      "bytes": 14601929,
+      "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
     },
     "land.geojson": {
       "features": 332,
@@ -28,6 +28,11 @@
       "features": 6,
       "bytes": 6535,
       "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
+    },
+    "building-entrances.geojson": {
+      "features": 157,
+      "bytes": 41359,
+      "sha256": "6ce44bf4ee25d4ffd7ed0719f90df52a4f8fa5b486d57923d0b025084d1d2995"
     }
   },
   "places_file": "data/sources/places.geojson",
@@ -62,5 +67,38 @@
       "transport-stops.geojson",
       "water.geojson"
     ]
+  },
+  "building_details": {
+    "addr:housenumberPresent": 1003,
+    "addr:street": 896,
+    "addr:streetEntityId": 321,
+    "addr:streetEntityIds": 321,
+    "addr:streetUnjoined": 575,
+    "nohousenumber": 6,
+    "building": 43978,
+    "building:levels": 445,
+    "building:material": 3,
+    "start_date": 1,
+    "name": 265,
+    "addr:housenumber": 1003,
+    "roof:levels": 142,
+    "entrance:nohousenumber": 0,
+    "entrancesUnjoined": 28,
+    "entrances": 157,
+    "entrance:addr:city": 31,
+    "entrance:addr:housenumber": 102,
+    "entrance:addr:postcode": 24,
+    "entrance:addr:street": 72,
+    "entranceKind:yes": 77,
+    "entranceKind:main": 6,
+    "entranceKind:staircase": 69,
+    "entranceKind:garage": 3,
+    "entrance:ref": 22,
+    "entrance:addr:flats": 5,
+    "entrance:level": 17,
+    "entranceKind:home": 2,
+    "entrance:wheelchair": 3,
+    "entrance:door": 1,
+    "entrance:addr:floor": 1
   }
 }

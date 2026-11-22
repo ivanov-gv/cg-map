@@ -1,37 +1,78 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pinned editor source bundle",
+  "description": "Version 1 pins the original eight source files; version 2 adds building-entrances.geojson and stays open until the Feature stack merges.",
   "type": "object",
   "required": ["version", "layers"],
   "additionalProperties": false,
   "properties": {
-    "version": {"const": 1},
+    "version": {"enum": [1, 2]},
     "layers": {
       "type": "array",
-      "minItems": 8,
-      "maxItems": 8,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["filename", "sha256", "bytes", "featureCount"],
         "properties": {
-          "filename": {
-            "enum": [
-              "building-labels.geojson",
-              "buildings.geojson",
-              "context-countries.geojson",
-              "land.geojson",
-              "places.geojson",
-              "roads.geojson",
-              "transport-stops.geojson",
-              "water.geojson"
-            ]
-          },
+          "filename": {"type": "string"},
           "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "bytes": {"type": "integer", "minimum": 1},
           "featureCount": {"type": "integer", "minimum": 0}
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "version": {"const": 1},
+        "layers": {
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "properties": {
+              "filename": {
+                "enum": [
+                  "building-labels.geojson",
+                  "buildings.geojson",
+                  "context-countries.geojson",
+                  "land.geojson",
+                  "places.geojson",
+                  "roads.geojson",
+                  "transport-stops.geojson",
+                  "water.geojson"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "version": {"const": 2},
+        "layers": {
+          "minItems": 9,
+          "maxItems": 9,
+          "items": {
+            "properties": {
+              "filename": {
+                "enum": [
+                  "building-entrances.geojson",
+                  "building-labels.geojson",
+                  "buildings.geojson",
+                  "context-countries.geojson",
+                  "land.geojson",
+                  "places.geojson",
+                  "roads.geojson",
+                  "transport-stops.geojson",
+                  "water.geojson"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

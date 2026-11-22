@@ -110,7 +110,7 @@ test('every source layer can adopt identity without changing its existing domain
 });
 
 // Exercise the real check-data entry point: no source is missed just because it has independent provenance.
-test('check-data enforces adopted metadata in all eight source files before provenance checks', testContext => {
+test('check-data enforces adopted metadata in all nine source files before provenance checks', testContext => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'cg-map-entity-check-'));
   testContext.after(() => rmSync(root, {recursive: true, force: true}));
   const sourceDirectory = path.join(root, 'data/sources');
