@@ -198,9 +198,10 @@ be downloaded as plain GeoJSON for GIS inspection. Import resumes a changeset on
 on any mismatch. Apply it with `make -C data apply-changeset CHANGESET=<absolute path>`; see the
 [data runbook](../../docs/runbooks/data.md#editor-changesets).
 
-Run `make verify PKG=apps/editor` and `make -C apps/editor e2e`; tests/e2e covers both URL prefixes. Use `make check`
-after runtime changes. Sources and their provenance stay with data; the bundle contract lives in packages/contracts.
-This app has no editorial API.
+Local `make verify PKG=apps/editor` and `make -C apps/editor e2e` after runtime changes are optional for iterating; the
+pre-push `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge.
+tests/e2e covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
+packages/contracts. This app has no editorial API.
 
 The default preview uses a separate deterministic port/origin from the public app, preserving that app's service worker
 and offline caches. The editor's own worker keeps its caches under an `editor-` prefix and never touches another app's.

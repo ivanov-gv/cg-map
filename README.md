@@ -51,10 +51,13 @@ requires [optional Python dependencies](docs/runbooks/data.md). Do not rebuild g
 ## Publication
 
 [ci-pr-checks](.github/workflows/ci-pr-checks.yml) runs only the checks a change needs, one workflow per folder, and
-reports one `CI gate`. A merge to main runs no checks: [ci-publish](.github/workflows/ci-publish.yml) builds what it
-changed and pushes the dev site image, and [cd-dev-pages](.github/workflows/cd-dev-pages.yml) pulls that image and
-deploys it to GitHub Pages: see [release](docs/runbooks/release.md). Pull requests never deploy, a nightly run checks
-everything (paused for now, issue #319; dispatch `ci-nightly` by hand), and a Markdown-only change runs no code checks.
+reports one `CI gate`. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a `workflow_dispatch`
+of the pipelines `make ci-plan BASE=origin/main` selects on the branch. Local runs are optional for iterating:
+[testing rules](.github/TESTING.md). A merge to main runs no checks: [ci-publish](.github/workflows/ci-publish.yml)
+builds what it changed and pushes the dev site image, and [cd-dev-pages](.github/workflows/cd-dev-pages.yml) pulls that
+image and deploys it to GitHub Pages: see [release](docs/runbooks/release.md). Pull requests never deploy, a nightly run
+checks everything (paused for now, issue #319; dispatch `ci-nightly` by hand), and a Markdown-only change runs no code
+checks.
 
 Public URL: <https://ivanov-gv.github.io/cg-map/>. GitHub Pages source is **GitHub Actions**; no branch-folder setting
 or committed deployment copy is needed.

@@ -11,7 +11,8 @@
   issue, as [the plan rules](plans/AGENTS.md) describe.
 - Add a record to [the decisions log](decisions/AGENTS.md) from any PR that makes an important decision. When a rule
   seems to block a design, follow [its seven steps](decisions/AGENTS.md#when-a-rule-seems-to-block-a-design).
-- Run `make verify PKG=docs` after documentation changes.
+- `make verify PKG=docs` is optional local iteration after documentation changes; GitHub's docs pipeline gates the merge
+  ([the rule](../.github/TESTING.md)).
 
 Use the [documentation index](README.md) to find each folder's scope and source documents. Before editing a folder, read
 its rules: [decisions](decisions/AGENTS.md), [engineering](engineering/AGENTS.md), [map data](map-data/AGENTS.md),

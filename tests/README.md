@@ -4,8 +4,9 @@
 - Browser acceptance lives with each browser project, against its own artifact at origin root and project prefix. See
   [web testing](../apps/web/AGENTS.md#testing).
 
-Component-specific tests live with their components. Run make check and make verify PKG=tests from the root. Browser
-tests do not establish phone GPU performance or long-term storage retention.
+Component-specific tests live with their components. `make verify PKG=tests` from the root is optional for iterating;
+the pre-push hook's `make check` is required (builds and non-browser checks, no browser suites). GitHub's tests pipeline
+and `CI gate` are the merge gate. Browser tests do not establish phone GPU performance or long-term storage retention.
 
 ## Data version
 

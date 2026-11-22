@@ -19,6 +19,7 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   the importer: the integration changeset test and the shared geometry fixture enforce it. It is an offline-first app
   installed on the owner's devices from `make -C apps/editor lan`: no hosting and no auth. Do not invent editorial/auth
   APIs. Build separately; editable sources must never enter dist/web.
-- This is an independent project: its Makefile, tests/e2e and ci-apps-editor pipeline are its own. Run
-  `make verify PKG=apps/editor` and `make -C apps/editor e2e`, then a final `make check` for behavior. Inspect desktop
-  and phone previews through `make -C apps/editor dev`.
+- This is an independent project: its Makefile, tests/e2e and ci-apps-editor pipeline are its own. Local
+  `make verify PKG=apps/editor` and `make -C apps/editor e2e` are optional for iterating; the pre-push `make check` is
+  required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect desktop and
+  phone previews through `make -C apps/editor dev` while iterating.

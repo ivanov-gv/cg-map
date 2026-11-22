@@ -12,6 +12,7 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
   point tests at repository data/ or packages/contracts/. Test targets set both roots. A future app production release
   pins every dependency (no production release exists yet).
 - Use local assets and relative URLs; show async and map failures. Keep touch targets and visible keyboard focus.
-- This is an independent project: its Makefile, tests/e2e and ci-apps-core-demo pipeline are its own. Run
-  `make verify PKG=apps/core-demo` and `make -C apps/core-demo e2e`, then a final `make check`. Inspect desktop and
-  phone previews through `make -C apps/core-demo dev`.
+- This is an independent project: its Makefile, tests/e2e and ci-apps-core-demo pipeline are its own. Local
+  `make verify PKG=apps/core-demo` and `make -C apps/core-demo e2e` are optional for iterating; the pre-push
+  `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect
+  desktop and phone previews through `make -C apps/core-demo dev` while iterating.

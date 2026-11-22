@@ -14,8 +14,8 @@ its HEAD; only [tests](tests/AGENTS.md) and data's contract checks read HEAD. Ad
 
 ## Repo map and language rules
 
-Read the matching guideline before planning, editing, or reviewing code in that language. Claude Code loads them
-automatically by path; other agents must open the linked file.
+Read the matching guideline before planning, editing, or reviewing code in that language;
+[testing](docs/engineering/testing.md) before changing tests. Claude Code loads them by path; other agents open them.
 
 | Path                                                                                                                                                               | What                                                          | Guidelines                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -34,12 +34,12 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make setup`: install pinned npm dependencies (Node 24; `gh` needs `read:packages`) and enable git hooks.
 - `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
-- `make check`: `verify` in every project but services/backend; `make check-go` checks that Go module.
-- `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
+- `make check` (the pre-push hook): `verify` in every project but services/backend, no browser suites; `make check-go`
+  checks that Go module. `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
 - `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
-- `make lint-workflows`, `make test-<workflow>` / `make test-all-workflows`: lint, run; required for `.github/**`.
+- `make lint-workflows` (required for `.github/**`), `make test-<workflow>` / `make test-all-workflows`: lint, act run.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
-- `make test-e2e`: browser tests of every browser project, each building itself first.
+- `make test-e2e`: optional local browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
 
 ## Project commands, from each project's own Makefile
@@ -50,7 +50,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Hard rules
 
-- **No merge until local tests pass**, and `.github/**` changes pass under act: [the rule](.github/TESTING.md).
+- **Merge only when [tests pass on GitHub](.github/TESTING.md)**; locally the pre-push `make check` is required.
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
 - Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
   `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
@@ -82,7 +82,7 @@ Work starts in the human-written wiki: read it, never edit it; propose changes a
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
    history: [plan rules](docs/plans/AGENTS.md).
 3. Make a bounded change, with its docs. Keep runtime modules independent of pipeline/server implementation.
-4. Follow the owning component's AGENTS.md for focused tests during iteration and required final verification.
+4. Follow the owning component's AGENTS.md for focused tests during iteration; GitHub runs the final verification.
 5. Run the compliance review: Claude Code `agents:compliance-reviewer`, Codex `compliance_reviewer`
    ([how](docs/engineering/README.md#compliance-review)). Fix findings; at most two re-checks.
 6. Report executed checks, review findings left open, and limitations.

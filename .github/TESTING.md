@@ -1,27 +1,37 @@
 # Testing workflows
 
-**No merge until local tests pass.** A PR that changes `.github/**` does not merge until every workflow it touches has
-passed under `act`. After a fix, rerun the workflow you changed and what `make ci-plan` selects. A run on GitHub does
-not replace a local run, except when the local setup fails — see the [Order](#order) section for the fallback. Any other
-PR needs its owning project's checks, and browser tests where it changes a browser project.
+**A PR merges only when its tests pass on GitHub**: its PR run (`CI gate`), or a `workflow_dispatch` of the pipelines
+`make ci-plan BASE=origin/main` selects, on the branch. The pre-push hook runs required `make check` (builds and
+non-browser checks, no browser suites) and, for services/backend changes, `make check-go`. Browser suites
+(`make -C apps/<x> e2e`, `make test-e2e`) and `act` runs are optional, for iterating, except `make test-cd-dev-pages`
+when changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). A change to `.github/**` also needs
+`make lint-workflows` locally and a GitHub test run (`test_run=true`) of every workflow it touches, plus what
+`make ci-plan BASE=origin/main` selects. After a fix, rerun those GitHub runs.
 
-Running a workflow is the only way to know it works, so a change to `.github/**` must run in test-run mode locally and
-on GitHub. Pipeline structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
-[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md),
+Running a workflow is the only way to know it works, so every workflow keeps three ways to run it: locally under `act`
+(`test_run`), a manual `workflow_dispatch` with `test_run`, and the default production run. A local dry run is a parse
+check only. Only the GitHub test run gates a merge; local `act` runs are optional, except `make test-cd-dev-pages` when
+changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Pipeline structure and reasoning:
+[ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
+[ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md), whose local-run requirement is changed by
+[ADR 0032](../docs/decisions/0032-tests-pass-on-github-and-earn-their-cost.md),
 [ADR 0017](../docs/decisions/0017-ci-cd-model.md) and [release](../docs/runbooks/release.md).
 
 ## Order
 
-Test workflows in this order, stopping at the first failure:
+Lint and the GitHub test run are required; local runs are optional for iterating, except `make test-cd-dev-pages` when
+changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Run them in this order, stopping at the first
+failure:
 
-1. **Lint:** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
-2. **Local dry run:** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without executing steps.
-3. **Local test run:** `make test-<workflow>` runs the workflow under `act`, checking logic and step ordering.
-4. **GitHub test run:** `gh workflow run <file> --ref <branch> -f test_run=true` dispatches the workflow on GitHub
-   before merge, verifying environment settings, variables, and secrets.
+1. **Lint (required):** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
+2. **Local dry run (optional):** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without
+   executing steps.
+3. **Local test run (optional, except Pages):** `make test-<workflow>` runs the workflow under `act`, checking logic and
+   step ordering.
+4. **GitHub test run (required):** `gh workflow run <file> --ref <branch> -f test_run=true` dispatches the workflow on
+   GitHub before merge, verifying environment settings, variables, and secrets.
 
-If the local setup fails — OOM, no Docker — step 3 may be replaced by the GitHub run, which usually takes much longer. A
-workflow can be dispatched on a branch once GitHub has registered it, that is, once it has run at least once (for
+A workflow can be dispatched on a branch once GitHub has registered it, that is, once it has run at least once (for
 example from a pull request). Dispatch it by numeric id when the file name returns 404. A schedule- or dispatch-only
 workflow that has never run (such as a new ci-nightly) cannot be dispatched until it lands on main. Dispatch the
 workflows it calls, with the same inputs, instead.
@@ -112,8 +122,9 @@ Under `act`, the image pull needs a real token and a real `ci-publish` run, so b
 Under `act`, `IMAGE_REPOSITORY` is `ttl.sh/ivanov-gv-cg-map` (from `var.env`), so the test run of `ci-publish` must have
 pushed the image first.
 
-A dry run only checks that a workflow parses, so it does not count as a test. Once one job of a matrix fails, `act`
-reports the rest of that matrix as failed even when all their steps pass, so read the steps of the first failure.
+A dry run only checks that a workflow parses, so it does not count as a test or satisfy the required GitHub test run.
+Once one job of a matrix fails, `act` reports the rest of that matrix as failed even when all their steps pass, so read
+the steps of the first failure.
 
 `act` has limits that shape these workflows. It ignores `timeout-minutes`, so only a run on GitHub proves a job's time.
 Its artifact server rejects `upload-artifact@v6` and `upload-pages-artifact@v5`, so they stay at `@v5` and `@v4`. Its
@@ -155,12 +166,12 @@ workflows or a composite action changed, a `cd-browser-image` one when that work
 `publish-dev-package`, `publish-browser-image`, `setup-web`, `run-check`) changed, and a `cd-dev-pages` test run when
 `cd-dev-pages.yml` or `test_run` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The same
 exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs pass,
-re-run the failed check. CI cannot see local runs, so record yours in the PR template.
+re-run the failed check. CI cannot see local runs; link the GitHub runs in the PR template and note any local run as
+context only.
 
-`ci-pr-checks.yml`, `ci-nightly.yml`, `ci-publish.yml` and `cd-dev-pages.yml` cannot be dispatched until they land on
-main; until then, test them locally with `make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and
-`make test-cd-dev-pages COMMIT=<full SHA>`. The test-run-evidence check exempts workflows not yet on `main`
-automatically.
+Until a workflow lands on `main`, the PR run and a GitHub test run of the workflows it calls are the evidence.
+`make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and `make test-cd-dev-pages COMMIT=<full SHA>`
+remain optional local ways to iterate. The test-run-evidence check exempts workflows not yet on `main` automatically.
 
 ## Through a real PR
 
@@ -180,16 +191,22 @@ make ci-plan BASE=origin/main
 
 Pushing images, deploying Pages and publishing dev packages run only from `main`, so only a real merge proves them.
 
-## Workflows must be tested before release
+## Workflows must be testable and tested on GitHub before release
 
 If a path cannot be tested yet, make it testable (inputs, `workflow_dispatch`, environment variables with test-run
-values). Every workflow change must run for real under `act` and on GitHub before merge.
+values). Keep all three ways to run a workflow available — locally under `act` (`test_run`), a manual
+`workflow_dispatch` with `test_run`, and the default production run — but only a GitHub test run (`test_run=true`) of
+every workflow touched, plus what `make ci-plan BASE=origin/main` selects, gates the merge. A local dry run is a parse
+check only. Local `act` runs are optional, except `make test-cd-dev-pages` when changing ci-publish or cd-dev-pages
+([Pages recipe](#pages-path-recipe)).
 
 ### Pages path recipe
 
-Test the full Pages CI/CD path before merging a change to `ci-publish`, or `cd-dev-pages`:
+Test the full Pages CI/CD path on GitHub before merging a change to `ci-publish`, or `cd-dev-pages`:
 
 1. Dispatch `ci-publish` on the branch with `test_run=true` and `commit=<main SHA>` to push a test-run image.
-2. Run `make test-cd-dev-pages COMMIT=<main SHA>` (workflow_run path) for real under `act`.
-3. Run `make test-cd-dev-pages-dispatch COMMIT=<main SHA>` (dispatch path) for real under `act`.
-4. After the stack lands, the first push to `main` runs it end to end.
+2. Dispatch `cd-dev-pages` on the branch with `test_run=true` and `commit=<main SHA>` for the dispatch path.
+3. `make test-cd-dev-pages COMMIT=<main SHA>` — **REQUIRED local exception** for the `workflow_run` path, which GitHub
+   cannot exercise before merge. `make test-cd-dev-pages-dispatch` (dispatch path, same `COMMIT`) remains an optional
+   local `act` run for iterating.
+4. After the stack lands, the first push to `main` runs the workflow_run path end to end.

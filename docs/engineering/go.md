@@ -28,4 +28,5 @@ Applies to `*.go`, `go.mod`, and `go.work`. Today this is the services/backend m
 - Table-driven tests with `net/http/httptest` for handlers. Tests create their own temporary directories with
   `t.TempDir()`.
 - Add a test that fails without your change. Do not skip or delete failing tests.
-- Verify: `make verify PKG=services/backend` (same as `make check-go`).
+- Local `make verify PKG=services/backend` (same as `make check-go`) is optional for iterating; GitHub gates the merge
+  ([the rule](../../.github/TESTING.md)).

@@ -14,6 +14,12 @@ On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one wi
 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright install chromium` (see
 [technical debt](../system-architecture/technical-debt.md)).
 
+The pre-push hook's `make check` is required (builds and non-browser checks, no browser suites); the browser suites and
+`act` runs shown here are optional for iterating, except `make test-cd-dev-pages` when changing ci-publish or
+cd-dev-pages ([Pages recipe](../../.github/TESTING.md#pages-path-recipe)). A PR merges only when its tests pass on
+GitHub: its PR run (`CI gate`), or a `workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on
+the branch: [the rule](../../.github/TESTING.md).
+
 Frontend iteration commands and measured check durations live with the
 [web application](../../apps/web/README.md#focused-browser-checks).
 
@@ -41,11 +47,12 @@ golangci-lint, tests, and build. See
 [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting) for the shared rules and fix
 command.
 
-Each browser project runs Playwright against its own built artifact. For the deployable web artifact, it tests / and
-/cg-map/, fixture-backed search/selection, satellite switching with one map instance, and downloading/reloading the
-reviewed archive offline. Discover checks cover the street-scale first view and key, granted/denied location states,
-country-scale POI suppression, and named layer failures; geolocation is emulated, so physical-device fixes remain a
-manual check. Compatibility tests preserve old /web/ entry behavior. On failure, traces/screenshots are uploaded by CI.
+When adding a browser test, follow [the testing guideline](../engineering/testing.md). Each browser project runs
+Playwright against its own built artifact. For the deployable web artifact, it tests / and /cg-map/, fixture-backed
+search/selection, satellite switching with one map instance, and downloading/reloading the reviewed archive offline.
+Discover checks cover the street-scale first view and key, granted/denied location states, country-scale POI
+suppression, and named layer failures; geolocation is emulated, so physical-device fixes remain a manual check.
+Compatibility tests preserve old /web/ entry behavior. On failure, traces/screenshots are uploaded by CI.
 
 These checks do not prove GIS topology, real-world listing freshness, phone GPU performance, or persistent storage
 retention. Test the target phone for gestures, rotation/folding, interrupted/full-storage downloads, airplane-mode
@@ -109,8 +116,9 @@ The editor's install test is also tagged. The web app has no install test to tag
 ## Browser test areas
 
 Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
-Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests:
-see [the decision](../decisions/0006-ci-time-limits-and-tests-before-merge.md).
+Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests;
+[ADR 0006](../decisions/0006-ci-time-limits-and-tests-before-merge.md) records that decision, and
+[ADR 0032](../decisions/0032-tests-pass-on-github-and-earn-their-cost.md) changes the merge rule to GitHub runs.
 
 | Area        | Specs in apps/web/tests/e2e                                                                 | Covers                                                                                          | Code it depends on most                                                                                  |
 | ----------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |

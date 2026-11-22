@@ -15,4 +15,5 @@ Read [README.md](README.md), [JavaScript](../docs/engineering/javascript.md) and
 - A normal run tests data at HEAD. A release run tests the exact package being promoted with
   `make -C tests verify MAP_DATA_VERSION=<version>`; the Makefile installs that version and points the whole suite,
   including the web build, at it.
-- Run `make verify PKG=tests`.
+- Local `make verify PKG=tests` is optional for iterating; the tests pipeline and `CI gate` on GitHub are the merge
+  gate.

@@ -8,14 +8,15 @@ make setup
 make -C apps/web dev
 ```
 
-make setup also points git at platform/git-hooks (fast pre-commit checks; make check on pre-push). The root Makefile
-holds repository-wide tasks only; each project's own Makefile holds its build, run and test targets. npm workspaces are
-apps/web, apps/editor, apps/core-demo, packages/map-core and data; services/backend is an independent Go module.
-`make -C apps/web dev` builds dist/web and runs the Go backend on it in server mode (layers and live transport APIs;
-pass `DEV_FLAGS=-live-transport=false` to avoid upstream calls). `make -C apps/web dev-mock` serves dist/web statically
-in mock mode, like GitHub Pages. Both serve generated dist/web, not repository source. `make -C apps/editor dev` and
-`make -C apps/core-demo dev` build and serve the separate internal viewers. Each worktree gets its own stable dev and
-e2e port; override with PORT or E2E_PORT. Rebuild/restart after source edits; no hot reload is configured.
+make setup also points git at platform/git-hooks (fast pre-commit checks; required `make check` on pre-push, lint and
+unit checks with no browser suites). The root Makefile holds repository-wide tasks only; each project's own Makefile
+holds its build, run and test targets. npm workspaces are apps/web, apps/editor, apps/core-demo, packages/map-core and
+data; services/backend is an independent Go module. `make -C apps/web dev` builds dist/web and runs the Go backend on it
+in server mode (layers and live transport APIs; pass `DEV_FLAGS=-live-transport=false` to avoid upstream calls).
+`make -C apps/web dev-mock` serves dist/web statically in mock mode, like GitHub Pages. Both serve generated dist/web,
+not repository source. `make -C apps/editor dev` and `make -C apps/core-demo dev` build and serve the separate internal
+viewers. Each worktree gets its own stable dev and e2e port; override with PORT or E2E_PORT. Rebuild/restart after
+source edits; no hot reload is configured.
 
 ```sh
 make check
@@ -24,9 +25,12 @@ make test-e2e
 make check-go
 ```
 
-make check runs each project's own `verify`. make test-e2e runs each browser project's own browser tests; each builds
-its artifact and tests it at / and /cg-map/. Browser artifacts in each project's test-results are ignored locally and
-uploaded on CI failure.
+make check runs each project's own `verify`; it is required in the pre-push hook and performs builds and non-browser
+checks, no browser suites. make test-e2e runs each browser project's own browser tests; each builds its artifact and
+tests it at / and /cg-map/. Browser artifacts in each project's test-results are ignored locally and uploaded on CI
+failure. The browser suites are optional local checks for iterating; a PR merges only when its tests pass on GitHub: its
+PR run (`CI gate`), or a `workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on the branch:
+[the rule](../../.github/TESTING.md).
 
 ## Faster browser tests
 
@@ -52,7 +56,7 @@ Two setup steps can fail in a sandboxed session. Both have a local fallback; nei
   browser with a local, uncommitted config that sets `use.launchOptions.executablePath`, rather than reinstalling
   browsers.
 
-Record either fallback in the PR's validation section.
+Record either fallback in the PR's validation section when you use a local run.
 
 ## Markdown checks and formatting
 
@@ -98,9 +102,9 @@ make -f platform/docs.mk lint
 make verify PKG=docs/system-architecture/ownership.md
 ```
 
-Run `make -f platform/docs.mk lint` after documentation edits for a docs-scoped Markdown check. It is an explicit
-command, not an on-save hook; the repository-wide Markdown check still runs in `make check`, CI, and the installed Git
-hooks.
+A local `make -f platform/docs.mk lint` is available after documentation edits for a docs-scoped Markdown check. It is
+an explicit command, not an on-save hook; the repository-wide Markdown check still runs in `make check`, CI, and the
+installed Git hooks.
 
 Track multi-session work in a GitHub issue, with sub-issues and "blocked by" links, and record its history in a plan
 from [the template](../plans/TEMPLATE.md). A PR that makes an important decision adds a record to the

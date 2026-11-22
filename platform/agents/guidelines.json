@@ -29,6 +29,11 @@
       "id": "go",
       "source": "docs/engineering/go.md",
       "paths": ["**/*.go", "**/go.mod", "**/go.sum", "**/go.work"]
+    },
+    {
+      "id": "testing",
+      "source": "docs/engineering/testing.md",
+      "paths": ["**/tests/**", "**/*.test.mjs", "**/*.test.js", "**/*_test.go", "**/test_*.py", "**/*.spec.mjs", "**/playwright.config.*"]
     }
   ]
 }
