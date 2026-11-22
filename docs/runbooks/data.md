@@ -27,7 +27,7 @@ make -C data build-relief PYTHON=~/.cache/cg-map/venv/bin/python
 make -C data check
 ```
 
-`make -C data build-relief` (see [ADR 0029](../decisions/0029-relief-derived-read-only-sources.md)) defaults to
+`make -C data build-relief` (see [ADR 0030](../decisions/0030-relief-derived-read-only-sources.md)) defaults to
 `PYTHON=python3` and fails visibly if the chosen interpreter lacks the pinned GIS packages. `make verify PKG=data`
 includes GIS-backed Python tests, so run it with the pinned venv on `PATH` (for example
 `PATH=$HOME/.cache/cg-map/venv/bin:$PATH make verify PKG=data`). CI installs `data/tools/requirements.txt` and runs
