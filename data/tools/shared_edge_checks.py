@@ -22,6 +22,8 @@ LAND_FILE = 'land.geojson'
 SETTLEMENT_FILE = 'settlements.geojson'
 CONTEXT_FILE = 'context-countries.geojson'
 MUNICIPALITY_PREFIX = 'ME-'
+MUNICIPALITY_KIND = 'municipality'
+UNASSIGNED_WATER_KIND = 'unassigned-water'
 INSIDE_COUNTRY = 'ME'
 SEA = 'sea'
 
@@ -48,20 +50,43 @@ def polygons_in(collection, label):
     return polygons
 
 
+def area_identity(feature):
+    """Return the edge-side identifier of one published polygon."""
+    properties = feature['properties']
+    if properties.get('kind') == UNASSIGNED_WATER_KIND:
+        return properties.get('entityId')
+    if 'ISO3166-2' in properties:
+        return properties.get('ISO3166-2')
+    raise ValueError('published area has an unsupported kind')
+
+
+def area_identities(features):
+    """Return the distinct edge-side identifiers of published polygons."""
+    identities = set()
+    for feature in features:
+        identifier = area_identity(feature)
+        if not identifier:
+            raise ValueError('published area is missing its identifier')
+        if identifier in identities:
+            raise ValueError(f'duplicate area identity {identifier}')
+        identities.add(identifier)
+    return identities
+
+
 def check_pairwise_intersections(polygons):
-    """Reject any positive-area overlap between two municipality polygons."""
+    """Reject any positive-area overlap between two published polygons."""
     for first, second in combinations(polygons, 2):
         if first.intersection(second).area > OVERLAP_AREA_TOLERANCE:
-            raise ValueError('municipality polygons overlap')
+            raise ValueError('published polygons overlap')
     return len(polygons)
 
 
 def check_coverage(polygons, country):
-    """Compare the municipality union with the reviewed country outline.
+    """Compare the published area union with the reviewed country outline.
 
-    The extractor assigns every internal country gap, including inland water,
-    to a municipality. Only the coordinate-rounding residue may remain, so the
-    check bounds both uncovered and extra land in local square metres.
+    Derived unassigned-water polygons cover material gaps alongside the
+    municipalities. Only coordinate-rounding residue may remain, so the check
+    bounds both uncovered and extra land in local square metres.
     """
     union = unary_union(polygons)
     missing_area_sqm = (
@@ -72,12 +97,12 @@ def check_coverage(polygons, country):
     )
     if missing_area_sqm > MISSING_AREA_TOLERANCE_SQM:
         raise ValueError(
-            f'municipality union leaves {missing_area_sqm:.1f} square metres '
+            f'published area union leaves {missing_area_sqm:.1f} square metres '
             'uncovered'
         )
     if extra_area_sqm > EXTRA_AREA_TOLERANCE_SQM:
         raise ValueError(
-            f'municipality union extends {extra_area_sqm:.1f} square metres '
+            f'published area union extends {extra_area_sqm:.1f} square metres '
             'outside land'
         )
     return {
@@ -86,22 +111,18 @@ def check_coverage(polygons, country):
     }
 
 
-def check_edge_usage(edges, municipalities, context_names):
-    """Require every edge to have exactly one municipality on each side."""
-    codes = {
-        feature['properties']['ISO3166-2'] for feature in municipalities
-    }
+def check_edge_usage(edges, areas, context_names):
+    """Require every edge to have exactly one published area on each side."""
+    area_ids = area_identities(areas)
     references = {}
-    for feature in municipalities:
-        properties = feature['properties']
-        for reference in properties['edges']:
+    for feature in areas:
+        identifier = area_identity(feature)
+        for reference in feature['properties']['edges']:
             edge_id = reference['id']
             if reference['direction'] not in (1, -1):
                 raise ValueError(f'{edge_id}: invalid edge direction')
-            if properties['ISO3166-2'] not in codes:
-                raise ValueError('municipality is missing its ISO code')
             references.setdefault(edge_id, []).append(
-                (properties['ISO3166-2'], reference['direction'])
+                (identifier, reference['direction'])
             )
 
     edge_ids = set()
@@ -122,45 +143,47 @@ def check_edge_usage(edges, municipalities, context_names):
         if not left or not right or left == right:
             raise ValueError(f'{edge_id}: edge needs two distinct sides')
         for side in (left, right):
-            if side not in codes and side not in outside_names:
+            if side not in area_ids and side not in outside_names:
                 raise ValueError(
                     f'{edge_id}: unknown outside side {side}'
                 )
         used = references.get(edge_id, [])
         for side, direction in ((left, 1), (right, -1)):
-            if side not in codes:
+            if side not in area_ids:
                 continue
             if used.count((side, direction)) != 1:
                 raise ValueError(f'{edge_id}: side {side} is not used once')
-        if len(used) != sum(side in codes for side in (left, right)):
-            raise ValueError(f'{edge_id}: unexpected municipality references')
+        if len(used) != sum(side in area_ids for side in (left, right)):
+            raise ValueError(f'{edge_id}: unexpected area references')
 
     for edge_id in references:
         if edge_id not in edge_ids:
-            raise ValueError(f'{edge_id}: municipality references unknown edge')
+            raise ValueError(f'{edge_id}: area references unknown edge')
     return len(edges)
 
 
-def check_reconstruction(edges, municipalities):
+def check_reconstruction(edges, areas):
     """Rebuild every polygon from its edge references and check their order."""
     lines = edge_lines(edges)
-    for feature in municipalities:
-        code = feature['properties']['ISO3166-2']
+    for feature in areas:
+        identifier = area_identity(feature)
         references = feature['properties']['edges']
         try:
             expected = ordered_edge_references(references, lines)
             rebuilt = rebuild_municipality(feature, lines)
         except ValueError as error:
-            raise ValueError(f'{code}: {error}') from error
+            raise ValueError(f'{identifier}: {error}') from error
         if references != expected:
-            raise ValueError(f'{code}: edge references are not in traversal order')
+            raise ValueError(
+                f'{identifier}: edge references are not in traversal order'
+            )
         stored = shape(feature['geometry'])
         difference = rebuilt.symmetric_difference(stored).area
         if difference > RECONSTRUCTION_AREA_TOLERANCE:
             raise ValueError(
-                f'{code}: stored polygon does not rebuild from its edges'
+                f'{identifier}: stored polygon does not rebuild from its edges'
             )
-    return len(municipalities)
+    return len(areas)
 
 
 def check_size(sources_dir):
@@ -190,25 +213,35 @@ def check_sources(sources_dir):
     """Run every shared-border topology check on one reviewed source tree."""
     sources = Path(sources_dir)
     edges = read_collection(sources / EDGE_FILE)
-    municipalities = read_collection(sources / MUNICIPALITY_FILE)
+    areas = read_collection(sources / MUNICIPALITY_FILE)
     settlements = read_collection(sources / SETTLEMENT_FILE)
     context = read_collection(sources / CONTEXT_FILE)
-    polygons = polygons_in(municipalities, MUNICIPALITY_FILE)
+    polygons = polygons_in(areas, MUNICIPALITY_FILE)
     metrics = check_coverage(
         polygons, country_geometry(read_collection(sources / LAND_FILE))
     )
+    municipality_count = 0
+    water_count = 0
+    for feature in areas['features']:
+        kind = feature['properties'].get('kind')
+        if kind == MUNICIPALITY_KIND:
+            municipality_count += 1
+        elif kind == UNASSIGNED_WATER_KIND:
+            water_count += 1
     return {
         'edges': check_edge_usage(
-            edges['features'], municipalities['features'],
+            edges['features'], areas['features'],
             {
                 feature['properties']['name']
                 for feature in context['features']
             },
         ),
         'reconstructed': check_reconstruction(
-            edges['features'], municipalities['features']
+            edges['features'], areas['features']
         ),
-        'municipalities': check_pairwise_intersections(polygons),
+        'areas': check_pairwise_intersections(polygons),
+        'municipalities': municipality_count,
+        'unassigned_water': water_count,
         'settlements': len(settlements['features']),
         'combined_bytes': check_size(sources),
         **metrics,

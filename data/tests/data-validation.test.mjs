@@ -3,12 +3,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {validateCollection, validateStops, validateTransitNetwork, validateBuildingLabels, validateBuildingSources, validateBuildingDetailCounts, checkPlaceMetadata, checkData, validateRoads, validateRoadNodes, validateTurnRestrictions} from '../tools/check-data.mjs';
+import {
+  checkData,
+  checkPlaceMetadata,
+  validateBuildingDetailCounts,
+  validateBuildingLabels,
+  validateBuildingSources,
+  validateCollection,
+  validateMunicipalities,
+  validateRoadNodes,
+  validateRoads,
+  validateStops,
+  validateTransitNetwork,
+  validateTurnRestrictions
+} from '../tools/check-data.mjs';
 import {entranceBearing} from '../tools/building-entrances.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
 const contractsDirectory = 'packages/contracts';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 const identitySources = JSON.parse(fs.readFileSync('packages/contracts/fixtures/entity-identity-cases.json')).sources;
+const municipalityAreas = JSON.parse(fs.readFileSync('packages/contracts/fixtures/municipality-area-cases.json'));
 test('reviewed Podgorica places satisfy the directory contract', () => {
   assert.equal(validateCollection(fixture, {places: true, contractsDirectory}), 3);
 });
@@ -29,6 +43,26 @@ test('invalid coordinates, duplicate identities, and unknown categories are reje
 test('unclosed polygon rings are rejected', () => {
   assert.throws(() => validateCollection({type: 'FeatureCollection', features: [{type: 'Feature', properties: {},
     geometry: {type: 'Polygon', coordinates: [[[19,42],[20,42],[20,43],[19,43]]]}}]}, {contractsDirectory}), /not closed/);
+});
+
+test('municipality file accepts derived unassigned-water areas', () => {
+  const collection = structuredClone(municipalityAreas.municipality);
+  collection.features.push(structuredClone(municipalityAreas.unassignedWater.features[0]));
+  assert.equal(validateMunicipalities(collection), 2);
+
+  for (const [field, expected] of [
+    ['ISO3166-2', /ISO code/],
+    ['neighbouringMunicipalities', /neighbouringMunicipalities/],
+    ['labelPoint', /labelPoint/]
+  ]) {
+    const bad = structuredClone(collection);
+    if (field === 'ISO3166-2') {
+      bad.features[1].properties[field] = 'ME-2';
+    } else {
+      delete bad.features[1].properties[field];
+    }
+    assert.throws(() => validateMunicipalities(bad), expected);
+  }
 });
 
 test('land and water domain properties, kinds and RFC 7946 ring order are validated', () => {

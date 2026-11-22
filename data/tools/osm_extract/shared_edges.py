@@ -15,6 +15,7 @@ from .identity import content_version, osm_identity
 
 EDGE_SIMPLIFY_DEGREES = 0.00003
 SAMPLE_OFFSET_DEGREES = 0.00002
+GEOMETRY_SAMPLE_DIVISORS = (1, 10, 100)
 OUTSIDE_COUNTRY = 'ME'
 SEA = 'sea'
 COUNTRY_NAME_TAGS = ('left:country', 'right:country', 'name:en', 'int_name', 'name')
@@ -145,22 +146,25 @@ def direction_at(line, fraction):
     )
 
 
-def side_labels_at(line, fraction, municipalities, land, context):
-    """Sample the two sides of a line at one position."""
+def side_points_at(line, fraction, offset_divisor=1):
+    """Return offset points on the left and right of one line position."""
     point = line.interpolate(fraction, normalized=True)
     delta_longitude, delta_latitude = direction_at(line, fraction)
     length = (delta_longitude ** 2 + delta_latitude ** 2) ** 0.5
     if length == 0:
         delta_longitude, delta_latitude, length = 1.0, 0.0, 1.0
-    offset = min(SAMPLE_OFFSET_DEGREES, line.length / 4)
+    offset = min(SAMPLE_OFFSET_DEGREES, line.length / 4) / offset_divisor
     normal_longitude = -delta_latitude / length * offset
     normal_latitude = delta_longitude / length * offset
-    left = Point(
-        point.x + normal_longitude, point.y + normal_latitude
+    return (
+        Point(point.x + normal_longitude, point.y + normal_latitude),
+        Point(point.x - normal_longitude, point.y - normal_latitude),
     )
-    right = Point(
-        point.x - normal_longitude, point.y - normal_latitude
-    )
+
+
+def side_labels_at(line, fraction, municipalities, land, context):
+    """Sample the two sides of a line at one position."""
+    left, right = side_points_at(line, fraction)
     return (
         label_at(left, municipalities, land, context),
         label_at(right, municipalities, land, context),
@@ -406,7 +410,12 @@ def ordered_edge(
     if second is None:
         if outside is None:
             outside = outside_from_sample(first, sampled, allow_unlabelled)
-        geometric = geometric_sides(first, outside, sampled)
+        try:
+            geometric = geometric_sides(first, outside, sampled)
+        except ValueError:
+            geometric = geometric_sides_from_area(
+                line, first, outside, areas
+            )
     elif set(sampled) == {first, second}:
         geometric = sampled
     else:
@@ -445,6 +454,36 @@ def geometric_sides(first, outside, sampled):
         return outside, first
     if outside == sampled[1]:
         return first, outside
+    raise ValueError(f'cannot orient edge between {first} and {outside}')
+
+
+def geometric_sides_from_area(line, first, outside, areas):
+    """Orient an exterior edge by testing which side lies inside its area."""
+    area = next(
+        (geometry for identifier, geometry in areas if identifier == first),
+        None,
+    )
+    if area is None:
+        raise ValueError(f'cannot orient edge between {first} and {outside}')
+    for fraction in (0.5, 0.25, 0.75, 0.1, 0.9):
+        for divisor in GEOMETRY_SAMPLE_DIVISORS:
+            left, right = side_points_at(line, fraction, divisor)
+            if area.covers(left):
+                return first, outside
+            if area.covers(right):
+                return outside, first
+    # A gap narrower than the sample offsets has no covered side point. Its
+    # interior still lies on one side of the edge's direction of travel.
+    interior = area.representative_point()
+    start, end = line.coords[0], line.coords[-1]
+    cross = (
+        (end[0] - start[0]) * (interior.y - start[1])
+        - (end[1] - start[1]) * (interior.x - start[0])
+    )
+    if cross > 0:
+        return first, outside
+    if cross < 0:
+        return outside, first
     raise ValueError(f'cannot orient edge between {first} and {outside}')
 
 

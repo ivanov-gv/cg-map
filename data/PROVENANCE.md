@@ -65,26 +65,31 @@ placement and ring order. It is not a full OSM semantic/cartographic pipeline; s
 [architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
 Issue #328 adds three OSM-derived read-only sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009
-named place nodes, `sources/border-edges.geojson` has 110 shared boundaries, and `sources/municipalities.geojson` has 25
-areas. Together they are 2,475,315 bytes; counts, byte sizes and SHA-256 for each file are in `sources/provenance.json`.
-Settlement properties copy the OSM name, population, capital, admin level and Wikidata facts, add the `rank` and
-municipality code, and keep the original `node/N` identity. Suburb, quarter and neighbourhood nodes are limited to the
-whole-city detail box; 34 place nodes outside the reviewed country outline were assigned to the nearest municipality,
-with a maximum offset of 0.022884 degrees. The fallback is bounded at 0.025 degrees.
+named place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26
+areas (25 municipalities and one derived unassigned-water area). Together they are 2,605,818 bytes; counts, byte sizes
+and SHA-256 for each file are in `sources/provenance.json`. Settlement properties copy the OSM name, population,
+capital, admin level and Wikidata facts, add the `rank` and municipality code, keep the original `node/N` identity, and
+sort features by `entityId` then `entityPart`. Suburb, quarter and neighbourhood nodes are limited to the whole-city
+detail box; 34 place nodes outside the reviewed country outline were assigned to the nearest municipality, with a
+maximum offset of 0.022884 degrees. The fallback is bounded at 0.025 degrees.
 
-Twenty-nine edge features keep an exact `way/N` identity; the other 81 use `derived:edge-<left>-<right>-<n>` and record
+Twenty-nine edge features keep an exact `way/N` identity; the other 112 use `derived:edge-<left>-<right>-<n>` and record
 their contributing OSM ways. Each shared edge is simplified once, and the municipality polygons are rebuilt in edge
 traversal order from those simplified lines. Exterior sides take their authority from OSM coastline or `admin_level=2`
 boundary way tags, matched to the reviewed outline within 0.00001 degrees and over 0.1% segment overlap so an endpoint
 touch cannot claim an edge; a segment spanning two authorities splits where supported coverage intervals of different
 authorities end and begin together. Local border names map to the reviewed context names, and Kosovo is accepted from
 OSM ways because it has no Natural Earth context polygon. Territorial-water ways count as `sea`; neighbouring countries
-remain context only. The country outline is the coverage authority, and water is not subtracted: internal gaps larger
-than 100 m², including the Lake Skadar area omitted from published municipality relations, are assigned to an adjacent
-municipality. The reviewed sources leave 14,840 m² uncovered and 3,048 m² extra, inside the named 20,000 m² and 10,000
-m² tolerances. The construction rule is recorded in [decision 0024](../docs/decisions/0024-shared-border-edges.md), and
-existing town labels are compared with the reviewed settlements in
-[hard-coded town coverage](../docs/map-data/hard-coded-towns.md).
+remain context only. The country outline is the coverage authority, and water is not subtracted. Internal gaps above 100
+m² and exterior water above 1,000,000 m² stay as derived `unassigned-water` areas; smaller exterior coastline residue is
+absorbed into the adjacent municipality with the longest shared boundary, tie-broken by nearest distance and ISO code,
+and the published gaps are then recomputed from the filled areas. Each derived area carries sorted
+`neighbouringMunicipalities`, traversal-ordered `edges` and a `labelPoint`. Lake Skadar is published as
+`derived:unassigned-water-1` with no `ISO3166-2`, and its shoreline and those of its municipal neighbours share one
+cleaned six-decimal boundary. The reviewed sources leave 14,815 m² uncovered and 3,048 m² extra, inside the named 20,000
+m² and 10,000 m² tolerances. The edge-construction rule is recorded in
+[decision 0024](../docs/decisions/0024-shared-border-edges.md), and the current gap partition rule in
+[decision 0025](../docs/decisions/0025-derived-unassigned-water-areas.md).
 
 ## Bus stops
 

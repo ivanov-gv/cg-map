@@ -171,30 +171,70 @@ export function validateBorderEdges(data, {requireAdopted = false, contractsDire
   return count;
 }
 
-// Validate municipality polygons with a label point and ordered directed edge references.
+const MUNICIPALITY_KIND = 'municipality';
+const UNASSIGNED_WATER_KIND = 'unassigned-water';
+const MUNICIPALITY_CODE_PATTERN = /^ME-\d+$/;
+const WATER_IDENTITY_PREFIX = 'derived:unassigned-water-';
+
+function validateAreaEdges(properties, label) {
+  const edges = properties.edges;
+  const hasEdges = Array.isArray(edges) && edges.length > 0;
+  const directionsAreValid = hasEdges && edges.every(edge =>
+    typeof edge?.id === 'string' && edge.id.length > 0 &&
+    (edge.direction === 1 || edge.direction === -1));
+  requireValue(directionsAreValid, `${label}: needs ordered directed edge references`);
+}
+
+function validateMunicipalityArea(properties, label) {
+  requireValue(properties.kind === MUNICIPALITY_KIND, `${label}: unexpected kind`);
+  const code = properties['ISO3166-2'];
+  requireValue(
+    typeof code === 'string' && MUNICIPALITY_CODE_PATTERN.test(code),
+    `${label}: needs a Montenegrin ISO code`
+  );
+  requireValue(
+    typeof properties.name === 'string' && properties.name.trim().length > 0,
+    `${label}: needs a name`
+  );
+  position(properties.labelPoint, `${label} labelPoint`);
+  validateAreaEdges(properties, label);
+}
+
+function validateUnassignedWaterArea(properties, label) {
+  requireValue(properties.kind === UNASSIGNED_WATER_KIND, `${label}: unexpected kind`);
+  requireValue(
+    !Object.hasOwn(properties, 'ISO3166-2'),
+    `${label}: derived area must not have an ISO code`
+  );
+  const neighbours = properties.neighbouringMunicipalities;
+  const neighboursAreValid = Array.isArray(neighbours) && neighbours.every(
+    code => typeof code === 'string' && MUNICIPALITY_CODE_PATTERN.test(code)
+  );
+  requireValue(neighboursAreValid, `${label}: needs neighbouringMunicipalities`);
+  requireValue(
+    typeof properties.entityId === 'string' &&
+    properties.entityId.startsWith(WATER_IDENTITY_PREFIX),
+    `${label}: needs a derived unassigned-water entityId`
+  );
+  position(properties.labelPoint, `${label} labelPoint`);
+  validateAreaEdges(properties, label);
+}
+
+// Validate municipality and derived unassigned-water polygons in one file.
 export function validateMunicipalities(data, {requireAdopted = false, contractsDirectory} = {}) {
   const count = validateCollection(data, {
     label: 'municipalities', geometryTypes: ['Polygon', 'MultiPolygon'], requireAdopted, contractsDirectory
   });
-  for (const feature of data.features) {
-    const properties = feature.properties;
-    requireValue(properties.kind === 'municipality', 'Municipality has an unexpected kind');
-    requireValue(
-      typeof properties['ISO3166-2'] === 'string' &&
-      /^ME-\d+$/.test(properties['ISO3166-2']),
-      'Municipality needs a Montenegrin ISO code'
-    );
-    requireValue(
-      typeof properties.name === 'string' && properties.name.trim().length > 0,
-      'Municipality needs a name'
-    );
-    position(properties.labelPoint, 'municipality labelPoint');
-    requireValue(
-      Array.isArray(properties.edges) && properties.edges.length > 0 &&
-      properties.edges.every(edge => typeof edge?.id === 'string' && edge.id.length > 0 &&
-        (edge.direction === 1 || edge.direction === -1)),
-      'Municipality needs ordered directed edge references'
-    );
+  for (const [index, feature] of data.features.entries()) {
+    const label = `municipality area ${index}`;
+    const kind = feature.properties.kind;
+    if (kind === MUNICIPALITY_KIND) {
+      validateMunicipalityArea(feature.properties, label);
+    } else if (kind === UNASSIGNED_WATER_KIND) {
+      validateUnassignedWaterArea(feature.properties, label);
+    } else {
+      throw new Error(`${label}: unsupported area kind ${kind}`);
+    }
   }
   return count;
 }

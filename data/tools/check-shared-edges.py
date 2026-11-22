@@ -18,8 +18,9 @@ def main():
     args = parser.parse_args()
     metrics = check_sources(args.root / 'data/sources')
     print(
-        'Validated {municipalities} municipality polygons, {edges} shared '
-        'edges and {settlements} settlements. Uncovered area '
+        'Validated {municipalities} municipalities, {unassigned_water} '
+        'unassigned-water areas and {edges} shared edges; {areas} published '
+        'polygons in total, with {settlements} settlements. Uncovered area '
         '{missing_area_sqm:.0f} m2, extra {extra_area_sqm:.0f} m2; new sources '
         '{combined_bytes} bytes.'.format(**metrics)
     )

@@ -54,6 +54,7 @@ def reviewed_municipality_areas(options):
     return [
         (feature['properties']['ISO3166-2'], shape(feature['geometry']))
         for feature in collection['features']
+        if feature['properties'].get('kind') == 'municipality'
     ]
 
 
@@ -130,8 +131,7 @@ class SettlementsLayer(Layer):
                 properties, identity
             ))
         self.features.sort(key=lambda feature: (
-            feature['properties']['municipality'],
-            feature['properties']['name'],
             feature['properties']['entityId'],
+            feature['properties'].get('entityPart', -1),
         ))
         return self.features

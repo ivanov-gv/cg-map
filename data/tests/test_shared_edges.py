@@ -11,7 +11,7 @@ sys.path.insert(0, str(TOOLS))
 
 import shared_edge_checks  # noqa: E402
 
-from shapely.geometry import LineString, box, mapping  # noqa: E402
+from shapely.geometry import LineString, box, mapping, shape  # noqa: E402
 
 
 def collection(features):
@@ -69,15 +69,56 @@ def municipality(identifier, references, geometry=None):
     )
 
 
+def adjacent_area_topology():
+    """Return two touching areas and the seven edges that rebuild them."""
+    water_id = 'derived:unassigned-water-1'
+    edges = [
+        edge('derived:edge-me-a-sea-south', 'ME-A', 'sea', ((0, 0), (1, 0))),
+        edge('derived:edge-me-a-water-1', 'ME-A', water_id, ((1, 0), (1, 1))),
+        edge('derived:edge-me-a-sea-north', 'ME-A', 'sea', ((1, 1), (0, 1))),
+        edge('derived:edge-me-a-sea-west', 'ME-A', 'sea', ((0, 1), (0, 0))),
+        edge('derived:edge-water-sea-south', water_id, 'sea', ((1, 0), (2, 0))),
+        edge('derived:edge-water-sea-east', water_id, 'sea', ((2, 0), (2, 1))),
+        edge('derived:edge-water-sea-north', water_id, 'sea', ((2, 1), (1, 1))),
+    ]
+    municipality_references = [
+        {'id': 'derived:edge-me-a-sea-south', 'direction': 1},
+        {'id': 'derived:edge-me-a-water-1', 'direction': 1},
+        {'id': 'derived:edge-me-a-sea-north', 'direction': 1},
+        {'id': 'derived:edge-me-a-sea-west', 'direction': 1},
+    ]
+    water_references = [
+        {'id': 'derived:edge-water-sea-south', 'direction': 1},
+        {'id': 'derived:edge-water-sea-east', 'direction': 1},
+        {'id': 'derived:edge-water-sea-north', 'direction': 1},
+        {'id': 'derived:edge-me-a-water-1', 'direction': -1},
+    ]
+    areas = [
+        feature(mapping(box(0, 0, 1, 1)), {
+            'ISO3166-2': 'ME-A', 'edges': municipality_references,
+        }),
+        feature(mapping(box(1, 0, 2, 1)), {
+            'kind': 'unassigned-water',
+            'entityId': water_id,
+            'neighbouringMunicipalities': ['ME-A'],
+            'edges': water_references,
+        }),
+    ]
+    return edges, areas
+
+
 class SharedEdgesTest(unittest.TestCase):
     """Check the reviewed sources and fail on broken topology examples."""
 
     def test_reviewed_sources_pass_all_topology_checks(self):
         metrics = shared_edge_checks.check_sources(SOURCES)
+        self.assertEqual(metrics['areas'], 26)
         self.assertEqual(metrics['municipalities'], 25)
-        self.assertEqual(metrics['edges'], 110)
-        self.assertEqual(metrics['reconstructed'], 25)
+        self.assertEqual(metrics['unassigned_water'], 1)
+        self.assertEqual(metrics['edges'], 141)
+        self.assertEqual(metrics['reconstructed'], 26)
         self.assertEqual(metrics['settlements'], 4009)
+        self.assertEqual(metrics['combined_bytes'], 2605818)
         self.assertLess(
             metrics['combined_bytes'],
             shared_edge_checks.MAX_COMBINED_BYTES,
@@ -180,6 +221,22 @@ class SharedEdgesTest(unittest.TestCase):
             shared_edge_checks.check_edge_usage(
                 edges, [municipality('ME-A', unknown_reference)], set()
             )
+
+    def test_unassigned_water_side_is_valid_and_rebuilds(self):
+        edges, areas = adjacent_area_topology()
+        self.assertEqual(
+            shared_edge_checks.check_edge_usage(edges, areas, set()),
+            len(edges),
+        )
+        self.assertEqual(
+            shared_edge_checks.check_reconstruction(edges, areas), len(areas)
+        )
+        self.assertEqual(
+            shared_edge_checks.check_pairwise_intersections([
+                shape(area['geometry']) for area in areas
+            ]),
+            len(areas),
+        )
 
     def test_unknown_outside_side_is_rejected(self):
         shared_edge = edge('derived:edge-me-a-narnia-1', 'ME-A', 'Narnia')

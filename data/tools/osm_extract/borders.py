@@ -1,5 +1,6 @@
 """Municipality areas built from OSM boundaries as shared edges."""
 
+from shapely import set_precision, snap
 from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
 
@@ -12,7 +13,7 @@ from .geometry import (
     area_source,
     way_coordinates,
 )
-from .identity import make_feature, osm_identity
+from .identity import content_version, make_feature, osm_identity
 from .shared_edges import (
     build_edges,
     directed_references,
@@ -28,7 +29,16 @@ CONTEXT_FILE = 'context-countries.geojson'
 LAND_FILE = 'land.geojson'
 MUNICIPALITY_ISO_PREFIX = 'ME-'
 BOUNDARY_LEVELS = {'2', '6'}
-MIN_ASSIGNED_GAP_SQM = 100
+MIN_UNASSIGNED_AREA_SQM = 100
+# A cross-border lake is orders of magnitude larger than coastline residue;
+# this separates Lake Skadar from slivers that collapse when edges are rounded.
+EXTERIOR_WATER_MIN_AREA_SQM = 1_000_000
+BOUNDARY_TOUCH_TOLERANCE_DEGREES = 1e-9
+COORDINATE_PRECISION_DEGREES = 1e-6
+WATER_ID_PREFIX = 'derived:unassigned-water-'
+# Lake Skadar is the largest derived gap. Its reviewed outline and clipped
+# municipality shoreline cross twice in a narrow strip on the Albanian border.
+LAKE_SKADAR_ID = f'{WATER_ID_PREFIX}1'
 
 
 def rounded_coordinates(way):
@@ -112,6 +122,15 @@ def polygon_parts(geometry):
     return []
 
 
+def neighbouring_municipalities(gap, areas):
+    """Return codes of municipalities sharing a boundary with one gap."""
+    return sorted(
+        iso_code
+        for iso_code, area in areas
+        if gap.boundary.intersection(area.boundary).length > 0
+    )
+
+
 def adjacent_municipality(gap, areas):
     """Pick the neighbour sharing the longest boundary with one country gap."""
     candidates = [
@@ -125,22 +144,46 @@ def adjacent_municipality(gap, areas):
     return min(candidates)[2]
 
 
-def fill_country_gaps(areas, land):
-    """Give each material internal country gap to one adjacent municipality."""
+def material_country_gaps(areas, land):
+    """Return material gaps in one area set, largest first."""
     covered = unary_union([area for _, area in areas])
     gaps = polygon_parts(land.difference(covered))
+    return sorted(
+        (
+            gap for gap in gaps
+            if (
+                gap.area * SQUARE_DEGREES_TO_SQUARE_METRES
+                > MIN_UNASSIGNED_AREA_SQM
+            )
+        ),
+        key=lambda gap: (-gap.area, gap.bounds),
+    )
+
+
+def exterior_residue_additions(gaps, areas, land):
+    """Collect small boundary-touching gaps by receiving municipality."""
     additions = {}
-    for gap in sorted(gaps, key=lambda part: (-part.area, part.bounds)):
-        if (
+    for gap in gaps:
+        touches_boundary = (
+            gap.distance(land.boundary)
+            <= BOUNDARY_TOUCH_TOLERANCE_DEGREES
+        )
+        is_residue = (
             gap.area * SQUARE_DEGREES_TO_SQUARE_METRES
-            <= MIN_ASSIGNED_GAP_SQM
-        ):
+            <= EXTERIOR_WATER_MIN_AREA_SQM
+        )
+        if not touches_boundary or not is_residue:
             continue
         iso_code = adjacent_municipality(gap, areas)
         additions[iso_code] = (
             gap if iso_code not in additions
             else unary_union([additions[iso_code], gap])
         )
+    return additions
+
+
+def fill_municipalities(areas, additions):
+    """Return municipality areas after absorbing exterior residue."""
     return [
         (
             iso_code,
@@ -149,6 +192,75 @@ def fill_country_gaps(areas, land):
         )
         for iso_code, area in areas
     ]
+
+
+def identified_water_areas(areas, land):
+    """Number the final material gaps by area and bounds."""
+    return [
+        (
+            f'{WATER_ID_PREFIX}{index}', gap,
+            neighbouring_municipalities(gap, areas),
+        )
+        for index, gap in enumerate(
+            material_country_gaps(areas, land), start=1
+        )
+    ]
+
+
+def partition_country_gaps(areas, land):
+    """Split material country gaps into derived water and municipality fill.
+
+    Internal gaps and large cross-border lakes stay outside the municipalities.
+    Small exterior gaps are coastline residue: joining the nearest municipality
+    keeps the reviewed outline covered without degenerate derived edges. The
+    remaining gaps are numbered only after that fill, so every identity has one
+    authoritative geometry.
+    """
+    additions = exterior_residue_additions(
+        material_country_gaps(areas, land), areas, land
+    )
+    filled = fill_municipalities(areas, additions)
+    return identified_water_areas(filled, land), filled
+
+
+def unassigned_water_areas(areas, land):
+    """Return derived areas for the gaps that stay outside municipalities."""
+    return partition_country_gaps(areas, land)[0]
+
+
+def aligned_lake_areas(areas, water_areas):
+    """Give Lake Skadar and its neighbours one shared shoreline.
+
+    The reviewed country outline and the clipped municipality shoreline cross
+    twice in a narrow strip, leaving a sliver in the raw gap. Snapping only the
+    lake to reviewed precision would then leave its neighbours on the old
+    shoreline, so they are drawn onto the cleaned boundary as well.
+    """
+    lake_neighbours = next(
+        (
+            neighbours for identifier, _, neighbours in water_areas
+            if identifier == LAKE_SKADAR_ID
+        ),
+        None,
+    )
+    if lake_neighbours is None:
+        return areas
+    lake = set_precision(
+        dict(areas)[LAKE_SKADAR_ID], COORDINATE_PRECISION_DEGREES,
+        mode='valid_output'
+    )
+    aligned = []
+    for identifier, geometry in areas:
+        if identifier == LAKE_SKADAR_ID:
+            aligned.append((identifier, lake))
+        elif identifier in lake_neighbours:
+            aligned.append((
+                identifier,
+                snap(geometry, lake.boundary, COORDINATE_PRECISION_DEGREES),
+            ))
+        else:
+            aligned.append((identifier, geometry))
+    return aligned
 
 
 class BorderEdgesLayer(Layer):
@@ -184,7 +296,7 @@ class BorderEdgesLayer(Layer):
         self.collected_areas.append({
             'iso': tags['ISO3166-2'],
             'geometry': geometry,
-            'name': tags.get('name', ''),
+            'name': tags.get('name'),
             'name:en': tags.get('name:en'),
             'population': population_value(tags),
             'identity': osm_identity(kind, osm_id, area.version),
@@ -194,20 +306,33 @@ class BorderEdgesLayer(Layer):
         if not self.collected_areas:
             raise RuntimeError('No Montenegrin municipality relations found.')
         land = country_geometry(options, state)
-        areas = fill_country_gaps(clipped_areas(self.collected_areas, land), land)
-        codes = [code for code, _ in areas]
+        municipality_areas = clipped_areas(self.collected_areas, land)
+        water_areas, municipality_areas = partition_country_gaps(
+            municipality_areas, land
+        )
+        areas = municipality_areas + [
+            (identifier, geometry) for identifier, geometry, _ in water_areas
+        ]
+        areas = aligned_lake_areas(areas, water_areas)
+        codes = [code for code, _ in municipality_areas]
         if len(codes) != len(set(codes)):
             raise RuntimeError('Duplicate municipality ISO3166-2 codes.')
         state.municipality_areas = areas
         state.municipality_sources = [
             {**source, 'geometry': mapping(area)}
-            for source, (_, area) in zip(self.collected_areas, areas)
+            for source, (_, area) in zip(
+                self.collected_areas, municipality_areas
+            )
         ]
         edges = build_edges(
             areas, land, context_areas(options), self.boundary_ways
         )
+        water_neighbours = {
+            identifier: neighbours
+            for identifier, _, neighbours in water_areas
+        }
         state.municipality_features = municipality_features(
-            areas, edges, self.collected_areas
+            areas, edges, self.collected_areas, water_neighbours
         )
         self.features = edges
         return self.features
@@ -222,39 +347,51 @@ class MunicipalitiesLayer(Layer):
         return state.municipality_features
 
 
-def municipality_features(areas, edges, collected):
-    """Rebuild each polygon from its edges and add a label point."""
+def municipality_features(areas, edges, collected, water_neighbours):
+    """Rebuild municipality and derived water polygons from their edges."""
     lines = edge_lines(edges)
     features = []
     by_code = {
         municipality_source['iso']: municipality_source
         for municipality_source in collected
     }
-    for iso_code, _ in sorted(areas, key=lambda area: area[0]):
-        references = directed_references(iso_code, edges)
-        placeholder = {'properties': {'edges': references}}
+    for area_id, _ in sorted(areas, key=lambda area: area[0]):
         try:
+            edge_references = directed_references(area_id, edges)
+            placeholder = {'properties': {'edges': edge_references}}
             geometry = rebuild_municipality(placeholder, lines)
         except ValueError as error:
-            raise ValueError(f'{iso_code}: {error}') from error
+            raise ValueError(f'{area_id}: {error}') from error
+        geometry_value = rounded_geometry(mapping(geometry))
+        label_point = geometry.representative_point()
         properties = {
-            'kind': 'municipality',
-            'name': by_code[iso_code]['name'],
-            'ISO3166-2': iso_code,
             'labelPoint': [
-                round(geometry.representative_point().x, 6),
-                round(geometry.representative_point().y, 6),
+                round(label_point.x, 6), round(label_point.y, 6),
             ],
-            'edges': references,
+            'edges': edge_references,
         }
-        english = by_code[iso_code]['name:en']
-        if english:
-            properties['name:en'] = english
-        population = by_code[iso_code]['population']
-        if population is not None:
-            properties['population'] = population
-        features.append(make_feature(
-            rounded_geometry(mapping(geometry)),
-            properties, by_code[iso_code]['identity']
-        ))
+        if area_id in water_neighbours:
+            properties.update({
+                'kind': 'unassigned-water',
+                'neighbouringMunicipalities': water_neighbours[area_id],
+            })
+            identity = {
+                'entityId': area_id,
+                'entityVersion': content_version({
+                    'geometry': geometry_value, 'properties': properties,
+                }),
+            }
+        else:
+            source = by_code[area_id]
+            properties.update({
+                'kind': 'municipality', 'ISO3166-2': area_id,
+            })
+            if source['name']:
+                properties['name'] = source['name']
+            if source['name:en']:
+                properties['name:en'] = source['name:en']
+            if source['population'] is not None:
+                properties['population'] = source['population']
+            identity = source['identity']
+        features.append(make_feature(geometry_value, properties, identity))
     return features

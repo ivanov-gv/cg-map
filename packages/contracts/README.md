@@ -169,6 +169,12 @@ extracted land-cover and water polygons. Preserved country and context outlines 
 holes remain part of the geometry; ring order is structural validation, not a GIS topology guarantee. Consumers keep
 accepting the older `park`, `water` and `river` values.
 
+The shared [municipality-area cases](fixtures/municipality-area-cases.json) pin the two kinds in
+`municipalities.geojson`: an OSM `municipality` with `ISO3166-2`, and a derived `unassigned-water` area with sorted
+`neighbouringMunicipalities`, a `labelPoint`, ordered `edges` and no ISO code. Both adopt source entity identity; water
+uses a content-version `entityVersion`. `data/tools/check-data.mjs` and `data/tests/data-validation.test.mjs` validate
+both fixtures, and the Python topology check rebuilds their polygons from the same ordered edges.
+
 ## Source entity identity
 
 [entity-identity.schema.json](entity-identity.schema.json) defines source identity in `Feature.properties`, separately
