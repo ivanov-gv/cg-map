@@ -16,9 +16,11 @@ place-to-building joins without turning the read-only map into an editorial serv
 `buildings.geojson` keeps the copied OSM tags, replaces no-number placeholders with `nohousenumber: "yes"`, and adds an
 `addr:streetEntityId` only when the case- and whitespace-folded street name matches exactly one published road group.
 `building-entrances.geojson` is a ninth, read-only source file for adopted OSM `entrance=*` nodes and their copied tags;
-it joins to footprints by `buildingEntityId`. Places inside a footprint gain the same kind of source-identity join. The
-existing `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is not generated from
-the new file in this change. No energy-class field is published because the reviewed OSM source does not provide one.
+it joins to footprints by `buildingEntityId`. The extractor can add the same kind of source-identity join to places when
+the `places` group is refreshed with `buildings`; this Feature keeps the reviewed places snapshot from the branch below,
+so no published place carries that join yet. The existing `entrances` array in `building-labels.geojson` remains the
+runtime arrow/label format and is not generated from the new file in this change. No energy-class field is published
+because the reviewed OSM source does not provide one.
 
 The extractor reads the `buildings.geojson` placeholder rule in the editor contract; a contract test keeps it identical
 to the building-label rule, so producer and editor reject the same values. Contracts, source validation, and editor

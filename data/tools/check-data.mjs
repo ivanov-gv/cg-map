@@ -351,17 +351,16 @@ function validateEntranceProperties(properties, buildingIDs, counts, rules) {
 }
 
 function countPlacesByBuildingJoin(places, buildingIDs, counts) {
-  const insidePlaces = [];
-  for (const feature of places.features) {
-    const buildingEntityId = feature.properties.buildingEntityId;
-    if (buildingEntityId === undefined) {
-      continue;
-    }
-    requireValue(buildingIDs.has(buildingEntityId), 'place: unknown buildingEntityId');
-    insidePlaces.push(feature);
+  // The buildings group does not refresh places, so a places snapshot from another Feature has no joins to count.
+  const joinedPlaces = places.features.filter(
+    feature => feature.properties.buildingEntityId !== undefined
+  );
+  if (joinedPlaces.length === 0) return;
+  for (const feature of joinedPlaces) {
+    requireValue(buildingIDs.has(feature.properties.buildingEntityId), 'place: unknown buildingEntityId');
   }
-  counts.placesInsideBuildings = insidePlaces.length;
-  counts.placesOutsideBuildings = places.features.length - insidePlaces.length;
+  counts.placesInsideBuildings = joinedPlaces.length;
+  counts.placesOutsideBuildings = places.features.length - joinedPlaces.length;
 }
 
 // New source files join by upstream identity, never by display name or array position.

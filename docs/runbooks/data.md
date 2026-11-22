@@ -67,8 +67,9 @@ run, including partial ones, so provenance records the exact reviewed input. The
 source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a
 full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies
 footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups together when
-refreshing either side of that join. `context-countries.geojson` is a preserved input to the land and water layers,
-refreshed only on a full run. Fix the policy, then review the new facts as above.
+refreshing either side of that join; this Feature does not refresh places, so the published snapshot has no such joins.
+`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
+policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
@@ -79,13 +80,14 @@ place-only command above with `--update-provenance --accept-new-facts`. Never pa
 The reviewed extract copies OSM building tags into `buildings.geojson`, folds only case and whitespace when joining
 `addr:street` to one connected group of same-named road ways, names the group's lowest way ID in `addr:streetEntityId`,
 lists all its members in `addr:streetEntityIds`, and records no-number placeholders as `nohousenumber: "yes"`. It also
-writes `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints, and adds
-`buildingEntityId` to places inside those footprints. The version-2 editor bundle lists the new entrance file; the
-editor can inspect it but cannot change it, and still accepts a version-1 bundle with the original eight files. The
-separate `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is not generated from
-this source file. See [building addresses](../map-data/building-numbers.md),
-[decision 0022](../decisions/0022-osm-building-source-details.md) and
-[decision 0023](../decisions/0023-editor-bundle-versions.md).
+writes `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints. It can add
+`buildingEntityId` to places inside those footprints when the `places` group is refreshed with `buildings`; this Feature
+keeps the reviewed places snapshot from the branch below, so no published place carries that join. The version-2 editor
+bundle lists the new entrance file; the editor can inspect it but cannot change it, and still accepts a version-1 bundle
+with the original eight files. The separate `entrances` array in `building-labels.geojson` remains the runtime
+arrow/label format and is not generated from this source file. See
+[building addresses](../map-data/building-numbers.md), [decision 0022](../decisions/0022-osm-building-source-details.md)
+and [decision 0023](../decisions/0023-editor-bundle-versions.md).
 
 Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
 `building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed

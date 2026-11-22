@@ -90,6 +90,16 @@ test('reviewed building source counts match the extracted provenance', () => {
   );
 });
 
+test('a reviewed places snapshot without building joins adds no place counts', () => {
+  const readSource = name => JSON.parse(fs.readFileSync(`data/sources/${name}`));
+  const counts = validateBuildingSources(
+    readSource('buildings.geojson'), readSource('roads.geojson'),
+    readSource('building-entrances.geojson'), readSource('places.geojson')
+  );
+  assert.equal(counts.placesInsideBuildings, undefined);
+  assert.equal(counts.placesOutsideBuildings, undefined);
+});
+
 test('building sources validate copied tags, identity joins and no-number rules', () => {
   const validate = sources => validateBuildingSources(
     sources['buildings.geojson'], sources['roads.geojson'],

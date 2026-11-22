@@ -36,10 +36,12 @@ tags and address fields; a number whose only meaning is "no number" becomes `noh
 house number. `addr:streetEntityId` appears only when the folded street name matches one connected group of same-named
 road ways; it uses that group's lowest way ID and `addr:streetEntityIds` lists all its members. The same extract writes
 `building-entrances.geojson` from OSM `entrance=*` nodes on or within one metre of a published footprint, with the
-node's own identity, copied tags and `buildingEntityId`. A place whose point lies inside a footprint also gains that
-footprint's `buildingEntityId`. The source file is read-only in the editor; see the data runbook for the refresh groups
-and [decision 0022](../decisions/0022-osm-building-source-details.md) for why source entrances and display entrances
-remain separate.
+node's own identity, copied tags and `buildingEntityId`. When the `places` group is refreshed with `buildings`, a place
+whose point lies inside a footprint also gains that footprint's `buildingEntityId`; this Feature keeps the reviewed
+places snapshot from the branch below, so no published place carries that join yet. The source file is read-only in the
+editor; see the data runbook for the refresh groups and
+[decision 0022](../decisions/0022-osm-building-source-details.md) for why source entrances and display entrances remain
+separate.
 
 The `entrances` array described below is still produced and reviewed through `building-labels.geojson`. It carries
 derived inward bearings and display fields for arrows and labels; it is not generated from the OSM entrance source in
