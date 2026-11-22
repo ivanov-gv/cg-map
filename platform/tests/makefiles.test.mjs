@@ -238,7 +238,6 @@ test('project Makefiles reach other projects only through listed contracts', () 
     'apps/web': ['platform/tools/dev-port.mjs', 'services/backend'],
     'apps/editor': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py', 'platform/tools/lan_certificate.py'],
     'apps/core-demo': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
-    'services/backend': ['packages/contracts/proto'],
     data: ['packages/contracts'],
     platform: ['apps/web'],
     tests: ['apps/web']
