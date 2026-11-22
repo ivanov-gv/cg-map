@@ -242,15 +242,21 @@ test('reviewed building source counts match the extracted provenance', () => {
   );
 });
 
-test('a reviewed places snapshot without building joins adds no place counts', () => {
+test('reviewed places match provenance joins, and a snapshot without joins adds no place counts', () => {
   const readSource = name => JSON.parse(fs.readFileSync(`data/sources/${name}`));
-  const counts = validateBuildingSources(
-    readSource('buildings.geojson'), readSource('roads.geojson'),
-    readSource('building-entrances.geojson'), readSource('places.geojson'),
-    {contractsDirectory}
-  );
-  assert.equal(counts.placesInsideBuildings, undefined);
-  assert.equal(counts.placesOutsideBuildings, undefined);
+  const buildings = readSource('buildings.geojson');
+  const roads = readSource('roads.geojson');
+  const entrances = readSource('building-entrances.geojson');
+  const places = readSource('places.geojson');
+  const details = JSON.parse(fs.readFileSync('data/sources/provenance.json')).building_details;
+  const counts = validateBuildingSources(buildings, roads, entrances, places, {contractsDirectory});
+  assert.equal(counts.placesInsideBuildings, details.placesInsideBuildings);
+  assert.equal(counts.placesOutsideBuildings, details.placesOutsideBuildings);
+  const withoutJoins = structuredClone(places);
+  for (const feature of withoutJoins.features) delete feature.properties.buildingEntityId;
+  const noJoinCounts = validateBuildingSources(buildings, roads, entrances, withoutJoins, {contractsDirectory});
+  assert.equal(noJoinCounts.placesInsideBuildings, undefined);
+  assert.equal(noJoinCounts.placesOutsideBuildings, undefined);
 });
 
 test('building sources validate copied tags, identity joins and no-number rules', () => {
