@@ -47,3 +47,13 @@ as with a map-core pin bump, selects every pipeline.
   `feature/337-data-package`; its data content is identical to main `0a74bd8`. Installing dependencies needs a GitHub
   Packages token, as it already does for map-core. That is the cost of making the tests consume a real published
   artifact instead of a repository shortcut.
+
+## Outcome note (2026-11-22)
+
+The owner refined the scoped `tests/` exception without changing the app and platform pin rule above. Cross-project
+integration tests still read HEAD data by default through one helper, but a data release must be tested against the
+exact version being promoted. `make -C tests verify MAP_DATA_VERSION=<version>` installs that registry package, sets
+`MAP_DATA_ROOT` through the same helper and builds the web artifact from it. The repository check permits a direct
+repository data path only in that helper. Current guidance is in
+[the architecture rules](../system-architecture/architecture.md#independent-projects) and
+[the release runbook](../runbooks/release.md#releasing-map-data).

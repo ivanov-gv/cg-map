@@ -80,7 +80,15 @@ with a new one.
 
 Release only a commit on main whose CI run selected data: a merge that changes data publishes `@ivanov-gv/map-data` as
 `0.0.0-dev.<commit>` under the `dev` tag when ci-publish's plan selects data. A versioned release promotes that dev
-package without rebuilding:
+package without rebuilding. Before tagging, run the integration suite against the exact dev package being promoted:
+
+```sh
+make -C tests verify MAP_DATA_VERSION=0.0.0-dev.<commit on main>
+```
+
+That command installs the package from GitHub Packages and points the whole suite, including the web build, at it. The
+suite still tests HEAD data by default. A HEAD-only contract that fails against the release is a release finding; do not
+skip or loosen the test to make the promotion green.
 
 ```sh
 git tag map-data/v0.1.0 <commit on main>

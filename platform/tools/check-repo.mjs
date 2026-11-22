@@ -138,6 +138,18 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
     );
   }
 }
+// Cross-project tests default to repository data, but that choice lives in one helper so a release can point the whole
+// suite at a published package. Every other test file must use the helper.
+const integrationDataHelper = 'tests/data-root.mjs';
+const integrationDataRule = 'integration tests must read data and data tools through tests/data-root.mjs';
+const integrationTestFiles = walk('tests').filter(file =>
+  !file.includes('/node_modules/') && (/\.(?:mjs|js|json)$/.test(file) || file.endsWith('/Makefile'))
+);
+assert.ok(fs.existsSync(integrationDataHelper), `Missing integration data helper: ${integrationDataHelper}`);
+for (const file of integrationTestFiles) {
+  if (file === integrationDataHelper) continue;
+  assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
+}
 const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);
@@ -176,4 +188,4 @@ const instructionFiles = [
   '.github/TESTING.md'
 ];
 assert.deepEqual(unreachableInstructions('.', instructionFiles), [], 'Link these instruction files from the root AGENTS.md or a file it links');
-console.log('Documentation links, instruction reach, decisions log, component layout, and dependency boundaries passed.');
+console.log('Documentation links, instruction reach, decisions log, component layout, data roots, and dependency boundaries passed.');

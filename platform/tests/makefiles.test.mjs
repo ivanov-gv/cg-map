@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import operatingSystem from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {componentFor, plans} from '../tools/verify.mjs';
@@ -114,6 +115,65 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
     assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
   });
 }
+
+test('integration repo boundary rejects repository data paths outside the shared helper', t => {
+  const probe = path.join(repoRoot, 'tests', `__data-probe-${process.pid}.mjs`);
+  t.after(() => fs.rmSync(probe, {force: true}));
+  fs.writeFileSync(probe, "export const source = '../../data/sources/places.geojson';\n");
+  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(result.status, 0);
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  assert.ok(output.includes(path.basename(probe)), output);
+  assert.match(output, /tests\/data-root\.mjs/, output);
+});
+
+test('the integration data helper defaults to HEAD and honours MAP_DATA_ROOT', () => {
+  const helper = path.join(repoRoot, 'tests', 'data-root.mjs');
+  const cleanEnv = {...process.env};
+  delete cleanEnv.MAP_DATA_ROOT;
+  const head = spawnSync('node', [helper], {cwd: repoRoot, encoding: 'utf8', env: cleanEnv});
+  assert.equal(head.status, 0, head.stderr);
+  assert.equal(head.stdout.trim(), path.join(repoRoot, 'data'));
+  const overrideRoot = path.join(repoRoot, 'tests', 'release-root-probe');
+  const override = spawnSync('node', [helper], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {...cleanEnv, MAP_DATA_ROOT: overrideRoot}
+  });
+  assert.equal(override.status, 0, override.stderr);
+  assert.equal(override.stdout.trim(), overrideRoot);
+  const empty = spawnSync('node', [helper], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: {...cleanEnv, MAP_DATA_ROOT: ''}
+  });
+  assert.notEqual(empty.status, 0);
+  assert.match(empty.stderr, /MAP_DATA_ROOT is set but empty/);
+});
+
+test('the published data root resolves an installed package and rejects repository data', t => {
+  const fixtureRoot = fs.mkdtempSync(path.join(operatingSystem.tmpdir(), 'cg-map-published-data-'));
+  t.after(() => fs.rmSync(fixtureRoot, {recursive: true, force: true}));
+  const fixtureTests = path.join(fixtureRoot, 'tests');
+  const fixtureData = path.join(fixtureRoot, 'data');
+  const fixturePackage = path.join(fixtureTests, 'node_modules', '@ivanov-gv', 'map-data');
+  fs.mkdirSync(fixturePackage, {recursive: true});
+  fs.mkdirSync(fixtureData, {recursive: true});
+  fs.copyFileSync(path.join(repoRoot, 'tests', 'data-root.mjs'), path.join(fixtureTests, 'data-root.mjs'));
+  const packageIdentity = '{"name":"@ivanov-gv/map-data","version":"9.9.9"}\n';
+  fs.writeFileSync(path.join(fixturePackage, 'package.json'), packageIdentity);
+  fs.writeFileSync(path.join(fixtureData, 'package.json'), packageIdentity);
+  const helper = path.join(fixtureTests, 'data-root.mjs');
+  const published = spawnSync('node', [helper, '--published'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.equal(published.status, 0, published.stderr);
+  assert.equal(published.stdout.trim(), fixturePackage);
+
+  fs.rmSync(fixturePackage, {recursive: true});
+  fs.symlinkSync(fixtureData, fixturePackage, 'dir');
+  const repositoryData = spawnSync('node', [helper, '--published'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(repositoryData.status, 0);
+  assert.match(repositoryData.stderr, /must resolve an installed @ivanov-gv\/map-data package, not repository data/);
+});
 
 test('repo boundary rejects path builders that target repository data', t => {
   const probe = path.join(repoRoot, 'apps/web/tests', `__data-join-probe-${process.pid}.mjs`);

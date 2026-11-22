@@ -24,20 +24,20 @@ changed.
 
 Projects depend on each other only through these concrete contracts:
 
-| Contract                                      | Producer           | Consumers                                                 |
-| --------------------------------------------- | ------------------ | --------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package       | packages/map-core  | apps/web, apps/editor, at a pinned version                |
-| Local map-core, unreleased                    | packages/map-core  | apps/core-demo                                            |
-| Published `@ivanov-gv/map-data` package       | data               | map application and platform hosting tests, pinned        |
-| Map data for an artifact, data/tools/app-data | data               | dev and CI artifact builds on main                        |
-| Shared formats and schemas                    | packages/contracts | data, map-core, map applications, services/backend, tests |
-| Reviewed sources, release archive and imagery | data               | dev and CI artifact builds, cross-component tests         |
-| Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD  |
-| Place test fixture                            | data               | apps/web browser tests via the pin                        |
-| Built web artifact, dist/web                  | apps/web           | platform hosting tests, tests                             |
-| Built web artifact, dist/web                  | apps/web           | the dev Pages site                                        |
-| Go host `run` target                          | services/backend   | apps/web `dev`                                            |
-| Static host and per-worktree ports            | platform           | apps/web, apps/editor, apps/core-demo                     |
+| Contract                                      | Producer           | Consumers                                                                                              |
+| --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| Published `@ivanov-gv/map-core` package       | packages/map-core  | apps/web, apps/editor, at a pinned version                                                             |
+| Local map-core, unreleased                    | packages/map-core  | apps/core-demo                                                                                         |
+| Published `@ivanov-gv/map-data` package       | data               | map application and platform hosting tests, pinned                                                     |
+| Map data for an artifact, data/tools/app-data | data               | dev and CI artifact builds on main                                                                     |
+| Shared formats and schemas                    | packages/contracts | data, map-core, map applications, services/backend, tests                                              |
+| Reviewed sources, release archive and imagery | data               | dev and CI artifact builds, cross-component tests                                                      |
+| Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion |
+| Place test fixture                            | data               | apps/web browser tests via the pin                                                                     |
+| Built web artifact, dist/web                  | apps/web           | platform hosting tests, tests                                                                          |
+| Built web artifact, dist/web                  | apps/web           | the dev Pages site                                                                                     |
+| Go host `run` target                          | services/backend   | apps/web `dev`                                                                                         |
+| Static host and per-worktree ports            | platform           | apps/web, apps/editor, apps/core-demo                                                                  |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -52,12 +52,12 @@ Rules:
   when the producer changes. Runtime-only contracts are the exception.
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
-  `@ivanov-gv/map-data`. The scoped exception is `tests/`, the cross-project integration project, which tests HEAD
-  contracts by design.
+  `@ivanov-gv/map-data`. The scoped exception is `tests/`, the cross-project integration project: it tests HEAD
+  contracts by default, and a release is tested against the exact version it publishes by setting the data version.
 
 ### Map data modes
 
-Map data reaches an application in three distinct ways:
+Map data reaches an application or its integration tests in four distinct ways:
 
 1. App tests (unit and browser) and the platform hosting test's web build read the exact `@ivanov-gv/map-data` release
    pinned in their owning manifest, resolved by a pinned-data helper. A data-only change selects no app or platform
@@ -66,9 +66,12 @@ Map data reaches an application in three distinct ways:
    developers and the dev site see unreleased data without publishing it.
 3. A future app production release pins every dependency, data included. No app production release exists yet, so this
    is a rule for future CD; the map-data release CD promotes data packages and is not an app release mode.
+4. Cross-project integration tests read repository data and tools at HEAD through one helper, which honours
+   `MAP_DATA_ROOT`. Before promoting a release, the same suite installs the exact data package and points that helper at
+   it, so the release is tested as published.
 
-Only the first mode reads the installed package; the others read repository data and its tools together. See
-[releasing map data](../runbooks/release.md#releasing-map-data).
+App and platform test modes read the installed package; dev, CI artifact builds and default integration tests read
+repository data and its tools together. See [releasing map data](../runbooks/release.md#releasing-map-data).
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
 register it: `PROJECTS` and `test-ci-*` in the root Makefile, `components` in platform/tools/verify.mjs, `FOLDERS` and a

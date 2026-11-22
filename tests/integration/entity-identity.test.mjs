@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile, writeFile, mkdtemp, mkdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import {writeEditorBundle} from '../../data/tools/editor-bundle.mjs';
-import {validateCollection, validateStops, validateBuildingLabels} from '../../data/tools/check-data.mjs';
+import {dataToolURL} from '../data-root.mjs';
 import {decodeSource, validateBundleManifest} from '../../apps/editor/src/source-bundle.js';
 import {normalizePlaces, parseVisibilityConfig, markerKeys} from '@ivanov-gv/map-core';
 import {matchesPlaceSearch, selectNearestPlaces} from '../../apps/web/src/core.js';
+
+const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
+const {validateCollection, validateStops, validateBuildingLabels} = await import(dataToolURL('check-data.mjs'));
 
 // Run the same source features through domain validation, real byte-preserving assembly and both consumers.
 test('entity-aware sources pass producer validation and reach editor and web without identity loss', async testContext => {
