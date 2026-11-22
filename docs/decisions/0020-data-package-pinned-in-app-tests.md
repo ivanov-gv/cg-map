@@ -38,6 +38,6 @@ no app pipeline. CI publishes a dev package for the commit, and `map-data/v<vers
   because `packages/contracts` is not shipped in the data package.
 - The package carries source-specific licensing in `PROVENANCE.md`; it is not labelled MIT, which covers original
   application code only.
-- A clean checkout cannot run app tests until `0.1.0` exists and the root lockfile is regenerated. The change that adds
-  the pins leaves the lockfile untouched; the lead regenerates it after the publish in a separate commit. That is the
-  cost of making the tests consume a real published artifact instead of a repository shortcut.
+- The pins need a version that already exists, so `0.1.0` was published once by hand from main's data, as map-core's
+  `0.1.0` was. Installing dependencies needs a GitHub Packages token, as it already does for map-core. That is the cost
+  of making the tests consume a real published artifact instead of a repository shortcut.
