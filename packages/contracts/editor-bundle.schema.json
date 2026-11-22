@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pinned editor source bundle",
-  "description": "Version 1 pins the original eight source files; version 2 adds building-entrances.geojson and stays open until the Feature stack merges.",
+  "description": "Version 1 pins the original eight source files; version 2 adds files from later Features until the stack merges.",
   "type": "object",
   "required": ["version", "layers"],
   "additionalProperties": false,
@@ -52,20 +52,23 @@
       "properties": {
         "version": {"const": 2},
         "layers": {
-          "minItems": 10,
-          "maxItems": 10,
+          "minItems": 13,
+          "maxItems": 13,
           "items": {
             "properties": {
               "filename": {
                 "enum": [
+                  "border-edges.geojson",
                   "building-entrances.geojson",
                   "building-labels.geojson",
                   "buildings.geojson",
                   "context-countries.geojson",
                   "land.geojson",
+                  "municipalities.geojson",
                   "places.geojson",
                   "road-nodes.geojson",
                   "roads.geojson",
+                  "settlements.geojson",
                   "transport-stops.geojson",
                   "water.geojson"
                 ]

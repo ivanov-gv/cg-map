@@ -32,6 +32,24 @@
       "readOnlyReason": "OSM entrance nodes from the reviewed extract. Change them through a data-owned refresh.",
       "properties": {}
     },
+    "settlements.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "OSM settlement snapshot. Public town labels move into data in a separate Feature.",
+      "properties": {}
+    },
+    "border-edges.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Shared edges are rebuilt from OSM boundaries; an edge move changes every municipality that uses it.",
+      "properties": {}
+    },
+    "municipalities.geojson": {
+      "operations": [],
+      "geometries": [],
+      "readOnlyReason": "Municipality polygons are rebuilt from shared edges in the data pipeline.",
+      "properties": {}
+    },
     "buildings.geojson": {
       "operations": ["modify"],
       "geometries": ["Polygon"],

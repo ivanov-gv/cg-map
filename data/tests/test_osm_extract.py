@@ -11,16 +11,24 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from shapely.geometry import LinearRing, shape
+from shapely.geometry import LineString, LinearRing, Point, Polygon, box, mapping, shape
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
 SOURCES = ROOT / 'data/sources'
 sys.path.insert(0, str(TOOLS))
 
-from osm_extract import cli  # noqa: E402
+from osm_extract import ExtractionState, cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
+from osm_extract.settlements import (  # noqa: E402
+    NEAREST_MUNICIPALITY_LIMIT_DEGREES, SettlementsLayer, municipality_at,
+    reviewed_municipality_areas,
+)
+from osm_extract.shared_edges import (  # noqa: E402
+    coordinate_key, matching_way, ordered_edge, outside_authority_index,
+    outside_way_label, side_labels_at, split_outside_line,
+)
 from osm_extract.writing import serialize_collection  # noqa: E402
 from osm_extract.places import (  # noqa: E402
     category_for,
@@ -39,23 +47,32 @@ FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
 FIXTURE_HASH = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
 SOURCE_URL = 'https://example.test/montenegro.osm.pbf'
 SOURCE_DATE = '2026-11-21'
+DUPLICATE_WAY_FIXTURE = {
+    '4300': coordinate_key(LineString([(19.18, 42.38), (19.18, 42.52)])),
+    '4301': coordinate_key(LineString([(19.18, 42.52), (19.18, 42.38)])),
+}
 SNAPSHOT_TIME = '2026-11-20T21:21:21Z'
 REQUIRED_SOURCES = (
     'context-countries.geojson',
+    'land.geojson',
+    'municipalities.geojson',
     'transport-stops.geojson',
     'transport-stops.provenance.json',
     'provenance.json',
     'place-visibility-policy.json',
 )
 GENERATED_FILES = (
+    'border-edges.geojson',
     'building-entrances.geojson',
     'buildings.geojson',
     'context-countries.geojson',
     'land.geojson',
+    'municipalities.geojson',
     'places.geojson',
     'provenance.json',
     'road-nodes.geojson',
     'roads.geojson',
+    'settlements.geojson',
     'transport-stops.geojson',
     'transport-stops.provenance.json',
     'turn-restrictions.json',
@@ -71,16 +88,18 @@ EXTRACTED_GEOJSON = tuple(
     )
 )
 REVIEWED_GEOJSON = (
-    'building-entrances.geojson', 'buildings.geojson',
-    'building-labels.geojson',
-    'context-countries.geojson', 'land.geojson', 'places.geojson',
-    'road-nodes.geojson', 'roads.geojson', 'transport-stops.geojson',
-    'water.geojson',
+    'border-edges.geojson', 'building-entrances.geojson',
+    'building-labels.geojson', 'buildings.geojson',
+    'context-countries.geojson', 'land.geojson', 'municipalities.geojson',
+    'places.geojson', 'road-nodes.geojson', 'roads.geojson',
+    'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
 )
 LAYER_FILES = {
     'buildings': ('building-entrances.geojson', 'buildings.geojson'),
     'roads': ('roads.geojson', 'road-nodes.geojson', 'turn-restrictions.json'),
     'land': ('land.geojson',),
+    'borders': ('border-edges.geojson', 'municipalities.geojson'),
+    'settlements': ('settlements.geojson',),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
 }
@@ -241,6 +260,20 @@ def node_serialization(filename):
     return result.stdout.decode('utf-8')
 
 
+def features_by_identity(root, filename):
+    """Index generated features by their published entity ID."""
+    _, features = source_features(root, filename)
+    return {
+        feature['properties']['entityId']: feature for feature in features
+    }
+
+
+def settlements_by_name(root):
+    """Index generated settlements by their OSM name."""
+    _, features = source_features(root, 'settlements.geojson')
+    return {feature['properties']['name']: feature for feature in features}
+
+
 class OsmExtractTest(unittest.TestCase):
     """Exercise the extractor without touching the reviewed source files."""
 
@@ -322,6 +355,14 @@ class OsmExtractTest(unittest.TestCase):
             ('relation/3004', 0): 14,
             ('relation/3004', 1): 14,
             ('way/4000', None): 6,
+            ('way/4501', None): 3,
+            ('way/4502', None): 4,
+            ('node/9301', None): 4,
+            ('node/9302', None): 2,
+            ('node/9303', None): 1,
+            ('node/9304', None): 1,
+            ('node/9305', None): 1,
+            ('node/9307', None): 1,
         }
         for key, version in expected.items():
             with self.subTest(key=key):
@@ -675,8 +716,10 @@ class OsmExtractTest(unittest.TestCase):
                 root = prepared_root(self.temporary_path / group)
                 sources = root / 'data/sources'
                 preserved = ('context-countries.geojson',)
-                if group == 'water':
+                if group in ('water', 'borders'):
                     preserved += ('land.geojson',)
+                if group == 'settlements':
+                    preserved += ('municipalities.geojson',)
                 marker = b'not regenerated by this run\n'
                 for name in GENERATED_FILES:
                     if name in baseline and name not in always_regenerated:
@@ -1128,6 +1171,469 @@ class EndNodePreservationTest(unittest.TestCase):
                              'way/2007 startNode should be OSM node 2091')
             self.assertEqual(p['endNode'], 2092,
                              'way/2007 endNode should be OSM node 2092')
+
+    def test_settlements_copy_osm_facts_and_assign_municipality(self):
+        extract(self.first_root)
+        settlements = settlements_by_name(self.first_root)
+        self.assertEqual(len(settlements), 6)
+        capital = settlements['Test Capital']['properties']
+        self.assertEqual(capital['entityId'], 'node/9301')
+        self.assertEqual(capital['rank'], 'capital')
+        self.assertEqual(capital['name:en'], 'Test Capital EN')
+        self.assertEqual(capital['population'], 1000)
+        self.assertEqual(capital['capital'], 'yes')
+        self.assertEqual(capital['admin_level'], 2)
+        self.assertEqual(capital['wikidata'], 'Q1')
+        self.assertEqual(capital['municipality'], 'ME-A')
+        self.assertEqual(
+            settlements['Test Town']['properties']['rank'], 'town'
+        )
+        self.assertEqual(
+            settlements['Test Hamlet']['properties']['rank'], 'village'
+        )
+        self.assertEqual(
+            settlements['Test Village']['properties']['municipality'],
+            'ME-B',
+        )
+        self.assertEqual(
+            settlements['Nearby Village']['properties']['municipality'],
+            'ME-A',
+        )
+        self.assertNotIn('Far Neighbourhood', settlements)
+        for feature in settlements.values():
+            properties = feature['properties']
+            self.assertEqual(properties['kind'], 'settlement')
+            self.assertEqual(properties['source'], 'OpenStreetMap')
+
+    def test_settlement_features_sort_by_source_identity_not_name(self):
+        options = cli.Options(
+            (19.0, 42.0, 20.0, 43.0), False, False, Path('.'),
+            SOURCE_URL, SOURCE_DATE, SNAPSHOT_TIME, False,
+        )
+        state = ExtractionState(municipality_sources=[{
+            'iso': 'ME-1',
+            'geometry': mapping(box(19.0, 42.0, 20.0, 43.0)),
+        }])
+        layer = SettlementsLayer()
+        layer.nodes = [
+            (
+                (19.25, 42.44), {'name': 'Alpha', 'place': 'town'},
+                {'entityId': 'node/30', 'entityVersion': 3},
+            ),
+            (
+                (19.26, 42.45), {'name': 'Beta', 'place': 'town'},
+                {'entityId': 'node/10', 'entityVersion': 1},
+            ),
+            (
+                (19.27, 42.46), {'name': 'Gamma', 'place': 'town'},
+                {'entityId': 'node/20', 'entityVersion': 2},
+            ),
+        ]
+        features = layer.finish(options, state)
+        self.assertEqual(
+            [feature['properties']['entityId'] for feature in features],
+            ['node/10', 'node/20', 'node/30'],
+        )
+
+    def test_reviewed_settlement_lookup_ignores_derived_water_areas(self):
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-water-lookup-'
+        )
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        collection = {
+            'type': 'FeatureCollection',
+            'entitySchemaVersion': 1,
+            'features': [
+                {
+                    'type': 'Feature',
+                    'geometry': mapping(box(19.0, 42.0, 20.0, 43.0)),
+                    'properties': {
+                        'kind': 'municipality', 'ISO3166-2': 'ME-1',
+                    },
+                },
+                {
+                    'type': 'Feature',
+                    'geometry': mapping(box(20.0, 42.0, 21.0, 43.0)),
+                    'properties': {
+                        'kind': 'unassigned-water',
+                        'entityId': 'derived:unassigned-water-1',
+                        'entityVersion': 'sha256:' + 'a' * 64,
+                    },
+                },
+            ],
+        }
+        (root / 'data/sources/municipalities.geojson').write_text(
+            json.dumps(collection), encoding='utf-8'
+        )
+        options = cli.Options(
+            (19.0, 42.0, 20.0, 43.0), False, False,
+            root / 'data/sources', SOURCE_URL, SOURCE_DATE,
+            SNAPSHOT_TIME, False,
+        )
+        self.assertEqual(
+            [code for code, _ in reviewed_municipality_areas(options)],
+            ['ME-1'],
+        )
+
+    def test_internal_country_gap_stays_an_unassigned_water_area(self):
+        from osm_extract.borders import unassigned_water_areas
+
+        land = box(0, 0, 4, 3)
+        west = box(0, 0, 1, 3)
+        east = box(3, 0, 4, 3)
+        north = box(1, 1, 3, 3)
+        areas = [('ME-W', west), ('ME-E', east), ('ME-N', north)]
+        derived = unassigned_water_areas(areas, land)
+        self.assertEqual(len(derived), 1)
+        identifier, geometry, neighbours = derived[0]
+        self.assertEqual(identifier, 'derived:unassigned-water-1')
+        self.assertTrue(geometry.covers(Point(2, 0.5)))
+        self.assertEqual(
+            neighbours, ['ME-E', 'ME-N', 'ME-W']
+        )
+        self.assertEqual([geometry for _, geometry in areas], [west, east, north])
+
+    def test_small_exterior_gap_joins_its_municipality(self):
+        from osm_extract.borders import (
+            partition_country_gaps, unassigned_water_areas
+        )
+
+        land = box(0, 0, 4, 3)
+        municipality = box(0, 0, 4, 2.99999)
+        areas = [('ME-A', municipality)]
+        self.assertEqual(unassigned_water_areas(areas, land), [])
+
+        _, filled = partition_country_gaps(areas, land)
+        self.assertEqual(filled[0][0], 'ME-A')
+        self.assertGreater(filled[0][1].area, municipality.area)
+
+    def test_large_exterior_gap_stays_a_derived_area(self):
+        from osm_extract.borders import unassigned_water_areas
+
+        land = box(0, 0, 4, 3)
+        derived = unassigned_water_areas([('ME-A', box(2, 0, 4, 3))], land)
+        self.assertEqual(len(derived), 1)
+        self.assertEqual(derived[0][0], 'derived:unassigned-water-1')
+        self.assertEqual(derived[0][2], ['ME-A'])
+
+    def test_published_gaps_are_recomputed_after_exterior_fill(self):
+        from osm_extract import borders
+
+        land = box(0, 0, 4, 3)
+        exterior_gap = box(1, 2.999, 1.01, 3)
+        municipality = land.difference(exterior_gap)
+        before_fill = box(1, 1, 2, 2)
+        after_fill = box(1.1, 1, 2, 2)
+        calls = []
+
+        def gaps(_geometry):
+            calls.append(_geometry)
+            return (
+                [exterior_gap, before_fill] if len(calls) == 1
+                else [after_fill]
+            )
+
+        with mock.patch.object(borders, 'polygon_parts', side_effect=gaps):
+            derived, filled = borders.partition_country_gaps(
+                [('ME-A', municipality)], land
+            )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(derived), 1)
+        self.assertEqual(derived[0][1].bounds, after_fill.bounds)
+        self.assertGreater(filled[0][1].area, municipality.area)
+
+    def test_lake_shoreline_is_shared_with_its_municipal_neighbours(self):
+        from osm_extract import borders
+
+        lake = Polygon([
+            (0, 0), (1, 0), (1, 1), (0, 1),
+            (0.0000004, 0.5), (-0.0000004, 0.5), (0, 0),
+        ])
+        neighbour = box(-1, 0, 0, 1)
+        areas = [(borders.LAKE_SKADAR_ID, lake), ('ME-A', neighbour)]
+        water_areas = [(borders.LAKE_SKADAR_ID, lake, ['ME-A'])]
+
+        aligned = dict(borders.aligned_lake_areas(areas, water_areas))
+
+        self.assertEqual(
+            aligned[borders.LAKE_SKADAR_ID].bounds,
+            borders.set_precision(
+                lake, borders.COORDINATE_PRECISION_DEGREES,
+                mode='valid_output',
+            ).bounds,
+        )
+        self.assertGreater(
+            aligned[borders.LAKE_SKADAR_ID].boundary.intersection(
+                aligned['ME-A'].boundary
+            ).length,
+            0.9,
+        )
+
+    def test_municipality_areas_reference_one_shared_edge_each(self):
+        extract(self.first_root)
+        edges = features_by_identity(
+            self.first_root, 'border-edges.geojson'
+        ).values()
+        shared = [
+            feature for feature in edges
+            if feature['properties']['left'] == 'ME-A'
+            and feature['properties']['right'] == 'ME-B'
+        ]
+        self.assertEqual(len(shared), 1)
+        shared_id = shared[0]['properties']['entityId']
+        self.assertTrue(shared_id.startswith('derived:edge-'))
+        self.assertIn(
+            'way/4501', shared[0]['properties']['osmWays']
+        )
+        self.assertIn(
+            'way/4502', shared[0]['properties']['osmWays']
+        )
+        municipalities = {
+            feature['properties']['ISO3166-2']: feature
+            for feature in source_features(
+                self.first_root, 'municipalities.geojson'
+            )[1]
+        }
+        self.assertEqual(
+            set(municipalities), {'ME-A', 'ME-B'}
+        )
+        directions = {}
+        for iso_code, feature in municipalities.items():
+            references = {
+                reference['id']: reference['direction']
+                for reference in feature['properties']['edges']
+            }
+            self.assertIn(shared_id, references)
+            directions[iso_code] = references[shared_id]
+            ring = feature['geometry']['coordinates'][0]
+            self.assertEqual(ring[0], ring[-1])
+        self.assertEqual(directions['ME-A'], 1)
+        self.assertEqual(directions['ME-B'], -1)
+
+    def test_side_sampling_follows_line_direction_not_coordinate_order(self):
+        land = box(0, 0, 1, 1)
+        areas = [('ME-A', box(0, 0, 1, 0.5))]
+        east = LineString([(0, 0), (1, 0)])
+        west = LineString([(1, 0), (0, 0)])
+        self.assertEqual(
+            side_labels_at(east, 0.5, areas, land, []), ('ME-A', None)
+        )
+        self.assertEqual(
+            side_labels_at(west, 0.5, areas, land, []), (None, 'ME-A')
+        )
+        for line in (east, west):
+            with self.subTest(coordinates=list(line.coords)):
+                oriented, left, right = ordered_edge(
+                    line, 'ME-A', None, areas, land, [], outside='sea'
+                )
+                self.assertEqual((left, right), ('ME-A', 'sea'))
+                self.assertEqual(list(oriented.coords), [(0, 0), (1, 0)])
+
+    def test_exterior_edge_orients_from_area_when_sampling_misses_it(self):
+        water_id = 'derived:unassigned-water-1'
+        water = box(0, 0, 0.000005, 1)
+        land = box(0, 0, 1, 1)
+        line = LineString([(0, 0), (0, 1)])
+        oriented, left, right = ordered_edge(
+            line, water_id, None, [(water_id, water)], land, [],
+            outside='Croatia',
+        )
+        self.assertEqual((left, right), ('Croatia', water_id))
+        self.assertEqual(list(oriented.coords), [(0, 0), (0, 1)])
+
+    def test_tiny_water_gap_orients_from_its_interior(self):
+        water_id = 'derived:unassigned-water-86'
+        water = Polygon([
+            (19.452724113769644, 43.36647859281529),
+            (19.451415, 43.366909),
+            (19.450921, 43.367047),
+            (19.450475, 43.367218),
+            (19.450473, 43.367219),
+            (19.452724113769644, 43.36647859281529),
+        ])
+        land = box(19, 43, 20, 44)
+        line = LineString([
+            (19.452724113769644, 43.36647859281529),
+            (19.451415, 43.366909),
+        ])
+        oriented, left, right = ordered_edge(
+            line, water_id, None, [(water_id, water)], land, [],
+            outside='Republic of Serbia',
+        )
+        self.assertEqual((left, right), ('Republic of Serbia', water_id))
+        self.assertEqual(
+            list(oriented.coords),
+            [(19.452724113769644, 43.36647859281529), (19.451415, 43.366909)],
+        )
+
+    def test_outside_way_labels_cover_local_names_and_territorial_waters(self):
+        cases = (
+            (
+                {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name': 'Hrvatska - Crna Gora',
+                },
+                {'Croatia'},
+                'Croatia',
+            ),
+            (
+                {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Montenegro - Kosovo',
+                },
+                set(),
+                'Kosovo',
+            ),
+            (
+                {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name': 'Territorial waters of Montenegro',
+                },
+                set(),
+                'sea',
+            ),
+        )
+        for tags, names, expected in cases:
+            with self.subTest(tags=tags):
+                self.assertEqual(outside_way_label(tags, names), expected)
+
+    def test_endpoint_touching_way_does_not_claim_a_whole_segment(self):
+        ways = {
+            1: {
+                'coordinates': [(0, 0), (0.5, 0.05)],
+                'tags': {'natural': 'coastline'},
+            },
+        }
+        index = outside_authority_index(ways, set())
+        self.assertIsNone(index.label_for(LineString([(0, 0), (0.5, 0)])))
+
+    def test_parallel_way_beats_an_endpoint_touch(self):
+        ways = {
+            1: {
+                'coordinates': [(0, -0.001), (0, 0)],
+                'tags': {'natural': 'coastline'},
+            },
+            2: {
+                'coordinates': [(0, 0.0000002), (0.01, 0.0000002)],
+                'tags': {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Albania - Montenegro',
+                },
+            },
+        }
+        index = outside_authority_index(ways, {'Albania'})
+        self.assertEqual(
+            index.label_for(LineString([(0, 0), (0.01, 0)])), 'Albania'
+        )
+
+    def test_authority_match_survives_an_offset_midpoint(self):
+        ways = {
+            1: {
+                'coordinates': [
+                    (0, 0), (0.005, 0.000008), (0.01, 0.000018),
+                    (0.015, 0.000008), (0.02, 0),
+                ],
+                'tags': {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Albania - Montenegro',
+                },
+            },
+        }
+        index = outside_authority_index(ways, {'Albania'})
+        self.assertEqual(
+            index.label_for(LineString([(0, 0), (0.02, 0)])), 'Albania'
+        )
+
+    def test_exterior_chain_splits_at_coast_and_country_authorities(self):
+        ways = {
+            1: {
+                'coordinates': [(0, 0), (0.5, 0)],
+                'tags': {'natural': 'coastline'},
+            },
+            2: {
+                'coordinates': [(0.5, 0), (1, 0)],
+                'tags': {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Albania - Montenegro',
+                },
+            },
+        }
+        line = LineString([(0, 0), (0.5, 0), (1, 0)])
+        pieces = split_outside_line(
+            line, outside_authority_index(ways, {'Albania'})
+        )
+        self.assertEqual(
+            [(list(part.coords), label) for part, label in pieces],
+            [
+                ([(0, 0), (0.5, 0)], 'sea'),
+                ([(0.5, 0), (1, 0)], 'Albania'),
+            ],
+        )
+
+    def test_authority_transition_inside_one_segment_is_split(self):
+        ways = {
+            1: {
+                'coordinates': [(0, 0), (0.5, 0)],
+                'tags': {'natural': 'coastline'},
+            },
+            2: {
+                'coordinates': [(0.5, 0), (1, 0)],
+                'tags': {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Albania - Montenegro',
+                },
+            },
+        }
+        line = LineString([(0, 0), (1, 0)])
+        pieces = split_outside_line(
+            line, outside_authority_index(ways, {'Albania'})
+        )
+        self.assertEqual(
+            [(list(part.coords), label) for part, label in pieces],
+            [
+                ([(0, 0), (0.5, 0)], 'sea'),
+                ([(0.5, 0), (1, 0)], 'Albania'),
+            ],
+        )
+
+    def test_near_touch_does_not_create_a_transition_cut(self):
+        ways = {
+            1: {
+                'coordinates': [(0, 0), (0.5, 0)],
+                'tags': {'natural': 'coastline'},
+            },
+            2: {
+                'coordinates': [(0.5, -0.000009), (0.5, 0.000009)],
+                'tags': {
+                    'boundary': 'administrative', 'admin_level': '2',
+                    'name:en': 'Albania - Montenegro',
+                },
+            },
+        }
+        index = outside_authority_index(ways, {'Albania'})
+        self.assertEqual(
+            index.transition_fractions(LineString([(0, 0), (1, 0)])), []
+        )
+
+    def test_nearest_municipality_fallback_has_a_bounded_distance(self):
+        areas = [('ME-A', box(0, 0, 1, 1))]
+        near = Point(1 + NEAREST_MUNICIPALITY_LIMIT_DEGREES / 2, 0.5)
+        distant = Point(1 + NEAREST_MUNICIPALITY_LIMIT_DEGREES * 2, 0.5)
+        self.assertEqual(municipality_at(near, areas), 'ME-A')
+        with self.assertRaisesRegex(ValueError, 'from every municipality'):
+            municipality_at(distant, areas)
+
+    def test_duplicate_geometry_ways_do_not_claim_an_exact_identity(self):
+        line = LineString([(19.18, 42.38), (19.18, 42.52)])
+        reversed_line = LineString([(19.18, 42.52), (19.18, 42.38)])
+        self.assertIsNone(matching_way(line, DUPLICATE_WAY_FIXTURE))
+        self.assertIsNone(matching_way(reversed_line, DUPLICATE_WAY_FIXTURE))
+        self.assertEqual(
+            matching_way(line, {'4300': DUPLICATE_WAY_FIXTURE['4300']}),
+            '4300',
+        )
 
 
 class StandalonePlacesTest(unittest.TestCase):

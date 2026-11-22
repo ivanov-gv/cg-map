@@ -7,12 +7,12 @@ Run `make -C apps/editor dev` and open the printed local URL. The standalone art
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest
 place to install it from. It has no access control, and its data is already public.
 
-The build assembles the nine reviewed source GeoJSON files of bundle version 2 through data-owned tooling. The editor
-also accepts version 1, the original eight files without entrance points, from older reviewed bundles. It verifies the
-manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes bind
-revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source geometry/properties,
-never simplified tiles. Unknown properties, provenance and any source feature ID are displayed unchanged. Source files
-are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
+The build assembles the thirteen reviewed source GeoJSON files of bundle version 2 through data-owned tooling. The
+editor also accepts version 1, the original eight files without later Feature sources, from older reviewed bundles. It
+verifies the manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes
+bind revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source
+geometry/properties, never simplified tiles. Unknown properties, provenance and any source feature ID are displayed
+unchanged. Source files are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an
@@ -46,14 +46,15 @@ A wide view of buildings or roads can involve tens of thousands of hits; zoom in
 
 `packages/contracts/editor-layers.json` says what each file allows:
 
-| Mode                        | Edits                                                                |
-| --------------------------- | -------------------------------------------------------------------- |
-| POIs                        | Details, level, move, add, delete                                    |
-| Roads & paths               | Name, kind, points, whole-line move, draw, delete                    |
-| Buildings                   | Corners and whole-footprint move                                     |
-| Building labels             | Existing addresses and position                                      |
-| Land, Water                 | Parks, water and rivers only: name and shape                         |
-| Country outlines, Bus stops | Read-only, with the reason shown; they have their own data workflows |
+| Mode                                      | Edits                                                                |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| POIs                                      | Details, level, move, add, delete                                    |
+| Roads & paths                             | Name, kind, points, whole-line move, draw, delete                    |
+| Buildings                                 | Corners and whole-footprint move                                     |
+| Building labels                           | Existing addresses and position                                      |
+| Land, Water                               | Parks, water and rivers only: name and shape                         |
+| Settlements, Border edges, Municipalities | Read-only: rebuilt from OSM by the data pipeline                     |
+| Country outlines, Bus stops               | Read-only, with the reason shown; they have their own data workflows |
 
 Selecting a feature opens its form and tools. Nothing is recorded until Apply, which validates the result with the same
 rules as the importer. Every edit passes through one command path that can reach only the active file; importing a

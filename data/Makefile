@@ -1,14 +1,18 @@
 ROOT := ..
 
-.PHONY: verify lint check build-data apply-changeset test python-test python-check
+.PHONY: verify lint check check-topology build-data apply-changeset test python-test python-check
 
-verify: lint check test python-test python-check
+verify: lint check test python-test python-check check-topology
 
 lint:
 	cd $(ROOT) && npx --no-install eslint data/tools data/tests
 
 check:
 	npm run -s check
+
+# GIS topology is a separate, Shapely-backed check; structural check-data stays dependency-free.
+check-topology:
+	cd $(ROOT) && python3 data/tools/check-shared-edges.py
 
 build-data:
 	npm run build
