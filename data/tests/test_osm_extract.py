@@ -22,6 +22,18 @@ from osm_extract import cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
+from osm_extract.places import (  # noqa: E402
+    category_for,
+    collect_facts,
+    is_standalone_kind,
+    get_kind,
+    has_sight_promotion,
+    STANDALONE_HISTORIC,
+    STANDALONE_TOURISM,
+    STANDALONE_AMENITY,
+    STANDALONE_AMENITY_SIGHTS,
+    STANDALONE_AMENITY_NO_CATEGORY,
+)
 
 FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
 FIXTURE_HASH = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
@@ -776,8 +788,24 @@ class OsmExtractTest(unittest.TestCase):
         details = json.loads(
             (self.first_root / 'data/sources/provenance.json').read_text()
         )['building_details']
-        self.assertEqual(details['placesInsideBuildings'], 2)
-        self.assertEqual(details['placesOutsideBuildings'], 4)
+        self.assertEqual(details['placesInsideBuildings'], 3)
+        # node/1013 (tower) and node/1017 (lighthouse) are outside; gate is not
+        self.assertEqual(details['placesOutsideBuildings'], 10)
+
+    def test_containment_sets_building_id_and_standalone_together(self):
+        """One footprint join decides both published location properties."""
+        extract(self.first_root)
+        _, places = source_features(self.first_root, 'places.geojson')
+        by_id = {
+            feature['properties']['entityId']: feature['properties']
+            for feature in places
+        }
+        outside = by_id['node/1011']
+        self.assertNotIn('buildingEntityId', outside)
+        self.assertTrue(outside['standalone'])
+        inside = by_id['node/1016']
+        self.assertEqual(inside['buildingEntityId'], 'way/2001')
+        self.assertNotIn('standalone', inside)
 
     def test_partial_run_refuses_a_different_input_pbf(self):
         extract(self.first_root)
@@ -1100,6 +1128,274 @@ class EndNodePreservationTest(unittest.TestCase):
                              'way/2007 startNode should be OSM node 2091')
             self.assertEqual(p['endNode'], 2092,
                              'way/2007 endNode should be OSM node 2092')
+
+
+class StandalonePlacesTest(unittest.TestCase):
+    """Test standalone point extraction and fact collection for #327."""
+
+    def test_standalone_historic_kinds_map_to_sights(self):
+        for kind in STANDALONE_HISTORIC:
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'historic': kind}
+                self.assertEqual(category_for(tags), 'sights')
+
+    def test_standalone_tourism_kinds_map_to_sights(self):
+        for kind in STANDALONE_TOURISM:
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'tourism': kind}
+                self.assertEqual(category_for(tags), 'sights')
+
+    def test_standalone_amenity_sights_map_to_sights(self):
+        """Only fountain maps to sights without extra tags."""
+        for kind in STANDALONE_AMENITY_SIGHTS:
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'amenity': kind}
+                self.assertEqual(category_for(tags), 'sights')
+
+    def test_standalone_amenity_no_category_returns_empty(self):
+        """cinema, library, etc. return no category without sight promotion."""
+        for kind in STANDALONE_AMENITY_NO_CATEGORY:
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'amenity': kind}
+                self.assertEqual(category_for(tags), '')
+
+    def test_standalone_amenity_promoted_to_sights(self):
+        """place_of_worship/theatre/arts_centre become sights with heritage."""
+        for kind in ('place_of_worship', 'theatre', 'arts_centre'):
+            for promo_tag, promo_value in [
+                ('tourism', 'attraction'),
+                ('heritage', 'yes'),
+                ('historic', 'yes'),
+            ]:
+                with self.subTest(kind=kind, tag=promo_tag):
+                    tags = {'name': 'Test', 'amenity': kind, promo_tag: promo_value}
+                    self.assertEqual(category_for(tags), 'sights')
+
+    def test_has_sight_promotion_detects_promotion_tags(self):
+        self.assertTrue(has_sight_promotion({'tourism': 'attraction'}))
+        self.assertTrue(has_sight_promotion({'heritage': 'yes'}))
+        self.assertTrue(has_sight_promotion({'historic': 'monument'}))
+        self.assertFalse(has_sight_promotion({'amenity': 'library'}))
+        self.assertFalse(has_sight_promotion({}))
+        # Only tourism=attraction promotes, not other tourism values
+        self.assertFalse(has_sight_promotion({'tourism': 'hotel'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'museum'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'music_school'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'drinking_water'}))
+
+    def test_standalone_barrier_kinds_not_extracted(self):
+        """barrier=gate is not extracted — no category for it (ADR 0027)."""
+        tags = {'name': 'Test', 'barrier': 'gate'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
+
+    def test_named_towers_and_lighthouses_are_sights(self):
+        """tower and lighthouse are extracted with the OSM value as kind."""
+        for kind in ('tower', 'lighthouse'):
+            with self.subTest(kind=kind):
+                tags = {'name': 'Test', 'man_made': kind}
+                self.assertEqual(category_for(tags), 'sights')
+                self.assertTrue(is_standalone_kind(tags))
+                self.assertEqual(get_kind(tags), kind)
+
+    def test_man_made_bridge_not_extracted(self):
+        """A bridge is linear, not a standalone place point (ADR 0027)."""
+        tags = {'name': 'Test', 'man_made': 'bridge'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
+
+    def test_existing_categories_unchanged(self):
+        self.assertEqual(
+            category_for({'name': 'X', 'amenity': 'cafe'}), 'food'
+        )
+        self.assertEqual(
+            category_for({'name': 'X', 'shop': 'clothes'}), 'shops'
+        )
+        self.assertEqual(
+            category_for({'name': 'X', 'tourism': 'hotel'}), 'stay'
+        )
+        self.assertEqual(
+            category_for({'name': 'X', 'amenity': 'pharmacy'}), 'essentials'
+        )
+        self.assertEqual(
+            category_for({'name': 'X', 'tourism': 'museum'}), 'sights'
+        )
+
+    def test_tourism_information_not_extracted(self):
+        """tourism=information is not extracted — too many non-sights (ADR 0027)."""
+        tags = {'name': 'Summit Travel Agency', 'tourism': 'information'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
+
+    def test_is_standalone_kind_returns_true_for_extracted_kinds(self):
+        self.assertTrue(is_standalone_kind({'historic': 'fort'}))
+        self.assertTrue(is_standalone_kind({'tourism': 'viewpoint'}))
+        self.assertTrue(is_standalone_kind({'amenity': 'fountain'}))
+        self.assertTrue(is_standalone_kind({'man_made': 'tower'}))
+        self.assertTrue(is_standalone_kind({'man_made': 'lighthouse'}))
+
+    def test_is_standalone_kind_returns_false_for_gaps(self):
+        """Gate, bridge and information remain category gaps (ADR 0027)."""
+        self.assertFalse(is_standalone_kind({'barrier': 'gate'}))
+        self.assertFalse(is_standalone_kind({'man_made': 'bridge'}))
+        self.assertFalse(is_standalone_kind({'tourism': 'information'}))
+
+    def test_is_standalone_kind_returns_false_for_regular_kinds(self):
+        self.assertFalse(is_standalone_kind({'amenity': 'cafe'}))
+        self.assertFalse(is_standalone_kind({'shop': 'clothes'}))
+        self.assertFalse(is_standalone_kind({'tourism': 'hotel'}))
+
+    def test_collect_facts_copies_standard_tags(self):
+        tags = {
+            'name:en': 'English Name',
+            'name:sr-Latn': 'Srpsko Ime',
+            'website': 'https://example.com',
+            'opening_hours': 'Mo-Fr 09:00-18:00',
+            'phone': '+382 20 123',
+            'wheelchair': 'yes',
+            'wikidata': 'Q123',
+            'wikipedia': 'en:Example',
+            'cuisine': 'serbian',
+            'level': '2',
+            'addr:street': 'Main St',
+            'addr:housenumber': '1',
+            'email': 'test@example.com',
+        }
+        facts = collect_facts(tags)
+        for key, expected in tags.items():
+            with self.subTest(key=key):
+                self.assertEqual(facts[key], expected)
+
+    def test_collect_facts_normalises_contact_phone(self):
+        tags = {'contact:phone': '+382 20 999'}
+        facts = collect_facts(tags)
+        self.assertEqual(facts['phone'], '+382 20 999')
+
+    def test_collect_facts_normalises_contact_website(self):
+        tags = {'contact:website': 'https://contact.example.com'}
+        facts = collect_facts(tags)
+        self.assertEqual(facts['website'], 'https://contact.example.com')
+
+    def test_collect_facts_normalises_contact_email(self):
+        tags = {'contact:email': 'contact@example.com'}
+        facts = collect_facts(tags)
+        self.assertEqual(facts['email'], 'contact@example.com')
+
+    def test_collect_facts_plain_key_takes_precedence(self):
+        tags = {
+            'phone': '+382 20 111',
+            'contact:phone': '+382 20 222',
+            'website': 'https://plain.com',
+            'contact:website': 'https://contact.com',
+            'email': 'plain@example.com',
+            'contact:email': 'contact@example.com',
+        }
+        facts = collect_facts(tags)
+        self.assertEqual(facts['phone'], '+382 20 111')
+        self.assertEqual(facts['website'], 'https://plain.com')
+        self.assertEqual(facts['email'], 'plain@example.com')
+
+    def test_standalone_places_are_extracted(self):
+        """Verify the fixture standalone points appear in the extract."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-standalone-'
+        )
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        place_ids = {f['properties']['id'] for f in features}
+        # New standalone points from the fixture
+        self.assertIn('node/1010', place_ids, 'monument extracted')
+        self.assertIn('node/1011', place_ids, 'fountain extracted')
+        self.assertIn('node/1012', place_ids, 'library extracted')
+        self.assertIn('node/1013', place_ids, 'tower extracted')
+        self.assertNotIn('node/1014', place_ids, 'gate not extracted')
+        self.assertIn('node/1015', place_ids, 'place_of_worship extracted')
+        self.assertIn('node/1017', place_ids, 'lighthouse extracted')
+
+    def test_tower_and_lighthouse_are_published_as_sights(self):
+        """Named man-made sights keep their OSM kind and standalone flag."""
+        temporary = tempfile.TemporaryDirectory(prefix='cg-map-man-made-')
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        by_id = {f['properties']['id']: f for f in features}
+        expected = (
+            ('node/1013', 'tower'),
+            ('node/1017', 'lighthouse'),
+        )
+        for place_id, kind in expected:
+            with self.subTest(place_id=place_id):
+                self.assertTrue(place_id in by_id, f'{place_id} missing from extract')
+                properties = by_id[place_id]['properties']
+                self.assertEqual(properties['category'], 'sights')
+                self.assertEqual(properties['kind'], kind)
+                self.assertTrue(properties['standalone'])
+
+    def test_standalone_flag_set_outside_building(self):
+        """Points outside buildings get standalone:true."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-standalone-flag-'
+        )
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        by_id = {f['properties']['id']: f for f in features}
+        # node/1010 (monument at 42.441, 19.251) is outside building 2001
+        monument = by_id.get('node/1010')
+        self.assertIsNotNone(monument, 'monument should be extracted')
+        self.assertTrue(
+            monument['properties'].get('standalone'),
+            'monument outside building should be standalone',
+        )
+
+    def test_place_inside_building_not_standalone(self):
+        """node/1016 is inside building 2001; should NOT be standalone."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-inside-building-'
+        )
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        by_id = {f['properties']['id']: f for f in features}
+        inside = by_id.get('node/1016')
+        self.assertIsNotNone(inside, 'inside monument should be extracted')
+        self.assertNotIn(
+            'standalone', inside['properties'],
+            'place inside building should not have standalone',
+        )
+
+    def test_new_facts_appear_in_extract(self):
+        """Verify new fact tags are copied to the extract."""
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-facts-'
+        )
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        by_id = {f['properties']['id']: f for f in features}
+        # node/1010 has name:en and wikidata
+        monument = by_id.get('node/1010', {})
+        props = monument.get('properties', {})
+        self.assertEqual(props.get('name:en'), 'Test Monument')
+        self.assertEqual(props.get('wikidata'), 'Q123')
+        # node/1012 has contact:phone normalised to phone
+        library = by_id.get('node/1012', {})
+        l_props = library.get('properties', {})
+        self.assertEqual(l_props.get('phone'), '+382 20 123 456')
+        self.assertEqual(l_props.get('wheelchair'), 'yes')
+        tower = by_id.get('node/1013', {})
+        self.assertEqual(tower.get('properties', {}).get('name:sr-Latn'), 'Test Kula')
+        # node/1015 has website and contact:email normalised to email
+        church = by_id.get('node/1015', {})
+        c_props = church.get('properties', {})
+        self.assertEqual(c_props.get('website'), 'https://example.com')
+        self.assertEqual(c_props.get('email'), 'info@example.com')
 
 
 if __name__ == '__main__':
