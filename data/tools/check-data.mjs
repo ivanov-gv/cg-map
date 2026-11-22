@@ -933,6 +933,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(heightChecks && heightChecks.ok + heightChecks.mismatch + heightChecks.missing === summary.summitFeatures, 'Relief summit height check counts disagree');
   requireValue(Array.isArray(summary.greenKindsPresentInLand) && summary.greenKindsPresentInLand.every(kind => typeof kind === 'string'), 'Invalid green kinds in relief summary');
   const parameters = relief.buildParameters;
+  const landContractGreenKinds = [...landWaterContractRules.extractedLandKinds];
   requireValue(parameters && Array.isArray(parameters.greenKinds) && parameters.greenKinds.length > 0 && parameters.greenKinds.every(kind => typeof kind === 'string'), 'Relief green kinds missing from provenance build parameters');
   requireValue(
     JSON.stringify(parameters.greenKinds) === JSON.stringify(landContractGreenKinds),
