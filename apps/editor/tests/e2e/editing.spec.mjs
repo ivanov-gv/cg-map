@@ -1555,7 +1555,7 @@ test.describe('source editing', () => {
     const countryChoice = `${country.properties.name} · ${country.geometry.type} · feature ${countryKey}`;
     await page.getByRole('button', {name: countryChoice, exact: true}).click();
     await expect(page.locator('#selection-source')).toHaveText(`land.geojson · feature ${countryKey}`);
-    await expect(page.locator('#lock-reason')).toContainText('Country shapes');
+    await expect(page.locator('#lock-reason')).toContainText('Country and context outlines');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
   });
 
