@@ -28,11 +28,10 @@ copyMapData(outputDirectory, {
   dataRoot,
   contractPath: path.join(contractsRoot, 'place-visibility.json')
 });
-const editorBundleContractURL = pathToFileURL(path.join(contractsRoot, 'editor-bundle.schema.json'));
 await writeEditorBundle(
   path.join(dataRoot, 'sources'),
   path.join(outputDirectory, 'sources'),
-  editorBundleContractURL
+  path.join(contractsRoot, 'editor-bundle.schema.json')
 );
 // The editing rules are a shared contract: the importer reads the same file.
 fileSystem.copyFileSync(

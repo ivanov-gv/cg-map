@@ -52,8 +52,8 @@
       "properties": {
         "version": {"const": 2},
         "layers": {
-          "minItems": 9,
-          "maxItems": 9,
+          "minItems": 10,
+          "maxItems": 10,
           "items": {
             "properties": {
               "filename": {
@@ -64,6 +64,7 @@
                   "context-countries.geojson",
                   "land.geojson",
                   "places.geojson",
+                  "road-nodes.geojson",
                   "roads.geojson",
                   "transport-stops.geojson",
                   "water.geojson"

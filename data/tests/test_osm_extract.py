@@ -18,6 +18,7 @@ sys.path.insert(0, str(TOOLS))
 
 from osm_extract import cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
+from osm_extract.roads import classify_path, road_level  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
 
 FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
@@ -39,9 +40,11 @@ GENERATED_FILES = (
     'land.geojson',
     'places.geojson',
     'provenance.json',
+    'road-nodes.geojson',
     'roads.geojson',
     'transport-stops.geojson',
     'transport-stops.provenance.json',
+    'turn-restrictions.json',
     'water.geojson',
 )
 GENERATED_GEOJSON = tuple(
@@ -57,11 +60,12 @@ REVIEWED_GEOJSON = (
     'building-entrances.geojson', 'buildings.geojson',
     'building-labels.geojson',
     'context-countries.geojson', 'land.geojson', 'places.geojson',
-    'roads.geojson', 'transport-stops.geojson', 'water.geojson',
+    'road-nodes.geojson', 'roads.geojson', 'transport-stops.geojson',
+    'water.geojson',
 )
 LAYER_FILES = {
     'buildings': ('building-entrances.geojson', 'buildings.geojson'),
-    'roads': ('roads.geojson',),
+    'roads': ('roads.geojson', 'road-nodes.geojson', 'turn-restrictions.json'),
     'land': ('land.geojson',),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
@@ -252,10 +256,15 @@ class OsmExtractTest(unittest.TestCase):
         expected = {
             ('node/1001', None): 3,
             ('node/1002', None): 2,
+            ('node/6001', None): 1,
+            ('node/6002', None): 1,
             ('way/2001', None): 5,
             ('way/2003', None): 4,
             ('way/2005', None): 11,
             ('way/2006', 0): 12,
+            ('way/2007', None): 2,
+            ('way/2008', None): 1,
+            ('way/2009', None): 1,
             ('relation/3001', None): 9,
             ('relation/3003', 0): 13,
             ('relation/3003', 1): 13,
@@ -319,6 +328,80 @@ class OsmExtractTest(unittest.TestCase):
                     )
                 self.assertEqual(records, sorted(records))
 
+    def test_turn_restrictions_is_valid_json(self):
+        extract(self.first_root)
+        restrictions_path = (
+            self.first_root / 'data/sources' / 'turn-restrictions.json'
+        )
+        data = json.loads(restrictions_path.read_text(encoding='utf-8'))
+        self.assertEqual(data['entitySchemaVersion'], 1)
+        self.assertIsInstance(data['restrictions'], list)
+
+    def test_turn_restriction_relation_is_extracted(self):
+        extract(self.first_root)
+        restrictions_path = (
+            self.first_root / 'data/sources' / 'turn-restrictions.json'
+        )
+        data = json.loads(restrictions_path.read_text(encoding='utf-8'))
+        restrictions = data['restrictions']
+        by_id = {r['entityId']: r for r in restrictions}
+        self.assertIn('relation/9100', by_id)
+        restriction = by_id['relation/9100']
+        self.assertEqual(restriction['entityVersion'], 1)
+        self.assertEqual(restriction['restriction'], 'no_left_turn')
+        self.assertEqual(restriction['from'], 2003)
+        self.assertEqual(restriction['to'], 2007)
+        self.assertEqual(restriction['viaNodes'], [2032])
+        self.assertNotIn('relation/9101', by_id)
+        self.assertNotIn('relation/9102', by_id)
+        self.assertNotIn('relation/9103', by_id)
+
+    def test_clipped_road_omits_node_at_clip_boundary(self):
+        extract(self.first_root)
+        _, features = source_features(self.first_root, 'roads.geojson')
+        parts = [
+            feature for feature in features
+            if feature['properties']['entityId'] == 'way/3010'
+        ]
+        self.assertEqual(len(parts), 1)
+        properties = parts[0]['properties']
+        self.assertEqual(properties['startNode'], 7001)
+        self.assertEqual(properties['startLevel'], 0)
+        self.assertNotIn('endNode', properties)
+        self.assertNotIn('endLevel', properties)
+
+    def test_turn_restrictions_file_is_one_per_line_sorted(self):
+        extract(self.first_root)
+        restrictions_path = (
+            self.first_root / 'data/sources' / 'turn-restrictions.json'
+        )
+        lines = restrictions_path.read_text(encoding='utf-8').splitlines()
+        self.assertEqual(lines[0], '{"entitySchemaVersion":1,"restrictions":[')
+        self.assertEqual(lines[-1], ']}')
+        records = []
+        for line in lines[1:-1]:
+            encoded = line.removesuffix(',')
+            restriction = json.loads(encoded)
+            self.assertEqual(
+                encoded,
+                json.dumps(
+                    restriction, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':')
+                ),
+            )
+            records.append(restriction['entityId'])
+        self.assertEqual(records, sorted(records))
+
+    def test_road_nodes_omit_empty_name(self):
+        extract(self.first_root)
+        _, features = source_features(self.first_root, 'road-nodes.geojson')
+        by_id = {
+            feature['properties']['entityId']: feature['properties']
+            for feature in features
+        }
+        self.assertIn('node/6001', by_id)
+        self.assertNotIn('name', by_id['node/6001'])
+
     def test_coordinates_use_reviewed_precision(self):
         extract(self.first_root)
         for name in EXTRACTED_GEOJSON:
@@ -341,6 +424,9 @@ class OsmExtractTest(unittest.TestCase):
     def test_each_layer_group_replaces_only_its_source_file(self):
         extract(self.first_root)
         baseline = file_contents(self.first_root)
+        # These files are always regenerated by the extractor regardless of
+        # which layer group is selected; skip them in this test.
+        always_regenerated = ('provenance.json',)
         for group, filenames in LAYER_FILES.items():
             with self.subTest(group=group):
                 root = prepared_root(self.temporary_path / group)
@@ -349,13 +435,16 @@ class OsmExtractTest(unittest.TestCase):
                 if group == 'water':
                     preserved += ('land.geojson',)
                 marker = b'not regenerated by this run\n'
-                for name in GENERATED_GEOJSON:
-                    contents = (
-                        baseline[name] if name in preserved else marker
-                    )
-                    (sources / name).write_bytes(contents)
+                for name in GENERATED_FILES:
+                    if name in baseline and name not in always_regenerated:
+                        contents = (
+                            baseline[name] if name in preserved else marker
+                        )
+                        (sources / name).write_bytes(contents)
                 extract(root, layers=[group])
-                for name in GENERATED_GEOJSON:
+                for name in GENERATED_FILES:
+                    if name not in baseline or name in always_regenerated:
+                        continue
                     with self.subTest(group=group, name=name):
                         if name in filenames or name in preserved:
                             expected = baseline[name]
@@ -592,6 +681,191 @@ class OsmExtractTest(unittest.TestCase):
             after['buildings.geojson'], before['buildings.geojson']
         )
         self.assertEqual(after['roads.geojson'], before['roads.geojson'])
+
+
+class PathClassTest(unittest.TestCase):
+    """Test the classify_path function for walking route classification."""
+
+    def test_paved_footway_is_main(self):
+        self.assertEqual(
+            classify_path({'highway': 'footway', 'surface': 'asphalt'}),
+            'main',
+        )
+
+    def test_paved_pedestrian_is_main(self):
+        self.assertEqual(
+            classify_path({'highway': 'pedestrian', 'surface': 'concrete'}),
+            'main',
+        )
+
+    def test_paved_cycleway_is_main(self):
+        self.assertEqual(
+            classify_path({'highway': 'cycleway', 'surface': 'paved'}),
+            'main',
+        )
+
+    def test_paved_path_is_main(self):
+        self.assertEqual(
+            classify_path({'highway': 'path', 'surface': 'asphalt'}),
+            'main',
+        )
+
+    def test_unpaved_path_is_trail(self):
+        self.assertEqual(
+            classify_path({'highway': 'path', 'surface': 'gravel'}),
+            'trail',
+        )
+
+    def test_track_is_trail(self):
+        self.assertEqual(
+            classify_path({'highway': 'track'}),
+            'trail',
+        )
+
+    def test_bridleway_is_trail(self):
+        self.assertEqual(
+            classify_path({'highway': 'bridleway'}),
+            'trail',
+        )
+
+    def test_sac_scale_is_trail(self):
+        self.assertEqual(
+            classify_path({'highway': 'path', 'sac_scale': 'hiking_mountains'}),
+            'trail',
+        )
+
+    def test_footway_without_surface_is_main(self):
+        self.assertEqual(
+            classify_path({'highway': 'footway'}),
+            'main',
+        )
+
+    def test_footway_with_explicitly_unpaved_surface_is_unclassified(self):
+        self.assertIsNone(
+            classify_path({'highway': 'footway', 'surface': 'gravel'}),
+        )
+
+    def test_path_without_surface_is_unclassified(self):
+        self.assertIsNone(
+            classify_path({'highway': 'path'}),
+        )
+
+    def test_residential_road_is_none(self):
+        self.assertIsNone(
+            classify_path({'highway': 'residential'}),
+        )
+
+    def test_paved_path_with_sac_scale_is_main(self):
+        # Paved path takes main over trail even with sac_scale
+        self.assertEqual(
+            classify_path({
+                'highway': 'path',
+                'surface': 'asphalt',
+                'sac_scale': 'hiking_mountains',
+            }),
+            'main',
+        )
+
+
+class RoadLevelTest(unittest.TestCase):
+    """Test the road_level function for bridge/tunnel level computation."""
+
+    def test_default_level_is_zero(self):
+        self.assertEqual(road_level({}), 0)
+
+    def test_explicit_layer(self):
+        self.assertEqual(road_level({'layer': '3'}), 3)
+
+    def test_negative_layer(self):
+        self.assertEqual(road_level({'layer': '-2'}), -2)
+
+    def test_bridge_without_layer_gets_one(self):
+        self.assertEqual(road_level({'bridge': 'yes'}), 1)
+
+    def test_tunnel_without_layer_gets_minus_one(self):
+        self.assertEqual(road_level({'tunnel': 'yes'}), -1)
+
+    def test_bridge_with_explicit_layer_uses_layer(self):
+        self.assertEqual(
+            road_level({'bridge': 'yes', 'layer': '2'}),
+            2,
+        )
+
+    def test_tunnel_with_explicit_layer_uses_layer(self):
+        self.assertEqual(
+            road_level({'tunnel': 'yes', 'layer': '-3'}),
+            -3,
+        )
+
+    def test_bridge_no_gets_zero(self):
+        self.assertEqual(road_level({'bridge': 'no'}), 0)
+
+    def test_non_numeric_layer_falls_back_to_bridge(self):
+        self.assertEqual(
+            road_level({'bridge': 'yes', 'layer': 'unknown'}),
+            1,
+        )
+
+
+class EndNodePreservationTest(unittest.TestCase):
+    """Verify that simplification preserves both end nodes exactly."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(
+            prefix='cg-map-end-node-'
+        )
+        self.addCleanup(temporary.cleanup)
+        temporary_path = Path(temporary.name)
+        self.first_root = prepared_root(temporary_path / 'root')
+
+    def test_simplification_keeps_end_coordinates(self):
+        """A road with many points is simplified; first/last coords match."""
+        from shapely.geometry import LineString
+        # Build a line with many intermediate points
+        coords = [
+            (19.250000, 42.440000),  # Start
+            (19.250010, 42.440010),
+            (19.250020, 42.440005),
+            (19.250030, 42.440015),
+            (19.250040, 42.440008),
+            (19.250050, 42.440012),
+            (19.250060, 42.440003),
+            (19.250070, 42.440018),
+            (19.250080, 42.440007),
+            (19.250090, 42.440014),
+            (19.251000, 42.441000),  # End
+        ]
+        line = LineString(coords)
+        simplified = line.simplify(0.000015, preserve_topology=True)
+        simplified_coords = list(simplified.coords)
+        # Endpoints must be preserved exactly
+        self.assertEqual(simplified_coords[0], coords[0],
+                         'simplification changed start coordinate')
+        self.assertEqual(simplified_coords[-1], coords[-1],
+                         'simplification changed end coordinate')
+
+    def test_end_nodes_match_osm_after_simplification(self):
+        """Extract a road and verify startNode/endNode equal OSM node IDs."""
+        extract(self.first_root, layers=['roads'])
+        _, features = source_features(self.first_root, 'roads.geojson')
+        # The fixture has way/2003 (residential) with nodes 2031, 2032
+        # and way/2007 (primary bridge) with nodes 2091, 2092
+        found_2003 = [f for f in features
+                       if f['properties']['entityId'] == 'way/2003']
+        found_2007 = [f for f in features
+                       if f['properties']['entityId'] == 'way/2007']
+        if found_2003:
+            p = found_2003[0]['properties']
+            self.assertEqual(p['startNode'], 2031,
+                             'way/2003 startNode should be OSM node 2031')
+            self.assertEqual(p['endNode'], 2032,
+                             'way/2003 endNode should be OSM node 2032')
+        if found_2007:
+            p = found_2007[0]['properties']
+            self.assertEqual(p['startNode'], 2091,
+                             'way/2007 startNode should be OSM node 2091')
+            self.assertEqual(p['endNode'], 2092,
+                             'way/2007 endNode should be OSM node 2092')
 
 
 if __name__ == '__main__':

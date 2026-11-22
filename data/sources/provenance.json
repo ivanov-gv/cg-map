@@ -1,60 +1,45 @@
 {
-  "export_date": "2026-11-21",
-  "upstream_snapshot": "2026-11-20T21:21:21Z",
-  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, country outline and water.",
-  "format": "Editable GeoJSON display extract; precomputed MVT/PMTiles runtime",
-  "layers": {
-    "water.geojson": {
-      "features": 1491,
-      "bytes": 1574917,
-      "sha256": "be7f78e3536c543a7291192bc8e1b7f91ea269d9af907398ba64a8dfb986be40"
-    },
-    "buildings.geojson": {
-      "features": 43978,
-      "bytes": 14601929,
-      "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
-    },
-    "land.geojson": {
-      "features": 332,
-      "bytes": 399430,
-      "sha256": "54ab7200d0107a24568c326dffab7ed9a578e56bc00d61c1e6acc640155296b8"
-    },
-    "roads.geojson": {
-      "features": 21247,
-      "bytes": 5368273,
-      "sha256": "71b8bc0ba8fc5a329d894694eb83222d15db801df560161b91597df530d27502"
-    },
-    "context-countries.geojson": {
-      "features": 6,
-      "bytes": 6535,
-      "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
-    },
-    "building-entrances.geojson": {
-      "features": 157,
-      "bytes": 41359,
-      "sha256": "6ce44bf4ee25d4ffd7ed0719f90df52a4f8fa5b486d57923d0b025084d1d2995"
-    }
+  "building_details": {
+    "addr:housenumber": 1003,
+    "addr:housenumberPresent": 1003,
+    "addr:street": 896,
+    "addr:streetEntityId": 321,
+    "addr:streetEntityIds": 321,
+    "addr:streetUnjoined": 575,
+    "building": 43978,
+    "building:levels": 445,
+    "building:material": 3,
+    "entrance:addr:city": 31,
+    "entrance:addr:flats": 5,
+    "entrance:addr:floor": 1,
+    "entrance:addr:housenumber": 102,
+    "entrance:addr:postcode": 24,
+    "entrance:addr:street": 72,
+    "entrance:door": 1,
+    "entrance:level": 17,
+    "entrance:nohousenumber": 0,
+    "entrance:ref": 22,
+    "entrance:wheelchair": 3,
+    "entranceKind:garage": 3,
+    "entranceKind:home": 2,
+    "entranceKind:main": 6,
+    "entranceKind:staircase": 69,
+    "entranceKind:yes": 77,
+    "entrances": 157,
+    "entrancesUnjoined": 28,
+    "name": 265,
+    "nohousenumber": 6,
+    "roof:levels": 142,
+    "start_date": 1
   },
-  "places_file": "data/sources/places.geojson",
-  "places_count": 1876,
-  "notes": [
-    "water.geojson includes one derived ocean polygon computed by the extractor from the reviewed land outline and surrounding countries.",
-    "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
-  ],
-  "places_bytes": 587199,
-  "places_sha256": "71456612a5e1b08d8622c67584bf312e5362e07045c8158a8c15f888486d11f3",
-  "places_facts_sha256": "005fd5e3ed8f4d421bf837bed946ffebb66bccaf03a5ed4ee607acfbe2277671",
-  "place_visibility_policy_sha256": "58aa75c12b1902801119a9db09c144c90ab3326ceb39080a68836767722d3fcc",
-  "place_visibility_config_sha256": "ad76ecf865cbea764fd34ae7571418ad9e1a2434f2bf64e37073af8f0f3269c6",
-  "input_url": "https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf",
-  "input_date": "2026-11-21",
-  "input_pbf_sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b",
+  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, country outline and water.",
   "detail_bbox": [
     19.15,
     42.37,
     19.34,
     42.51
   ],
+  "export_date": "2026-11-21",
   "extract_flags": {
     "all_details": false,
     "all_places": false,
@@ -68,37 +53,62 @@
       "water.geojson"
     ]
   },
-  "building_details": {
-    "addr:housenumberPresent": 1003,
-    "addr:street": 896,
-    "addr:streetEntityId": 321,
-    "addr:streetEntityIds": 321,
-    "addr:streetUnjoined": 575,
-    "nohousenumber": 6,
-    "building": 43978,
-    "building:levels": 445,
-    "building:material": 3,
-    "start_date": 1,
-    "name": 265,
-    "addr:housenumber": 1003,
-    "roof:levels": 142,
-    "entrance:nohousenumber": 0,
-    "entrancesUnjoined": 28,
-    "entrances": 157,
-    "entrance:addr:city": 31,
-    "entrance:addr:housenumber": 102,
-    "entrance:addr:postcode": 24,
-    "entrance:addr:street": 72,
-    "entranceKind:yes": 77,
-    "entranceKind:main": 6,
-    "entranceKind:staircase": 69,
-    "entranceKind:garage": 3,
-    "entrance:ref": 22,
-    "entrance:addr:flats": 5,
-    "entrance:level": 17,
-    "entranceKind:home": 2,
-    "entrance:wheelchair": 3,
-    "entrance:door": 1,
-    "entrance:addr:floor": 1
-  }
+  "format": "Editable GeoJSON display extract; precomputed MVT/PMTiles runtime",
+  "input_date": "2026-11-21",
+  "input_pbf_sha256": "70de54274bad52be8452852995f34280b5cbf37f2bbb207dcf56cb90410a3a5b",
+  "input_url": "https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf",
+  "layers": {
+    "building-entrances.geojson": {
+      "bytes": 41359,
+      "features": 157,
+      "sha256": "6ce44bf4ee25d4ffd7ed0719f90df52a4f8fa5b486d57923d0b025084d1d2995"
+    },
+    "buildings.geojson": {
+      "bytes": 14601929,
+      "features": 43978,
+      "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
+    },
+    "context-countries.geojson": {
+      "bytes": 6535,
+      "features": 6,
+      "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
+    },
+    "land.geojson": {
+      "bytes": 399430,
+      "features": 332,
+      "sha256": "54ab7200d0107a24568c326dffab7ed9a578e56bc00d61c1e6acc640155296b8"
+    },
+    "road-nodes.geojson": {
+      "bytes": 462217,
+      "features": 2534,
+      "sha256": "a1758607a9f417499ae970866c85b0139904be90779bebcf32d7b83e3fa9c67d"
+    },
+    "roads.geojson": {
+      "bytes": 7110391,
+      "features": 21247,
+      "sha256": "6c7876a10f851669e89a4d037fcd66f1f7fe4f4ae370b93d2aecaf7661047c2a"
+    },
+    "turn-restrictions.json": {
+      "bytes": 9471,
+      "features": 69,
+      "sha256": "a6365518a1982ea02ee474ff887b59d49d846ad23c61d56502074ca7525bff4e"
+    },
+    "water.geojson": {
+      "bytes": 1574917,
+      "features": 1491,
+      "sha256": "be7f78e3536c543a7291192bc8e1b7f91ea269d9af907398ba64a8dfb986be40"
+    }
+  },
+  "notes": [
+    "water.geojson includes one derived ocean polygon computed by the extractor from the reviewed land outline and surrounding countries.",
+    "provenance-legacy.json is historical metadata from the raster predecessor, not the current runtime."
+  ],
+  "place_visibility_config_sha256": "ad76ecf865cbea764fd34ae7571418ad9e1a2434f2bf64e37073af8f0f3269c6",
+  "place_visibility_policy_sha256": "58aa75c12b1902801119a9db09c144c90ab3326ceb39080a68836767722d3fcc",
+  "places_bytes": 587199,
+  "places_count": 1876,
+  "places_facts_sha256": "005fd5e3ed8f4d421bf837bed946ffebb66bccaf03a5ed4ee607acfbe2277671",
+  "places_file": "data/sources/places.geojson",
+  "places_sha256": "71456612a5e1b08d8622c67584bf312e5362e07045c8158a8c15f888486d11f3",
+  "upstream_snapshot": "2026-11-20T21:21:21Z"
 }

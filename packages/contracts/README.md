@@ -86,6 +86,25 @@ both versions and verifies the entire bundle before enabling modes. Feature indi
 stable upstream identities. This contract does not define editing or changesets; the formats below do. The bundle is
 built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md).
 
+`roads.geojson` carries OSM road attributes copied from the source: `bridge`, `tunnel`, `layer`, `oneway`, `access`,
+`motor_vehicle`, `foot`, `bicycle`, `maxspeed`, `surface`, `lit`, `sac_scale`, `smoothness`, `parking:left`,
+`parking:right`, `parking:both`, `parking:lane:left`, `parking:lane:right`, `parking:lane:both`, `junction`, `ref`, and
+`name:en`. Walking routes get a computed `pathClass`. `main`: footway unless its surface is explicitly unpaved, and
+paved pedestrian, cycleway, or path. `trail`: track, bridleway, any way with `sac_scale`, or path with an explicitly
+unpaved surface. A path without surface and without `sac_scale` is unclassified; unknown surface is not treated as
+unpaved. Detail-area roads record the OSM node ID and level at each real OSM end (`startNode`/`startLevel`,
+`endNode`/`endLevel`): the `layer` tag as an integer, default 0; bridges without explicit layer get +1, tunnels get −1.
+A part created by clipping keeps a node/level pair only when that end is the original OSM end node; a clip-boundary end
+omits that pair.
+
+`road-nodes.geojson` contains OSM nodes in the detail area with `highway=traffic_signals`, `crossing`, `stop`,
+`give_way`, `mini_roundabout` or `turning_circle`. The editor cannot edit this file yet (`operations: []`).
+
+`turn-restrictions.json` records `type=restriction` relations whose `from` and `to` ways are detail-area roads in
+`roads.geojson`, with their OSM identity, `restriction` value, `from`/`to` way IDs and optional `via` nodes or ways.
+Every `from`/`to`/`via` reference resolves in `roads.geojson` or `road-nodes.geojson`/road end nodes. It is not GeoJSON
+because restrictions are topological relations, not geometries.
+
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
 types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and
 the source value of a new place. Anything unlisted is locked, which is what preserves unknown fields, attribution and

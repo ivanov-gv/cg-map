@@ -117,6 +117,40 @@
     <tag k="building" v="yes"/>
   </way>
 
+  <!-- Road with bridge attributes -->
+  <node id="2091" version="1" lat="42.44" lon="19.26"/>
+  <node id="2092" version="1" lat="42.441" lon="19.261"/>
+  <way id="2007" version="2">
+    <nd ref="2091"/><nd ref="2092"/>
+    <tag k="highway" v="primary"/>
+    <tag k="name" v="Bridge Road"/>
+    <tag k="bridge" v="yes"/>
+    <tag k="layer" v="1"/>
+    <tag k="maxspeed" v="50"/>
+    <tag k="surface" v="asphalt"/>
+  </way>
+
+  <!-- Paved footway: main path class -->
+  <node id="2093" version="1" lat="42.442" lon="19.252"/>
+  <node id="2094" version="1" lat="42.443" lon="19.253"/>
+  <way id="2008" version="1">
+    <nd ref="2093"/><nd ref="2094"/>
+    <tag k="highway" v="footway"/>
+    <tag k="surface" v="paved"/>
+    <tag k="foot" v="yes"/>
+  </way>
+
+  <!-- Unpaved path with sac_scale: trail -->
+  <node id="2095" version="1" lat="42.444" lon="19.254"/>
+  <node id="2096" version="1" lat="42.445" lon="19.255"/>
+  <way id="2009" version="1">
+    <nd ref="2095"/><nd ref="2096"/>
+    <tag k="highway" v="path"/>
+    <tag k="sac_scale" v="hiking_mountains"/>
+    <tag k="surface" v="gravel"/>
+  </way>
+
+  <!-- Address join roads (for building address lookup) -->
   <node id="5101" version="1" lat="42.435" lon="19.27"/>
   <node id="5102" version="1" lat="42.435" lon="19.28"/>
   <way id="2015" version="2">
@@ -132,6 +166,16 @@
     <tag k="name" v="  test   street "/>
   </way>
 
+  <!-- Traffic signal node -->
+  <node id="6001" version="1" lat="42.44" lon="19.25">
+    <tag k="highway" v="traffic_signals"/>
+  </node>
+
+  <!-- Crossing node -->
+  <node id="6002" version="1" lat="42.441" lon="19.251">
+    <tag k="highway" v="crossing"/>
+    <tag k="crossing" v="zebra"/>
+  </node>
   <node id="3011" version="1" lat="42.41" lon="19.28"/>
   <node id="3012" version="1" lat="42.41" lon="19.29"/>
   <node id="3013" version="1" lat="42.42" lon="19.29"/>
@@ -186,6 +230,24 @@
     <tag k="type" v="multipolygon"/>
     <tag k="leisure" v="park"/>
   </relation>
+
+  <!-- Road crossing the detail-box north edge: clipped end is not an OSM node -->
+  <node id="7001" version="1" lat="42.50" lon="19.25"/>
+  <node id="7002" version="1" lat="42.52" lon="19.25"/>
+  <way id="3010" version="1">
+    <nd ref="7001"/><nd ref="7002"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="North Crossing"/>
+  </way>
+
+  <!-- Highway outside detail area: restrictions touching it must be skipped -->
+  <node id="7601" version="1" lat="42.60" lon="19.25"/>
+  <node id="7602" version="1" lat="42.61" lon="19.25"/>
+  <way id="3020" version="1">
+    <nd ref="7601"/><nd ref="7602"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Outside Detail"/>
+  </way>
 
   <way id="4000" version="6">
     <nd ref="9001"/><nd ref="9002"/><nd ref="9003"/><nd ref="9004"/><nd ref="9001"/>
@@ -243,4 +305,36 @@
     <tag k="building" v="yes"/>
     <tag k="addr:street" v="Remote Street"/>
   </way>
+
+  <relation id="9100" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2007" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
+
+  <relation id="9101" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="3020" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_right_turn"/>
+  </relation>
+
+  <relation id="9102" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="way" ref="2007" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2015" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
+
+  <relation id="9103" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2007" role="to"/>
+    <tag k="type" v="restriction"/>
+  </relation>
 </osm>
