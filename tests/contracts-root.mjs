@@ -27,6 +27,11 @@ export function readContractJSON(filename) {
   return JSON.parse(fs.readFileSync(contractPath(filename), 'utf8'));
 }
 
+// The changeset importer expects a disposable root with contracts at packages/contracts.
+export function stageContractsInto(destinationRoot) {
+  fs.cpSync(contractsDirectory, path.join(destinationRoot, 'packages/contracts'), {recursive: true});
+}
+
 // Returns the installed release root: the repository pin by default, the release candidate in a published run.
 export function publishedContractsRoot() {
   const isPublishedRun = process.argv[2] === '--published' || Boolean(process.env.MAP_CONTRACTS_VERSION);

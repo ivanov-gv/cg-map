@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {dataToolURL, stageDataInto, stagedSourcePath} from '../data-root.mjs';
-import {contractsDirectory, readContractJSON} from '../contracts-root.mjs';
+import {contractsDirectory, readContractJSON, stageContractsInto} from '../contracts-root.mjs';
 import {buildChangeset, importChangeset, materializedLayer} from '../../apps/editor/src/changeset.js';
 import {labelJoinProblems} from '../../apps/editor/src/cross-file-checks.js';
 import {EditSession} from '../../apps/editor/src/edit-session.js';
@@ -29,7 +29,7 @@ const levels = new Set(readContractJSON('place-visibility.json').levels.map(({le
 function temporaryRoot(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-editor-changeset-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  fs.cpSync(contractsDirectory, path.join(root, 'packages/contracts'), {recursive: true});
+  stageContractsInto(root);
   stageDataInto(root);
   return root;
 }

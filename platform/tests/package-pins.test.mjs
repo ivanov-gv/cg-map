@@ -11,10 +11,17 @@ const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const corePackageName = '@ivanov-gv/map-core';
 const dataPackageName = '@ivanov-gv/map-data';
 const contractsPackageName = '@ivanov-gv/map-contracts';
-const contractsVersion = '0.1.0';
 const exactVersionPattern = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
 const readJSON = relativePath => JSON.parse(fileSystem.readFileSync(`${repositoryRoot}${relativePath}`));
 const lockedPackages = readJSON('package-lock.json').packages;
+
+// Returns the lock key for a workspace's installed package, preferring its local copy over the hoisted root copy.
+function lockedPackagePath(workspace, packageName) {
+  const rootLockPath = `node_modules/${packageName}`;
+  if (!workspace) return rootLockPath;
+  const workspaceLockPath = `${workspace}/node_modules/${packageName}`;
+  return lockedPackages[workspaceLockPath] ? workspaceLockPath : rootLockPath;
+}
 
 function assertRegistryPin(manifestPath, lockPath, packageName, section) {
   const pinnedVersion = readJSON(manifestPath)[section][packageName];
@@ -49,21 +56,22 @@ test('core in this repository can never satisfy an app pin', () => {
   assert.equal(readJSON('packages/map-core/package.json').version, '0.0.0-dev');
 });
 
-test('every consumer pins the exact published contracts release, never the local package', () => {
-  const consumers = [
-    'package.json',
-    'apps/web/package.json',
-    'apps/editor/package.json',
-    'apps/core-demo/package.json',
-    'packages/map-core/package.json',
-    'platform/package.json'
+test('every consumer pins its own exact published contracts release, never the local package', () => {
+  const consumerWorkspaces = [
+    '',
+    'apps/web',
+    'apps/editor',
+    'apps/core-demo',
+    'packages/map-core',
+    'platform'
   ];
-  for (const manifest of consumers) {
-    assertRegistryPin(manifest, `node_modules/${contractsPackageName}`, contractsPackageName, 'devDependencies');
-    assert.equal(
-      readJSON(manifest).devDependencies[contractsPackageName],
-      contractsVersion,
-      `${manifest} must pin ${contractsPackageName} ${contractsVersion}`
+  for (const workspace of consumerWorkspaces) {
+    const manifest = workspace ? `${workspace}/package.json` : 'package.json';
+    assertRegistryPin(
+      manifest,
+      lockedPackagePath(workspace, contractsPackageName),
+      contractsPackageName,
+      'devDependencies'
     );
   }
   assert.equal(readJSON('packages/contracts/package.json').version, '0.0.0-dev');

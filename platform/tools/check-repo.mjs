@@ -153,7 +153,6 @@ for (const file of integrationTestFiles) {
 // Consumers must resolve contracts through the pinned package; data and tests/ own the one HEAD exception.
 const CONTRACT_PATH_HELPER = 'tests/contracts-root.mjs';
 // Platform's planner, verifier, guard and their tests name repository contract paths as data, not as consumer reads.
-// The integration test stages the HEAD helper's folder into a disposable tree, so it also names that folder.
 const contractPathMetadata = new Set([
   'platform/tools/check-repo.mjs',
   'platform/tools/ci-plan.mjs',
@@ -162,8 +161,7 @@ const contractPathMetadata = new Set([
   'platform/tests/ci-plan.test.mjs',
   'platform/tests/makefiles.test.mjs',
   'platform/tests/package-pins.test.mjs',
-  'platform/tests/workflows.test.mjs',
-  'tests/integration/editor-changeset.test.mjs'
+  'platform/tests/workflows.test.mjs'
 ]);
 // Match the directory itself: any extension, interpolation or join style still reads unreleased contracts.
 const repositoryContractsPattern = new RegExp(

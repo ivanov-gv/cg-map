@@ -920,7 +920,7 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
 
 test('ci-publish publishes a map-contracts dev package when the plan selects contracts', () => {
   const raw = fs.readFileSync(path.join(workflowDir, 'ci-publish.yml'), 'utf8');
-  assert.match(raw, /env: &publish-package-env/);
+  assert.match(raw, /env: &data-package-env/);
   assert.equal((raw.match(/steps: &publish-package-steps/g) || []).length, 1, 'the publishing steps need one anchor');
   assert.equal(
     (raw.match(/steps: \*publish-package-steps/g) || []).length,

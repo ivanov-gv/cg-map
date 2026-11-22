@@ -189,7 +189,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    env: &publish-package-env
+    env: &data-package-env
       PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
       PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
       PACKAGE_DIRECTORY: source/data
@@ -225,7 +225,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    env: *publish-package-env
+    env: *data-package-env
     steps: *publish-package-steps
   # A release promotes what this publishes, and consumers pin that release. The steps are the data job's shared anchor.
   contracts-package:
