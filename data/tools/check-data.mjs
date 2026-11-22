@@ -410,9 +410,12 @@ const ROAD_NODE_KINDS = new Set([
   'mini_roundabout', 'turning_circle',
 ]);
 // Allowed restriction values from OSM turn restriction relations.
+// Base values documented by OSM; transport-specific restriction:* tags are not
+// extracted as the restriction value.
 const RESTRICTION_VALUES = new Set([
-  'no_left_turn', 'no_right_turn', 'no_u_turn',
-  'only_left_turn', 'only_right_turn', 'only_straight_on',
+  'no_left_turn', 'no_right_turn', 'no_u_turn', 'no_straight_on',
+  'only_left_turn', 'only_right_turn', 'only_u_turn', 'only_straight_on',
+  'no_entry', 'no_exit',
 ]);
 // Allowed pathClass values.
 const PATH_CLASS_VALUES = new Set(['main', 'trail']);
@@ -420,101 +423,123 @@ const PATH_CLASS_VALUES = new Set(['main', 'trail']);
 // Road nodes: points with OSM identity and a recognised highway kind.
 export function validateRoadNodes(data) {
   const count = validateCollection(data, {label: 'road-nodes.geojson', geometryTypes: ['Point']});
-  const ids = new Set();
-  for (const [i, f] of data.features.entries()) {
-    const name = `road-nodes.geojson feature ${i}`;
-    const p = f.properties;
-    requireValue(ROAD_NODE_KINDS.has(p.kind), `${name}: unknown road node kind: ${p.kind}`);
-    requireValue(/^node\/\d+$/.test(p.entityId), `${name}: invalid OSM node identity`);
-    requireValue(!ids.has(p.entityId), `${name}: duplicate entityId`);
-    ids.add(p.entityId);
+  const seenEntityIds = new Set();
+  for (const [index, feature] of data.features.entries()) {
+    const name = `road-nodes.geojson feature ${index}`;
+    const properties = feature.properties;
+    requireValue(ROAD_NODE_KINDS.has(properties.kind), `${name}: unknown road node kind: ${properties.kind}`);
+    requireValue(/^node\/\d+$/.test(properties.entityId), `${name}: invalid OSM node identity`);
+    requireValue(!seenEntityIds.has(properties.entityId), `${name}: duplicate entityId`);
+    seenEntityIds.add(properties.entityId);
   }
   requireValue(count > 0, 'Empty road nodes snapshot');
   return count;
+}
+
+function roadWayIds(roads) {
+  const wayIds = new Set();
+  for (const feature of roads.features) {
+    const match = feature.properties.entityId?.match(/^way\/(\d+)$/);
+    if (match) wayIds.add(Number(match[1]));
+  }
+  return wayIds;
+}
+
+function roadEndNodeIds(roads) {
+  const endNodeIds = new Set();
+  for (const feature of roads.features) {
+    const properties = feature.properties;
+    if (properties.startNode !== undefined) endNodeIds.add(properties.startNode);
+    if (properties.endNode !== undefined) endNodeIds.add(properties.endNode);
+  }
+  return endNodeIds;
+}
+
+function roadNodePointIds(roadNodes) {
+  const nodeIds = new Set();
+  for (const feature of roadNodes.features) {
+    const match = feature.properties.entityId?.match(/^node\/(\d+)$/);
+    if (match) nodeIds.add(Number(match[1]));
+  }
+  return nodeIds;
 }
 
 // Turn restrictions: structured JSON with OSM identity and from/to/via refs.
 export function validateTurnRestrictions(data, roads, roadNodes) {
   requireValue(data?.entitySchemaVersion === 1, 'turn-restrictions.json: missing entitySchemaVersion');
   requireValue(Array.isArray(data.restrictions), 'turn-restrictions.json: missing restrictions array');
-  // Build lookup sets from roads and road nodes
-  const roadWayIds = new Set();
-  const roadEndNodes = new Set();
-  for (const f of roads.features) {
-    const p = f.properties;
-    if (p.startNode !== undefined) roadEndNodes.add(p.startNode);
-    if (p.endNode !== undefined) roadEndNodes.add(p.endNode);
-    // Extract way ID from entityId like "way/12345"
-    const match = p.entityId?.match(/^way\/(\d+)$/);
-    if (match) roadWayIds.add(Number(match[1]));
-  }
-  const roadNodeIds = new Set();
-  for (const f of roadNodes.features) {
-    const match = f.properties.entityId?.match(/^node\/(\d+)$/);
-    if (match) roadNodeIds.add(Number(match[1]));
-  }
-  let outsideCount = 0;
-  for (const [i, r] of data.restrictions.entries()) {
-    const label = `restriction ${i} (${r.entityId})`;
-    requireValue(/^relation\/\d+$/.test(r.entityId), `${label}: invalid entityId`);
-    requireValue(Number.isSafeInteger(r.entityVersion) && r.entityVersion >= 1, `${label}: invalid entityVersion`);
-    requireValue(RESTRICTION_VALUES.has(r.restriction), `${label}: unknown restriction value: ${r.restriction}`);
-    requireValue(Number.isSafeInteger(r.from), `${label}: invalid from way ID`);
-    requireValue(Number.isSafeInteger(r.to), `${label}: invalid to way ID`);
-    // Check from/to exist in roads; report those pointing outside
-    if (!roadWayIds.has(r.from)) {
-      outsideCount++;
-    }
-    if (!roadWayIds.has(r.to)) {
-      outsideCount++;
-    }
-    // Check via nodes exist in road-nodes or as end nodes of roads
-    if (Array.isArray(r.viaNodes)) {
-      for (const nid of r.viaNodes) {
-        const found = roadNodeIds.has(nid) || roadEndNodes.has(nid);
-        if (!found) {
-          outsideCount++;
-        }
+  const wayIds = roadWayIds(roads);
+  const endNodeIds = roadEndNodeIds(roads);
+  const nodeIds = roadNodePointIds(roadNodes);
+  const allowedViaNodes = new Set([...nodeIds, ...endNodeIds]);
+
+  for (const [index, restriction] of data.restrictions.entries()) {
+    const label = `restriction ${index} (${restriction.entityId})`;
+    requireValue(/^relation\/\d+$/.test(restriction.entityId), `${label}: invalid entityId`);
+    requireValue(
+      Number.isSafeInteger(restriction.entityVersion) && restriction.entityVersion >= 1,
+      `${label}: invalid entityVersion`
+    );
+    requireValue(
+      RESTRICTION_VALUES.has(restriction.restriction),
+      `${label}: unknown restriction value: ${restriction.restriction}`
+    );
+    requireValue(Number.isSafeInteger(restriction.from), `${label}: invalid from way ID`);
+    requireValue(Number.isSafeInteger(restriction.to), `${label}: invalid to way ID`);
+    requireValue(
+      wayIds.has(restriction.from),
+      `${label}: from way ${restriction.from} not found in roads.geojson`
+    );
+    requireValue(
+      wayIds.has(restriction.to),
+      `${label}: to way ${restriction.to} not found in roads.geojson`
+    );
+    if (Array.isArray(restriction.viaNodes)) {
+      for (const viaNodeId of restriction.viaNodes) {
+        requireValue(
+          allowedViaNodes.has(viaNodeId),
+          `${label}: via node ${viaNodeId} not found in road-nodes.geojson or road end nodes`
+        );
       }
     }
-    if (Array.isArray(r.viaWays)) {
-      for (const wid of r.viaWays) {
-        if (!roadWayIds.has(wid)) {
-          outsideCount++;
-        }
+    if (Array.isArray(restriction.viaWays)) {
+      for (const viaWayId of restriction.viaWays) {
+        requireValue(
+          wayIds.has(viaWayId),
+          `${label}: via way ${viaWayId} not found in roads.geojson`
+        );
       }
     }
   }
-  return {count: data.restrictions.length, outsideCount};
+  return {count: data.restrictions.length};
 }
 
-// Validate road features: pathClass, startNode/endNode on detail roads, levels are integers.
+// Validate road features: pathClass, end nodes and levels.
 export function validateRoads(data) {
   const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString']});
-  for (const [i, f] of data.features.entries()) {
-    const name = `roads.geojson feature ${i}`;
-    const p = f.properties;
-    if (p.pathClass !== undefined) {
-      requireValue(PATH_CLASS_VALUES.has(p.pathClass), `${name}: invalid pathClass: ${p.pathClass}`);
+  for (const [index, feature] of data.features.entries()) {
+    const name = `roads.geojson feature ${index}`;
+    const properties = feature.properties;
+    if (properties.pathClass !== undefined) {
+      requireValue(PATH_CLASS_VALUES.has(properties.pathClass), `${name}: invalid pathClass: ${properties.pathClass}`);
     }
-    // Detail roads must have startNode/endNode
-    if (p.startNode !== undefined) {
-      requireValue(Number.isSafeInteger(p.startNode), `${name}: startNode must be an integer`);
+    const endNodeFields = [
+      ['startNode', 'startLevel'],
+      ['endNode', 'endLevel'],
+    ];
+    for (const [nodeField, levelField] of endNodeFields) {
+      const nodeValue = properties[nodeField];
+      const levelValue = properties[levelField];
+      if (nodeValue !== undefined) {
+        requireValue(Number.isSafeInteger(nodeValue), `${name}: ${nodeField} must be an integer`);
+      }
+      if (levelValue !== undefined) {
+        requireValue(Number.isInteger(levelValue), `${name}: ${levelField} must be an integer`);
+      }
+      const hasNode = nodeValue !== undefined;
+      const hasLevel = levelValue !== undefined;
+      requireValue(hasNode === hasLevel, `${name}: ${nodeField} and ${levelField} must appear together`);
     }
-    if (p.endNode !== undefined) {
-      requireValue(Number.isSafeInteger(p.endNode), `${name}: endNode must be an integer`);
-    }
-    // Levels must be integers when present
-    if (p.startLevel !== undefined) {
-      requireValue(Number.isInteger(p.startLevel), `${name}: startLevel must be an integer`);
-    }
-    if (p.endLevel !== undefined) {
-      requireValue(Number.isInteger(p.endLevel), `${name}: endLevel must be an integer`);
-    }
-    // startNode/endNode and startLevel/endLevel must appear together
-    const hasNodes = p.startNode !== undefined && p.endNode !== undefined;
-    const hasLevels = p.startLevel !== undefined && p.endLevel !== undefined;
-    requireValue(hasNodes === hasLevels, `${name}: startNode/endNode and startLevel/endLevel must appear together`);
   }
   requireValue(count > 0, 'Empty roads snapshot');
   return count;
@@ -570,10 +595,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
       const restrictionsPath = path.join(root, 'data/sources/turn-restrictions.json');
       if (fs.existsSync(restrictionsPath)) {
         const restrictionsData = JSON.parse(fs.readFileSync(restrictionsPath));
-        const restrictionResult = validateTurnRestrictions(restrictionsData, roadsData, roadNodesData);
-        if (restrictionResult.outsideCount > 0) {
-          console.log(`turn-restrictions.json: ${restrictionResult.outsideCount} restriction(s) reference nodes/ways outside the extract`);
-        }
+        validateTurnRestrictions(restrictionsData, roadsData, roadNodesData);
       }
     }
   }

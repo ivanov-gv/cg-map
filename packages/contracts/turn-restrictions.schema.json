@@ -46,11 +46,15 @@
             "no_left_turn",
             "no_right_turn",
             "no_u_turn",
+            "no_straight_on",
             "only_left_turn",
             "only_right_turn",
-            "only_straight_on"
+            "only_u_turn",
+            "only_straight_on",
+            "no_entry",
+            "no_exit"
           ],
-          "description": "OSM restriction tag value"
+          "description": "OSM restriction tag value (base values; transport-specific restriction:* tags are not extracted)"
         },
         "from": {
           "type": "integer",

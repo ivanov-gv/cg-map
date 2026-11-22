@@ -9,19 +9,22 @@ from .identity import osm_identity
 
 SOURCE_FILE = 'road-nodes.geojson'
 
-# Node tags that mark a road network feature worth recording.
-ROAD_NODE_TAGS = {
-    'highway': {
-        'traffic_signals', 'crossing', 'stop', 'give_way',
-        'mini_roundabout', 'turning_circle',
-    },
+# Highway values that mark a road network feature worth recording.
+ROAD_NODE_KINDS = {
+    'traffic_signals', 'crossing', 'stop', 'give_way',
+    'mini_roundabout', 'turning_circle',
 }
 
 
 def node_has_road_tag(node):
     """Check whether an OSM node carries a road-network tag."""
     highway = node.tags.get('highway', '')
-    return highway in ROAD_NODE_TAGS['highway']
+    return highway in ROAD_NODE_KINDS
+
+
+def road_node_sort_key(feature):
+    """Sort road nodes by their OSM entity identity."""
+    return feature['properties']['entityId']
 
 
 class RoadNodesLayer(Layer):
@@ -41,8 +44,10 @@ class RoadNodesLayer(Layer):
 
         properties = {
             'kind': node.tags.get('highway', ''),
-            'name': node.tags.get('name', ''),
         }
+        name = node.tags.get('name', '')
+        if name:
+            properties['name'] = name
         # Copy relevant OSM tags
         for key in ('ref', 'name:en', 'crossing', 'traffic_signals'):
             value = node.tags.get(key, '')
@@ -63,5 +68,5 @@ class RoadNodesLayer(Layer):
 
     def finish(self, options, state):
         """Sort nodes by OSM ID and return."""
-        self.features.sort(key=lambda f: f['properties']['entityId'])
+        self.features.sort(key=road_node_sort_key)
         return self.features

@@ -310,13 +310,27 @@ def write_layer_files(layers, sources_directory, filenames):
         ]
         first_result = owning_layers[0].features
         if isinstance(first_result, dict):
-            # Non-GeoJSON output (e.g., turn-restrictions.json)
+            # Non-GeoJSON structured output: one record per line, sorted keys.
             output_path = sources_directory / filename
-            text = json.dumps(first_result, indent=2, ensure_ascii=False) + '\n'
+            restrictions = sorted(
+                first_result.get('restrictions', []),
+                key=lambda restriction: restriction.get('entityId', '')
+            )
+            lines = [
+                json.dumps(
+                    restriction, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':')
+                )
+                for restriction in restrictions
+            ]
+            text = (
+                '{"entitySchemaVersion":1,"restrictions":[\n'
+                + ',\n'.join(lines)
+                + '\n]}\n'
+            )
             output_path.write_text(text, encoding='utf-8')
             size = output_path.stat().st_size
-            count = len(first_result.get('restrictions', []))
-            print(f'{filename} {count} restrictions bytes={size}')
+            print(f'{filename} {len(restrictions)} restrictions bytes={size}')
         else:
             # GeoJSON features from all layers sharing this filename
             features = [

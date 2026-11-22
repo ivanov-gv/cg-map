@@ -35,10 +35,7 @@ PAVED_SURFACES = {
     'cobblestone', 'unhewn_cobblestone', 'sett', 'paving_stones',
 }
 
-# Highway kinds that qualify as main walking routes when paved.
-MAIN_PATH_KINDS = {'footway', 'pedestrian', 'cycleway', 'path'}
-
-# Highway kinds that qualify as trails when unpaved.
+# Highway kinds that are trails when explicitly unpaved or marked.
 TRAIL_KINDS = {'path', 'track', 'bridleway'}
 
 
@@ -46,23 +43,38 @@ def classify_path(tags):
     """Return a path class for walking routes, or None.
 
     Rules (documented and tested):
-    - 'main': paved footway, pedestrian, cycleway, or paved path.
-      A way is paved when surface is in PAVED_SURFACES.
-    - 'trail': unpaved path, track, bridleway, or any way with sac_scale.
-
-    The function checks 'main' first, then 'trail'.
+    - 'main': footway unless its surface is explicitly unpaved; paved
+      pedestrian, cycleway, or path.
+    - 'trail': track, bridleway, any way with sac_scale, or path with an
+      explicitly unpaved surface.
+    - unclassified: path without surface and without sac_scale, or any other
+      highway kind. Unknown surface is not treated as unpaved.
     """
     kind = tags.get('highway', '')
     surface = tags.get('surface', '')
-    has_sac_scale = 'sac_scale' in tags
+    has_surface = surface != ''
     is_paved = surface in PAVED_SURFACES
+    is_explicitly_unpaved = has_surface and not is_paved
+    has_sac_scale = 'sac_scale' in tags
 
-    # Main routes: paved walking infrastructure
-    if kind in MAIN_PATH_KINDS and is_paved:
+    if kind == 'footway':
+        if is_explicitly_unpaved:
+            return None
         return 'main'
 
-    # Trails: unpaved paths or marked hiking routes
-    if kind in TRAIL_KINDS or has_sac_scale:
+    if kind in {'pedestrian', 'cycleway'}:
+        if is_paved:
+            return 'main'
+        return None
+
+    if kind == 'path':
+        if is_paved:
+            return 'main'
+        if has_sac_scale or is_explicitly_unpaved:
+            return 'trail'
+        return None
+
+    if kind in {'track', 'bridleway'} or has_sac_scale:
         return 'trail'
 
     return None
@@ -105,6 +117,34 @@ def collect_end_nodes(way):
     return nodes[0].ref, nodes[-1].ref
 
 
+def rounded_point(point):
+    """Round a coordinate pair to six decimals for endpoint comparison."""
+    return [round(point[0], 6), round(point[1], 6)]
+
+
+def apply_end_nodes_to_part(part_feature, original_start, original_end, end_nodes):
+    """Set start/end node and level only when the part keeps that OSM end.
+
+    A clipped part can start or end at the detail-box boundary instead of an
+    OSM node. Those synthetic ends carry no node identity or level.
+    """
+    part_geometry = part_feature['geometry']
+    part_coordinates = part_geometry['coordinates']
+    if part_geometry['type'] != 'LineString' or len(part_coordinates) < 2:
+        return
+
+    part_start = rounded_point(part_coordinates[0])
+    part_end = rounded_point(part_coordinates[-1])
+    start_node, end_node, start_level, end_level = end_nodes
+
+    if part_start == original_start:
+        part_feature['properties']['startNode'] = start_node
+        part_feature['properties']['startLevel'] = start_level
+    if part_end == original_end:
+        part_feature['properties']['endNode'] = end_node
+        part_feature['properties']['endLevel'] = end_level
+
+
 class RoadsLayer(Layer):
     """Write road lines with attributes, path class, and graph nodes."""
 
@@ -123,36 +163,33 @@ class RoadsLayer(Layer):
         if not (is_local or kind in MAJOR_KINDS):
             return
 
-        # Base properties
         properties = {
             'kind': kind,
             'name': way.tags.get('name', ''),
         }
-
-        # Copy OSM road attributes
         properties.update(collect_road_attributes(way.tags))
-
-        # Compute path class for walking routes
         path_class = classify_path(way.tags)
         if path_class:
             properties['pathClass'] = path_class
 
-        # Road graph: end nodes and levels (detail only)
-        if is_local:
-            start_node, end_node = collect_end_nodes(way)
-            if start_node is not None:
-                properties['startNode'] = start_node
-                properties['endNode'] = end_node
-                properties['startLevel'] = road_level(way.tags)
-                properties['endLevel'] = road_level(way.tags)
-
         identity = osm_identity('way', way.id, way.version)
         geometry = {'type': 'LineString', 'coordinates': coordinates}
         if is_local:
-            self.features.extend(clipped_features(
+            start_node, end_node = collect_end_nodes(way)
+            part_features = clipped_features(
                 geometry, options.detail_bbox, identity, properties,
                 DETAIL_SIMPLIFY_DEGREES
-            ))
+            )
+            if start_node is not None:
+                original_start = rounded_point(coordinates[0])
+                original_end = rounded_point(coordinates[-1])
+                level = road_level(way.tags)
+                end_nodes = (start_node, end_node, level, level)
+                for part_feature in part_features:
+                    apply_end_nodes_to_part(
+                        part_feature, original_start, original_end, end_nodes
+                    )
+            self.features.extend(part_features)
         else:
             self.features.extend(geometry_features(
                 geometry, identity, properties,

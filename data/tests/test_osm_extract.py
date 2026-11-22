@@ -352,6 +352,55 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(restriction['from'], 2003)
         self.assertEqual(restriction['to'], 2007)
         self.assertEqual(restriction['viaNodes'], [2032])
+        self.assertNotIn('relation/9101', by_id)
+        self.assertNotIn('relation/9102', by_id)
+        self.assertNotIn('relation/9103', by_id)
+
+    def test_clipped_road_omits_node_at_clip_boundary(self):
+        extract(self.first_root)
+        _, features = source_features(self.first_root, 'roads.geojson')
+        parts = [
+            feature for feature in features
+            if feature['properties']['entityId'] == 'way/3010'
+        ]
+        self.assertEqual(len(parts), 1)
+        properties = parts[0]['properties']
+        self.assertEqual(properties['startNode'], 7001)
+        self.assertEqual(properties['startLevel'], 0)
+        self.assertNotIn('endNode', properties)
+        self.assertNotIn('endLevel', properties)
+
+    def test_turn_restrictions_file_is_one_per_line_sorted(self):
+        extract(self.first_root)
+        restrictions_path = (
+            self.first_root / 'data/sources' / 'turn-restrictions.json'
+        )
+        lines = restrictions_path.read_text(encoding='utf-8').splitlines()
+        self.assertEqual(lines[0], '{"entitySchemaVersion":1,"restrictions":[')
+        self.assertEqual(lines[-1], ']}')
+        records = []
+        for line in lines[1:-1]:
+            encoded = line.removesuffix(',')
+            restriction = json.loads(encoded)
+            self.assertEqual(
+                encoded,
+                json.dumps(
+                    restriction, ensure_ascii=False, sort_keys=True,
+                    separators=(',', ':')
+                ),
+            )
+            records.append(restriction['entityId'])
+        self.assertEqual(records, sorted(records))
+
+    def test_road_nodes_omit_empty_name(self):
+        extract(self.first_root)
+        _, features = source_features(self.first_root, 'road-nodes.geojson')
+        by_id = {
+            feature['properties']['entityId']: feature['properties']
+            for feature in features
+        }
+        self.assertIn('node/6001', by_id)
+        self.assertNotIn('name', by_id['node/6001'])
 
     def test_coordinates_use_reviewed_precision(self):
         extract(self.first_root)
@@ -685,10 +734,20 @@ class PathClassTest(unittest.TestCase):
             'trail',
         )
 
-    def test_unpaved_footway_is_none(self):
-        # footway without surface is not classified
-        self.assertIsNone(
+    def test_footway_without_surface_is_main(self):
+        self.assertEqual(
             classify_path({'highway': 'footway'}),
+            'main',
+        )
+
+    def test_footway_with_explicitly_unpaved_surface_is_unclassified(self):
+        self.assertIsNone(
+            classify_path({'highway': 'footway', 'surface': 'gravel'}),
+        )
+
+    def test_path_without_surface_is_unclassified(self):
+        self.assertIsNone(
+            classify_path({'highway': 'path'}),
         )
 
     def test_residential_road_is_none(self):

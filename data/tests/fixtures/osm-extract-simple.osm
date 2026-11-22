@@ -231,6 +231,24 @@
     <tag k="leisure" v="park"/>
   </relation>
 
+  <!-- Road crossing the detail-box north edge: clipped end is not an OSM node -->
+  <node id="7001" version="1" lat="42.50" lon="19.25"/>
+  <node id="7002" version="1" lat="42.52" lon="19.25"/>
+  <way id="3010" version="1">
+    <nd ref="7001"/><nd ref="7002"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="North Crossing"/>
+  </way>
+
+  <!-- Highway outside detail area: restrictions touching it must be skipped -->
+  <node id="7101" version="1" lat="42.60" lon="19.25"/>
+  <node id="7102" version="1" lat="42.61" lon="19.25"/>
+  <way id="3020" version="1">
+    <nd ref="7101"/><nd ref="7102"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Outside Detail"/>
+  </way>
+
   <way id="4000" version="6">
     <nd ref="9001"/><nd ref="9002"/><nd ref="9003"/><nd ref="9004"/><nd ref="9001"/>
     <tag k="boundary" v="administrative"/>
@@ -294,5 +312,29 @@
     <member type="way" ref="2007" role="to"/>
     <tag k="type" v="restriction"/>
     <tag k="restriction" v="no_left_turn"/>
+  </relation>
+
+  <relation id="9101" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="3020" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_right_turn"/>
+  </relation>
+
+  <relation id="9102" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="way" ref="2007" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2015" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_left_turn"/>
+  </relation>
+
+  <relation id="9103" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2007" role="to"/>
+    <tag k="type" v="restriction"/>
   </relation>
 </osm>

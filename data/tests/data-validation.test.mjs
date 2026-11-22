@@ -511,13 +511,21 @@ test('road-nodes reject duplicate entityId', () => {
   assert.throws(() => validateRoadNodes(bad), /duplicate entityId/);
 });
 
-test('turn-restrictions validate structure and report outside refs', () => {
+test('turn-restrictions validate structure and refs resolve', () => {
   const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
   const restrictions = JSON.parse(fs.readFileSync('data/sources/turn-restrictions.json'));
   const result = validateTurnRestrictions(restrictions, roads, nodes);
   assert.ok(result.count > 0, 'turn-restrictions.json must not be empty');
-  assert.ok(Number.isInteger(result.outsideCount));
+});
+
+test('turn-restrictions fail on missing from/to/via refs', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const bad = {entitySchemaVersion: 1, restrictions: [
+    {entityId: 'relation/1', entityVersion: 1, restriction: 'no_left_turn', from: 999999999, to: 999999998}
+  ]};
+  assert.throws(() => validateTurnRestrictions(bad, roads, nodes), /not found in roads\.geojson/);
 });
 
 test('turn-restrictions reject invalid entityId format', () => {
@@ -536,6 +544,24 @@ test('turn-restrictions reject unknown restriction values', () => {
     {entityId: 'relation/1', entityVersion: 1, restriction: 'invalid_restriction', from: 1, to: 2}
   ]};
   assert.throws(() => validateTurnRestrictions(bad, roads, nodes), /unknown restriction value/);
+});
+
+test('turn-restrictions accept documented OSM restriction values', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const roadWayIds = roads.features
+    .map(feature => feature.properties.entityId)
+    .filter(id => /^way\/\d+$/.test(id))
+    .map(id => Number(id.split('/')[1]));
+  const from = roadWayIds[0];
+  const to = roadWayIds[1] ?? roadWayIds[0];
+  const accepted = {entitySchemaVersion: 1, restrictions: [
+    {entityId: 'relation/1', entityVersion: 1, restriction: 'no_entry', from, to},
+    {entityId: 'relation/2', entityVersion: 1, restriction: 'no_exit', from, to},
+    {entityId: 'relation/3', entityVersion: 1, restriction: 'only_u_turn', from, to},
+    {entityId: 'relation/4', entityVersion: 1, restriction: 'no_straight_on', from, to},
+  ]};
+  assert.doesNotThrow(() => validateTurnRestrictions(accepted, roads, nodes));
 });
 
 test('turn-restrictions validate entitySchemaVersion', () => {
