@@ -458,8 +458,7 @@ class OsmExtractTest(unittest.TestCase):
             'way/5003': ('meadow', 'landuse=meadow', True, 'Test Meadow'),
             'way/5004': ('meadow', 'landuse=meadow', True, ''),
             'way/5010': ('meadow', 'natural=grassland', True, ''),
-            'way/5011': ('woods', 'leisure=nature_reserve', None, 'Test Forest Park'),
-            'way/5012': ('park', 'leisure=park', None, ''),
+            'way/5012': ('grass', 'landuse=grass', None, ''),
             'way/5005': ('grass', 'leisure=common', True, 'Test Common'),
             'way/5006': ('scrub', 'natural=scrub', None, ''),
             'way/5007': ('sports', 'leisure=pitch', None, ''),
@@ -476,6 +475,17 @@ class OsmExtractTest(unittest.TestCase):
                 self.assertEqual(properties['name'], name)
                 self.assertEqual(properties['name:en'], '')
                 self.assertIsInstance(properties['entityVersion'], int)
+
+    def test_protected_areas_and_localities_are_not_land_cover(self):
+        extract(self.first_root)
+        land = features_by_entity_id(self.first_root, 'land.geojson')
+        for entity_id in ('way/5011', 'way/5013'):
+            with self.subTest(entity_id=entity_id, no_land_cover=True):
+                self.assertNotIn(entity_id, land)
+        grass = single_feature(land, 'way/5012')['properties']
+        self.assertEqual(grass['kind'], 'grass')
+        self.assertEqual(grass['osmTag'], 'landuse=grass')
+        self.assertNotIn('destination', grass)
 
     def test_water_kinds_names_and_waterway_line_tags(self):
         extract(self.first_root)

@@ -14,19 +14,17 @@ SOURCE_FILE = 'land.geojson'
 DETAIL_SIMPLIFY_DEGREES = 0.0001
 
 # The first matching tag wins, so a feature with several green tags gets one
-# truthful kind and keeps that tag as osmTag. Forest parks mapped as nature
-# reserves use the woods kind; place=locality is a mapped clearing.
+# truthful kind and keeps that tag as osmTag. A protected area or a place name
+# is not land cover: only an actual cover tag selects a feature.
 KIND_RULES = (
     (('leisure', 'park'), 'park'),
     (('leisure', 'garden'), 'garden'),
     (('natural', 'wood'), 'woods'),
     (('landuse', 'forest'), 'woods'),
-    (('leisure', 'nature_reserve'), 'woods'),
     (('landuse', 'meadow'), 'meadow'),
     (('natural', 'grassland'), 'meadow'),
     (('landuse', 'grass'), 'grass'),
     (('leisure', 'common'), 'grass'),
-    (('place', 'locality'), 'grass'),
     (('natural', 'scrub'), 'scrub'),
     (('leisure', 'pitch'), 'sports'),
     (('leisure', 'sports_centre'), 'sports'),
@@ -37,7 +35,7 @@ KIND_RULES = (
     (('amenity', 'grave_yard'), 'cemetery'),
     (('leisure', 'playground'), 'playground'),
 )
-CLEARING_TAGS = (('leisure', 'common'), ('place', 'locality'))
+CLEARING_TAGS = (('leisure', 'common'),)
 DESTINATION_KINDS = frozenset({'meadow', 'grass'})
 PLACE_MARKER_TAGS = (
     'place', 'amenity', 'tourism', 'historic', 'shop', 'leisure'

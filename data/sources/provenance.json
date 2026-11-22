@@ -74,9 +74,9 @@
       "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
     },
     "land.geojson": {
-      "bytes": 507915,
-      "features": 614,
-      "sha256": "331570b020b159af580c9a58b7c40cb3c27fbf454dd6afca585aaed2f9195fee"
+      "bytes": 506456,
+      "features": 612,
+      "sha256": "45d0fcddac48bd427734ce119e1ee694d9fe6e1aca324474a640ec5d77ca1560"
     },
     "road-nodes.geojson": {
       "bytes": 462217,

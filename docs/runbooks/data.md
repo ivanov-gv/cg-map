@@ -128,9 +128,10 @@ changing it. Browser tests also exercise the actual reviewed archive and imagery
 ## Green areas and water extraction
 
 The `land` layer publishes named kinds and the OSM tag that selected each one. When an object carries several candidate
-tags, the first rule in `data/tools/osm_extract/land.py` wins. A meadow or grass area gets `destination: true` when it
-is named, is a mapped clearing, or contains a named place, POI or peak node in the detail box. Green multipolygons keep
-their holes.
+tags, the first rule in `data/tools/osm_extract/land.py` wins. Only a land-cover tag creates a feature: a protected-area
+boundary or `place=locality` alone is not green cover. A meadow or grass area gets `destination: true` when it is named,
+is mapped as a common (`leisure=common`), or contains a named place, POI or peak node in the detail box. Green
+multipolygons keep their holes.
 
 The `water` layer publishes lake, river, reservoir, pond, basin and generic water areas. River and canal lines stay
 countrywide; stream, ditch and drain lines are clipped to the detail box and gain `entityPart` when clipped. Waterway
