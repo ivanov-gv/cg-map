@@ -7,11 +7,11 @@ from pathlib import Path
 # Add the tools directory to the path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'tools'))
 from enrich_stops import (
-    side_of_road,
-    find_nearest_road_side,
     build_lines_index,
     distance_squared_metres,
-    MAX_ROAD_DISTANCE_METRES,
+    enrich_stops,
+    find_nearest_road_side,
+    side_of_road,
 )
 
 # Reference latitude for tests — Podgorica is ~42.4°N
@@ -176,6 +176,52 @@ class TestLinesIndex(unittest.TestCase):
         network = {'patterns': []}
         index = build_lines_index(network)
         self.assertEqual(index, {})
+
+
+class TestEnrichStopsStaleProperties(unittest.TestCase):
+    """Test that rerunning enrichment removes stale derived properties."""
+
+    def test_rerun_removes_stale_lines_and_side(self):
+        stops_data = {
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'id': 'stop-1',
+                'geometry': {'type': 'Point', 'coordinates': [19.26, 42.44]},
+                'properties': {
+                    'name': 'Stop 1',
+                    'lines': ['1', '2'],
+                    'side': 'left',
+                },
+            }],
+        }
+        network = {'patterns': []}
+        roads = []
+
+        enrich_stops(stops_data, network, roads)
+
+        properties = stops_data['features'][0]['properties']
+        self.assertNotIn('lines', properties)
+        self.assertNotIn('side', properties)
+
+
+class TestNearestRoadSideAmbiguity(unittest.TestCase):
+    """Test side is omitted when the nearest road is ambiguous."""
+
+    def test_nearest_road_on_line_omits_side(self):
+        roads = [{
+            'geometry': {
+                'type': 'LineString',
+                'coordinates': [[19.0, 42.0001], [19.1, 42.0001]],
+            }
+        }, {
+            'geometry': {
+                'type': 'LineString',
+                'coordinates': [[19.0, 42.0], [19.1, 42.0]],
+            }
+        }]
+        stop = [19.05, 42.0]
+        self.assertIsNone(find_nearest_road_side(stop, roads))
 
 
 if __name__ == '__main__':

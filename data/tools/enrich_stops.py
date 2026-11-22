@@ -27,9 +27,12 @@ MAX_ROAD_DISTANCE_METRES = 30
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--stops', default=DEFAULT_STOPS, help='Path to transport-stops.geojson')
-    parser.add_argument('--network', default=DEFAULT_NETWORK, help='Path to transit-network.json')
-    parser.add_argument('--roads', default=DEFAULT_ROADS, help='Path to roads.geojson')
+    parser.add_argument('--stops', type=Path, default=DEFAULT_STOPS,
+                        help='Path to transport-stops.geojson')
+    parser.add_argument('--network', type=Path, default=DEFAULT_NETWORK,
+                        help='Path to transit-network.json')
+    parser.add_argument('--roads', type=Path, default=DEFAULT_ROADS,
+                        help='Path to roads.geojson')
     return parser.parse_args()
 
 
@@ -192,9 +195,7 @@ def find_nearest_road_side(stop_point, roads):
             dist = closest_distance_to_road_metres(stop_point, line_coords, reference_lat)
             if dist < best_dist:
                 best_dist = dist
-                side = side_of_road(stop_point, line_coords, reference_lat)
-                if side is not None:
-                    best_side = side
+                best_side = side_of_road(stop_point, line_coords, reference_lat)
 
     if best_dist <= max_squared_metres and best_side is not None:
         return best_side
@@ -220,12 +221,12 @@ def enrich_stops(stops_data, network, roads):
         properties = feature['properties']
         coordinates = feature['geometry']['coordinates']
 
-        # Add lines from transit network
+        properties.pop('lines', None)
         if stop_id in lines_index:
             properties['lines'] = lines_index[stop_id]
             stops_with_lines += 1
 
-        # Compute side of road
+        properties.pop('side', None)
         side = find_nearest_road_side(coordinates, roads)
         if side is not None:
             properties['side'] = side

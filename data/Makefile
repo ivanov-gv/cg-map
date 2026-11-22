@@ -28,10 +28,9 @@ apply-changeset:
 	cd $(ROOT) && node data/tools/apply-changeset.mjs $(abspath $(CHANGESET)) --contracts-directory $(abspath $(ROOT)/packages/contracts)
 
 # Regenerate transport-stops and transit-routes from current sources.
-# Requires Python venv with osmium: ~/.cache/cg-map/venv/bin/python.
 transit-routes:
-	cd $(ROOT) && ~/.cache/cg-map/venv/bin/python data/tools/enrich_stops.py
-	cd $(ROOT) && ~/.cache/cg-map/venv/bin/python data/tools/build_transit_routes.py
+	cd $(ROOT) && $(PYTHON) data/tools/enrich_stops.py
+	cd $(ROOT) && $(PYTHON) data/tools/build_transit_routes.py
 
 test:
 	cd $(ROOT) && node --test data/tests/*.test.mjs

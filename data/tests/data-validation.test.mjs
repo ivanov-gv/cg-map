@@ -956,3 +956,64 @@ test('stop-routes cross-check catches mismatched lines', () => {
     assert.throws(() => validateStopsAndRoutes(stopMissingLine, routes), /missing line/);
   }
 });
+
+test('stop-routes cross-check requires both city directions when source has them', () => {
+  const stops = JSON.parse(fs.readFileSync('data/sources/transport-stops.geojson'));
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  const network = JSON.parse(fs.readFileSync('data/sources/transit-network.json'));
+  const routeWithBothDirections = routes.routes.find(route =>
+    !route.directions.some(direction => direction.entityId) &&
+    (network.patterns || []).some(pattern => pattern.route === route.number && (pattern.sampleTrip || '').includes('_AB_')) &&
+    (network.patterns || []).some(pattern => pattern.route === route.number && (pattern.sampleTrip || '').includes('_BA_'))
+  );
+  assert.ok(routeWithBothDirections, 'expected a city route with both AB and BA source patterns');
+  const broken = structuredClone(routes);
+  const target = broken.routes.find(route => route.number === routeWithBothDirections.number);
+  const removedDirection = target.directions[1];
+  target.directions = [target.directions[0]];
+  const remainingStopIds = new Set(target.directions.flatMap(direction =>
+    direction.stops.map(stop => typeof stop === 'string' ? stop : stop.id)
+  ));
+  const adjustedStops = structuredClone(stops);
+  for (const stop of removedDirection.stops) {
+    const stopId = typeof stop === 'string' ? stop : stop.id;
+    if (remainingStopIds.has(stopId)) continue;
+    const feature = adjustedStops.features.find(entry => entry.id === stopId);
+    if (feature?.properties?.lines) {
+      feature.properties.lines = feature.properties.lines.filter(line => line !== target.number);
+      if (feature.properties.lines.length === 0) delete feature.properties.lines;
+    }
+  }
+  assert.throws(() => validateStopsAndRoutes(adjustedStops, broken, network), /both directions present in source/);
+});
+
+test('route number uniqueness allows same number in different source scopes', () => {
+  const routes = JSON.parse(fs.readFileSync('data/sources/transit-routes.json'));
+  const duplicateAllowed = {
+    version: 1,
+    retrievedAt: routes.retrievedAt,
+    source: routes.source,
+    routes: [
+      {
+        number: '1',
+        name: 'City 1',
+        network: 'bus',
+        directions: [{headsign: 'A', stops: ['a', 'b']}],
+      },
+      {
+        number: '1',
+        name: 'OSM 1',
+        network: 'bus',
+        directions: [{
+          entityId: 'relation/999',
+          entityVersion: 1,
+          headsign: 'A',
+          stops: [{id: 'node/1', name: 'A', coordinates: [19.0, 42.0]}, {id: 'node/2', name: 'B', coordinates: [19.1, 42.1]}],
+          fromMunicipality: 'ME-08',
+          toMunicipality: 'ME-08',
+        }],
+      },
+    ],
+  };
+  assert.equal(validateTransitRoutes(duplicateAllowed), 2);
+});

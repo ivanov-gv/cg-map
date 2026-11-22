@@ -385,11 +385,19 @@ export function validateTransitRoutes(data) {
   const routeNumbers = new Set();
   for (const route of data.routes) {
     const routeLabel = `route ${route.number || route.name || '(unknown)'}`;
-    // number is optional — omitted when OSM has no ref
     if (route.number !== undefined) {
       requireValue(typeof route.number === 'string' && route.number.length > 0, `${routeLabel}: invalid number`);
-      requireValue(!routeNumbers.has(route.number), `${routeLabel}: duplicate route number`);
-      routeNumbers.add(route.number);
+      const hasOsmDirection = route.directions.some(direction => typeof direction.entityId === 'string');
+      const source = hasOsmDirection ? 'osm' : 'epodgorica';
+      const municipalityScope = route.directions
+        .map(direction => direction.fromMunicipality || direction.toMunicipality || '')
+        .sort()[0] || source;
+      const identity = hasOsmDirection
+        ? route.directions.map(direction => direction.entityId).filter(Boolean).sort().join(',')
+        : 'city';
+      const uniquenessKey = `${route.network}|${route.number}|${source}|${municipalityScope}|${identity}`;
+      requireValue(!routeNumbers.has(uniquenessKey), `${routeLabel}: duplicate route number`);
+      routeNumbers.add(uniquenessKey);
     }
     if (route.name !== undefined) {
       requireValue(typeof route.name === 'string' && route.name.length > 0, `${routeLabel}: name must be a nonempty string`);
@@ -428,57 +436,76 @@ export function validateTransitRoutes(data) {
   return data.routes.length;
 }
 
-// Cross-validate that stop lines match routes and route stops exist in the stops file.
-export function validateStopsAndRoutes(stopsData, routesData) {
-  const stopIds = new Set();
-  for (const feature of stopsData.features) {
-    stopIds.add(feature.id);
+function collectRouteStopIds(direction) {
+  const stopIds = [];
+  for (const stop of direction.stops) {
+    stopIds.push(typeof stop === 'string' ? stop : stop.id);
   }
+  for (const variant of direction.variants || []) {
+    for (const stop of variant.stops) {
+      stopIds.push(typeof stop === 'string' ? stop : stop.id);
+    }
+  }
+  return stopIds;
+}
 
+// Cross-validate that stop lines match routes and route stops exist in the stops file.
+export function validateStopsAndRoutes(stopsData, routesData, transitNetwork = null) {
+  const stopIds = new Set(stopsData.features.map(feature => feature.id));
   const expectedLines = {};
+
   for (const route of routesData.routes) {
     const routeNumber = route.number;
+    if (!routeNumber) continue;
     for (const direction of route.directions) {
-      // Check main direction stops
-      for (const stop of direction.stops) {
-        const stopId = typeof stop === 'string' ? stop : stop.id;
+      for (const stopId of collectRouteStopIds(direction)) {
         if (stopId.startsWith('node/')) continue;
-        if (routeNumber) {
-          expectedLines[stopId] = expectedLines[stopId] || new Set();
-          expectedLines[stopId].add(routeNumber);
-        }
-      }
-      // Also check variant stops
-      for (const variant of direction.variants || []) {
-        for (const stop of variant.stops) {
-          const stopId = typeof stop === 'string' ? stop : stop.id;
-          if (stopId.startsWith('node/')) continue;
-          if (routeNumber) {
-            expectedLines[stopId] = expectedLines[stopId] || new Set();
-            expectedLines[stopId].add(routeNumber);
-          }
-        }
+        requireValue(stopIds.has(stopId), `Route references stop ${stopId} not in transport-stops.geojson`);
+        expectedLines[stopId] = expectedLines[stopId] || new Set();
+        expectedLines[stopId].add(routeNumber);
       }
     }
   }
 
-  for (const stopId of Object.keys(expectedLines)) {
-    requireValue(stopIds.has(stopId), `Route references stop ${stopId} not in transport-stops.geojson`);
-  }
-
   for (const feature of stopsData.features) {
     const stopId = feature.id;
-    const stopLines = feature.properties?.lines;
-    if (!stopLines) continue;
-    const expected = expectedLines[stopId];
-    if (!expected) continue;
-    const actual = new Set(stopLines);
+    const actualLines = Array.isArray(feature.properties?.lines) ? feature.properties.lines : [];
+    const expected = expectedLines[stopId] || new Set();
+    const actual = new Set(actualLines);
     for (const line of expected) {
       requireValue(actual.has(line), `Stop ${stopId} missing line ${line} from routes`);
     }
     for (const line of actual) {
       requireValue(expected.has(line), `Stop ${stopId} has line ${line} not in routes`);
     }
+  }
+
+  if (transitNetwork) {
+    validateCityRouteDirections(routesData, transitNetwork);
+  }
+}
+
+function validateCityRouteDirections(routesData, transitNetwork) {
+  const patternsByRoute = new Map();
+  for (const pattern of transitNetwork.patterns || []) {
+    const routeNumber = pattern.route;
+    if (!patternsByRoute.has(routeNumber)) {
+      patternsByRoute.set(routeNumber, new Set());
+    }
+    const sampleTrip = pattern.sampleTrip || '';
+    if (sampleTrip.includes('_AB_')) patternsByRoute.get(routeNumber).add('AB');
+    if (sampleTrip.includes('_BA_')) patternsByRoute.get(routeNumber).add('BA');
+  }
+
+  for (const route of routesData.routes) {
+    const hasOsmDirection = route.directions.some(direction => typeof direction.entityId === 'string');
+    if (hasOsmDirection) continue;
+    const routeNumber = route.number;
+    if (!routeNumber) continue;
+    const expectedDirections = patternsByRoute.get(routeNumber);
+    if (!expectedDirections || expectedDirections.size < 2) continue;
+    requireValue(route.directions.length >= 2,
+      `route ${routeNumber}: both directions present in source but missing in transit-routes.json`);
   }
 }
 function insideRing(point, ring) {

@@ -35,12 +35,12 @@ carry optional `lines` (sorted route numbers serving the stop), `side` (`left` o
 browser acceptance verifies selection and offline rendering.
 
 `transit-routes.schema.json` defines the published bus route network: version, retrieval time, source, and an array of
-routes. Each route has a number, name, network type (`bus` for city lines, `intercity` for OSM intercity routes),
-optional colour (hex format), and ordered directions with stop IDs. City routes use ePodgorica stop IDs; intercity
-routes use OSM node IDs (`node/N`). Each OSM direction records `fromMunicipality` and `toMunicipality` (ISO3166-2 codes
-like `ME-16`) so the consumer can see which Montenegrin municipality each end serves. The producer validates that city
-route stops exist in the stops file and that stop `lines` match the routes. Intercity routes carry OSM relation identity
-and version.
+routes. Each route has an optional number and optional name, a network type (`bus` for city lines, `intercity` for OSM
+intercity routes), optional colour (hex format), and ordered directions with stop IDs. City routes use ePodgorica stop
+IDs; intercity routes use OSM node IDs (`node/N`). Each OSM direction records `fromMunicipality` and `toMunicipality`
+(ISO3166-2 codes like `ME-16`) so the consumer can see which Montenegrin municipality each end serves. The producer
+validates that city route stops exist in the stops file and that stop `lines` match the routes. Intercity routes carry
+OSM relation identity and version.
 
 `transit-network.schema.json` describes the published version-1 representative bus network: source date, a stop-ID
 dictionary (names and WGS84 coordinates), and forward ordered stop IDs with equally sized monotonic relative seconds per
