@@ -5,7 +5,9 @@ import path from 'node:path';
 import {PMTiles} from 'pmtiles';
 import {VectorTile} from '@mapbox/vector-tile';
 import Pbf from 'pbf';
-import {MAX_TILE_ZOOM, TILE_LAYERS, tileLayerMetadata} from '../../data/tools/tile-layers.mjs';
+import {dataToolURL} from '../data-root.mjs';
+
+const {MAX_TILE_ZOOM, TILE_LAYERS, tileLayerMetadata} = await import(dataToolURL('tile-layers.mjs'));
 
 const webDirectory = path.resolve('dist/web');
 const manifest = JSON.parse(fs.readFileSync(path.join(webDirectory, 'data/manifest.json'), 'utf8'));

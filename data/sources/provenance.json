@@ -275,7 +275,7 @@
   "relief": {
     "buildParameters": {
       "canyonRimJoinGapMetres": 60,
-      "canyonRimMinimumBankRiseMetres": 8,
+      "canyonRimMinimumBankRiseMetres": 8.0,
       "canyonRimMinimumLengthMetres": 100,
       "canyonRimSearchDistanceMetres": 60,
       "canyonRimSearchStepMetres": 10,
@@ -304,7 +304,7 @@
       ],
       "minimumAreaSquareMetres": 2500,
       "ridgeMinimumLengthMetres": 100,
-      "ridgeSimplificationToleranceDegrees": 0.00001,
+      "ridgeSimplificationToleranceDegrees": 1e-05,
       "summitLinkDistanceMetres": 50
     },
     "detailBounds": [
