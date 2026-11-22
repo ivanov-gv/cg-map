@@ -1130,10 +1130,6 @@ class EndNodePreservationTest(unittest.TestCase):
                              'way/2007 endNode should be OSM node 2092')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class StandalonePlacesTest(unittest.TestCase):
     """Test standalone point extraction and fact collection for #327."""
 
@@ -1248,7 +1244,6 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertFalse(is_standalone_kind({'amenity': 'cafe'}))
         self.assertFalse(is_standalone_kind({'shop': 'clothes'}))
         self.assertFalse(is_standalone_kind({'tourism': 'hotel'}))
-
 
     def test_collect_facts_copies_standard_tags(self):
         tags = {
@@ -1401,3 +1396,7 @@ class StandalonePlacesTest(unittest.TestCase):
         c_props = church.get('properties', {})
         self.assertEqual(c_props.get('website'), 'https://example.com')
         self.assertEqual(c_props.get('email'), 'info@example.com')
+
+
+if __name__ == '__main__':
+    unittest.main()
