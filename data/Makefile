@@ -16,7 +16,7 @@ build-data:
 # Applies a reviewed editor export to data/sources: make -C data apply-changeset CHANGESET=<absolute path>. Never commits.
 apply-changeset:
 	$(if $(CHANGESET),,$(error Set CHANGESET to the absolute path of a changeset file))
-	cd $(ROOT) && node data/tools/apply-changeset.mjs $(abspath $(CHANGESET))
+	cd $(ROOT) && node data/tools/apply-changeset.mjs $(abspath $(CHANGESET)) --contracts-directory $(abspath $(ROOT)/packages/contracts)
 
 test:
 	cd $(ROOT) && node --test data/tests/*.test.mjs

@@ -5,23 +5,26 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {dataToolURL, stageDataInto, stagedSourcePath} from '../data-root.mjs';
 import {buildChangeset, importChangeset, materializedLayer} from '../../apps/editor/src/changeset.js';
 import {labelJoinProblems} from '../../apps/editor/src/cross-file-checks.js';
 import {EditSession} from '../../apps/editor/src/edit-session.js';
 import {translateGeometry} from '../../apps/editor/src/geometry-editing.js';
 import {featureProblem} from '../../apps/editor/src/layer-rules.js';
-import {applyChangeset} from '../../data/tools/apply-changeset.mjs';
+
+const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 
 // The contract between the editor and the importer, end to end: whatever the editor exports, the data-owned
 // importer must accept, and the result must equal what the editor showed.
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+const contractsDirectory = path.join(repositoryRoot, 'packages/contracts');
 const envelope = {
   id: 'integration-changeset',
   createdAt: '2026-11-06T10:00:00.000Z',
   author: 'Integration Test',
   reason: 'Editor and importer agree'
 };
-const readContract = filename => JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'packages/contracts', filename)));
+const readContract = filename => JSON.parse(fs.readFileSync(path.join(contractsDirectory, filename)));
 const rules = readContract('editor-layers.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));
 
@@ -29,19 +32,19 @@ const levels = new Set(readContract('place-visibility.json').levels.map(({level}
 function temporaryRoot(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-editor-changeset-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  for (const directory of ['data/sources', 'data/artifacts', 'packages/contracts']) {
+  for (const directory of ['packages/contracts']) {
     fs.cpSync(path.join(repositoryRoot, directory), path.join(root, directory), {recursive: true});
   }
+  stageDataInto(root);
   return root;
 }
 
-const sourcePath = (root, filename) => path.join(root, 'data/sources', filename);
-const readSource = (root, filename) => JSON.parse(fs.readFileSync(sourcePath(root, filename)));
+const readSource = (root, filename) => JSON.parse(fs.readFileSync(stagedSourcePath(root, filename)));
 
 // What the browser holds after verifying the bundle.
 function loadSources(root, filenames) {
   const entries = filenames.map(filename => {
-    const bytes = fs.readFileSync(sourcePath(root, filename));
+    const bytes = fs.readFileSync(stagedSourcePath(root, filename));
     const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
     return [filename, {metadata: {filename, sha256}, collection: JSON.parse(bytes)}];
   });
@@ -58,7 +61,7 @@ function recordValidEdit(session, filename, key, feature) {
 // Exports through a JSON round trip, because that is the only way a changeset leaves the browser.
 async function exportAndApply(session, sources, root) {
   const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope)));
-  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt})};
+  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt, contractsDirectory})};
 }
 
 const indexOfFirst = (features, isWanted) => features.findIndex(isWanted);
@@ -98,7 +101,7 @@ test('POI details, level, position, creation and deletion survive the importer u
   assert.equal(written.features[0].properties.name, 'Renamed by the editor');
   assert.equal(written.features.at(-1).properties.id, localId);
   assert.deepEqual(written.features, expected.features);
-  const policy = JSON.parse(fs.readFileSync(sourcePath(root, 'place-visibility-policy.json')));
+  const policy = JSON.parse(fs.readFileSync(stagedSourcePath(root, 'place-visibility-policy.json')));
   assert.ok(
     policy.overrides.some(({id}) => id === promoted.properties.id),
     'a level edit becomes a policy override'
@@ -207,7 +210,7 @@ test('the importer refuses a footprint move that strands its label, as the edito
   const moved = {...footprint, geometry: translateGeometry(footprint.geometry, 0.01, 0)};
   recordValidEdit(session, 'buildings.geojson', String(footprintIndex), moved);
   assert.equal(labelJoinProblems(session).length, 1);
-  const originalBytes = fs.readFileSync(sourcePath(root, 'buildings.geojson'));
+  const originalBytes = fs.readFileSync(stagedSourcePath(root, 'buildings.geojson'));
   await assert.rejects(exportAndApply(session, sources, root), /Building label outside its polygon/);
-  assert.deepEqual(fs.readFileSync(sourcePath(root, 'buildings.geojson')), originalBytes);
+  assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'buildings.geojson')), originalBytes);
 });

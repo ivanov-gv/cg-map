@@ -4,11 +4,14 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {assertOfflineModulesIncluded} from './offline-inventory.js';
+import {resolveDataRoot} from './data-root.mjs';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const outputDirectory = path.join(repositoryRoot, 'dist/web');
 const isCheck = process.argv.includes('--check');
+// The manifest describes the data the build used. Test targets pin this root to the same package as the build.
+const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
 const provenance = JSON.parse(
-  fileSystem.readFileSync(path.join(repositoryRoot, 'data/sources/provenance.json'), 'utf8')
+  fileSystem.readFileSync(path.join(dataRoot, 'sources/provenance.json'), 'utf8')
 );
 const webPackage = JSON.parse(
   fileSystem.readFileSync(path.join(repositoryRoot, 'apps/web/package.json'), 'utf8')

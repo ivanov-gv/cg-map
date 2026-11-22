@@ -5,12 +5,19 @@ import {fileURLToPath} from 'node:url';
 import {entranceBearing} from './building-entrances.mjs';
 import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
+import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const contract=JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/places.schema.json')));
-const categories=new Set(contract.properties.properties.properties.category.enum);
-const visibilityLevels=new Set(JSON.parse(fs.readFileSync(path.join(rootDirectory,'packages/contracts/place-visibility.json'))).levels.map(entry=>entry.level));
 
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
+
+function placeRules(contractsDirectory) {
+  const placeSchema = readContract(contractsDirectory, 'places.schema.json');
+  const visibilityConfig = readContract(contractsDirectory, 'place-visibility.json');
+  return {
+    categories: new Set(placeSchema.properties.properties.properties.category.enum),
+    visibilityLevels: new Set(visibilityConfig.levels.map(entry => entry.level))
+  };
+}
 function position(point, label) {
   requireValue(Array.isArray(point) && point.length >= 2 && point.every(Number.isFinite), `${label}: invalid position`);
   requireValue(Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 90, `${label}: coordinates must be WGS84 longitude, latitude`);
@@ -32,9 +39,16 @@ function geometry(g, label) {
     default: throw new Error(`${label}: unsupported geometry ${g.type}`);
   }
 }
-export function validateCollection(data, {places = false, label = 'GeoJSON', geometryTypes, requireKind = false} = {}) {
+export function validateCollection(data, {
+  places = false,
+  label = 'GeoJSON',
+  geometryTypes,
+  requireKind = false,
+  contractsDirectory
+} = {}) {
   requireValue(data?.type === 'FeatureCollection' && Array.isArray(data.features), `${label}: expected FeatureCollection`);
-  validateSourceEntities(data, {label});
+  validateSourceEntities(data, {label, contractsDirectory});
+  const rules = places ? placeRules(contractsDirectory) : null;
   const ids = new Set();
   for (const [i, f] of data.features.entries()) {
     const name = `${label} feature ${i}`;
@@ -48,14 +62,14 @@ export function validateCollection(data, {places = false, label = 'GeoJSON', geo
       requireValue(typeof p.id === 'string' && p.id.length > 0 && !ids.has(p.id), `${name}: missing or duplicate place id`);
       ids.add(p.id);
       requireValue(typeof p.name === 'string' && p.name.trim().length > 0, `${name}: missing place name`);
-      requireValue(categories.has(p.category), `${name}: unknown category`);
-      requireValue(visibilityLevels.has(p.visibilityLevel), `${name}: missing or unsupported visibilityLevel`);
+      requireValue(rules.categories.has(p.category), `${name}: unknown category`);
+      requireValue(rules.visibilityLevels.has(p.visibilityLevel), `${name}: missing or unsupported visibilityLevel`);
     }
   }
   return data.features.length;
 }
-export function validateStops(data) {
-  const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point']});
+export function validateStops(data, {contractsDirectory} = {}) {
+  const count = validateCollection(data, {label: 'transport stops', geometryTypes: ['Point'], contractsDirectory});
   const ids = new Set();
   for (const f of data.features) {
     const {stopId, name} = f.properties;
@@ -108,11 +122,13 @@ function onRing(point, ring) {
 
 // A placeholder such as "b.b." records a missing number, never a literal identifier. The list is shared with the editor
 // through the contract.
-const editingRules = JSON.parse(fs.readFileSync(path.join(rootDirectory, 'packages/contracts/editor-layers.json')));
-const houseNumberRule = editingRules.layers['building-labels.geojson'].properties['addr:housenumber'];
-function noNumber(value) {
-  const ignoredCharacters = new RegExp(houseNumberRule.ignoredCharactersPattern, 'g');
-  return houseNumberRule.forbiddenValues.includes(value.toLowerCase().replace(ignoredCharacters, ''));
+function houseNumberRule(contractsDirectory) {
+  const editingRules = readContract(contractsDirectory, 'editor-layers.json');
+  return editingRules.layers['building-labels.geojson'].properties['addr:housenumber'];
+}
+function noNumber(value, rule) {
+  const ignoredCharacters = new RegExp(rule.ignoredCharactersPattern, 'g');
+  return rule.forbiddenValues.includes(value.toLowerCase().replace(ignoredCharacters, ''));
 }
 
 function addressText(value) {
@@ -121,7 +137,7 @@ function addressText(value) {
 }
 
 // Only unambiguous, sourced entrance points on a footprint wall may be published.
-function validateEntrances(properties, polygon, sourceIDs) {
+function validateEntrances(properties, polygon, sourceIDs, houseNumber) {
   if (properties.entrances === undefined) return;
   const maximumEntrances = 100;
   requireValue(Array.isArray(properties.entrances) && properties.entrances.length <= maximumEntrances, 'Invalid building entrances');
@@ -141,7 +157,7 @@ function validateEntrances(properties, polygon, sourceIDs) {
     for (const field of ['number', 'ref', 'lamela', 'street']) {
       const value = entrance[field];
       if (value === undefined) continue;
-      requireValue(addressText(value) && (field !== 'number' || !noNumber(value)), `Invalid entrance ${field}`);
+      requireValue(addressText(value) && (field !== 'number' || !noNumber(value, houseNumber)), `Invalid entrance ${field}`);
     }
     const isBoundary = polygon.coordinates.some(ring => onRing(entrance.coordinates, ring));
     requireValue(isBoundary, 'Entrance must lie on a building wall');
@@ -149,8 +165,14 @@ function validateEntrances(properties, polygon, sourceIDs) {
 }
 
 // Labels retain reviewed source identities and interior anchors; entrance points must be on a wall.
-export function validateBuildingLabels(data, buildings) {
-  const count = validateCollection(data, {label: 'building labels', geometryTypes: ['Point'], requireKind: true});
+export function validateBuildingLabels(data, buildings, {contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label: 'building labels',
+    geometryTypes: ['Point'],
+    requireKind: true,
+    contractsDirectory
+  });
+  const houseNumber = houseNumberRule(contractsDirectory);
   const sourceIDs = new Set();
   const footprints = new Set();
   for (const feature of data.features) {
@@ -163,7 +185,7 @@ export function validateBuildingLabels(data, buildings) {
       const value = properties[field];
       if (value === undefined) continue;
       const isNumber = ['addr:housenumber', 'building_number'].includes(field);
-      requireValue(addressText(value) && (!isNumber || !noNumber(value)), `Invalid building ${field}`);
+      requireValue(addressText(value) && (!isNumber || !noNumber(value, houseNumber)), `Invalid building ${field}`);
     }
     const hasUniqueSource = typeof feature.id === 'string' && /^way\/\d+$/.test(feature.id) && properties.osm_id === feature.id && !sourceIDs.has(feature.id);
     requireValue(hasUniqueSource, 'Invalid or duplicate building source ID');
@@ -177,28 +199,28 @@ export function validateBuildingLabels(data, buildings) {
     const isInterior = polygon.type === 'Polygon' && anchor.length === 2 && insideRing(anchor, polygon.coordinates[0]);
     const isCourtyard = polygon.coordinates.slice(1).some(ring => insideRing(anchor, ring));
     requireValue(isInterior && !isCourtyard, 'Building label outside its polygon');
-    validateEntrances(properties, polygon, sourceIDs);
+    validateEntrances(properties, polygon, sourceIDs, houseNumber);
     sourceIDs.add(feature.id);
     footprints.add(footprintIndex);
   }
   requireValue(count > 0, 'Empty building address snapshot');
   return count;
 }
-export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance) {
+export function checkPlaceMetadata(placeBytes, policyBytes, configBytes, provenance, {contractsDirectory} = {}) {
   const places = JSON.parse(placeBytes);
-  const count = validateCollection(places, {places: true, label: 'places'});
+  const count = validateCollection(places, {places: true, label: 'places', contractsDirectory});
   requireValue(count === provenance.places_count, 'Place count differs from reviewed provenance');
-  requireValue(serializePlaces(applyVisibility(places, JSON.parse(policyBytes), JSON.parse(configBytes))) === placeBytes, 'Place visibility levels differ from the reviewed policy. Run data/tools/apply-place-visibility.mjs.');
+  requireValue(serializePlaces(applyVisibility(places, JSON.parse(policyBytes), JSON.parse(configBytes))) === placeBytes, 'Place visibility levels differ from the reviewed policy. Run data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts.');
   for (const [key, value] of Object.entries(placesProvenance(placeBytes, places, policyBytes, configBytes))) requireValue(provenance[key] === value, `Place provenance mismatch: ${key}. Review the change and update data/sources/provenance.json.`);
   return count;
 }
-export function checkData(root = rootDirectory) {
+export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
   const labelProvenance=JSON.parse(fs.readFileSync(path.join(root,'data/sources/building-labels.provenance.json')));
   const buildings = JSON.parse(buildingBytes);
-  validateSourceEntities(buildings, {label: 'buildings.geojson'});
-  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),buildings);
+  validateSourceEntities(buildings, {label: 'buildings.geojson', contractsDirectory});
+  const labelCount=validateBuildingLabels(JSON.parse(labelBytes),buildings,{contractsDirectory});
   requireValue(labelCount===labelProvenance.features && labelBytes.length===labelProvenance.bytes && crypto.createHash('sha256').update(labelBytes).digest('hex')===labelProvenance.sha256 && crypto.createHash('sha256').update(buildingBytes).digest('hex')===labelProvenance.buildings_sha256, 'Building label provenance mismatch');
 
   const transitBytes = fs.readFileSync(path.join(root, 'data/sources/transit-network.json'));
@@ -208,7 +230,7 @@ export function checkData(root = rootDirectory) {
 
   const stopBytes = fs.readFileSync(path.join(root, 'data/sources/transport-stops.geojson'));
   const stopProvenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/transport-stops.provenance.json')));
-  const stopCount = validateStops(JSON.parse(stopBytes));
+  const stopCount = validateStops(JSON.parse(stopBytes), {contractsDirectory});
   requireValue(stopCount === stopProvenance.features && stopBytes.length === stopProvenance.bytes && crypto.createHash('sha256').update(stopBytes).digest('hex') === stopProvenance.sha256 && Number.isFinite(Date.parse(stopProvenance.retrieved_at)), 'Stop snapshot provenance mismatch');
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
@@ -218,12 +240,18 @@ export function checkData(root = rootDirectory) {
     requireValue(/^[\w-]+\.geojson$/.test(name), 'Unsafe provenance layer path');
     const bytes = fs.readFileSync(path.join(root, 'data/sources', name));
     const geometryTypes = name === 'roads.geojson' ? ['LineString', 'MultiLineString'] : name === 'water.geojson' ? ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'] : ['Polygon', 'MultiPolygon'];
-    const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true});
+    const count = validateCollection(JSON.parse(bytes), {label: name, geometryTypes, requireKind: true, contractsDirectory});
     requireValue(count === expected.features && bytes.length === expected.bytes && crypto.createHash('sha256').update(bytes).digest('hex') === expected.sha256,
       `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
   }
   requireValue(provenance.places_file === 'data/sources/places.geojson', 'Unexpected places_file');
-  const count = checkPlaceMetadata(fs.readFileSync(path.join(root, provenance.places_file), 'utf8'), fs.readFileSync(path.join(root, 'data/sources/place-visibility-policy.json'), 'utf8'), fs.readFileSync(path.join(root, 'packages/contracts/place-visibility.json'), 'utf8'), provenance);
+  const count = checkPlaceMetadata(
+    fs.readFileSync(path.join(root, provenance.places_file), 'utf8'),
+    fs.readFileSync(path.join(root, 'data/sources/place-visibility-policy.json'), 'utf8'),
+    fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8'),
+    provenance,
+    {contractsDirectory}
+  );
   const release=JSON.parse(fs.readFileSync(path.join(root,'data/artifacts/release.json')));
   requireValue(/^montenegro-[a-f0-9]{16}\.pmtiles$/.test(release.archive.file), 'Unsafe archive filename');
   const archive=fs.readFileSync(path.join(root,'data/artifacts',release.archive.file));
@@ -232,5 +260,6 @@ export function checkData(root = rootDirectory) {
   return count;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.log(`Validated geometry, source hashes, and ${checkData()} places. This is structural validation, not GIS topology validation.`);
+  const contractsDirectory = contractsDirectoryFrom(process.argv.slice(2), 'check-data.mjs');
+  console.log(`Validated geometry, source hashes, and ${checkData(rootDirectory, {contractsDirectory})} places. This is structural validation, not GIS topology validation.`);
 }

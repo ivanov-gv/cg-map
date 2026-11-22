@@ -6,12 +6,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
 import {checkData, validateBuildingLabels, validateCollection} from './check-data.mjs';
+import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sourcesPath = 'data/sources';
 const policyPath = 'data/sources/place-visibility-policy.json';
-const levelsPath = 'packages/contracts/place-visibility.json';
-const rulesPath = 'packages/contracts/editor-layers.json';
 const provenancePath = 'data/sources/provenance.json';
 const labelProvenancePath = 'data/sources/building-labels.provenance.json';
 const ledgerPath = 'data/sources/editor-corrections.json';
@@ -371,7 +370,7 @@ function readLedger(root) {
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {version: 1, corrections: []};
 }
 
-function provenanceWrites(root, nextBytes, policyBytes, places) {
+function provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfigBytes) {
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
   const provenance = JSON.parse(read(provenancePath));
   const labelProvenance = JSON.parse(read(labelProvenancePath));
@@ -391,7 +390,7 @@ function provenanceWrites(root, nextBytes, policyBytes, places) {
   labelProvenance.buildings_sha256 = sha256(bytesOf('buildings.geojson'));
   if (places) {
     const placeBytes = nextBytes.get('places.geojson');
-    Object.assign(provenance, placesProvenance(placeBytes, places, policyBytes, read(levelsPath)), {
+    Object.assign(provenance, placesProvenance(placeBytes, places, policyBytes, visibilityConfigBytes), {
       places_count: places.features.length
     });
   }
@@ -456,7 +455,7 @@ function writeStaged(root, writes) {
 }
 
 // The new bytes of every changed source, plus the policy and regenerated places when places changed.
-function serializedResults(changeset, sources, originalBytes, policyText, levelConfig) {
+function serializedResults(changeset, sources, originalBytes, policyText, levelConfig, contractsDirectory) {
   const nextBytes = new Map();
   let policyBytes = policyText;
   let places = null;
@@ -467,10 +466,14 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
       const policy = policyWithLevelEdits(JSON.parse(policyText), operations, changeset);
       policyBytes = JSON.stringify(policy, null, 2) + '\n';
       places = applyVisibility(nextSource, policy, levelConfig);
-      validateCollection(places, {places: true, label: 'places'});
+      validateCollection(places, {places: true, label: 'places', contractsDirectory});
       nextBytes.set(filename, serializePlaces(places));
     } else {
-      validateCollection(nextSource, {label: filename, requireKind: filename !== 'transport-stops.geojson'});
+      validateCollection(nextSource, {
+        label: filename,
+        requireKind: filename !== 'transport-stops.geojson',
+        contractsDirectory
+      });
       nextBytes.set(filename, serializeLayer(nextSource, originalBytes.get(filename)));
     }
   }
@@ -482,12 +485,13 @@ function serializedResults(changeset, sources, originalBytes, policyText, levelC
 export function applyChangeset(
   changeset,
   root = rootDirectory,
-  {now = new Date().toISOString(), checkFinalData = checkData} = {}
+  {now = new Date().toISOString(), checkFinalData = checkData, contractsDirectory} = {}
 ) {
   checkEnvelope(changeset);
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-  const rules = JSON.parse(read(rulesPath));
-  const levelConfig = JSON.parse(read(levelsPath));
+  const rules = readContract(contractsDirectory, 'editor-layers.json');
+  const visibilityConfigBytes = fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8');
+  const levelConfig = JSON.parse(visibilityConfigBytes);
   const levels = new Set(levelConfig.levels.map(entry => entry.level));
   const {sources, originalBytes} = readPinnedSources(changeset, root);
   for (const operation of changeset.operations) checkOperation(operation, sources, rules, levels);
@@ -496,21 +500,24 @@ export function applyChangeset(
     sources,
     originalBytes,
     read(policyPath),
-    levelConfig
+    levelConfig,
+    contractsDirectory
   );
   const parsedSource = filename => JSON.parse(nextBytes.get(filename) ?? read(`${sourcesPath}/${filename}`));
-  validateBuildingLabels(parsedSource('building-labels.geojson'), parsedSource('buildings.geojson'));
+  validateBuildingLabels(parsedSource('building-labels.geojson'), parsedSource('buildings.geojson'), {
+    contractsDirectory
+  });
 
   const writes = [...nextBytes].map(([filename, bytes]) => [`${sourcesPath}/${filename}`, bytes]);
   if (places) writes.push([policyPath, policyBytes]);
-  writes.push(...provenanceWrites(root, nextBytes, policyBytes, places));
+  writes.push(...provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfigBytes));
   const ledger = readLedger(root);
   ledger.corrections.push(...ledgerEntries(changeset, now));
   writes.push([ledgerPath, JSON.stringify(ledger, null, 2) + '\n']);
 
   const restore = writeStaged(root, writes);
   try {
-    checkFinalData(root);
+    checkFinalData(root, {contractsDirectory});
   } catch (error) {
     const restoreNote = restore();
     const outcome = restoreNote ? 'reviewed files not fully restored' : 'reviewed files restored';
@@ -523,9 +530,15 @@ export function applyChangeset(
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const changesetPath = process.argv[2];
-  if (!changesetPath) throw new Error('Usage: apply-changeset.mjs <changeset.json>');
-  const summary = applyChangeset(JSON.parse(fs.readFileSync(changesetPath)));
+  const [changesetPath, ...remainingArguments] = process.argv.slice(2);
+  if (!changesetPath) throw new Error('Usage: apply-changeset.mjs <changeset.json> --contracts-directory <directory>');
+  const contractsDirectory = contractsDirectoryFrom(
+    remainingArguments,
+    'apply-changeset.mjs <changeset.json>'
+  );
+  const summary = applyChangeset(JSON.parse(fs.readFileSync(changesetPath)), rootDirectory, {
+    contractsDirectory
+  });
   console.log(
     `Applied ${summary.operations} operations to ${summary.files.join(', ')}. Review the diff before committing.`
   );

@@ -37,6 +37,7 @@
     "data",
     "packages/map-core",
     "apps/core-demo",
-    "apps/editor"
+    "apps/editor",
+    "platform"
   ]
 }

@@ -1,6 +1,6 @@
 // Shared by the browser specs. Each spec covers one area, which CI runs as its own job.
 import {expect} from '@playwright/test';
-import fileSystem from 'node:fs';
+import {readPinnedFixture} from '../pinned-data.mjs';
 
 const HOLD_CHECK_MILLISECONDS = 50;
 // Longer than the selection camera's animation, so a move that should not start has had its chance.
@@ -12,11 +12,7 @@ export const stubRouting = (page) =>
     route.fulfill({status: 503, json: {code: 'Unavailable'}})
   );
 
-export const fixture = JSON.parse(
-  fileSystem.readFileSync(
-    new URL('../../../../data/tests/fixtures/podgorica-places.geojson', import.meta.url)
-  )
-);
+export const fixture = JSON.parse(readPinnedFixture('podgorica-places.geojson'));
 // Read every rendered place icon, retaining its listing identity and visibility level.
 export const renderedPlaceIcons = (page) =>
   page.evaluate(() => {

@@ -2,6 +2,9 @@ ROOT := ../..
 # A separate origin keeps this preview outside the public app's service worker. Override with PORT=...
 PORT ?= $(shell node $(ROOT)/platform/tools/dev-port.mjs --app core-demo)
 E2E_ARGS ?=
+# Resolved only for test targets. A dev or release build keeps its repository data root.
+PINNED_DATA_ROOT = $(shell node tests/pinned-data.mjs)
+verify test e2e e2e-built: export MAP_DATA_ROOT = $(if $(PINNED_DATA_ROOT),$(PINNED_DATA_ROOT),$(error Cannot resolve @ivanov-gv/map-data; run make setup))
 
 .PHONY: verify lint test build dev e2e e2e-built
 

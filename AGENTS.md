@@ -8,8 +8,9 @@ not every agent loads nested files. This is a read-only map PoC; do not invent b
 
 Each project below is mostly independent: it owns its Makefile, build, run, lint, tests, instructions and CI pipeline.
 Projects connect only through the [concrete contracts](docs/system-architecture/architecture.md#independent-projects).
-The root Makefile never runs a project's build or run targets, and no project runs another project's checks. Add a
-project the way that section describes.
+The root Makefile never runs a project's build or run targets, and no project runs another project's checks. A project's
+tests read only its own files or an exact published version of another project (such as `@ivanov-gv/map-data`), never
+its HEAD; only [tests](tests/AGENTS.md) reads HEAD. Add a project the way that section describes.
 
 ## Repo map and language rules
 
@@ -40,7 +41,6 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
 - `make test-e2e`: browser tests of every browser project, each building itself first.
 - `make agent-rules`: regenerate .claude/rules after editing docs/engineering or platform/agents/guidelines.json.
-- `make worktree NAME=<branch>`: isolated checkout for a session; commits need one.
 
 ## Project commands, from each project's own Makefile
 

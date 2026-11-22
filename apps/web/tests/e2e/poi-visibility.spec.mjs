@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import fileSystem from 'node:fs';
+import {readPinnedSource} from '../pinned-data.mjs';
 import {CAMERA_HOLD_MILLISECONDS, expectToHold, mapIdle} from './helpers.mjs';
 
 // Software WebGL needs seconds per camera step, and these tests compare many exact camera steps.
@@ -264,7 +264,7 @@ test('name collisions never remove an eligible icon', async ({page}) => {
 
 test('an icon on a house number keeps both the icon and the address label', async ({page}) => {
   const label = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/building-labels.geojson', import.meta.url))
+    readPinnedSource('building-labels.geojson')
   ).features[0];
   const data = featureCollection([
     {
@@ -589,7 +589,7 @@ test('level metadata is an offline shell asset and offline reload keeps the same
 test('real data at every threshold, for visual density review', async ({page}, testInfo) => {
   test.skip(!process.env.POI_DENSITY_SCREENSHOTS, 'Run on request after changing levels');
   const places = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../../data/sources/places.geojson', import.meta.url))
+    readPinnedSource('places.geojson')
   ).features;
   await open(page, null);
   const scenes = {podgorica: [19.2627, 42.4411], 'dense-west': [19.24, 42.44], coast: [18.84, 42.286]};

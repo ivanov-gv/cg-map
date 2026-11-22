@@ -1,7 +1,10 @@
 import {defineConfig} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {pinnedDataRoot} from './tests/pinned-data.mjs';
 
+// The browser suite's build reads data through this root unless a caller already chose one.
+process.env.MAP_DATA_ROOT ??= pinnedDataRoot;
 const webRoot = fileURLToPath(new URL('.', import.meta.url));
 const portTool = fileURLToPath(new URL('../../platform/tools/dev-port.mjs', import.meta.url));
 const serverTool = fileURLToPath(new URL('../../platform/tools/serve.py', import.meta.url));

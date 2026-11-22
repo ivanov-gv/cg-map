@@ -49,6 +49,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       map-core: ${{ steps.plan.outputs.map-core }}
+      data: ${{ steps.plan.outputs.data }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: &plan-env
@@ -72,6 +73,7 @@ jobs:
     environment: test-run
     outputs:
       map-core: ${{ steps.plan.outputs.map-core }}
+      data: ${{ steps.plan.outputs.data }}
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: *plan-env
@@ -174,6 +176,54 @@ jobs:
       packages: read
     env: *package-env
     steps: *package-steps
+  # A release promotes what this publishes; app tests pin that release.
+  data-package:
+    name: Publish map-data dev package
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: dev
+    permissions:
+      contents: read
+      packages: write
+    env: &data-package-env
+      PACKAGE_PUBLISH_FLAGS: ${{ vars.PACKAGE_PUBLISH_FLAGS }}
+      PACKAGE_COMMIT: ${{ inputs.commit || github.sha }}
+    steps: &data-package-steps
+      # The first checkout keeps this revision's publishing action. The second gets the requested source commit.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate commit
+        id: commit
+        uses: ./.github/actions/validate-commit
+        with:
+          commit: ${{ env.PACKAGE_COMMIT }}
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.commit.outputs.commit }}
+          path: source
+          persist-credentials: false
+      - uses: ./.github/actions/publish-dev-package
+        with:
+          directory: source/data
+          flags: ${{ env.PACKAGE_PUBLISH_FLAGS }}
+          token: ${{ github.token }}
+          commit: ${{ steps.commit.outputs.commit }}
+  data-package-test-run:
+    name: (test-run) Publish map-data dev package
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: test-run
+    permissions:
+      contents: read
+      packages: read
+    env: *data-package-env
+    steps: *data-package-steps
   # A release promotes what this publishes, and the browser jobs pin that release. Merging this changes no pipeline.
   browser-image:
     name: Publish browser image
@@ -230,20 +280,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Validate commit
+        id: commit
+        uses: ./.github/actions/validate-commit
+        with:
+          commit: ${{ env.COMMIT }}
       - name: Check out source
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-          ref: ${{ env.COMMIT }}
+          ref: ${{ steps.commit.outputs.commit }}
           path: source
-      - name: Validate commit input
-        if: ${{ inputs.commit != '' }}
-        shell: bash
-        run: |
-          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
-            exit 1
-          fi
       - uses: ./source/.github/actions/setup-web
       - name: Build each app
         run: |
@@ -275,7 +322,7 @@ jobs:
           repository: ${{ env.IMAGE_REPOSITORY }}
           dockerfile: platform/pages/Dockerfile
           context: 'site'
-          commit: ${{ env.COMMIT }}
+          commit: ${{ steps.commit.outputs.commit }}
           token: ${{ github.token }}
           skip_main_tag: 'true'
   # Keep only the last N dev-pages versions — the rollback window.

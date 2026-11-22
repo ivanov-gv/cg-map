@@ -16,9 +16,9 @@ repo:
 agents-check:
 	cd $(ROOT) && npm run -s check:agents
 
-# The hosting tests run against the built web artifact, a listed contract.
+# The hosting tests run against a web artifact built from platform's own map-data pin, a listed contract.
 build-web:
-	$(MAKE) --no-print-directory -C $(ROOT)/apps/web build
+	MAP_DATA_ROOT="$$(node tools/pinned-data-root.mjs)" $(MAKE) --no-print-directory -C $(ROOT)/apps/web build
 
 test:
 	cd $(ROOT) && node --test platform/tests/*.test.mjs

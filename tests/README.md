@@ -6,3 +6,27 @@
 
 Component-specific tests live with their components. Run make check and make verify PKG=tests from the root. Browser
 tests do not establish phone GPU performance or long-term storage retention.
+
+## Data version
+
+[data-root.mjs](data-root.mjs) is the only data path resolver in this project. It reads repository `data/` at HEAD by
+default, so a data change selects this pipeline. It also honours `MAP_DATA_ROOT`, which is how a release run points
+every test and the web build at one data root.
+
+Test HEAD data:
+
+```sh
+make verify PKG=tests
+```
+
+Test an exact published package instead:
+
+```sh
+make -C tests verify MAP_DATA_VERSION=0.1.0
+```
+
+That target installs `@ivanov-gv/map-data@<version>` from GitHub Packages into `tests/node_modules`, resolves it through
+the same helper and exports `MAP_DATA_ROOT` to lint, build and integration steps. It needs a GitHub Packages token; the
+Makefile uses `NODE_AUTH_TOKEN` or `gh auth token`. HEAD-only contracts may fail against an older package; those
+failures are real findings, not tests to skip or loosen. See
+[releasing map data](../docs/runbooks/release.md#releasing-map-data).

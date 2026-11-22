@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
+import {readPinnedSource} from './pinned-data.mjs';
 import {
   DirectionTracker,
   compassDirection,
@@ -106,7 +107,7 @@ test('implausible jumps, long gaps and far-away buses do not invent movement', (
 
 test('bundled route network gives every current route a direction estimate', () => {
   const snapshot = JSON.parse(
-    fileSystem.readFileSync(new URL('../../../data/sources/transit-network.json', import.meta.url))
+    readPinnedSource('transit-network.json')
   );
   const linesByRoute = routeLines(snapshot);
   for (const pattern of snapshot.patterns) {

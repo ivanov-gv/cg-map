@@ -113,6 +113,43 @@ for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
+// App tests, their browser configuration and tools written only for tests read data from the pinned package. Register a
+// new test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
+const TEST_ONLY_APP_TOOLS = [];
+const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
+const repositoryDataPattern = new RegExp(
+  [
+    '(?:\\.\\./)+data(?:/|[\'"`])',
+    '(?<!map-)data/(?:sources|tools|artifacts|imagery)\\b',
+    '(?:join|resolve)\\s*\\([^)]*[\'"]data[\'"]\\s*,\\s*[\'"](?:sources|tools|artifacts|imagery)[\'"]'
+  ].join('|')
+);
+for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+  const configFile = `${application}/playwright.config.mjs`;
+  const testFiles = [
+    ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
+    ...(fs.existsSync(configFile) ? [configFile] : []),
+    ...TEST_ONLY_APP_TOOLS.filter(file => file.startsWith(`${application}/`))
+  ];
+  for (const file of testFiles) {
+    assert.ok(
+      !repositoryDataPattern.test(fs.readFileSync(file, 'utf8')),
+      `${file}: ${pinnedDataRule}`
+    );
+  }
+}
+// Cross-project tests default to repository data, but that choice lives in one helper so a release can point the whole
+// suite at a published package. Every other test file must use the helper.
+const integrationDataHelper = 'tests/data-root.mjs';
+const integrationDataRule = 'integration tests must read data and data tools through tests/data-root.mjs';
+const integrationTestFiles = walk('tests').filter(file =>
+  !file.includes('/node_modules/') && (/\.(?:mjs|js|json)$/.test(file) || file.endsWith('/Makefile'))
+);
+assert.ok(fs.existsSync(integrationDataHelper), `Missing integration data helper: ${integrationDataHelper}`);
+for (const file of integrationTestFiles) {
+  if (file === integrationDataHelper) continue;
+  assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
+}
 const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);
@@ -151,4 +188,4 @@ const instructionFiles = [
   '.github/TESTING.md'
 ];
 assert.deepEqual(unreachableInstructions('.', instructionFiles), [], 'Link these instruction files from the root AGENTS.md or a file it links');
-console.log('Documentation links, instruction reach, decisions log, component layout, and dependency boundaries passed.');
+console.log('Documentation links, instruction reach, decisions log, component layout, data roots, and dependency boundaries passed.');

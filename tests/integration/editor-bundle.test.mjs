@@ -4,22 +4,23 @@ import {existsSync} from 'node:fs';
 import {mkdtemp, rm, readFile, readdir, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {writeEditorBundle} from '../../data/tools/editor-bundle.mjs';
+import {dataSourceDirectory, dataSourceURL, dataToolURL} from '../data-root.mjs';
 import {sourceFiles, validateBundleManifest, decodeSource} from '../../apps/editor/src/source-bundle.js';
+
+const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
+const editorBundleContractURL = new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url);
 
 // Real producer/consumer integration proves that revision-bound indices refer to unchanged source bytes.
 test('reviewed source bundle round trips byte-for-byte through the editor consumer', async t => {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-bundle-'));
   t.after(() => rm(outputDirectory, {recursive: true, force: true}));
-  const sourceDirectory = new URL('../../data/sources/', import.meta.url);
-  const manifest = validateBundleManifest(await writeEditorBundle(fileURLToPath(sourceDirectory), outputDirectory));
+  const manifest = validateBundleManifest(await writeEditorBundle(dataSourceDirectory, outputDirectory, editorBundleContractURL));
   assert.deepEqual(
     manifest.layers.map(layer => layer.filename),
     sourceFiles
   );
   for (const metadata of manifest.layers) {
-    const original = await readFile(new URL(metadata.filename, sourceDirectory));
+    const original = await readFile(dataSourceURL(metadata.filename));
     const bundled = await readFile(path.join(outputDirectory, metadata.filename));
     assert.deepEqual(bundled, original);
     const decoded = await decodeSource(bundled, metadata);
@@ -31,8 +32,7 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
 test('producer manifest matches the shared bundle contract', async t => {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-bundle-'));
   t.after(() => rm(outputDirectory, {recursive: true, force: true}));
-  const sourceDirectory = fileURLToPath(new URL('../../data/sources/', import.meta.url));
-  const manifest = await writeEditorBundle(sourceDirectory, outputDirectory);
+  const manifest = await writeEditorBundle(dataSourceDirectory, outputDirectory, editorBundleContractURL);
   const schema = JSON.parse(
     await readFile(new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url))
   );
@@ -62,7 +62,7 @@ test('producer refuses a source file set that differs from the contract', async 
   t.after(() => rm(outputDirectory, {recursive: true, force: true}));
   const emptyCollection = JSON.stringify({type: 'FeatureCollection', features: []});
   await writeFile(path.join(sourceDirectory, 'unexpected.geojson'), emptyCollection);
-  await assert.rejects(writeEditorBundle(sourceDirectory, outputDirectory), /sources must be exactly/);
+  await assert.rejects(writeEditorBundle(sourceDirectory, outputDirectory, editorBundleContractURL), /sources must be exactly/);
   assert.deepEqual(await readdir(outputDirectory), []);
 });
 

@@ -1,15 +1,55 @@
 {
-  "name": "@cg-map/data",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@ivanov-gv/map-data",
+  "version": "0.0.0-dev",
   "type": "module",
   "scripts": {
-    "check": "node tools/check-data.mjs",
+    "check": "node tools/check-data.mjs --contracts-directory ../packages/contracts",
     "build": "node tools/build-tiles.mjs && python3 tools/pack.py && node tools/finalize-archive.mjs",
     "test": "cd .. && node --test data/tests/*.test.mjs"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./sources/*": "./sources/*",
+    "./artifacts/*": "./artifacts/*",
+    "./imagery/*": "./imagery/*",
+    "./PROVENANCE.md": "./PROVENANCE.md",
+    "./tests/fixtures/*": "./tests/fixtures/*",
+    "./tools/app-data.mjs": "./tools/app-data.mjs",
+    "./tools/apply-changeset.mjs": "./tools/apply-changeset.mjs",
+    "./tools/apply-place-visibility.mjs": "./tools/apply-place-visibility.mjs",
+    "./tools/building-entrances.mjs": "./tools/building-entrances.mjs",
+    "./tools/check-data.mjs": "./tools/check-data.mjs",
+    "./tools/contracts.mjs": "./tools/contracts.mjs",
+    "./tools/editor-bundle.mjs": "./tools/editor-bundle.mjs",
+    "./tools/entity-identity.mjs": "./tools/entity-identity.mjs"
   },
   "dependencies": {
     "geojson-vt": "4.0.2",
     "vt-pbf": "3.1.3"
-  }
+  },
+  "description": "Reviewed map sources, imagery and release artifacts for Kompas map applications and their tests.",
+  "license": "SEE LICENSE IN PROVENANCE.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivanov-gv/cg-map.git",
+    "directory": "data"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "sources",
+    "artifacts",
+    "imagery",
+    "PROVENANCE.md",
+    "tests/fixtures",
+    "tools/app-data.mjs",
+    "tools/apply-changeset.mjs",
+    "tools/apply-place-visibility.mjs",
+    "tools/building-entrances.mjs",
+    "tools/check-data.mjs",
+    "tools/contracts.mjs",
+    "tools/editor-bundle.mjs",
+    "tools/entity-identity.mjs"
+  ]
 }

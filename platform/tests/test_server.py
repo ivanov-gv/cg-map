@@ -1,7 +1,20 @@
-import sys,unittest,io,json
+import io
+import json
+import subprocess
+import sys
+import unittest
 from pathlib import Path
+
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'platform/tools'))
 from serve import parse_range,Handler,PrefixedHandler
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+PINNED_DATA_ROOT = subprocess.check_output(
+    ['node', str(REPOSITORY_ROOT / 'platform/tools/pinned-data-root.mjs')],
+    cwd=REPOSITORY_ROOT,
+    text=True
+).strip()
+
 class Ranges(unittest.TestCase):
     def test_ranges(self):
         for value,want in [('bytes=0-99',(0,99)),('bytes=900-',(900,999)),('bytes=-30',(970,999)),('bytes=950-2000',(950,999))]:
@@ -48,6 +61,13 @@ class PrefixedRequests(unittest.TestCase):
 
     def test_missing_file_under_prefix(self):
         self.assertIn(b' 404 ', self.status_line('/cg-map/missing.html'))
+
+# The artifact under test must come from the pinned package, not from repository HEAD.
+class BuiltArtifactData(unittest.TestCase):
+    def test_archive_matches_pinned_data_release(self):
+        manifest = json.loads((REPOSITORY_ROOT / 'dist/web/data/manifest.json').read_text())
+        release = json.loads((Path(PINNED_DATA_ROOT) / 'artifacts/release.json').read_text())
+        self.assertEqual(manifest['archive']['sha256'], release['archive']['sha256'])
 
 
 if __name__=='__main__':unittest.main()

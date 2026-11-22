@@ -1,0 +1,27 @@
+name: Validate commit
+description: Refuse a commit that is not a full SHA, before checking out or publishing that commit.
+inputs:
+  commit:
+    description: Full commit SHA to validate (empty means the workflow's commit).
+    required: false
+    default: ''
+outputs:
+  commit:
+    description: The validated commit SHA.
+    value: ${{ steps.validate.outputs.commit }}
+runs:
+  using: composite
+  steps:
+    - id: validate
+      shell: bash
+      env:
+        INPUT_COMMIT: ${{ inputs.commit }}
+        EVENT_COMMIT: ${{ github.sha }}
+      run: |
+        commit="${INPUT_COMMIT:-$EVENT_COMMIT}"
+        if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::commit must be a full 40-character SHA, got: $commit"
+          exit 1
+        fi
+        echo "commit=$commit" >> "$GITHUB_OUTPUT"
+        echo "Validated commit: $commit" | tee -a "$GITHUB_STEP_SUMMARY"

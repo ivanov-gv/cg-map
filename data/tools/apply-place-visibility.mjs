@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {contractPath, contractsDirectoryFrom} from './contracts.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const PLACES = 'data/sources/places.geojson', POLICY = 'data/sources/place-visibility-policy.json', CONFIG = 'packages/contracts/place-visibility.json', PROVENANCE = 'data/sources/provenance.json';
+const PLACES = 'data/sources/places.geojson', POLICY = 'data/sources/place-visibility-policy.json', PROVENANCE = 'data/sources/provenance.json';
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const nonblank = value => typeof value === 'string' && value.trim().length > 0;
 
@@ -75,12 +76,12 @@ export function placesProvenance(bytes, collection, policyBytes, configBytes) {
   return {places_bytes: Buffer.byteLength(bytes), places_sha256: sha256(bytes), places_facts_sha256: placeFactsHash(collection), place_visibility_policy_sha256: sha256(policyBytes), place_visibility_config_sha256: sha256(configBytes)};
 }
 
-export function run(argv, root = rootDirectory) {
+export function run(argv, {root = rootDirectory, contractsDirectory} = {}) {
   const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-  const policyBytes = read(POLICY), configBytes = read(CONFIG), current = read(PLACES);
+  const policyBytes = read(POLICY), configBytes = fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8'), current = read(PLACES);
   const next = serializePlaces(applyVisibility(JSON.parse(current), JSON.parse(policyBytes), JSON.parse(configBytes)));
   if (argv.includes('--check')) {
-    if (next !== current) throw new Error(`${PLACES} differs from the visibility policy. Run node data/tools/apply-place-visibility.mjs and review it.`);
+    if (next !== current) throw new Error(`${PLACES} differs from the visibility policy. Run node data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts and review it.`);
     console.log('Place visibility levels match the reviewed policy.');
     return;
   }
@@ -95,4 +96,7 @@ export function run(argv, root = rootDirectory) {
   if (update) fs.writeFileSync(path.join(root, PROVENANCE), JSON.stringify({...provenance, ...entry, places_count: collection.features.length}, null, 2) + '\n');
   console.log(`Wrote ${collection.features.length} places by level ${JSON.stringify(counts)}. places_sha256=${entry.places_sha256}${argv.includes('--update-provenance') ? ' (provenance updated)' : ' (provenance not updated)'}`);
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run(process.argv.slice(2));
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const argv = process.argv.slice(2);
+  run(argv, {contractsDirectory: contractsDirectoryFrom(argv, 'apply-place-visibility.mjs')});
+}

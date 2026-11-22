@@ -61,16 +61,17 @@ jobs:
     outputs: &find-outputs
       commit: ${{ steps.resolve.outputs.commit }}
     steps: &find-steps
-      - name: Resolve commit
+      # Only the local actions: CD never touches the application's source.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+      - name: Validate commit
         id: resolve
-        shell: bash
-        run: |
-          if [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::commit must be a full 40-character SHA, got: $COMMIT"
-            exit 1
-          fi
-          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-          echo "Resolved commit: $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+        uses: ./.github/actions/validate-commit
+        with:
+          commit: ${{ env.COMMIT }}
       - name: Pull dev site image
         env:
           COMMIT_SHA: ${{ steps.resolve.outputs.commit }}

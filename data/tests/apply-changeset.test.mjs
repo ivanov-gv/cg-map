@@ -9,6 +9,7 @@ import {applyChangeset, lineProblem, polygonProblem, propertyProblem, ringProble
 import {checkData} from '../tools/check-data.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+const contractsDirectory = path.join(repositoryRoot, 'packages/contracts');
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fingerprint = feature => sha256(JSON.stringify(feature));
 const reviewedAt = '2026-11-06T10:00:00.000Z';
@@ -67,10 +68,10 @@ test('a metadata edit updates the source, provenance and ledger, and still passe
   const operation = modifyOperation(root, 'places.geojson', 0, feature => {
     feature.properties.name = 'Corrected name';
   });
-  const summary = applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt});
+  const summary = applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt, contractsDirectory});
   assert.equal(summary.needsTileRebuild, false);
   assert.equal(readSource(root, 'places.geojson').features[0].properties.name, 'Corrected name');
-  assert.doesNotThrow(() => checkData(root));
+  assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
   const {corrections} = JSON.parse(fs.readFileSync(sourcePath(root, 'editor-corrections.json')));
   assert.equal(corrections.length, 1);
   assert.equal(corrections[0].beforeFingerprint, operation.beforeFingerprint);
@@ -82,13 +83,13 @@ test('a level edit becomes a policy override, and survives regenerating levels',
   const operation = modifyOperation(root, 'places.geojson', 0, feature => {
     feature.properties.visibilityLevel = feature.properties.visibilityLevel === 2 ? 3 : 2;
   });
-  applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt});
+  applyChangeset(changeset(root, 'places.geojson', [operation]), root, {now: reviewedAt, contractsDirectory});
   const policy = JSON.parse(fs.readFileSync(sourcePath(root, 'place-visibility-policy.json')));
   const override = policy.overrides.find(({id}) => id === operation.before.properties.id);
   assert.equal(override.level, operation.after.properties.visibilityLevel);
   assert.equal(override.provenance.reviewedBy, 'Test Editor');
   assert.equal(readSource(root, 'places.geojson').features[0].properties.visibilityLevel, override.level);
-  assert.doesNotThrow(() => checkData(root));
+  assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
 });
 
 test('a new place keeps its local identity, and a deletion removes the feature', testContext => {
@@ -119,12 +120,12 @@ test('a new place keeps its local identity, and a deletion removes the feature',
       after: null
     }
   ];
-  applyChangeset(changeset(root, 'places.geojson', operations), root, {now: reviewedAt});
+  applyChangeset(changeset(root, 'places.geojson', operations), root, {now: reviewedAt, contractsDirectory});
   const {features} = readSource(root, 'places.geojson');
   assert.equal(features.length, count);
   assert.equal(features.at(-1).properties.id, localId);
   assert.ok(features.every(feature => feature.properties.id !== before.properties.id));
-  assert.doesNotThrow(() => checkData(root));
+  assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
 });
 
 test('level 1 outside the landmark category is refused by name, before anything is written', testContext => {
@@ -144,7 +145,7 @@ test('level 1 outside the landmark category is refused by name, before anything 
     after
   };
   const refused = changeset(root, 'places.geojson', [operation]);
-  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt}), /reserved for sights landmarks/);
+  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt, contractsDirectory}), /reserved for sights landmarks/);
   assert.deepEqual(fs.readFileSync(sourcePath(root, 'places.geojson')), original);
 });
 
@@ -191,7 +192,7 @@ test('an added feature cannot claim an upstream identity or anything the rules d
   const root = temporaryRoot(testContext);
   const refuses = (operation, expected) =>
     assert.throws(
-      () => applyChangeset(changeset(root, operation.filename, [operation]), root, {now: reviewedAt}),
+      () => applyChangeset(changeset(root, operation.filename, [operation]), root, {now: reviewedAt, contractsDirectory}),
       expected
     );
   const place = (id, extra = {}) => ({
@@ -222,7 +223,7 @@ test('a deletion that also carries an after state is refused', testContext => {
   const root = temporaryRoot(testContext);
   const operation = modifyOperation(root, 'places.geojson', 0, feature => (feature.properties.name = 'X'));
   const refused = changeset(root, 'places.geojson', [{...operation, operation: 'delete'}]);
-  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt}), /a deletion has no after state/);
+  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt, contractsDirectory}), /a deletion has no after state/);
 });
 
 test('renaming a place keeps its override and its reviewer, and a matching level removes nothing else', testContext => {
@@ -236,14 +237,14 @@ test('renaming a place keeps its override and its reviewer, and a matching level
       feature.properties.visibilityLevel = feature.properties.visibilityLevel === 2 ? 3 : 2;
     })
   ]);
-  applyChangeset(promoted, root, {now: reviewedAt});
+  applyChangeset(promoted, root, {now: reviewedAt, contractsDirectory});
   const {id} = readSource(root, 'places.geojson').features[0].properties;
   assert.equal(reviewerOf(id), 'Test Editor');
   const renamed = changeset(root, 'places.geojson', [
     modifyOperation(root, 'places.geojson', 0, feature => (feature.properties.name = 'Renamed'))
   ]);
   renamed.author = 'Second Editor';
-  applyChangeset(renamed, root, {now: reviewedAt});
+  applyChangeset(renamed, root, {now: reviewedAt, contractsDirectory});
   assert.equal(reviewerOf(id), 'Test Editor');
 });
 
@@ -257,7 +258,7 @@ test('changing a kind pins the reviewed level, so regeneration cannot silently c
   const edited = changeset(root, 'places.geojson', [
     modifyOperation(root, 'places.geojson', index, feature => (feature.properties.kind = 'supermarket'))
   ]);
-  applyChangeset(edited, root, {now: reviewedAt});
+  applyChangeset(edited, root, {now: reviewedAt, contractsDirectory});
   assert.equal(readSource(root, 'places.geojson').features[index].properties.visibilityLevel, visibilityLevel);
 });
 
@@ -274,7 +275,7 @@ test('the ledger keeps both values and matches its schema, and a failed final ch
       modifyOperation(root, 'places.geojson', 0, feature => (feature.properties.name = 'Corrected'))
     ]);
   assert.throws(
-    () => applyChangeset(edit(), root, {now: reviewedAt, checkFinalData: failingCheck}),
+    () => applyChangeset(edit(), root, {now: reviewedAt, contractsDirectory, checkFinalData: failingCheck}),
     /reviewed files restored: forced final failure/
   );
   assert.deepEqual(fs.readFileSync(sourcePath(root, 'places.geojson')), placesBefore);
@@ -284,7 +285,7 @@ test('the ledger keeps both values and matches its schema, and a failed final ch
     []
   );
 
-  applyChangeset(edit(), root, {now: reviewedAt});
+  applyChangeset(edit(), root, {now: reviewedAt, contractsDirectory});
   const {version, corrections} = JSON.parse(fs.readFileSync(ledgerFile));
   assert.equal(version, 1);
   const schema = JSON.parse(
@@ -301,7 +302,7 @@ test('a modification cannot add a top-level field', testContext => {
   const refused = changeset(root, 'places.geojson', [
     modifyOperation(root, 'places.geojson', 0, feature => (feature.invented = 'x'))
   ]);
-  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt}), /feature invented is not editable/);
+  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt, contractsDirectory}), /feature invented is not editable/);
 });
 
 test('a level edit or deletion of a place with a commercial record is refused by name, keeping it', testContext => {
@@ -324,7 +325,7 @@ test('a level edit or deletion of a place with a commercial record is refused by
       feature.properties.visibilityLevel = visibilityLevel === 3 ? 2 : 3;
     })
   ]);
-  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt}), /has a commercial placement/);
+  assert.throws(() => applyChangeset(refused, root, {now: reviewedAt, contractsDirectory}), /has a commercial placement/);
   const before = features[0];
   const deletion = {
     filename: 'places.geojson',
@@ -335,7 +336,7 @@ test('a level edit or deletion of a place with a commercial record is refused by
     after: null
   };
   const refusedDeletion = changeset(root, 'places.geojson', [deletion]);
-  assert.throws(() => applyChangeset(refusedDeletion, root, {now: reviewedAt}), /has a commercial placement/);
+  assert.throws(() => applyChangeset(refusedDeletion, root, {now: reviewedAt, contractsDirectory}), /has a commercial placement/);
   assert.deepEqual(JSON.parse(fs.readFileSync(policyFile)).overrides, [commercial]);
 });
 
@@ -353,7 +354,7 @@ test('a failed staged write leaves every reviewed file untouched, without rewrit
     reviewedWrites.push(file);
     return realWrite(file, ...rest);
   });
-  assert.throws(() => applyChangeset(edit, root, {now: reviewedAt}), /Changeset not applied: ENOSPC/);
+  assert.throws(() => applyChangeset(edit, root, {now: reviewedAt, contractsDirectory}), /Changeset not applied: ENOSPC/);
   testContext.mock.restoreAll();
   assert.deepEqual(reviewedWrites, []);
   assert.deepEqual(fs.readFileSync(placesFile), placesBefore);
@@ -383,7 +384,7 @@ test('a failed rename restores only what was replaced, and names a file it could
     });
   };
   failSecondRename();
-  assert.throws(() => applyChangeset(edit(), root, {now: reviewedAt}), /Changeset not applied: rename failed\.$/);
+  assert.throws(() => applyChangeset(edit(), root, {now: reviewedAt, contractsDirectory}), /Changeset not applied: rename failed\.$/);
   testContext.mock.restoreAll();
   assert.deepEqual(snapshot(), original);
 
@@ -394,7 +395,7 @@ test('a failed rename restores only what was replaced, and names a file it could
     return realWrite(file, ...rest);
   });
   assert.throws(
-    () => applyChangeset(edit(), root, {now: reviewedAt}),
+    () => applyChangeset(edit(), root, {now: reviewedAt, contractsDirectory}),
     /rename failed\. Could not restore: .*places\.geojson/
   );
 });
@@ -413,7 +414,7 @@ test('a restore that runs out of disk keeps the file whole, and the refusal says
     throw new Error('forced final failure');
   };
   assert.throws(
-    () => applyChangeset(edit, root, {now: reviewedAt, checkFinalData: failingCheck}),
+    () => applyChangeset(edit, root, {now: reviewedAt, contractsDirectory, checkFinalData: failingCheck}),
     /reviewed files not fully restored: forced final failure\. Could not restore: .*places\.geojson/
   );
   testContext.mock.restoreAll();
@@ -429,9 +430,9 @@ test('a road edit asks for a tile rebuild and passes the data check', testContex
   const operation = modifyOperation(root, 'roads.geojson', 0, feature => {
     feature.geometry.coordinates[0] = [18.825, 42.278];
   });
-  const summary = applyChangeset(changeset(root, 'roads.geojson', [operation]), root, {now: reviewedAt});
+  const summary = applyChangeset(changeset(root, 'roads.geojson', [operation]), root, {now: reviewedAt, contractsDirectory});
   assert.equal(summary.needsTileRebuild, true);
-  assert.doesNotThrow(() => checkData(root));
+  assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
 });
 
 test('a refused changeset leaves every reviewed file untouched', async testContext => {
@@ -577,7 +578,7 @@ test('a refused changeset leaves every reviewed file untouched', async testConte
   ];
   for (const [name, build, expected] of refusals) {
     await testContext.test(name, () => {
-      assert.throws(() => applyChangeset(build(), root, {now: reviewedAt}), expected);
+      assert.throws(() => applyChangeset(build(), root, {now: reviewedAt, contractsDirectory}), expected);
       assert.deepEqual(snapshot(), original);
     });
   }
