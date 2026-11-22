@@ -40,3 +40,15 @@ parts remain intact. The coastline stays a line feature without another source f
 layer that consumers separate by geometry type and kind: water polygons fill, waterways stroke, and coastlines stay out
 of the river stroke so the ocean fill shows the shore. See the
 [data runbook](../runbooks/data.md#green-areas-and-water-extraction) for the extraction and validation procedure.
+
+## Outcome note: review follow-ups (issue #326, 22 November 2026)
+
+The published kinds, first-match `osmTag` and coastline placement above are unchanged. Review narrowed the source rules:
+a protected-area boundary or `place=locality` alone is not green cover; stream, ditch and drain lines are limited to the
+detail box; and unmapped or blank OSM names produce no property. The editor rules require `kind` from the published
+enum, so a local edit cannot remove or invent a display kind.
+
+The earlier public-label consequence is narrower than first written. The detail card keeps its coarse fallback: `park`
+reads "Park", other land kinds read "Land", and the `water` and `rivers` layers read "Water"; a recorded name still
+takes precedence. Per-kind card copy is deferred to a later UI Feature, so this data refresh does not also change public
+selection wording. `tests/integration/land-water-kinds.test.mjs` checks that every published kind remains selectable.

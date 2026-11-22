@@ -76,7 +76,7 @@ test('extracted land and water kinds stay in step with validation and consumers'
       {layer: {id: 'land'}, properties: {kind, name: `Named ${kind}`}},
       [19, 42]
     );
-    assert.notEqual(point.kind, 'Land', kind);
+    assert.equal(point.kind, kind === 'park' ? 'Park' : 'Land', kind);
     assert.equal(point.name, `Named ${kind}`, kind);
   }
 
@@ -85,7 +85,7 @@ test('extracted land and water kinds stay in step with validation and consumers'
       {layer: {id: 'water'}, properties: {kind, name: `Named ${kind}`}},
       [19, 42]
     );
-    if (kind !== 'water') assert.notEqual(point.kind, 'Water', kind);
+    assert.equal(point.kind, 'Water', kind);
     assert.equal(point.name, `Named ${kind}`, kind);
   }
 });

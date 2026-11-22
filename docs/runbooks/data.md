@@ -144,7 +144,7 @@ Extracted green and water polygons are written with counterclockwise exteriors a
 and context outlines keep their source winding. `make -C data check` enforces the shared kind enums, requires `osmTag`
 on extracted features, and checks new property shapes and generated ring order.
 `tests/integration/land-water-kinds.test.mjs` also checks that those enums stay in step with the editor rules, shared
-fill expression and web selection labels; run it with `make verify PKG=tests`. After changing extraction rules, run:
+fill expression and web selection fallbacks; run it with `make verify PKG=tests`. After changing extraction rules, run:
 
 ```sh
 python3 -m unittest discover -s data/tests -p 'test_osm_extract.py'
