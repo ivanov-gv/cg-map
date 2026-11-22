@@ -46,7 +46,10 @@ test('editor bundle versions keep version 1 frozen and version 2 additive', () =
   const version1Files = version1.properties.layers.items.properties.filename.enum;
   const version2Files = version2.properties.layers.items.properties.filename.enum;
   assert.deepEqual(version1Files, originalFiles);
-  assert.deepEqual(version2Files, [...originalFiles, 'building-entrances.geojson'].sort());
+  assert.deepEqual(
+    version2Files,
+    [...originalFiles, 'building-entrances.geojson', 'road-nodes.geojson'].sort()
+  );
   assert.equal(version1.properties.layers.minItems, version1Files.length);
   assert.equal(version1.properties.layers.maxItems, version1Files.length);
   assert.equal(version2.properties.layers.minItems, version2Files.length);

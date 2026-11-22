@@ -241,10 +241,10 @@
   </way>
 
   <!-- Highway outside detail area: restrictions touching it must be skipped -->
-  <node id="7101" version="1" lat="42.60" lon="19.25"/>
-  <node id="7102" version="1" lat="42.61" lon="19.25"/>
+  <node id="7601" version="1" lat="42.60" lon="19.25"/>
+  <node id="7602" version="1" lat="42.61" lon="19.25"/>
   <way id="3020" version="1">
-    <nd ref="7101"/><nd ref="7102"/>
+    <nd ref="7601"/><nd ref="7602"/>
     <tag k="highway" v="residential"/>
     <tag k="name" v="Outside Detail"/>
   </way>

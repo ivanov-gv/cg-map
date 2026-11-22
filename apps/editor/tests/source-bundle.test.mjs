@@ -27,7 +27,18 @@ test('manifest accepts both bundle versions and requires one entry per supported
     'transport-stops.geojson',
     'water.geojson'
   ]);
-  assert.deepEqual(bundleFilesByVersion[2], ['building-entrances.geojson', 'road-nodes.geojson', ...bundleFilesByVersion[1]]);
+  assert.deepEqual(bundleFilesByVersion[2], [
+    'building-entrances.geojson',
+    'building-labels.geojson',
+    'buildings.geojson',
+    'context-countries.geojson',
+    'land.geojson',
+    'places.geojson',
+    'road-nodes.geojson',
+    'roads.geojson',
+    'transport-stops.geojson',
+    'water.geojson'
+  ]);
   for (const version of [1, 2]) {
     assert.equal(
       validateBundleManifest(manifest(version)).layers.length,
