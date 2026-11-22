@@ -336,7 +336,6 @@
     <member type="node" ref="2032" role="via"/>
     <member type="way" ref="2007" role="to"/>
     <tag k="type" v="restriction"/>
-    <tag k="restriction" v="no_left_turn"/>
   </relation>
 
   <!-- Green areas: one feature per documented OSM tag, including mapped clearings. -->
@@ -442,9 +441,9 @@
   <node id="6122" version="1" lat="42.455" lon="19.285"/>
   <node id="6123" version="1" lat="42.455" lon="19.295"/>
   <node id="6124" version="1" lat="42.445" lon="19.295"/>
-  <node id="7101" version="1" lat="42.40" lon="19.20"/>
-  <node id="7102" version="1" lat="42.40" lon="19.21"/>
-  <node id="7103" version="1" lat="42.40" lon="19.22"/>
+  <node id="7305" version="1" lat="42.40" lon="19.20"/>
+  <node id="7306" version="1" lat="42.40" lon="19.21"/>
+  <node id="7307" version="1" lat="42.40" lon="19.22"/>
   <node id="7111" version="1" lat="42.39" lon="19.20"/>
   <node id="7112" version="1" lat="42.39" lon="19.21"/>
   <node id="7121" version="1" lat="42.39" lon="19.22"/>
@@ -672,9 +671,9 @@
     <nd ref="6121"/>
   </way>
   <way id="7001" version="41">
-    <nd ref="7101"/>
-    <nd ref="7102"/>
-    <nd ref="7103"/>
+    <nd ref="7305"/>
+    <nd ref="7306"/>
+    <nd ref="7307"/>
     <tag k="waterway" v="river"/>
     <tag k="name" v="Test River"/>
     <tag k="name:en" v="Test River EN"/>
