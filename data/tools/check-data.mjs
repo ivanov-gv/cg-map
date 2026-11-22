@@ -162,9 +162,9 @@ const reliefKinds = {
 };
 const copernicusAttribution = '© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved';
 
-export function validateRelief(data, {label}) {
+export function validateRelief(data, {label, contractsDirectory}) {
   const kind = reliefKinds[label];
-  const count = validateCollection(data, {label, geometryTypes: reliefGeometryTypes[label], requireKind: true});
+  const count = validateCollection(data, {label, geometryTypes: reliefGeometryTypes[label], requireKind: true, contractsDirectory});
   for (const feature of data.features) {
     const properties = feature.properties;
     requireValue(properties.kind === kind, `${label}: wrong relief kind ${properties.kind}`);
@@ -827,7 +827,7 @@ export function validateRoads(data, {contractsDirectory} = {}) {
 }
 
 function validateReliefSource(data, {label, requireAdopted = false, contractsDirectory}) {
-  const count = validateRelief(data, {label});
+  const count = validateRelief(data, {label, contractsDirectory});
   if (requireAdopted) {
     requireValue(data.entitySchemaVersion === 1, `${label}: requires entitySchemaVersion 1`);
     validateSourceEntities(data, {label, contractsDirectory});
