@@ -77,7 +77,8 @@ The `test-run` values list an existing package and delete nothing.
 
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
-A test run really pushes images, to a temporary public registry, and really runs npm publish, as a dry run.
+A test run really pushes images, to a temporary public registry, and really runs npm publish as a dry run, after
+checking registry auth with `npm whoami` so a missing token fails the test run as a real publish would.
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
@@ -189,7 +190,8 @@ paused (issue #319), so it runs only when dispatched until the cron is uncomment
 make ci-plan BASE=origin/main
 ```
 
-Pushing images, deploying Pages and publishing dev packages run only from `main`, so only a real merge proves them.
+Pushing images, deploying Pages and publishing dev packages run only from `main`: a test run proves registry auth, but
+only a real merge proves write access and the publish.
 
 ## Workflows must be testable and tested on GitHub before release
 

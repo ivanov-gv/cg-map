@@ -146,8 +146,9 @@ npm install --workspace apps/web --workspace apps/editor --workspace apps/core-d
 ## Releasing map-contracts
 
 A contract change publishes a dev package when ci-publish's plan selects contracts, then a versioned release promotes it
-without rebuilding. The repository package stays `0.0.0-dev`, so it can never satisfy a consumer's exact pin. Before
-tagging a release, test the exact dev package with the integration suite:
+without rebuilding. Publishing checks registry auth with `npm whoami` first, because `--dry-run` skips auth, so a test
+run fails when a real publish would. The repository package stays `0.0.0-dev`, so it can never satisfy a consumer's
+exact pin. Before tagging a release, test the exact dev package with the integration suite:
 
 ```sh
 make -C tests verify MAP_CONTRACTS_VERSION=0.0.0-dev.<commit on main>

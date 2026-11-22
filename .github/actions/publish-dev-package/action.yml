@@ -25,7 +25,18 @@ runs:
         NODE_AUTH_TOKEN: ${{ inputs.token }}
         COMMIT_SHA: ${{ inputs.commit || github.sha }}
       run: |
+        # A folder outside the npm workspace does not read the repository's .npmrc, so give npm its own userconfig.
+        # Keep it outside the repository; npm substitutes NODE_AUTH_TOKEN, so no secret is written to disk.
+        temporary_npm_userconfig="$(mktemp)"
+        trap 'rm -f "$temporary_npm_userconfig"' EXIT
+        chmod 600 "$temporary_npm_userconfig"
+        printf '%s\n' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' > "$temporary_npm_userconfig"
+        export NPM_CONFIG_USERCONFIG="$temporary_npm_userconfig"
         cd "$PACKAGE_DIRECTORY"
+        # npm publish --dry-run skips auth, so prove the token works here in both modes.
+        echo "::group::Check registry authentication"
+        npm whoami --registry https://npm.pkg.github.com
+        echo "::endgroup::"
         version="0.0.0-dev.$COMMIT_SHA"
         npm pkg set version="$version"
         # shellcheck disable=SC2086 # PUBLISH_FLAGS is empty or one flag.

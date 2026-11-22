@@ -955,13 +955,47 @@ test('ci-publish publishes a map-contracts dev package when the plan selects con
   assert.equal(jobs['contracts-package-test-run'].environment, 'test-run');
 });
 
+const publishActionPath = path.join(repoRoot, '.github/actions/publish-dev-package/action.yml');
+
 test('publish-dev-package versions a requested commit, not the workflow ref', () => {
-  const action = fs.readFileSync(
-    path.join(repoRoot, '.github/actions/publish-dev-package/action.yml'),
-    'utf8'
-  );
+  const action = fs.readFileSync(publishActionPath, 'utf8');
   assert.match(action, /^\s{2}commit:$/m, 'the action must accept a source commit');
   assert.match(action, /COMMIT_SHA: \$\{\{ inputs\.commit \|\| github\.sha \}\}/);
+});
+
+test('publish-dev-package checks registry auth before every publish', () => {
+  const action = parseYaml(fs.readFileSync(publishActionPath, 'utf8'));
+  assert.equal(action.runs.using, 'composite');
+  const publishSteps = action.runs.steps.filter(step => (step.run ?? '').includes('npm publish'));
+  assert.equal(publishSteps.length, 1, 'the action needs one publish step');
+  const {run, env} = publishSteps[0];
+  assert.equal(env.NODE_AUTH_TOKEN, '${{ inputs.token }}', 'the registry check must use the action token');
+  const authIndex = run.indexOf('npm whoami --registry https://npm.pkg.github.com');
+  const publishCommand = run.match(/^\s*npm publish\b/m);
+  assert.notEqual(authIndex, -1, 'the action must check registry auth before publishing');
+  assert.ok(publishCommand && publishCommand.index > authIndex, 'the auth check must run before npm publish');
+  assert.match(run, /NPM_CONFIG_USERCONFIG/, 'a folder outside the workspace needs a userconfig');
+  assert.match(run, /\$\{NODE_AUTH_TOKEN\}/, 'npm must read the token from the environment, not a file');
+  assert.match(run, /_authToken/, 'the userconfig must map the registry token');
+  assert.match(run, /mktemp/, 'the userconfig must live outside the repository');
+  assert.doesNotMatch(run, /test_run/, 'both modes must run the same auth check');
+});
+
+test('every dev-package publish job shares the auth-checking action', () => {
+  const {jobs} = load('ci-publish.yml');
+  for (const name of [
+    'package',
+    'package-test-run',
+    'data-package',
+    'data-package-test-run',
+    'contracts-package',
+    'contracts-package-test-run'
+  ]) {
+    assert.ok(
+      jobs[name].steps.some(step => step.uses === './.github/actions/publish-dev-package'),
+      `${name} must use the action that checks registry auth`
+    );
+  }
 });
 
 // The nightly schedule is paused (issue #319): only a dispatch runs it, and the commented cron stays ready to restore.
