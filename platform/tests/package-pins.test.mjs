@@ -49,15 +49,23 @@ test('core in this repository can never satisfy an app pin', () => {
 
 test('the map-data package ships every path its consumers read', () => {
   const mapData = readJSON('data/package.json');
+  const dataTools = [
+    'tools/app-data.mjs',
+    'tools/apply-changeset.mjs',
+    'tools/apply-place-visibility.mjs',
+    'tools/building-entrances.mjs',
+    'tools/check-data.mjs',
+    'tools/contracts.mjs',
+    'tools/editor-bundle.mjs',
+    'tools/entity-identity.mjs'
+  ];
   for (const file of [
     'sources',
     'artifacts',
     'imagery',
     'PROVENANCE.md',
     'tests/fixtures',
-    'tools/app-data.mjs',
-    'tools/editor-bundle.mjs',
-    'tools/building-entrances.mjs'
+    ...dataTools
   ]) {
     assert.ok(mapData.files.includes(file), `data/package.json must ship ${file}`);
   }
@@ -68,9 +76,7 @@ test('the map-data package ships every path its consumers read', () => {
     './imagery/*',
     './PROVENANCE.md',
     './tests/fixtures/*',
-    './tools/app-data.mjs',
-    './tools/editor-bundle.mjs',
-    './tools/building-entrances.mjs'
+    ...dataTools.map(file => `./${file}`)
   ]) {
     assert.ok(mapData.exports[exported], `data/package.json must export ${exported}`);
   }

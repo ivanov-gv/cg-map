@@ -19,12 +19,13 @@ Edit data/sources/places.geojson, review attribution and place count in provenan
 reviewed change:
 
 ```sh
-node data/tools/apply-place-visibility.mjs --update-provenance --accept-new-facts
+node data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts --update-provenance --accept-new-facts
 make -C data check
 make check
 make test-e2e
 ```
 
+The data tools take the shared contracts directory from their caller; the published data package does not contain it.
 The web build incorporates the new directory and regenerates offline manifests in dist/web. Do not regenerate vector
 tiles for a place-only change. If changing release-level timestamp/coverage deliberately, regenerate
 data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
@@ -39,7 +40,7 @@ category default, then `fallbackLevel`. Places with a missing kind take the fall
 To change an assignment, edit the policy, then:
 
 ```sh
-node data/tools/apply-place-visibility.mjs --update-provenance
+node data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts --update-provenance
 make -C data check
 ```
 

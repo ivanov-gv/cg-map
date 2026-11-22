@@ -7,7 +7,6 @@ import {createHash} from 'node:crypto';
 // This tool lives in data/tools/ in the repository and in the package root's tools/ once published. In both layouts
 // its parent holds artifacts/, sources/ and imagery/, so callers can pass another root without copying the tool.
 const localDataRoot = fileURLToPath(new URL('../', import.meta.url));
-const localContractPath = path.join(localDataRoot, '../packages/contracts/place-visibility.json');
 const archiveFilenamePattern = /^montenegro-[a-f0-9]{16}\.pmtiles$/;
 
 // Returns the reviewed release and its archive bytes. Throws rather than assemble an unreviewed map.
@@ -25,7 +24,9 @@ export function readVerifiedRelease(dataRoot = localDataRoot) {
 // Copies the verified map data the shared runtime reads at startup into data/ of an artifact. A consumer passes its own
 // contract path because the published data package does not contain workspace contracts.
 export function copyMapData(outputDirectory, options = {}) {
-  const {dataRoot = localDataRoot, contractPath = localContractPath} = options;
+  const {dataRoot = localDataRoot, contractPath} = options;
+  if (!contractPath)
+    throw new Error('copyMapData: a contractPath is required; the published data package does not contain contracts');
   const root = path.resolve(dataRoot);
   const {release, archiveBytes} = readVerifiedRelease(root);
   const dataDirectory = path.join(outputDirectory, 'data');

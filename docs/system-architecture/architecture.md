@@ -71,7 +71,9 @@ Map data reaches an application or its integration tests in four distinct ways:
    it, so the release is tested as published.
 
 App and platform test modes read the installed package; dev, CI artifact builds and default integration tests read
-repository data and its tools together. See [releasing map data](../runbooks/release.md#releasing-map-data).
+repository data and its tools together. The published package ships every tool those modes import. Tools that validate
+or bundle sources take their contract location from the caller and never resolve a repository-only contract path. See
+[releasing map data](../runbooks/release.md#releasing-map-data).
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then
 register it: `PROJECTS` and `test-ci-*` in the root Makefile, `components` in platform/tools/verify.mjs, `FOLDERS` and a

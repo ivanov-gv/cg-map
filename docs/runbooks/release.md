@@ -80,7 +80,8 @@ with a new one.
 
 Release only a commit on main whose CI run selected data: a merge that changes data publishes `@ivanov-gv/map-data` as
 `0.0.0-dev.<commit>` under the `dev` tag when ci-publish's plan selects data. A versioned release promotes that dev
-package without rebuilding. Before tagging, run the integration suite against the exact dev package being promoted:
+package without rebuilding. Before tagging a data release, run the integration suite against the exact dev package being
+promoted:
 
 ```sh
 make -C tests verify MAP_DATA_VERSION=0.0.0-dev.<commit on main>
@@ -101,7 +102,20 @@ prerelease such as `map-data/v0.2.0-rc.1` with `--prerelease` to publish under `
 `latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
 
 `0.1.0` is the one exception: its package was built from commit `51a8feb` of `feature/337-data-package`, its data
-content is identical to main `0a74bd8`, and the lead published it on 2026-11-22. It has no tag and started no CD.
+content is identical to main `0a74bd8`, and the lead published it on 2026-11-22. It has no tag and started no CD. It
+predates the complete tool set and caller-supplied contract locations, and a published version cannot be changed.
+`make -C tests verify MAP_DATA_VERSION=0.1.0` against the integration tests at `edbf441` showed six failures:
+
+- `tests/integration/contracts.test.mjs:26` — the package has no `tools/check-data.mjs`.
+- `tests/integration/editor-bundle.test.mjs:13` — the tool cannot find the `editor-bundle.schema.json` contract.
+- `tests/integration/editor-bundle.test.mjs:31` — the same missing contract breaks the manifest contract check.
+- `tests/integration/editor-bundle.test.mjs:57` — the same missing contract breaks the source-set refusal check.
+- `tests/integration/editor-changeset.test.mjs:15` — the package has no `tools/apply-changeset.mjs`.
+- `tests/integration/entity-identity.test.mjs:12` — the package has no `tools/check-data.mjs`.
+
+Those lines describe the suite at `edbf441`; later call sites pass a contract URL that `0.1.0` also accepts. These are
+findings about the immutable package, not tests to skip. Later versions ship the imported tools and take their contract
+location from the caller.
 
 App and platform hosting tests read only that pinned package, so a data-only change selects no app or platform pipeline.
 Each application bumps its own pin in its own change, as map-core upgrades do; a pin bump changes `package-lock.json`

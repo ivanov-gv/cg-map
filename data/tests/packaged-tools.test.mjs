@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
 import operatingSystem from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {copyMapData} from '../tools/app-data.mjs';
+import {readContract} from '../tools/contracts.mjs';
 import {writeEditorBundle} from '../tools/editor-bundle.mjs';
+
+const contractsDirectory = fileURLToPath(new URL('../../packages/contracts/', import.meta.url));
 
 function temporaryDirectory(t) {
   const directory = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), 'map-data-tools-'));
@@ -46,10 +50,26 @@ test('copyMapData reads an injected root and contract', t => {
   assert.equal(fileSystem.readFileSync(path.join(outputDirectory, 'data', archive)).toString(), archiveBytes.toString());
 });
 
+test('packaged tools name a missing contracts input instead of resolving repository paths', async t => {
+  assert.throws(
+    () => readContract(undefined, 'editor-bundle.schema.json'),
+    /contracts directory is required to read editor-bundle\.schema\.json/
+  );
+  assert.throws(
+    () => copyMapData(path.join(temporaryDirectory(t), 'artifact')),
+    /copyMapData: a contractPath is required/
+  );
+  await assert.rejects(
+    writeEditorBundle(temporaryDirectory(t), path.join(temporaryDirectory(t), 'bundle')),
+    /writeEditorBundle: editor-bundle\.schema\.json path is required/
+  );
+});
+
 test('writeEditorBundle reads an injected source directory and contract', async t => {
   const directory = temporaryDirectory(t);
-  const contractURL = new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url);
-  const contract = JSON.parse(fileSystem.readFileSync(contractURL, 'utf8'));
+  const contract = JSON.parse(
+    fileSystem.readFileSync(path.join(contractsDirectory, 'editor-bundle.schema.json'), 'utf8')
+  );
   const filenames = contract.properties.layers.items.properties.filename.enum;
   const sourceDirectory = path.join(directory, 'sources');
   fileSystem.mkdirSync(sourceDirectory);
@@ -58,7 +78,11 @@ test('writeEditorBundle reads an injected source directory and contract', async 
   }
 
   const outputDirectory = path.join(directory, 'bundle');
-  const manifest = await writeEditorBundle(sourceDirectory, outputDirectory, contractURL);
+  const manifest = await writeEditorBundle(
+    sourceDirectory,
+    outputDirectory,
+    path.join(contractsDirectory, 'editor-bundle.schema.json')
+  );
 
   assert.deepEqual(
     manifest.layers.map(layer => layer.filename),

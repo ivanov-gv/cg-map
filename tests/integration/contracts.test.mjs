@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import {dataSourcePath, dataToolURL} from '../data-root.mjs';
 import {categories} from '../../apps/web/src/core.js';
 import {parseVisibilityConfig, normalizePlaces, assertPublishedPlaces} from '../../dist/web/map-core/place-visibility.js';
+
+const contractsDirectory = path.join(import.meta.dirname, '../../packages/contracts');
 
 test('web categories agree with the published place contract', () => {
   const contract = JSON.parse(fs.readFileSync('packages/contracts/places.schema.json'));
@@ -36,7 +39,7 @@ test('producer and browser agree on separate building numbers and located entran
   const fixture = JSON.parse(
     fs.readFileSync('packages/contracts/fixtures/building-entrances.json'),
   );
-  assert.equal(validateBuildingLabels(fixture.labels, fixture.buildings), 1);
+  assert.equal(validateBuildingLabels(fixture.labels, fixture.buildings, {contractsDirectory}), 1);
   const index = buildingAddressIndex(fixture.labels);
   assert.equal(buildingAddress(index.get(0)), fixture.address);
   assert.equal(

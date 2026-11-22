@@ -17,13 +17,14 @@ const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 // The contract between the editor and the importer, end to end: whatever the editor exports, the data-owned
 // importer must accept, and the result must equal what the editor showed.
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+const contractsDirectory = path.join(repositoryRoot, 'packages/contracts');
 const envelope = {
   id: 'integration-changeset',
   createdAt: '2026-11-06T10:00:00.000Z',
   author: 'Integration Test',
   reason: 'Editor and importer agree'
 };
-const readContract = filename => JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'packages/contracts', filename)));
+const readContract = filename => JSON.parse(fs.readFileSync(path.join(contractsDirectory, filename)));
 const rules = readContract('editor-layers.json');
 const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));
 
@@ -60,7 +61,7 @@ function recordValidEdit(session, filename, key, feature) {
 // Exports through a JSON round trip, because that is the only way a changeset leaves the browser.
 async function exportAndApply(session, sources, root) {
   const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope)));
-  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt})};
+  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt, contractsDirectory})};
 }
 
 const indexOfFirst = (features, isWanted) => features.findIndex(isWanted);

@@ -10,6 +10,7 @@ import {matchesPlaceSearch, selectNearestPlaces} from '../../apps/web/src/core.j
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
 const {validateCollection, validateStops, validateBuildingLabels} = await import(dataToolURL('check-data.mjs'));
+const contractsDirectory = path.join(import.meta.dirname, '../../packages/contracts');
 
 // Run the same source features through domain validation, real byte-preserving assembly and both consumers.
 test('entity-aware sources pass producer validation and reach editor and web without identity loss', async testContext => {
@@ -20,12 +21,13 @@ test('entity-aware sources pass producer validation and reach editor and web wit
   await mkdir(sourceDirectory);
   const fixture = JSON.parse(await readFile(new URL('../../packages/contracts/fixtures/entity-identity-cases.json', import.meta.url)));
   for (const [filename, collection] of Object.entries(fixture.sources)) {
-    assert.equal(validateCollection(collection, {label: filename, places: filename === 'places.geojson'}), 1);
+    assert.equal(validateCollection(collection, {label: filename, places: filename === 'places.geojson', contractsDirectory}), 1);
     await writeFile(path.join(sourceDirectory, filename), JSON.stringify(collection));
   }
-  assert.equal(validateStops(fixture.sources['transport-stops.geojson']), 1);
-  assert.equal(validateBuildingLabels(fixture.sources['building-labels.geojson'], fixture.sources['buildings.geojson']), 1);
-  const manifest = validateBundleManifest(await writeEditorBundle(sourceDirectory, outputDirectory));
+  assert.equal(validateStops(fixture.sources['transport-stops.geojson'], {contractsDirectory}), 1);
+  assert.equal(validateBuildingLabels(fixture.sources['building-labels.geojson'], fixture.sources['buildings.geojson'], {contractsDirectory}), 1);
+  const contractURL = new URL('../../packages/contracts/editor-bundle.schema.json', import.meta.url);
+  const manifest = validateBundleManifest(await writeEditorBundle(sourceDirectory, outputDirectory, contractURL));
   const decodedSources = new Map();
   for (const metadata of manifest.layers) {
     const bytes = await readFile(path.join(outputDirectory, metadata.filename));
