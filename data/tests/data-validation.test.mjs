@@ -451,7 +451,7 @@ test('interior entrance points are rejected even when their wall bearing is corr
 
 test('roads validate pathClass, startNode/endNode, and level integers', () => {
   const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
-  assert.ok(validateRoads(roads) > 0);
+  assert.ok(validateRoads(roads, {contractsDirectory}) > 0);
 });
 
 test('roads reject invalid pathClass values', () => {
@@ -464,7 +464,7 @@ test('roads reject invalid pathClass values', () => {
       break;
     }
   }
-  assert.throws(() => validateRoads(bad), /invalid pathClass/);
+  assert.throws(() => validateRoads(bad, {contractsDirectory}), /invalid pathClass/);
 });
 
 test('roads reject non-integer startLevel', () => {
@@ -476,7 +476,7 @@ test('roads reject non-integer startLevel', () => {
       break;
     }
   }
-  assert.throws(() => validateRoads(bad), /startLevel must be an integer/);
+  assert.throws(() => validateRoads(bad, {contractsDirectory}), /startLevel must be an integer/);
 });
 
 test('roads require startNode/endNode and startLevel/endLevel together', () => {
@@ -489,26 +489,26 @@ test('roads require startNode/endNode and startLevel/endLevel together', () => {
       break;
     }
   }
-  assert.throws(() => validateRoads(bad), /must appear together/);
+  assert.throws(() => validateRoads(bad, {contractsDirectory}), /must appear together/);
 });
 
 test('road-nodes validate kind and OSM identity', () => {
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
-  assert.ok(validateRoadNodes(nodes) > 0);
+  assert.ok(validateRoadNodes(nodes, {contractsDirectory}) > 0);
 });
 
 test('road-nodes reject unknown kind', () => {
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
   const bad = structuredClone(nodes);
   bad.features[0].properties.kind = 'unknown_kind';
-  assert.throws(() => validateRoadNodes(bad), /unknown road node kind/);
+  assert.throws(() => validateRoadNodes(bad, {contractsDirectory}), /unknown road node kind/);
 });
 
 test('road-nodes reject duplicate entityId', () => {
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
   const bad = structuredClone(nodes);
   bad.features[1].properties.entityId = bad.features[0].properties.entityId;
-  assert.throws(() => validateRoadNodes(bad), /duplicate entityId/);
+  assert.throws(() => validateRoadNodes(bad, {contractsDirectory}), /duplicate entityId/);
 });
 
 test('turn-restrictions validate structure and refs resolve', () => {

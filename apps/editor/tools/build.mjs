@@ -30,7 +30,8 @@ copyMapData(outputDirectory, {
 });
 await writeEditorBundle(
   path.join(dataRoot, 'sources'),
-  path.join(outputDirectory, 'sources')
+  path.join(outputDirectory, 'sources'),
+  path.join(contractsRoot, 'editor-bundle.schema.json')
 );
 // The editing rules are a shared contract: the importer reads the same file.
 fileSystem.copyFileSync(

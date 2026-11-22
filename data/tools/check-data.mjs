@@ -421,8 +421,8 @@ const RESTRICTION_VALUES = new Set([
 const PATH_CLASS_VALUES = new Set(['main', 'trail']);
 
 // Road nodes: points with OSM identity and a recognised highway kind.
-export function validateRoadNodes(data) {
-  const count = validateCollection(data, {label: 'road-nodes.geojson', geometryTypes: ['Point']});
+export function validateRoadNodes(data, {contractsDirectory} = {}) {
+  const count = validateCollection(data, {label: 'road-nodes.geojson', geometryTypes: ['Point'], contractsDirectory});
   const seenEntityIds = new Set();
   for (const [index, feature] of data.features.entries()) {
     const name = `road-nodes.geojson feature ${index}`;
@@ -515,8 +515,8 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
 }
 
 // Validate road features: pathClass, end nodes and levels.
-export function validateRoads(data) {
-  const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString']});
+export function validateRoads(data, {contractsDirectory} = {}) {
+  const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString'], contractsDirectory});
   for (const [index, feature] of data.features.entries()) {
     const name = `roads.geojson feature ${index}`;
     const properties = feature.properties;
@@ -585,12 +585,12 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const roadsPath = path.join(root, 'data/sources/roads.geojson');
   if (fs.existsSync(roadsPath)) {
     const roadsData = JSON.parse(fs.readFileSync(roadsPath));
-    validateRoads(roadsData);
+    validateRoads(roadsData, {contractsDirectory});
     // Validate road nodes if present
     const roadNodesPath = path.join(root, 'data/sources/road-nodes.geojson');
     if (fs.existsSync(roadNodesPath)) {
       const roadNodesData = JSON.parse(fs.readFileSync(roadNodesPath));
-      validateRoadNodes(roadNodesData);
+      validateRoadNodes(roadNodesData, {contractsDirectory});
       // Validate turn restrictions against roads and road nodes
       const restrictionsPath = path.join(root, 'data/sources/turn-restrictions.json');
       if (fs.existsSync(restrictionsPath)) {
