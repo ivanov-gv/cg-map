@@ -54,13 +54,14 @@ exclude ordinary shallow banks; a 30 m DEM cannot reliably separate smaller rise
 minimum-length constants in the same module exist because a 60 m gap is usually one bad pixel or small bend, while a
 sub-100 m line after joining reads as speckle. Slope aspect and flat-ground rules live in that module too, with unit
 tests run by plain `python3`. Green kinds come from the single `GREEN_KINDS` constant in
-`data/tools/relief/derivations.py`, which Feature #326 extends; the current `land.geojson` contains only `park` among
-those kinds. Green kinds, minimum slope area, the retired ridge radius, layer sources and the ridge/rim thresholds are
-recorded in the `relief` block of `data/sources/provenance.json`; features carry object facts only.
+`data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
+nine configured kinds occur in the current `land.geojson` (`garden` is absent). Green kinds, minimum slope area, the
+retired ridge radius, layer sources and the ridge/rim thresholds are recorded in the `relief` block of
+`data/sources/provenance.json`; features carry object facts only.
 
-Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the bundle to the eight files in
-`editor-bundle.schema.json`, so adding a relief source must not change browser editing tests. See
-[data licensing](../map-data/data-license.md) for the required Copernicus attribution.
+Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the bundle to the versioned exact file set in
+`editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must not change browser editing
+tests. See [data licensing](../map-data/data-license.md) for the required Copernicus attribution.
 
 ## Place-only edits
 

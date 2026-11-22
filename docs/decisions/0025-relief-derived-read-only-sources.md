@@ -1,4 +1,4 @@
-# 0020: Relief as derived read-only sources
+# 0025: Relief as derived read-only sources
 
 ## Status
 
@@ -8,8 +8,8 @@ Accepted.
 
 Issue #329 needs terrain behaviour in a read-only map PoC: 20 m contours, checked OSM summits, aspect classes inside
 green areas, summit ridges, and canyon rims. The raster DEM is a large external input that must stay out of Git, and the
-source editor already pins exactly eight editable GeoJSON files. Adding five arbitrary files would either break the
-editor bundle or quietly create editing modes for computed facts.
+source editor already pins a versioned, exact set of editable GeoJSON files. Adding five arbitrary files would either
+break the editor bundle or quietly create editing modes for computed facts.
 
 ## Decision
 
@@ -20,7 +20,7 @@ only its summary and checksum are provenance, because per-summit results live on
 and canyon rim parts are separate `LineString` features, and slopes are separate `Polygon` features, so the editor can
 move one line or recolour one side. Derived IDs and canyon `entityPart` numbers are deterministic for pinned inputs but
 are not stable across DEM or green-area changes. OSM summit facts are preserved with DEM values, `heightCheck` and
-reasons beside them. Editor layers get read-only reasons, and the bundle filters to its eight-file schema.
+reasons beside them. Editor layers get read-only reasons, and the bundle filters to its versioned exact-file-set schema.
 
 ## Consequences
 
@@ -40,3 +40,8 @@ minimum slope area, layer sources and those thresholds are build parameters in t
 keep only object facts. The full build uses pinned GIS packages in `~/.cache/cg-map/venv` through `PYTHON=...`, while
 plain-system-Python unit tests stay NumPy-only. Current procedures and the authoritative property rules are in the
 [data runbook](../runbooks/data.md#relief-sources) and [contracts README](../../packages/contracts/README.md).
+
+Decision refinement (2026-11-22): after the #326 land kinds and #328 border sources were stacked into this Feature, the
+configured green kinds were aligned to the land-kind enum in `source-land-water.schema.json`. `check-data` now rejects a
+recorded build that drifts from that enum or from the kinds actually present in `land.geojson`, so a green-kind change
+needs a reviewed rebuild.
