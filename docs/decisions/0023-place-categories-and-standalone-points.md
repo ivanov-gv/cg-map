@@ -14,12 +14,28 @@ to fit the existing enum would also misrepresent the source and give it sight-le
 
 ## Decision
 
-Keep the five categories. Extract named standalone points from the documented `historic`, `tourism`, `amenity`,
-`barrier` and `man_made` values with the OSM value as `kind`; `tourism=information` is included only when named.
-Historic and tourism points, named gates and man-made structures, and fountains are `sights`. `place_of_worship`,
-`townhall`, `theatre`, `cinema`, `library`, `arts_centre` and `community_centre` are published as `sights` only when a
-sight tag (`tourism=attraction`, `heritage=*` or `historic=*`) promotes them; otherwise they are not published until the
-category contract is extended in a separate reviewed change.
+Keep the five categories. Extract named standalone points from the documented `historic`, `tourism`, and `amenity`
+values with the OSM value as `kind`. Historic and tourism points (`viewpoint`, `artwork`, `attraction`, `museum`,
+`gallery`) and fountains are `sights`. `place_of_worship`, `townhall`, `theatre`, `cinema`, `library`, `arts_centre` and
+`community_centre` are published as `sights` only when a sight tag (`tourism=attraction`, `heritage=*` or `historic=*`)
+promotes them; otherwise they are not published until the category contract is extended in a separate reviewed change.
+
+### Category gaps — kinds not extracted
+
+The following OSM kinds are common enough to appear in the Montenegro extract, but they do not fit the five published
+categories (`food`, `sights`, `shops`, `stay`, `essentials`). Extracting them as `sights` would misrepresent the source.
+They remain excluded until a new category is agreed:
+
+| OSM key/value         | Count in PBF | Reason                                        |
+| --------------------- | ------------ | --------------------------------------------- |
+| `tourism=information` | 129          | Travel agencies, signposts, notice boards     |
+| `barrier=gate`        | 1            | Named gates — would need `public` category    |
+| `man_made=tower`      | 12           | Would need `infrastructure` category          |
+| `man_made=lighthouse` | 3            | Would need `infrastructure` category          |
+| `man_made=bridge`     | 6            | Bridges are linear features, not place points |
+
+Sight promotion is strict: only `tourism=attraction` (not `tourism=hotel`, `tourism=music_school`, etc.), `heritage=*`,
+or `historic=*` promote a place to the `sights` category.
 
 A point is `standalone: true` only when no published building footprint contains it. The same footprint join sets
 `buildingEntityId` on places inside a building, so a standalone point never carries both fields. Facts are copied

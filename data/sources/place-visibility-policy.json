@@ -19,7 +19,6 @@
     "artwork": 5,
     "yes": 5,
     "monument": 4,
-    "castle": 2,
     "ruins": 4,
     "fort": 4,
     "city_gate": 4,
@@ -29,7 +28,6 @@
     "viewpoint": 4,
     "attraction": 4,
     "gallery": 4,
-    "information": 5,
     "fountain": 4,
     "place_of_worship": 3,
     "townhall": 3,
@@ -37,11 +35,7 @@
     "cinema": 4,
     "library": 3,
     "arts_centre": 3,
-    "community_centre": 4,
-    "gate": 5,
-    "tower": 4,
-    "lighthouse": 4,
-    "bridge": 5
+    "community_centre": 4
   },
   "categories": {
     "food": 4,

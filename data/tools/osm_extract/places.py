@@ -30,7 +30,7 @@ STANDALONE_HISTORIC = {
     'city_gate', 'archaeological_site', 'wayside_cross', 'wayside_shrine',
 }
 STANDALONE_TOURISM = {
-    'viewpoint', 'artwork', 'attraction', 'museum', 'gallery', 'information',
+    'viewpoint', 'artwork', 'attraction', 'museum', 'gallery',
 }
 # amenity=* values that are standalone points and map to 'sights'.
 STANDALONE_AMENITY_SIGHTS = {'fountain'}
@@ -41,26 +41,34 @@ STANDALONE_AMENITY_NO_CATEGORY = {
     'cinema', 'library', 'arts_centre', 'community_centre',
 }
 STANDALONE_AMENITY = STANDALONE_AMENITY_SIGHTS | STANDALONE_AMENITY_NO_CATEGORY
-STANDALONE_BARRIER = {'gate'}
-STANDALONE_MAN_MADE = {'tower', 'lighthouse', 'bridge'}
+# barrier=gate and man_made=tower|lighthouse|bridge are not extracted yet;
+# they need categories (public, infrastructure) the contract does not have.
+# See ADR 0023 for the category gap record.
 STANDALONE_KEYS = {
     'historic': STANDALONE_HISTORIC,
     'tourism': STANDALONE_TOURISM,
     'amenity': STANDALONE_AMENITY,
-    'barrier': STANDALONE_BARRIER,
-    'man_made': STANDALONE_MAN_MADE,
 }
 
 # Tags that promote certain amenity kinds to 'sights' even when their
-# default category is not yet defined.
-SIGHT_PROMOTION_TAGS = {'tourism', 'heritage', 'historic'}
+# default category is not yet defined. Only tourism=attraction counts as
+# a sight tag, not tourism=hotel or tourism=music_school.
+SIGHT_PROMOTION_TAGS = {'heritage', 'historic'}
+SIGHT_PROMOTION_TOURISM = {'attraction'}
 
 
 def has_sight_promotion(tags):
-    """Check if a place has a tag that promotes it to 'sights'."""
+    """Check if a place has a tag that promotes it to 'sights'.
+
+    Only tourism=attraction (not any tourism value), heritage=*, or
+    historic=* promote a place to the sights category.
+    """
     for key in SIGHT_PROMOTION_TAGS:
         if tags.get(key):
             return True
+    tourism = tags.get('tourism', '')
+    if tourism in SIGHT_PROMOTION_TOURISM:
+        return True
     return False
 
 
@@ -88,12 +96,9 @@ def category_for(tags):
     amenity = tags.get('amenity', '')
     tourism = tags.get('tourism', '')
     historic = tags.get('historic', '')
-    barrier = tags.get('barrier', '')
-    man_made = tags.get('man_made', '')
 
     is_standalone_sight = (
         historic in STANDALONE_HISTORIC or tourism in STANDALONE_TOURISM
-        or barrier in STANDALONE_BARRIER or man_made in STANDALONE_MAN_MADE
         or amenity in STANDALONE_AMENITY_SIGHTS
     )
     if amenity in FOOD_AMENITIES:
@@ -125,8 +130,6 @@ def get_kind(tags):
         or tags.get('tourism')
         or tags.get('shop')
         or tags.get('historic')
-        or tags.get('barrier')
-        or tags.get('man_made')
     )
 
 

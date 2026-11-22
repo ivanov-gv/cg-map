@@ -35,7 +35,9 @@ data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
 [Stable POI visibility](../ui-ux/features/poi-visibility.md) gives each place a fixed level. The zoom table is
 [place-visibility.json](../../packages/contracts/place-visibility.json). Assignments live in
 data/sources/place-visibility-policy.json, separate from OSM facts. Precedence is active ID override, kind rule,
-category default, then `fallbackLevel`. Places with a missing kind take the fallback.
+category default, then `fallbackLevel`. Places with a missing kind take the fallback. See
+[ADR 0023](../decisions/0023-place-categories-and-standalone-points.md) for which OSM kinds are extracted and which are
+excluded as category gaps.
 
 To change an assignment, edit the policy, then:
 

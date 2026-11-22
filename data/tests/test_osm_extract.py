@@ -33,8 +33,6 @@ from osm_extract.places import (  # noqa: E402
     STANDALONE_AMENITY,
     STANDALONE_AMENITY_SIGHTS,
     STANDALONE_AMENITY_NO_CATEGORY,
-    STANDALONE_BARRIER,
-    STANDALONE_MAN_MADE,
 )
 
 FIXTURE = ROOT / 'data/tests/fixtures/osm-extract-simple.osm'
@@ -791,7 +789,8 @@ class OsmExtractTest(unittest.TestCase):
             (self.first_root / 'data/sources/provenance.json').read_text()
         )['building_details']
         self.assertEqual(details['placesInsideBuildings'], 3)
-        self.assertEqual(details['placesOutsideBuildings'], 10)
+        # node/1013 (tower) and node/1014 (gate) are no longer extracted
+        self.assertEqual(details['placesOutsideBuildings'], 8)
 
     def test_containment_sets_building_id_and_standalone_together(self):
         """One footprint join decides both published location properties."""
@@ -1182,18 +1181,25 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertTrue(has_sight_promotion({'historic': 'monument'}))
         self.assertFalse(has_sight_promotion({'amenity': 'library'}))
         self.assertFalse(has_sight_promotion({}))
+        # Only tourism=attraction promotes, not other tourism values
+        self.assertFalse(has_sight_promotion({'tourism': 'hotel'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'museum'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'music_school'}))
+        self.assertFalse(has_sight_promotion({'tourism': 'drinking_water'}))
 
-    def test_standalone_barrier_kinds_map_to_sights(self):
-        for kind in STANDALONE_BARRIER:
-            with self.subTest(kind=kind):
-                tags = {'name': 'Test', 'barrier': kind}
-                self.assertEqual(category_for(tags), 'sights')
+    def test_standalone_barrier_kinds_not_extracted(self):
+        """barrier=gate is not extracted — no category for it (ADR 0023)."""
+        tags = {'name': 'Test', 'barrier': 'gate'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
 
-    def test_standalone_man_made_kinds_map_to_sights(self):
-        for kind in STANDALONE_MAN_MADE:
+    def test_standalone_man_made_kinds_not_extracted(self):
+        """man_made=tower|lighthouse|bridge not extracted (ADR 0023)."""
+        for kind in ('tower', 'lighthouse', 'bridge'):
             with self.subTest(kind=kind):
                 tags = {'name': 'Test', 'man_made': kind}
-                self.assertEqual(category_for(tags), 'sights')
+                self.assertEqual(category_for(tags), '')
+                self.assertFalse(is_standalone_kind(tags))
 
     def test_existing_categories_unchanged(self):
         self.assertEqual(
@@ -1212,25 +1218,25 @@ class StandalonePlacesTest(unittest.TestCase):
             category_for({'name': 'X', 'tourism': 'museum'}), 'sights'
         )
 
-    def test_is_standalone_kind_returns_true_for_new_kinds(self):
+    def test_tourism_information_not_extracted(self):
+        """tourism=information is not extracted — too many non-sights (ADR 0023)."""
+        tags = {'name': 'Summit Travel Agency', 'tourism': 'information'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
+
+    def test_is_standalone_kind_returns_true_for_extracted_kinds(self):
         self.assertTrue(is_standalone_kind({'historic': 'fort'}))
-        self.assertTrue(is_standalone_kind({'tourism': 'information'}))
+        self.assertTrue(is_standalone_kind({'tourism': 'viewpoint'}))
         self.assertTrue(is_standalone_kind({'amenity': 'fountain'}))
-        self.assertTrue(is_standalone_kind({'barrier': 'gate'}))
-        self.assertTrue(is_standalone_kind({'man_made': 'lighthouse'}))
+        # barrier and man_made are not extracted (ADR 0023)
+        self.assertFalse(is_standalone_kind({'barrier': 'gate'}))
+        self.assertFalse(is_standalone_kind({'man_made': 'lighthouse'}))
 
     def test_is_standalone_kind_returns_false_for_regular_kinds(self):
         self.assertFalse(is_standalone_kind({'amenity': 'cafe'}))
         self.assertFalse(is_standalone_kind({'shop': 'clothes'}))
         self.assertFalse(is_standalone_kind({'tourism': 'hotel'}))
 
-    def test_get_kind_checks_barrier_and_man_made(self):
-        self.assertEqual(
-            get_kind({'barrier': 'gate'}), 'gate'
-        )
-        self.assertEqual(
-            get_kind({'man_made': 'tower'}), 'tower'
-        )
 
     def test_collect_facts_copies_standard_tags(self):
         tags = {
@@ -1296,8 +1302,8 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertIn('node/1010', place_ids, 'monument extracted')
         self.assertIn('node/1011', place_ids, 'fountain extracted')
         self.assertIn('node/1012', place_ids, 'library extracted')
-        self.assertIn('node/1013', place_ids, 'tower extracted')
-        self.assertIn('node/1014', place_ids, 'gate extracted')
+        # node/1013 (man_made=tower) is not extracted — no category (ADR 0023)
+        # node/1014 (barrier=gate) is not extracted — no category (ADR 0023)
         self.assertIn('node/1015', place_ids, 'place_of_worship extracted')
 
     def test_standalone_flag_set_outside_building(self):
@@ -1355,10 +1361,8 @@ class StandalonePlacesTest(unittest.TestCase):
         l_props = library.get('properties', {})
         self.assertEqual(l_props.get('phone'), '+382 20 123 456')
         self.assertEqual(l_props.get('wheelchair'), 'yes')
-        # node/1013 has name:sr-Latn
-        tower = by_id.get('node/1013', {})
-        t_props = tower.get('properties', {})
-        self.assertEqual(t_props.get('name:sr-Latn'), 'Test Kula')
+        # node/1013 (man_made=tower) is not extracted — no category (ADR 0023)
+        self.assertNotIn('node/1013', by_id)
         # node/1015 has website and contact:email normalised to email
         church = by_id.get('node/1015', {})
         c_props = church.get('properties', {})
