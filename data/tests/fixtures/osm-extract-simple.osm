@@ -96,6 +96,11 @@
     <tag k="name" v="Inside Monument"/>
     <tag k="historic" v="monument"/>
   </node>
+  <node id="1017" version="1" lat="42.447" lon="19.257">
+    <tag k="name" v="Test Lighthouse"/>
+    <tag k="man_made" v="lighthouse"/>
+    <tag k="name:en" v="Test Lighthouse EN"/>
+  </node>
 
   <node id="2011" version="1" lat="42.44" lon="19.25"/>
   <node id="2012" version="1" lat="42.44" lon="19.251"/>

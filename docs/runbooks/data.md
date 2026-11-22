@@ -60,8 +60,8 @@ facts unless you also pass `--accept-new-facts` after reviewing them. Without th
 Place facts include `name`, `name:en`, `name:sr-Latn`, `phone` (from `phone` or `contact:phone`), `website` (from
 `website` or `contact:website`), `email` (from `email` or `contact:email`), `opening_hours` (OSM format), `wheelchair`,
 `addr:street`, `addr:housenumber`, `level`, `cuisine`, `wikidata`, `wikipedia`. The `contact:*` keys normalise onto the
-plain key only when the plain key is absent. Standalone points (historic, tourism, amenity, barrier, man_made) receive
-`standalone: true` when not inside a building footprint.
+plain key only when the plain key is absent. Standalone points (historic, tourism, amenity, and `man_made=tower` or
+`man_made=lighthouse`) receive `standalone: true` when not inside a building footprint.
 
 Each override needs `id`, `level`, `reason`, `active`, and `provenance` (`basis`, `reviewedBy`, `reviewedAt`). Unknown
 or duplicate IDs and unsupported levels are rejected. Level 1 is reserved for editorially reviewed places in the sights

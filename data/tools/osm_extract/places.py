@@ -41,13 +41,15 @@ STANDALONE_AMENITY_NO_CATEGORY = {
     'cinema', 'library', 'arts_centre', 'community_centre',
 }
 STANDALONE_AMENITY = STANDALONE_AMENITY_SIGHTS | STANDALONE_AMENITY_NO_CATEGORY
-# barrier=gate and man_made=tower|lighthouse|bridge are not extracted yet;
-# they need categories (public, infrastructure) the contract does not have.
-# See ADR 0023 for the category gap record.
+# Named towers and lighthouses are sights. man_made=bridge stays excluded:
+# a bridge is a linear feature, not a standalone place point. barrier=gate
+# also stays excluded until the contract has a public category. See ADR 0023.
+STANDALONE_MAN_MADE_SIGHTS = {'tower', 'lighthouse'}
 STANDALONE_KEYS = {
     'historic': STANDALONE_HISTORIC,
     'tourism': STANDALONE_TOURISM,
     'amenity': STANDALONE_AMENITY,
+    'man_made': STANDALONE_MAN_MADE_SIGHTS,
 }
 
 # Tags that promote certain amenity kinds to 'sights' even when their
@@ -89,16 +91,19 @@ CONTACT_NORMALISATION = {
 def category_for(tags):
     """Return the display category an OSM feature supports, or a blank.
 
-    Only the five contract categories are used. Public and cultural amenity
-    kinds would need new categories, so they drop out unless a sight tag
-    (tourism=attraction, heritage=*, historic=*) promotes them to sights.
+    Only the five contract categories are used. Named towers and lighthouses
+    are sights. Public and cultural amenity kinds would need new categories,
+    so they drop out unless a sight tag (tourism=attraction, heritage=*,
+    historic=*) promotes them to sights.
     """
     amenity = tags.get('amenity', '')
     tourism = tags.get('tourism', '')
     historic = tags.get('historic', '')
+    man_made = tags.get('man_made', '')
 
     is_standalone_sight = (
         historic in STANDALONE_HISTORIC or tourism in STANDALONE_TOURISM
+        or man_made in STANDALONE_MAN_MADE_SIGHTS
         or amenity in STANDALONE_AMENITY_SIGHTS
     )
     if amenity in FOOD_AMENITIES:
@@ -130,6 +135,7 @@ def get_kind(tags):
         or tags.get('tourism')
         or tags.get('shop')
         or tags.get('historic')
+        or tags.get('man_made')
     )
 
 

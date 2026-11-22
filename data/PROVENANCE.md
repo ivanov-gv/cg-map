@@ -11,7 +11,7 @@ features. The land file has 605 extracted green areas, one country outline and s
 water file has 1,122 polygons (including one derived ocean polygon) and 673 waterway or coastline lines. A
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
-tags are omitted rather than published as empty strings. The place snapshot has 2,112 entries, including named
+tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
 standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 20,985,409
 bytes.
 
@@ -22,8 +22,8 @@ entrance nodes on or within one metre of a published footprint, with 28 nearby c
 `start_date`, 265 `name`, 142 `roof:levels`, 896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number
 placeholders were omitted and recorded as `nohousenumber: "yes"`. A street name joins to a road entity only when case-
 and whitespace-folded text matches exactly one connected group of same-named road ways; `addr:streetEntityId` names the
-group's lowest way ID and `addr:streetEntityIds` lists its members: 321 joined and 575 did not. There are 1,093 places
-inside a footprint and 1,019 outside. Counts per copied tag and entrance kind live in `sources/provenance.json` under
+group's lowest way ID and `addr:streetEntityIds` lists its members: 321 joined and 575 did not. There are 1,090 places
+inside a footprint and 887 outside. Counts per copied tag and entrance kind live in `sources/provenance.json` under
 `building_details`. No energy-class field is published: no open OSM source in this extract supports one, and marking
 that gap here avoids presenting an inferred value as a source fact.
 

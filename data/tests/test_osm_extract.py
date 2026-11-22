@@ -789,8 +789,8 @@ class OsmExtractTest(unittest.TestCase):
             (self.first_root / 'data/sources/provenance.json').read_text()
         )['building_details']
         self.assertEqual(details['placesInsideBuildings'], 3)
-        # node/1013 (tower) and node/1014 (gate) are no longer extracted
-        self.assertEqual(details['placesOutsideBuildings'], 8)
+        # node/1013 (tower) and node/1017 (lighthouse) are outside; gate is not
+        self.assertEqual(details['placesOutsideBuildings'], 10)
 
     def test_containment_sets_building_id_and_standalone_together(self):
         """One footprint join decides both published location properties."""
@@ -1193,13 +1193,20 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertEqual(category_for(tags), '')
         self.assertFalse(is_standalone_kind(tags))
 
-    def test_standalone_man_made_kinds_not_extracted(self):
-        """man_made=tower|lighthouse|bridge not extracted (ADR 0023)."""
-        for kind in ('tower', 'lighthouse', 'bridge'):
+    def test_named_towers_and_lighthouses_are_sights(self):
+        """tower and lighthouse are extracted with the OSM value as kind."""
+        for kind in ('tower', 'lighthouse'):
             with self.subTest(kind=kind):
                 tags = {'name': 'Test', 'man_made': kind}
-                self.assertEqual(category_for(tags), '')
-                self.assertFalse(is_standalone_kind(tags))
+                self.assertEqual(category_for(tags), 'sights')
+                self.assertTrue(is_standalone_kind(tags))
+                self.assertEqual(get_kind(tags), kind)
+
+    def test_man_made_bridge_not_extracted(self):
+        """A bridge is linear, not a standalone place point (ADR 0023)."""
+        tags = {'name': 'Test', 'man_made': 'bridge'}
+        self.assertEqual(category_for(tags), '')
+        self.assertFalse(is_standalone_kind(tags))
 
     def test_existing_categories_unchanged(self):
         self.assertEqual(
@@ -1228,9 +1235,14 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertTrue(is_standalone_kind({'historic': 'fort'}))
         self.assertTrue(is_standalone_kind({'tourism': 'viewpoint'}))
         self.assertTrue(is_standalone_kind({'amenity': 'fountain'}))
-        # barrier and man_made are not extracted (ADR 0023)
+        self.assertTrue(is_standalone_kind({'man_made': 'tower'}))
+        self.assertTrue(is_standalone_kind({'man_made': 'lighthouse'}))
+
+    def test_is_standalone_kind_returns_false_for_gaps(self):
+        """Gate, bridge and information remain category gaps (ADR 0023)."""
         self.assertFalse(is_standalone_kind({'barrier': 'gate'}))
-        self.assertFalse(is_standalone_kind({'man_made': 'lighthouse'}))
+        self.assertFalse(is_standalone_kind({'man_made': 'bridge'}))
+        self.assertFalse(is_standalone_kind({'tourism': 'information'}))
 
     def test_is_standalone_kind_returns_false_for_regular_kinds(self):
         self.assertFalse(is_standalone_kind({'amenity': 'cafe'}))
@@ -1302,9 +1314,30 @@ class StandalonePlacesTest(unittest.TestCase):
         self.assertIn('node/1010', place_ids, 'monument extracted')
         self.assertIn('node/1011', place_ids, 'fountain extracted')
         self.assertIn('node/1012', place_ids, 'library extracted')
-        # node/1013 (man_made=tower) is not extracted — no category (ADR 0023)
-        # node/1014 (barrier=gate) is not extracted — no category (ADR 0023)
+        self.assertIn('node/1013', place_ids, 'tower extracted')
+        self.assertNotIn('node/1014', place_ids, 'gate not extracted')
         self.assertIn('node/1015', place_ids, 'place_of_worship extracted')
+        self.assertIn('node/1017', place_ids, 'lighthouse extracted')
+
+    def test_tower_and_lighthouse_are_published_as_sights(self):
+        """Named man-made sights keep their OSM kind and standalone flag."""
+        temporary = tempfile.TemporaryDirectory(prefix='cg-map-man-made-')
+        self.addCleanup(temporary.cleanup)
+        root = prepared_root(Path(temporary.name))
+        extract(root)
+        _, features = source_features(root, 'places.geojson')
+        by_id = {f['properties']['id']: f for f in features}
+        expected = (
+            ('node/1013', 'tower'),
+            ('node/1017', 'lighthouse'),
+        )
+        for place_id, kind in expected:
+            with self.subTest(place_id=place_id):
+                self.assertTrue(place_id in by_id, f'{place_id} missing from extract')
+                properties = by_id[place_id]['properties']
+                self.assertEqual(properties['category'], 'sights')
+                self.assertEqual(properties['kind'], kind)
+                self.assertTrue(properties['standalone'])
 
     def test_standalone_flag_set_outside_building(self):
         """Points outside buildings get standalone:true."""
@@ -1361,8 +1394,8 @@ class StandalonePlacesTest(unittest.TestCase):
         l_props = library.get('properties', {})
         self.assertEqual(l_props.get('phone'), '+382 20 123 456')
         self.assertEqual(l_props.get('wheelchair'), 'yes')
-        # node/1013 (man_made=tower) is not extracted — no category (ADR 0023)
-        self.assertNotIn('node/1013', by_id)
+        tower = by_id.get('node/1013', {})
+        self.assertEqual(tower.get('properties', {}).get('name:sr-Latn'), 'Test Kula')
         # node/1015 has website and contact:email normalised to email
         church = by_id.get('node/1015', {})
         c_props = church.get('properties', {})

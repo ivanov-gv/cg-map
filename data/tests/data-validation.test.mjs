@@ -456,6 +456,12 @@ test('kind rules take precedence over category defaults, with a fallback for the
   for (const [properties, level] of cases) assert.equal(resolveLevel(properties, policy), level, JSON.stringify(properties));
 });
 
+test('named man-made sights keep their kind rules and the gaps keep none', () => {
+  assert.equal(policy.kinds.tower, 4);
+  assert.equal(policy.kinds.lighthouse, 4);
+  for (const kind of ['bridge', 'gate', 'information']) assert.equal(policy.kinds[kind], undefined);
+});
+
 test('no level 1 place exists without an individually reviewed override', () => {
   assert.equal(published.features.filter(f => f.properties.visibilityLevel === 1).length, 0);
   for (const rules of [policy.kinds, policy.categories]) assert.ok(!Object.values(rules).includes(1));
