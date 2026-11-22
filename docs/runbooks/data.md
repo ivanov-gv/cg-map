@@ -28,18 +28,20 @@ make -C data check
 ```
 
 `make -C data build-relief` defaults to `PYTHON=python3` and fails visibly if the chosen interpreter lacks the pinned
-GIS packages. `make verify PKG=data` deliberately keeps using plain `python3`: its relief terrain unit tests import
-NumPy only, never rasterio or osmium, so the normal data checks do not depend on the build venv. CI runs those unit
-tests, not the external DEM/PBF rebuild. The builder verifies DEM and PBF SHA-256 values before deriving anything.
-`RELIEF_DEM_DIR`, `RELIEF_OSM_PATH`, and `RELIEF_OSM_SHA256` can point a disposable build at another reviewed snapshot;
-the committed build records the exact inputs. The raster tiles, PBF and `.build/relief-report.json` stay outside Git.
-Outputs are deterministic bytes: run the build twice and compare their hashes before committing a source change.
+GIS packages. `make verify PKG=data` includes GIS-backed Python tests, so run it with the pinned venv on `PATH` (for
+example `PATH=$HOME/.cache/cg-map/venv/bin:$PATH make verify PKG=data`). CI installs `data/tools/requirements.txt` and
+runs those checks; it does not run the external DEM/PBF rebuild. The builder verifies DEM and PBF SHA-256 values before
+deriving anything. `RELIEF_DEM_DIR`, `RELIEF_OSM_PATH`, and `RELIEF_OSM_SHA256` can point a disposable build at another
+reviewed snapshot; the committed build records the exact inputs. The raster tiles, PBF and `.build/relief-report.json`
+stay outside Git. Outputs are deterministic bytes: run the build twice and compare their hashes before committing a
+source change.
 
-Summits are clipped to the `kind=country` boundary in `land.geojson`. Each carries `heightCheck`: `missing` when OSM has
-no elevation, `mismatch` only when a closed contour enclosing the summit is above OSM height or the OSM/DEM difference
-exceeds 25 m, and `ok` otherwise. The per-summit result lives on the feature; the report in `.build` adds the full
-mismatch list and build inputs. Contours are 20 m apart with 100 m index lines, one `LineString` per connected line,
-checked against crossing contours before publication.
+Summits are clipped to the `kind=country` boundary in `land.geojson`: both the OSM point and its published six-decimal
+coordinate must be inside or on the boundary. A point that rounds across the boundary in either direction is dropped.
+Each summit carries `heightCheck`: `missing` when OSM has no elevation, `mismatch` only when a closed contour enclosing
+the summit is above OSM height or the OSM/DEM difference exceeds 25 m, and `ok` otherwise. The per-summit result lives
+on the feature; the report in `.build` adds the full mismatch list and build inputs. Contours are 20 m apart with 100 m
+index lines, one `LineString` per connected line, checked against crossing contours before publication.
 
 Slopes are one `Polygon` per connected light class inside the reviewed green areas. A ridge is the shared boundary
 between adjacent sunlit and shaded slope polygons: one simplified, connected `LineString` per boundary, dropping pieces

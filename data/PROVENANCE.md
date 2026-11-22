@@ -125,12 +125,13 @@ OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The raster tiles, 
 artifacts and are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256
 values are recorded in `sources/provenance.json`.
 
-The current build has 5,412 Montenegro summits (4,542 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
+The current build has 5,411 Montenegro summits (4,541 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
 levels, 152 slope polygons, 28 ridge lines, and 46 canyon-rim segments across the four river banks. The full report is
 written to `.build/relief-report.json`; each summit already carries its `heightCheck`, enclosing contour, DEM facts and
-reasons. OSM names and elevations are never overwritten by DEM values. A summit is checked only when it lies inside the
-`kind=country` boundary in `land.geojson`, and a mismatch needs a closed contour above OSM height around the summit or
-an OSM/DEM difference over 25 m. A missing OSM elevation keeps its DEM facts and is not a mismatch.
+reasons. OSM names and elevations are never overwritten by DEM values. A summit is checked only when both its OSM point
+and its published six-decimal coordinate lie inside or on the `kind=country` boundary in `land.geojson`; the report
+records 216 summit points rejected by those checks. A mismatch needs a closed contour above OSM height around the summit
+or an OSM/DEM difference over 25 m. A missing OSM elevation keeps its DEM facts and is not a mismatch.
 
 A ridge is one simplified, connected `LineString` on the shared boundary between sunlit and shaded slope polygons inside
 green areas; pieces under 100 m are dropped. `summit` and `summitName` appear only on a ridge that passes within 50 m of

@@ -263,17 +263,23 @@ def build_summits(model, osm, land, contour_features):
     contour_rule_mismatches = 0
     dem_difference_mismatches = 0
     for summit in osm['summits']:
-        longitude, latitude = summit['coordinates']
-        if not country.covers(Point(longitude, latitude)):
+        source_longitude, source_latitude = summit['coordinates']
+        published_longitude, published_latitude = rounded_coordinates(summit['coordinates'])
+        # Rounding can move a summit across the boundary in either direction, so both the
+        # OSM point and the coordinate we publish must lie within the country.
+        if not (
+            country.covers(Point(source_longitude, source_latitude))
+            and country.covers(Point(published_longitude, published_latitude))
+        ):
             outside_country += 1
             continue
-        dem_elevation = round(model.sample(longitude, latitude), 2)
+        dem_elevation = round(model.sample(source_longitude, source_latitude), 2)
         surrounding_elevation = round(
-            model.surrounding_height(longitude, latitude), 2
+            model.surrounding_height(source_longitude, source_latitude), 2
         )
         osm_elevation = _parse_elevation(summit['tags'].get('ele'))
         enclosing_contour = (
-            _enclosing_contour(rings, longitude, latitude)
+            _enclosing_contour(rings, source_longitude, source_latitude)
             if osm_elevation is not None else None
         )
         height_check = classify_height_check(
@@ -298,7 +304,7 @@ def build_summits(model, osm, land, contour_features):
             'mismatch': height_check == 'mismatch',
             'mismatchReasons': reasons,
         }
-        geometry = {'type': 'Point', 'coordinates': rounded_coordinates(summit['coordinates'])}
+        geometry = {'type': 'Point', 'coordinates': [published_longitude, published_latitude]}
         features.append({
             'type': 'Feature',
             'id': summit['entityId'],
