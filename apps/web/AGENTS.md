@@ -23,18 +23,19 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   browser acceptance, and artifact upload. Baseline reviewed 2026-11-03; browser tests alone took 5m 54s in CI and 5m
   40s locally (49 passed, one expected desktop touch skip). These are observations, not time limits. The suite has grown
   since; CI now runs it as [separate jobs by area](../../docs/verification/testing.md#browser-test-areas).
-- Start with `make verify PKG=apps/web` from the repository root (about 3s locally). During iteration, run only affected
-  browser scenarios using project, file, and title filters; confirm the selection with `--list`. See
+- For optional local iteration, start with `make verify PKG=apps/web` from the repository root (about 3s locally). Run
+  only affected browser scenarios using project, file, and title filters; confirm the selection with `--list`. See
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web
   tests. Run `make verify` or `npm run verify` from apps/web for the same component checks.
-- Run `make check` and full `make -C apps/web e2e` once after the final web/UI, offline, or release behavior change,
-  covering both deployment projects. Install Chromium first with `npm run browser:install -- chromium` from apps/web if
+- Full `make -C apps/web e2e` is optional for iterating after a web/UI, offline, or release behavior change, covering
+  both deployment projects; the pre-push `make check` is required (builds and non-browser checks, no browser suites).
+  GitHub's PR run gates the merge. Install Chromium first with `npm run browser:install -- chromium` from apps/web if
   needed.
 - Standalone browser commands build first. Use `make -C apps/web e2e-built` only after a successful web build (as CI
   does after building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in
   test-results/ inside this component.
 - Repeat passing suites only after relevant edits, failures, or an unresolved concern; do not rerun unchanged passing
-  suites per turn. Documentation-only changes need Markdown, link/boundary, and agent-rule checks, not browser
-  acceptance.
+  suites per turn. Documentation-only changes need the docs pipeline on GitHub, not browser acceptance; local Markdown,
+  link/boundary, and agent-rule checks are optional for iterating.
 - Report exactly which checks ran; a targeted browser pass is not a full-suite pass. Do not weaken tests or timeouts to
   save time.

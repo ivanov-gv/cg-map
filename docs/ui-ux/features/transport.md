@@ -83,8 +83,10 @@ layers and closes stop details.
 The snapshot is data/sources/transport-stops.geojson with its own provenance JSON, source URL, count, byte size, and
 SHA-256. It is copied into the web artifact and offline shell; vehicle positions remain excluded. To refresh
 deliberately, fetch /api/gtfs/stops/all, preserve stopId/name/longitude/latitude, validate unique IDs and coordinates,
-update provenance/date UI, and run make check plus browser acceptance. This refresh does not require rebuilding the
-basemap archive. Stop details do not imply live arrival predictions.
+and update provenance/date UI. GitHub's checks and browser acceptance gate the merge; the pre-push `make check` is
+required (builds and non-browser checks, no browser suites), while browser runs are optional for iterating:
+[the rule](../../../.github/TESTING.md). This refresh does not require rebuilding the basemap archive. Stop details do
+not imply live arrival predictions.
 
 The Transport panel keeps live status visible and puts its source/snapshot explanation under Source and details, leaving
 room to select route endpoints on smaller screens.

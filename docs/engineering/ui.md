@@ -35,6 +35,8 @@ boundaries and offline invariants are in [apps/web/AGENTS.md](../../apps/web/AGE
 
 ## Verification
 
-- `make -C <app> e2e` for any user-visible change. Add a Playwright assertion for new interactions.
-- Do a manual check through `make -C apps/web dev` for visual changes and report what was checked; e2e does not judge
+- Add a Playwright assertion for new interactions, following [the testing guideline](testing.md). Local
+  `make -C <app> e2e` is optional for iterating; the GitHub PR run gates the merge
+  ([the rule](../../.github/TESTING.md)).
+- Do a manual check through `make -C apps/web dev` for visual changes; report what was checked, since e2e does not judge
   appearance.

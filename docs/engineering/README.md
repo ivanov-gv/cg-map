@@ -12,7 +12,7 @@ trusting them per machine. Checks run where they cannot be bypassed: Make target
 | Procedures                                            | Make targets and platform scripts                                    | Listed in AGENTS.md                                       | Same commands in CI                                |
 | Compliance                                            | The guidelines above                                                 | A read-only review agent at the end of every task (below) | git hooks, CI                                      |
 
-Language guidelines: [JavaScript](javascript.md), [UI](ui.md), [Python](python.md), [Go](go.md).
+Guidelines: [JavaScript](javascript.md), [UI](ui.md), [Python](python.md), [Go](go.md), [testing](testing.md).
 [Readability](readability.md) applies to all code in every language. Mapping from guideline to paths:
 [platform/agents/guidelines.json](../../platform/agents/guidelines.json).
 
@@ -93,8 +93,9 @@ mechanical rules in services/backend, through golangci-lint; everything else res
 - Open the task's issue, then create a worktree and write `docs/plans/<task>.md` there from the
   [template](../plans/TEMPLATE.md) before launching a multi-session task. Split work by component so sessions touch
   disjoint directories.
-- Integrate one branch at a time: rebase and resolve conflicts in the worktree, run `make check`, then merge by PR. No
-  merge until [local tests pass](../../.github/TESTING.md).
+- Integrate one branch at a time: rebase and resolve conflicts in the worktree, then merge by PR when its tests pass on
+  GitHub. The pre-push `make check` is required (builds and non-browser checks, no browser suites); other local runs are
+  optional: [the rule](../../.github/TESTING.md).
 
 ## Changing the rules
 

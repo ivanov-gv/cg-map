@@ -14,5 +14,6 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
 - This is a published package: apps/web and apps/editor pin a release, so a change here reaches only apps/core-demo
   until it is [released](../../docs/runbooks/release.md#releasing-map-core) and they upgrade. Treat what src/index.js
   and tools/ export as a public API: a breaking change needs a major version.
-- Run `make verify PKG=packages/map-core` and `make -C apps/core-demo e2e`. Review both deployment prefixes and the
-  concept app manually.
+- Local `make verify PKG=packages/map-core` and `make -C apps/core-demo e2e` are optional for iterating; GitHub's
+  map-core and consumer pipelines gate the merge. Review both deployment prefixes and the concept app manually while
+  iterating.

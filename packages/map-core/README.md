@@ -23,10 +23,10 @@ uses the same policy and palette as the public app; public search/selection orch
 assets/ holds the vendored MapLibre and PMTiles bundles and fonts. tools/assemble.mjs is the build-time half of the
 contract: each application's own build tool uses it to copy the runtime, assets and verified map data into its artifact.
 
-Run `make verify PKG=packages/map-core`. Open the independent [concept app](../../apps/core-demo/README.md) to inspect
-features visually. Builds relocate the package imports and copy one maintained runtime into each independent artifact;
-the public offline manifest inventories those modules too. New shared capabilities need a concept control and
-appropriate tests.
+Local `make verify PKG=packages/map-core` is optional for iterating; GitHub's map-core and consumer pipelines gate the
+merge. Open the independent [concept app](../../apps/core-demo/README.md) to inspect features visually while iterating.
+Builds relocate the package imports and copy one maintained runtime into each independent artifact; the public offline
+manifest inventories those modules too. New shared capabilities need a concept control and appropriate tests.
 
 Next extractions can move remaining app-specific selection policy behind an explicit adapter when both consumers need
 it. Avoid growing core with editor commands or public-app state.

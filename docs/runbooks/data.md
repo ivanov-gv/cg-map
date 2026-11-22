@@ -101,6 +101,11 @@ reports encoded bytes per layer and zoom band; if the release exceeds 45 MB, rai
 that layer rather than dropping its metadata. Archive acceptance checks the zooms and fields against the same definition
 in `tests/integration/archive-layers.test.mjs`.
 
+The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
+an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
+`workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on the branch:
+[the rule](../../.github/TESTING.md).
+
 ## Place-only edits
 
 Edit data/sources/places.geojson, review attribution and place count in provenance, then assign levels and record the
@@ -109,8 +114,6 @@ reviewed change:
 ```sh
 node data/tools/apply-place-visibility.mjs --contracts-directory packages/contracts --update-provenance --accept-new-facts
 make -C data check
-make check
-make test-e2e
 ```
 
 The data tools take the shared contracts directory from their caller; the published data package does not contain it.
@@ -319,8 +322,6 @@ python3 data/tools/extract-osm.py /path/to/montenegro-2026-11-21.osm.pbf \
 python3 data/tools/build-building-labels.py /path/to/montenegro-2026-11-21.osm.pbf
 make -C data build-data
 make -C data check
-make check
-make test-e2e
 ```
 
 The extractor computes all outputs before replacing reviewed files. It applies the existing visibility policy but does
