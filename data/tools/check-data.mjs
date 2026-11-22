@@ -89,12 +89,16 @@ function validateLandWaterProperties(properties, label, rules, expectedOsmTagKin
     requireValue(typeof osmTag === 'string' && osmTag.length > 0, `${label}: missing osmTag`);
   }
   if (osmTag !== undefined) {
-    requireValue(typeof osmTag === 'string' && osmTag.length <= definitions.osmTag.maxLength && rules.osmTagPattern.test(osmTag), `${label}: invalid osmTag`);
+    const validTag = typeof osmTag === 'string'
+      && osmTag.length <= definitions.osmTag.maxLength
+      && rules.osmTagPattern.test(osmTag);
+    requireValue(validTag, `${label}: invalid osmTag`);
   }
   for (const [field, value] of [['name', name], ['name:en', englishName], ['tunnel', tunnel], ['intermittent', intermittent]]) {
     if (value === undefined) continue;
     const definition = field === 'tunnel' || field === 'intermittent' ? definitions[field] : definitions.name;
-    requireValue(typeof value === 'string' && value.length <= definition.maxLength, `${label}: invalid ${field}`);
+    const withinMaxLength = typeof value === 'string' && value.length <= definition.maxLength;
+    requireValue(withinMaxLength, `${label}: invalid ${field}`);
     if (nameFields.has(field)) requireValue(value.trim().length > 0, `${label}: blank ${field}`);
   }
   if (destination !== undefined) requireValue(destination === true, `${label}: destination must be true when present`);
