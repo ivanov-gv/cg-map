@@ -120,7 +120,7 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 ## Relief
 
 `contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived,
-read-only vectors. See [ADR 0025](../docs/decisions/0025-relief-derived-read-only-sources.md).
+read-only vectors. See [ADR 0029](../docs/decisions/0029-relief-derived-read-only-sources.md).
 `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the
 reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and are
 not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are recorded

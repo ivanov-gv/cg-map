@@ -127,8 +127,8 @@ against them, and tests/integration/editor-changeset.test.mjs runs one's output 
 `editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. For land and water,
 `properties.kind` repeats `editableKinds` as a required enum, so an edit can neither remove a published kind nor invent
 one outside the reviewed source contract. The five relief collections are also read-only editor layers: their reasons
-are recorded in `editor-layers.json`, but they stay out of the versioned, exact-file-set `editor-bundle.schema.json`
-and its editing modes.
+are recorded in `editor-layers.json`, but they stay out of the versioned, exact-file-set `editor-bundle.schema.json` and
+its editing modes.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those
@@ -143,8 +143,8 @@ contour above OSM height around the summit or an OSM/DEM difference over 25 m, a
 fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
 OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
 and `method: "dem-canyon-bank"`. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
-elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
-
+elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology
+proof.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and

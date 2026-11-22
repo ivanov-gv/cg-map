@@ -27,10 +27,11 @@ make -C data build-relief PYTHON=~/.cache/cg-map/venv/bin/python
 make -C data check
 ```
 
-`make -C data build-relief` defaults to `PYTHON=python3` and fails visibly if the chosen interpreter lacks the pinned
-GIS packages. `make verify PKG=data` includes GIS-backed Python tests, so run it with the pinned venv on `PATH` (for
-example `PATH=$HOME/.cache/cg-map/venv/bin:$PATH make verify PKG=data`). CI installs `data/tools/requirements.txt` and
-runs those checks; it does not run the external DEM/PBF rebuild. The builder verifies DEM and PBF SHA-256 values before
+`make -C data build-relief` (see [ADR 0029](../decisions/0029-relief-derived-read-only-sources.md)) defaults to
+`PYTHON=python3` and fails visibly if the chosen interpreter lacks the pinned GIS packages. `make verify PKG=data`
+includes GIS-backed Python tests, so run it with the pinned venv on `PATH` (for example
+`PATH=$HOME/.cache/cg-map/venv/bin:$PATH make verify PKG=data`). CI installs `data/tools/requirements.txt` and runs
+those checks; it does not run the external DEM/PBF rebuild. The builder verifies DEM and PBF SHA-256 values before
 deriving anything. `RELIEF_DEM_DIR`, `RELIEF_OSM_PATH`, and `RELIEF_OSM_SHA256` can point a disposable build at another
 reviewed snapshot; the committed build records the exact inputs. The raster tiles, PBF and `.build/relief-report.json`
 stay outside Git. Outputs are deterministic bytes: run the build twice and compare their hashes before committing a
