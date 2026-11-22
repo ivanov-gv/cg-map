@@ -57,3 +57,15 @@ exact version being promoted. `make -C tests verify MAP_DATA_VERSION=<version>` 
 repository data path only in that helper. Current guidance is in
 [the architecture rules](../system-architecture/architecture.md#independent-projects) and
 [the release runbook](../runbooks/release.md#releasing-map-data).
+
+## Outcome note: packaged tools (2026-11-22)
+
+`0.1.0` shipped only three tools, so `tests/` could not test a release as published, and some tools resolved
+`packages/contracts` by a path that exists only in this repository. Every `data/tools` module that `tests/` or an app
+imports, with its local imports, is now in the package `files` and `exports`. A data test packs the package and fails on
+an omitted tool. Packaged tools take the contracts location from their caller and fail with a message naming the missing
+input; they have no repository-path fallback. `copyMapData` defaults to its package parent, which ships sources,
+artifacts and imagery. The three source tools default to the repository root for local workflows, so package consumers
+pass their data root explicitly. The consumer scan lives in `tests/integration`, the one project allowed to read other
+projects at HEAD. The immutable `0.1.0` keeps its known tool-related test failures; later versions fix the packaging
+forward. Contracts stay a repository directory until Feature #340 publishes them as a package.
