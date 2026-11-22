@@ -124,3 +124,18 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
     }
   });
 }
+
+test('web built-artifact browser tests use dist/web as-is', () => {
+  const webPackage = readJSON('apps/web/package.json');
+  assert.equal(webPackage.scripts['pretest:built'], undefined, 'a hidden rebuild would ignore the built artifact');
+  assert.equal(webPackage.scripts['test:e2e:built'], 'playwright test');
+});
+
+test('web build and offline finalizer share one data-root resolver', () => {
+  assert.ok(fileSystem.existsSync(`${repositoryRoot}apps/web/tools/data-root.mjs`));
+  for (const tool of ['build.mjs', 'finalize.mjs']) {
+    const source = fileSystem.readFileSync(`${repositoryRoot}apps/web/tools/${tool}`, 'utf8');
+    assert.match(source, /import \{resolveDataRoot\} from '\.\/data-root\.mjs'/);
+    assert.doesNotMatch(source, /function resolveDataRoot/);
+  }
+});

@@ -9,7 +9,6 @@
     "verify": "make verify",
     "pretest": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" npm run build",
     "test": "node --test tests/*.test.mjs",
-    "pretest:built": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" npm run build",
     "test:built": "node --test tests/*.test.mjs",
     "check:offline": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" node tools/finalize.mjs --check",
     "release:prepare": "npm run build",

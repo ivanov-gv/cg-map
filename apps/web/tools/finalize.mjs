@@ -4,17 +4,11 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {assertOfflineModulesIncluded} from './offline-inventory.js';
+import {resolveDataRoot} from './data-root.mjs';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const outputDirectory = path.join(repositoryRoot, 'dist/web');
 const isCheck = process.argv.includes('--check');
 // The manifest describes the data the build used. Test targets pin this root to the same package as the build.
-function resolveDataRoot(defaultRoot) {
-  if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
-    throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');
-  }
-  return process.env.MAP_DATA_ROOT ? path.resolve(process.env.MAP_DATA_ROOT) : defaultRoot;
-}
-
 const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
 const provenance = JSON.parse(
   fileSystem.readFileSync(path.join(dataRoot, 'sources/provenance.json'), 'utf8')

@@ -4,19 +4,12 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {copyMapCore, copyRuntimeAssets, relocateCoreImports} from '@ivanov-gv/map-core/tools/assemble.mjs';
 import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/src/place-visibility.js';
+import {resolveDataRoot} from './data-root.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
 // Dev builds default to the repository's HEAD; a future app production release pins every dependency, including data.
-// Test targets set MAP_DATA_ROOT to the pinned package, and
-// the data tools come from that same root so a test can never mix a pinned snapshot with a different tool revision.
-function resolveDataRoot(defaultRoot) {
-  if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
-    throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');
-  }
-  return process.env.MAP_DATA_ROOT ? path.resolve(process.env.MAP_DATA_ROOT) : defaultRoot;
-}
-
+// Test targets set MAP_DATA_ROOT, so the data tools come from that same root as the data snapshot.
 const dataRoot = resolveDataRoot(path.join(root, 'data'));
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const {readVerifiedRelease} = await import(dataToolsURL);
