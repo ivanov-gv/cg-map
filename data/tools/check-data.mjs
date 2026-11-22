@@ -326,9 +326,15 @@ function validateEntranceProperties(properties, buildingIDs, counts, rules) {
     incrementCount(counts, `entrance:${name}`);
   }
   const houseNumber = properties['addr:housenumber'];
+  const hasNoNumber = properties.nohousenumber !== undefined;
+  if (hasNoNumber) {
+    requireValue(properties.nohousenumber === 'yes', 'entrance: invalid no-number flag');
+  }
   if (houseNumber !== undefined) {
     requireValue(!noNumber(houseNumber, rules.houseNumber), 'entrance: no-number placeholder must not be a house number');
+    requireValue(!hasNoNumber, 'entrance: house number and no-number flag are exclusive');
   }
+  incrementCount(counts, 'entrance:nohousenumber', Number(hasNoNumber));
   incrementCount(counts, `entranceKind:${properties.entrance}`);
 }
 

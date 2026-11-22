@@ -178,6 +178,24 @@ test('building sources validate copied tags, identity joins and no-number rules'
       }
     },
     {
+      name: 'an entrance number together with the no-number flag',
+      expected: /entrance: house number and no-number flag are exclusive/,
+      mutate: sources => {
+        const properties = sources['building-entrances.geojson'].features[0].properties;
+        properties['addr:housenumber'] = '12';
+        properties.nohousenumber = 'yes';
+      }
+    },
+    {
+      name: 'an invalid entrance no-number flag',
+      expected: /entrance: invalid no-number flag/,
+      mutate: sources => {
+        const properties = sources['building-entrances.geojson'].features[0].properties;
+        delete properties['addr:housenumber'];
+        properties.nohousenumber = 'no';
+      }
+    },
+    {
       name: 'a place linked to an unknown building',
       expected: /place: unknown buildingEntityId/,
       mutate: sources => {
@@ -190,6 +208,11 @@ test('building sources validate copied tags, identity joins and no-number rules'
     invalidCase.mutate(bad);
     assert.throws(() => validate(bad), invalidCase.expected, invalidCase.name);
   }
+  const noNumberEntrance = structuredClone(identitySources);
+  const entranceProperties = noNumberEntrance['building-entrances.geojson'].features[0].properties;
+  delete entranceProperties['addr:housenumber'];
+  entranceProperties.nohousenumber = 'yes';
+  assert.equal(validate(noNumberEntrance)['entrance:nohousenumber'], 1);
   const ambiguous = structuredClone(identitySources);
   const duplicateRoad = structuredClone(ambiguous['roads.geojson'].features[0]);
   duplicateRoad.properties.entityId = 'way/5';

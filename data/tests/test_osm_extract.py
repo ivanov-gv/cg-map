@@ -417,12 +417,16 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(
             first['geometry']['coordinates'], [19.2505, 42.44]
         )
-        self.assertNotIn(
-            'addr:housenumber', by_id['node/5002']['properties']
-        )
+        placeholder = by_id['node/5002']['properties']
+        self.assertNotIn('addr:housenumber', placeholder)
+        self.assertEqual(placeholder['nohousenumber'], 'yes')
         self.assertEqual(
             by_id['node/5004']['properties']['buildingEntityId'], 'way/2002'
         )
+        details = json.loads(
+            (self.first_root / 'data/sources/provenance.json').read_text()
+        )['building_details']
+        self.assertEqual(details['entrance:nohousenumber'], 1)
 
     def test_places_inside_a_footprint_get_its_building_identity(self):
         extract(self.first_root)

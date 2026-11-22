@@ -240,6 +240,8 @@ class EntrancesLayer(Layer):
                     tag == 'addr:housenumber'
                     and is_placeholder(value, forbidden_values, ignored_characters)
                 ):
+                    properties['nohousenumber'] = 'yes'
+                    counts['entrance:nohousenumber'] += 1
                     continue
                 properties[tag] = value
             geometry = {
