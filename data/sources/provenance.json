@@ -1,14 +1,14 @@
 {
   "archive": {
-    "bytes": 27576218,
+    "bytes": 22719076,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
-          "0-8": 41528,
-          "13-16": 1218475,
-          "9-12": 239744
+          "0-8": 45153,
+          "13-16": 1282604,
+          "9-12": 255365
         },
-        "bytes": 1499747
+        "bytes": 1583122
       },
       "buildings": {
         "byZoomBand": {
@@ -21,10 +21,10 @@
       "canyon_rims": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 32555,
+          "13-16": 34530,
           "9-12": 0
         },
-        "bytes": 32555
+        "bytes": 34530
       },
       "contours": {
         "byZoomBand": {
@@ -44,27 +44,27 @@
       },
       "land": {
         "byZoomBand": {
-          "0-8": 45279,
-          "13-16": 18995699,
-          "9-12": 274412
+          "0-8": 44790,
+          "13-16": 18993833,
+          "9-12": 273673
         },
-        "bytes": 19315390
+        "bytes": 19312296
       },
       "municipalities": {
         "byZoomBand": {
-          "0-8": 2031,
-          "13-16": 11110,
-          "9-12": 9750
+          "0-8": 2046,
+          "13-16": 11300,
+          "9-12": 9895
         },
-        "bytes": 22891
+        "bytes": 23241
       },
       "ridges": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 10388,
+          "13-16": 9702,
           "9-12": 0
         },
-        "bytes": 10388
+        "bytes": 9702
       },
       "road_nodes": {
         "byZoomBand": {
@@ -76,11 +76,11 @@
       },
       "roads": {
         "byZoomBand": {
-          "0-8": 534683,
-          "13-16": 4609353,
-          "9-12": 1896712
+          "0-8": 534605,
+          "13-16": 4614604,
+          "9-12": 1895976
         },
-        "bytes": 7040748
+        "bytes": 7045185
       },
       "settlements": {
         "byZoomBand": {
@@ -93,30 +93,30 @@
       "slopes": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 79161,
-          "9-12": 10245
+          "13-16": 85668,
+          "9-12": 11319
         },
-        "bytes": 89406
+        "bytes": 96987
       },
       "summits": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 1924015,
-          "9-12": 753363
+          "13-16": 1924062,
+          "9-12": 753418
         },
-        "bytes": 2677378
+        "bytes": 2677480
       },
       "water": {
         "byZoomBand": {
-          "0-8": 864459,
-          "13-16": 8257320,
-          "9-12": 1753017
+          "0-8": 205317,
+          "13-16": 5117887,
+          "9-12": 697509
         },
-        "bytes": 10874796
+        "bytes": 6020713
       }
     },
-    "file": "montenegro-e8f3c3d2c74f588d.pmtiles",
-    "sha256": "e8f3c3d2c74f588d4331a84e09128da3d2df997b1d70672e3edbc3072f10cdde",
+    "file": "montenegro-2a06727ae1de5c70.pmtiles",
+    "sha256": "2a06727ae1de5c70e9890e96eadaaddf834fb35fcd3d92501576d9b7fc278941",
     "tiles": 229422
   },
   "building_details": {
@@ -275,7 +275,7 @@
   "relief": {
     "buildParameters": {
       "canyonRimJoinGapMetres": 60,
-      "canyonRimMinimumBankRiseMetres": 8.0,
+      "canyonRimMinimumBankRiseMetres": 8,
       "canyonRimMinimumLengthMetres": 100,
       "canyonRimSearchDistanceMetres": 60,
       "canyonRimSearchStepMetres": 10,
@@ -304,7 +304,7 @@
       ],
       "minimumAreaSquareMetres": 2500,
       "ridgeMinimumLengthMetres": 100,
-      "ridgeSimplificationToleranceDegrees": 1e-05,
+      "ridgeSimplificationToleranceDegrees": 0.00001,
       "summitLinkDistanceMetres": 50
     },
     "detailBounds": [
