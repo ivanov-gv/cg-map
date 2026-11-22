@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {dataSourcePath, dataToolURL} from '../data-root.mjs';
 import {
   contractPath,
@@ -72,5 +75,63 @@ test('producer and browser agree on separate building numbers and located entran
     JSON.parse(fs.readFileSync('dist/web/data/manifest.json')).shell.includes(
       'data/building-labels.geojson',
     ),
+  );
+});
+
+test('the contracts helper uses the repository pin by default and the candidate in a published run', t => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-contracts-root-'));
+  t.after(() => fs.rmSync(temporaryRoot, {recursive: true, force: true}));
+  const helper = path.join(temporaryRoot, 'tests/contracts-root.mjs');
+  fs.mkdirSync(path.dirname(helper), {recursive: true});
+  fs.copyFileSync(new URL('../contracts-root.mjs', import.meta.url), helper);
+  fs.writeFileSync(path.join(temporaryRoot, 'package.json'), JSON.stringify({name: 'repository-manifest'}));
+
+  const writePackage = (parent, version) => {
+    const packageRoot = path.join(parent, 'node_modules/@ivanov-gv/map-contracts');
+    fs.mkdirSync(packageRoot, {recursive: true});
+    fs.writeFileSync(
+      path.join(packageRoot, 'package.json'),
+      JSON.stringify({name: '@ivanov-gv/map-contracts', version})
+    );
+  };
+  writePackage(temporaryRoot, '0.1.0');
+  writePackage(path.join(temporaryRoot, 'tests'), '0.2.0');
+
+  const runHelper = (args, version) => {
+    const environment = {...process.env, MAP_CONTRACTS_ROOT: path.join(temporaryRoot, 'contracts')};
+    if (version) environment.MAP_CONTRACTS_VERSION = version;
+    else delete environment.MAP_CONTRACTS_VERSION;
+    return execFileSync(process.execPath, [helper, ...args], {
+      cwd: temporaryRoot,
+      encoding: 'utf8',
+      env: environment
+    }).trim();
+  };
+  const resolvePublishedRoot = version => {
+    const script = `import {publishedContractsRoot} from ${JSON.stringify(pathToFileURL(helper).href)}; console.log(publishedContractsRoot());`;
+    const environment = {...process.env};
+    if (version) environment.MAP_CONTRACTS_VERSION = version;
+    else delete environment.MAP_CONTRACTS_VERSION;
+    return execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: temporaryRoot,
+      encoding: 'utf8',
+      env: environment
+    }).trim();
+  };
+
+  assert.equal(
+    resolvePublishedRoot(),
+    path.join(temporaryRoot, 'node_modules/@ivanov-gv/map-contracts'),
+    'a HEAD run must ignore a leftover tests candidate'
+  );
+  assert.equal(
+    resolvePublishedRoot('0.2.0'),
+    path.join(temporaryRoot, 'tests/node_modules/@ivanov-gv/map-contracts'),
+    'a published run must test the candidate it installed'
+  );
+  assert.equal(
+    runHelper(['--published'], undefined),
+    path.join(temporaryRoot, 'tests/node_modules/@ivanov-gv/map-contracts'),
+    'the --published flag must select the candidate'
   );
 });

@@ -49,9 +49,6 @@ test('core in this repository can never satisfy an app pin', () => {
   assert.equal(readJSON('packages/map-core/package.json').version, '0.0.0-dev');
 });
 
-// The 0.1.0 entry does not exist in the registry until the lead publishes it, so these pins deliberately do not read
-// package-lock.json. The lead must regenerate that lockfile after publishing; the map-core and map-data pins below can
-// still assert registry entries because those releases already exist.
 test('every consumer pins the exact published contracts release, never the local package', () => {
   const consumers = [
     'package.json',
@@ -62,15 +59,33 @@ test('every consumer pins the exact published contracts release, never the local
     'platform/package.json'
   ];
   for (const manifest of consumers) {
-    const pinned = readJSON(manifest).devDependencies?.[contractsPackageName];
-    assert.equal(pinned, contractsVersion, `${manifest} must pin ${contractsPackageName} ${contractsVersion}`);
-    assert.match(pinned, exactVersionPattern);
+    assertRegistryPin(manifest, `node_modules/${contractsPackageName}`, contractsPackageName, 'devDependencies');
+    assert.equal(
+      readJSON(manifest).devDependencies[contractsPackageName],
+      contractsVersion,
+      `${manifest} must pin ${contractsPackageName} ${contractsVersion}`
+    );
   }
   assert.equal(readJSON('packages/contracts/package.json').version, '0.0.0-dev');
   assert.ok(
     !readJSON('package.json').workspaces.includes('packages/contracts'),
     'npm must not link the unpublished HEAD package into consumers'
   );
+});
+
+test('the web build resolves contracts through its own pin, not a root-hoisted path', () => {
+  const source = fileSystem.readFileSync(path.join(repositoryRoot, 'apps/web/tools/build.mjs'), 'utf8');
+  assert.match(source, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
+  assert.doesNotMatch(source, /node_modules\/@ivanov-gv\/map-contracts/);
+});
+
+test('platform resolves contracts from the pinned package, not repository sources', () => {
+  const resolved = execFileSync('node', ['platform/tools/pinned-contracts-root.mjs'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8'
+  }).trim();
+  assert.match(resolved, /node_modules\/@ivanov-gv\/map-contracts$/);
+  assert.notEqual(resolved, path.join(repositoryRoot, 'packages/contracts'));
 });
 
 test('the map-data package ships every path its consumers read', () => {

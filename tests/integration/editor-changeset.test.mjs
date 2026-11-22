@@ -22,9 +22,8 @@ const envelope = {
   author: 'Integration Test',
   reason: 'Editor and importer agree'
 };
-const readContract = readContractJSON;
-const rules = readContract('editor-layers.json');
-const levels = new Set(readContract('place-visibility.json').levels.map(({level}) => level));
+const rules = readContractJSON('editor-layers.json');
+const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
 
 // A disposable copy: these tests must never write the reviewed sources.
 function temporaryRoot(testContext) {

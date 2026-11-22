@@ -30,7 +30,11 @@ for (const filename of webModules) {
 fileSystem.mkdirSync(path.join(output, 'data'), {recursive: true});
 fileSystem.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
 const places = JSON.parse(fileSystem.readFileSync(path.join(dataRoot, 'sources/places.geojson')));
-const contractsRoot = resolveContractsRoot(path.join(root, 'node_modules/@ivanov-gv/map-contracts'));
+// Resolve from this app so its own pin wins; a release build overrides the root with MAP_CONTRACTS_ROOT.
+const pinnedContractsRoot = path.dirname(
+  fileURLToPath(import.meta.resolve('@ivanov-gv/map-contracts/package.json'))
+);
+const contractsRoot = resolveContractsRoot(pinnedContractsRoot);
 const visibilityContractPath = path.join(contractsRoot, 'place-visibility.json');
 const visibilityConfig = JSON.parse(fileSystem.readFileSync(visibilityContractPath));
 assertPublishedPlaces(places.features, parseVisibilityConfig(visibilityConfig));
