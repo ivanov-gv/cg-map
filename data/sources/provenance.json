@@ -1,4 +1,124 @@
 {
+  "archive": {
+    "bytes": 22719076,
+    "encodedLayerBytes": {
+      "borders": {
+        "byZoomBand": {
+          "0-8": 45153,
+          "13-16": 1282604,
+          "9-12": 255365
+        },
+        "bytes": 1583122
+      },
+      "buildings": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 6069033,
+          "9-12": 0
+        },
+        "bytes": 6069033
+      },
+      "canyon_rims": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 34530,
+          "9-12": 0
+        },
+        "bytes": 34530
+      },
+      "contours": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 726387,
+          "9-12": 17104
+        },
+        "bytes": 743491
+      },
+      "entrances": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 4192,
+          "9-12": 0
+        },
+        "bytes": 4192
+      },
+      "land": {
+        "byZoomBand": {
+          "0-8": 44790,
+          "13-16": 18993833,
+          "9-12": 273673
+        },
+        "bytes": 19312296
+      },
+      "municipalities": {
+        "byZoomBand": {
+          "0-8": 2046,
+          "13-16": 11300,
+          "9-12": 9895
+        },
+        "bytes": 23241
+      },
+      "ridges": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 9702,
+          "9-12": 0
+        },
+        "bytes": 9702
+      },
+      "road_nodes": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 57371,
+          "9-12": 0
+        },
+        "bytes": 57371
+      },
+      "roads": {
+        "byZoomBand": {
+          "0-8": 534605,
+          "13-16": 4614604,
+          "9-12": 1895976
+        },
+        "bytes": 7045185
+      },
+      "settlements": {
+        "byZoomBand": {
+          "0-8": 2476,
+          "13-16": 1045673,
+          "9-12": 304011
+        },
+        "bytes": 1352160
+      },
+      "slopes": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 85668,
+          "9-12": 11319
+        },
+        "bytes": 96987
+      },
+      "summits": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 1924062,
+          "9-12": 753418
+        },
+        "bytes": 2677480
+      },
+      "water": {
+        "byZoomBand": {
+          "0-8": 205317,
+          "13-16": 5117887,
+          "9-12": 697509
+        },
+        "bytes": 6020713
+      }
+    },
+    "file": "montenegro-2a06727ae1de5c70.pmtiles",
+    "sha256": "2a06727ae1de5c70e9890e96eadaaddf834fb35fcd3d92501576d9b7fc278941",
+    "tiles": 229422
+  },
   "building_details": {
     "addr:housenumber": 1003,
     "addr:housenumberPresent": 1003,

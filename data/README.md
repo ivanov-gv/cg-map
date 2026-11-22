@@ -25,6 +25,35 @@ From this workspace: `npm run check`, `npm run build`, `npm test`. The full buil
 Viewing/building the web uses the committed reviewed archive instead. The reviewed data is also published as
 [`@ivanov-gv/map-data`](../docs/runbooks/release.md#releasing-map-data) for app tests.
 
+## Published vector layers
+
+`data/tools/tile-layers.mjs` is the one definition of the archive's layers. The tile builder selects and filters source
+fields with it, writes the same table to `.build/tiles/layer-metadata.json`, and `data/tools/pack.py` copies that
+generated table into the archive's `vector_layers` metadata. No second layer list is maintained in Python.
+
+| Layer          | Source file                  | Zooms                                         | Fields                                                                                                         |
+| -------------- | ---------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| land           | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                       |
+| water          | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                            |
+| roads          | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel` |
+| buildings      | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                      |
+| contours       | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                           |
+| slopes         | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                       |
+| ridges         | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                       |
+| canyon_rims    | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                |
+| summits        | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                        |
+| settlements    | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                      |
+| borders        | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                |
+| municipalities | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                               |
+| road_nodes     | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                 |
+| entrances      | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                               |
+
+Low zooms stay light: paths and footways are withheld below zoom 14, minor summits and unnamed settlements appear only
+at their detail zooms, and road nodes and entrances are detail-only. Turn restrictions are topological relations, and
+transit routes are ordered stop lists with directions; neither is display geometry, so both remain JSON sources rather
+than tile layers. Full building tags stay in `buildings.geojson` for the editor; the archive carries only `kind` and
+`building:levels`.
+
 Source provenance is described in [PROVENANCE.md](PROVENANCE.md). The data validator uses
 [shared contracts](../packages/contracts/README.md), never web implementation.
 

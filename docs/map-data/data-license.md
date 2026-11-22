@@ -64,3 +64,8 @@ The source references recorded in data/sources/provenance.json are the
 the
 [CDSE collection description](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
 They are not relicensed as MIT, ODbL or Natural Earth public-domain data.
+
+The reviewed PMTiles archive contains contour, summit, slope, ridge and canyon-rim layers derived from that DEM, so its
+header attribution also carries the Article 6(b) adapted-product notice quoted above. `data/tools/pack.py` reads that
+notice and the described coverage from `data/sources/provenance.json`; it does not keep a second attribution string.
+Consumers of the archive, including the TileJSON served by the Go host, must keep that notice with the map.

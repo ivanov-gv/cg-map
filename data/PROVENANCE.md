@@ -12,7 +12,7 @@ water file has 1,122 polygons (including one derived ocean polygon) and 673 wate
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 20,985,409
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 22,719,076
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -172,3 +172,41 @@ slope area, layer sources and the ridge/rim thresholds are recorded under `relie
 features carry object facts only. Derived contour, slope, ridge and rim IDs are deterministic for the pinned inputs but
 are not stable across a DEM or green-area change. See [relief sources](../docs/runbooks/data.md#relief-sources) and
 [data licensing](../docs/map-data/data-license.md).
+
+## Final Epic #322 source counts
+
+No source file was refreshed for the archive rebuild. These are the reviewed counts and bytes carried into the release;
+the hashes of the GeoJSON files remain in `sources/provenance.json` under `layers`, and the separate snapshot hashes
+remain in their own provenance files.
+
+| Source file                  | Reviewed count                               | Bytes      |
+| ---------------------------- | -------------------------------------------- | ---------- |
+| `buildings.geojson`          | 43,978 footprints                            | 14,601,929 |
+| `building-entrances.geojson` | 157 entrance nodes                           | 41,359     |
+| `building-labels.geojson`    | 1,207 labels                                 | 403,046    |
+| `roads.geojson`              | 21,247 road features                         | 7,110,391  |
+| `road-nodes.geojson`         | 2,534 signal and crossing nodes              | 462,217    |
+| `turn-restrictions.json`     | 69 restriction relations                     | 9,471      |
+| `land.geojson`               | 612 areas and outlines                       | 493,167    |
+| `water.geojson`              | 1,795 areas, waterways and coastlines        | 2,097,403  |
+| `places.geojson`             | 1,977 places                                 | 684,021    |
+| `settlements.geojson`        | 4,009 named places                           | 1,102,523  |
+| `border-edges.geojson`       | 141 shared edges                             | 624,849    |
+| `municipalities.geojson`     | 26 areas                                     | 878,446    |
+| `contours.geojson`           | 445 lines across 32 levels                   | 950,066    |
+| `summits.geojson`            | 5,411 peaks                                  | 2,030,185  |
+| `slopes.geojson`             | 186 polygons                                 | 456,808    |
+| `ridges.geojson`             | 31 lines                                     | 19,666     |
+| `canyon-rims.geojson`        | 50 segments                                  | 44,838     |
+| `transport-stops.geojson`    | 719 stops                                    | 219,913    |
+| `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
+| `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
+
+The archive released from these sources is `montenegro-2a06727ae1de5c70.pmtiles`, 22,719,076 bytes with SHA-256
+`2a06727ae1de5c70e9890e96eadaaddf834fb35fcd3d92501576d9b7fc278941`; `release.json` is its checksummed index. Its archive
+metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
+`sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
+dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,
+transit routes and the full building tags remain source-side because they are topological relations, ordered stop lists
+and editor attributes, not display geometry. The archive attribution carries the Copernicus adapted-product notice
+required for the DEM-derived layers; see [data licensing](../docs/map-data/data-license.md).
