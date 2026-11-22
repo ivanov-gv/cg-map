@@ -19,7 +19,6 @@ from .writing import read_collection
 
 SOURCE_FILE = 'water.geojson'
 LAND_FILE = 'land.geojson'
-WATERWAY_KINDS = frozenset({'river', 'stream', 'canal', 'ditch', 'drain'})
 COUNTRYWIDE_WATERWAY_KINDS = frozenset({'river', 'canal'})
 DETAIL_WATERWAY_KINDS = frozenset({'stream', 'ditch', 'drain'})
 WATER_AREA_RULES = (
