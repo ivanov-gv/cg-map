@@ -57,16 +57,18 @@ test('extracted land and water kinds stay in step with validation and consumers'
     kind => !preservedLandKinds.has(kind)
   );
   const waterKinds = contract.$defs.waterKind.enum;
+  const editableWaterKinds = waterKinds.filter(kind => !derivedWaterKinds.has(kind));
 
   assert.deepEqual(greenKindsFromStyle().slice().sort(), landKinds.slice().sort());
-  assert.deepEqual(
-    editorRules.layers['land.geojson'].editableKinds.slice().sort(),
-    landKinds.slice().sort()
-  );
-  assert.deepEqual(
-    editorRules.layers['water.geojson'].editableKinds.slice().sort(),
-    waterKinds.filter(kind => !derivedWaterKinds.has(kind)).sort()
-  );
+  for (const [filename, expectedKinds] of [
+    ['land.geojson', landKinds],
+    ['water.geojson', editableWaterKinds]
+  ]) {
+    const rule = editorRules.layers[filename];
+    assert.deepEqual(rule.editableKinds.slice().sort(), expectedKinds.slice().sort(), filename);
+    assert.equal(rule.properties.kind.required, true, filename);
+    assert.deepEqual(rule.properties.kind.enum.slice().sort(), expectedKinds.slice().sort(), filename);
+  }
 
   for (const kind of landKinds) {
     assert.deepEqual(selectedName(kind), [`Named ${kind}`], kind);

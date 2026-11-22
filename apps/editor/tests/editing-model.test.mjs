@@ -135,6 +135,22 @@ test('files and kinds outside the rules stay inspect-only, with a reason', () =>
   assert.equal(featureCapabilities(country, rules.layers['land.geojson']).canDelete, false);
 });
 
+test('land and water edits require a published kind from the rule enum', () => {
+  for (const filename of ['land.geojson', 'water.geojson']) {
+    const rule = rules.layers[filename];
+    const editableKind = rule.editableKinds[0];
+    const feature = {type: 'Feature', properties: {kind: editableKind}, geometry: {type: 'Polygon', coordinates: [square]}};
+    assert.equal(featureProblem(feature, rule, levels), null, filename);
+    const missing = structuredClone(feature);
+    delete missing.properties.kind;
+    assert.match(featureProblem(missing, rule, levels), /kind is required/, filename);
+    const unsupported = structuredClone(feature);
+    unsupported.properties.kind = 'unmapped-kind';
+    assert.match(featureProblem(unsupported, rule, levels), /kind is not an allowed value/, filename);
+    assert.deepEqual(rule.properties.kind.enum.toSorted(), rule.editableKinds.toSorted(), filename);
+  }
+});
+
 test('an edit keeps unknown fields, and returning to the source state leaves no change', () => {
   const session = new EditSession(sourcesWith({'places.geojson': [placeFeature()]}));
   assert.equal(session.recordEdit('places.geojson', '0', placeFeature()), false);

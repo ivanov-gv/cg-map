@@ -128,6 +128,20 @@
       ],
       "inspectOnlyReason": "Country and context outlines mirror their sources and need a data-owned refresh.",
       "properties": {
+        "kind": {
+          "required": true,
+          "enum": [
+            "park",
+            "garden",
+            "woods",
+            "meadow",
+            "grass",
+            "scrub",
+            "sports",
+            "cemetery",
+            "playground"
+          ]
+        },
         "name": {"maxLength": 120},
         "name:en": {"maxLength": 120}
       }
@@ -150,6 +164,22 @@
       ],
       "inspectOnlyReason": "The ocean polygon is derived by the data pipeline.",
       "properties": {
+        "kind": {
+          "required": true,
+          "enum": [
+            "lake",
+            "river",
+            "reservoir",
+            "pond",
+            "basin",
+            "water",
+            "stream",
+            "canal",
+            "ditch",
+            "drain",
+            "coastline"
+          ]
+        },
         "name": {"maxLength": 120},
         "name:en": {"maxLength": 120}
       }

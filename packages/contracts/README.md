@@ -112,7 +112,9 @@ identity. `editor-changeset.schema.json` defines the export: base hash per chang
 revision-bound reference, a fingerprint and full before/after features. `fixtures/editor-geometry-cases.json` and
 `fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
 against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied.
+`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. For land and water,
+`properties.kind` repeats `editableKinds` as a required enum, so an edit can neither remove a published kind nor invent
+one outside the reviewed source contract.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and
