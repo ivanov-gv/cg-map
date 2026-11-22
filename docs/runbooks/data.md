@@ -36,7 +36,7 @@ data/artifacts/release.json with node data/tools/finalize-archive.mjs as well.
 [place-visibility.json](../../packages/contracts/place-visibility.json). Assignments live in
 data/sources/place-visibility-policy.json, separate from OSM facts. Precedence is active ID override, kind rule,
 category default, then `fallbackLevel`. Places with a missing kind take the fallback. See
-[ADR 0026](../decisions/0026-place-categories-and-standalone-points.md) for which OSM kinds are extracted and which are
+[ADR 0027](../decisions/0027-place-categories-and-standalone-points.md) for which OSM kinds are extracted and which are
 excluded as category gaps.
 
 To change an assignment, edit the policy, then:

@@ -1,4 +1,4 @@
-# 0026: Place categories and standalone points
+# 0027: Place categories and standalone points
 
 ## Status
 
