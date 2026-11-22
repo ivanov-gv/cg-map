@@ -150,9 +150,9 @@ The release starts [cd-map-contracts](../../.github/workflows/cd-map-contracts.y
 Use a prerelease such as `map-contracts/v0.2.0-rc.1` with `--prerelease` to publish under `next`; a final version
 publishes under `latest`. A published version cannot be changed: fix forward with a new one. The commit must be on main.
 
-`0.1.0` is the bootstrap exception: the lead publishes it by hand from this change because the pinned consumers must
-exist before CI can plan and publish a contracts release. The change leaves `package-lock.json` untouched; after `0.1.0`
-exists, the lead runs `make setup` to regenerate it. A contract-only change selects contracts, data, tests and platform,
+`0.1.0` is the one exception: it was published by hand once on 2026-11-22, because the pinned consumers need a version
+that exists before CI can publish a contracts release. It was packed from `feature/340-contracts-package`; its schemas,
+fixtures and proto are identical to main `0a74bd8`. A contract-only change selects contracts, data, tests and platform,
 not app pipelines.
 
 ## Releasing the browser image

@@ -43,8 +43,8 @@ publishes a dev package for the change, and a `map-contracts/v<version>` release
   coordinated producer and consumer review; the exports are the supported surface.
 - Data and `tests/` deliberately read HEAD, so schema-only failures appear there rather than in app tests. The helper
   and guard keep that exception to the two places whose job it is to check HEAD.
-- `0.1.0` is a one-time manual bootstrap: the pinned consumers must exist before CI can plan and publish a contracts
-  release. The change leaves `package-lock.json` untouched, and the lead regenerates it after the version exists.
+- `0.1.0` was published once by hand, because the pinned consumers need a version that exists before CI can publish a
+  contracts release. Its schemas, fixtures and proto are identical to main `0a74bd8`.
 - GitHub Packages requires a token for installation, as it already does for map-core and map-data. Published versions
   are immutable; fixes go forward in a new version.
 
