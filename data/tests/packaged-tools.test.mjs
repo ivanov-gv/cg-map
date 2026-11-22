@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
-import os from 'node:os';
+import operatingSystem from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {copyMapData} from '../tools/app-data.mjs';
 import {writeEditorBundle} from '../tools/editor-bundle.mjs';
 
 function temporaryDirectory(t) {
-  const directory = fileSystem.mkdtempSync(path.join(os.tmpdir(), 'map-data-tools-'));
+  const directory = fileSystem.mkdtempSync(path.join(operatingSystem.tmpdir(), 'map-data-tools-'));
   t.after(() => fileSystem.rmSync(directory, {recursive: true, force: true}));
   return directory;
 }
