@@ -55,9 +55,10 @@ export const TILE_LAYERS = [
     sourceFile: 'roads.geojson',
     minZoom: 0,
     // Display needs the road kind, name, structure, one-way state, path class, lighting and end levels.
+    // inGreenArea is derived by the tile builder (green-areas.mjs), not stored in the source.
     fields: [
       'kind', 'name', 'name:en', 'bridge', 'tunnel', 'layer',
-      'oneway', 'pathClass', 'lit', 'startLevel', 'endLevel'
+      'oneway', 'pathClass', 'lit', 'startLevel', 'endLevel', 'inGreenArea'
     ],
     keep: keepRoad
   },

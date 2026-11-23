@@ -48,8 +48,10 @@ Slopes are one `Polygon` per connected light class inside the reviewed green are
 between adjacent sunlit and shaded slope polygons: one simplified, connected `LineString` per boundary, dropping pieces
 under 100 m. A summit is linked through `summit`/`summitName` only when the final ridge passes within 50 m of it; an
 unlinked ridge has no summit fields. Canyon rims are one `LineString` per segment with numbered `entityPart` values on
-one derived identity; gaps under 60 m on one bank are joined before parts under 100 m are dropped. Derived IDs are
-deterministic for the pinned inputs but are not stable across a DEM or green-area change.
+one derived identity; gaps under 60 m on one bank are joined before parts under 100 m are dropped. Every rim runs with
+the river on its right, OSM cliffs included: the nearest river line decides, because a style offsets the canyon wall
+from the rim toward the water. Derived IDs are deterministic for the pinned inputs but are not stable across a DEM or
+green-area change.
 
 Canyon rims keep only samples where the bank rises at least 8 m above the river surface within 60 m of the channel
 (`CANYON_BANK_RISE_METRES` and `CANYON_SEARCH_DISTANCE_METRES` in `data/tools/relief/terrain.py`). The thresholds
@@ -71,24 +73,26 @@ tests. See [data licensing](../map-data/data-license.md) for the required Copern
 `make -C data build-data` encodes one vector layer per published source. `data/tools/tile-layers.mjs` is the single
 definition of each layer's source, fields and zoom ladder; the builder emits it to `.build/tiles/layer-metadata.json`,
 and `data/tools/pack.py` writes that table as the archive's `vector_layers` metadata. Do not add a second hand-written
-layer list to the packager.
+layer list to the packager. The builder derives one field that no source stores: `roads.inGreenArea` is `true` for a
+walking path whose midpoint lies inside a green land area (`data/tools/green-areas.mjs`, green kinds from the relief
+build parameters), so a style can draw park routes apart from city footpaths.
 
-| Layer          | Source file                  | Zooms                                         | Fields                                                                                                         |
-| -------------- | ---------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| land           | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                       |
-| water          | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                            |
-| roads          | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel` |
-| buildings      | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                      |
-| contours       | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                           |
-| slopes         | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                       |
-| ridges         | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                       |
-| canyon_rims    | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                |
-| summits        | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                        |
-| settlements    | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                      |
-| borders        | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                |
-| municipalities | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                               |
-| road_nodes     | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                 |
-| entrances      | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                               |
+| Layer          | Source file                  | Zooms                                         | Fields                                                                                                                        |
+| -------------- | ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| land           | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                                      |
+| water          | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
+| roads          | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
+| buildings      | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                                     |
+| contours       | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
+| slopes         | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                                      |
+| ridges         | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
+| canyon_rims    | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                               |
+| summits        | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
+| settlements    | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                                     |
+| borders        | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                               |
+| municipalities | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                                              |
+| road_nodes     | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                                |
+| entrances      | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                                              |
 
 The table lists the fields written into tiles, not every source tag. Index contours start at zoom 12 and all contour
 lines at 14; named summits start at 9 and minor ones at 13; settlement ranks enter at 5, 8, 11 and 13. Paths and

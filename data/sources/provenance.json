@@ -198,7 +198,7 @@
     "canyon-rims.geojson": {
       "bytes": 44838,
       "features": 50,
-      "sha256": "5ea56b05baba340c59095a61b2ec0af00ebc0f7c503a11da3bc2cab7f275ffc1"
+      "sha256": "0511b42b9c5679a1e29e71256986e71f919e7ab78123c13a343e0c5acde66eb6"
     },
     "context-countries.geojson": {
       "bytes": 6535,
@@ -342,7 +342,7 @@
         "data/tools/build-relief.py": "011eb29bb9870208fc29e78dba153e8c9896a21f6afefa9b918c013fb01323f8",
         "data/tools/relief/__init__.py": "881d2d0cf67afa43aeff67501d72a8c63065925f4e2c6c2754917da260d92963",
         "data/tools/relief/build.py": "0cbfe21fa3c08c71284489836182792bf9e34efdc61d626a2353e778761baf78",
-        "data/tools/relief/derivations.py": "d543a125132c6eb2ebbf75bf6d5c8de90e6be9ab61b1ee081b0b949ac58df3c1",
+        "data/tools/relief/derivations.py": "5961e726061e8ec10f69283298a966319290ebe81d81bd63d664dd4f212d182d",
         "data/tools/relief/sources.py": "ec83ae43f165a834fc3d00d41041ea9557c3c8a8ddeb3902194971be0beb19cc",
         "data/tools/relief/terrain.py": "7cce114335a3698f514dc0aab343836b14349b17b82e9f2addb4321fcaed8630"
       }
@@ -357,7 +357,7 @@
     "osmSnapshot": "2026-11-20T21:21:21Z",
     "reportBytes": 156310,
     "reportFile": ".build/relief-report.json",
-    "reportSha256": "43f01e1da5bc2f1fb017f775aa861773db9829a2ca02ab58aca9fc594dfc402a",
+    "reportSha256": "7e1186d66f99828328b80157b535d097ac4db0a7ced5a1de0c5e528f6fdba588",
     "retiredBuildParameters": {
       "radiusMetres": 400
     },

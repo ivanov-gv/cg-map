@@ -103,7 +103,7 @@ class ReliefDerivationTests(unittest.TestCase):
         features, _ = derivations.build_summits(ConstantTerrainModel(), osm, land, contours)
         self.assertEqual(features[0]['properties']['enclosingContourElevation'], 120)
 
-    def test_canyon_rim_keeps_osm_cliff_identity_separate_from_dem(self):
+    def test_canyon_rim_keeps_osm_cliff_identity_separate_from_dem_and_water_on_its_right(self):
         class RiverBankModel:
             def sample(self, longitude, latitude):
                 if abs(latitude - 5.0) < 0.0002:
@@ -121,7 +121,8 @@ class ReliefDerivationTests(unittest.TestCase):
             'entityId': 'way/7',
             'entityVersion': 3,
             'kind': 'cliff',
-            'coordinates': [[0.002, 5.0003], [0.008, 5.0003]],
+            # Mapped against the river's flow, so the builder must reverse it to keep the water on its right.
+            'coordinates': [[0.008, 5.0003], [0.002, 5.0003]],
         }]
         features, _ = derivations.build_canyon_rims(
             RiverBankModel(), water, cliffs, bounds, river_names=('Ribnica',), sample_spacing_metres=20
@@ -137,3 +138,10 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertNotIn('minimumBankRiseMetres', cliff_features[0]['properties'])
         self.assertIn('lengthMetres', cliff_features[0]['properties'])
         self.assertTrue(all(f['properties']['entityId'].startswith('derived:canyon-rim-') for f in dem_features))
+        self.assertEqual({f['properties']['bank'] for f in dem_features}, {'left', 'right'})
+        for feature in features:
+            (start_x, start_y), (end_x, end_y) = feature['geometry']['coordinates'][0], feature['geometry']['coordinates'][-1]
+            river_y = 5.0
+            # A negative cross product puts the river to the right of the line's direction.
+            cross = (end_x - start_x) * (river_y - start_y) - (end_y - start_y) * ((start_x + end_x) / 2 - start_x)
+            self.assertLess(cross, 0, feature['properties'])

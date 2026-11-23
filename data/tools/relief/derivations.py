@@ -866,6 +866,24 @@ def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
     return sorted(kept, key=lambda item: (item[1]['entityId'], tuple(item[0].coords[0])))
 
 
+def _with_water_on_right(segment, river_lines, bank):
+    """Return the rim segment running so that the river lies on its right.
+
+    A style offsets a canyon wall from the rim toward the water with one sign for every rim, so all rims share this
+    direction. River lines run downstream: a left-bank rim keeps the downstream direction, a right-bank rim runs
+    upstream. The nearest river line decides the direction, because OSM cliff ways keep their mappers' direction.
+    """
+    middle = segment.interpolate(0.5, normalized=True)
+    river_line = min(river_lines, key=lambda line: line.distance(middle))
+    start = Point(segment.coords[0])
+    end = Point(segment.coords[-1])
+    runs_downstream = river_line.project(end) >= river_line.project(start)
+    should_run_downstream = bank == 'left'
+    if runs_downstream == should_run_downstream:
+        return segment
+    return LineString(list(segment.coords)[::-1])
+
+
 def _metric_length(geometry, latitude_metres, longitude_metres):
     if geometry.is_empty:
         return 0.0
@@ -997,6 +1015,13 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
                 cliffs, lines, bank, detail_bounds, latitude_metres, longitude_metres,
                 rim_geometry, CANYON_SEARCH_DISTANCE_METRES / 2,
             )
+            cliff_parts = [
+                (_with_water_on_right(part, lines, bank), cliff) for part, cliff in cliff_parts
+            ]
+            dem_segments = [
+                (_with_water_on_right(segment, lines, bank), rise)
+                for segment, rise in dem_segments
+            ]
             cliff_features = _cliff_rim_features(
                 cliff_parts, river_name, bank, latitude_metres, longitude_metres
             )

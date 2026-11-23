@@ -151,7 +151,8 @@ across a DEM or green-area change. Summit `heightCheck` is `missing`, `mismatch`
 contour above OSM height around the summit or an OSM/DEM difference over 25 m, and a missing OSM height keeps its DEM
 fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
 OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
-and `method: "dem-canyon-bank"`. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
+and `method: "dem-canyon-bank"`. Every rim line runs with the river on its right, so a style can offset a canyon wall
+toward the water with one sign. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
 elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology
 proof.
 
