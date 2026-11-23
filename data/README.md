@@ -31,22 +31,8 @@ Viewing/building the web uses the committed reviewed archive instead. The review
 fields with it, writes the same table to `.build/tiles/layer-metadata.json`, and `data/tools/pack.py` copies that
 generated table into the archive's `vector_layers` metadata. No second layer list is maintained in Python.
 
-| Layer          | Source file                  | Zooms                                         | Fields                                                                                                         |
-| -------------- | ---------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| land           | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                       |
-| water          | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                            |
-| roads          | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel` |
-| buildings      | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                      |
-| contours       | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                           |
-| slopes         | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                       |
-| ridges         | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                       |
-| canyon_rims    | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                |
-| summits        | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                        |
-| settlements    | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                      |
-| borders        | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                |
-| municipalities | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                               |
-| road_nodes     | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                 |
-| entrances      | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                               |
+The layers, their source files, zooms and fields are listed once, in the
+[archive layers table](../docs/runbooks/data.md#archive-layers).
 
 Low zooms stay light: paths and footways are withheld below zoom 14, minor summits and unnamed settlements appear only
 at their detail zooms, and road nodes and entrances are detail-only. Turn restrictions are topological relations, and

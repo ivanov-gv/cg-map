@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
 from shapely.geometry import box, mapping
 
 TOOLS_PATH = Path(os.environ.get(
@@ -90,6 +91,29 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertIsNone(derivations._parse_elevation('12m34'))
         self.assertIsNone(derivations._parse_elevation(''))
 
+    def test_contours_run_with_uphill_on_their_left(self):
+        longitudes = np.linspace(19.0, 19.01, 41)
+        latitudes = np.linspace(42.01, 42.0, 41)
+        column_grid, row_grid = np.meshgrid(np.arange(41), np.arange(41))
+        # One round hill in the middle of the grid, 200 m high at its top.
+        heights = 200.0 - np.hypot(column_grid - 20, row_grid - 20) * 8
+        grid = {'longitudes': longitudes, 'latitudes': latitudes, 'heights': heights}
+        features, _ = derivations.build_contours(grid)
+        # Lines cut by the grid's edge have no inside; closed rings around the summit show the direction.
+        rings = [
+            feature for feature in features
+            if feature['geometry']['coordinates'][0] == feature['geometry']['coordinates'][-1]
+        ]
+        self.assertTrue(rings)
+        for feature in rings:
+            coordinates = feature['geometry']['coordinates']
+            signed_area = sum(
+                start_x * end_y - end_x * start_y
+                for (start_x, start_y), (end_x, end_y) in zip(coordinates[:-1], coordinates[1:])
+            )
+            # Counter-clockwise around the summit keeps the hill on the left.
+            self.assertGreater(signed_area, 0, feature['properties'])
+
     def test_enclosing_contour_uses_highest_enclosing_level(self):
         land = {'features': [{
             'properties': {'kind': 'country', 'entityId': 'relation/53296'},
@@ -103,7 +127,7 @@ class ReliefDerivationTests(unittest.TestCase):
         features, _ = derivations.build_summits(ConstantTerrainModel(), osm, land, contours)
         self.assertEqual(features[0]['properties']['enclosingContourElevation'], 120)
 
-    def test_canyon_rim_keeps_osm_cliff_identity_separate_from_dem(self):
+    def test_canyon_rim_keeps_osm_cliff_identity_separate_from_dem_and_water_on_its_right(self):
         class RiverBankModel:
             def sample(self, longitude, latitude):
                 if abs(latitude - 5.0) < 0.0002:
@@ -121,7 +145,8 @@ class ReliefDerivationTests(unittest.TestCase):
             'entityId': 'way/7',
             'entityVersion': 3,
             'kind': 'cliff',
-            'coordinates': [[0.002, 5.0003], [0.008, 5.0003]],
+            # Mapped against the river's flow, so the builder must reverse it to keep the water on its right.
+            'coordinates': [[0.008, 5.0003], [0.002, 5.0003]],
         }]
         features, _ = derivations.build_canyon_rims(
             RiverBankModel(), water, cliffs, bounds, river_names=('Ribnica',), sample_spacing_metres=20
@@ -137,3 +162,10 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertNotIn('minimumBankRiseMetres', cliff_features[0]['properties'])
         self.assertIn('lengthMetres', cliff_features[0]['properties'])
         self.assertTrue(all(f['properties']['entityId'].startswith('derived:canyon-rim-') for f in dem_features))
+        self.assertEqual({feature['properties']['bank'] for feature in dem_features}, {'left', 'right'})
+        for feature in features:
+            (start_x, start_y), (end_x, end_y) = feature['geometry']['coordinates'][0], feature['geometry']['coordinates'][-1]
+            river_y = 5.0
+            # A negative cross product puts the river to the right of the line's direction.
+            cross = (end_x - start_x) * (river_y - start_y) - (end_y - start_y) * ((start_x + end_x) / 2 - start_x)
+            self.assertLess(cross, 0, feature['properties'])

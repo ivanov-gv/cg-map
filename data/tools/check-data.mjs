@@ -6,6 +6,7 @@ import {entranceBearing} from './building-entrances.mjs';
 import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
+import {reversedCanyonRims, reversedClosedContours} from './relief-directions.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const nameFields = new Set(['name', 'name:en']);
 
@@ -965,6 +966,16 @@ function validateReliefSource(data, {label, requireAdopted = false, contractsDir
   return count;
 }
 
+// The relief contract's directions: rims with the river on their right, contours with higher ground on their left.
+function validateReliefDirections(root) {
+  const source = name => JSON.parse(fs.readFileSync(path.join(root, 'data/sources', name)));
+  const reversedRims = reversedCanyonRims(source('canyon-rims.geojson'), source('water.geojson'));
+  requireValue(reversedRims.length === 0, `canyon-rims.geojson: ${reversedRims.length} rims run with the river on their left`);
+  const contours = reversedClosedContours(source('contours.geojson'), source('summits.geojson'));
+  requireValue(contours.judgedCount > 0, 'contours.geojson: no closed contour to check its direction');
+  requireValue(contours.reversed.length === 0, `contours.geojson: ${contours.reversed.length} closed contours run with higher ground on their right`);
+}
+
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
@@ -1063,6 +1074,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     JSON.parse(fs.readFileSync(path.join(root,'data/sources/places.geojson'))),
     {contractsDirectory}
   );
+  validateReliefDirections(root);
   const relief = provenance.relief;
   requireValue(relief && relief.reportFile === '.build/relief-report.json', 'Relief provenance missing');
   const summary = relief.summary;

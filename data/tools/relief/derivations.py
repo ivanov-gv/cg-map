@@ -150,6 +150,43 @@ def _simplify_path(path):
     return coordinates
 
 
+def _grid_height(heights, longitudes, latitudes, longitude, latitude):
+    """Return the height of the grid cell nearest a point, clamped to the grid's edge."""
+    column = round((longitude - longitudes[0]) / (longitudes[1] - longitudes[0]))
+    row = round((latitude - latitudes[0]) / (latitudes[1] - latitudes[0]))
+    column = min(max(column, 0), len(longitudes) - 1)
+    row = min(max(row, 0), len(latitudes) - 1)
+    return float(heights[row, column])
+
+
+def _with_uphill_on_left(path, heights, longitudes, latitudes):
+    """Return the contour path running with higher ground on its left.
+
+    A map label placed along a line has the top of its digits on the line's left, so this direction makes every
+    contour height read facing uphill. Every segment votes with the heights one grid cell to each side.
+    """
+    cell_longitude = abs(float(longitudes[1] - longitudes[0]))
+    cell_latitude = abs(float(latitudes[1] - latitudes[0]))
+    uphill_on_left = 0.0
+    for (start_x, start_y), (end_x, end_y) in zip(path[:-1], path[1:]):
+        east = (end_x - start_x) / cell_longitude
+        north = (end_y - start_y) / cell_latitude
+        length = math.hypot(east, north)
+        if length == 0:
+            continue
+        middle_x = (start_x + end_x) / 2
+        middle_y = (start_y + end_y) / 2
+        left_x = middle_x - north / length * cell_longitude
+        left_y = middle_y + east / length * cell_latitude
+        right_x = middle_x + north / length * cell_longitude
+        right_y = middle_y - east / length * cell_latitude
+        uphill_on_left += (
+            _grid_height(heights, longitudes, latitudes, left_x, left_y)
+            - _grid_height(heights, longitudes, latitudes, right_x, right_y)
+        )
+    return path if uphill_on_left >= 0 else path[::-1]
+
+
 def _contour_paths(grid, interval):
     heights = smooth_heights(smooth_heights(grid['heights']))
     generator = contour_generator(
@@ -161,7 +198,10 @@ def _contour_paths(grid, interval):
         for path in separate_line_paths(generator.lines(level)):
             simplified = _simplify_path(path)
             if len(simplified) >= 2:
-                paths.append((level, simplified))
+                oriented = _with_uphill_on_left(
+                    simplified, heights, grid['longitudes'], grid['latitudes']
+                )
+                paths.append((level, oriented))
     return paths, levels
 
 
@@ -866,6 +906,24 @@ def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
     return sorted(kept, key=lambda item: (item[1]['entityId'], tuple(item[0].coords[0])))
 
 
+def _with_water_on_right(segment, river_lines, bank):
+    """Return the rim segment running so that the river lies on its right.
+
+    A style offsets a canyon wall from the rim toward the water with one sign for every rim, so all rims share this
+    direction. River lines run downstream: a left-bank rim keeps the downstream direction, a right-bank rim runs
+    upstream. The nearest river line decides the direction, because OSM cliff ways keep their mappers' direction.
+    """
+    middle = segment.interpolate(0.5, normalized=True)
+    river_line = min(river_lines, key=lambda line: line.distance(middle))
+    start = Point(segment.coords[0])
+    end = Point(segment.coords[-1])
+    runs_downstream = river_line.project(end) >= river_line.project(start)
+    should_run_downstream = bank == 'left'
+    if runs_downstream == should_run_downstream:
+        return segment
+    return LineString(list(segment.coords)[::-1])
+
+
 def _metric_length(geometry, latitude_metres, longitude_metres):
     if geometry.is_empty:
         return 0.0
@@ -997,6 +1055,13 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
                 cliffs, lines, bank, detail_bounds, latitude_metres, longitude_metres,
                 rim_geometry, CANYON_SEARCH_DISTANCE_METRES / 2,
             )
+            cliff_parts = [
+                (_with_water_on_right(part, lines, bank), cliff) for part, cliff in cliff_parts
+            ]
+            dem_segments = [
+                (_with_water_on_right(segment, lines, bank), rise)
+                for segment, rise in dem_segments
+            ]
             cliff_features = _cliff_rim_features(
                 cliff_parts, river_name, bank, latitude_metres, longitude_metres
             )

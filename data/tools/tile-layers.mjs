@@ -55,9 +55,10 @@ export const TILE_LAYERS = [
     sourceFile: 'roads.geojson',
     minZoom: 0,
     // Display needs the road kind, name, structure, one-way state, path class, lighting and end levels.
+    // inGreenArea is derived by the tile builder (green-areas.mjs), not stored in the source.
     fields: [
       'kind', 'name', 'name:en', 'bridge', 'tunnel', 'layer',
-      'oneway', 'pathClass', 'lit', 'startLevel', 'endLevel'
+      'oneway', 'pathClass', 'lit', 'startLevel', 'endLevel', 'inGreenArea'
     ],
     keep: keepRoad
   },
@@ -104,6 +105,13 @@ export const TILE_LAYERS = [
     // names and OSM/DEM elevations are the display facts; heightCheck keeps a reported mismatch visible.
     fields: ['name', 'name:en', 'ele', 'demElevation', 'heightCheck'],
     keep: (tags, zoom) => zoom >= MINOR_SUMMIT_ZOOM || Boolean(tags.name)
+  },
+  {
+    name: 'green_area_labels',
+    sourceFile: 'land.geojson',
+    minZoom: 13,
+    // The tile builder derives one long-axis line per named green area (green-area-labels.mjs) for its name label.
+    fields: ['name', 'name:en']
   },
   {
     name: 'settlements',

@@ -17,6 +17,10 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 group in `metadata`, and a unit test fails when a layer is out of order. Applications install points of interest after
 the style; both apps place them below street labels today.
 
+Canyon walls are nested bands offset from each canyon rim toward the water, darkest at the water; they rely on the
+relief contract's rule that every rim runs with the river on its right. Bridge decks reuse their street's casing width
+and add dark edges.
+
 ## Lifecycle
 
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite
