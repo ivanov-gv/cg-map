@@ -261,6 +261,7 @@ test('overlay states paint the selection red and an editable overlay as a thin g
   assert.equal(map.getLayer('example-fill').paint['fill-opacity'], 0);
   overlay.setState('default');
   assert.equal(map.getLayer('example-fill').paint['fill-opacity'], 0.22);
+  assert.ok(map.getLayer('example-line').paint['line-width'] <= map.getLayer('example-selection-line').paint['line-width']);
   assert.throws(() => overlay.setState('highlighted'), /Unknown overlay state/);
 });
 

@@ -1,15 +1,25 @@
-import {stateColors} from './basemap-palette.js';
+// Map primitive states from the Penpot card "7 · Map primitives (Core)". Highlighted: picked, its card open.
+// Editable: the Editor's objects that can be edited on the chosen layer.
+const stateColors = {
+  overlay: '#32634d',
+  highlighted: '#c8372d',
+  // The highlighted red at 15% over white, opaque, so a selected marker hides the overlay marker under it.
+  highlightedMarkerFill: '#f7e1e0',
+  editable: '#2e8b57',
+  markerOutline: '#ffffff'
+};
 
 const emptyCollection = () => ({type: 'FeatureCollection', features: []});
 
 // Paint for each primitive state. Default is the overlay's own look; Highlighted is a red outline over a 15% fill,
-// a red edge for lines and a red ring for markers; Editable is a subtle green outline with no fill.
+// a red edge for lines and a red ring for markers; Editable is a subtle green outline with no fill. The selection is
+// drawn over the overlay, so Default lines are no wider than the Highlighted edge and leave no green fringe.
 const statePaints = {
   default: {
     fillColor: stateColors.overlay,
     fillOpacity: 0.22,
     lineColor: stateColors.overlay,
-    lineWidth: 3,
+    lineWidth: 2.5,
     pointColor: stateColors.overlay,
     pointOpacity: 1,
     pointStrokeColor: stateColors.markerOutline,
@@ -20,8 +30,8 @@ const statePaints = {
     fillOpacity: 0.15,
     lineColor: stateColors.highlighted,
     lineWidth: 2.5,
-    pointColor: stateColors.highlighted,
-    pointOpacity: 0.15,
+    pointColor: stateColors.highlightedMarkerFill,
+    pointOpacity: 1,
     pointStrokeColor: stateColors.highlighted,
     pointStrokeWidth: 2.5
   },
@@ -38,12 +48,12 @@ const statePaints = {
 };
 const pointRadiusPixels = 7;
 
-// Paint properties per layer kind, so a state change is the same property list as layer creation.
+// Paint properties per MapLibre layer type, so a state change is the same property list as layer creation.
 function layerPaints(paint) {
   return {
     fill: {'fill-color': paint.fillColor, 'fill-opacity': paint.fillOpacity},
     line: {'line-color': paint.lineColor, 'line-width': paint.lineWidth},
-    point: {
+    circle: {
       'circle-color': paint.pointColor,
       'circle-opacity': paint.pointOpacity,
       'circle-stroke-color': paint.pointStrokeColor,
@@ -75,7 +85,7 @@ function overlayLayers(source, paint) {
       type: 'circle',
       source,
       filter: ['==', ['geometry-type'], 'Point'],
-      paint: {...paints.point, 'circle-radius': pointRadiusPixels}
+      paint: {...paints.circle, 'circle-radius': pointRadiusPixels}
     }
   ];
 }
@@ -109,9 +119,8 @@ export function createGeoJSONOverlay(map, name, data = emptyCollection()) {
     setState(state) {
       if (state !== 'default' && state !== 'editable') throw new Error(`Unknown overlay state: ${state}`);
       const paints = layerPaints(statePaints[state]);
-      const paintsByLayerId = {[`${name}-fill`]: paints.fill, [`${name}-line`]: paints.line, [`${name}-point`]: paints.point};
-      for (const [layerId, paint] of Object.entries(paintsByLayerId)) {
-        for (const [property, value] of Object.entries(paint)) map.setPaintProperty(layerId, property, value);
+      for (const layer of layers) {
+        for (const [property, value] of Object.entries(paints[layer.type])) map.setPaintProperty(layer.id, property, value);
       }
     },
     setVisible(isVisible) {
