@@ -29,6 +29,11 @@ Contour lines are one faint type every 20 m. Their heights are labels along each
 contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along
 each line; the wiki's single column down a hill's sunlit slope is not reproduced.
 
+Walking paths are drawn by what they are to a walker: park routes (main paths with `inGreenArea`) as a cream path over a
+casing, trails and city footpaths as quiet round dots, stairways with a step pattern. Meadows fill only land areas with
+the `destination` flag. The park routes are new layers, `park-route-casing` and `park-routes`: an application that
+hit-tests walking paths by layer id adds them when it upgrades.
+
 ## Lifecycle
 
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite

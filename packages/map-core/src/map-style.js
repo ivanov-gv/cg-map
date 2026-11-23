@@ -34,7 +34,8 @@ const majorRoadFilter = roadKindFilter(majorRoadKinds);
 const nonStreetFilter = roadKindFilter(['footway', 'pedestrian', 'path', 'track', 'cycleway', 'steps']);
 const streetFilter = ['all', ['!', majorRoadFilter], ['!', nonStreetFilter]];
 
-function roadLineLayer({id, color, width, filter, minzoom = 0, dash}) {
+// Dashes end square by default; a dotted line passes cap 'round' with zero-length dashes, so each dot is round.
+function roadLineLayer({id, color, width, filter, minzoom = 0, dash, cap = dash ? 'butt' : 'round', opacity}) {
   return {
     id,
     type: 'line',
@@ -42,11 +43,12 @@ function roadLineLayer({id, color, width, filter, minzoom = 0, dash}) {
     'source-layer': 'roads',
     minzoom,
     ...(filter ? {filter} : {}),
-    layout: {'line-cap': dash ? 'butt' : 'round', 'line-join': 'round'},
+    layout: {'line-cap': cap, 'line-join': 'round'},
     paint: {
       'line-color': color,
       'line-width': width,
-      ...(dash ? {'line-dasharray': dash} : {})
+      ...(dash ? {'line-dasharray': dash} : {}),
+      ...(opacity === undefined ? {} : {'line-opacity': opacity})
     }
   };
 }
@@ -142,6 +144,21 @@ function buildingLayers() {
   ];
 }
 
+// Meadows mark places people go to (the land layer's destination flag), not every grassy patch, which stays park green.
+function meadowLayers() {
+  return [
+    inDrawingGroup('meadows', {
+      id: 'meadows',
+      type: 'fill',
+      source,
+      'source-layer': 'land',
+      minzoom: 13,
+      filter: ['==', ['get', 'destination'], true],
+      paint: {'fill-color': colors.meadow}
+    })
+  ];
+}
+
 // Casings come first so every street fill covers the casing of the streets it crosses.
 function streetLayers() {
   const minorStreetWidth = [
@@ -217,36 +234,74 @@ function bridgeLayers() {
   return layers.map(layer => inDrawingGroup('bridges', layer));
 }
 
+// Walking paths by what they are to a walker (wiki UI 3.Core, Penpot hills rules):
+// - park routes: main (paved or maintained) paths inside green areas, a cream path over a casing;
+// - trails: rough paths anywhere, and paths and unpaved footways without a class, a quiet dotted line;
+// - city footpaths: main footways and paths outside green areas, small round dots;
+// - stairways: a step pattern; cycleways outside parks keep their own blue dashes.
+const pathClass = ['get', 'pathClass'];
+const isInGreenArea = ['==', ['get', 'inGreenArea'], true];
+const isParkRoute = ['all', isInGreenArea, ['==', pathClass, 'main'], roadKindFilter(['footway', 'path', 'cycleway'])];
+// Steps, cycleways and pedestrian streets with a trail class (OSM sac_scale) keep their own pattern.
+const isTrail = [
+  'all',
+  roadKindFilter(['footway', 'path', 'track']),
+  ['any', ['==', pathClass, 'trail'], ['!', ['has', 'pathClass']]]
+];
+const isCityFootpath = ['all', ['!', isInGreenArea], ['==', pathClass, 'main'], roadKindFilter(['footway', 'path'])];
+const isCyclewayOutsideParks = ['all', roadKindFilter(['cycleway']), ['!', isParkRoute]];
+// Dot spacing in line widths, the Penpot value: a zero-length dash with round caps is one dot, so 1.8 px dots sit about
+// 4 px apart, centre to centre.
+const dottedLine = [0, 2.2];
+const trailOpacity = 0.75;
+
 function walkingLayers() {
   return [
     inDrawingGroup('trails', roadLineLayer({
       id: 'paths',
-      color: colors.path,
-      width: scaledWidth(1.1, 1.8, 3.5),
-      filter: roadKindFilter(['path', 'track']),
+      color: colors.trail,
+      width: scaledWidth(1, 1.5, 3),
+      filter: isTrail,
       minzoom: 13,
-      dash: [4, 2]
+      dash: dottedLine,
+      cap: 'round',
+      opacity: trailOpacity
+    })),
+    inDrawingGroup('trails', roadLineLayer({
+      id: 'footways',
+      color: colors.cityFootpath,
+      width: scaledWidth(1.2, 1.8, 3.5),
+      filter: isCityFootpath,
+      minzoom: 13,
+      dash: dottedLine,
+      cap: 'round'
     })),
     inDrawingGroup('main-routes', roadLineLayer({
-      id: 'footways',
-      color: colors.footway,
-      width: scaledWidth(1.1, 1.8, 3.5),
-      filter: roadKindFilter(['footway', 'pedestrian']),
-      minzoom: 13,
-      dash: [2, 1.4]
+      id: 'park-route-casing',
+      color: colors.parkRouteCasing,
+      width: scaledWidth(2.4, 3.6, 9),
+      filter: isParkRoute,
+      minzoom: 13
+    })),
+    inDrawingGroup('main-routes', roadLineLayer({
+      id: 'park-routes',
+      color: colors.parkRoute,
+      width: scaledWidth(1.4, 2.2, 6),
+      filter: isParkRoute,
+      minzoom: 13
     })),
     inDrawingGroup('main-routes', roadLineLayer({
       id: 'cycleways',
       color: colors.cycleway,
       width: scaledWidth(1.2, 2, 4),
-      filter: roadKindFilter(['cycleway']),
+      filter: isCyclewayOutsideParks,
       minzoom: 13,
       dash: [3, 1.5]
     })),
     inDrawingGroup('stairways', roadLineLayer({
       id: 'steps',
       color: colors.stairway,
-      width: scaledWidth(2.4, 4.5, 10),
+      width: scaledWidth(2.4, 4, 9),
       filter: roadKindFilter(['steps']),
       minzoom: 13,
       dash: [0.4, 0.35]
@@ -324,6 +379,7 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...canyonLayers(),
       ...waterLayers(),
       ...buildingLayers(),
+      ...meadowLayers(),
       ...contourLayers(),
       ...streetLayers(),
       ...bridgeLayers(),
