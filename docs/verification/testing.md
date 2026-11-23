@@ -100,10 +100,11 @@ Check a branch with `make ci-plan BASE=origin/main`.
 
 ## Phone layout tests
 
-A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. The nightly run and a plain
-`make e2e` run them all, so a phone-only bug that a tag misses appears at most a day later. The desktop project runs
-everything except tests scoped to another project. List what a PR runs with
-`E2E_PHONE=tagged npx playwright test --list --project=pages-mobile`.
+A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. In apps/web every run does the
+same — nightly, CI test runs and a plain `make e2e` — so a test that misses the tag never runs on the phone. The
+`phone_tests` CI input applies only to apps/editor, whose nightly still runs every test on the phone. The desktop
+project runs everything except tests scoped to another project. List the web phone selection with
+`npx playwright test --list --project=pages-mobile`.
 
 In apps/web, a test that works on one layout only declares that in its tags instead of skipping itself after setup and
 page load. `@desktop` runs in `root-desktop` only; `@phone-only` (always with `@phone`) runs in `pages-mobile` only;

@@ -215,8 +215,6 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-web.yml"') }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
-      # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
-      phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-editor:
     name: apps-editor
     needs: [switch, plan, plan-test-run]

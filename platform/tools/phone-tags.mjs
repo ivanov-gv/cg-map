@@ -1,6 +1,6 @@
 // Finds browser tests that depend on the phone layout but have no @phone tag, which a PR would then not run there. Reads
 // the syntax tree, so that a dependency in a helper or a describe-level skip counts as well as one in the test's own body.
-// Only the nightly run would otherwise catch those: docs/verification/testing.md, "Phone layout tests".
+// Without the tag the phone project would not run the test at all: docs/verification/testing.md, "Phone layout tests".
 import * as espree from 'espree';
 
 const PHONE_DEPENDENCY = /\b(isMobile|hasTouch)\b|touchscreen|viewportSize\(\)\.width/;

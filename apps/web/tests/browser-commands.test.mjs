@@ -25,9 +25,9 @@ function listBrowserTestsThroughMake(makeArguments) {
 test('the Makefile preserves project, title and file filters', async testContext => {
   const cases = [
     {
-      name: 'mobile transport',
-      filters: ['--project=pages-mobile', '--grep=transport toggles'],
-      makeArguments: "--project=pages-mobile --grep='transport toggles'",
+      name: 'mobile phone-tagged scenario',
+      filters: ['--project=pages-mobile', '--grep=map-tap card: Back closes it'],
+      makeArguments: "--project=pages-mobile --grep='map-tap card: Back closes it'",
       count: 1
     },
     {
