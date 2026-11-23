@@ -20,8 +20,9 @@ function contourLineLayer() {
 
 // The height, number only, along its own line. Contours run with higher ground on their left (relief contract) and
 // a line label's top faces the line's left, so keeping labels un-flipped makes every height read facing uphill.
-// The halo hides the faint line under the digits, the design's small gap; it is drawn with the labels, above streets,
-// so a street never covers a height.
+// The halo hides the faint line under the digits, the design's small gap. It takes the sunlit slope's green, where the
+// wiki puts a hill's heights, and stays thin and soft so it reads as a gap on the other tones too. The labels are drawn
+// with the labels group, above streets, so a street never covers a height.
 function contourLabelLayer() {
   return inDrawingGroup('labels', {
     id: 'contour-labels',
@@ -41,8 +42,9 @@ function contourLabelLayer() {
     },
     paint: {
       'text-color': colors.contour,
-      'text-halo-color': colors.contourLabelHalo,
-      'text-halo-width': 1.5
+      'text-halo-color': colors.sunlitSlope,
+      'text-halo-width': 1,
+      'text-halo-blur': 0.5
     }
   });
 }

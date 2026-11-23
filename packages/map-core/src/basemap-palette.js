@@ -12,7 +12,6 @@ export const basemapColors = {
   sunlitSlope: '#c9ddb2',
   shadedSlope: '#b3cf98',
   contour: '#8c7a5e',
-  contourLabelHalo: '#efeee2',
   summit: '#5e5040',
   summitHalo: '#f6f3ea',
   parkName: '#4e7a3e',
