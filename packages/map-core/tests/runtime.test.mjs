@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMap, whenMapReady, mapStyle, hitTest, offsetCoordinate, createGeoJSONOverlay} from '../src/index.js';
 import {relocateCoreImports} from '../tools/assemble.mjs';
+import {basemapColors} from '../src/basemap-palette.js';
+import {drawingGroups, drawingGroupKey} from '../src/drawing-order.js';
 
 // A small eventful engine keeps lifecycle tests isolated from GPU, network and the DOM.
 class TestMap {
@@ -101,9 +103,21 @@ test('every extracted green kind keeps the park fill', () => {
       'park', 'garden', 'woods', 'meadow', 'grass',
       'scrub', 'sports', 'cemetery', 'playground'
     ]]],
-    '#dce6c9',
-    '#efeee2'
+    basemapColors.park,
+    basemapColors.land
   ]);
+});
+
+// The wiki's bottom-to-top order is a design rule: a layer moved or added out of order breaks this test.
+test('basemap layers follow the drawing order', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const groupPositions = style.layers.map(layer => {
+    const position = drawingGroups.indexOf(layer.metadata?.[drawingGroupKey]);
+    assert.ok(position >= 0, `${layer.id} has no drawing group`);
+    return position;
+  });
+  const isInOrder = groupPositions.every((position, index) => index === 0 || position >= groupPositions[index - 1]);
+  assert.ok(isInOrder, style.layers.map(layer => layer.metadata[drawingGroupKey]).join(' → '));
 });
 
 test('coastline lines are not styled as waterways', () => {
