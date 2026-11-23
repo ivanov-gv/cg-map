@@ -146,9 +146,10 @@ jobs:
       # A regular PR run dispatches CD test runs even when this call itself runs in-place in test-run mode: the caller
       # is still the PR, not a test run of ci-pr-checks. ci-pr-checks empties the list in its own test runs, so a
       # dispatched test run cannot dispatch another one. A changed workflows workflow with no CD changes gets the
-      # planner's proof flag so its empty-list dispatcher job still runs.
+      # planner's proof flag so its empty-list dispatcher job still runs. Job outputs are strings, so compare the
+      # planner flags to 'true' before passing them to the boolean input.
       cd_test_runs: ${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}
-      prove_cd_test_runs: ${{ needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs }}
+      prove_cd_test_runs: ${{ (needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs) == 'true' }}
       head_sha: ${{ github.event.pull_request.head.sha || github.sha }}
   platform:
     name: platform

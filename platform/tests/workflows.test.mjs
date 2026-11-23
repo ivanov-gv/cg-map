@@ -329,6 +329,126 @@ test('a called workflow asks for no more than its caller grants, or the whole ru
   }
 });
 
+const REUSABLE_WORKFLOW_PREFIX = './.github/workflows/';
+const COMPARISON_OPERATORS = ['==', '!=', '<', '>', '<=', '>='];
+// contains() and the status functions return booleans, so they can stand where a comparison does.
+const BOOLEAN_FUNCTIONS = new Set([
+  'always', 'cancelled', 'contains', 'endsWith', 'failure', 'startsWith', 'success'
+]);
+
+// Job outputs and string inputs are strings. Read bare inputs only when the caller declares them boolean.
+function booleanInputNames(file) {
+  const on = load(file).on ?? {};
+  const names = [];
+  for (const trigger of ['workflow_call', 'workflow_dispatch']) {
+    for (const [name, input] of Object.entries(on[trigger]?.inputs ?? {})) {
+      if (input?.type === 'boolean') names.push(name);
+    }
+  }
+  return new Set(names);
+}
+
+// GitHub expressions use single-quoted strings; doubled quotes are the escape for an apostrophe.
+function expressionTokens(expression, context) {
+  const pattern = /\s*(==|!=|<=|>=|&&|\|\||[()!,.<>[\]]|'(?:''|[^'])*'|[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*|\d+)\s*/y;
+  const tokens = [];
+  let offset = 0;
+  while (offset < expression.length) {
+    pattern.lastIndex = offset;
+    const match = pattern.exec(expression);
+    assert.ok(match, `${context} has an unsupported expression token at ${expression.slice(offset)}`);
+    tokens.push(match[1]);
+    offset = pattern.lastIndex;
+  }
+  return tokens;
+}
+
+// Return null for unbalanced parentheses. A non-null result with no operators is one balanced value expression.
+function splitTopLevelTokens(tokens, operators) {
+  let depth = 0;
+  const parts = [[]];
+  const found = [];
+  for (const token of tokens) {
+    if (token === '(') depth++;
+    if (token === ')') depth--;
+    if (depth < 0) return null;
+    if (depth === 0 && operators.includes(token)) {
+      found.push(token);
+      parts.push([]);
+      continue;
+    }
+    parts.at(-1).push(token);
+  }
+  return depth === 0 ? {found, parts} : null;
+}
+
+function stripOuterParentheses(tokens) {
+  if (tokens[0] !== '(') return null;
+  let depth = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index] === '(') depth++;
+    if (tokens[index] === ')') depth--;
+    if (depth === 0) return index === tokens.length - 1 ? tokens.slice(1, -1) : null;
+  }
+  return null;
+}
+
+// A comparison can read strings on either side; the comparison itself is the boolean result.
+function isValueTokens(tokens) {
+  if (tokens.length === 0) return false;
+  const split = splitTopLevelTokens(tokens, ['&&', '||', ...COMPARISON_OPERATORS]);
+  return split !== null && split.found.length === 0;
+}
+
+function isBooleanFunctionCall(tokens) {
+  if (tokens.length < 3 || !BOOLEAN_FUNCTIONS.has(tokens[0])) return false;
+  return stripOuterParentheses(tokens.slice(1)) !== null;
+}
+
+function isBooleanTokens(tokens, booleanInputs) {
+  const wrapped = stripOuterParentheses(tokens);
+  if (wrapped) return isBooleanTokens(wrapped, booleanInputs);
+  const orParts = splitTopLevelTokens(tokens, ['||']);
+  if (orParts?.found.length) return orParts.parts.every(part => isBooleanTokens(part, booleanInputs));
+  const andParts = splitTopLevelTokens(tokens, ['&&']);
+  if (andParts?.found.length) return andParts.parts.every(part => isBooleanTokens(part, booleanInputs));
+  if (tokens[0] === '!') return isBooleanTokens(tokens.slice(1), booleanInputs);
+  const comparison = splitTopLevelTokens(tokens, COMPARISON_OPERATORS);
+  if (comparison?.found.length === 1) return comparison.parts.every(isValueTokens);
+  if (isBooleanFunctionCall(tokens)) return true;
+  if (tokens.length === 1 && ['true', 'false'].includes(tokens[0])) return true;
+  const path = tokens.join('');
+  return path.startsWith('inputs.') && booleanInputs.has(path.slice('inputs.'.length));
+}
+
+function assertBooleanCallValue(callerFile, jobName, inputName, value, booleanInputs) {
+  const context = `${callerFile} ${jobName} ${inputName}`;
+  if (typeof value === 'boolean') return;
+  const match = typeof value === 'string' ? /^\$\{\{([\s\S]*)\}\}$/.exec(value.trim()) : null;
+  assert.ok(match, `${context} must pass a boolean literal or expression, got ${JSON.stringify(value)}`);
+  const expression = match[1].trim();
+  assert.ok(expression, `${context} has an empty expression`);
+  assert.ok(
+    isBooleanTokens(expressionTokens(expression, context), booleanInputs),
+    `${context} passes a string-valued expression to a boolean input: ${expression}`
+  );
+}
+
+test('reusable calls pass real booleans to boolean workflow inputs', () => {
+  for (const callerFile of newWorkflowFiles) {
+    const booleanInputs = booleanInputNames(callerFile);
+    for (const [jobName, job] of Object.entries(load(callerFile).jobs)) {
+      if (!job.uses?.startsWith(REUSABLE_WORKFLOW_PREFIX)) continue;
+      const calledFile = job.uses.replace(REUSABLE_WORKFLOW_PREFIX, '');
+      const calledInputs = load(calledFile).on?.workflow_call?.inputs ?? {};
+      for (const [inputName, value] of Object.entries(job.with ?? {})) {
+        if (calledInputs[inputName]?.type !== 'boolean') continue;
+        assertBooleanCallValue(callerFile, jobName, inputName, value, booleanInputs);
+      }
+    }
+  }
+});
+
 test('only the publish workflow writes packages, and only from main unless it is a test run', () => {
   const {jobs} = load('ci-publish.yml');
   const writers = Object.entries(jobs).filter(([, job]) => job.permissions?.packages === 'write');
@@ -786,7 +906,7 @@ test('ci-pr-checks dispatches CD test runs on a regular PR run even when workflo
   );
   assert.equal(
     call.with.prove_cd_test_runs,
-    '${{ needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs }}',
+    "${{ (needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs) == 'true' }}",
     'the planner must tell an in-place call to prove an empty dispatcher'
   );
   assert.equal(call.with.head_sha, '${{ github.event.pull_request.head.sha || github.sha }}');
