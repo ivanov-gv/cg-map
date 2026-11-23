@@ -890,17 +890,17 @@ test('every static test call passes inputs meant for its workflow', () => {
   }
 });
 
-test('the browser test calls run every browser area, and the editor runs every phone test', () => {
+test('the browser test calls run the smoke area with the default phone tests', () => {
   const {jobs} = load('ci-pr-checks.yml');
   const browserMatrixInputs = {
-    'test-ci-apps-web': 'all_browser_matrix',
-    'test-ci-apps-editor': 'all_editor_browser_matrix'
+    'test-ci-apps-web': 'smoke_browser_matrix',
+    'test-ci-apps-editor': 'smoke_editor_browser_matrix'
   };
   for (const [name, output] of Object.entries(browserMatrixInputs)) {
     const call = jobs[name];
     assert.equal(call.with.browser_matrix, plannerMatrixInput(output), `${name} passes another project's matrix`);
   }
-  assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, 'all');
+  assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, undefined, 'the editor test call keeps the tagged default');
   assert.equal(jobs['test-ci-apps-web'].with.phone_tests, undefined, 'web no longer has a phone_tests input');
 });
 
