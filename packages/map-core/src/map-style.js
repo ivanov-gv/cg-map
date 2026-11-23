@@ -242,15 +242,16 @@ function bridgeLayers() {
 const pathClass = ['get', 'pathClass'];
 const isInGreenArea = ['==', ['get', 'inGreenArea'], true];
 const isParkRoute = ['all', isInGreenArea, ['==', pathClass, 'main'], roadKindFilter(['footway', 'path', 'cycleway'])];
+// Steps, cycleways and pedestrian streets with a trail class (OSM sac_scale) keep their own pattern.
 const isTrail = [
-  'any',
-  ['==', pathClass, 'trail'],
-  ['all', ['!', ['has', 'pathClass']], roadKindFilter(['footway', 'path', 'track'])]
+  'all',
+  roadKindFilter(['footway', 'path', 'track']),
+  ['any', ['==', pathClass, 'trail'], ['!', ['has', 'pathClass']]]
 ];
 const isCityFootpath = ['all', ['!', isInGreenArea], ['==', pathClass, 'main'], roadKindFilter(['footway', 'path'])];
 const isCyclewayOutsideParks = ['all', roadKindFilter(['cycleway']), ['!', isParkRoute]];
-// Dot spacing in line widths: a zero-length dash with round caps is one dot, so 2.2 widths leaves about 4 px between
-// 1.8 px dots, as designed.
+// Dot spacing in line widths, the Penpot value: a zero-length dash with round caps is one dot, so 1.8 px dots sit about
+// 4 px apart, centre to centre.
 const dottedLine = [0, 2.2];
 const trailOpacity = 0.75;
 
