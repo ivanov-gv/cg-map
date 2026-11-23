@@ -102,13 +102,16 @@ Check a branch with `make ci-plan BASE=origin/main`.
 
 A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. The nightly run and a plain
 `make e2e` run them all, so a phone-only bug that a tag misses appears at most a day later. The desktop project runs
-everything except tests scoped to `@mobile-only`. List what a PR runs with
+everything except tests scoped to another project. List what a PR runs with
 `E2E_PHONE=tagged npx playwright test --list --project=pages-mobile`.
 
-In apps/web, use both `@mobile-only` and `@phone` when a scenario needs the phone project's layout and would otherwise
-be repeated by `root-desktop`. The phone project keeps tagged cases in the PR run; `root-desktop` excludes
-`@mobile-only` with `grepInvert`. This replaces a loop over desktop/mobile/Flip viewports inside a spec: use the
-project's viewport and add a separate case only where the code takes a different path. List the scoped cases with
+In apps/web, a test that works on one layout only declares that in its tags instead of skipping itself after setup and
+page load. `@desktop` runs in `root-desktop` only; `@phone-only` (always with `@phone`) runs in `pages-mobile` only;
+`@mobile-only` (with `@phone`) also keeps a phone-layout scenario out of `root-desktop`. `grepInvert` in
+`playwright.config.mjs` filters the unwanted project before the test starts. Use both `@mobile-only` and `@phone` when a
+scenario needs the phone project's layout and would otherwise be repeated on desktop. This replaces a loop over
+desktop/mobile/Flip viewports inside a spec: use the project's viewport and add a separate case only where the code
+takes a different path. List the scoped cases with
 `npx playwright test --list --project=pages-mobile --grep '@mobile-only'`.
 
 Tag a test `@phone` when it:

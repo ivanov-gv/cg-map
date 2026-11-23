@@ -303,9 +303,7 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 17}), CENTRE);
 });
 
-test('result rows identify places, buildings and addresses and list the nearest first', {tag: '@phone'}, async ({
-  page
-}) => {
+test('result rows identify places, buildings and addresses and list the nearest first', {tag: '@phone'}, async ({page}) => {
   await mapIdle(page);
   const expectedStreetNames = await streetNamesForQuery(page, 'bulevar');
   expect(expectedStreetNames).toContain('Bulevar Stanka Dragojevića');
@@ -427,11 +425,7 @@ test('a typed query keeps unmatching places on the map while it highlights resul
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 });
 
-test('Mobile Back keeps unmatching places and result highlights with the query', {tag: '@phone'}, async ({
-  page,
-  isMobile
-}) => {
-  test.skip(!isMobile, 'phone layout');
+test('Mobile Back keeps unmatching places and result highlights with the query', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await mapIdle(page);
   await page.locator('#search').fill('bulevar');
   await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
@@ -447,11 +441,7 @@ test('Mobile Back keeps unmatching places and result highlights with the query',
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 });
 
-test('a Mobile map tap keeps unmatching places while the query stays in the compact strip', {tag: '@phone'}, async ({
-  page,
-  isMobile
-}) => {
-  test.skip(!isMobile, 'phone layout');
+test('a Mobile map tap keeps unmatching places while the query stays in the compact strip', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await mapIdle(page);
   await page.locator('#search').fill('bulevar');
   await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
@@ -529,8 +519,7 @@ test('a category keeps below-threshold places visible when a query narrows resul
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 });
 
-test('result highlights survive closing the dock and a place card', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('result highlights survive closing the dock and a place card', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await mapIdle(page);
   await page.locator('#search').fill('bulevar');
   await expectQueryHighlights(page);
@@ -586,11 +575,7 @@ test('Flip keeps category highlights after the dock closes', {tag: '@phone'}, as
   });
 });
 
-test('closing Mobile search keeps result highlights while the query stays in the bar', {tag: '@phone'}, async ({
-  page,
-  isMobile
-}) => {
-  test.skip(!isMobile, 'phone layout');
+test('closing Mobile search keeps result highlights while the query stays in the bar', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await page.locator('#search').fill('bulevar');
   await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
@@ -604,8 +589,7 @@ test('closing Mobile search keeps result highlights while the query stays in the
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
 });
 
-test('category highlights stay on Mobile with search closed', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('category highlights stay on Mobile with search closed', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   const expected = ['node/1', 'node/2', 'node/3', 'node/4'];
   await page.locator('#search').click();
   await page.locator('#categories button[data-category="food"]').click();
@@ -864,9 +848,7 @@ test('tapping a highlighted building removes its green fringe', async ({page}) =
 
 const FIRST_GPS_FIX = {latitude: 42.44205, longitude: 19.26085, accuracy: 18};
 const SECOND_GPS_FIX = {latitude: 42.4419, longitude: 19.2607, accuracy: 19};
-test('GPS distances: without a usable fix rows keep centre order and show no distance', {tag: '@phone'}, async ({
-  page
-}) => {
+test('GPS distances: without a usable fix rows keep centre order and show no distance', {tag: '@phone'}, async ({page}) => {
   await expect
     .poll(() => page.locator('#position-badge').getAttribute('data-state'))
     .not.toBe('live');

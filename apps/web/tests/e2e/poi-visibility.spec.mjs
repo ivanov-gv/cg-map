@@ -145,9 +145,7 @@ test('a level is absent just below its threshold, present at it, and reversible'
 test.describe('stability', () => {
   // page.route cannot replace a request the service worker answers, and the reload below must see the reordered input.
   test.use({serviceWorkers: 'block'});
-  test('small pans, zoom steps, bearing, round trips, reloads, and input order keep exact icon sets', async ({
-    page
-  }) => {
+  test('small pans, zoom steps, bearing, round trips, reloads, and input order keep exact icon sets', async ({page}) => {
     const data = dense();
     await open(page, data, [TILE_BOUNDARY_LONGITUDE_DEGREES, CENTER_LATITUDE_DEGREES], 17);
     const all = eligible(data, 17);
@@ -391,9 +389,8 @@ test('typing closes a selected marker card when its listing no longer matches', 
 
 test(
   'the camera holds still for a selected marker while the phone keyboard is open',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone keyboard');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     const data = featureCollection([place('near-a', 4, 0, 0), place('near-b', 4, 0.00002, 0)]);
     const coordinates = data.features[0].geometry.coordinates;
     await open(page, data, coordinates);
@@ -443,9 +440,7 @@ test('a query keeps other places while the leading match keeps its icon exceptio
   expect(await hasPreview('only-match')).toBe(false);
 });
 
-test('a broad filter admits only eligible matches plus one exception that moves and clears', async ({
-  page
-}) => {
+test('a broad filter admits only eligible matches plus one exception that moves and clears', async ({page}) => {
   const data = ladder();
   await open(page, data);
   await page.locator('#search').fill('Place');

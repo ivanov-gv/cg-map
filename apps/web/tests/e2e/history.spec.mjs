@@ -101,8 +101,7 @@ async function tapEmptyMap(page) {
   );
 }
 
-test('map-tap card: Back closes it, next Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('map-tap card: Back closes it, next Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page, renderedPlace);
   await tapRenderedPlace(page, [19.26, 42.44], 'node/1');
   await expect(page.locator('#place-card')).toBeVisible();
@@ -116,11 +115,7 @@ test('map-tap card: Back closes it, next Back leaves', {tag: '@phone'}, async ({
   await expectLeftApp(page);
 });
 
-test('map-tap card then dock: Back closes the dock before the covered card', {tag: '@phone'}, async ({
-  page,
-  isMobile
-}) => {
-  test.skip(!isMobile, 'phone layout');
+test('map-tap card then dock: Back closes the dock before the covered card', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page, renderedPlace);
   await tapRenderedPlace(page, [19.26, 42.44], 'node/1');
   const card = page.locator('#place-card');
@@ -140,9 +135,8 @@ test('map-tap card then dock: Back closes the dock before the covered card', {ta
 
 test(
   'dock to result to Full: Back gives Peek, Back closes card, Back closes search, Back closes dock, Back leaves',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await openApp(page);
     await openMenu(page);
     await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
@@ -168,8 +162,7 @@ test(
   }
 );
 
-test('× on search with a card open, then Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('× on search with a card open, then Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openSearchBubble(page);
   await page.locator('.result', {hasText: 'Nearby place 0'}).click();
@@ -181,8 +174,7 @@ test('× on search with a card open, then Back leaves', {tag: '@phone'}, async (
   await expectLeftApp(page);
 });
 
-test('search → menu (dock) → menu (close) → Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('search → menu (dock) → menu (close) → Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openSearchBubble(page);
 
@@ -195,8 +187,7 @@ test('search → menu (dock) → menu (close) → Back leaves', {tag: '@phone'},
   await expectLeftApp(page);
 });
 
-test('Escape on phone card, then Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('Escape on phone card, then Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page, renderedPlace);
   await tapRenderedPlace(page, [19.26, 42.44], 'node/1');
   await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
@@ -207,8 +198,7 @@ test('Escape on phone card, then Back leaves', {tag: '@phone'}, async ({page, is
   await expectLeftApp(page);
 });
 
-test('Escape on phone search, then Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('Escape on phone search, then Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openSearchBubble(page);
 
@@ -218,8 +208,7 @@ test('Escape on phone search, then Back leaves', {tag: '@phone'}, async ({page, 
   await expectLeftApp(page);
 });
 
-test('Escape on phone dock, then Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('Escape on phone dock, then Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openMenu(page);
   await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
@@ -230,8 +219,7 @@ test('Escape on phone dock, then Back leaves', {tag: '@phone'}, async ({page, is
   await expectLeftApp(page);
 });
 
-test('Flip modes → × close → Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'touch emulation');
+test('Flip modes → × close → Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await withFlipViewport(page, async () => {
     await openApp(page);
     await page.locator('#menu-toggle').click();
@@ -247,8 +235,7 @@ test('Flip modes → × close → Back leaves', {tag: '@phone'}, async ({page, i
   });
 });
 
-test('Search key (#261) then Back leaves', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('Search key (#261) then Back leaves', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await page.locator('body').click({position: {x: 10, y: 400}});
   await page.keyboard.press('/');
@@ -260,8 +247,7 @@ test('Search key (#261) then Back leaves', {tag: '@phone'}, async ({page, isMobi
   await expectLeftApp(page);
 });
 
-test('reload at depth 2 then Back leaves within 1 press', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('reload at depth 2 then Back leaves within 1 press', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openSearchBubble(page);
   await page.locator('.result', {hasText: 'Nearby place 0'}).click();
@@ -278,8 +264,7 @@ test('reload at depth 2 then Back leaves within 1 press', {tag: '@phone'}, async
   await expectLeftApp(page);
 });
 
-test('map-tap compaction (bubble → strip) then Back → bubble', {tag: '@phone'}, async ({page, isMobile}) => {
-  test.skip(!isMobile, 'phone layout');
+test('map-tap compaction (bubble → strip) then Back → bubble', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await openApp(page);
   await openSearchBubble(page);
   await tapEmptyMap(page);

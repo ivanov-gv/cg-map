@@ -5,6 +5,7 @@ import * as espree from 'espree';
 
 const PHONE_DEPENDENCY = /\b(isMobile|hasTouch)\b|touchscreen|viewportSize\(\)\.width/;
 const PHONE_TAG = '@phone';
+const DESKTOP_TAG = '@desktop';
 const HOOKS = new Set(['beforeEach', 'beforeAll', 'afterEach', 'afterAll']);
 
 const parse = text => espree.parse(text, {ecmaVersion: 'latest', sourceType: 'module', range: true});
@@ -65,7 +66,7 @@ function phoneDependentFunctions(functions) {
   return dependent;
 }
 
-const hasPhoneTag = (call, text) => call.arguments.slice(0, -1).some(argument => sourceOf(argument, text).includes(PHONE_TAG));
+const hasTag = (call, text, tag) => call.arguments.slice(0, -1).some(argument => sourceOf(argument, text).includes(tag));
 
 // What a test.skip in a test or describe says about the phone layout.
 function skipKinds(body) {
@@ -107,11 +108,12 @@ function collectTests(statements, text, inherited, tests) {
     if (!name) continue;
     const callback = call.arguments.at(-1);
     if (!isFunction(callback)) continue;
-    const isTagged = inherited.isTagged || hasPhoneTag(call, text);
+    const isTagged = inherited.isTagged || hasTag(call, text, PHONE_TAG);
+    const isDesktopTagged = inherited.isDesktopTagged || hasTag(call, text, DESKTOP_TAG);
     if (name.startsWith('test.describe')) {
-      collectTests(callback.body.body, text, {setup, isTagged}, tests);
+      collectTests(callback.body.body, text, {setup, isTagged, isDesktopTagged}, tests);
     } else if (name === 'test') {
-      tests.push({title: sourceOf(call.arguments[0], text), isTagged, body: `${setup}\n${sourceOf(callback, text)}`});
+      tests.push({title: sourceOf(call.arguments[0], text), isTagged, isDesktopTagged, body: `${setup}\n${sourceOf(callback, text)}`});
     }
   }
 }
@@ -127,10 +129,10 @@ export function untaggedPhoneTests(specText, helperTexts = [], neutralHelpers = 
   for (const name of neutralHelpers) functions.delete(name);
   const dependentFunctions = phoneDependentFunctions(functions);
   const tests = [];
-  collectTests(parse(specText).body, specText, {setup: '', isTagged: false}, tests);
+  collectTests(parse(specText).body, specText, {setup: '', isTagged: false, isDesktopTagged: false}, tests);
   return tests
-    .filter(({body, isTagged}) => {
-      if (isTagged) return false;
+    .filter(({body, isTagged, isDesktopTagged}) => {
+      if (isTagged || isDesktopTagged) return false;
       const {isDesktopOnly, isPhoneOnly} = skipKinds(body);
       if (isDesktopOnly) return false;
       return isPhoneOnly || PHONE_DEPENDENCY.test(body) || callsAny(body, dependentFunctions);

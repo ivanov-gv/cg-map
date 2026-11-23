@@ -307,9 +307,7 @@ async function showFlipModesScreen(page) {
 
 test.beforeEach(({page}) => stubRouting(page));
 
-test('dock expands around a stationary header and keeps layer/download options anchored', async ({
-  page
-}, testInfo) => {
+test('dock expands around a stationary header and keeps layer/download options anchored', async ({page}, testInfo) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
   const header = await page.locator('.search-bar').boundingBox();
@@ -500,8 +498,7 @@ test('a chosen result still zooms in to street level from far out', async ({page
   await expect.poll(async () => (await camera(page)).zoom).toBe(15);
 });
 
-test('desktop keeps the results open beside the place card', async ({page, isMobile}, testInfo) => {
-  test.skip(isMobile, 'desktop layout');
+test('desktop keeps the results open beside the place card', {tag: '@desktop'}, async ({page}, testInfo) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
   // Open the dock to access the results list.
@@ -538,8 +535,7 @@ test('desktop keeps the results open beside the place card', async ({page, isMob
 });
 
 test.describe('Desktop floating card', () => {
-  test('is a fixed centred sheet in three columns with the scale bar untouched', async ({page, isMobile}, testInfo) => {
-    test.skip(isMobile, 'desktop layout');
+  test('is a fixed centred sheet in three columns with the scale bar untouched', {tag: '@desktop'}, async ({page}, testInfo) => {
     await page.setViewportSize({width: 1440, height: 900});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -650,11 +646,7 @@ test.describe('Desktop floating card', () => {
     await page.screenshot({path: testInfo.outputPath('desktop-floating-card.png')});
   });
 
-  test('keeps its geometry across dock and result states and a narrow desktop window', async ({
-    page,
-    isMobile
-  }, testInfo) => {
-    test.skip(isMobile, 'desktop layout');
+  test('keeps its geometry across dock and result states and a narrow desktop window', {tag: '@desktop'}, async ({page}, testInfo) => {
     await page.setViewportSize({width: 1440, height: 900});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -694,8 +686,7 @@ test.describe('Desktop floating card', () => {
     await page.screenshot({path: testInfo.outputPath('card-1100x700.png')});
   });
 
-  test('keeps a one-result search panel at its content height above the card', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('keeps a one-result search panel at its content height above the card', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 1440, height: 900});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -727,8 +718,7 @@ test.describe('Desktop floating card', () => {
     expect(radius).toBe('15px');
   });
 
-  test('stacks sections within their column beside an open dock', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('stacks sections within their column beside an open dock', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 1440, height: 900});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -753,8 +743,7 @@ test.describe('Desktop floating card', () => {
     expect(boxes.card.y - (boxes.locate.y + boxes.locate.height)).toBeCloseTo(16, 0);
   });
 
-  test('reveals a place chosen near the bottom of the map above the card', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('reveals a place chosen near the bottom of the map above the card', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 1440, height: 900});
     const place = fixture.features[1];
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
@@ -787,8 +776,7 @@ test.describe('Desktop floating card', () => {
     expect(after.y).toBeGreaterThan(96);
   });
 
-  test('keeps the scale and credit in the bottom-left beside an open search panel', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('keeps the scale and credit in the bottom-left beside an open search panel', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 1280, height: 800});
     const many = {
       type: 'FeatureCollection',
@@ -846,8 +834,7 @@ test.describe('Desktop floating card', () => {
     await expect(page.locator('.dock-footer')).toBeHidden();
   });
 
-  test('scrolls tall content inside the floating card without scrolling the page', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('scrolls tall content inside the floating card without scrolling the page', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 800, height: 700});
     const hours = Array.from({length: 14}, (_, index) => {
       const start = String(8 + (index % 9)).padStart(2, '0');
@@ -886,11 +873,7 @@ test.describe('Desktop floating card', () => {
     expect(close.y + close.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
   });
 
-  test('clamps the card on a short desktop window and keeps the locate button readable', async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(isMobile, 'desktop layout');
+  test('clamps the card on a short desktop window and keeps the locate button readable', {tag: '@desktop'}, async ({page}) => {
     await page.setViewportSize({width: 900, height: 420});
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -918,9 +901,8 @@ test.describe('Desktop floating card', () => {
 
 test(
   'phone place card from search steps through peek, full, fullscreen and back',
-  {tag: '@phone'},
-  async ({page, isMobile}, testInfo) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}, testInfo) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
@@ -1041,9 +1023,8 @@ test(
 
 test(
   'phone map pick opens the card in Full and swipes through Fullscreen and closed',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
@@ -1092,9 +1073,8 @@ test(
 
 test(
   'phone card top follows the finger between Full and Fullscreen',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
@@ -1163,9 +1143,8 @@ test(
 
 test(
   'phone Full does not scroll but Fullscreen does and pulls down from the top',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     const tall = structuredClone(nearbyPlaces);
     tall.features[0].properties.opening_hours = Array.from({length: 40}, () => 'Mo-Fr 08:00-17:00').join('; ');
     tall.features[0].properties.website = 'https://example.com';
@@ -1252,9 +1231,8 @@ test(
 
 test(
   'focusing content clipped by a tall Full card opens Fullscreen',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     const tall = structuredClone(nearbyPlaces);
     tall.features[0].properties.phone = Array.from({length: 80}, () => '+381 11 1234567').join('; ');
     tall.features[0].properties.website = 'https://example.com';
@@ -1284,9 +1262,8 @@ test(
 
 test(
   'a quick flick moves a phone card one step and reduced motion keeps the same end states',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
@@ -1308,9 +1285,8 @@ test(
 
 test(
   'Flip wheel input still leaves its two-step card alone',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'touch emulation');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await withFlipViewport(page, async () => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
       await ready(page);
@@ -1337,9 +1313,8 @@ test(
 
 test(
   'phone results strip names the active category and query',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const touch = await page.context().newCDPSession(page);
@@ -1376,9 +1351,8 @@ test(
 
 test(
   'phone search stays in the dock or compact view it started from until a result is chosen',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const body = page.locator('body');
@@ -1431,9 +1405,8 @@ test(
 
 test(
   'phone dock results end above the keyboard, and its options return when it closes',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await openMenu(page);
@@ -1463,9 +1436,8 @@ test(
 
 test(
   'phone keyboard: the focus zone is judged after it closes, and the map stays still while it is open',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await settled(page);
@@ -1674,9 +1646,8 @@ test('a tapped map pin follows the focus zone like a result', {tag: '@phone'}, a
 
 test(
   'phone category strip scrolls to the active chip and with a mouse wheel',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     // Use a narrow mobile viewport (360 × 740) so all five category chips overflow the strip.
     // 360 px is still a Mobile viewport (wider than 400 or taller than 400, so not Flip).
     await page.setViewportSize({width: 360, height: 740});
@@ -1772,9 +1743,8 @@ test('categories row stays one scrollable line across floating, dock and joined 
 
 test(
   'one wheel gesture changes the phone card state only once',
-  {tag: '@phone'},
-  async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  {tag: ['@phone', '@phone-only']},
+  async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await page.locator('#search').click();
@@ -1798,11 +1768,7 @@ test(
   }
 );
 
-test('a narrow desktop window keeps the floating card clear of the dock and map controls', async ({
-  page,
-  isMobile
-}) => {
-  test.skip(isMobile, 'desktop layout');
+test('a narrow desktop window keeps the floating card clear of the dock and map controls', {tag: '@desktop'}, async ({page}) => {
   await page.setViewportSize({width: 780, height: 700});
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
   await ready(page);
@@ -1933,9 +1899,7 @@ test.describe('dock footer build version', () => {
   // The manifest route must reach the page rather than a cached service-worker response.
   test.use({serviceWorkers: 'block'});
 
-  test('dock footer shows the build version on one line at Flip, Mobile and desktop', {tag: '@phone'}, async ({
-    page
-  }) => {
+  test('dock footer shows the build version on one line at Flip, Mobile and desktop', {tag: '@phone'}, async ({page}) => {
     let footerCommit = SHORT_TEST_COMMIT;
     await routeFooterCommit(page, () => footerCommit);
 
@@ -2262,8 +2226,7 @@ test.describe('GPS follow location', {tag: ['@mobile-only', '@phone']}, () => {
 test.describe('Desktop search bar', () => {
   test.use({viewport: {width: 1280, height: 800}});
 
-  test('floating categories are visible under the bar with no query and dock closed', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('floating categories are visible under the bar with no query and dock closed', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     await closeMenu(page);
@@ -2278,8 +2241,7 @@ test.describe('Desktop search bar', () => {
     await expect(page.locator('#dock-content')).toBeHidden();
   });
 
-  test('typing shows the clear button; clearing a query stays Open and closing Open returns Empty', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('typing shows the clear button; clearing a query stays Open and closing Open returns Empty', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
@@ -2303,8 +2265,7 @@ test.describe('Desktop search bar', () => {
     await expect(panel).toHaveAttribute('data-state', 'empty');
   });
 
-  test('with a query, categories and results are inside one container under the bar', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('with a query, categories and results are inside one container under the bar', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Type a query that matches some places.
@@ -2323,8 +2284,7 @@ test.describe('Desktop search bar', () => {
     expect(Math.abs(panelBox.y - (bar.y + bar.height))).toBeLessThanOrEqual(6);
   });
 
-  test('Tab reaches menu button, input, clear button, and first category chip', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('Tab reaches menu button, input, clear button, and first category chip', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Focus the menu button.
@@ -2344,8 +2304,7 @@ test.describe('Desktop search bar', () => {
     await expect(firstChip).toBeFocused();
   });
 
-  test('choosing a result from the search panel places the card along the bottom beside it', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('choosing a result from the search panel places the card along the bottom beside it', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Type a query that matches a place in the fixture.
@@ -2378,8 +2337,7 @@ test.describe('Desktop search bar', () => {
     expect(isCardVisible).toBe(true);
   });
 
-  test('with a query, the native search cancel button is hidden', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('with a query, the native search cancel button is hidden', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     await page.locator('#search').fill('Café');
@@ -2405,8 +2363,7 @@ test.describe('Desktop search bar', () => {
     expect(nativeCancelHidden).toBe(true);
   });
 
-  test('floating card stops clear of the floating chips on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('floating card stops clear of the floating chips on desktop', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Ensure dock is closed and no query.
@@ -2441,8 +2398,7 @@ test.describe('Desktop search bar', () => {
     expect(cardVisible).toBe(true);
   });
 
-  test('desktop-to-mobile resize hides floating chips, mobile-to-desktop restores them', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop-to-mobile resize hides floating chips, mobile-to-desktop restores them', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Start at desktop: floating chips visible.
@@ -2468,8 +2424,7 @@ test.describe('Desktop search bar', () => {
     await expect(panel.locator('#categories')).toBeVisible();
   });
 
-  test('Escape clears query and focuses input on desktop; closes dock when open', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('Escape clears query and focuses input on desktop; closes dock when open', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Part A: dock closed, type query, Tab to move focus off input, then Escape.
@@ -2495,8 +2450,7 @@ test.describe('Desktop search bar', () => {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   });
 
-  test('aria-expanded reflects results visibility when typing and clearing', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('aria-expanded reflects results visibility when typing and clearing', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Empty: no query and no results, so aria-expanded is 'false'.
@@ -2515,8 +2469,7 @@ test.describe('Desktop search bar', () => {
     await expect(page.locator('#search')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('card bottom stays within viewport on desktop with small height', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('card bottom stays within viewport on desktop with small height', {tag: '@desktop'}, async ({page}) => {
     // Use a short viewport so the card's max-height constraint matters.
     // With the old CSS (max-height: calc(100% - 130px)) and card top at ~152 px,
     // a tall card overflows the bottom when viewport height is only 560 px.
@@ -2568,8 +2521,7 @@ test.describe('Desktop search bar', () => {
     expect(mapBottom - cardBottom).toBeCloseTo(20, 0);
   });
 
-  test('focusing search input does not close the card on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('focusing search input does not close the card on desktop', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
     // Type a query and choose a result so the card opens.
@@ -2628,11 +2580,7 @@ test.describe('Mobile search bar', () => {
     expect(categoryChip.height).toBeGreaterThanOrEqual(40);
   });
 
-  test('Search key hides the keyboard without closing the bubble or dock', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('Search key hides the keyboard without closing the bubble or dock', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const search = page.locator('#search');
@@ -2738,8 +2686,7 @@ test.describe('Flip search bar', () => {
     });
   });
 
-  test('Flip Search key hides the keyboard without closing the dock', {tag: '@phone'}, async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  test('Flip Search key hides the keyboard without closing the dock', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await withFlipViewport(page, async () => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
       await ready(page);
@@ -3721,9 +3668,7 @@ test.describe('Escape closes dock and restores focus', () => {
 });
 
 // Left dock: vertical order, nearest-first list, category + query filtering
-test('left dock shows elements in vertical order: search, categories, results, layers, download', async ({
-  page
-}) => {
+test('left dock shows elements in vertical order: search, categories, results, layers, download', async ({page}) => {
   await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
   await ready(page);
   await openMenu(page);
@@ -3742,9 +3687,7 @@ test('left dock shows elements in vertical order: search, categories, results, l
   expect(download.y).toBeGreaterThan(layerGrid.y);
 });
 
-test('panning the map changes the first result to the place nearest the new centre', async ({
-  page
-}) => {
+test('panning the map changes the first result to the place nearest the new centre', async ({page}) => {
   // Create places at known positions so nearest ordering is deterministic.
   const places = {
     type: 'FeatureCollection',
@@ -3842,8 +3785,7 @@ test.describe('menu button hover state on touch screens', () => {
   // wraps .icon-button:hover in @media (hover: hover) so the hover background
   // never applies on touch devices. This test verifies that behavior.
   test('menu button does not show hover background on touch screens',
-    {tag: '@phone'}, async ({page, isMobile}) => {
-    test.skip(!isMobile, 'only meaningful on touch-emulating projects');
+    {tag: ['@phone', '@phone-only']}, async ({page}) => {
 
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
     await ready(page);
@@ -3886,8 +3828,7 @@ test.describe('Search Bar states and All category', () => {
   // CSS selection also reaches the chip while the phone main screen hides the category row.
   const allElement = page => page.locator('#categories button[data-category=""]');
 
-  test('desktop focus opens nearby results and × returns through Open to Empty', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop focus opens nearby results and × returns through Open to Empty', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
@@ -3911,8 +3852,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#results')).toBeHidden();
   });
 
-  test('desktop focus from Empty opens results without closing a map-picked card', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop focus from Empty opens results without closing a map-picked card', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await closeMenu(page);
@@ -3931,8 +3871,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#place-card')).toBeVisible();
   });
 
-  test('a desktop floating chip opens results in the joined panel', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('a desktop floating chip opens results in the joined panel', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await closeMenu(page);
@@ -3945,11 +3884,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#results')).toBeVisible();
   });
 
-  test('desktop × in Filled clears the query and keeps results open, then closes card and results', async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop × in Filled clears the query and keeps results open, then closes card and results', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
@@ -3971,8 +3906,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   });
 
-  test('desktop × in the Open dock closes the dock and a chosen place card', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop × in the Open dock closes the dock and a chosen place card', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await openMenu(page);
@@ -3990,8 +3924,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
   });
 
-  test('phone focus opens the bubble in Open and × returns to the map', {tag: '@phone'}, async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone focus opens the bubble in Open and × returns to the map', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await expect(page.locator('#clear-search')).toBeHidden();
@@ -4011,11 +3944,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('#clear-search')).toBeHidden();
   });
 
-  test('phone dock shows × with an empty field and × in Open returns to the map', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone dock shows × with an empty field and × in Open returns to the map', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const clearButton = page.locator('#clear-search');
@@ -4091,8 +4020,7 @@ test.describe('Search Bar states and All category', () => {
     await expect(page.locator('.result')).toHaveCount(6);
   });
 
-  test('desktop dock keeps the category row scroll position and active category', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop dock keeps the category row scroll position and active category', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     const scrollLeft = () => page.locator('#categories').evaluate(element => element.scrollLeft);
@@ -4132,8 +4060,7 @@ test.describe('Active category chip', () => {
   const mapChip = page => page.locator('#active-category-chip');
   const chipRemove = page => page.locator('#active-category-chip-remove');
 
-  test('desktop × on the active chip unsets the category and keeps the query', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
+  test('desktop × on the active chip unsets the category and keeps the query', {tag: '@desktop'}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await closeMenu(page);
@@ -4192,11 +4119,7 @@ test.describe('Active category chip', () => {
     expect(await page.locator('#categories').evaluate(element => element.scrollLeft)).toBe(maxScrollLeft);
   });
 
-  test('phone chip appears under the header and × restores all places', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone chip appears under the header and × restores all places', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await openMenu(page);
@@ -4230,11 +4153,7 @@ test.describe('Active category chip', () => {
     await expect(page.locator('.result')).toHaveCount(6);
   });
 
-  test('phone chip opens the bubble with its category and hides while panels are open', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone chip opens the bubble with its category and hides while panels are open', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await openMenu(page);
@@ -4258,11 +4177,7 @@ test.describe('Active category chip', () => {
     await expect(rowRemove(page)).toBeVisible();
   });
 
-  test('phone chip stays above a Full card and hides only in Fullscreen', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone chip stays above a Full card and hides only in Fullscreen', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await expect(mapChip(page)).toBeHidden();
@@ -4309,8 +4224,7 @@ test.describe('Active category chip', () => {
     await expect(mapChip(page)).toBeHidden();
   });
 
-  test('phone chip stays above a Full card on a short phone', {tag: '@phone'}, async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  test('phone chip stays above a Full card on a short phone', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await atViewport(page, {width: 360, height: 640}, async () => {
@@ -4329,11 +4243,7 @@ test.describe('Active category chip', () => {
     });
   });
 
-  test('flip chip sits right of the icon button and a tap opens the dock', {tag: '@phone'}, async ({
-    page,
-    isMobile
-  }) => {
-    test.skip(!isMobile, 'phone layout');
+  test('flip chip sits right of the icon button and a tap opens the dock', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
     await ready(page);
     await withFlipViewport(page, async () => {
@@ -4364,8 +4274,7 @@ test.describe('Active category chip', () => {
     });
   });
 
-  test('flip keeps three results visible with the active category ×', {tag: '@phone'}, async ({page, isMobile}) => {
-    test.skip(!isMobile, 'phone layout');
+  test('flip keeps three results visible with the active category ×', {tag: ['@phone', '@phone-only']}, async ({page}) => {
     await page.route('**/data/places.geojson', route => route.fulfill({json: manyPlacesFixture('flip-active')}));
     await atViewport(page, {width: 374, height: 241}, async () => {
       await ready(page);
@@ -4671,8 +4580,7 @@ test('one tap opens a POI card with recorded sections', async ({page}) => {
     .toBe(true);
 });
 
-test('choosing another listing replaces the card and its highlight', async ({page, isMobile}) => {
-  test.skip(isMobile, 'A phone card covers the map');
+test('choosing another listing replaces the card and its highlight', {tag: '@desktop'}, async ({page}) => {
   const first = cardPlace('node/42424242', [20.8, 43.7], {name: 'First place'});
   const second = cardPlace('node/42424243', [20.81, 43.71], {
     name: 'Second place',
@@ -4701,11 +4609,7 @@ test('choosing another listing replaces the card and its highlight', async ({pag
     .toBe(true);
 });
 
-test('two places in one building each open their own card with the same building address', async ({
-  page,
-  isMobile
-}) => {
-  test.skip(isMobile, 'A phone card covers the map');
+test('two places in one building each open their own card with the same building address', {tag: '@desktop'}, async ({page}) => {
   const label = readGeoJSON('building-labels.geojson').features.find(
     feature =>
       Number.isInteger(feature.properties.footprintIndex) && feature.properties['addr:street']
@@ -5006,8 +4910,7 @@ test('panning and double-clicking keep the card closed', async ({page}) => {
   );
 });
 
-test('a two-finger pinch zooms without selecting a point', {tag: '@phone'}, async ({page, context, isMobile}) => {
-  test.skip(!isMobile, 'native touch gesture');
+test('a two-finger pinch zooms without selecting a point', {tag: ['@phone', '@phone-only']}, async ({page, context}) => {
   await ready(page);
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
   await mapIdle(page);
@@ -5647,9 +5550,7 @@ test('Flip Back from Fullscreen restores the Icon Button after a card control ta
   });
 });
 
-test('Flip Back after a replacement selection restores the originating dock row', {tag: '@phone'}, async ({
-  page
-}) => {
+test('Flip Back after a replacement selection restores the originating dock row', {tag: '@phone'}, async ({page}) => {
   await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
   await withFlipViewport(page, async () => {
     await ready(page);

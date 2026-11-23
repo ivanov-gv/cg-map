@@ -369,9 +369,8 @@ test(
 
 test(
   'one-finger tap then drag zooms and never opens point actions',
-  {tag: '@phone'},
-  async ({page, context, isMobile}) => {
-    test.skip(!isMobile, 'Native mobile touch gesture');
+  {tag: ['@phone', '@phone-only']},
+  async ({page, context}) => {
     await ready(page);
     await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [20.8, 43.7], zoom: 14}));
     await page.waitForTimeout(TAP_BLOCK_AFTER_MOVE_MILLISECONDS);
