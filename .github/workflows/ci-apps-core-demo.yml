@@ -29,7 +29,9 @@ jobs:
       # Set only on a local run with a GPU: see the Makefile.
       options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -61,5 +63,7 @@ jobs:
       # Set only on a local run with a GPU: see the Makefile.
       options: ${{ vars.BROWSER_CONTAINER_OPTIONS }}
     timeout-minutes: 7
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     steps: *verify-steps

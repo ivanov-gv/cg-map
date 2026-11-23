@@ -68,6 +68,16 @@ test('GitHub expressions in .github use no unsupported array or string propertie
   }
 });
 
+// A job environment is either a name or a mapping; only a mapping can suppress its deployment record.
+function environmentName(environment) {
+  return typeof environment === 'string' ? environment : environment?.name;
+}
+
+// True when GitHub records a deployment: any environment except a mapping with `deployment: false`.
+function recordsDeployment(job) {
+  return job.environment !== undefined && job.environment.deployment !== false;
+}
+
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
   'ci-pr-checks.yml': [
@@ -119,8 +129,8 @@ for (const file of newWorkflowFiles) {
     for (const job of production) {
       const twin = jobs[`${job}-test-run`];
       assert.ok(twin, `${job} needs a ${job}-test-run twin`);
-      assert.equal(twin.environment, 'test-run', `${job}-test-run must use the test-run environment`);
-      assert.notEqual(jobs[job].environment, 'test-run', `${job} must not use the test-run environment`);
+      assert.equal(environmentName(twin.environment), 'test-run', `${job}-test-run must use the test-run environment`);
+      assert.notEqual(environmentName(jobs[job].environment), 'test-run', `${job} must not use the test-run environment`);
       assertSelectedByMode(jobs, job);
       if (job === 'deploy') continue;
       assert.deepEqual(twin.steps, jobs[job].steps, `${job} and its twin must share steps`);
@@ -163,7 +173,7 @@ for (const file of newWorkflowFiles) {
 test('CI workflows never touch production', () => {
   for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
-      const environment = job.environment;
+      const environment = environmentName(job.environment);
       const allowedEnvironments = ['dev', 'test-run', 'ci-approval'];
       if (environment) assert.ok(allowedEnvironments.includes(environment), `${file} ${name} uses ${environment}`);
       for (const permission of ['pages', 'id-token']) {
@@ -196,8 +206,8 @@ for (const [file, tagPrefix] of Object.entries(CD_TAGS))
     assert.equal(checkout.with['sparse-checkout-cone-mode'], false, 'cone mode would also check out root files');
   }
   assert.ok(jobs.switch.if.includes(`startsWith(github.event.release.tag_name, '${tagPrefix}')`));
-  assert.equal(jobs.publish.environment, 'package-release');
-  assert.equal(jobs['publish-test-run'].environment, 'test-run');
+  assert.equal(environmentName(jobs.publish.environment), 'package-release');
+  assert.equal(environmentName(jobs['publish-test-run'].environment), 'test-run');
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
 });
 
@@ -609,7 +619,7 @@ test('cd-dev-pages find maps IMAGE_REPOSITORY from vars', () => {
 
 test('cd-dev-pages find uses environment dev', () => {
   const {jobs} = load('cd-dev-pages.yml');
-  assert.equal(jobs.find.environment, 'dev');
+  assert.equal(environmentName(jobs.find.environment), 'dev');
 });
 
 const validateCommitStep = './.github/actions/validate-commit';
@@ -781,7 +791,7 @@ test('cd-dev-pages deploy gating: find-success deploys, find-fail and find-skipp
 
 test('a pull request runs nothing until it is approved', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  assert.equal(jobs.approval.environment, 'ci-approval');
+  assert.equal(environmentName(jobs.approval.environment), 'ci-approval');
   assert.match(jobs.approval.if, /pull_request/);
   assert.deepEqual([jobs.switch.needs].flat(), ['approval']);
   const reachesApproval = name => {
@@ -1072,7 +1082,7 @@ test('ci-publish publishes a map-data dev package when the plan selects data', (
   );
   assert.deepEqual(jobs['data-package-test-run'].steps, publish.steps);
   assert.deepEqual(jobs['data-package-test-run'].env, publish.env);
-  assert.equal(jobs['data-package-test-run'].environment, 'test-run');
+  assert.equal(environmentName(jobs['data-package-test-run'].environment), 'test-run');
 });
 
 test('ci-publish publishes a map-contracts dev package when the plan selects contracts', () => {
@@ -1109,7 +1119,7 @@ test('ci-publish publishes a map-contracts dev package when the plan selects con
   assert.deepEqual(publish.steps, jobs['data-package'].steps, 'both packages must share the publishing steps');
   assert.deepEqual(jobs['contracts-package-test-run'].steps, publish.steps);
   assert.deepEqual(jobs['contracts-package-test-run'].env, publish.env);
-  assert.equal(jobs['contracts-package-test-run'].environment, 'test-run');
+  assert.equal(environmentName(jobs['contracts-package-test-run'].environment), 'test-run');
 });
 
 const publishActionPath = path.join(repoRoot, '.github/actions/publish-dev-package/action.yml');
@@ -1452,7 +1462,7 @@ test('a release version of the browser image must say which Playwright is inside
   assert.match(action, /playwright\.version/);
   assert.match(action, /already exists/);
   const {jobs} = load('cd-browser-image.yml');
-  assert.equal(jobs.publish.environment, 'package-release');
+  assert.equal(environmentName(jobs.publish.environment), 'package-release');
   assert.equal(jobs['publish-test-run'].permissions.packages, 'read', 'a test run must be unable to publish');
 });
 
@@ -1498,9 +1508,8 @@ test('the browser image runs the Node version the repository pins', () => {
   assert.equal(dockerfile.match(/^ARG NODE_VERSION=(.+)$/m)?.[1], pinnedVersion);
 });
 
-// Jobs reference an environment only when they read its variables or secrets.
-// GitHub records a deployment for every job that references an environment, so unnecessary references create noise.
-// Exception: the approval gate (ci-approval) waits for manual approval.
+// Jobs reference an environment only when they read its variables or secrets. CI never releases, so those references
+// suppress deployment records. Exception: the approval gate waits for manual approval.
 const ENV_EXCEPTIONS = {
   'ci-pr-checks.yml': ['approval'],
 };
@@ -1514,7 +1523,7 @@ test('ci-* production jobs reference dev only when they read vars.* or secrets.*
       if (name.endsWith('-test-run') || exceptions.includes(name) || job.uses) continue;
       const jobText = JSON.stringify(job);
       const readsVarsOrSecrets = /\$\{\{[^}]*\bvars\./.test(jobText) || /\$\{\{[^}]*\bsecrets\./.test(jobText);
-      const environment = typeof job.environment === 'string' ? job.environment : job.environment?.name;
+      const environment = environmentName(job.environment);
       if (readsVarsOrSecrets) {
         assert.equal(environment, 'dev', `${file} ${name} reads vars/secrets but does not reference dev`);
       } else {
@@ -1524,13 +1533,41 @@ test('ci-* production jobs reference dev only when they read vars.* or secrets.*
   }
 });
 
-test('ci-* test-run twins always reference test-run', () => {
-  for (const file of newWorkflowFiles.filter(name => name.startsWith('ci-'))) {
+test('test-run twins always reference test-run', () => {
+  for (const file of newWorkflowFiles) {
     const {jobs} = load(file);
     for (const [name, job] of Object.entries(jobs)) {
       if (!name.endsWith('-test-run')) continue;
-      const environment = typeof job.environment === 'string' ? job.environment : job.environment?.name;
+      const environment = environmentName(job.environment);
       assert.equal(environment, 'test-run', `${file} ${name} must reference test-run`);
+    }
+  }
+});
+
+// CI never releases, so its jobs record no deployments. Each CD run records one, from the last job that changes
+// the target: the package promoter, or the Pages deploy for cd-dev-pages.
+const DEPLOYING_JOBS = {
+  'cd-browser-image.yml': ['publish'],
+  'cd-dev-pages.yml': ['deploy'],
+  'cd-map-contracts.yml': ['publish'],
+  'cd-map-core.yml': ['publish'],
+  'cd-map-data.yml': ['publish']
+};
+
+test('at most one job per workflow records a deployment, and only CD releases do', () => {
+  for (const file of newWorkflowFiles) {
+    const deployingJobs = Object.entries(load(file).jobs)
+      .filter(([, job]) => recordsDeployment(job))
+      .map(([name]) => name);
+    assert.deepEqual(deployingJobs, DEPLOYING_JOBS[file] ?? [], `${file} records deployments from ${deployingJobs}`);
+  }
+});
+
+test('every test-run twin reads test-run secrets without recording a deployment', () => {
+  for (const file of newWorkflowFiles) {
+    for (const [name, job] of Object.entries(load(file).jobs)) {
+      if (!name.endsWith('-test-run')) continue;
+      assert.equal(job.environment?.deployment, false, `${file} ${name} must not record a deployment`);
     }
   }
 });
@@ -1648,7 +1685,7 @@ test('ci-publish pages-cleanup has a test-run twin with packages: read', () => {
   const {jobs} = load('ci-publish.yml');
   const twin = jobs['pages-cleanup-test-run'];
   assert.ok(twin, 'pages-cleanup-test-run must exist');
-  assert.equal(twin.environment, 'test-run');
+  assert.equal(environmentName(twin.environment), 'test-run');
   assert.equal(twin.permissions.packages, 'read', 'test-run cleanup must not write packages');
   assert.deepEqual(twin.steps, jobs['pages-cleanup'].steps, 'twin must share steps');
 });

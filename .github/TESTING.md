@@ -53,8 +53,8 @@ Lint and the PR gate's GitHub test runs are required; local runs are optional fo
 order, stopping at the first failure:
 
 1. **Lint (required):** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
-2. **Local dry run (optional):** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without
-   executing steps. It is never a test run.
+2. **Local dry run (optional):** `make test-<workflow> ACT="$ACT -n"` checks that the workflow parses without executing
+   steps. It is never a test run.
 3. **Local test run (optional, except Pages):** `make test-<workflow>` runs the workflow under `act`, checking logic and
    step ordering.
 4. **GitHub test runs (required, automatic):** push the branch and read `CI gate`. It calls changed `ci-*` workflows
@@ -120,17 +120,36 @@ commit, in both environments. The browser image gets the same label through
 `make -C platform browser-image REVISION=<commit>`. `ci-publish` keeps the newest dev-pages versions, so cleanup never
 deletes the version `:dev` points at.
 
-Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
-`${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
-use `environment: test-run`. The exception is the approval gate (`ci-approval`, which passes automatically until the
-owner adds required reviewers). The Pages deploy in `cd-dev-pages` uses `github-pages` and has no test-run twin, but it
-is a CD workflow, not CI.
+Production jobs reference the `dev` environment only when they read its variables or secrets (via `${{ vars.* }}` or
+`${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins
+reference `test-run`; the deployment rule below gives the mapping form both must use. The exception is the approval gate
+(`ci-approval`, which passes automatically until the owner adds required reviewers). The Pages deploy in `cd-dev-pages`
+references `github-pages` and has no test-run twin, but it is a CD workflow, not CI.
+
+At most one job per run records a deployment; every other environment-bearing job uses the mapping form
+`environment: {name: <env>, deployment: false}` and still reads that environment's secrets and variables. The choices
+are: a CD release is recorded by the last job that changes its target; CI records none, including jobs that publish dev
+artifacts; `ci-approval` records none, because it is a gate; every test-run twin records none, because a test run is not
+a release. In `cd-dev-pages`, `find` reads `dev` without a deployment and `deploy` is the one deploying job, on
+`github-pages`. Platform tests enforce the rule; see
+[ADR 0034](../docs/decisions/0034-one-deployment-per-workflow-run.md). Protection rules still apply to every job that
+names an environment, and a deployment shows only its chosen job's status.
 
 ## Locally with act
 
-Needs Docker and `gh extension install nektos/gh-act`. Workflows use `environment.deployment`, so the extension must be
-act 0.2.98 built with the schema fix from [nektos/act#6243](https://github.com/nektos/act/pull/6243) (commit `0f761c0`):
-released 0.2.88 and 0.2.98 reject that key. The image is private, so a new machine needs
+Needs Docker and the pinned act build. Workflows use `environment.deployment`, which released 0.2.88 and 0.2.98 reject;
+build the schema fix from [nektos/act#6243](https://github.com/nektos/act/pull/6243) once:
+
+```sh
+git clone https://github.com/nektos/act "$HOME/.cache/cg-map/act-src"
+git -C "$HOME/.cache/cg-map/act-src" fetch origin refs/pull/6243/head
+git -C "$HOME/.cache/cg-map/act-src" checkout 0f761c049dc3ef82fb686a4af7b917d9f3ef831d
+go build -o "$HOME/.local/bin/act-pinned" .
+export ACT="$HOME/.local/bin/act-pinned"
+```
+
+`make` checks that `$(ACT) --version` names that commit and refuses a released build; `gh act` works only after its
+local binary is replaced with the same build. The image is private, so a new machine needs
 `gh auth token | docker login ghcr.io --username <you> --password-stdin` once, with `read:packages`. Every target runs
 on [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs
 run the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
@@ -144,7 +163,7 @@ make test-cd-map-data VERSION=0.1.0 COMMIT=<full SHA> # needs a dev package from
 make test-cd-map-contracts VERSION=0.1.0 COMMIT=<full SHA> # needs a dev package from main
 make test-cd-dev-pages COMMIT=<full SHA on main> # needs a ci-publish dev-pages image; see below
 make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA on main> # see below
-make test-all-workflows ACT="gh act -n" # dry run of every target
+make test-all-workflows ACT="$ACT -n" # dry run of every target
 ```
 
 `test-cd-browser-image` promotes an image from the test registry, tagged with a commit on `main`, so push one first with

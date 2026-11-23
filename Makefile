@@ -65,8 +65,17 @@ lint-workflows:
 		docker run --rm -v "$$(pwd)":/repo -w /repo rhysd/actionlint:1.7.12 -color; \
 	fi
 
-# Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="gh act -n"
+# Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="$ACT -n"
 ACT ?= gh act
+# The default works only after the gh act binary is the pinned build; see .github/TESTING.md.
+# Workflows use environment.deployment, which released act rejects. See .github/TESTING.md for the pinned build.
+ACT_PINNED_COMMIT := 0f761c049dc3
+act-pinned:
+	@version="$$($(ACT) --version 2>&1)"; \
+	case "$$version" in \
+		*$(ACT_PINNED_COMMIT)*) ;; \
+		*) printf '%s\n' "Needs act built from nektos/act#6243 ($(ACT_PINNED_COMMIT)); see .github/TESTING.md. Got: $$version" >&2; exit 1 ;; \
+	esac
 # Pinned, as in the workflows: every machine runs local jobs on the same image CI uses.
 ACT_IMAGE := ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
 # Browser jobs render on the GPU where there is one. Too many at once time out tests: four did, with or without a GPU.
@@ -113,7 +122,7 @@ test-cd-map-contracts: act-image
 	$(ACT) workflow_dispatch -W .github/workflows/cd-map-contracts.yml $(ACT_RUN) --input version=$(VERSION) --input commit=$(COMMIT)
 
 # A release version never changes, so an image already here is the right one. A dry run starts no job, so it needs none.
-act-image:
+act-image: act-pinned
 	$(if $(findstring -n,$(ACT)),,docker image inspect $(ACT_IMAGE) > /dev/null 2>&1 || docker pull $(ACT_IMAGE) || (echo 'Log in first: gh auth token | docker login ghcr.io --username <you> --password-stdin' && exit 1))
 
 # Needs an image from make test-ci-publish, whose commit it promotes: make test-cd-browser-image VERSION=1.56.1-r2 COMMIT=<full SHA>

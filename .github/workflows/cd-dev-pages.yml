@@ -56,7 +56,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions: &find-permissions
       contents: read
       packages: read
@@ -114,7 +116,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 7
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions: *find-permissions
     env:
       IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}

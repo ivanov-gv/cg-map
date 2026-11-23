@@ -50,11 +50,18 @@ These gaps need recording so the model is documented in one place and the featur
   production job references `dev` only when it reads its variables or secrets; jobs that read neither reference no
   environment, and every test-run twin uses `test-run`. GitHub records a deployment for each job that references an
   environment, so these records are expected and are not deploys.
+
+  **Outcome (#335, 2026-11-23):** a job can now read an environment with `deployment: false`;
+  [ADR 0034](0034-one-deployment-per-workflow-run.md) replaces this deployment-record rule.
+
 - **Approval gate** (#169). The owner decides whether to add required reviewers to `ci-approval` or remove the gate
   entirely. The decision records the plain string form (`environment: dev`), because act rejects `deployment: false`.
 
   **Outcome (#169, 2026-11-15):** the gate passes automatically until the owner adds required reviewers; adding a
   reviewer later needs no workflow change.
+
+  **Outcome (#335, 2026-11-23):** the gate now uses the mapping form with `deployment: false`, under the pinned act
+  build; [ADR 0034](0034-one-deployment-per-workflow-run.md) records the deployment rule.
 
 These decisions supersede the Pages-as-CI-step and `:main`-image parts of
 [ADR 0005](0005-packages-releases-and-dev-pages.md), and the "push to main updates dev" part of
