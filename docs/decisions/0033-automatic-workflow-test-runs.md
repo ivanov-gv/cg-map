@@ -62,3 +62,17 @@ A planner-file change is proved by the workflow that executes that file: `workfl
 `ci-workflows.yml`, while `ci-plan.mjs` and its test select the workflows that use the `plan` action. The automatic
 `ci-publish` test call plans by the PR diff unless its `run_all` input is true, so it builds the browser image only when
 browser-image inputs changed, by the same planner rule as a push to `main`.
+
+## Update (issue #377, part A, 2026-11-23)
+
+A changed folder workflow whose folder the diff selects is now proved by its regular call with `test_run`, rather than
+by a second call with the full browser matrix; PR #373 exceeded the 420 s run budget from that duplication. The planner
+splits its selection into `ci_in_place_test_runs` and `ci_test_runs`. A separate browser call uses one short, unsharded
+area to prove the workflow's jobs and steps, not every test, and keeps the default tagged phone tests. The `workflows`
+call still dispatches changed CD workflows on a regular PR run: its in-place test-run mode is not a test run of
+`ci-pr-checks`, and only the latter suppresses dispatch. Published images also carry a moving `:dev` tag and an
+`org.opencontainers.image.revision` label so a consumer can tie that tag to an exact commit. A review closed the
+empty-list gaps in the same approach: an in-place web or editor call uses the smoke matrix when the diff selects no
+area, and an in-place workflows call runs the CD dispatcher's no-op path when no CD workflow changed, so every job of
+the changed workflow still runs. The decision above is unchanged; only the cost and destination of the same evidence
+changed.

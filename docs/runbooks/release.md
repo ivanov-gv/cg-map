@@ -18,14 +18,16 @@ GitHub Pages is the dev environment, and there are no pre or prod environments y
 Every merge to main updates it, with no tags or releases:
 
 1. A push to main starts [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects
-   into an image in GHCR, tagged by commit SHA and `main`: `ghcr.io/ivanov-gv/cg-map/<app>`. It runs no tests, because
-   the PR run already tested this content. The nightly run of [ci-nightly](../../.github/workflows/ci-nightly.yml) tests
-   main.
+   into an image in GHCR, tagged by commit SHA and `main`, with a moving `dev` tag beside them:
+   `ghcr.io/ivanov-gv/cg-map/<app>`. The image label `org.opencontainers.image.revision` names the commit the tag was
+   built from. It runs no tests, because the PR run already tested this content. The nightly run of
+   [ci-nightly](../../.github/workflows/ci-nightly.yml) tests main.
 2. The `pages` job in ci-publish builds the dev site from source (all three apps) and pushes the image
-   `$IMAGE_REPOSITORY/dev-pages:<sha>`. When ci-publish completes successfully on main,
-   [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via `workflow_run` — it pulls the image by
-   commit SHA, extracts the site, and deploys. CD only runs for a successful push build on main, never for a CI test run
-   or any other run. A deploy replaces the whole site, so it always takes all three.
+   `$IMAGE_REPOSITORY/dev-pages:<sha>` with a moving `$IMAGE_REPOSITORY/dev-pages:dev` tag beside it. When ci-publish
+   completes successfully on main, [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via
+   `workflow_run` — it pulls the image by commit SHA, extracts the site, and deploys. CD only runs for a successful push
+   build on main, never for a CI test run or any other run. A deploy replaces the whole site, so it always takes all
+   three.
 
 ### Contracts in app builds and tests
 

@@ -92,11 +92,13 @@ jobs:
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
       editor_browser_matrix: ${{ steps.plan.outputs.editor_browser_matrix }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+      ci_in_place_test_runs: ${{ steps.plan.outputs.ci_in_place_test_runs }}
       ci_test_runs: ${{ steps.plan.outputs.ci_test_runs }}
       cd_test_runs: ${{ steps.plan.outputs.cd_test_runs }}
+      prove_cd_test_runs: ${{ steps.plan.outputs.prove_cd_test_runs }}
       manual_test_runs: ${{ steps.plan.outputs.manual_test_runs }}
-      all_browser_matrix: ${{ steps.plan.outputs.all_browser_matrix }}
-      all_editor_browser_matrix: ${{ steps.plan.outputs.all_editor_browser_matrix }}
+      smoke_browser_matrix: ${{ steps.plan.outputs.smoke_browser_matrix }}
+      smoke_editor_browser_matrix: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
       RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
@@ -120,13 +122,16 @@ jobs:
     env: *plan-env
     steps: *plan-steps
 
+  # A changed folder workflow runs once: when the diff selects its folder, its regular call below passes test_run
+  # instead of adding a second call. The name is quoted inside the planner's JSON list so one name cannot match inside
+  # another name.
   docs:
     name: docs
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.docs == 'true' || needs.plan-test-run.outputs.docs == 'true') }}
     uses: ./.github/workflows/ci-docs.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-docs.yml"') }}
   workflows:
     name: workflows
     needs: [switch, plan, plan-test-run]
@@ -137,9 +142,14 @@ jobs:
       contents: read
       packages: read
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
-      # Only the regular PR run dispatches CD test runs; a test run must not dispatch another test run.
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-workflows.yml"') }}
+      # A regular PR run dispatches CD test runs even when this call itself runs in-place in test-run mode: the caller
+      # is still the PR, not a test run of ci-pr-checks. ci-pr-checks empties the list in its own test runs, so a
+      # dispatched test run cannot dispatch another one. A changed workflows workflow with no CD changes gets the
+      # planner's proof flag so its empty-list dispatcher job still runs. Job outputs are strings, so compare the
+      # planner flags to 'true' before passing them to the boolean input.
       cd_test_runs: ${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}
+      prove_cd_test_runs: ${{ (needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs) == 'true' }}
       head_sha: ${{ github.event.pull_request.head.sha || github.sha }}
   platform:
     name: platform
@@ -147,63 +157,63 @@ jobs:
     if: ${{ !cancelled() && (needs.plan.outputs.platform == 'true' || needs.plan-test-run.outputs.platform == 'true') }}
     uses: ./.github/workflows/ci-platform.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-platform.yml"') }}
   browser-image:
     name: browser-image
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') }}
     uses: ./.github/workflows/ci-browser-image.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-browser-image.yml"') }}
   contracts:
     name: contracts
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') }}
     uses: ./.github/workflows/ci-contracts.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-contracts.yml"') }}
   data:
     name: data
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') }}
     uses: ./.github/workflows/ci-data.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-data.yml"') }}
   backend:
     name: backend
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.backend == 'true' || needs.plan-test-run.outputs.backend == 'true') }}
     uses: ./.github/workflows/ci-backend.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-backend.yml"') }}
   transit-relay:
     name: transit-relay
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.transit-relay == 'true' || needs.plan-test-run.outputs.transit-relay == 'true') }}
     uses: ./.github/workflows/ci-transit-relay.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-transit-relay.yml"') }}
   tests:
     name: tests
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.tests == 'true' || needs.plan-test-run.outputs.tests == 'true') }}
     uses: ./.github/workflows/ci-tests.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-tests.yml"') }}
   map-core:
     name: map-core
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') }}
     uses: ./.github/workflows/ci-map-core.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-map-core.yml"') }}
   apps-web:
     name: apps-web
     needs: [switch, plan, plan-test-run]
     if: ${{ !cancelled() && (needs.plan.outputs.apps-web == 'true' || needs.plan-test-run.outputs.apps-web == 'true') }}
     uses: ./.github/workflows/ci-apps-web.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-web.yml"') }}
       browser_matrix: ${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}
       # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
       phone_tests: ${{ inputs.phone_tests || 'tagged' }}
@@ -213,7 +223,7 @@ jobs:
     if: ${{ !cancelled() && (needs.plan.outputs.apps-editor == 'true' || needs.plan-test-run.outputs.apps-editor == 'true') }}
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-editor.yml"') }}
       browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
       # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
       phone_tests: ${{ inputs.phone_tests || 'tagged' }}
@@ -223,11 +233,12 @@ jobs:
     if: ${{ !cancelled() && (needs.plan.outputs.apps-core-demo == 'true' || needs.plan-test-run.outputs.apps-core-demo == 'true') }}
     uses: ./.github/workflows/ci-apps-core-demo.yml
     with:
-      test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-core-demo.yml"') }}
 
-  # A changed CI workflow is proved by calling it in test-run mode here. These calls are static because GitHub cannot
-  # build a reusable call from a matrix; the planner output only decides whether each call runs. None runs inside a
-  # test run, so a test run cannot dispatch itself. CD workflows cannot be called: ci-workflows dispatches them.
+  # A changed CI workflow with no regular call that can run in test-run mode is proved here. These calls are static
+  # because GitHub cannot build a reusable call from a matrix; the planner output only decides whether each call runs.
+  # Browser calls use a one-area smoke matrix: they prove the jobs and steps, not every test. None runs inside a test
+  # run, so a test run cannot dispatch itself. CD workflows cannot be called: ci-workflows dispatches them.
   test-ci-apps-core-demo:
     name: (test run) apps-core-demo
     needs: [switch, plan, plan-test-run]
@@ -242,8 +253,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: true
-      browser_matrix: ${{ needs.plan.outputs.all_editor_browser_matrix || needs.plan-test-run.outputs.all_editor_browser_matrix }}
-      phone_tests: all
+      browser_matrix: ${{ needs.plan.outputs.smoke_editor_browser_matrix || needs.plan-test-run.outputs.smoke_editor_browser_matrix }}
   test-ci-apps-web:
     name: (test run) apps-web
     needs: [switch, plan, plan-test-run]
@@ -251,8 +261,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-web.yml
     with:
       test_run: true
-      browser_matrix: ${{ needs.plan.outputs.all_browser_matrix || needs.plan-test-run.outputs.all_browser_matrix }}
-      phone_tests: all
+      browser_matrix: ${{ needs.plan.outputs.smoke_browser_matrix || needs.plan-test-run.outputs.smoke_browser_matrix }}
   test-ci-backend:
     name: (test run) backend
     needs: [switch, plan, plan-test-run]

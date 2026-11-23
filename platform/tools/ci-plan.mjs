@@ -271,10 +271,10 @@ export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
   return {include: areas.flatMap(area => browserJobs(area, areaTable))};
 }
 
-// Workflow test-run calls prove the changed workflow itself, so they run every browser area rather than the changed
-// files' narrow selection. A workflow that edits the planner needs the same full matrix in both test-run modes.
-export const ALL_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_AREAS));
-export const ALL_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_EDITOR_AREAS, EDITOR_BROWSER_AREAS));
+// A separate test call proves the workflow's jobs and steps, not every test: discover runs 5 tests in one web job and
+// selection runs 8 in one editor job, with no sharding. The full matrices stay in the PR's regular browser calls.
+export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
+export const SMOKE_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(['selection'], EDITOR_BROWSER_AREAS));
 
 // A change to an app, or to what it is built from, publishes that app's image.
 export function imageMatrix(folders) {
@@ -282,29 +282,71 @@ export function imageMatrix(folders) {
   return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
+// A changed folder workflow already has a regular call whose folder the diff selected, so that call runs in test-run
+// mode instead of adding a second call. Workflows without a folder call, such as ci-publish, keep a separate one.
+function partitionCiTestRuns(ciWorkflows, folders) {
+  const inPlace = ciWorkflows.filter(workflow => {
+    const folder = workflow.replace(/^ci-/, '').replace(/\.yml$/, '');
+    return FOLDERS.includes(folder) && folders.includes(folder);
+  });
+  return {inPlace, separate: ciWorkflows.filter(workflow => !inPlace.includes(workflow))};
+}
+
+// Both the job outputs and the human summary use this one decision, so they cannot report different calls.
+function testRunCallsFor(folders, changedFiles) {
+  const testRuns = selectWorkflowTestRuns(changedFiles);
+  const {inPlace, separate} = partitionCiTestRuns(testRuns.ci, folders);
+  // The dispatcher would skip an in-place workflows change with no CD changes. Its empty-list path can prove the job.
+  const proveCdTestRuns = inPlace.includes('ci-workflows.yml') && testRuns.cd.length === 0;
+  return {testRuns, inPlace, separate, proveCdTestRuns};
+}
+
+// An in-place call must prove every job of the changed workflow. An empty plan would skip its browser job, so the
+// regular call gets the same smoke area a separate test call would use. Other empty plans still run no browser area.
+function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, areaTable = BROWSER_AREAS) {
+  if (areas.length === 0 && inPlace.includes(workflow)) return smokeMatrix;
+  return JSON.stringify(browserMatrix(areas, areaTable));
+}
+
 export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
-  const testRuns = selectWorkflowTestRuns(changedFiles);
+  const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
+  const browserMatrixForCall = matrixForInPlaceBrowserCall(areas, 'ci-apps-web.yml', inPlace, SMOKE_BROWSER_MATRIX);
+  const editorBrowserMatrixForCall = matrixForInPlaceBrowserCall(
+    editorAreas,
+    'ci-apps-editor.yml',
+    inPlace,
+    SMOKE_EDITOR_BROWSER_MATRIX,
+    EDITOR_BROWSER_AREAS
+  );
   return [
     ...folderLines,
-    `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
-    `editor_browser_matrix=${JSON.stringify(browserMatrix(editorAreas, EDITOR_BROWSER_AREAS))}`,
+    `browser_matrix=${browserMatrixForCall}`,
+    `editor_browser_matrix=${editorBrowserMatrixForCall}`,
     `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
-    `ci_test_runs=${JSON.stringify(testRuns.ci)}`,
+    `ci_in_place_test_runs=${JSON.stringify(inPlace)}`,
+    `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
+    `prove_cd_test_runs=${proveCdTestRuns}`,
     `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
-    `all_browser_matrix=${ALL_BROWSER_MATRIX}`,
-    `all_editor_browser_matrix=${ALL_EDITOR_BROWSER_MATRIX}`
+    `smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`,
+    `smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`
   ].join('\n');
 }
 
 export function formatSummary({folders, areas, editorAreas, everything}, reason, changedFiles = []) {
+  const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
+  // formatWorkflowTestRuns still owns the CD and manual lines. Drop its unsplit CI line in favor of the split pair.
+  const dispatchLines = formatWorkflowTestRuns({...testRuns, ci: []}).split('\n').slice(1);
   return [
     `Selected ${everything ? 'everything' : 'a subset of pipelines'}${reason ? ` (${reason})` : ''}.`,
     `- Folders: ${folders.join(', ') || 'none'}`,
     `- Browser areas: ${areas.join(', ') || 'none'}`,
     `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`,
-    formatWorkflowTestRuns(selectWorkflowTestRuns(changedFiles))
+    `- CI test-run calls (separate): ${separate.join(', ') || 'none'}`,
+    `- CI test runs in place: ${inPlace.join(', ') || 'none'}`,
+    ...(proveCdTestRuns ? ['- CD proof flag: true'] : []),
+    ...dispatchLines
   ].join('\n');
 }
 
