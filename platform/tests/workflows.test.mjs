@@ -698,15 +698,45 @@ test('ci-pr-checks calls every callable CI workflow in test-run mode when it cha
   }
 });
 
-test('the browser test calls run every browser area and every phone test', () => {
+// A static test call proves a changed workflow with every area of that workflow's own project. Passing another
+// project's matrix makes the called app look for specs it does not have, so each expected input is named explicitly.
+const plannerMatrixInput = output => `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`;
+
+const staticTestCallInputs = {
+  'test-ci-apps-core-demo': {test_run: true},
+  'test-ci-apps-editor': {
+    test_run: true,
+    browser_matrix: plannerMatrixInput('all_editor_browser_matrix'),
+    phone_tests: 'all'
+  },
+  'test-ci-apps-web': {
+    test_run: true,
+    browser_matrix: plannerMatrixInput('all_browser_matrix'),
+    phone_tests: 'all'
+  },
+  'test-ci-backend': {test_run: true},
+  'test-ci-browser-image': {test_run: true},
+  'test-ci-contracts': {test_run: true},
+  'test-ci-data': {test_run: true},
+  'test-ci-docs': {test_run: true},
+  'test-ci-map-core': {test_run: true},
+  'test-ci-platform': {test_run: true},
+  'test-ci-publish': {test_run: true, commit: '${{ github.event.pull_request.head.sha || github.sha }}'},
+  'test-ci-tests': {test_run: true},
+  'test-ci-transit-relay': {test_run: true},
+  'test-ci-workflows': {test_run: true}
+};
+
+test('every static test call passes inputs meant for its workflow', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  for (const [name, output] of [
-    ['test-ci-apps-web', 'all_browser_matrix'],
-    ['test-ci-apps-editor', 'all_browser_matrix']
-  ]) {
-    const call = jobs[name];
-    assert.equal(call.with.browser_matrix, `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`);
-    assert.equal(call.with.phone_tests, 'all');
+  const callNames = Object.keys(jobs).filter(name => name.startsWith('test-ci-'));
+  assert.deepEqual(
+    Object.keys(staticTestCallInputs).toSorted(),
+    callNames.toSorted(),
+    'the input map must cover every static test call'
+  );
+  for (const [name, expected] of Object.entries(staticTestCallInputs)) {
+    assert.deepEqual(jobs[name].with, expected, `${name} passes the wrong inputs`);
   }
 });
 

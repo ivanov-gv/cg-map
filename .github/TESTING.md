@@ -170,8 +170,9 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 
 The gate's planner selects the workflows a change touches and the gate proves them in the same PR run:
 
-- Every changed callable `ci-*` workflow becomes a `uses:` call with `test_run: true` and every browser area and phone
-  test. A shared action is proved by a workflow that really executes it.
+- Every changed callable `ci-*` workflow becomes a `uses:` call with `test_run: true`. A browser workflow also gets
+  every area from its own planner output — `all_browser_matrix` for web, `all_editor_browser_matrix` for editor — and
+  every phone test. A shared action is proved by a workflow that really executes it.
 - Every changed `cd-*` workflow is dispatched by `ci-workflows` with `test_run=true`, the head commit, and a unique test
   `VERSION` (or `test_id` for cd-dev-pages). The job reuses an existing successful test run of the head commit when one
   exists; otherwise it dispatches and waits for the real conclusion. If the head commit has no dev package or image, it

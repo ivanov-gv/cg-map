@@ -242,7 +242,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: true
-      browser_matrix: ${{ needs.plan.outputs.all_browser_matrix || needs.plan-test-run.outputs.all_browser_matrix }}
+      browser_matrix: ${{ needs.plan.outputs.all_editor_browser_matrix || needs.plan-test-run.outputs.all_editor_browser_matrix }}
       phone_tests: all
   test-ci-apps-web:
     name: (test run) apps-web
