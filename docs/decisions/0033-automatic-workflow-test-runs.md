@@ -87,3 +87,12 @@ moving tag is inspected rather than pulled. Both must name a full commit, which 
 dispatch and the commit-tag image pull. This supersedes the fallback described in the #366 outcome note and removes the
 `git fetch` of main. Reusing an earlier successful test run of the head commit stays. The #370 fix also runs `npm view`
 from a temporary directory, outside the repository's `.npmrc`, and distinguishes E404 from other registry failures.
+
+## Update (moving tags in test runs, 2026-11-23)
+
+The owner eased the CD rule this design follows (ivanov-gv/agents 2.2.0, `cicd-general`, CD workflows rules 7 and 8): CD
+deploys to dev, staging and production only by an immutable identifier tied to one commit, never by a moving tag, while
+a test run may resolve its source through a moving tag because it publishes only to an ephemeral destination, and must
+log the commit it resolved. CD test runs here already meet the stricter form: they read the `:dev` label without pulling
+the tag, log `<workflow>: dev tag resolves to <commit>`, and pull and dispatch by that commit. Nothing changes in the
+code.

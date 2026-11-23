@@ -20,7 +20,8 @@ Every merge to main updates it, with no tags or releases:
 1. A push to main starts [ci-publish](../../.github/workflows/ci-publish.yml), which builds each app the change affects
    into an image in GHCR, tagged by commit SHA and `main`, with a moving `dev` tag beside them:
    `ghcr.io/ivanov-gv/cg-map/<app>`. The image label `org.opencontainers.image.revision` names the commit the tag was
-   built from. It runs no tests, because the PR run already tested this content. The nightly run of
+   built from; a new moving tag needs one full publish first ([TESTING](../../.github/TESTING.md#test-run-mode)). It
+   runs no tests, because the PR run already tested this content. The nightly run of
    [ci-nightly](../../.github/workflows/ci-nightly.yml) tests main.
 2. The `pages` job in ci-publish builds the dev site from source (all three apps) and pushes the image
    `$IMAGE_REPOSITORY/dev-pages:<sha>` with a moving `$IMAGE_REPOSITORY/dev-pages:dev` tag beside it. When ci-publish
