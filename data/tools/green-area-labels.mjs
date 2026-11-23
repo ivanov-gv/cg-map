@@ -4,7 +4,8 @@
 // The line covers this share of the area's long side, so a name centred on it stays inside the area.
 const labelLineShare = 0.8;
 
-function cross(origin, first, second) {
+// The z component of (first − origin) × (second − origin): positive when the three points turn counter-clockwise.
+function crossProduct(origin, first, second) {
   return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (second[0] - origin[0]);
 }
 
@@ -13,12 +14,12 @@ function convexHull(points) {
   const sorted = [...points].sort(([firstX, firstY], [secondX, secondY]) => firstX - secondX || firstY - secondY);
   const lowerHull = [];
   for (const point of sorted) {
-    while (lowerHull.length >= 2 && cross(lowerHull.at(-2), lowerHull.at(-1), point) <= 0) lowerHull.pop();
+    while (lowerHull.length >= 2 && crossProduct(lowerHull.at(-2), lowerHull.at(-1), point) <= 0) lowerHull.pop();
     lowerHull.push(point);
   }
   const upperHull = [];
   for (const point of sorted.reverse()) {
-    while (upperHull.length >= 2 && cross(upperHull.at(-2), upperHull.at(-1), point) <= 0) upperHull.pop();
+    while (upperHull.length >= 2 && crossProduct(upperHull.at(-2), upperHull.at(-1), point) <= 0) upperHull.pop();
     upperHull.push(point);
   }
   return [...lowerHull.slice(0, -1), ...upperHull.slice(0, -1)];

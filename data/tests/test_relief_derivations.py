@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
 from shapely.geometry import box, mapping
 
 TOOLS_PATH = Path(os.environ.get(
@@ -91,7 +92,6 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertIsNone(derivations._parse_elevation(''))
 
     def test_contours_run_with_uphill_on_their_left(self):
-        import numpy as np
         longitudes = np.linspace(19.0, 19.01, 41)
         latitudes = np.linspace(42.01, 42.0, 41)
         column_grid, row_grid = np.meshgrid(np.arange(41), np.arange(41))
@@ -100,7 +100,10 @@ class ReliefDerivationTests(unittest.TestCase):
         grid = {'longitudes': longitudes, 'latitudes': latitudes, 'heights': heights}
         features, _ = derivations.build_contours(grid)
         # Lines cut by the grid's edge have no inside; closed rings around the summit show the direction.
-        rings = [f for f in features if f['geometry']['coordinates'][0] == f['geometry']['coordinates'][-1]]
+        rings = [
+            feature for feature in features
+            if feature['geometry']['coordinates'][0] == feature['geometry']['coordinates'][-1]
+        ]
         self.assertTrue(rings)
         for feature in rings:
             coordinates = feature['geometry']['coordinates']
@@ -159,7 +162,7 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertNotIn('minimumBankRiseMetres', cliff_features[0]['properties'])
         self.assertIn('lengthMetres', cliff_features[0]['properties'])
         self.assertTrue(all(f['properties']['entityId'].startswith('derived:canyon-rim-') for f in dem_features))
-        self.assertEqual({f['properties']['bank'] for f in dem_features}, {'left', 'right'})
+        self.assertEqual({feature['properties']['bank'] for feature in dem_features}, {'left', 'right'})
         for feature in features:
             (start_x, start_y), (end_x, end_y) = feature['geometry']['coordinates'][0], feature['geometry']['coordinates'][-1]
             river_y = 5.0
