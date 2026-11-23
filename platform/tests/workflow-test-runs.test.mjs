@@ -2,16 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   browserImageTestVersion,
+  commitFromDevVersion,
+  commitFromImageLabels,
   dispatchArguments,
   dispatchAvailability,
   findDispatchedRun,
   formatWorkflowTestRuns,
+  isImageTagMissing,
+  isPackageVersionMissing,
   isTestRunTitle,
+  npmAuthForRegistry,
   packageTestVersion,
   playwrightVersionFromLock,
-  readMainCommitLog,
-  selectWorkflowTestRuns,
-  sourceCommitFor
+  selectWorkflowTestRuns
 } from '../tools/workflow-test-runs.mjs';
 
 for (const [name, file, expected] of [
@@ -115,77 +118,50 @@ test('test versions are unique and follow each registry\'s rules', () => {
   assert.throws(() => browserImageTestVersion('latest', 12), /three numbers/);
 });
 
-test('main history is read from the fetched origin/main ref', () => {
-  const commit = '2222222222222222222222222222222222222222';
-  const log = `${commit}\n`;
-  let call;
-  const runGit = (command, args, options) => {
-    call = {command, args, options};
-    return log;
-  };
-
-  assert.equal(readMainCommitLog(runGit), log);
-  assert.equal(call.command, 'git');
-  assert.deepEqual(call.args, ['log', '--max-count=20', '--format=%H', 'refs/remotes/origin/main']);
-  assert.equal(call.options.encoding, 'utf8');
-  assert.equal(call.options.env, process.env);
+test('a dev package version names the commit it was published from', () => {
+  const commit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  assert.equal(commitFromDevVersion(`0.0.0-dev.${commit}\n`), commit);
+  assert.throws(() => commitFromDevVersion('0.1.0'), /unexpected dev version/);
+  assert.throws(() => commitFromDevVersion(`0.0.0-dev.${'A'.repeat(40)}`), /unexpected dev version/);
+  assert.throws(() => commitFromDevVersion(`0.0.0-test.${commit}`), /unexpected dev version/);
 });
 
-test('source commit uses head when it has an artifact, otherwise the newest main commit', () => {
-  const headCommit = '1111111111111111111111111111111111111111';
-  const mainCommit = '2222222222222222222222222222222222222222';
-  const mainCommitLog = `${mainCommit}\n3333333333333333333333333333333333333333`;
-
-  assert.deepEqual(
-    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === headCommit),
-    {commit: headCommit, isFallback: false}
-  );
-  assert.deepEqual(
-    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === mainCommit),
-    {commit: mainCommit, isFallback: true}
-  );
+test('an image label names the commit its dev tag was published from', () => {
+  const commit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const labels = {'org.opencontainers.image.revision': commit};
+  assert.equal(commitFromImageLabels(JSON.stringify(labels)), commit);
+  assert.throws(() => commitFromImageLabels('null'), /missing org\.opencontainers\.image\.revision label/);
+  assert.throws(() => commitFromImageLabels('not json'), /unreadable image labels/);
   assert.throws(
-    () => sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, () => false),
-    /no dev artifact exists/
+    () => commitFromImageLabels(JSON.stringify({'org.opencontainers.image.revision': 'main'})),
+    /missing org\.opencontainers\.image\.revision label/
   );
 });
 
-test('the fallback checks main commits newest first until one has an artifact', () => {
-  const headCommit = '1111111111111111111111111111111111111111';
-  const commitWithArtifact = '2222222222222222222222222222222222222222';
-  const newestCommit = '3333333333333333333333333333333333333333';
-  const olderCommit = '4444444444444444444444444444444444444444';
-  const checkedCommits = [];
-  // Issue #366: run status is no longer an input. A commit can belong to a failed ci-publish run and still have the
-  // artifact another job published, so the registry answer is the only evidence the fallback needs.
-  const artifactExists = commit => {
-    checkedCommits.push(commit);
-    return commit === commitWithArtifact;
-  };
-
-  const source = sourceCommitFor(
-    'cd-map-contracts.yml',
-    headCommit,
-    `${newestCommit}\n${commitWithArtifact}\n${olderCommit}`,
-    artifactExists
-  );
-
-  assert.deepEqual(source, {commit: commitWithArtifact, isFallback: true});
-  assert.deepEqual(
-    checkedCommits,
-    [headCommit, newestCommit, commitWithArtifact],
-    'checks newest first and stops at the artifact'
-  );
+test('only a missing npm tag is a missing dev package', () => {
+  assert.equal(isPackageVersionMissing('npm error code E404\nnpm error 404 Not Found'), true);
+  assert.equal(isPackageVersionMissing('npm error 401 Unauthorized - unauthenticated'), false);
+  assert.equal(isPackageVersionMissing('npm error code E403\nnpm error 403 Forbidden'), false);
 });
 
-test('source commit checks at most the newest twenty main commits', () => {
-  const commits = Array.from({length: 21}, (_, index) => String(index).padStart(40, '0'));
-  const oldestCommit = commits.at(-1);
+test('a missing image tag is told apart from a registry failure', () => {
+  assert.equal(isImageTagMissing('ERROR: MANIFEST_UNKNOWN: manifest tagged by "dev" is not found'), true);
+  assert.equal(isImageTagMissing('unexpected status from GET request: 404 Not Found'), true);
+  assert.equal(isImageTagMissing('failed to fetch anonymous token: 401 Unauthorized'), false);
+});
 
-  assert.throws(
-    () => sourceCommitFor('cd-map-core.yml', 'f'.repeat(40), commits.join('\n'), commit => commit === oldestCommit),
-    /no dev artifact exists/
-  );
+test('auth and network failures are not a missing image tag', () => {
+  assert.equal(isImageTagMissing('authentication failed: token endpoint returned 404 Not Found'), false);
+  assert.equal(isImageTagMissing('network error: 404 Not Found while reading manifest'), false);
+});
+
+test('npm auth keeps the token in the environment, not the registry config', () => {
+  const environment = {PATH: '/usr/bin'};
+  const auth = npmAuthForRegistry('secret-token', environment);
+  assert.equal(auth.userConfig, '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n');
+  assert.equal(auth.env.NODE_AUTH_TOKEN, 'secret-token');
+  assert.equal(environment.NODE_AUTH_TOKEN, undefined);
+  assert.ok(!auth.userConfig.includes('secret-token'));
 });
 
 test('a dispatched run is matched by its new id, head commit, and unique title', () => {

@@ -936,20 +936,15 @@ test('ci-workflows dispatches and waits for a real CD test run, never a dry run'
   assert.match(stepsText, /workflow-test-runs\.mjs/, 'must run the real orchestrator');
   assert.match(stepsText, /sparse-checkout/, 'must check out only the orchestrator and its dependencies');
   assert.match(stepsText, /RUN_ID/, 'must pass a unique run id for the test version');
+  assert.match(stepsText, /HEAD_SHA/, 'must pass the head commit to reuse an earlier test run');
   assert.match(stepsText, /BRANCH/, 'must dispatch on the pull request branch');
   assert.doesNotMatch(stepsText, /--dry-run|-n\b/, 'only act parses; the workflow must run the dispatch');
 });
 
-test('the CD dispatcher fetches main history before reading source commits', () => {
-  const steps = load('ci-workflows.yml').jobs['cd-test-runs'].steps;
-  const fetchIndex = steps.findIndex(step => /git .*fetch/.test(step.run ?? ''));
-  const scriptIndex = steps.findIndex(step => /workflow-test-runs\.mjs/.test(step.run ?? ''));
-  assert.notEqual(fetchIndex, -1, 'a shallow checkout has no main history');
-  assert.match(steps[fetchIndex].run, /--depth=20/);
-  assert.match(steps[fetchIndex].run, /\+refs\/heads\/main:refs\/remotes\/origin\/main/);
-  // Git over HTTPS rejects a bearer header and then fails on a username prompt; the public repository needs no auth.
-  assert.doesNotMatch(steps[fetchIndex].run, /extraheader|AUTHORIZATION/i, 'the public history fetch sends no credentials');
-  assert.ok(scriptIndex > fetchIndex, 'the selector must run after the fetch');
+test('the CD dispatcher needs no main history fetch', () => {
+  const stepsText = JSON.stringify(load('ci-workflows.yml').jobs['cd-test-runs'].steps);
+  assert.doesNotMatch(stepsText, /\bgit (fetch|log)\b/, 'registry tags replace the main history scan');
+  assert.doesNotMatch(stepsText, /refs\/remotes\/origin\/main|--depth=20/);
 });
 
 test('the CD dispatcher runs for selected workflows or an in-place proof, never for an empty list alone', () => {

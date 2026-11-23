@@ -83,10 +83,6 @@ jobs:
             package.json
             package-lock.json
             .node-version
-      # A shallow PR checkout has no main history; the dispatcher needs its recent commits to pick a source commit.
-      # The repository is public, so the fetch needs no credentials; git over HTTPS rejects a bearer header anyway.
-      - name: Fetch recent main history
-        run: git fetch --no-tags --depth=20 origin +refs/heads/main:refs/remotes/origin/main
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version

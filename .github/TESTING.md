@@ -217,9 +217,12 @@ The gate's planner selects the workflows a change touches and the gate proves th
   test run.
 - Every changed `cd-*` workflow is dispatched by `ci-workflows` with `test_run=true`, the head commit, and a unique test
   `VERSION` (or `test_id` for cd-dev-pages). The job reuses an existing successful test run of the head commit when one
-  exists; otherwise it dispatches and waits for the real conclusion. If the head commit has no dev package or image, it
-  checks the last 20 commits of main, newest first, uses the first with an artifact and says so in the job summary. A
-  `ci-publish` conclusion is not a filter: a run can fail after another of its jobs published an artifact.
+  exists; otherwise it resolves the dev tag once in the registry and dispatches and waits for the real conclusion.
+  Packages use `@ivanov-gv/<pkg>@dev` (`0.0.0-dev.<commit>`); images use `<repository>/<name>:dev` and its
+  `org.opencontainers.image.revision` label. The job logs `<workflow>: dev tag resolves to <commit>` and always pulls
+  the image or package by that commit, never by the moving tag. A missing tag or malformed version is an error naming
+  the artifact; `ci-publish` on main publishes dev tags. A `ci-publish` conclusion is not a filter: a run can fail after
+  another of its jobs published an artifact.
 - A workflow not yet registered on `main`, or one whose `main` version lacks `workflow_dispatch`, `test_run` and
   `commit`, cannot be dispatched and is exempt with a reason in the job summary. `ci-pr-checks.yml` and `ci-nightly.yml`
   are always manual exceptions: a reusable call to either would form a cycle. Dispatch them with the first command below
