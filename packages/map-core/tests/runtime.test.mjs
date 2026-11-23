@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMap, whenMapReady, mapStyle, hitTest, offsetCoordinate, createGeoJSONOverlay} from '../src/index.js';
+import {
+  createMap,
+  whenMapReady,
+  mapStyle,
+  hitTest,
+  offsetCoordinate,
+  createGeoJSONOverlay,
+  basemapColors,
+  drawingGroups,
+  drawingGroupKey
+} from '../src/index.js';
 import {relocateCoreImports} from '../tools/assemble.mjs';
-import {basemapColors} from '../src/basemap-palette.js';
-import {drawingGroups, drawingGroupKey} from '../src/drawing-order.js';
 
 // A small eventful engine keeps lifecycle tests isolated from GPU, network and the DOM.
 class TestMap {

@@ -10,6 +10,8 @@ export {
   mapBounds
 } from './map.js';
 export {mapStyle, installBuildingNumberScale} from './map-style.js';
+export {drawingGroups, drawingGroupKey} from './drawing-order.js';
+export {basemapColors} from './basemap-palette.js';
 export {installSatellite, setSatelliteVisible, satelliteBounds, satelliteLayerIds} from './satellite.js';
 export {createGeoJSONOverlay} from './overlay.js';
 export {installPlaces} from './places.js';
