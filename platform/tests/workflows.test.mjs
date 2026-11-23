@@ -786,6 +786,8 @@ test('the CD dispatcher fetches main history before reading source commits', () 
   assert.notEqual(fetchIndex, -1, 'a shallow checkout has no main history');
   assert.match(steps[fetchIndex].run, /--depth=20/);
   assert.match(steps[fetchIndex].run, /\+refs\/heads\/main:refs\/remotes\/origin\/main/);
+  // Git over HTTPS rejects a bearer header and then fails on a username prompt; the public repository needs no auth.
+  assert.doesNotMatch(steps[fetchIndex].run, /extraheader|AUTHORIZATION/i, 'the public history fetch sends no credentials');
   assert.ok(scriptIndex > fetchIndex, 'the selector must run after the fetch');
 });
 
