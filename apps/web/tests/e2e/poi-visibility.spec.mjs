@@ -584,27 +584,3 @@ test('level metadata is an offline shell asset and offline reload keeps the same
   await camera(page, {center: [19.2627, 42.4411], zoom: 17});
   await expectIcons(page, online);
 });
-
-// A manual review aid, not an acceptance check: POI_DENSITY_SCREENSHOTS=1 npm run test:e2e -- --grep 'density review'
-test('real data at every threshold, for visual density review', async ({page}, testInfo) => {
-  test.skip(!process.env.POI_DENSITY_SCREENSHOTS, 'Run on request after changing levels');
-  const places = JSON.parse(
-    readPinnedSource('places.geojson')
-  ).features;
-  await open(page, null);
-  const scenes = {podgorica: [19.2627, 42.4411], 'dense-west': [19.24, 42.44], coast: [18.84, 42.286]};
-  for (const [name, center] of Object.entries(scenes))
-    for (const zoom of Object.values(THRESHOLDS)) {
-      await camera(page, {center, zoom});
-      await expect
-        .poll(() => page.evaluate(() => window.kompasDebug.map.areTilesLoaded()), {timeout: 30000})
-        .toBe(true);
-      await mapIdle(page);
-      const ids = await iconIds(page);
-      const known = new Map(
-        places.map((feature) => [feature.properties.id, feature.properties.visibilityLevel])
-      );
-      for (const id of ids) expect(zoom).toBeGreaterThanOrEqual(THRESHOLDS[known.get(id)]);
-      await page.screenshot({path: testInfo.outputPath(`${name}-z${zoom}-${ids.length}.png`)});
-    }
-});

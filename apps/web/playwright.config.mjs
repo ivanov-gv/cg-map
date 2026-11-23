@@ -49,7 +49,13 @@ export default defineConfig({
     }
   },
   projects: [
-    {name: 'root-desktop', use: {baseURL: `http://127.0.0.1:${port}/`, viewport: {width: 1280, height: 800}}},
+    // A test tagged @mobile-only needs the phone project's layout, so the desktop project must not repeat it.
+    // It also carries @phone for the PR run's phone project; see docs/verification/testing.md.
+    {
+      name: 'root-desktop',
+      grepInvert: /@mobile-only/,
+      use: {baseURL: `http://127.0.0.1:${port}/`, viewport: {width: 1280, height: 800}}
+    },
     {
       name: 'pages-mobile',
       ...phoneTests,

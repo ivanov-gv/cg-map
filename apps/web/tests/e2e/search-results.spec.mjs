@@ -139,6 +139,12 @@ const renderedPlaceIds = page =>
       ...new Set(map.queryRenderedFeatures({layers}).flatMap(feature => JSON.parse(feature.properties.activeIds)))
     ].sort();
   });
+const expectQueryHighlights = async page => {
+  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
+  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
+  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
+  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
+};
 const ROAD_LAYERS = [
   'steps',
   'cycleways',
@@ -523,24 +529,46 @@ test('a category keeps below-threshold places visible when a query narrows resul
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 });
 
+test('result highlights survive closing the dock and a place card', {tag: '@phone'}, async ({page, isMobile}) => {
+  test.skip(!isMobile, 'phone layout');
+  await mapIdle(page);
+  await page.locator('#search').fill('bulevar');
+  await expectQueryHighlights(page);
+
+  // Tap a building that is not itself a result, so its red card must not replace a green mark.
+  const otherBuilding = secondAddress().geometry.coordinates;
+  expect(await isInView(page, otherBuilding)).toBe(true);
+  const point = await pointOnMap(page, otherBuilding);
+  await page.mouse.click(point.x, point.y);
+  await expect(page.locator('#place-name')).toHaveText('Building 13');
+  await expectQueryHighlights(page);
+
+  await closeCard(page);
+  await expect(page.locator('#place-card')).toBeHidden();
+  await expect(page.locator('#search')).toHaveValue('bulevar');
+  await expectQueryHighlights(page);
+
+  await page.locator('#menu-toggle').click();
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  await expectQueryHighlights(page);
+  await closeMenu(page);
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+  await expectQueryHighlights(page);
+});
+
+// A fresh Flip journey keeps its own camera and dock path; the phone journey above cannot carry those highlights over.
 test('Flip keeps result highlights with the dock open and after it closes', {tag: '@phone'}, async ({page}) => {
   await withFlipViewport(page, async () => {
     await mapIdle(page);
     await page.locator('#menu-toggle').click();
     await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
     await page.locator('#search').fill('bulevar');
-    await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
-    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
+    await expectQueryHighlights(page);
 
     await closeMenu(page);
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
     await expect(page.locator('#search')).toHaveValue('bulevar');
-    await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
-    await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-    await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
+    await expectQueryHighlights(page);
   });
 });
 
@@ -556,34 +584,6 @@ test('Flip keeps category highlights after the dock closes', {tag: '@phone'}, as
     await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
     await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
   });
-});
-
-test('a Mobile map pick keeps result highlights while its card is open and after it closes', {tag: '@phone'}, async ({
-  page
-}) => {
-  await mapIdle(page);
-  await page.locator('#search').fill('bulevar');
-  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-
-  // Tap a building that is not itself a result, so its red card must not replace a green mark.
-  const otherBuilding = secondAddress().geometry.coordinates;
-  expect(await isInView(page, otherBuilding)).toBe(true);
-  const point = await pointOnMap(page, otherBuilding);
-  await page.mouse.click(point.x, point.y);
-  await expect(page.locator('#place-name')).toHaveText('Building 13');
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-
-  await closeCard(page);
-  await expect(page.locator('#place-card')).toBeHidden();
-  await expect(page.locator('#search')).toHaveValue('bulevar');
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([4]);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
 });
 
 test('closing Mobile search keeps result highlights while the query stays in the bar', {tag: '@phone'}, async ({

@@ -641,7 +641,14 @@ npm run test:e2e -- --last-failed
 
 # The component Make target also accepts filters
 make e2e E2E_ARGS='--project=pages-mobile --grep="transport toggles"'
+
+# List device-scoped cases without executing them
+npm run test:e2e -- --project=pages-mobile --grep '@mobile-only' --list
 ```
+
+A test tagged `@mobile-only` runs only in `pages-mobile`; it also carries `@phone` so a PR keeps it. Prefer this to a
+device loop inside a spec, which repeats the case in both projects. See
+[phone layout tests](../../docs/verification/testing.md#phone-layout-tests).
 
 `--grep` is a regular expression over test titles; combine it with a file and `--project` to narrow the selection. Both
 projects run when `--project` is omitted. Standalone `npm test` and `npm run test:e2e` build the artifact first from the

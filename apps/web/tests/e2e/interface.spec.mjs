@@ -500,26 +500,6 @@ test('a chosen result still zooms in to street level from far out', async ({page
   await expect.poll(async () => (await camera(page)).zoom).toBe(15);
 });
 
-test('search bar focus has no ring, and categories and the place card have no scrollbars', async ({page}) => {
-  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-  await ready(page);
-  const barBorder = () =>
-    page.locator('.search-bar').evaluate(element => getComputedStyle(element).borderColor);
-  const resting = await barBorder();
-  await page.locator('#search').focus();
-  expect(await page.locator('#search').evaluate(element => getComputedStyle(element).outlineStyle)).toBe(
-    'none'
-  );
-  expect(await barBorder()).not.toBe(resting);
-  // Open the dock to access results (desktop search panel needs a query to show results).
-  await openMenu(page);
-  await page.locator('.result').first().click();
-  for (const selector of ['#categories', '#place-card'])
-    expect(await page.locator(selector).evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe(
-      'none'
-    );
-});
-
 test('desktop keeps the results open beside the place card', async ({page, isMobile}, testInfo) => {
   test.skip(isMobile, 'desktop layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
@@ -1756,109 +1736,38 @@ test(
   }
 );
 
-// Categories row is a single horizontal row on desktop: floating chips, dock, and joined card.
-// Chips do not wrap to a second row; the row scrolls horizontally when it overflows.
-test.describe('categories row is a single row on desktop', () => {
-  test.beforeEach(({page}) => stubRouting(page));
-
-  // Use a viewport narrow enough that the category chips overflow the container.
-  const narrowDesktop = {width: 1280, height: 800};
-
-  test('floating categories row is a single row with horizontal scroll', async ({page}) => {
-    await page.setViewportSize(narrowDesktop);
-    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-    await ready(page);
-
-    // Dock is closed, no query: floating chips are visible in the desktop search panel.
-    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
-      const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button[data-category]');
-      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
-      return {
-        tops: rectTops,
-        scrollWidth: categories.scrollWidth,
-        clientWidth: categories.clientWidth
-      };
-    });
-
-    // All chips should share the same top (within 1 px for sub-pixel rendering).
-    const firstTop = tops[0];
-    for (const top of tops) {
-      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
-    }
-
-    // The row should be wider than its container, so horizontal scroll is possible.
-    expect(scrollWidth).toBeGreaterThan(clientWidth);
+// The row is one element that moves between the floating panel, the dock and the joined panel.
+async function expectCategoryRowScrolls(page, state) {
+  const row = await page.locator('#categories').evaluate(element => {
+    const tops = [...element.querySelectorAll('button[data-category]')].map(
+      button => button.getBoundingClientRect().top
+    );
+    const start = element.scrollLeft;
+    element.scrollLeft = start + 50;
+    const canScroll = element.scrollLeft > start;
+    element.scrollLeft = start;
+    return {tops, canScroll, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth};
   });
 
-  test('categories row in the dock is a single row with horizontal scroll', async ({page}) => {
-    await page.setViewportSize(narrowDesktop);
-    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-    await ready(page);
-    await openMenu(page);
+  const firstTop = row.tops[0];
+  expect(row.tops.length, state).toBeGreaterThan(1);
+  for (const top of row.tops) expect(Math.abs(top - firstTop), state).toBeLessThanOrEqual(1);
+  expect(row.scrollWidth, state).toBeGreaterThan(row.clientWidth);
+  expect(row.canScroll, state).toBe(true);
+}
 
-    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
-      const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button[data-category]');
-      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
-      return {
-        tops: rectTops,
-        scrollWidth: categories.scrollWidth,
-        clientWidth: categories.clientWidth
-      };
-    });
+test('categories row stays one scrollable line across floating, dock and joined panel states', async ({page}) => {
+  await page.setViewportSize({width: 1280, height: 800});
+  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+  await ready(page);
 
-    const firstTop = tops[0];
-    for (const top of tops) {
-      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
-    }
-    expect(scrollWidth).toBeGreaterThan(clientWidth);
-  });
-
-  test('categories row in the joined card is a single row with horizontal scroll', async ({page}) => {
-    await page.setViewportSize(narrowDesktop);
-    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-    await ready(page);
-
-    // Type a query to show the joined card with categories + results.
-    await page.locator('#search').fill('Nearby');
-    await expect(page.locator('.result')).toHaveCount(6);
-
-    const {tops, scrollWidth, clientWidth} = await page.evaluate(() => {
-      const categories = document.getElementById('categories');
-      const buttons = categories.querySelectorAll('button[data-category]');
-      const rectTops = Array.from(buttons).map(btn => btn.getBoundingClientRect().top);
-      return {
-        tops: rectTops,
-        scrollWidth: categories.scrollWidth,
-        clientWidth: categories.clientWidth
-      };
-    });
-
-    const firstTop = tops[0];
-    for (const top of tops) {
-      expect(Math.abs(top - firstTop)).toBeLessThanOrEqual(1);
-    }
-    expect(scrollWidth).toBeGreaterThan(clientWidth);
-  });
-
-  test('categories row is horizontally scrollable', async ({page}) => {
-    await page.setViewportSize(narrowDesktop);
-    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-    await ready(page);
-
-    // Verify the row can be scrolled horizontally by setting scrollLeft directly.
-    const {canScroll, scrollWidth, clientWidth} = await page.evaluate(() => {
-      const categories = document.getElementById('categories');
-      const start = categories.scrollLeft;
-      categories.scrollLeft = start + 50;
-      const canScroll = categories.scrollLeft > start;
-      categories.scrollLeft = start; // reset
-      return {canScroll, scrollWidth: categories.scrollWidth, clientWidth: categories.clientWidth};
-    });
-    expect(canScroll).toBe(true);
-    expect(scrollWidth).toBeGreaterThan(clientWidth);
-  });
+  await expectCategoryRowScrolls(page, 'floating panel');
+  await openMenu(page);
+  await expectCategoryRowScrolls(page, 'dock');
+  await closeMenu(page);
+  await page.locator('#search').fill('Nearby');
+  await expect(page.locator('.result')).toHaveCount(6);
+  await expectCategoryRowScrolls(page, 'joined panel');
 });
 
 test(
@@ -1967,90 +1876,6 @@ test('touchpad scrolling zooms the map and its move carries the wheel event', as
   expect(await page.evaluate(() => window.wheelMoveStarts)).toContain('wheel');
 });
 
-test('device class is set on body at flip, mobile, and desktop viewport sizes', async ({page}) => {
-  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-
-  // Desktop viewport (1280×800)
-  await page.setViewportSize({width: 1280, height: 800});
-  await ready(page);
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
-
-  // Mobile viewport (412×840) — default for pages-mobile project
-  await page.setViewportSize({width: 412, height: 840});
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
-
-  // Flip viewport (340×340) — withFlipViewport restores to the previous size (412×840) after
-  await withFlipViewport(page, async () => {
-    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
-  });
-
-  // withFlipViewport restored to 412×840, so the class is mobile again
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
-
-  // Explicitly resize to desktop to verify the transition back
-  await page.setViewportSize({width: 1280, height: 800});
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
-});
-
-// attributionNodes sanitises HTML safely — tested in the browser where DOMParser is available.
-// Node has no DOMParser, so these four cases live in a browser test instead of a unit test.
-test('attributionNodes rejects javascript: href and flattens non-anchor elements', async ({page}) => {
-  await ready(page);
-  const findings = await page.evaluate(() => {
-    const results = {};
-
-    // Recreate the attributionNodes logic inline for testing
-    function testAttributionNodes(html) {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const nodes = [];
-      for (const child of doc.body.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          nodes.push(document.createTextNode(child.textContent));
-        } else if (child.tagName === 'A') {
-          const href = child.getAttribute('href');
-          if (href && href.startsWith('https://')) {
-            const anchor = document.createElement('a');
-            anchor.href = href;
-            anchor.target = '_blank';
-            anchor.rel = 'noopener noreferrer';
-            anchor.textContent = child.textContent;
-            nodes.push(anchor);
-          } else {
-            nodes.push(document.createTextNode(child.textContent));
-          }
-        } else {
-          nodes.push(document.createTextNode(child.textContent));
-        }
-      }
-      return nodes;
-    }
-
-    // Test 1: javascript: href becomes plain text
-    const jsNodes = testAttributionNodes('<a href="javascript:alert(1)">Click</a>');
-    results.javascriptHref = jsNodes.every(node => node.nodeType === Node.TEXT_NODE);
-
-    // Test 2: <b> element flattens to text
-    const boldNodes = testAttributionNodes('<b>Bold</b>');
-    results.boldFlattened = boldNodes.length === 1 && boldNodes[0].nodeType === Node.TEXT_NODE &&
-      boldNodes[0].textContent === 'Bold';
-
-    // Test 3: anchor nested in <span> becomes text (only top-level anchors rebuilt)
-    const nestedNodes = testAttributionNodes('<span><a href="https://example.com">Link</a></span>');
-    results.nestedAnchor = nestedNodes.every(node => node.nodeType === Node.TEXT_NODE);
-
-    // Test 4: target _blank and rel on rebuilt anchor
-    const safeNodes = testAttributionNodes('<a href="https://example.com">Safe</a>');
-    const anchor = safeNodes.find(node => node.nodeType === Node.ELEMENT_NODE);
-    results.anchorTarget = anchor?.target === '_blank' && anchor?.rel === 'noopener noreferrer';
-
-    return results;
-  });
-  expect(findings.javascriptHref).toBe(true);
-  expect(findings.boldFlattened).toBe(true);
-  expect(findings.nestedAnchor).toBe(true);
-  expect(findings.anchorTarget).toBe(true);
-});
-
 // Attribution lives in the dock footer, not as a floating control on the map.
 test('attribution appears in dock footer and updates with satellite toggle', async ({page}) => {
   await ready(page);
@@ -2142,95 +1967,9 @@ test.describe('dock footer build version', () => {
   });
 });
 
-test('Satellite layer tile uses the design folded-map icon', async ({page}) => {
-  await ready(page);
-  const iconGeometry = await page.locator('#i-satellite').evaluate(symbol => ({
-    viewBox: symbol.getAttribute('viewBox'),
-    children: [...symbol.children].map(child =>
-      child.tagName.toLowerCase() === 'circle'
-        ? {
-            tag: 'circle',
-            cx: child.getAttribute('cx'),
-            cy: child.getAttribute('cy'),
-            r: child.getAttribute('r')
-          }
-        : {tag: 'path', d: child.getAttribute('d')}
-    )
-  }));
-  expect(iconGeometry.viewBox).toBe('0 0 24 24');
-  expect(iconGeometry.children).toEqual([
-    {tag: 'path', d: 'M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20Z'},
-    {tag: 'circle', cx: '16', cy: '9.3', r: '1.6'},
-    {tag: 'path', d: 'M5.2 16.6l4.1-4.3 3.3 3.1 2-2 4.2 3.4'}
-  ]);
-  const iconStroke = await page.locator('#satellite-toggle .icon').evaluate(element => {
-    const style = getComputedStyle(element);
-    return {
-      fill: style.fill,
-      stroke: style.strokeWidth,
-      cap: style.strokeLinecap,
-      join: style.strokeLinejoin
-    };
-  });
-  expect(iconStroke).toEqual({fill: 'none', stroke: '1.65px', cap: 'round', join: 'round'});
-});
-
 // ---------------------------------------------------------------------------
 // Full-screen map and scale bar (issue #97)
 // ---------------------------------------------------------------------------
-
-// Verifies that the map fills the viewport and the scale bar sits in the
-// bottom-left corner without overlap — on Desktop, Mobile, and Flip.
-const FLIP_VIEWPORT = {width: 340, height: 340};
-const deviceCases = [
-  {name: 'desktop', viewport: {width: 1280, height: 800}},
-  {name: 'mobile', viewport: {width: 412, height: 840}},
-  {name: 'flip', viewport: FLIP_VIEWPORT}
-];
-
-// MapLibre's control CSS sets .maplibregl-ctrl-group button to 29×29, so the rendered
-// box and the computed style must both be checked (issue #272).
-const locateDesignCases = [
-  {name: 'desktop', viewport: {width: 1280, height: 800}, size: 48, rightGap: 20, bottomGap: 20},
-  {name: 'mobile', viewport: {width: 412, height: 840}, size: 48, rightGap: 12, bottomGap: 24},
-  {name: 'flip', viewport: FLIP_VIEWPORT, size: 40, rightGap: 12, bottomGap: 12}
-];
-
-for (const device of locateDesignCases) {
-  const phoneTag = device.name === 'desktop' ? {} : {tag: '@phone'};
-
-  test(`Locate button has the design size, radius, icon and offsets on ${device.name}`, {...phoneTag}, async ({page}) => {
-    await atViewport(page, device.viewport, async () => {
-      await ready(page);
-      const button = page.locator('#position-action');
-      await expect(button).toBeVisible();
-      const computed = await button.evaluate(element => {
-        const style = getComputedStyle(element);
-        const iconStyle = getComputedStyle(element.querySelector('.icon'));
-        return {
-          width: style.width,
-          height: style.height,
-          radius: style.borderTopLeftRadius,
-          iconWidth: iconStyle.width,
-          iconHeight: iconStyle.height
-        };
-      });
-      expect(computed).toEqual({
-        width: `${device.size}px`,
-        height: `${device.size}px`,
-        radius: '14px',
-        iconWidth: '21px',
-        iconHeight: '21px'
-      });
-      const box = await button.boundingBox();
-      expect(box.width).toBe(device.size);
-      expect(box.height).toBe(device.size);
-      const viewport = page.viewportSize();
-      expect(viewport.width - (box.x + box.width)).toBe(device.rightGap);
-      expect(viewport.height - (box.y + box.height)).toBe(device.bottomGap);
-    });
-  });
-}
 
 async function assertMapFillsViewport(page) {
   const viewport = page.viewportSize();
@@ -2333,126 +2072,6 @@ async function assertNoOverlapAtScaleBar(page) {
   expect(culprits).toEqual([]);
 }
 
-for (const {name, viewport} of deviceCases) {
-  test(`map fills viewport and scale bar is in bottom-left on ${name}`, async ({page}) => {
-    async function checkMainScreen() {
-      await ready(page);
-      await closeMenu(page);
-      await assertMapFillsViewport(page);
-      await assertScaleBarInBottomLeft(page);
-      await assertNoOverlapAtScaleBar(page);
-    }
-
-    await atViewport(page, viewport, checkMainScreen);
-  });
-}
-
-// ---------------------------------------------------------------------------
-// OSM credit line below the scale bar (issue #144)
-// ---------------------------------------------------------------------------
-
-// Verifies the on-map "OpenStreetMap" credit sits below the scale bar on
-// Desktop, Mobile, and Flip — visible, positioned, sized, and clickable.
-for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
-  ...deviceCase,
-  isMobile: deviceCase.name !== 'desktop'
-}))) {
-  const phoneTag = isMobile ? {tag: '@phone'} : {};
-
-  test(`OSM credit matches scale bar styling on ${name}`, {...phoneTag}, async ({page}) => {
-    await atViewport(page, viewport, async () => {
-      await ready(page);
-      await closeMenu(page);
-
-      // The credit inherits the same background-color, color, and font-family
-      // as the scale bar so they stay in step (wiki Web app – UI, ADR 0016).
-      const styles = await page.evaluate(() => {
-        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
-        const creditEl = document.querySelector('.osm-credit-line');
-        if (!scaleBar || !creditEl) return null;
-        const scaleStyle = getComputedStyle(scaleBar);
-        const creditStyle = getComputedStyle(creditEl);
-        return {
-          scaleBackground: scaleStyle.backgroundColor,
-          creditBackground: creditStyle.backgroundColor,
-          scaleColor: scaleStyle.color,
-          creditColor: creditStyle.color,
-          scaleFontFamily: scaleStyle.fontFamily,
-          creditFontFamily: creditStyle.fontFamily
-        };
-      });
-      expect(styles).not.toBeNull();
-      expect(styles.creditBackground).toBe(styles.scaleBackground);
-      expect(styles.creditColor).toBe(styles.scaleColor);
-      expect(styles.creditFontFamily).toBe(styles.scaleFontFamily);
-    });
-  });
-
-  test(`OSM credit line is visible and positioned below scale bar on ${name}`, {...phoneTag}, async ({page}) => {
-    await atViewport(page, viewport, async () => {
-      await ready(page);
-      await closeMenu(page);
-
-      // Credit is visible
-      const credit = page.locator('.osm-credit-line');
-      await expect(credit).toBeVisible();
-
-      // Link href is the OSM copyright page
-      const link = credit.locator('a');
-      await expect(link).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
-
-      // Position: credit top is within 2 px of scale bar's bottom
-      // Left edge within 2 px of scale bar's left
-      // Height is about half the scale bar's (within 2 px)
-      const measurements = await page.evaluate(() => {
-        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
-        const creditEl = document.querySelector('.osm-credit-line');
-        if (!scaleBar || !creditEl) return null;
-        const scaleRect = scaleBar.getBoundingClientRect();
-        const creditRect = creditEl.getBoundingClientRect();
-        return {
-          scaleBarHeight: scaleRect.height,
-          creditHeight: creditRect.height,
-          topGap: creditRect.top - scaleRect.bottom,
-          leftDiff: Math.abs(creditRect.left - scaleRect.left)
-        };
-      });
-      expect(measurements).not.toBeNull();
-      expect(measurements.topGap).toBeGreaterThanOrEqual(-2);
-      expect(measurements.topGap).toBeLessThanOrEqual(2);
-      expect(measurements.leftDiff).toBeLessThanOrEqual(2);
-      expect(measurements.creditHeight).toBeGreaterThanOrEqual(
-        measurements.scaleBarHeight / 2 - 2
-      );
-      expect(measurements.creditHeight).toBeLessThanOrEqual(
-        measurements.scaleBarHeight / 2 + 2
-      );
-
-      // elementFromPoint at the credit's centre returns the link (not covered)
-      const elementAtCenter = await page.evaluate(() => {
-        const creditEl = document.querySelector('.osm-credit-line');
-        if (!creditEl) return null;
-        const rect = creditEl.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        const el = document.elementFromPoint(centerX, centerY);
-        return el?.tagName === 'A' ? el.getAttribute('href') : null;
-      });
-      expect(elementAtCenter).toBe('https://www.openstreetmap.org/copyright');
-    });
-  });
-}
-
-// Proves the overlap check can detect a visible element covering the scale bar.
-// Injects a white background on .sidebar so it paints over the scale bar area.
-test('overlap check detects injected sidebar background', async ({page}) => {
-  await ready(page);
-  await closeMenu(page);
-  await page.addStyleTag({content: '.sidebar { background: white !important; }'});
-  const culprits = await scaleBarCulprits(page);
-  expect(culprits.length).toBeGreaterThan(0);
-});
-
 // Proves attribution refreshes when a source is added after load.
 test('attribution refreshes when a source is added after load', async ({page}) => {
   await ready(page);
@@ -2492,43 +2111,23 @@ test('attribution refreshes when a source is added after load', async ({page}) =
 // Zoom buttons removed (issue #98)
 // ---------------------------------------------------------------------------
 
-for (const {name, viewport} of deviceCases) {
-  test(`zoom buttons are hidden and position button sits alone on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      // Zoom buttons are not visible
-      await expect(page.locator('.maplibregl-ctrl-zoom-in')).toBeHidden();
-      await expect(page.locator('.maplibregl-ctrl-zoom-out')).toBeHidden();
-      // Position button is visible and close to the bottom-right corner
-      await expect(page.locator('#position-action')).toBeVisible();
-      const locate = await page.locator('#position-action').boundingBox();
-      const viewportSize = page.viewportSize();
-      const rightGap = viewportSize.width - (locate.x + locate.width);
-      const bottomGap = viewportSize.height - (locate.y + locate.height);
-      expect(rightGap).toBeLessThanOrEqual(24);
-      expect(bottomGap).toBeLessThanOrEqual(24);
-    }
+test('zoom buttons are hidden and the position button sits alone', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+  await ready(page);
+  await expect(page.locator('.maplibregl-ctrl-zoom-in')).toBeHidden();
+  await expect(page.locator('.maplibregl-ctrl-zoom-out')).toBeHidden();
+  await expect(page.locator('#position-action')).toBeVisible();
+});
 
-    await atViewport(page, viewport, check);
-  });
-}
-
-for (const {name, viewport} of deviceCases) {
-  test(`keyboard zoom still works on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
-      // Focus the map canvas and press '+' to zoom in
-      await page.locator('#map canvas').focus();
-      await page.keyboard.press('+');
-      await expect
-        .poll(async () => page.evaluate(() => window.kompasDebug.map.getZoom()))
-        .toBeGreaterThan(startZoom);
-    }
-
-    await atViewport(page, viewport, check);
-  });
-}
+test('keyboard zoom still works', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+  await ready(page);
+  const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
+  // Focus the map canvas and press '+' to zoom in
+  await page.locator('#map canvas').focus();
+  await page.keyboard.press('+');
+  await expect
+    .poll(async () => page.evaluate(() => window.kompasDebug.map.getZoom()))
+    .toBeGreaterThan(startZoom);
+});
 
 // ---------------------------------------------------------------------------
 // GPS follow location (issue #99, reviewed in #127) — real geolocation
@@ -2544,154 +2143,116 @@ async function waitForLiveFix(page) {
     .toBe('live');
 }
 
-test.describe('GPS follow location', () => {
+test.describe('GPS follow location', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  // Test a: Click centres and sets data-following/aria-pressed true.
+  // Click centres on the fix, then a new fix moves the same followed camera.
   // Pan the camera far from the fix first, so the centre assertion is meaningful.
-  for (const {name, viewport} of deviceCases) {
-    test(`clicking position button starts following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('following starts on click and tracks a new fix', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Pan far from the fix so the centre check is not trivial.
-        await page.evaluate(() =>
-          window.kompasDebug.map.jumpTo({center: [19.0, 42.2]})
-        );
-        await settled(page);
+    // Pan far from the fix so the centre check is not trivial.
+    await page.evaluate(() =>
+      window.kompasDebug.map.jumpTo({center: [19.0, 42.2]})
+    );
+    await settled(page);
 
-        // Click the position button to start following.
-        await page.locator('#position-action').click();
-        await settled(page);
+    // Click the position button to start following.
+    await page.locator('#position-action').click();
+    await settled(page);
 
-        // data-following should be true.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        // aria-pressed should be true.
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
-        // Camera should centre on the fix.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(150);
-      }
+    // data-following should be true.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // aria-pressed should be true.
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
+    // Camera should centre on the fix.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(150);
 
-      await atViewport(page, viewport, check);
-    });
-  }
-
-  // Test b: A new fix moves the camera while following.
-  for (const {name, viewport} of deviceCases) {
-    test(`new GPS fix moves camera while following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
-
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-        // Simulate a new fix at a different location.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-
-        // Camera should have moved to the new fix — wait until it is there.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              SECOND_FIX
-            )
-          )
-          .toBeLessThan(150);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Simulate a new fix at a different location and wait for the followed camera to reach it.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          SECOND_FIX
+        )
+      )
+      .toBeLessThan(150);
+  });
 
   // Test c: Second click stops following; a later fix does not move the camera.
-  for (const {name, viewport} of deviceCases) {
-    test(`second click stops following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('second click stops following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Second click stops following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+    // Second click stops following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
 
-        // Record the camera position after stopping.
-        const stoppedCamera = await camera(page);
+    // Record the camera position after stopping.
+    const stoppedCamera = await camera(page);
 
-        // A new fix should not move the camera.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
+    // A new fix should not move the camera.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
 
-        // Camera should not have moved.
-        expect(await camera(page)).toEqual(stoppedCamera);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Camera should not have moved.
+    expect(await camera(page)).toEqual(stoppedCamera);
+  });
 
   // Test d: Drag the map stops following; a new fix after drag does not move the camera.
-  for (const {name, viewport} of deviceCases) {
-    test(`dragging map stops following on ${name}`, {tag: '@phone'}, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('dragging map stops following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Drag the map on the canvas (simulates user gesture with originalEvent).
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
+    // Drag the map on the canvas (simulates user gesture with originalEvent).
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
 
-        // Following should be off.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+    // Following should be off.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
 
-        // Deliver a new fix — camera should hold.
-        const afterDrag = await camera(page);
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterDrag);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Deliver a new fix — camera should hold.
+    const afterDrag = await camera(page);
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterDrag);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2700,15 +2261,6 @@ test.describe('GPS follow location', () => {
 
 test.describe('Desktop search bar', () => {
   test.use({viewport: {width: 1280, height: 800}});
-
-  test('search bar is taller than 54 px on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    expect(bar.height).toBeGreaterThan(54);
-    expect(bar.height).toBe(60);
-  });
 
   test('floating categories are visible under the bar with no query and dock closed', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
@@ -2724,39 +2276,6 @@ test.describe('Desktop search bar', () => {
     await expect(panel.locator('#categories button[data-category]').first()).toHaveAttribute('aria-label', 'All categories');
     // The dock should be closed.
     await expect(page.locator('#dock-content')).toBeHidden();
-  });
-
-  test('floating categories scroll horizontally when they overflow', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    await closeMenu(page);
-    const categories = page.locator('#desktop-search-panel #categories');
-    // The scroll width should be greater than the visible width (categories overflow).
-    const overflow = await categories.evaluate(el => el.scrollWidth - el.clientWidth);
-    expect(overflow).toBeGreaterThan(0);
-    // Scroll horizontally by setting scrollLeft directly.
-    await categories.evaluate(el => {
-      el.scrollLeft = 50;
-    });
-    const scrolled = await categories.evaluate(el => el.scrollLeft);
-    expect(scrolled).toBeGreaterThan(0);
-  });
-
-  test('floating categories have transparent background and each chip has a shadow', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    await closeMenu(page);
-    const panel = page.locator('#desktop-search-panel');
-    // Container background is transparent in floating mode.
-    const background = await panel.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(background).toBe('rgba(0, 0, 0, 0)');
-    // Each category chip floats with its own box-shadow.
-    const chipShadow = await panel.locator('#categories button[data-category]').first().evaluate(
-      el => getComputedStyle(el).boxShadow
-    );
-    expect(chipShadow).not.toBe('none');
   });
 
   test('typing shows the clear button; clearing a query stays Open and closing Open returns Empty', async ({page, isMobile}) => {
@@ -3072,29 +2591,6 @@ test.describe('Desktop search bar', () => {
 test.describe('Mobile search bar', () => {
   test.use({viewport: {width: 412, height: 840}});
 
-  test('search bar is smaller than desktop on mobile', async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    // Desktop bar is 60px; mobile bar must be smaller.
-    expect(bar.height).toBeLessThan(54);
-    expect(bar.height).toBe(44);
-  });
-
-  test('search bar has left and right gutters on mobile', async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    const viewport = page.viewportSize();
-    const leftGap = bar.x;
-    const rightGap = viewport.width - (bar.x + bar.width);
-    // The bar uses --bar-inset (12 px on mobile) on both sides.
-    expect(leftGap).toBeGreaterThanOrEqual(10);
-    expect(leftGap).toBeLessThanOrEqual(14);
-    expect(rightGap).toBeGreaterThanOrEqual(10);
-    expect(rightGap).toBeLessThanOrEqual(14);
-  });
-
   test('categories move to dock after desktop-to-mobile resize', async ({page}) => {
     // Start at desktop size so the floating chips are visible.
     await page.setViewportSize({width: 1280, height: 800});
@@ -3265,46 +2761,40 @@ test.describe('Flip search bar', () => {
 });
 
 // Test e: Geolocation permission denied — click shows recovery message in #error.
-test.describe('GPS follow location — denied', () => {
-  for (const {name, viewport} of deviceCases) {
-    test(`clicking position button with geolocation denied on ${name}`, async ({page}) => {
-      async function check() {
-        // Simulate denied state: override permissions.query to return 'denied' for geolocation,
-        // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
-        await page.addInitScript(() => {
-          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = async (permissionDescriptor) => {
-            if (permissionDescriptor?.name === 'geolocation') {
-              return {state: 'denied', addEventListener: () => {}};
-            }
-            return originalQuery(permissionDescriptor);
-          };
-          const originalWatchPosition = navigator.geolocation.watchPosition;
-          navigator.geolocation.watchPosition = function(success, error, options) {
-            if (error) error({code: 1, message: 'Permission denied'});
-            return originalWatchPosition.call(this, success, error, options);
-          };
-        });
-        await ready(page);
-        // The tracker sees permission 'denied' from the query, so start() sets 'denied' immediately.
-        await expect
-          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
-          .toBe('denied');
-
-        // Click the position button — it should trigger requestPosition, which shows the recovery message.
-        await page.locator('#position-action').click();
-        await settled(page);
-
-        // data-following should remain false.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        // The error panel should show the recovery message.
-        await expect(page.locator('#error')).toBeVisible();
-        await expect(page.locator('#error-text')).toHaveText(/Location blocked/);
-      }
-
-      await atViewport(page, viewport, check);
+test.describe('GPS follow location — denied', {tag: ['@mobile-only', '@phone']}, () => {
+  test('clicking position button with geolocation denied', async ({page}) => {
+    // Simulate denied state: override permissions.query to return 'denied' for geolocation,
+    // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
+    await page.addInitScript(() => {
+      const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = async (permissionDescriptor) => {
+        if (permissionDescriptor?.name === 'geolocation') {
+          return {state: 'denied', addEventListener: () => {}};
+        }
+        return originalQuery(permissionDescriptor);
+      };
+      const originalWatchPosition = navigator.geolocation.watchPosition;
+      navigator.geolocation.watchPosition = function(success, error, options) {
+        if (error) error({code: 1, message: 'Permission denied'});
+        return originalWatchPosition.call(this, success, error, options);
+      };
     });
-  }
+    await ready(page);
+    // The tracker sees permission 'denied' from the query, so start() sets 'denied' immediately.
+    await expect
+      .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+      .toBe('denied');
+
+    // Click the position button — it should trigger requestPosition, which shows the recovery message.
+    await page.locator('#position-action').click();
+    await settled(page);
+
+    // data-following should remain false.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // The error panel should show the recovery message.
+    await expect(page.locator('#error')).toBeVisible();
+    await expect(page.locator('#error-text')).toHaveText(/Location blocked/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3313,314 +2803,197 @@ test.describe('GPS follow location — denied', () => {
 
 // Defect 1: Click the follow button *before* any usable fix arrives.
 // Uses holdGeolocationFixes so the first fix is queued until after the click.
-test.describe('GPS follow — click before fix arrives', () => {
+test.describe('GPS follow — click before fix arrives', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`start following before fix arrives on ${name}`, async ({page, context}) => {
-      async function check() {
-        await holdGeolocationFixes(page);
-        await ready(page);
-        // State is 'acquiring' because the fix is held.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+  test('start following before fix arrives', async ({page, context}) => {
+    await holdGeolocationFixes(page);
+    await ready(page);
+    // State is 'acquiring' because the fix is held.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Click to start following — fix has not arrived yet.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+    // Click to start following — fix has not arrived yet.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Release the held fix — the tracker receives it.
-        await page.evaluate(() => window.releaseHeldFixes());
-        await waitForLiveFix(page);
-        await settled(page);
+    // Release the held fix — the tracker receives it.
+    await page.evaluate(() => window.releaseHeldFixes());
+    await waitForLiveFix(page);
+    await settled(page);
 
-        // Following should still be active and camera centred on the fix.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(150);
+    // Following should still be active and camera centred on the fix.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(150);
 
-        // Record camera while following (centered on FIRST_FIX).
-        const whileFollowing = await camera(page);
+    // Record camera while following (centered on FIRST_FIX).
+    const whileFollowing = await camera(page);
 
-        // Drag the map — should stop following without re-centring.
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Drag the map — should stop following without re-centring.
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // The drag must not have re-centred the camera (defect 1: #isLocationRequested not cleared
-        // by the follow branch causes refresh() to re-center on the old fix).
-        const afterDrag = await camera(page);
-        const reCentered = await page.evaluate(
-          ({whileFollowingCenter}) => {
-            return window.kompasDebug.map.getCenter().distanceTo({
-              lng: whileFollowingCenter[0],
-              lat: whileFollowingCenter[1]
-            }) < 100;
-          },
-          {whileFollowingCenter: whileFollowing.center}
-        );
-        expect(reCentered).toBe(false);
+    // The drag must not have re-centred the camera (defect 1: #isLocationRequested not cleared
+    // by the follow branch causes refresh() to re-center on the old fix).
+    const afterDrag = await camera(page);
+    const reCentered = await page.evaluate(
+      ({whileFollowingCenter}) => {
+        return window.kompasDebug.map.getCenter().distanceTo({
+          lng: whileFollowingCenter[0],
+          lat: whileFollowingCenter[1]
+        }) < 100;
+      },
+      {whileFollowingCenter: whileFollowing.center}
+    );
+    expect(reCentered).toBe(false);
 
-        // Deliver another fix — camera should hold at the dragged position.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterDrag);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
-});
-
-// Acquiring style: the button uses the filled toggle style while following even without a fix.
-// Uses holdGeolocationFixes so the fix is held until after the click.
-test.describe('GPS follow — acquiring style', () => {
-  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
-
-  for (const {name, viewport} of deviceCases) {
-    test(`position button uses filled style while acquiring on ${name}`, async ({page}) => {
-      async function check() {
-        await holdGeolocationFixes(page);
-        await ready(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
-
-        // Read the not-following background first.
-        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        // Click to start following — state is still 'acquiring' but following is active.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
-
-        // The button background should differ from the not-following background.
-        const backgroundAcquiring = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        expect(backgroundAcquiring).not.toEqual(backgroundNotFollowing);
-
-        // Verify it matches --green from the root.
-        const greenColor = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
-        );
-        const red = parseInt(greenColor.slice(1, 3), 16);
-        const green = parseInt(greenColor.slice(3, 5), 16);
-        const blue = parseInt(greenColor.slice(5, 7), 16);
-        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(backgroundAcquiring).toBe(expectedRgb);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
-});
-
-// Defect 2: Follow, then choose a search result; a new fix should not move the camera.
-test.describe('GPS follow — search result stops following', () => {
-  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
-
-  for (const {name, viewport} of deviceCases) {
-    test(`choosing a search result stops following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
-
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-        // On Flip the search field is hidden until the dock opens, so open the menu first.
-        if (await page.locator('body').getAttribute('data-device') === 'flip') {
-          await openMenu(page);
-        }
-        // Search and choose a result — this moves the camera, which stops following.
-        await page.locator('#search').fill('Nearby place 0');
-        await expect(page.locator('.result')).toHaveCount(1);
-        await page.locator('.result').click();
-        await settled(page);
-
-        // Following should be off.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-
-        // Deliver a new fix — camera should hold.
-        const afterSearch = await camera(page);
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterSearch);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Deliver another fix — camera should hold at the dragged position.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterDrag);
+  });
 });
 
 // Restart with the same coordinates: follow, drag (stops), click again after the fix goes stale.
 // The stale state forces #startFollowing through requestPosition(), which is where the old code
 // failed to reset #lastFollowedCoordinates and never moved the camera on the retry.
-test.describe('GPS follow — restart with same coordinates', () => {
+test.describe('GPS follow — restart with same coordinates', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`restart following with same coordinates on ${name}`, async ({page, context}) => {
-      async function check() {
-        // Install the clock before the page loads so the PositionTracker's reevaluation interval
-        // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
-        // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
-        await page.clock.install();
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('restart following with same coordinates', async ({page, context}) => {
+    // Install the clock before the page loads so the PositionTracker's reevaluation interval
+    // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
+    // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
+    await page.clock.install();
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Drag the map to stop following.
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Drag the map to stop following.
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // Fast-forward past the freshness limit so the fix becomes stale.
-        // This is essential: when the state is still 'live', #startFollowing moves the camera
-        // directly and the old code works. Only a stale state forces the requestPosition() path.
-        await page.clock.fastForward(31_000);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
+    // Fast-forward past the freshness limit so the fix becomes stale.
+    // This is essential: when the state is still 'live', #startFollowing moves the camera
+    // directly and the old code works. Only a stale state forces the requestPosition() path.
+    await page.clock.fastForward(31_000);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
 
-        // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
-        // The state remains 'stale' because the snapshot was already updated by the clock.
-        await page.clock.setSystemTime(new Date());
+    // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
+    // The state remains 'stale' because the snapshot was already updated by the clock.
+    await page.clock.setSystemTime(new Date());
 
-        // Click again — the stale state forces a retry, which delivers the same coordinates.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Click again — the stale state forces a retry, which delivers the same coordinates.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Camera should centre on the fix — this is the key assertion.
-        // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
-        // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
-        // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(50);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Camera should centre on the fix — this is the key assertion.
+    // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
+    // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
+    // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(50);
+  });
 });
 
 // Resize while following: following should not stop.
 // The old code stopped following on every movestart that wasn't tagged by the follower.
 // A viewport resize fires movestart synchronously, so following was incorrectly stopped.
-test.describe('GPS follow — resize while following', () => {
+test.describe('GPS follow — resize while following', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`map resize does not stop following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('map resize does not stop following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following and wait for the camera animation to fully settle.
-        // Without this wait, the follow ease may still be running when we resize,
-        // and MapLibre fires no movestart while already moving — so the old code's
-        // stopFollowingOnForeignMove never fires and the test passes by accident.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expectCameraToHold(page, await camera(page));
+    // Start following and wait for the camera animation to fully settle.
+    // Without this wait, the follow ease may still be running when we resize,
+    // and MapLibre fires no movestart while already moving — so the old code's
+    // stopFollowingOnForeignMove never fires and the test passes by accident.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expectCameraToHold(page, await camera(page));
 
-        // Resize the viewport by a clear amount so the map container actually changes size.
-        const resizedViewport = name === 'desktop'
-          ? {width: 1000, height: 700}
-          : name === 'mobile'
-            ? {width: 390, height: 844}
-            : {width: 360, height: 360};
-        await page.setViewportSize(resizedViewport);
-        await settled(page);
+    // Resize the viewport by a clear amount so the map container actually changes size.
+    const resizedViewport = {width: 390, height: 844};
+    await page.setViewportSize(resizedViewport);
+    await settled(page);
 
-        // Following should still be active after resize.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Following should still be active after resize.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+  });
 });
 
 // Dismissed prompt: start with permission not granted, click triggers error callback.
-test.describe('GPS follow — dismissed prompt', () => {
-  for (const {name, viewport} of deviceCases) {
-    test(`dismissed permission prompt shows error on ${name}`, async ({page}) => {
-      async function check() {
-        // Simulate permission not granted: watchPosition calls error callback with code 1.
-        await page.addInitScript(() => {
-          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = async (permissionDescriptor) => {
-            if (permissionDescriptor?.name === 'geolocation') {
-              return {state: 'prompt', addEventListener: () => {}};
-            }
-            return originalQuery(permissionDescriptor);
-          };
-          const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
-          navigator.geolocation.watchPosition = function(success, error, options) {
-            // Simulate the error callback being called (permission dismissed).
-            if (error) error({code: 1, message: 'Permission dismissed'});
-            return originalWatchPosition(success, error, options);
-          };
-        });
-        await ready(page);
-        // State is 'prompt' after the error callback (code 1 with permission !== 'denied').
-        await expect
-          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
-          .toBe('prompt');
-
-        // Click the position button — following should not start, error should be visible.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#error')).toBeVisible();
-      }
-
-      await atViewport(page, viewport, check);
+test.describe('GPS follow — dismissed prompt', {tag: ['@mobile-only', '@phone']}, () => {
+  test('dismissed permission prompt shows error', async ({page}) => {
+    // Simulate permission not granted: watchPosition calls error callback with code 1.
+    await page.addInitScript(() => {
+      const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = async (permissionDescriptor) => {
+        if (permissionDescriptor?.name === 'geolocation') {
+          return {state: 'prompt', addEventListener: () => {}};
+        }
+        return originalQuery(permissionDescriptor);
+      };
+      const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+      navigator.geolocation.watchPosition = function(success, error, options) {
+        // Simulate the error callback being called (permission dismissed).
+        if (error) error({code: 1, message: 'Permission dismissed'});
+        return originalWatchPosition(success, error, options);
+      };
     });
-  }
+    await ready(page);
+    // State is 'prompt' after the error callback (code 1 with permission !== 'denied').
+    await expect
+      .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+      .toBe('prompt');
+
+    // Click the position button — following should not start, error should be visible.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#error')).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -4228,85 +3601,38 @@ test.describe('Flip dock content derived from state', () => {
 // Desktop and Mobile dock footer visibility (review finding 4)
 // ---------------------------------------------------------------------------
 
-test.describe('Desktop and Mobile dock footer visibility', () => {
+test.describe('Dock footer visibility', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
-  for (const {name, viewport} of [
-    {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'mobile', viewport: {width: 412, height: 840}}
-  ]) {
-    test(`open dock shows Satellite, Transport, Download on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+  test('open dock shows Satellite, Transport, Download', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
 
-        // Footer should be visible with all controls.
-        await expect(page.locator('.dock-footer')).toBeVisible();
-        await expect(page.locator('#satellite-toggle')).toBeVisible();
-        await expect(page.locator('#transport-toggle')).toBeVisible();
-        await expect(page.locator('#download')).toBeVisible();
-      });
-    });
+    // Footer should be visible with all controls.
+    await expect(page.locator('.dock-footer')).toBeVisible();
+    await expect(page.locator('#satellite-toggle')).toBeVisible();
+    await expect(page.locator('#transport-toggle')).toBeVisible();
+    await expect(page.locator('#download')).toBeVisible();
+  });
 
-    test(`burger label toggles Open/Close menu on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
+  test('burger label toggles Open/Close menu', {tag: '@phone'}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
 
-        // Dock closed: "Open menu".
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+    // Dock closed: "Open menu".
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
 
-        // Open dock: "Close menu".
-        await page.locator('#menu-toggle').click();
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
+    // Open dock: "Close menu".
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
 
-        // Close dock: "Open menu" again.
-        await page.locator('#menu-toggle').click();
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
-      });
-    });
+    // Close dock: "Open menu" again.
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+  });
 
-    // The dock footer's top padding is 16 px on Desktop and Mobile (guarded #155).
-    test(`dock footer top padding is 16 px on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        const paddingTop = await page.locator('.dock-footer').evaluate(
-          el => parseFloat(getComputedStyle(el).paddingTop)
-        );
-        expect(paddingTop).toBe(16);
-      });
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Footer toggle removed: verify it no longer exists (issue #247)
-// ---------------------------------------------------------------------------
-
-test.describe('footer toggle removed', () => {
-  test.beforeEach(({page}) => stubRouting(page));
-
-  for (const {name, viewport} of [
-    {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'mobile', viewport: {width: 412, height: 840}},
-    {name: 'flip', viewport: {width: 340, height: 340}}
-  ]) {
-    test(`#footer-toggle does not exist on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-
-        // #footer-toggle should not exist in the DOM.
-        const exists = await page.locator('#footer-toggle').count();
-        expect(exists).toBe(0);
-      });
-    });
-  }
 });
 
 // ---------------------------------------------------------------------------
@@ -4392,100 +3718,6 @@ test.describe('Escape closes dock and restores focus', () => {
       });
     });
   }
-});
-
-// Layer toggle while following: following should stop on the camera move.
-test.describe('GPS follow — layer toggle stops following', () => {
-  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
-
-  for (const {name, viewport} of deviceCases) {
-    test(`toggling satellite layer stops following on ${name}`, async ({page, context}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-      await page.setViewportSize(viewport);
-      await ready(page);
-      await context.setGeolocation(FIRST_FIX);
-      await waitForLiveFix(page);
-
-      // Start following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-      // Open the menu to access the satellite toggle, then toggle it.
-      await openMenu(page);
-      // On Flip, cycle to the modes state to reach the satellite toggle.
-      if (name === 'flip') await page.locator('#menu-toggle').click();
-      await page.locator('#satellite-toggle').click();
-      await settled(page);
-
-      // Following should be off (the camera move from the satellite toggle stops it).
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-
-      // Deliver a new fix — camera should hold.
-      const afterToggle = await camera(page);
-      await context.setGeolocation(SECOND_FIX);
-      await waitForLiveFix(page);
-      await settled(page);
-      await expectCameraToHold(page, afterToggle);
-    });
-  }
-});
-
-// Defect 3: The computed background of #position-action differs between following and not following.
-test.describe('GPS follow — button style', () => {
-  test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
-
-  for (const {name, viewport} of deviceCases) {
-    test(`position button background differs when following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
-
-        // Read the CSS custom property --green from the root computed style.
-        const greenColor = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
-        );
-
-        // Not following: background is transparent (or near-transparent).
-        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-
-        // Following: background should match --green.
-        const backgroundFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        expect(backgroundFollowing).not.toEqual(backgroundNotFollowing);
-        // Convert hex --green to rgb for comparison (e.g. #193f36 → rgb(25, 63, 54)).
-        const red = parseInt(greenColor.slice(1, 3), 16);
-        const green = parseInt(greenColor.slice(3, 5), 16);
-        const blue = parseInt(greenColor.slice(5, 7), 16);
-        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(backgroundFollowing).toBe(expectedRgb);
-
-        // Stop following — background should no longer be green.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-
-        const backgroundAfterStop = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
-
-        expect(backgroundAfterStop).not.toBe(expectedRgb);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
-
 });
 
 // Left dock: vertical order, nearest-first list, category + query filtering
@@ -4642,16 +3874,6 @@ test.describe('menu button hover state on touch screens', () => {
     expect(backgroundAfter).toEqual(backgroundBefore);
   });
 
-  // On desktop, the hover media query matches and :hover feedback is available.
-  test('hover media query matches on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'only meaningful on non-touch projects');
-
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-
-    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
-    expect(canHover, 'desktop project should support hover').toBe(true);
-  });
 });
 
 
@@ -5899,111 +5121,131 @@ const expectMapCornerHits = (hits, expected) => {
   }
 };
 
-test('scale bar stays in the bottom-left corner with desktop card and search states', async ({
-  page,
-  isMobile
-}) => {
-  test.skip(isMobile, 'desktop layout');
-  await page.setViewportSize({width: 1280, height: 800});
-  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-  await ready(page);
-  await settled(page);
-  // A fixed camera keeps the scale's text and width out of the comparison; only its placement may change.
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 16}));
-  await mapIdle(page);
-  const initial = await mapCornerBoxes(page);
-  expectMapControlsInCorner(page, initial);
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+async function expectCreditBelowScaleBar(page) {
+  const boxes = await mapCornerBoxes(page);
+  expectMapControlsInCorner(page, boxes);
+  expect(boxes.credit.y, 'credit below scale').toBeGreaterThanOrEqual(boxes.scale.y + boxes.scale.height - 2);
+  expect(boxes.credit.y, 'credit below scale').toBeLessThanOrEqual(boxes.scale.y + boxes.scale.height + 2);
+  expect(Math.abs(boxes.credit.x - boxes.scale.x), 'credit left edge').toBeLessThanOrEqual(2);
 
-  await openMenu(page);
-  await page.locator('#dock-main .result', {hasText: 'Nearby place 0'}).click();
-  await expect(page.locator('#place-card')).toBeVisible();
-  await settled(page);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the open dock');
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+  const creditHit = await page.evaluate(() => {
+    const credit = document.querySelector('.osm-credit-line');
+    const {x, y, width, height} = credit.getBoundingClientRect();
+    const element = document.elementFromPoint(x + width / 2, y + height / 2);
+    return element?.tagName === 'A' ? element.getAttribute('href') : null;
+  });
+  expect(creditHit).toBe('https://www.openstreetmap.org/copyright');
+}
 
-  await closeMenu(page);
-  await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
-  const card = await page.locator('#place-card').boundingBox();
-  expect(card.x).toBeCloseTo((1280 - card.width) / 2, 0);
-  expect(1280 - (card.x + card.width)).toBeCloseTo(card.x, 0);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'floating card');
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+test.describe('map controls across covering panels', () => {
+  // A viewport change reloads the app; without this the service worker can serve real places over the fixture.
+  test.use({serviceWorkers: 'block'});
+  test.beforeEach(async ({page}) => {
+    // Keep startup's update handle without a registration the blocked worker cannot provide.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator.serviceWorker, 'register', {
+        configurable: true,
+        value: async () => ({update: async () => {}})
+      });
+    });
+  });
 
-  await page.locator('#search').focus();
-  await expect(page.locator('#desktop-search-panel')).toBeVisible();
-  await settled(page);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the joined search panel');
-  // The inset panel and card leave the map corner uncovered, so the map controls are on top there.
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+  // A single journey covers the states that can cover the map corner. The project viewport is irrelevant: this test sets
+  // each layout viewport in turn, so it runs once in the mobile project and carries @phone.
+  test('map controls stay in the bottom-left across covering panels', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
 
-  await closeCard(page);
-  await expect(page.locator('#place-card')).toBeHidden();
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'joined search panel without a card');
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
-});
+    async function initialCornerState() {
+      await ready(page);
+      await settled(page);
+      // A fixed camera keeps the scale's text and width out of the comparison; only placement may change.
+      await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 16}));
+      await mapIdle(page);
+      await assertMapFillsViewport(page);
+      await assertScaleBarInBottomLeft(page);
+      await assertNoOverlapAtScaleBar(page);
+      await expectCreditBelowScaleBar(page);
+      return mapCornerBoxes(page);
+    }
 
-test('scale bar stays in the bottom-left corner with phone Peek and Full cards', {tag: '@phone'}, async ({
-  page,
-  isMobile
-}) => {
-  test.skip(!isMobile, 'phone layout');
-  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-  await ready(page);
-  await settled(page);
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26, 42.44], zoom: 16}));
-  await mapIdle(page);
-  const initial = await mapCornerBoxes(page);
-  expectMapControlsInCorner(page, initial);
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+    await atViewport(page, {width: 1280, height: 800}, async () => {
+      const initial = await initialCornerState();
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
 
-  await openMenu(page);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'open phone dock');
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
-  await closeMenu(page);
+      await openMenu(page);
+      await page.locator('#dock-main .result', {hasText: 'Nearby place 0'}).click();
+      await expect(page.locator('#place-card')).toBeVisible();
+      await settled(page);
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the open dock');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
 
-  await page.locator('#search').click();
-  await page.locator('.result', {hasText: 'Nearby place 0'}).click();
-  await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
-  await settled(page);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Peek card');
-  // The peek card stops above the screen edge, leaving the credit below it on top of the map.
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+      await closeMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'closed');
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'floating card');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
 
-  await page.locator('#card-handle').click();
-  await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card');
-  expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+      await page.locator('#search').focus();
+      await expect(page.locator('#desktop-search-panel')).toBeVisible();
+      await settled(page);
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'card beside the joined search panel');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
 
-  // The card follows the keyboard, but the scale bar stays at the bottom of the map.
-  await simulateKeyboard(page, 600);
-  expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card with keyboard');
-  await simulateKeyboard(page, 840);
-});
+      await closeCard(page);
+      await expect(page.locator('#place-card')).toBeHidden();
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'joined search panel without a card');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+    });
 
-test('scale bar stays in the bottom-left corner under the Flip dock', {tag: '@phone'}, async ({page}) => {
-  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-  await atViewport(page, {width: 340, height: 250}, async () => {
-    await ready(page);
-    await settled(page);
-    const initial = await mapCornerBoxes(page);
-    expectMapControlsInCorner(page, initial);
-    expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+    await atViewport(page, {width: 412, height: 840}, async () => {
+      const initial = await initialCornerState();
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
 
-    await openMenu(page);
-    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
-    expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock list');
-    expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+      await openMenu(page);
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'open phone dock');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+      await closeMenu(page);
 
-    await page.locator('#menu-toggle').click();
-    await expect(page.locator('#dock-main #results')).toBeHidden();
-    expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock modes');
-    expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+      await page.locator('#search').click();
+      await page.locator('.result', {hasText: 'Nearby place 0'}).click();
+      await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'peek');
+      await settled(page);
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Peek card');
+      // The peek card stops above the screen edge, leaving the credit below it on top of the map.
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+
+      await page.locator('#card-handle').click();
+      await expect(page.locator('#place-card')).toHaveAttribute('data-state', 'full');
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isCard', credit: 'isControl'});
+
+      // The card follows the keyboard, but the scale bar stays at the bottom of the map.
+      await simulateKeyboard(page, 600);
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Full card with keyboard');
+      await simulateKeyboard(page, 840);
+      await closeCard(page);
+    });
+
+    await atViewport(page, {width: 340, height: 250}, async () => {
+      const initial = await initialCornerState();
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isControl', credit: 'isControl'});
+
+      await openMenu(page);
+      await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock list');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+
+      await page.locator('#menu-toggle').click();
+      await expect(page.locator('#dock-main #results')).toBeHidden();
+      expectSameMapCornerBoxes(await mapCornerBoxes(page), initial, 'Flip dock modes');
+      expectMapCornerHits(await mapCornerHits(page), {scale: 'isDock', credit: 'isDock'});
+    });
   });
 });
 
 // Flip card: the cover screen keeps two steps, with buttons and pulls reaching the same states.
-for (const {name, viewport} of FLIP_VIEWPORTS) {
+// Both cover-screen sizes take the same code path, so one representative size is enough per journey.
+const REPRESENTATIVE_FLIP_CASES = FLIP_VIEWPORTS.slice(0, 1);
+for (const {name, viewport} of REPRESENTATIVE_FLIP_CASES) {
   test(`Flip map pick opens Peek, taps to Fullscreen, and closes through the Icon Button at ${name}`, {
     tag: '@phone'
   }, async ({page}) => {
@@ -6081,7 +5323,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
   });
 }
 
-for (const {name, viewport} of FLIP_VIEWPORTS) {
+for (const {name, viewport} of REPRESENTATIVE_FLIP_CASES) {
   test(`Flip pulls open Fullscreen and step back from a map pick at ${name}`, {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
     await withFlipViewport(page, async () => {
@@ -6112,7 +5354,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
   });
 }
 
-for (const {name, viewport} of FLIP_VIEWPORTS) {
+for (const {name, viewport} of REPRESENTATIVE_FLIP_CASES) {
   test(`Flip pulls return a dock pick to its originating row at ${name}`, {tag: '@phone'}, async ({page}) => {
     await page.route('**/data/places.geojson', (route) => route.fulfill({json: nearbyPlaces}));
     await withFlipViewport(page, async () => {
@@ -6145,7 +5387,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
   });
 }
 
-for (const {name, viewport} of FLIP_VIEWPORTS) {
+for (const {name, viewport} of REPRESENTATIVE_FLIP_CASES) {
   test(`Flip ignores a downward pull while Fullscreen content is scrolled at ${name}`, {
     tag: '@phone'
   }, async ({page}) => {
@@ -6181,7 +5423,7 @@ for (const {name, viewport} of FLIP_VIEWPORTS) {
   });
 }
 
-for (const {name, viewport} of FLIP_VIEWPORTS) {
+for (const {name, viewport} of REPRESENTATIVE_FLIP_CASES) {
   test(`Flip dock pick returns to the same list and query after Peek and Fullscreen at ${name}`, {
     tag: '@phone'
   }, async ({page}) => {

@@ -1,6 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildFooterVersionText, visibleSourceAttributions} from '../src/attribution.js';
+import {attributionNodes, buildFooterVersionText, visibleSourceAttributions} from '../src/attribution.js';
+
+class FakeAttributionNode {
+  constructor(nodeType, textContent, {tagName = null, attributes = {}} = {}) {
+    this.nodeType = nodeType;
+    this.textContent = textContent;
+    this.tagName = tagName;
+    this.attributes = attributes;
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
+  }
+}
+
+// attributionNodes only reads the parsed body's top-level children. A small parser for the fixtures below keeps this
+// a unit test without adding a DOM implementation as a dependency.
+class FakeAttributionParser {
+  parseFromString(html) {
+    const body = {childNodes: []};
+    const markupPattern = /<(?<tag>[a-z]+)(?<attributes>[^>]*)>(?<content>.*?)<\/\k<tag>>|(?<text>[^<]+)/gi;
+
+    for (const match of html.matchAll(markupPattern)) {
+      if (match.groups.text !== undefined) {
+        body.childNodes.push(new FakeAttributionNode(3, match.groups.text));
+        continue;
+      }
+
+      const attributes = {};
+      const attributePattern = /(?<name>[\w:-]+)="(?<value>[^"]*)"/g;
+      for (const attribute of match.groups.attributes.matchAll(attributePattern))
+        attributes[attribute.groups.name] = attribute.groups.value;
+      body.childNodes.push(
+        new FakeAttributionNode(1, match.groups.content.replace(/<[^>]*>/g, ''), {
+          tagName: match.groups.tag.toUpperCase(),
+          attributes
+        })
+      );
+    }
+
+    return {body};
+  }
+}
+
+globalThis.DOMParser = FakeAttributionParser;
+globalThis.Node = {TEXT_NODE: 3, ELEMENT_NODE: 1};
+
+const fakeTargetDocument = () => ({
+  createTextNode: text => new FakeAttributionNode(3, text),
+  createElement: tagName => new FakeAttributionNode(1, '', {tagName: tagName.toUpperCase()})
+});
 
 function fakeStyle(sources, layers) {
   return {sources, layers};
@@ -110,4 +160,29 @@ test('buildFooterVersionText keeps the version but drops the commit in the compa
   const build = {name: 'Kompas', version: '0.1.0', commit: 'a1b2c3d'};
 
   assert.equal(buildFooterVersionText(build, {compact: true}), 'Kompas 0.1.0 · ');
+});
+
+test('attributionNodes rebuilds only safe top-level links', () => {
+  const nodes = attributionNodes('<a href="https://example.org/">Safe</a>', fakeTargetDocument());
+
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].nodeType, Node.ELEMENT_NODE);
+  assert.equal(nodes[0].tagName, 'A');
+  assert.equal(nodes[0].href, 'https://example.org/');
+  assert.equal(nodes[0].target, '_blank');
+  assert.equal(nodes[0].rel, 'noopener noreferrer');
+  assert.equal(nodes[0].textContent, 'Safe');
+});
+
+test('attributionNodes flattens unsafe, non-https and nested markup', () => {
+  const html =
+    '© OSM <a href="javascript:alert(1)">Unsafe</a> <a href="http://example.org/">Plain</a> ' +
+    '<b>Bold</b> <span><a href="https://example.org/">Nested</a></span>';
+  const nodes = attributionNodes(html, fakeTargetDocument());
+
+  assert.ok(nodes.every(node => node.nodeType === Node.TEXT_NODE));
+  assert.deepEqual(
+    nodes.map(node => node.textContent),
+    ['© OSM ', 'Unsafe', ' ', 'Plain', ' ', 'Bold', ' ', 'Nested']
+  );
 });
