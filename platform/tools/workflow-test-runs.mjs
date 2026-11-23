@@ -81,7 +81,7 @@ const PLANNER_FILE_WORKFLOWS = {
 const DEV_IMAGE_REPOSITORY = 'ghcr.io/ivanov-gv/cg-map';
 const TEST_IMAGE_REPOSITORY = 'ttl.sh/ivanov-gv-cg-map';
 const DEV_IMAGE_LABEL = 'org.opencontainers.image.revision';
-const IMAGE_LABEL_FORMAT = '{{json .Image.Config.Labels}}';
+const IMAGE_CONFIG_LABELS_FORMAT = '{{json .Config.Labels}}';
 const NPM_REGISTRY_USER_CONFIG = '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n';
 
 function inOrder(selected, order) {
@@ -159,6 +159,25 @@ export function browserImageTestVersion(playwrightVersion, runId) {
   return `${playwrightVersion}-r${String(runId)}`;
 }
 
+// The @dev npm spec and its missing-version error always name the same scoped package.
+export function devPackageTarget(packageName) {
+  const coordinate = `@ivanov-gv/${packageName}`;
+  return {
+    spec: `${coordinate}@dev`,
+    missingVersionMessage: `no dev version published for ${coordinate} (tag dev)`
+  };
+}
+
+// Pull the moving tag first: image inspect reads the pulled image's config, not an OCI index's per-platform map.
+export function devImageCommands(name) {
+  const image = `${DEV_IMAGE_REPOSITORY}/${name}:dev`;
+  return {
+    image,
+    pull: ['pull', '--quiet', image],
+    inspect: ['image', 'inspect', '--format', IMAGE_CONFIG_LABELS_FORMAT, image]
+  };
+}
+
 // ci-publish versions each dev package as 0.0.0-dev.<full 40-digit commit>; any other shape is not a dev artifact.
 export function commitFromDevVersion(version) {
   const match = /^0\.0\.0-dev\.([0-9a-f]{40})$/.exec(String(version).trim());
@@ -166,7 +185,7 @@ export function commitFromDevVersion(version) {
   return match[1];
 }
 
-// buildx imagetools prints OCI labels as JSON. The revision label is the source commit of the moving dev tag.
+// docker image inspect prints the config labels as JSON. The revision label is the source commit of the dev tag.
 export function commitFromImageLabels(labelText) {
   let labels;
   try {
@@ -185,13 +204,14 @@ export function isPackageVersionMissing(failureText) {
   return /\bE404\b/.test(String(failureText));
 }
 
-// A missing :dev tag appears as MANIFEST_UNKNOWN or a 404; auth and network errors must not be reported as one.
+// docker pull reports a missing :dev tag as "manifest unknown" or "not found"; access and network errors must not look
+// like one.
 export function isImageTagMissing(failureText) {
   const text = String(failureText);
   const authOrNetworkFailure =
     /\b(?:401|403)\b|unauthori[sz]ed|forbidden|denied|authentication|network|no such host|timed? out/i;
   if (authOrNetworkFailure.test(text)) return false;
-  return /MANIFEST_UNKNOWN|NAME_UNKNOWN|\b404\b|not found/i.test(text);
+  return /manifest unknown|not found/i.test(text);
 }
 
 // npm expands NODE_AUTH_TOKEN when it reads the config, so the token stays in the environment and not on disk.
@@ -299,13 +319,14 @@ export function isTestRunTitle(title) {
 }
 
 function devCommitForPackage(packageName) {
+  const target = devPackageTarget(packageName);
   const auth = npmAuthForRegistry(requireEnv('GH_TOKEN'), process.env);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-package-check-'));
   const userConfig = path.join(directory, '.npmrc');
   fs.writeFileSync(userConfig, auth.userConfig, {mode: 0o600});
   const args = [
     'view',
-    `@ivanov-gv/${packageName}@dev`,
+    target.spec,
     'version',
     '--registry',
     'https://npm.pkg.github.com',
@@ -319,16 +340,15 @@ function devCommitForPackage(packageName) {
     version = execFileSync('npm', args, {cwd: directory, encoding: 'utf8', stdio: 'pipe', env: auth.env});
   } catch (error) {
     const failureText = commandFailureText(error);
-    if (isPackageVersionMissing(failureText))
-      throw new Error(`no dev version published for ${packageName}`, {cause: error});
-    throw new Error(`Could not check @ivanov-gv/${packageName}@dev: ${failureText}`, {cause: error});
+    if (isPackageVersionMissing(failureText)) throw new Error(target.missingVersionMessage, {cause: error});
+    throw new Error(`could not check ${target.spec}: ${failureText}`, {cause: error});
   } finally {
     fs.rmSync(directory, {recursive: true, force: true});
   }
   try {
     return commitFromDevVersion(version);
   } catch (error) {
-    throw new Error(`Unexpected @dev version for @ivanov-gv/${packageName}: ${version}`, {cause: error});
+    throw new Error(`unexpected version for ${target.spec}: ${version}`, {cause: error});
   }
 }
 
@@ -341,27 +361,27 @@ function loginToGithubRegistry() {
 }
 
 function devCommitForImage(name) {
-  const image = `${DEV_IMAGE_REPOSITORY}/${name}:dev`;
-  let labelText;
+  const {image, pull, inspect} = devImageCommands(name);
   try {
-    // The dev tag moves; read it once for its revision label, then pull the immutable commit tag for the test run.
-    labelText = execFileSync(
-      'docker',
-      ['buildx', 'imagetools', 'inspect', '--format', IMAGE_LABEL_FORMAT, image],
-      {encoding: 'utf8', stdio: 'pipe', env: process.env}
-    );
+    // Pull once into the local daemon: buildx inspect's .Image is a per-platform map for an OCI index, while image
+    // inspect reads the pulled image's config. The later commit pull reuses these layers.
+    execFileSync('docker', pull, {encoding: 'utf8', stdio: 'pipe', env: process.env});
   } catch (error) {
     const failureText = commandFailureText(error);
     if (isImageTagMissing(failureText))
-      throw new Error(`${image} has no dev tag; ci-publish on main publishes it: ${failureText}`, {cause: error});
-    throw new Error(`Could not read labels of ${image}: ${failureText}`, {cause: error});
+      throw new Error(`${image}: no dev tag published; ci-publish on main publishes it`, {cause: error});
+    throw new Error(`could not pull ${image}: ${failureText}`, {cause: error});
+  }
+  let labelText;
+  try {
+    labelText = execFileSync('docker', inspect, {encoding: 'utf8', stdio: 'pipe', env: process.env});
+  } catch (error) {
+    throw new Error(`could not read labels of ${image}: ${commandFailureText(error)}`, {cause: error});
   }
   try {
     return commitFromImageLabels(labelText);
   } catch (error) {
-    throw new Error(`${image} has no valid ${DEV_IMAGE_LABEL} label; ci-publish on main publishes it: ${labelText}`, {
-      cause: error
-    });
+    throw new Error(`${image}: no valid ${DEV_IMAGE_LABEL} label; ci-publish on main publishes it`, {cause: error});
   }
 }
 

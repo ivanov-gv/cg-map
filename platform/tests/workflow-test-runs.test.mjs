@@ -4,6 +4,8 @@ import {
   browserImageTestVersion,
   commitFromDevVersion,
   commitFromImageLabels,
+  devImageCommands,
+  devPackageTarget,
   dispatchArguments,
   dispatchAvailability,
   findDispatchedRun,
@@ -118,6 +120,19 @@ test('test versions are unique and follow each registry\'s rules', () => {
   assert.throws(() => browserImageTestVersion('latest', 12), /three numbers/);
 });
 
+test('dev package lookups and errors name the same scoped package', () => {
+  const target = devPackageTarget('map-core');
+  assert.equal(target.spec, '@ivanov-gv/map-core@dev');
+  assert.equal(target.missingVersionMessage, 'no dev version published for @ivanov-gv/map-core (tag dev)');
+});
+
+test('image labels come from a pulled image, not an OCI index', () => {
+  const {image, pull, inspect} = devImageCommands('map-core');
+  assert.equal(image, 'ghcr.io/ivanov-gv/cg-map/map-core:dev');
+  assert.deepEqual(pull, ['pull', '--quiet', image]);
+  assert.deepEqual(inspect, ['image', 'inspect', '--format', '{{json .Config.Labels}}', image]);
+});
+
 test('a dev package version names the commit it was published from', () => {
   const commit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   assert.equal(commitFromDevVersion(`0.0.0-dev.${commit}\n`), commit);
@@ -145,14 +160,22 @@ test('only a missing npm tag is a missing dev package', () => {
 });
 
 test('a missing image tag is told apart from a registry failure', () => {
-  assert.equal(isImageTagMissing('ERROR: MANIFEST_UNKNOWN: manifest tagged by "dev" is not found'), true);
-  assert.equal(isImageTagMissing('unexpected status from GET request: 404 Not Found'), true);
-  assert.equal(isImageTagMissing('failed to fetch anonymous token: 401 Unauthorized'), false);
+  const image = 'ghcr.io/ivanov-gv/cg-map/map-core:dev';
+  assert.equal(
+    isImageTagMissing(`Error response from daemon: manifest for ${image} not found: manifest unknown`),
+    true
+  );
+  assert.equal(isImageTagMissing('Error response from daemon: manifest unknown'), true);
+  assert.equal(
+    isImageTagMissing('Error response from daemon: pull access denied for map-core, repository does not exist'),
+    false
+  );
 });
 
 test('auth and network failures are not a missing image tag', () => {
+  assert.equal(isImageTagMissing('Error response from daemon: access denied'), false);
+  assert.equal(isImageTagMissing('error during connect: dial tcp: lookup docker.example.com: no such host'), false);
   assert.equal(isImageTagMissing('authentication failed: token endpoint returned 404 Not Found'), false);
-  assert.equal(isImageTagMissing('network error: 404 Not Found while reading manifest'), false);
 });
 
 test('npm auth keeps the token in the environment, not the registry config', () => {
