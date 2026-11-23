@@ -174,14 +174,15 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
-municipalities.geojson), `settlements`, and `places`; each group replaces only its own source files. A partial run must
-use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a full extract. The `buildings`
-group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places`
-group in the same run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that
-join; this Feature does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed
-`land.geojson` as its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point.
-Run them together when refreshing either source. `context-countries.geojson` is a preserved input to the land and water
-layers, refreshed only on a full run. Fix the policy, then review the new facts as above.
+municipalities.geojson), `settlements`, `places`, and `protected-areas` (protected-areas.geojson); each group replaces
+only its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails
+and asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
+supplies footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups
+together when refreshing either side of that join; this Feature does not refresh places, so the published snapshot has
+no such joins. A `borders` run uses reviewed `land.geojson` as its country outline; a `settlements` run uses reviewed
+`municipalities.geojson` to assign each point. Run them together when refreshing either source.
+`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
+policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the

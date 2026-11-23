@@ -82,6 +82,7 @@ export function longAxisLine(outerRing) {
   return [toDegrees(start), toDegrees(end)];
 }
 
+// One long-axis label line per polygon part with a usable outer ring, each carrying the feature's properties.
 function labelLines(feature) {
   const polygons = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
   return polygons

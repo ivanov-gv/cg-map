@@ -70,6 +70,7 @@ GENERATED_FILES = (
     'land.geojson',
     'municipalities.geojson',
     'places.geojson',
+    'protected-areas.geojson',
     'provenance.json',
     'road-nodes.geojson',
     'roads.geojson',
@@ -103,6 +104,7 @@ LAYER_FILES = {
     'settlements': ('settlements.geojson',),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
+    'protected-areas': ('protected-areas.geojson',),
 }
 COVERED_SEA = {
     'type': 'Polygon',
@@ -551,6 +553,13 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(grass['kind'], 'grass')
         self.assertEqual(grass['osmTag'], 'landuse=grass')
         self.assertNotIn('destination', grass)
+        # The named reserve is a map name instead, in its own source with its OSM identity.
+        protected_areas = features_by_entity_id(self.first_root, 'protected-areas.geojson')
+        reserve = single_feature(protected_areas, 'way/5011')['properties']
+        self.assertEqual(reserve['kind'], 'protected-area')
+        self.assertEqual(reserve['osmTag'], 'leisure=nature_reserve')
+        self.assertEqual(reserve['name'], 'Test Forest Park')
+        self.assertEqual(reserve['entityVersion'], 39)
 
     def test_absent_and_blank_names_are_omitted(self):
         extract(self.first_root)

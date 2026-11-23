@@ -13,6 +13,7 @@ DETAIL_SIMPLIFY_DEGREES = 0.0001
 
 # A park forest such as Park šuma Gorica is mapped as a protected area over unnamed woods. Its name belongs on the map,
 # but the area is no land cover, so it gets its own source instead of a land kind. The first matching tag wins.
+# data/tools/check-data.mjs accepts exactly these tags (protectedAreaTags); a data test keeps the two lists equal.
 PROTECTED_AREA_TAGS = (
     ('leisure', 'nature_reserve'),
     ('boundary', 'protected_area'),
