@@ -12,6 +12,8 @@ export const basemapColors = {
   sunlitSlope: '#c9ddb2',
   shadedSlope: '#b3cf98',
   contour: '#8c7a5e',
+  // Halfway between land and the sunlit slope: most heights sit on land, the hill heights the wiki cares about on green.
+  contourLabelHalo: '#dce6ca',
   summit: '#5e5040',
   summitHalo: '#f6f3ea',
   parkName: '#4e7a3e',
