@@ -21,6 +21,10 @@ Canyon walls are nested bands offset from each canyon rim toward the water, dark
 relief contract's rule that every rim runs with the river on its right. Bridge decks reuse their street's casing width
 and add dark edges.
 
+Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
+and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
+it, since the style has no sprite.
+
 ## Lifecycle
 
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite

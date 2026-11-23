@@ -1,6 +1,7 @@
 import {basemapColors as colors} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 import {canyonLayers} from './canyon-layers.js';
+import {hillLabelLayers, slopeLayers} from './hill-layers.js';
 
 const source = 'basemap';
 const roadKind = ['get', 'kind'];
@@ -318,13 +319,15 @@ export function mapStyle(basemapURL, assetBaseURL) {
     },
     layers: [
       ...landLayers(),
+      ...slopeLayers(),
       ...canyonLayers(),
       ...waterLayers(),
       ...buildingLayers(),
       ...streetLayers(),
       ...bridgeLayers(),
       ...walkingLayers(),
-      ...labelLayers()
+      ...labelLayers(),
+      ...hillLabelLayers()
     ]
   };
 }
