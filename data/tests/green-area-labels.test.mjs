@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {longAxisLine} from '../tools/green-area-labels.mjs';
+import {greenAreaLabelLines, longAxisLine} from '../tools/green-area-labels.mjs';
 
 const metresPerDegreeLatitude = 111320;
 const originLatitude = 42.44;
@@ -27,4 +27,14 @@ test('a label line follows the long side of a turned area', () => {
   assert.ok(Math.abs(lineAngle - angle) < 0.001, `angle ${lineAngle}`);
   assert.ok(Math.abs(lineLength - 160) < toleranceMetres, `length ${lineLength}`);
   assert.ok(Math.hypot(...centre) < toleranceMetres, `centre ${centre}`);
+});
+
+// Park šuma Gorica is named only as a protected area; a protected area repeating a park's name adds no second label.
+test('protected areas add their names unless a green area already shows them', () => {
+  const square = [[19.27, 42.44], [19.28, 42.44], [19.28, 42.45], [19.27, 42.45], [19.27, 42.44]];
+  const area = properties => ({type: 'Feature', properties, geometry: {type: 'Polygon', coordinates: [square]}});
+  const land = [area({kind: 'park', name: 'Zlatica'}), area({kind: 'woods'})];
+  const protectedAreas = [area({kind: 'protected-area', name: 'Park šuma Gorica'}), area({kind: 'protected-area', name: 'Zlatica'})];
+  const names = greenAreaLabelLines(land, ['park', 'woods'], protectedAreas).map(line => line.properties.name);
+  assert.deepEqual(names, ['Zlatica', 'Park šuma Gorica']);
 });

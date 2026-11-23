@@ -20,6 +20,7 @@ sys.path.insert(0, str(TOOLS))
 
 from osm_extract import ExtractionState, cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
+from osm_extract.protected_areas import protected_area_tag  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
 from osm_extract.settlements import (  # noqa: E402
     NEAREST_MUNICIPALITY_LIMIT_DEGREES, SettlementsLayer, municipality_at,
@@ -69,6 +70,7 @@ GENERATED_FILES = (
     'land.geojson',
     'municipalities.geojson',
     'places.geojson',
+    'protected-areas.geojson',
     'provenance.json',
     'road-nodes.geojson',
     'roads.geojson',
@@ -102,6 +104,7 @@ LAYER_FILES = {
     'settlements': ('settlements.geojson',),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
+    'protected-areas': ('protected-areas.geojson',),
 }
 COVERED_SEA = {
     'type': 'Polygon',
@@ -550,6 +553,13 @@ class OsmExtractTest(unittest.TestCase):
         self.assertEqual(grass['kind'], 'grass')
         self.assertEqual(grass['osmTag'], 'landuse=grass')
         self.assertNotIn('destination', grass)
+        # The named reserve is a map name instead, in its own source with its OSM identity.
+        protected_areas = features_by_entity_id(self.first_root, 'protected-areas.geojson')
+        reserve = single_feature(protected_areas, 'way/5011')['properties']
+        self.assertEqual(reserve['kind'], 'protected-area')
+        self.assertEqual(reserve['osmTag'], 'leisure=nature_reserve')
+        self.assertEqual(reserve['name'], 'Test Forest Park')
+        self.assertEqual(reserve['entityVersion'], 39)
 
     def test_absent_and_blank_names_are_omitted(self):
         extract(self.first_root)
@@ -869,7 +879,7 @@ class OsmExtractTest(unittest.TestCase):
         reviewed_fields = {
             'export_date': 'reviewed date',
             'upstream_snapshot': 'reviewed snapshot',
-            'coverage': 'reviewed coverage',
+            'coverage': 'reviewed coverage © contributors',
             'input_url': 'reviewed URL',
             'input_date': 'reviewed input date',
             'detail_bbox': [1, 2, 3, 4],
@@ -883,7 +893,9 @@ class OsmExtractTest(unittest.TestCase):
         provenance['layers']['water.geojson']['sha256'] = 'stale checksum'
         provenance_path.write_text(json.dumps(provenance, indent=2) + '\n')
         extract(self.first_root, layers=['water'])
-        updated = json.loads(provenance_path.read_text(encoding='utf-8'))
+        updated_text = provenance_path.read_text(encoding='utf-8')
+        self.assertIn('©', updated_text, 'provenance keeps UTF-8 text unescaped')
+        updated = json.loads(updated_text)
         for field, expected in reviewed_fields.items():
             with self.subTest(field=field):
                 self.assertEqual(updated[field], expected)
@@ -986,6 +998,17 @@ class OsmExtractTest(unittest.TestCase):
             after['buildings.geojson'], before['buildings.geojson']
         )
         self.assertEqual(after['roads.geojson'], before['roads.geojson'])
+
+
+class ProtectedAreaTagTest(unittest.TestCase):
+    """A named protected area is a map name; an unnamed one or plain land cover is not."""
+
+    def test_named_reserves_and_protected_areas_are_kept_by_their_first_tag(self):
+        gorica = {'name': 'Park šuma Gorica', 'leisure': 'nature_reserve', 'boundary': 'protected_area'}
+        self.assertEqual(protected_area_tag(gorica), 'leisure=nature_reserve')
+        self.assertEqual(protected_area_tag({'name': 'Zeta', 'boundary': 'protected_area'}), 'boundary=protected_area')
+        self.assertIsNone(protected_area_tag({'leisure': 'nature_reserve'}))
+        self.assertIsNone(protected_area_tag({'name': 'Zlatica', 'leisure': 'park'}))
 
 
 class PathClassTest(unittest.TestCase):

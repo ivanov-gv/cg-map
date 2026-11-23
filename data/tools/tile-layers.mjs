@@ -107,10 +107,18 @@ export const TILE_LAYERS = [
     keep: (tags, zoom) => zoom >= MINOR_SUMMIT_ZOOM || Boolean(tags.name)
   },
   {
+    name: 'protected_areas',
+    sourceFile: 'protected-areas.geojson',
+    minZoom: 10,
+    // Named protected areas are picked by name on the map; they are no land cover, so a style draws no fill for them.
+    fields: ['kind', 'name', 'name:en']
+  },
+  {
     name: 'green_area_labels',
     sourceFile: 'land.geojson',
     minZoom: 13,
-    // The tile builder derives one long-axis line per named green area (green-area-labels.mjs) for its name label.
+    // The tile builder derives one long-axis line per named green area and per named protected area
+    // (green-area-labels.mjs, protected-areas.geojson) for its name label.
     fields: ['name', 'name:en']
   },
   {

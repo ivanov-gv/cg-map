@@ -64,6 +64,11 @@ upstream version; clipped or split parts keep one identity and gain `entityPart`
 placement and ring order. It is not a full OSM semantic/cartographic pipeline; see
 [architecture](../docs/system-architecture/architecture.md) before expanding coverage.
 
+Issue #402 adds `sources/protected-areas.geojson` from the same reviewed PBF (`--layers protected-areas`): the four
+named protected areas that reach the detail box (`leisure=nature_reserve`, `boundary=protected_area`,
+`boundary=national_park`), among them way 28132307, Park šuma Gorica. They are names for the map, not land cover; see
+[decision 0036](../docs/decisions/0036-protected-areas-name-the-map-not-land.md).
+
 Issue #328 adds three OSM-derived read-only sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009
 named place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26
 areas (25 municipalities and one derived unassigned-water area). Together they are 2,605,818 bytes; counts, byte sizes
@@ -198,12 +203,13 @@ remain in their own provenance files.
 | `slopes.geojson`             | 186 polygons                                 | 456,808    |
 | `ridges.geojson`             | 31 lines                                     | 19,666     |
 | `canyon-rims.geojson`        | 50 segments                                  | 44,838     |
+| `protected-areas.geojson`    | 4 named protected areas                      | 39,710     |
 | `transport-stops.geojson`    | 719 stops                                    | 219,913    |
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-2a06727ae1de5c70.pmtiles`, 22,719,076 bytes with SHA-256
-`2a06727ae1de5c70e9890e96eadaaddf834fb35fcd3d92501576d9b7fc278941`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-566a9be61e898be8.pmtiles`, 23,149,168 bytes with SHA-256
+`566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,

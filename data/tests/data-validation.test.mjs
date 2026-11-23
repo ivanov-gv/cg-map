@@ -12,6 +12,8 @@ import {
   validateCollection,
   validateMunicipalities,
   validateRelief,
+  validateProtectedAreas,
+  protectedAreaTags,
   validateRoadNodes,
   validateRoads,
   validateStops,
@@ -876,6 +878,30 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
       assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
   }
+});
+
+// A protected area is only worth publishing with its name; the label layer relies on this check to skip none.
+test('protected-area validation rejects an unnamed area, a wrong kind and an unsupported tag', () => {
+  const areas = JSON.parse(fs.readFileSync('data/sources/protected-areas.geojson'));
+  assert.equal(validateProtectedAreas(areas, {contractsDirectory}), areas.features.length);
+  const mutations = [
+    data => {delete data.features[0].properties.name;},
+    data => {data.features[0].properties.kind = 'park';},
+    data => {data.features[0].properties.osmTag = 'leisure=park';}
+  ];
+  for (const change of mutations) {
+    const bad = structuredClone(areas);
+    change(bad);
+    assert.throws(() => validateProtectedAreas(bad, {contractsDirectory}));
+  }
+});
+
+// The extractor and the validator name the same tags; a tag added on one side only would fail the next re-extract.
+test('the extractor and check-data accept the same protected-area tags', () => {
+  const extractor = fs.readFileSync('data/tools/osm_extract/protected_areas.py', 'utf8');
+  const tagList = /PROTECTED_AREA_TAGS = \(([\s\S]*?)\n\)/.exec(extractor)[1];
+  const extractorTags = [...tagList.matchAll(/\('(\w+)', '(\w+)'\)/g)].map(([, key, value]) => `${key}=${value}`);
+  assert.deepEqual(extractorTags.sort(), [...protectedAreaTags].sort());
 });
 
 test('the editor bundle keeps its thirteen editable sources and excludes relief files', async t => {

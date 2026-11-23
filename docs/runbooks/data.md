@@ -80,25 +80,27 @@ layer list to the packager. The builder derives one field that no source stores:
 walking path whose midpoint lies inside a green land area (`data/tools/green-areas.mjs`, green kinds from the relief
 build parameters), so a style can draw park routes apart from city footpaths. The `green_area_labels` layer is derived
 too: one line along the long side of each named green area, from its smallest enclosing rectangle
-(`data/tools/green-area-labels.mjs`), for the area's name.
+(`data/tools/green-area-labels.mjs`), for the area's name, plus one per named protected area whose name no green area
+already shows.
 
-| Layer             | Source file                  | Zooms                                         | Fields                                                                                                                        |
-| ----------------- | ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| land              | `land.geojson`               | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                                      |
-| water             | `water.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
-| roads             | `roads.geojson`              | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
-| buildings         | `buildings.geojson`          | 13–17                                         | `kind`, `building:levels`                                                                                                     |
-| contours          | `contours.geojson`           | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
-| slopes            | `slopes.geojson`             | 12–17                                         | `aspect`                                                                                                                      |
-| ridges            | `ridges.geojson`             | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
-| canyon_rims       | `canyon-rims.geojson`        | 13–17                                         | `river`, `bank`                                                                                                               |
-| summits           | `summits.geojson`            | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
-| green_area_labels | `land.geojson` (derived)     | 13–17                                         | `name`, `name:en`                                                                                                             |
-| settlements       | `settlements.geojson`        | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                                     |
-| borders           | `border-edges.geojson`       | 6–17                                          | `left`, `right`                                                                                                               |
-| municipalities    | `municipalities.geojson`     | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                                              |
-| road_nodes        | `road-nodes.geojson`         | 16–17                                         | `kind`, `name`                                                                                                                |
-| entrances         | `building-entrances.geojson` | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                                              |
+| Layer             | Source file                                         | Zooms                                         | Fields                                                                                                                        |
+| ----------------- | --------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| land              | `land.geojson`                                      | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                                      |
+| water             | `water.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
+| roads             | `roads.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
+| buildings         | `buildings.geojson`                                 | 13–17                                         | `kind`, `building:levels`                                                                                                     |
+| contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
+| slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
+| ridges            | `ridges.geojson`                                    | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
+| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`                                                                                                               |
+| summits           | `summits.geojson`                                   | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
+| protected_areas   | `protected-areas.geojson`                           | 10–17                                         | `kind`, `name`, `name:en`                                                                                                     |
+| green_area_labels | `land.geojson`, `protected-areas.geojson` (derived) | 13–17                                         | `name`, `name:en`                                                                                                             |
+| settlements       | `settlements.geojson`                               | capital/city 5, town 8, village 11, others 13 | `name`, `name:en`, `rank`                                                                                                     |
+| borders           | `border-edges.geojson`                              | 6–17                                          | `left`, `right`                                                                                                               |
+| municipalities    | `municipalities.geojson`                            | 8–17                                          | `name`, `name:en` (label point, not the polygon)                                                                              |
+| road_nodes        | `road-nodes.geojson`                                | 16–17                                         | `kind`, `name`                                                                                                                |
+| entrances         | `building-entrances.geojson`                        | 16–17                                         | `entrance`, `ref`, `level`, `door`, `wheelchair`                                                                              |
 
 The table lists the fields written into tiles, not every source tag. Index contours start at zoom 12 and all contour
 lines at 14; named summits start at 9 and minor ones at 13; settlement ranks enter at 5, 8, 11 and 13. Paths and
@@ -173,14 +175,15 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
-municipalities.geojson), `settlements`, and `places`; each group replaces only its own source files. A partial run must
-use the PBF whose SHA-256 is in provenance.json; a different input fails and asks for a full extract. The `buildings`
-group writes both `buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places`
-group in the same run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that
-join; this Feature does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed
-`land.geojson` as its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point.
-Run them together when refreshing either source. `context-countries.geojson` is a preserved input to the land and water
-layers, refreshed only on a full run. Fix the policy, then review the new facts as above.
+municipalities.geojson), `settlements`, `places`, and `protected-areas` (protected-areas.geojson); each group replaces
+only its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails
+and asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
+supplies footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups
+together when refreshing either side of that join; this Feature does not refresh places, so the published snapshot has
+no such joins. A `borders` run uses reviewed `land.geojson` as its country outline; a `settlements` run uses reviewed
+`municipalities.geojson` to assign each point. Run them together when refreshing either source.
+`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
+policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
@@ -270,9 +273,11 @@ changing it. Browser tests also exercise the actual reviewed archive and imagery
 
 The `land` layer publishes named kinds and the OSM tag that selected each one. When an object carries several candidate
 tags, the first rule in `data/tools/osm_extract/land.py` wins. Only a land-cover tag creates a feature: a protected-area
-boundary or `place=locality` alone is not green cover. A meadow or grass area gets `destination: true` when it is named,
-is mapped as a common (`leisure=common`), or contains a named place, POI or peak node in the detail box. Green
-multipolygons keep their holes.
+boundary or `place=locality` alone is not green cover. Named protected areas (`leisure=nature_reserve`,
+`boundary=protected_area`, `boundary=national_park`) go to their own read-only `protected-areas.geojson` instead, from
+the `protected-areas` extract group: a park forest such as Park šuma Gorica is named only there, over unnamed woods. A
+meadow or grass area gets `destination: true` when it is named, is mapped as a common (`leisure=common`), or contains a
+named place, POI or peak node in the detail box. Green multipolygons keep their holes.
 
 The `water` layer publishes lake, river, reservoir, pond, basin and generic water areas. River and canal lines stay
 countrywide; stream, ditch and drain lines are clipped to the detail box and gain `entityPart` when clipped. Waterway

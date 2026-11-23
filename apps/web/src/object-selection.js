@@ -1,4 +1,5 @@
-const selectableSourceLayers = ['buildings', 'land', 'water', 'roads'];
+// Protected areas are picked by name over unnamed woods and water, so they need the same outline.
+const selectableSourceLayers = ['buildings', 'land', 'protected_areas', 'water', 'roads'];
 const emptyFilter = ['==', ['id'], -1];
 
 // Filter the original vector features instead of copying one clipped tile's

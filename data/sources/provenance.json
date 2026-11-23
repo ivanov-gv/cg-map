@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 22719076,
+    "bytes": 23149168,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -21,18 +21,18 @@
       "canyon_rims": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 34530,
+          "13-16": 34534,
           "9-12": 0
         },
-        "bytes": 34530
+        "bytes": 34534
       },
       "contours": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 726387,
-          "9-12": 17104
+          "13-16": 725465,
+          "9-12": 17109
         },
-        "bytes": 743491
+        "bytes": 742574
       },
       "entrances": {
         "byZoomBand": {
@@ -41,6 +41,14 @@
           "9-12": 0
         },
         "bytes": 4192
+      },
+      "green_area_labels": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 52419,
+          "9-12": 0
+        },
+        "bytes": 52419
       },
       "land": {
         "byZoomBand": {
@@ -57,6 +65,14 @@
           "9-12": 9895
         },
         "bytes": 23241
+      },
+      "protected_areas": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 694143,
+          "9-12": 23179
+        },
+        "bytes": 717322
       },
       "ridges": {
         "byZoomBand": {
@@ -77,10 +93,10 @@
       "roads": {
         "byZoomBand": {
           "0-8": 534605,
-          "13-16": 4614604,
-          "9-12": 1895976
+          "13-16": 4621305,
+          "9-12": 1896054
         },
-        "bytes": 7045185
+        "bytes": 7051964
       },
       "settlements": {
         "byZoomBand": {
@@ -115,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-2a06727ae1de5c70.pmtiles",
-    "sha256": "2a06727ae1de5c70e9890e96eadaaddf834fb35fcd3d92501576d9b7fc278941",
+    "file": "montenegro-566a9be61e898be8.pmtiles",
+    "sha256": "566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9",
     "tiles": 229422
   },
   "building_details": {
@@ -219,6 +235,11 @@
       "bytes": 878446,
       "features": 26,
       "sha256": "8cc7e03b55ee5d99246dd37eba6f4b387496cae3d50647891bb03faf5d0d7a86"
+    },
+    "protected-areas.geojson": {
+      "bytes": 39710,
+      "features": 4,
+      "sha256": "658f5528c5fe14e63bd2811dcfb305142c7101a4379943aea5da75824b098b3d"
     },
     "ridges.geojson": {
       "bytes": 19666,

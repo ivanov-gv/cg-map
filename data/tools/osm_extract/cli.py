@@ -21,6 +21,7 @@ from .country import CountryLayer
 from .identity import adopt_collection
 from .land import LandLayer
 from .places import PlacesLayer
+from .protected_areas import ProtectedAreasLayer
 from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
 from .settlements import SettlementsLayer
@@ -45,12 +46,14 @@ LAYER_GROUPS = {
     'settlements': (SettlementsLayer,),
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
+    'protected-areas': (ProtectedAreasLayer,),
 }
 # Country geometry is finalised before borders clip municipalities to land;
 # settlements then use those areas to assign their municipality. Water and
 # places finish last with the reviewed outline and building footprints.
 FINISH_ORDER = (
-    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places'
+    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places',
+    'protected-areas'
 )
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
@@ -276,8 +279,9 @@ def updated_provenance(root, options, filenames, input_hash, is_partial, details
             },
         })
     provenance_path = root / 'data/sources/provenance.json'
+    # UTF-8 like the relief build, which writes the same file: escaping would rewrite its © notices on every run.
     provenance_path.write_text(
-        json.dumps(provenance, indent=2, sort_keys=True) + '\n',
+        json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
         encoding='utf-8'
     )
 
