@@ -6,6 +6,7 @@ import {
   dispatchAvailability,
   findDispatchedRun,
   formatWorkflowTestRuns,
+  isPackageVersionMissing,
   isTestRunTitle,
   packageTestVersion,
   playwrightVersionFromLock,
@@ -234,4 +235,10 @@ test('an unavailable workflow is exempt, but an API failure is not', () => {
     () => dispatchAvailability('ci-publish.yml', {errorText: 'error'}),
     /Could not look up ci-publish\.yml/
   );
+});
+
+test('only a not-found npm answer means the dev package is missing', () => {
+  assert.equal(isPackageVersionMissing('npm error code E404\nnpm error 404 Not Found'), true);
+  assert.equal(isPackageVersionMissing('npm error 401 Unauthorized - unauthenticated'), false);
+  assert.equal(isPackageVersionMissing('npm error code E403\nnpm error 403 Forbidden'), false);
 });

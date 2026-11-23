@@ -285,6 +285,12 @@ export function isTestRunTitle(title) {
   return /\btest_run=true\b/.test(String(title));
 }
 
+// Only a not-found answer means the dev package is absent. Any other npm failure (401, 403, a network error) must stop
+// the run instead of looking like a missing artifact.
+export function isPackageVersionMissing(failureText) {
+  return /\bE404\b/.test(String(failureText));
+}
+
 function packageExists(packageName, commit) {
   const token = requireEnv('GH_TOKEN');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-package-check-'));
@@ -300,7 +306,13 @@ function packageExists(packageName, commit) {
     userConfig
   ];
   try {
-    return commandSucceeds('npm', args, {env: process.env});
+    // Run outside the repository: its .npmrc maps the token to NODE_AUTH_TOKEN and would override this userconfig.
+    execFileSync('npm', args, {cwd: directory, stdio: 'pipe', env: process.env});
+    return true;
+  } catch (error) {
+    const failureText = commandFailureText(error);
+    if (isPackageVersionMissing(failureText)) return false;
+    throw new Error(`Could not check @ivanov-gv/${packageName}@0.0.0-dev.${commit}: ${failureText}`, {cause: error});
   } finally {
     fs.rmSync(directory, {recursive: true, force: true});
   }
