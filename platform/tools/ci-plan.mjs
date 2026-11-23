@@ -271,10 +271,10 @@ export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
   return {include: areas.flatMap(area => browserJobs(area, areaTable))};
 }
 
-// Workflow test-run calls prove the changed workflow itself, so they run every browser area rather than the changed
-// files' narrow selection. A workflow that edits the planner needs the same full matrix in both test-run modes.
-export const ALL_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_AREAS));
-export const ALL_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_EDITOR_AREAS, EDITOR_BROWSER_AREAS));
+// A separate test call proves the workflow's jobs and steps, not every test: discover runs 5 tests in one web job and
+// selection runs 8 in one editor job, with no sharding. The full matrices stay in the PR's regular browser calls.
+export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
+export const SMOKE_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(['selection'], EDITOR_BROWSER_AREAS));
 
 // A change to an app, or to what it is built from, publishes that app's image.
 export function imageMatrix(folders) {
@@ -282,19 +282,31 @@ export function imageMatrix(folders) {
   return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
+// A changed folder workflow already has a regular call whose folder the diff selected, so that call runs in test-run
+// mode instead of adding a second call. Workflows without a folder call, such as ci-publish, keep a separate one.
+function partitionCiTestRuns(ciWorkflows, folders) {
+  const inPlace = ciWorkflows.filter(workflow => {
+    const folder = workflow.replace(/^ci-/, '').replace(/\.yml$/, '');
+    return FOLDERS.includes(folder) && folders.includes(folder);
+  });
+  return {inPlace, separate: ciWorkflows.filter(workflow => !inPlace.includes(workflow))};
+}
+
 export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   const testRuns = selectWorkflowTestRuns(changedFiles);
+  const {inPlace, separate} = partitionCiTestRuns(testRuns.ci, folders);
   return [
     ...folderLines,
     `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
     `editor_browser_matrix=${JSON.stringify(browserMatrix(editorAreas, EDITOR_BROWSER_AREAS))}`,
     `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
-    `ci_test_runs=${JSON.stringify(testRuns.ci)}`,
+    `ci_in_place_test_runs=${JSON.stringify(inPlace)}`,
+    `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
     `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
-    `all_browser_matrix=${ALL_BROWSER_MATRIX}`,
-    `all_editor_browser_matrix=${ALL_EDITOR_BROWSER_MATRIX}`
+    `smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`,
+    `smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`
   ].join('\n');
 }
 

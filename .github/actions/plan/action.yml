@@ -61,8 +61,11 @@ outputs:
   image_matrix:
     description: Image build matrix for publishing.
     value: ${{ steps.plan.outputs.image_matrix }}
+  ci_in_place_test_runs:
+    description: Changed folder workflows whose regular call runs in test-run mode.
+    value: ${{ steps.plan.outputs.ci_in_place_test_runs }}
   ci_test_runs:
-    description: Folder workflows to call with test_run true for a workflow change.
+    description: Changed CI workflows that still need a separate test-run call.
     value: ${{ steps.plan.outputs.ci_test_runs }}
   cd_test_runs:
     description: CD workflows to dispatch with test_run true for a workflow change.
@@ -70,12 +73,12 @@ outputs:
   manual_test_runs:
     description: Workflows that still need a manual test run.
     value: ${{ steps.plan.outputs.manual_test_runs }}
-  all_browser_matrix:
-    description: Every web browser area, for a workflow test-run call.
-    value: ${{ steps.plan.outputs.all_browser_matrix }}
-  all_editor_browser_matrix:
-    description: Every editor browser area, for a workflow test-run call.
-    value: ${{ steps.plan.outputs.all_editor_browser_matrix }}
+  smoke_browser_matrix:
+    description: One short web browser area, for a workflow test-run call.
+    value: ${{ steps.plan.outputs.smoke_browser_matrix }}
+  smoke_editor_browser_matrix:
+    description: One short editor browser area, for a workflow test-run call.
+    value: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
 runs:
   using: composite
   steps:

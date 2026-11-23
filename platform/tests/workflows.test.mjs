@@ -669,8 +669,38 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-// A changed CI workflow is proved by a static reusable call in ci-pr-checks. The planner output decides which calls
-// run; GitHub cannot build reusable calls from a matrix.
+const inPlaceTestRun = workflow =>
+  `\${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"${workflow}"') }}`;
+
+// A selected folder's regular call proves the changed workflow in test-run mode, so the planner keeps that workflow out
+// of the separate list and the static call below is skipped. Quoting the name inside the JSON prevents prefix matches.
+test('a changed folder workflow passes test_run to its regular call, not to a second call', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  for (const folder of FOLDERS) {
+    const workflow = `ci-${folder}.yml`;
+    assert.equal(jobs[folder].with.test_run, inPlaceTestRun(workflow), `${folder} would run twice or not in test-run mode`);
+    const testCall = jobs[`test-${workflow.replace('.yml', '')}`];
+    assert.ok(testCall, `${workflow} needs a static call for when its folder is not selected`);
+    assert.match(
+      testCall.if,
+      new RegExp(`contains\\(needs\\.plan\\.outputs\\.ci_test_runs, '${workflow.replaceAll('.', '\\.')}'\\)`)
+    );
+  }
+});
+
+test('no job in ci-pr-checks except the gate waits for a folder job', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  for (const [name, job] of Object.entries(jobs)) {
+    if (name === 'gate') continue;
+    const needs = [job.needs].flat().filter(Boolean);
+    for (const folder of FOLDERS) {
+      assert.ok(!needs.includes(folder), `${name} depends on ${folder}; project calls must start in parallel`);
+    }
+  }
+});
+
+// A changed CI workflow with no selected folder is proved by a static reusable call. The planner output decides which
+// calls run; GitHub cannot build reusable calls from a matrix.
 test('ci-pr-checks calls every callable CI workflow in test-run mode when it changes', () => {
   const {jobs} = load('ci-pr-checks.yml');
   for (const workflow of CALLABLE_CI_WORKFLOWS) {
@@ -698,21 +728,19 @@ test('ci-pr-checks calls every callable CI workflow in test-run mode when it cha
   }
 });
 
-// A static test call proves a changed workflow with every area of that workflow's own project. Passing another
-// project's matrix makes the called app look for specs it does not have, so each expected input is named explicitly.
+// A static test call proves a changed workflow's jobs and steps with one short area of that workflow's own project.
+// Passing another project's matrix makes the called app look for specs it does not have, so each input is named here.
 const plannerMatrixInput = output => `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`;
 
 const staticTestCallInputs = {
   'test-ci-apps-core-demo': {test_run: true},
   'test-ci-apps-editor': {
     test_run: true,
-    browser_matrix: plannerMatrixInput('all_editor_browser_matrix'),
-    phone_tests: 'all'
+    browser_matrix: plannerMatrixInput('smoke_editor_browser_matrix')
   },
   'test-ci-apps-web': {
     test_run: true,
-    browser_matrix: plannerMatrixInput('all_browser_matrix'),
-    phone_tests: 'all'
+    browser_matrix: plannerMatrixInput('smoke_browser_matrix')
   },
   'test-ci-backend': {test_run: true},
   'test-ci-browser-image': {test_run: true},
@@ -741,20 +769,24 @@ test('every static test call passes inputs meant for its workflow', () => {
 });
 
 // CD workflows cannot be reusable, so ci-workflows dispatches them and waits for the real conclusion.
-test('ci-pr-checks passes the changed CD workflows to the workflows call only on a regular run', () => {
+test('ci-pr-checks dispatches CD test runs on a regular PR run even when workflows runs in place', () => {
   const {jobs} = load('ci-pr-checks.yml');
   const call = jobs.workflows;
   assert.equal(call.uses, './.github/workflows/ci-workflows.yml');
   assert.match(call.if, /!cancelled\(\)/);
   assert.equal(call.permissions.actions, 'write', 'the CD dispatcher needs to dispatch workflows');
   assert.equal(call.permissions.packages, 'read', 'the artifact checks need to read packages');
+  assert.equal(call.with.test_run, inPlaceTestRun('ci-workflows.yml'), 'a changed workflows call runs in place');
   assert.equal(
     call.with.cd_test_runs,
     "${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}",
-    'a test run must not dispatch more test runs'
+    'only a test run of ci-pr-checks suppresses dispatch, not an in-place test run of ci-workflows'
   );
   assert.equal(call.with.head_sha, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(jobs['test-ci-workflows'].with.cd_test_runs, undefined, 'the static test call must not dispatch CD workflows');
+  const dispatcher = load('ci-workflows.yml').jobs['cd-test-runs'];
+  assert.equal(dispatcher.if, "${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}");
+  assert.doesNotMatch(dispatcher.if, /inputs\.test_run/, 'the dispatcher is gated on the list, not on test-run mode');
 });
 
 test('ci-workflows dispatches and waits for a real CD test run, never a dry run', () => {
@@ -1224,6 +1256,24 @@ test('browser jobs run only the planned areas, and none when there are none', ()
   }
 });
 
+test('the plan action and both plan jobs expose the same test-run and smoke outputs', () => {
+  const action = parseYaml(fs.readFileSync(path.join(repoRoot, '.github/actions/plan/action.yml'), 'utf8'));
+  const outputNames = [
+    'ci_in_place_test_runs',
+    'ci_test_runs',
+    'smoke_browser_matrix',
+    'smoke_editor_browser_matrix'
+  ];
+  for (const name of outputNames) {
+    assert.equal(action.outputs[name]?.value, `\${{ steps.plan.outputs.${name} }}`);
+  }
+  assert.equal(action.outputs.all_browser_matrix, undefined, 'the full matrix is no longer a test-call input');
+  assert.equal(action.outputs.all_editor_browser_matrix, undefined);
+  const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
+  assert.match(text, /outputs: &plan-outputs/);
+  assert.match(text, /outputs: \*plan-outputs/);
+});
+
 test('the planner has an output on the plan job for every folder and every test-run selector', () => {
   const {plan} = load('ci-pr-checks.yml').jobs;
   assert.deepEqual(
@@ -1233,11 +1283,12 @@ test('the planner has an output on the plan job for every folder and every test-
       'browser_matrix',
       'editor_browser_matrix',
       'image_matrix',
+      'ci_in_place_test_runs',
       'ci_test_runs',
       'cd_test_runs',
       'manual_test_runs',
-      'all_browser_matrix',
-      'all_editor_browser_matrix'
+      'smoke_browser_matrix',
+      'smoke_editor_browser_matrix'
     ])
   );
 });
@@ -1444,6 +1495,12 @@ test('ci-publish pages-cleanup has a test-run twin with packages: read', () => {
   assert.deepEqual(twin.steps, jobs['pages-cleanup'].steps, 'twin must share steps');
 });
 
+test('dev-pages cleanup explains why keeping the newest versions preserves the dev tag', () => {
+  const text = fs.readFileSync(path.join(workflowDir, 'ci-publish.yml'), 'utf8');
+  assert.match(text, /# Each publish moves :dev to the new image, and this job keeps the newest N versions/);
+  assert.match(text, /cannot leave :dev dangling/, 'the comment must explain that the tagged version is retained');
+});
+
 test('publish-image action generalised with name, dockerfile, commit, skip_main_tag inputs', () => {
   const action = fs.readFileSync(path.join(repoRoot, '.github/actions/publish-image/action.yml'), 'utf8');
   assert.match(action, /name:/, 'must have name input');
@@ -1562,17 +1619,21 @@ test('publish-image action tags dev-pages with the commit SHA, not github.sha', 
     /--tag\s+ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
     'build tag must be repository/dev-pages:COMMIT_SHA'
   );
+  assert.match(buildCall, /--tag\s+ttl\.sh\/ivanov-gv-cg-map\/dev-pages:dev\b/, 'test runs push a moving dev tag too');
+  assert.match(
+    buildCall,
+    /--label\s+org\.opencontainers\.image\.revision=88563c2685eb6f28062525992dc9a10aca304752\b/,
+    'the image must carry the commit it was built from'
+  );
   // Should not have a :main tag when skip_main_tag is true.
   assert.doesNotMatch(buildCall, /:main/, 'should not tag as main when skip_main_tag is true');
 
-  // Verify the push call uses the same tag.
-  const pushCall = result.calls.find(c => c.startsWith('push'));
-  assert.ok(pushCall, 'should have a docker push call');
-  assert.match(
-    pushCall,
-    /ttl\.sh\/ivanov-gv-cg-map\/dev-pages:88563c2685eb6f28062525992dc9a10aca304752/,
-    'push must use the commit-tagged image'
-  );
+  // Both tags are pushed, including in a test run against the temporary registry.
+  const pushCalls = result.calls.filter(call => call.startsWith('push'));
+  assert.deepEqual(pushCalls.toSorted(), [
+    'push ttl.sh/ivanov-gv-cg-map/dev-pages:88563c2685eb6f28062525992dc9a10aca304752',
+    'push ttl.sh/ivanov-gv-cg-map/dev-pages:dev'
+  ]);
 });
 
 test('publish-image action tags app images with both commit SHA and main', async () => {
@@ -1598,6 +1659,21 @@ test('publish-image action tags app images with both commit SHA and main', async
     /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:main/,
     'build must include main tag for app images'
   );
+  assert.match(buildCall, /--tag\s+ghcr\.io\/ivanov-gv\/cg-map\/web:dev\b/, 'build must also include dev');
+  assert.match(
+    buildCall,
+    /--label\s+org\.opencontainers\.image\.revision=abc123def456\b/,
+    'app images must carry their revision'
+  );
+  assert.deepEqual(
+    result.calls.filter(call => call.startsWith('push')).toSorted(),
+    [
+      'push ghcr.io/ivanov-gv/cg-map/web:abc123def456',
+      'push ghcr.io/ivanov-gv/cg-map/web:dev',
+      'push ghcr.io/ivanov-gv/cg-map/web:main'
+    ],
+    'commit, dev and main tags are all pushed'
+  );
 });
 
 test('publish-image action uses build context from context input', async () => {
@@ -1619,6 +1695,77 @@ test('publish-image action uses build context from context input', async () => {
     /site$/,
     'build must use the context path from the context input'
   );
+});
+
+const browserImageScript = parseYaml(
+  fs.readFileSync(path.join(repoRoot, '.github/actions/publish-browser-image/action.yml'), 'utf8')
+).runs.steps[0].run;
+
+async function runBrowserImageAction(repository, commit) {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'publish-browser-image-test-'));
+  const logFile = path.join(temporaryDirectory, 'calls.log');
+  const stub = `#!/bin/bash\necho "$@" >> '${logFile}'\n`;
+  for (const name of ['docker', 'make']) {
+    const pathToStub = path.join(temporaryDirectory, name);
+    await fs.promises.writeFile(pathToStub, stub);
+    await fs.promises.chmod(pathToStub, 0o755);
+  }
+  const env = {
+    PATH: temporaryDirectory + ':' + process.env.PATH,
+    HOME: temporaryDirectory,
+    GITHUB_ACTOR: 'test-actor',
+    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
+    IMAGE_REPOSITORY: repository,
+    REGISTRY_TOKEN: 'fake-token',
+    COMMIT_SHA: commit
+  };
+  try {
+    await execFileAsync('bash', ['-c', browserImageScript], {env, cwd: temporaryDirectory});
+    return fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
+}
+
+test('publish-browser-image labels the image with its revision and pushes dev in any mode', async () => {
+  const commit = 'abc123def456';
+  for (const repository of ['ghcr.io/ivanov-gv/cg-map', 'ttl.sh/ivanov-gv-cg-map']) {
+    const calls = await runBrowserImageAction(repository, commit);
+    assert.ok(
+      calls.includes(`-C platform browser-image IMAGE=${repository}/browser-ci:${commit} REVISION=${commit}`),
+      `${repository}: make must receive the revision so the image is labelled`
+    );
+    assert.ok(
+      calls.includes(`tag ${repository}/browser-ci:${commit} ${repository}/browser-ci:dev`),
+      `${repository}: dev must point at the commit-tagged image`
+    );
+    assert.ok(calls.includes(`push ${repository}/browser-ci:${commit}`));
+    assert.ok(calls.includes(`push ${repository}/browser-ci:dev`));
+  }
+});
+
+test('browser-image make target labels the build only when a revision is supplied', async () => {
+  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'browser-image-make-test-'));
+  const logFile = path.join(temporaryDirectory, 'calls.log');
+  const stub = `#!/bin/bash\necho "$@" >> '${logFile}'\n`;
+  const dockerStub = path.join(temporaryDirectory, 'docker');
+  await fs.promises.writeFile(dockerStub, stub);
+  await fs.promises.chmod(dockerStub, 0o755);
+  const run = async argumentsList => {
+    await fs.promises.writeFile(logFile, '');
+    await execFileAsync('make', ['-C', path.join(repoRoot, 'platform'), 'browser-image', ...argumentsList], {
+      env: {...process.env, PATH: temporaryDirectory + ':' + process.env.PATH}
+    });
+    const build = fs.readFileSync(logFile, 'utf8').split('\n').find(call => call.startsWith('build'));
+    assert.ok(build, 'the make target must build an image');
+    return build;
+  };
+  try {
+    assert.match(await run(['REVISION=abc123def456']), /--label org\.opencontainers\.image\.revision=abc123def456\b/);
+    assert.doesNotMatch(await run([]), /--label/, 'local builds without a revision need no label');
+  } finally {
+    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
+  }
 });
 
 // Any job that checks out a non-default ref must keep local actions on the

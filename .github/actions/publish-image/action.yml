@@ -1,5 +1,5 @@
 name: Publish image
-description: Build a Docker image and push it tagged by commit, and optionally as main.
+description: Build and push a Docker image tagged by commit and dev, plus main unless skipped; labels it with the revision.
 inputs:
   name:
     description: The image name suffix (e.g. "web", "dev-pages").
@@ -41,16 +41,23 @@ runs:
       run: |
         image="$IMAGE_REPOSITORY/$IMAGE_NAME"
         dockerfile="${DOCKERFILE:-apps/$IMAGE_NAME/Dockerfile}"
+        commit_tag="$image:$COMMIT_SHA"
+        dev_tag="$image:dev"
+        build_args=(--file "$dockerfile" --label "org.opencontainers.image.revision=$COMMIT_SHA" --tag "$commit_tag" --tag "$dev_tag")
+        if [ "$SKIP_MAIN_TAG" != "true" ]; then
+          build_args+=(--tag "$image:main")
+        fi
         case "$IMAGE_REPOSITORY" in
           ghcr.io/*) echo "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin ;;
         esac
-        if [ "$SKIP_MAIN_TAG" = "true" ]; then
-          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" "$BUILD_CONTEXT"
-          docker push "$image:$COMMIT_SHA"
-          echo "Published $image at $COMMIT_SHA (no main tag)" | tee -a "$GITHUB_STEP_SUMMARY"
-        else
-          docker build --file "$dockerfile" --tag "$image:$COMMIT_SHA" --tag "$image:main" "$BUILD_CONTEXT"
-          docker push "$image:$COMMIT_SHA"
+        docker build "${build_args[@]}" "$BUILD_CONTEXT"
+        docker push "$commit_tag"
+        docker push "$dev_tag"
+        if [ "$SKIP_MAIN_TAG" != "true" ]; then
           docker push "$image:main"
-          echo "Published $image at $COMMIT_SHA and main" | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ "$SKIP_MAIN_TAG" = "true" ]; then
+          echo "Published $commit_tag and $dev_tag (no main tag)" | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "Published $commit_tag, $dev_tag and main" | tee -a "$GITHUB_STEP_SUMMARY"
         fi

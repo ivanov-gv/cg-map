@@ -378,6 +378,8 @@ jobs:
           token: ${{ github.token }}
           skip_main_tag: 'true'
   # Keep only the last N dev-pages versions — the rollback window.
+  # Each publish moves :dev to the new image, and this job keeps the newest N versions, so the version :dev points at
+  # is always retained; deleting older versions cannot leave :dev dangling.
   # Package name and versions-to-keep come from environment vars so test-run can override them.
   # The test-run value names an existing package (cg-map/web) because cg-map/dev-pages does not exist in GHCR
   # until the first production push, so a test-run cleanup that lists it would fail.

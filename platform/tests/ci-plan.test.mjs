@@ -10,8 +10,8 @@ import {
   FOLDERS,
   SHARED_EDITOR_SOURCES,
   SHARED_WEB_SOURCES,
-  ALL_BROWSER_MATRIX,
-  ALL_EDITOR_BROWSER_MATRIX,
+  SMOKE_BROWSER_MATRIX,
+  SMOKE_EDITOR_BROWSER_MATRIX,
   browserMatrix,
   classify,
   formatOutputs,
@@ -161,13 +161,14 @@ for (const [name, files] of [
 test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 8);
+  assert.equal(lines.length, FOLDERS.length + 9);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
+  assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
-  assert.ok(lines.includes(`all_browser_matrix=${ALL_BROWSER_MATRIX}`));
-  assert.ok(lines.includes(`all_editor_browser_matrix=${ALL_EDITOR_BROWSER_MATRIX}`));
+  assert.ok(lines.includes(`smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`));
+  assert.ok(lines.includes(`smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
     include: [
@@ -185,6 +186,21 @@ test('outputs give every folder a value, a usable matrix, and the selected test 
       {area: 'interface-12', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=12/12'}
     ]
   });
+});
+
+test('a changed folder workflow runs in place, while other changed workflows keep a separate test call', () => {
+  const changedFiles = [
+    'apps/web/src/interface.js',
+    'docs/README.md',
+    '.github/workflows/ci-apps-web.yml',
+    '.github/workflows/ci-apps-editor.yml',
+    '.github/workflows/ci-docs.yml',
+    '.github/workflows/ci-publish.yml',
+    '.github/workflows/ci-workflows.yml'
+  ];
+  const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
+  assert.ok(lines.includes('ci_in_place_test_runs=["ci-apps-web.yml","ci-docs.yml","ci-workflows.yml"]'));
+  assert.ok(lines.includes('ci_test_runs=["ci-apps-editor.yml","ci-publish.yml"]'));
 });
 
 test('command line selects everything when it has no base or the diff fails', () => {
@@ -400,11 +416,14 @@ test('the browser matrix contains exactly the requested areas', () => {
   assert.deepEqual(new Set(areaOfEachJob), new Set(ALL_AREAS));
 });
 
-test('workflow test-run calls cover every browser area, not just the changed files', () => {
-  const webAreas = JSON.parse(ALL_BROWSER_MATRIX).include.map(({area}) => area.replace(/-\d+$/, ''));
-  const editorAreas = JSON.parse(ALL_EDITOR_BROWSER_MATRIX).include.map(({area}) => area.replace(/-\d+$/, ''));
-  assert.deepEqual(new Set(webAreas), new Set(ALL_AREAS));
-  assert.deepEqual(new Set(editorAreas), new Set(ALL_EDITOR_AREAS));
+test('smoke matrices run one short unsharded area for each separate browser test call', () => {
+  const web = JSON.parse(SMOKE_BROWSER_MATRIX).include;
+  const editor = JSON.parse(SMOKE_EDITOR_BROWSER_MATRIX).include;
+  assert.equal(web.length, 1);
+  assert.equal(web[0].area, 'discover');
+  assert.equal(editor.length, 1);
+  assert.equal(editor[0].area, 'selection');
+  for (const job of [...web, ...editor]) assert.doesNotMatch(job.specs, /--shard=/);
 });
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.
@@ -501,5 +520,6 @@ test('each browser project checks only itself, and only the public app reaches t
 test('outputs: an empty CD selection is the exact [] the dispatcher compares', () => {
   const lines = formatOutputs(planChanges([]), []).split('\n');
   assert.ok(lines.includes('cd_test_runs=[]'));
+  assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
 });

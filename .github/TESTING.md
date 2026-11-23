@@ -113,7 +113,11 @@ The `test-run` values list an existing package and delete nothing.
 `package-release` needs only `IMAGE_REPOSITORY`, with the same value as `dev`, for `cd-browser-image`.
 
 A test run really pushes images, to a temporary public registry, and really runs npm publish as a dry run, after
-checking registry auth with `npm whoami` so a missing token fails the test run as a real publish would.
+checking registry auth with `npm whoami` so a missing token fails the test run as a real publish would. Every published
+image gets a moving `:dev` tag next to `:<commit>` and an `org.opencontainers.image.revision` label carrying that
+commit, in both environments. The browser image gets the same label through
+`make -C platform browser-image REVISION=<commit>`. `ci-publish` keeps the newest dev-pages versions, so cleanup never
+deletes the version `:dev` points at.
 
 Production jobs use `environment: dev` only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins always
@@ -198,9 +202,16 @@ gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=
 
 The gate's planner selects the workflows a change touches and the gate proves them in the same PR run:
 
-- Every changed callable `ci-*` workflow becomes a `uses:` call with `test_run: true`. A browser workflow also gets
-  every area from its own planner output — `all_browser_matrix` for web, `all_editor_browser_matrix` for editor — and
-  every phone test. A shared action is proved by a workflow that really executes it.
+- Every changed callable `ci-*` workflow is proved by a `uses:` call with `test_run: true`. When its folder is selected
+  by the diff, the regular folder call passes `test_run` instead of a second call running: the planner's
+  `ci_in_place_test_runs` output drives that and keeps the workflow out of `ci_test_runs`. Workflows without a folder
+  call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short area —
+  `smoke_browser_matrix` (web's `discover`, five tests) or `smoke_editor_browser_matrix` (editor's `selection`, eight
+  tests) — and the default tagged phone tests; it proves the workflow's jobs and steps, not every test. The regular
+  browser calls keep the full planned matrices. A shared action is proved by a workflow that really executes it.
+- The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
+  test-run mode. Only a test run of `ci-pr-checks` suppresses dispatch, so a dispatched test run cannot dispatch another
+  test run.
 - Every changed `cd-*` workflow is dispatched by `ci-workflows` with `test_run=true`, the head commit, and a unique test
   `VERSION` (or `test_id` for cd-dev-pages). The job reuses an existing successful test run of the head commit when one
   exists; otherwise it dispatches and waits for the real conclusion. If the head commit has no dev package or image, it
