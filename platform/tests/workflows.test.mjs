@@ -779,6 +779,16 @@ test('ci-workflows dispatches and waits for a real CD test run, never a dry run'
   assert.doesNotMatch(stepsText, /--dry-run|-n\b/, 'only act parses; the workflow must run the dispatch');
 });
 
+test('the CD dispatcher fetches main history before reading source commits', () => {
+  const steps = load('ci-workflows.yml').jobs['cd-test-runs'].steps;
+  const fetchIndex = steps.findIndex(step => /git .*fetch/.test(step.run ?? ''));
+  const scriptIndex = steps.findIndex(step => /workflow-test-runs\.mjs/.test(step.run ?? ''));
+  assert.notEqual(fetchIndex, -1, 'a shallow checkout has no main history');
+  assert.match(steps[fetchIndex].run, /--depth=20/);
+  assert.match(steps[fetchIndex].run, /\+refs\/heads\/main:refs\/remotes\/origin\/main/);
+  assert.ok(scriptIndex > fetchIndex, 'the selector must run after the fetch');
+});
+
 test('the CD dispatcher condition is true only for a non-empty input list', () => {
   const {jobs} = load('ci-workflows.yml');
   const condition = jobs['cd-test-runs'].if;
