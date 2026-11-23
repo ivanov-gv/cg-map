@@ -70,12 +70,13 @@ const ACTION_WORKFLOWS = {
   'validate-commit': ['ci-publish.yml', 'cd-dev-pages.yml']
 };
 
-const PLANNER_FILES = [
-  'platform/tests/ci-plan.test.mjs',
-  'platform/tests/workflow-test-runs.test.mjs',
-  'platform/tools/ci-plan.mjs',
-  'platform/tools/workflow-test-runs.mjs'
-];
+// Each planner file is proved by the workflow that executes it, not by every workflow that shares the planner family.
+const PLANNER_FILE_WORKFLOWS = {
+  'platform/tools/ci-plan.mjs': ['ci-publish.yml', 'ci-pr-checks.yml'],
+  'platform/tests/ci-plan.test.mjs': ['ci-publish.yml', 'ci-pr-checks.yml'],
+  'platform/tools/workflow-test-runs.mjs': ['ci-workflows.yml'],
+  'platform/tests/workflow-test-runs.test.mjs': ['ci-workflows.yml']
+};
 
 const DEV_IMAGE_REPOSITORY = 'ghcr.io/ivanov-gv/cg-map';
 const TEST_IMAGE_REPOSITORY = 'ttl.sh/ivanov-gv-cg-map';
@@ -114,10 +115,9 @@ export function selectWorkflowTestRuns(changedFiles) {
       for (const name of ACTION_WORKFLOWS[action] ?? []) addWorkflow(sets, name);
       continue;
     }
-    if (PLANNER_FILES.includes(file)) {
-      // The planner is shared by both top-level workflows; only ci-publish has a test-run branch to prove it.
-      sets.ci.add('ci-publish.yml');
-      sets.manual.add('ci-pr-checks.yml');
+    const plannerWorkflows = PLANNER_FILE_WORKFLOWS[file];
+    if (plannerWorkflows) {
+      for (const name of plannerWorkflows) addWorkflow(sets, name);
       continue;
     }
     if (file.startsWith('.github/') && !file.endsWith('.md')) sets.manual.add('ci-pr-checks.yml');

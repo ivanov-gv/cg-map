@@ -55,3 +55,10 @@ The fallback now takes its candidates from main's history: the last 20 commits o
 than from successful `ci-publish` runs. A run can fail after one of its jobs has published a dev package or image, so
 its conclusion is not evidence that the commit has no artifact. Every candidate is still checked at the registry and the
 search stops at the first artifact, which bounds the dispatcher's work.
+
+## Outcome note (issue #372, 2026-11-23)
+
+A planner-file change is proved by the workflow that executes that file: `workflow-test-runs.mjs` and its test select
+`ci-workflows.yml`, while `ci-plan.mjs` and its test select the workflows that use the `plan` action. The automatic
+`ci-publish` test call plans by the PR diff unless its `run_all` input is true, so it builds the browser image only when
+browser-image inputs changed, by the same planner rule as a push to `main`.
