@@ -1,35 +1,39 @@
 # Testing workflows
 
-**A PR merges only when its tests pass on GitHub**: its PR run (`CI gate`), or a `workflow_dispatch` of the pipelines
-`make ci-plan BASE=origin/main` selects, on the branch. The pre-push hook runs required `make check` (builds and
-non-browser checks, no browser suites) and, for services/backend changes, `make check-go`. Browser suites
-(`make -C apps/<x> e2e`, `make test-e2e`) and `act` runs are optional, for iterating, except `make test-cd-dev-pages`
-when changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). A change to `.github/**` also needs
-`make lint-workflows` locally and a GitHub test run (`test_run=true`) of every workflow it touches, plus what
-`make ci-plan BASE=origin/main` selects. After a fix, rerun those GitHub runs.
+**A PR merges only when its tests pass on GitHub**: its PR run (`CI gate`). A change to `.github/**` makes the gate call
+every changed `ci-*` workflow in `test_run` mode and dispatch/wait for every changed `cd-*` workflow, using a real
+commit and a collision-free test version. There is no evidence job to re-run: the gate fails if a proved workflow fails.
+The pre-push hook runs required `make check` (builds and non-browser checks, no browser suites) and, for
+services/backend changes, `make check-go`. Browser suites (`make -C apps/<x> e2e`, `make test-e2e`) and `act` runs are
+optional, for iterating, except `make test-cd-dev-pages` when changing ci-publish or cd-dev-pages
+([Pages recipe](#pages-path-recipe)). A change to `.github/**` also needs `make lint-workflows` locally. After a fix,
+push again and let the gate prove the new commit.
 
 Running a workflow is the only way to know it works, so every workflow keeps three ways to run it: locally under `act`
 (`test_run`), a manual `workflow_dispatch` with `test_run`, and the default production run. A local dry run is a parse
-check only. Only the GitHub test run gates a merge; local `act` runs are optional, except `make test-cd-dev-pages` when
-changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Pipeline structure and reasoning:
-[ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
+check only. The automatic GitHub test runs in `CI gate` are what proves a workflow; local `act` runs are optional,
+except `make test-cd-dev-pages` when changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Pipeline
+structure and reasoning: [ADR 0005](../docs/decisions/0005-packages-releases-and-dev-pages.md),
 [ADR 0006](../docs/decisions/0006-ci-time-limits-and-tests-before-merge.md), whose local-run requirement is changed by
 [ADR 0032](../docs/decisions/0032-tests-pass-on-github-and-earn-their-cost.md),
-[ADR 0017](../docs/decisions/0017-ci-cd-model.md) and [release](../docs/runbooks/release.md).
+[ADR 0033](../docs/decisions/0033-automatic-workflow-test-runs.md), [ADR 0017](../docs/decisions/0017-ci-cd-model.md)
+and [release](../docs/runbooks/release.md).
 
 ## Order
 
-Lint and the GitHub test run are required; local runs are optional for iterating, except `make test-cd-dev-pages` when
-changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Run them in this order, stopping at the first
-failure:
+Lint and the PR gate's GitHub test runs are required; local runs are optional for iterating, except
+`make test-cd-dev-pages` when changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). Run them in this
+order, stopping at the first failure:
 
 1. **Lint (required):** `make lint-workflows` runs actionlint locally, catching syntax errors before any run.
 2. **Local dry run (optional):** `make test-<workflow> ACT="gh act -n"` checks that the workflow parses without
-   executing steps.
+   executing steps. It is never a test run.
 3. **Local test run (optional, except Pages):** `make test-<workflow>` runs the workflow under `act`, checking logic and
    step ordering.
-4. **GitHub test run (required):** `gh workflow run <file> --ref <branch> -f test_run=true` dispatches the workflow on
-   GitHub before merge, verifying environment settings, variables, and secrets.
+4. **GitHub test runs (required, automatic):** push the branch and read `CI gate`. It calls changed `ci-*` workflows
+   with `test_run: true` and dispatches changed `cd-*` workflows with `test_run=true`, then waits for their conclusions.
+   For a workflow that cannot be proved automatically, run the manual command in [On GitHub](#on-github) and re-run the
+   gate.
 
 A workflow can be dispatched on a branch once GitHub has registered it, that is, once it has run at least once (for
 example from a pull request). Dispatch it by numeric id when the file name returns 404. A schedule- or dispatch-only
@@ -40,7 +44,8 @@ workflows it calls, with the same inputs, instead.
 
 A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 or less, and `platform/tests/workflows`
 checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
-`ci-apps-editor` splits its browser tests; do not raise the limit.
+`ci-apps-editor` splits its browser tests; do not raise the limit. The exception is `cd-test-runs` in `ci-workflows`: it
+occupies a runner while it polls, but avoids repeating the browser-image build and waits up to 30 minutes for it.
 
 The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
 `CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
@@ -48,15 +53,18 @@ The whole PR run also has a time budget: from approval to `CI gate`, the aim is 
 effective start is the later of the approval job's completion and the attempt's `run_started_at` — this correctly
 handles reruns, where the attempt starts after the original approval. If `run_started_at` is unreadable, it falls back
 to the approval time; if neither is available, it uses the earliest job start. Non-PR events (schedule, manual dispatch)
-are exempt. Unreadable timings only warn — they do not fail the gate.
+are exempt, as are PRs that wait for CD test runs: an external browser-image build can outlast seven minutes, and
+`cd-test-runs` has its own 30-minute limit. The `CI gate` summary names the wait that grants the exemption. Unreadable
+timings only warn — they do not fail the gate.
 
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
 jobs, `select` (which only passes the planner's image matrix on), `run` in ci-nightly (which only calls ci-pr-checks),
-`pages-cleanup` in ci-publish (which only runs in production), `Check job times`, the check for test runs below,
-`CI gate`, `approval`, the Pages deploy in cd-dev-pages (because Pages can only publish to this repository: a test run
-stops after the find job), and the folder jobs in ci-pr-checks (`docs`, `workflows`, `platform`, `contracts`,
+`pages-cleanup` in ci-publish (which only runs in production), `Check job times`, `CI gate`, `approval`, the Pages
+deploy in cd-dev-pages (because Pages can only publish to this repository: a test run stops after the find job),
+`cd-test-runs` in ci-workflows (a test run must not dispatch another test run), the `test-ci-*` jobs in ci-pr-checks
+(each is already a test-run call), and the folder jobs in ci-pr-checks (`docs`, `workflows`, `platform`, `contracts`,
 `browser-image`, `data`, `backend`, `transit-relay`, `tests`, `map-core`, `apps-web`, `apps-editor`, `apps-core-demo`)
 which call each folder's workflow with `test_run` passed through. The `find` job in cd-dev-pages gates on CI conclusion
 in its `if:` — no separate gate job. The twins use the `test-run` environment, whose variables send everything to a test
@@ -160,19 +168,24 @@ gh workflow run cd-dev-pages.yml --ref <branch> -f test_run=true -f commit=<full
 gh workflow run cd-browser-image.yml --ref <branch> -f test_run=true -f version=1.56.1-r2 -f commit=<full SHA>
 ```
 
-`ci-workflows` fails a PR that changes `.github/**`, except Markdown, or the planner, until a successful test run of
-`ci-pr-checks` exists for its latest commit, `cd-map-core`, `cd-map-data` and `cd-map-contracts` test runs when those
-workflows or a composite action changed, a `cd-browser-image` one when that workflow or its actions changed, a
-`ci-publish` test run when `ci-publish.yml` or the publish-related actions (`plan`, `publish-image`,
-`publish-dev-package`, `publish-browser-image`, `setup-web`, `run-check`) changed, and a `cd-dev-pages` test run when
-`cd-dev-pages.yml` or `test_run` changed. A workflow not yet on `main` cannot be dispatched, so it is exempt. The same
-exemption applies when a workflow on `main` lacks `workflow_dispatch` and cannot be dispatched. After those runs pass,
-re-run the failed check. CI cannot see local runs; link the GitHub runs in the PR template and note any local run as
-context only.
+The gate's planner selects the workflows a change touches and the gate proves them in the same PR run:
 
-Until a workflow lands on `main`, the PR run and a GitHub test run of the workflows it calls are the evidence.
+- Every changed callable `ci-*` workflow becomes a `uses:` call with `test_run: true` and every browser area and phone
+  test. A shared action is proved by a workflow that really executes it.
+- Every changed `cd-*` workflow is dispatched by `ci-workflows` with `test_run=true`, the head commit, and a unique test
+  `VERSION` (or `test_id` for cd-dev-pages). The job reuses an existing successful test run of the head commit when one
+  exists; otherwise it dispatches and waits for the real conclusion. If the head commit has no dev package or image, it
+  uses the newest main commit that has one and says so in the job summary.
+- A workflow not yet registered on `main`, or one whose `main` version lacks `workflow_dispatch`, `test_run` and
+  `commit`, cannot be dispatched and is exempt with a reason in the job summary. `ci-pr-checks.yml` and `ci-nightly.yml`
+  are always manual exceptions: a reusable call to either would form a cycle. Dispatch them with the first command below
+  before merging a change to either.
+
+A test run really publishes to temporary destinations; `act -n` only parses and proves nothing. CI cannot see local
+runs; link any manual GitHub runs in the PR template and note local runs as context only.
+
 `make test-ci-pr-checks`, `make test-ci-nightly`, `make test-ci-publish`, and `make test-cd-dev-pages COMMIT=<full SHA>`
-remain optional local ways to iterate. The test-run-evidence check exempts workflows not yet on `main` automatically.
+remain optional local ways to iterate.
 
 ## Through a real PR
 
@@ -197,10 +210,10 @@ only a real merge proves write access and the publish.
 
 If a path cannot be tested yet, make it testable (inputs, `workflow_dispatch`, environment variables with test-run
 values). Keep all three ways to run a workflow available — locally under `act` (`test_run`), a manual
-`workflow_dispatch` with `test_run`, and the default production run — but only a GitHub test run (`test_run=true`) of
-every workflow touched, plus what `make ci-plan BASE=origin/main` selects, gates the merge. A local dry run is a parse
-check only. Local `act` runs are optional, except `make test-cd-dev-pages` when changing ci-publish or cd-dev-pages
-([Pages recipe](#pages-path-recipe)).
+`workflow_dispatch` with `test_run`, and the default production run — but the PR gate's GitHub test runs of every
+workflow touched, plus what `make ci-plan BASE=origin/main` selects, are what gates the merge. A local dry run is a
+parse check only. Local `act` runs are optional, except `make test-cd-dev-pages` when changing ci-publish or
+cd-dev-pages ([Pages recipe](#pages-path-recipe)).
 
 ### Pages path recipe
 

@@ -16,9 +16,9 @@ On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one wi
 
 The pre-push hook's `make check` is required (builds and non-browser checks, no browser suites); the browser suites and
 `act` runs shown here are optional for iterating, except `make test-cd-dev-pages` when changing ci-publish or
-cd-dev-pages ([Pages recipe](../../.github/TESTING.md#pages-path-recipe)). A PR merges only when its tests pass on
-GitHub: its PR run (`CI gate`), or a `workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on
-the branch: [the rule](../../.github/TESTING.md).
+cd-dev-pages ([Pages recipe](../../.github/TESTING.md#pages-path-recipe)). A PR merges only when its `CI gate` passes on
+GitHub: for a workflow change, the gate itself calls changed `ci-*` workflows in test-run mode and dispatches and waits
+for changed `cd-*` workflows, as [the workflow rule](../../.github/TESTING.md) describes.
 
 Frontend iteration commands and measured check durations live with the
 [web application](../../apps/web/README.md#focused-browser-checks).
@@ -65,7 +65,9 @@ authoritative for this layout.
 
 [ci-pr-checks](../../.github/workflows/ci-pr-checks.yml) calls one workflow per project, chosen from the diff by
 [the planner](../../platform/tools/ci-plan.mjs), and reports one `CI gate`. Anything the planner cannot classify runs
-everything. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
+everything. The same gate calls each changed `ci-*` workflow in test-run mode and asks `ci-workflows` to dispatch and
+wait for each changed `cd-*` workflow, so a workflow change is proved by real GitHub runs, not by a re-runnable evidence
+check. [ci-publish](../../.github/workflows/ci-publish.yml) runs independently on every push to main with its own
 test-run switch and planner (shared with ci-pr-checks through a composite action), building and pushing images and
 packages — it runs no tests as the PR run already tested the content. The `pages` job in ci-publish builds the dev site
 from source and pushes the image. [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) pulls that image and deploys
