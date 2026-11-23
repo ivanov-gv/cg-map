@@ -42,3 +42,12 @@ export const basemapColors = {
   houseNumber: '#514d44',
   houseNumberHalo: '#fffef8'
 };
+
+// Map primitive states from the Penpot card "7 · Map primitives (Core)". Highlighted: picked, its card open.
+// Editable: the Editor's objects that can be edited on the chosen layer.
+export const stateColors = {
+  overlay: '#32634d',
+  highlighted: '#c8372d',
+  editable: '#2e8b57',
+  markerOutline: '#ffffff'
+};

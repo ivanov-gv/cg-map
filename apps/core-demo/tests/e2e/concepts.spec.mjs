@@ -2,7 +2,7 @@ import {test, expect} from '@playwright/test';
 
 // Exercises each shared capability through the public map-core entry only.
 test.describe('core concepts', () => {
-  test('core concept controls exercise camera, POIs, projection, overlays, selection, satellite and teardown', async ({
+  test('core concept controls exercise camera, POIs, projection, overlays, states, selection, satellite and teardown', async ({
     page
   }) => {
     const scriptErrors = [];
@@ -56,6 +56,11 @@ test.describe('core concepts', () => {
         page.evaluate(() => window.coreDemoDebug.map.queryRenderedFeatures({layers: ['concept-fill']}).length)
       )
       .toBeGreaterThan(0);
+    await page.locator('#overlay-editable').click();
+    await expect(page.locator('#overlay-editable')).toHaveAttribute('aria-pressed', 'true');
+    expect(
+      await page.evaluate(() => window.coreDemoDebug.map.getPaintProperty('concept-line', 'line-width'))
+    ).toBe(1.5);
     await page.locator('#satellite').click();
     await expect(page.locator('#satellite')).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => window.coreDemoDebug.map === window.originalConceptMap)).toBe(true);
@@ -65,6 +70,7 @@ test.describe('core concepts', () => {
     await expect(page.locator('.maplibregl-canvas')).toHaveCount(1);
     await expect(page.locator('#geometry')).toHaveText('Point');
     await expect(page.locator('#satellite')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#overlay-editable')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('#error')).toBeHidden();
     expect(scriptErrors).toEqual([]);
   });

@@ -79,6 +79,9 @@ class TestMap {
   setLayoutProperty(name, _property, value) {
     this.layout.set(name, value);
   }
+  setPaintProperty(name, property, value) {
+    this.layers.get(name).paint[property] = value;
+  }
   project([longitude, latitude]) {
     return {x: longitude * 10, y: latitude * 10};
   }
@@ -244,6 +247,21 @@ test('overlay selection is independent and teardown removes every owned layer/so
   overlay.destroy();
   assert.equal(map.layers.size, 0);
   assert.equal(map.sources.size, 0);
+});
+
+// The selection is always Highlighted; the overlay switches between Default and Editable without new layers.
+test('overlay states paint the selection red and an editable overlay as a thin green outline', () => {
+  const map = new TestMap();
+  const overlay = createGeoJSONOverlay(map, 'example');
+  assert.equal(map.getLayer('example-selection-line').paint['line-color'], '#c8372d');
+  assert.equal(map.getLayer('example-selection-fill').paint['fill-opacity'], 0.15);
+  overlay.setState('editable');
+  assert.equal(map.getLayer('example-line').paint['line-color'], '#2e8b57');
+  assert.equal(map.getLayer('example-line').paint['line-width'], 1.5);
+  assert.equal(map.getLayer('example-fill').paint['fill-opacity'], 0);
+  overlay.setState('default');
+  assert.equal(map.getLayer('example-fill').paint['fill-opacity'], 0.22);
+  assert.throws(() => overlay.setState('highlighted'), /Unknown overlay state/);
 });
 
 test('imports of this package are rewritten to the copy inside an artifact, and nothing else is', () => {
