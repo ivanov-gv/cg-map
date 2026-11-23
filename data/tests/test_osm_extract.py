@@ -869,7 +869,7 @@ class OsmExtractTest(unittest.TestCase):
         reviewed_fields = {
             'export_date': 'reviewed date',
             'upstream_snapshot': 'reviewed snapshot',
-            'coverage': 'reviewed coverage',
+            'coverage': 'reviewed coverage © contributors',
             'input_url': 'reviewed URL',
             'input_date': 'reviewed input date',
             'detail_bbox': [1, 2, 3, 4],
@@ -883,7 +883,9 @@ class OsmExtractTest(unittest.TestCase):
         provenance['layers']['water.geojson']['sha256'] = 'stale checksum'
         provenance_path.write_text(json.dumps(provenance, indent=2) + '\n')
         extract(self.first_root, layers=['water'])
-        updated = json.loads(provenance_path.read_text(encoding='utf-8'))
+        updated_text = provenance_path.read_text(encoding='utf-8')
+        self.assertIn('©', updated_text, 'provenance keeps UTF-8 text unescaped')
+        updated = json.loads(updated_text)
         for field, expected in reviewed_fields.items():
             with self.subTest(field=field):
                 self.assertEqual(updated[field], expected)

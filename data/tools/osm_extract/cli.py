@@ -276,8 +276,9 @@ def updated_provenance(root, options, filenames, input_hash, is_partial, details
             },
         })
     provenance_path = root / 'data/sources/provenance.json'
+    # UTF-8 like the relief build, which writes the same file: escaping would rewrite its © notices on every run.
     provenance_path.write_text(
-        json.dumps(provenance, indent=2, sort_keys=True) + '\n',
+        json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
         encoding='utf-8'
     )
 
