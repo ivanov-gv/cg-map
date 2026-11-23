@@ -16,6 +16,11 @@ on:
         description: Test run
         type: boolean
         required: true
+      run_all:
+        description: Run every publish job regardless of the diff
+        type: boolean
+        required: false
+        default: false
       commit:
         description: The full commit SHA to build (empty = the caller's commit)
         type: string
@@ -25,6 +30,10 @@ on:
     inputs:
       test_run:
         description: Test run
+        type: boolean
+        default: true
+      run_all:
+        description: Run every publish job regardless of the diff
         type: boolean
         default: true
       commit:
@@ -65,9 +74,9 @@ jobs:
       browser-image: ${{ steps.plan.outputs.browser-image }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
     env: &plan-env
-      PLAN_BASE: ${{ github.event.before || 'origin/main' }}
-      # A reusable test run must prove every publish job, just like the manual "everything" run.
-      RUN_ALL: ${{ github.event_name == 'workflow_dispatch' || inputs.test_run == true || inputs.test_run == 'true' }}
+      PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+      # The PR gate test call proves what the PR changes; a manual dispatch can still run everything.
+      RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
     steps: &plan-steps
       - uses: actions/checkout@v7
         with:

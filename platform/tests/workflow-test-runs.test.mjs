@@ -51,11 +51,18 @@ test('selection: one shared action is proved by the workflows that execute it', 
   });
 });
 
-test('selection: planner changes keep the ci-pr-checks manual path', () => {
+test('selection: workflow-test-runs changes are proved by ci-workflows', () => {
   const selection = selectWorkflowTestRuns([
-    'platform/tools/ci-plan.mjs',
     'platform/tools/workflow-test-runs.mjs',
     'platform/tests/workflow-test-runs.test.mjs'
+  ]);
+  assert.deepEqual(selection, {ci: ['ci-workflows.yml'], cd: [], manual: []});
+});
+
+test('selection: ci-plan changes are proved by workflows that use the plan action', () => {
+  const selection = selectWorkflowTestRuns([
+    'platform/tools/ci-plan.mjs',
+    'platform/tests/ci-plan.test.mjs'
   ]);
   assert.deepEqual(selection, {ci: ['ci-publish.yml'], cd: [], manual: ['ci-pr-checks.yml']});
   assert.match(formatWorkflowTestRuns(selection), /Manual test runs: ci-pr-checks\.yml/);

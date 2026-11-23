@@ -832,9 +832,11 @@ test('ci-publish is callable in test-run mode with the caller commit', () => {
   assert.equal(on.workflow_call.inputs.test_run.type, 'boolean');
   assert.equal(on.workflow_call.inputs.test_run.required, true);
   assert.equal(on.workflow_call.inputs.commit.type, 'string');
+  assert.equal(on.workflow_call.inputs.run_all.type, 'boolean');
+  assert.equal(on.workflow_call.inputs.run_all.default, false, 'a PR test call plans what the PR changes');
   const plan = load('ci-publish.yml').jobs.plan;
-  assert.match(plan.env.RUN_ALL, /inputs\.test_run/, 'a reusable test run must plan every job');
-  assert.doesNotMatch(plan.env.RUN_ALL, /workflow_call/, 'the caller of a reusable run is a PR event');
+  assert.match(plan.env.RUN_ALL, /inputs\.run_all/, 'run_all is controlled by the caller');
+  assert.doesNotMatch(plan.env.RUN_ALL, /inputs\.test_run/, 'test_run must not force every publish job');
 });
 
 test('reusable calls work under the caller pull_request event', () => {
@@ -1674,4 +1676,22 @@ test('ci-publish pages would fail with single checkout of non-default ref', () =
     0,
     'no checkout should have ref without path — this caused #244 (invalid tag ttl.sh/ivanov-gv-cg-map/:037f5e9...)'
   );
+});
+
+test('ci-publish test call plans what the PR changes, not everything', () => {
+  const workflow = load('ci-publish.yml');
+  const runAll = String(workflow.jobs.plan.env.RUN_ALL);
+  assert.doesNotMatch(runAll, /inputs\.test_run/, 'test_run must not force run_all');
+  assert.match(runAll, /inputs\.run_all/, 'run_all is controlled by the run_all input');
+
+  const callInput = workflow.on.workflow_call.inputs.run_all;
+  assert.equal(callInput.type, 'boolean');
+  assert.equal(callInput.default, false, 'a reusable call should plan by diff unless asked to run all');
+
+  const dispatchInput = workflow.on.workflow_dispatch.inputs.run_all;
+  assert.equal(dispatchInput.type, 'boolean');
+  assert.equal(dispatchInput.default, true, 'manual dispatch keeps the run-everything option');
+
+  const planBase = String(workflow.jobs.plan.env.PLAN_BASE);
+  assert.match(planBase, /pull_request\.base\.sha/, 'a PR test call must diff against the PR base');
 });
