@@ -162,6 +162,23 @@ export const SHARED_EDITOR_SOURCES = [
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS, editorAreas: ALL_EDITOR_AREAS};
+// CI calls the root Makefile only through `make verify PKG=<path>` in these folder pipelines and `make check-docs` in
+// ci-docs; the lint-workflows and act test targets live in workflows too. Browser jobs, the backend and the browser image
+// call their own project Makefiles, so they need no areas here, and the explicit empty editorAreas stops planChanges from
+// giving an apps-editor result every editor area.
+const ROOT_MAKEFILE_FOLDERS = [
+  'docs',
+  'workflows',
+  'platform',
+  'contracts',
+  'data',
+  'transit-relay',
+  'tests',
+  'map-core',
+  'apps-web',
+  'apps-editor',
+  'apps-core-demo'
+];
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
@@ -198,6 +215,7 @@ export function classify(file) {
     return {folders: ['docs'], areas: []};
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/(ci-plan|workflow-test-runs)\./.test(file))
     return {folders: ['workflows', 'platform'], areas: []};
+  if (file === 'Makefile') return {folders: ROOT_MAKEFILE_FOLDERS, areas: [], editorAreas: []};
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
   if (/^services\/backend\/(.*\.go|go\.mod|go\.sum)$/.test(file)) return {folders: ['backend'], areas: []};

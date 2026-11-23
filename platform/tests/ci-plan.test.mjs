@@ -146,7 +146,6 @@ for (const [name, files] of [
   ['an unknown top-level folder', ['brand-new/file.txt']],
   ['an unknown root file', ['.editorconfig']],
   ['the lockfile', ['package-lock.json']],
-  ['the root Makefile', ['Makefile']],
   ['the Node version', ['.node-version']],
   ['the lint configuration', ['eslint.config.mjs']],
   ['an unknown file beside known ones', ['docs/README.md', 'brand-new.txt']]
@@ -158,6 +157,53 @@ for (const [name, files] of [
     assert.deepEqual(plan.areas, ALL_AREAS);
   });
 }
+
+test('only the root Makefile narrows the plan; other root files still select everything', () => {
+  const rootMakeFolders = [
+    'apps-core-demo',
+    'apps-editor',
+    'apps-web',
+    'contracts',
+    'data',
+    'docs',
+    'map-core',
+    'platform',
+    'tests',
+    'transit-relay',
+    'workflows'
+  ];
+  const makefileResult = classify('Makefile');
+  assert.deepEqual([...makefileResult.folders].sort(), rootMakeFolders);
+  assert.deepEqual(makefileResult.areas, []);
+  assert.deepEqual(makefileResult.editorAreas, []);
+
+  const makefilePlan = planChanges(['Makefile']);
+  assert.equal(makefilePlan.everything, false);
+  assert.deepEqual(makefilePlan.areas, []);
+  assert.deepEqual(makefilePlan.editorAreas, []);
+
+  for (const file of ['package.json', 'brand-new.txt']) {
+    const otherPlan = planChanges([file]);
+    assert.equal(otherPlan.everything, true, file);
+    assert.deepEqual(otherPlan.folders, FOLDERS, file);
+    assert.deepEqual(otherPlan.areas, ALL_AREAS, file);
+    assert.deepEqual(otherPlan.editorAreas, Object.keys(EDITOR_BROWSER_AREAS), file);
+  }
+});
+
+test('the root Makefile folders match the workflows that call root make', () => {
+  const workflowsDirectory = path.join(repoRoot, '.github/workflows');
+  const callingFolders = fs.readdirSync(workflowsDirectory).flatMap(file => {
+    const folder = /^ci-(.+)\.yml$/.exec(file)?.[1];
+    if (!folder) return [];
+    const workflow = fs.readFileSync(path.join(workflowsDirectory, file), 'utf8');
+    const callsRootMake = /^[ \t]*command:[ \t]*make[ \t]+(?:verify[ \t]+PKG=\S+|check-docs)[ \t]*$/m.test(workflow);
+    return callsRootMake ? [folder] : [];
+  });
+  // The lint-workflows and act test targets live in the root Makefile too, but no ci-workflows step calls it.
+  const expectedFolders = ['workflows', ...callingFolders].sort();
+  assert.deepEqual([...classify('Makefile').folders].sort(), expectedFolders);
+});
 
 test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
