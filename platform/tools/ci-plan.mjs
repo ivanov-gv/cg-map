@@ -292,6 +292,15 @@ function partitionCiTestRuns(ciWorkflows, folders) {
   return {inPlace, separate: ciWorkflows.filter(workflow => !inPlace.includes(workflow))};
 }
 
+// Both the job outputs and the human summary use this one decision, so they cannot report different calls.
+function testRunCallsFor(folders, changedFiles) {
+  const testRuns = selectWorkflowTestRuns(changedFiles);
+  const {inPlace, separate} = partitionCiTestRuns(testRuns.ci, folders);
+  // The dispatcher would skip an in-place workflows change with no CD changes. Its empty-list path can prove the job.
+  const proveCdTestRuns = inPlace.includes('ci-workflows.yml') && testRuns.cd.length === 0;
+  return {testRuns, inPlace, separate, proveCdTestRuns};
+}
+
 // An in-place call must prove every job of the changed workflow. An empty plan would skip its browser job, so the
 // regular call gets the same smoke area a separate test call would use. Other empty plans still run no browser area.
 function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, areaTable = BROWSER_AREAS) {
@@ -301,8 +310,7 @@ function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, area
 
 export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
-  const testRuns = selectWorkflowTestRuns(changedFiles);
-  const {inPlace, separate} = partitionCiTestRuns(testRuns.ci, folders);
+  const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
   const browserMatrixForCall = matrixForInPlaceBrowserCall(areas, 'ci-apps-web.yml', inPlace, SMOKE_BROWSER_MATRIX);
   const editorBrowserMatrixForCall = matrixForInPlaceBrowserCall(
     editorAreas,
@@ -311,8 +319,6 @@ export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) 
     SMOKE_EDITOR_BROWSER_MATRIX,
     EDITOR_BROWSER_AREAS
   );
-  // The dispatcher would skip an in-place workflows change with no CD changes. Its empty-list path can prove the job.
-  const proveCdTestRuns = inPlace.includes('ci-workflows.yml') && testRuns.cd.length === 0;
   return [
     ...folderLines,
     `browser_matrix=${browserMatrixForCall}`,
@@ -329,12 +335,18 @@ export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) 
 }
 
 export function formatSummary({folders, areas, editorAreas, everything}, reason, changedFiles = []) {
+  const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
+  // formatWorkflowTestRuns still owns the CD and manual lines. Drop its unsplit CI line in favor of the split pair.
+  const dispatchLines = formatWorkflowTestRuns({...testRuns, ci: []}).split('\n').slice(1);
   return [
     `Selected ${everything ? 'everything' : 'a subset of pipelines'}${reason ? ` (${reason})` : ''}.`,
     `- Folders: ${folders.join(', ') || 'none'}`,
     `- Browser areas: ${areas.join(', ') || 'none'}`,
     `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`,
-    formatWorkflowTestRuns(selectWorkflowTestRuns(changedFiles))
+    `- CI test-run calls (separate): ${separate.join(', ') || 'none'}`,
+    `- CI test runs in place: ${inPlace.join(', ') || 'none'}`,
+    ...(proveCdTestRuns ? ['- CD proof flag: true'] : []),
+    ...dispatchLines
   ].join('\n');
 }
 

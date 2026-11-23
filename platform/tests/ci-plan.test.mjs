@@ -15,6 +15,7 @@ import {
   browserMatrix,
   classify,
   formatOutputs,
+  formatSummary,
   planChanges,
   imageMatrix
 } from '../tools/ci-plan.mjs';
@@ -247,6 +248,31 @@ test('an in-place workflows call with no CD changes still proves its dispatcher'
   const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
   assert.ok(regularLines.includes('cd_test_runs=["cd-map-core.yml"]'));
   assert.ok(regularLines.includes('prove_cd_test_runs=false'));
+});
+
+test('summary splits CI test-run calls and shows the CD proof flag', () => {
+  const changedFiles = ['.github/workflows/ci-publish.yml', '.github/workflows/ci-workflows.yml'];
+  assert.equal(
+    formatSummary(planChanges(changedFiles), '', changedFiles),
+    [
+      'Selected a subset of pipelines.',
+      '- Folders: workflows, platform',
+      '- Browser areas: none',
+      '- Editor browser areas: none',
+      '- CI test-run calls (separate): ci-publish.yml',
+      '- CI test runs in place: ci-workflows.yml',
+      '- CD proof flag: true',
+      '- CD test-run dispatches: none',
+      '- Manual test runs: none'
+    ].join('\n')
+  );
+
+  const regularFiles = ['.github/workflows/ci-publish.yml', '.github/workflows/cd-map-core.yml'];
+  const regularSummary = formatSummary(planChanges(regularFiles), '', regularFiles);
+  assert.match(regularSummary, /- CI test-run calls \(separate\): ci-publish\.yml/);
+  assert.match(regularSummary, /- CI test runs in place: none/);
+  assert.match(regularSummary, /- CD test-run dispatches: cd-map-core\.yml/);
+  assert.doesNotMatch(regularSummary, /CD proof flag/);
 });
 
 test('command line selects everything when it has no base or the diff fails', () => {
