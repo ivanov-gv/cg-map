@@ -76,7 +76,8 @@ occupies a runner while it polls, but avoids repeating the browser-image build a
 
 The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
 `CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
-`GET repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT`) for `run_started_at`, then fetches the jobs JSON. The
+`GET repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT`) for `run_started_at`, then fetches every page of the
+jobs JSON with `per_page=100` and `--paginate --slurp`, so the tool sees all jobs in one array of API responses. The
 effective start is the later of the approval job's completion and the attempt's `run_started_at` — this correctly
 handles reruns, where the attempt starts after the original approval. If `run_started_at` is unreadable, it falls back
 to the approval time; if neither is available, it uses the earliest job start. Non-PR events (schedule, manual dispatch)

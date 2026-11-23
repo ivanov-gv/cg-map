@@ -1201,35 +1201,45 @@ test('CI gate checks run budget with aim and limit env vars', () => {
   assert.equal(gate.env.RUN_LIMIT_SECONDS, 420, 'gate must define RUN_LIMIT_SECONDS');
   assert.match(String(gate.env.CD_TEST_RUNS), /cd_test_runs/, 'gate must know when it waits for CD test runs');
   assert.match(stepsText, /run-budget\.mjs/, 'run budget step must use run-budget.mjs');
+  assert.match(
+    stepsText,
+    /jobs\?per_page=100\\?" --paginate --slurp/,
+    'the budget must read every page as one document'
+  );
   assert.match(stepsText, /\$CD_TEST_RUNS/, 'the budget must receive the CD test runs');
 });
 
 // Behavior tests for the real "Check run budget" step.
 // Extract the gate's run script, run it with `bash -e` (as GitHub does), with a fake `gh`
-// that returns jobs JSON whose approval job completed at a controlled time.
+// that returns one JSON object per page, or an array of pages when the step passes --slurp.
 const {gate: gateJob} = load('ci-pr-checks.yml').jobs;
 const runBudgetStep = gateJob.steps.find(step => step.name === 'Check run budget');
 const runBudgetScript = runBudgetStep.run;
 
-// Build a jobs JSON response with the approval job completed at a given offset (seconds ago).
-function makeJobsJson(secondsAgo) {
+// Build one API response page with the approval job completed at a given offset (seconds ago).
+function makeJobsPage(secondsAgo) {
   const completedAt = new Date(Date.now() - secondsAgo * 1000).toISOString();
-  return JSON.stringify({
-    jobs: [
-      {name: 'Approve CI run', completed_at: completedAt, started_at: completedAt}
-    ]
-  });
+  return {jobs: [{name: 'Approve CI run', completed_at: completedAt, started_at: completedAt}]};
+}
+
+function shellQuoted(text) {
+  return String(text).replace(/'/g, "'\\''");
 }
 
 // Run the "Check run budget" step script in a temp dir with a fake `gh` and the real run-budget.mjs.
-// The fake gh serves both the attempt endpoint (for run_started_at) and the jobs endpoint.
+// jobsInput is one or more API response pages; a non-JSON string stays raw for the bad-input test.
 // Returns {code, stdout, stderr}.
-async function runBudgetBehaviorTest(jobsJson, shouldFailGh, attemptJson, cdTestRuns = '[]') {
+async function runBudgetBehaviorTest(jobsInput, shouldFailGh, attemptJson, cdTestRuns = '[]') {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-behavior-'));
+  const isApiInput = typeof jobsInput !== 'string' || /^\s*[{[]/.test(jobsInput);
+  const responsePages = isApiInput ? [jobsInput].flat() : [];
+  const slurpedJson = isApiInput ? JSON.stringify(responsePages) : jobsInput;
+  const rawPages = isApiInput ? responsePages.map(page => JSON.stringify(page)).join('\n') : jobsInput;
 
-  // Create the fake gh script that distinguishes between the attempt and jobs endpoints.
-  const jobsEscaped = jobsJson.replace(/'/g, "'\\''");
-  const attemptEscaped = (attemptJson ?? '{}').replace(/'/g, "'\\''");
+  // Create the fake gh script that distinguishes the attempt endpoint from the jobs endpoint and honours --slurp.
+  const slurpedEscaped = shellQuoted(slurpedJson);
+  const rawEscaped = shellQuoted(rawPages);
+  const attemptEscaped = shellQuoted(attemptJson ?? '{}');
   const ghScript = `#!/usr/bin/env bash
 if [ "${shouldFailGh}" = "true" ]; then
   echo "API error" >&2
@@ -1237,13 +1247,17 @@ if [ "${shouldFailGh}" = "true" ]; then
 fi
 case "$@" in
   *'/attempts/'*/jobs*)
-    echo '${jobsEscaped}'
+    if [[ " $* " == *' --slurp '* ]]; then
+      echo '${slurpedEscaped}'
+    else
+      echo '${rawEscaped}'
+    fi
     ;;
   *'/attempts/'*)
     echo '${attemptEscaped}'
     ;;
   *)
-    echo '${jobsEscaped}'
+    echo '${slurpedEscaped}'
     ;;
 esac
 `;
@@ -1283,13 +1297,13 @@ esac
 
 test('run budget: over the limit exits 1 with ::error::', async () => {
   // 500s ago — over the 420s limit.
-  const result = await runBudgetBehaviorTest(makeJobsJson(500), false);
+  const result = await runBudgetBehaviorTest(makeJobsPage(500), false);
   assert.equal(result.code, 1, 'over the limit must exit 1');
   assert.match(result.stdout, /::error::/, 'over the limit must emit ::error::');
 });
 
 test('run budget: waiting for CD test runs exempts the whole PR run', async () => {
-  const result = await runBudgetBehaviorTest(makeJobsJson(500), false, undefined, '["cd-browser-image.yml"]');
+  const result = await runBudgetBehaviorTest(makeJobsPage(500), false, undefined, '["cd-browser-image.yml"]');
   assert.equal(result.code, 0, 'the CD waiter has its own timeout, so the gate must not fail');
   assert.match(result.stdout, /waiting for CD test runs: cd-browser-image\.yml/, 'the exemption must be visible');
   assert.doesNotMatch(result.stdout, /::error::/, 'an exempt run must not emit ::error::');
@@ -1297,17 +1311,27 @@ test('run budget: waiting for CD test runs exempts the whole PR run', async () =
 
 test('run budget: between aim and limit exits 0 with ::warning::', async () => {
   // 360s ago — between 300s aim and 420s limit.
-  const result = await runBudgetBehaviorTest(makeJobsJson(360), false);
+  const result = await runBudgetBehaviorTest(makeJobsPage(360), false);
   assert.equal(result.code, 0, 'between aim and limit must exit 0');
   assert.match(result.stdout, /::warning::/, 'between aim and limit must emit ::warning::');
 });
 
 test('run budget: under the aim exits 0 with no warning', async () => {
   // 200s ago — under the 300s aim.
-  const result = await runBudgetBehaviorTest(makeJobsJson(200), false);
+  const result = await runBudgetBehaviorTest(makeJobsPage(200), false);
   assert.equal(result.code, 0, 'under the aim must exit 0');
   assert.doesNotMatch(result.stdout, /::warning::/, 'under the aim must not warn');
   assert.doesNotMatch(result.stdout, /::error::/, 'under the aim must not error');
+});
+
+test('run budget: two pages of jobs are read as one document', async () => {
+  // Without --slurp the fake gh emits one JSON object per page, as GitHub's CLI does.
+  const secondPage = {jobs: [{name: 'Check job times', started_at: new Date().toISOString()}]};
+  const result = await runBudgetBehaviorTest([makeJobsPage(360), secondPage], false);
+  assert.equal(result.code, 0, 'two pages must not crash the budget step');
+  assert.match(result.stdout, /360s elapsed/, 'two pages must produce a numeric budget line');
+  assert.doesNotMatch(result.stdout, /unreadable/, 'two pages must not fall back to an unreadable budget');
+  assert.match(result.stdout, /::warning::/, '360s is over the aim');
 });
 
 test('run budget: gh fails exits 0 with ::warning::', async () => {
@@ -1331,15 +1355,9 @@ test('run budget: script crashes exits 0 with ::warning::', async () => {
 test('run budget: rerun with run_started_at uses attempt start, not approval (run 43710253591)', async () => {
   // Simulate a rerun: approval was long ago, but the attempt just started.
   // The attempt endpoint returns a recent run_started_at.
-  const approvalCompleted = new Date(Date.now() - 1933_000).toISOString();
   const runStartedAt = new Date(Date.now() - 13_000).toISOString();
-  const jobsJson = JSON.stringify({
-    jobs: [
-      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
-    ]
-  });
   const attemptJson = JSON.stringify({run_started_at: runStartedAt});
-  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  const result = await runBudgetBehaviorTest(makeJobsPage(1933), false, attemptJson);
   assert.equal(result.code, 0, 'rerun with run_started_at must exit 0 (ok)');
   assert.doesNotMatch(result.stdout, /::error::/, 'rerun must not error');
   assert.match(result.stdout, /13s elapsed/, 'elapsed must be 13s from attempt start');
@@ -1347,15 +1365,9 @@ test('run budget: rerun with run_started_at uses attempt start, not approval (ru
 
 test('run budget: first run with run_started_at earlier than approval uses approval', async () => {
   // On a first run, run_started_at is before the approval. The effective start is the approval.
-  const approvalCompleted = new Date(Date.now() - 200_000).toISOString();
   const runStartedAt = new Date(Date.now() - 300_000).toISOString();
-  const jobsJson = JSON.stringify({
-    jobs: [
-      {name: 'Approve CI run', completed_at: approvalCompleted, started_at: approvalCompleted}
-    ]
-  });
   const attemptJson = JSON.stringify({run_started_at: runStartedAt});
-  const result = await runBudgetBehaviorTest(jobsJson, false, attemptJson);
+  const result = await runBudgetBehaviorTest(makeJobsPage(200), false, attemptJson);
   assert.equal(result.code, 0, 'first run must exit 0');
   assert.match(result.stdout, /200s elapsed/, 'elapsed must be 200s from approval, not run_started_at');
 });

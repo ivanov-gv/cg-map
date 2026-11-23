@@ -6,7 +6,8 @@
 // Verdict: ok (under aim), warn (between aim and limit), fail (over limit), unreadable (bad input).
 //
 // CLI usage: node run-budget.mjs <jobs-json> <approval-job-name> <event-name> <aim-seconds> <limit-seconds> <run-started-at> <cd-test-runs>
-// The jobs JSON is the full response from the GitHub API endpoint for a run attempt's jobs.
+// The jobs JSON is one GitHub API jobs response, or every page slurped into an array of responses, as fetched with
+// `gh api ".../jobs?per_page=100" --paginate --slurp`. Jobs from all pages are combined before evaluation.
 // The run_started_at is the ISO timestamp from the run attempt endpoint (optional).
 // cd-test-runs is a JSON array of CD workflows whose external test runs this PR waits for (optional).
 
@@ -95,6 +96,14 @@ function buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventNa
   return lines.join('\n');
 }
 
+// Returns the jobs from one API response or from every page slurped into an array of responses.
+// Returns null for an unexpected shape, so the caller can report unreadable input.
+function collectJobs(parsedInput) {
+  const responsePages = Array.isArray(parsedInput) ? parsedInput : [parsedInput];
+  if (responsePages.length === 0 || !responsePages.every(page => Array.isArray(page?.jobs))) return null;
+  return responsePages.flatMap(page => page.jobs);
+}
+
 // Evaluate the run budget from parsed jobs JSON.
 // Returns {verdict, elapsedSeconds, summary}.
 // The runStartedAt parameter is optional: when provided, the effective start is the later of
@@ -102,7 +111,8 @@ function buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventNa
 function evaluateRunBudget(jobsJson, approvalJobName, eventName, aimSeconds, limitSeconds, nowIso, runStartedAt, cdTestRuns = []) {
   let jobs;
   try {
-    jobs = typeof jobsJson === 'string' ? JSON.parse(jobsJson) : jobsJson;
+    const parsedInput = typeof jobsJson === 'string' ? JSON.parse(jobsJson) : jobsJson;
+    jobs = collectJobs(parsedInput);
   } catch {
     return {verdict: 'unreadable', elapsedSeconds: null, summary: 'Run budget: unreadable — could not parse jobs JSON'};
   }
@@ -115,11 +125,11 @@ function evaluateRunBudget(jobsJson, approvalJobName, eventName, aimSeconds, lim
   }
   if (!Array.isArray(waitingFor)) waitingFor = [];
 
-  if (!Array.isArray(jobs?.jobs)) {
+  if (!jobs) {
     return {verdict: 'unreadable', elapsedSeconds: null, summary: 'Run budget: unreadable — jobs array not found'};
   }
 
-  const effectiveStart = getEffectiveStart(jobs.jobs, approvalJobName, runStartedAt);
+  const effectiveStart = getEffectiveStart(jobs, approvalJobName, runStartedAt);
   const endIso = nowIso ?? new Date().toISOString();
   const elapsedSeconds = computeElapsedSeconds(effectiveStart, endIso);
   const verdict = getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName, waitingFor);

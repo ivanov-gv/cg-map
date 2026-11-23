@@ -295,6 +295,29 @@ test('evaluateRunBudget: accepts JSON string input', () => {
   assert.equal(result.verdict, 'ok');
 });
 
+test('evaluateRunBudget: reads every page of a slurped two-page jobs response', () => {
+  // No approval or attempt start: the earliest job sets the start, and it is on page two.
+  const firstPage = {total_count: 3, jobs: [{name: 'Verify platform', started_at: '2026-11-23T13:29:00Z'}]};
+  const secondPage = {
+    total_count: 3,
+    jobs: [
+      {name: 'Verify docs', started_at: '2026-11-23T13:28:00Z'},
+      {name: 'CI gate', started_at: '2026-11-23T13:33:00Z'}
+    ]
+  };
+  const result = evaluateRunBudget(
+    JSON.stringify([firstPage, secondPage]),
+    APPROVAL_NAME,
+    'pull_request',
+    AIM,
+    LIMIT,
+    '2026-11-23T13:33:00Z'
+  );
+  assert.equal(result.elapsedSeconds, 300, 'page two must contribute its earlier job');
+  assert.equal(result.verdict, 'ok');
+  assert.match(result.summary, /300s elapsed/);
+});
+
 // Real data: run 43710253591, attempt 2
 // Approval completed at 11:43:04Z, attempt started at 12:15:04Z, gate ran at 12:15:17Z.
 // Without runStartedAt: elapsed from approval = 32 min 13 s → fail (over 420s limit).
