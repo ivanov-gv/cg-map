@@ -5,9 +5,10 @@
 // End = now (the gate step's time).
 // Verdict: ok (under aim), warn (between aim and limit), fail (over limit), unreadable (bad input).
 //
-// CLI usage: node run-budget.mjs <jobs-json> <approval-job-name> <event-name> <aim-seconds> <limit-seconds> <run-started-at>
+// CLI usage: node run-budget.mjs <jobs-json> <approval-job-name> <event-name> <aim-seconds> <limit-seconds> <run-started-at> <cd-test-runs>
 // The jobs JSON is the full response from the GitHub API endpoint for a run attempt's jobs.
 // The run_started_at is the ISO timestamp from the run attempt endpoint (optional).
+// cd-test-runs is a JSON array of CD workflows whose external test runs this PR waits for (optional).
 
 import {readFileSync} from 'node:fs';
 
@@ -65,20 +66,25 @@ function computeElapsedSeconds(startIso, endIso) {
   return (endMilliseconds - startMilliseconds) / 1000;
 }
 
-// Non-PR events (schedule, workflow_dispatch, workflow_call) are exempt from the budget:
-// nightly and dispatched runs already check everything, so there is no budget to enforce.
-function getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName) {
+// Non-PR events are exempt: nightly and dispatched runs check everything. A PR that waits for CD test runs is also
+// exempt: the external browser-image build is longer than the whole-run budget, and the waiter has its own time limit.
+function getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName, cdTestRuns = []) {
   if (eventName !== 'pull_request') return 'ok';
+  if (cdTestRuns.length) return 'ok';
   if (elapsedSeconds === null) return 'unreadable';
   if (elapsedSeconds <= aimSeconds) return 'ok';
   if (elapsedSeconds <= limitSeconds) return 'warn';
   return 'fail';
 }
 
-function buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventName) {
+function buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventName, cdTestRuns = []) {
   const lines = [];
   if (eventName !== 'pull_request') {
     lines.push(`Run budget: exempt (event: ${eventName})`);
+    return lines.join('\n');
+  }
+  if (cdTestRuns.length) {
+    lines.push(`Run budget: exempt (waiting for CD test runs: ${cdTestRuns.join(', ')})`);
     return lines.join('\n');
   }
   if (elapsedSeconds === null) {
@@ -93,13 +99,21 @@ function buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventNa
 // Returns {verdict, elapsedSeconds, summary}.
 // The runStartedAt parameter is optional: when provided, the effective start is the later of
 // the approval time and the run attempt start, correctly handling reruns.
-function evaluateRunBudget(jobsJson, approvalJobName, eventName, aimSeconds, limitSeconds, nowIso, runStartedAt) {
+function evaluateRunBudget(jobsJson, approvalJobName, eventName, aimSeconds, limitSeconds, nowIso, runStartedAt, cdTestRuns = []) {
   let jobs;
   try {
     jobs = typeof jobsJson === 'string' ? JSON.parse(jobsJson) : jobsJson;
   } catch {
     return {verdict: 'unreadable', elapsedSeconds: null, summary: 'Run budget: unreadable — could not parse jobs JSON'};
   }
+
+  let waitingFor = cdTestRuns;
+  try {
+    waitingFor = typeof waitingFor === 'string' ? JSON.parse(waitingFor) : waitingFor;
+  } catch {
+    waitingFor = [];
+  }
+  if (!Array.isArray(waitingFor)) waitingFor = [];
 
   if (!Array.isArray(jobs?.jobs)) {
     return {verdict: 'unreadable', elapsedSeconds: null, summary: 'Run budget: unreadable — jobs array not found'};
@@ -108,18 +122,18 @@ function evaluateRunBudget(jobsJson, approvalJobName, eventName, aimSeconds, lim
   const effectiveStart = getEffectiveStart(jobs.jobs, approvalJobName, runStartedAt);
   const endIso = nowIso ?? new Date().toISOString();
   const elapsedSeconds = computeElapsedSeconds(effectiveStart, endIso);
-  const verdict = getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName);
-  const summary = buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventName);
+  const verdict = getVerdict(elapsedSeconds, aimSeconds, limitSeconds, eventName, waitingFor);
+  const summary = buildSummary(verdict, elapsedSeconds, aimSeconds, limitSeconds, eventName, waitingFor);
 
   return {verdict, elapsedSeconds, summary};
 }
 
 // CLI wrapper
 if (process.argv[1] && process.argv[1].endsWith('run-budget.mjs')) {
-  const [, , jobsFile, approvalJobName, eventName, aimSeconds, limitSeconds, runStartedAt] = process.argv;
+  const [, , jobsFile, approvalJobName, eventName, aimSeconds, limitSeconds, runStartedAt, cdTestRuns] = process.argv;
 
   if (!jobsFile || !approvalJobName || !eventName || !aimSeconds || !limitSeconds) {
-    console.error('Usage: run-budget.mjs <jobs-json-file> <approval-job-name> <event-name> <aim-seconds> <limit-seconds> [run-started-at]');
+    console.error('Usage: run-budget.mjs <jobs-json-file> <approval-job-name> <event-name> <aim-seconds> <limit-seconds> [run-started-at] [cd-test-runs]');
     process.exit(1);
   }
 
@@ -139,7 +153,8 @@ if (process.argv[1] && process.argv[1].endsWith('run-budget.mjs')) {
     Number(aimSeconds),
     Number(limitSeconds),
     undefined,
-    runStartedAt
+    runStartedAt,
+    cdTestRuns
   );
 
   console.log(summary);

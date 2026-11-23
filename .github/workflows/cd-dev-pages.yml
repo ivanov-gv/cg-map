@@ -9,7 +9,7 @@ name: cd-dev-pages
 # The deploy job has no test-run twin: Pages can only publish to this repository.
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-  && format('cd-dev-pages test_run={0} {1}', inputs.test_run, inputs.commit)
+  && format('cd-dev-pages test_run={0} {1} {2}', inputs.test_run, inputs.commit, inputs.test_id)
   || format('cd-dev-pages {0}', github.event.workflow_run.head_sha || inputs.commit || github.sha) }}
 on:
   workflow_run:
@@ -26,6 +26,11 @@ on:
         description: Test run
         type: boolean
         default: true
+      test_id:
+        description: Unique test-run marker, used in the run name so a waiter can identify this run
+        type: string
+        required: false
+        default: ''
 permissions: {}
 jobs:
   switch:

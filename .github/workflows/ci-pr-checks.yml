@@ -92,6 +92,11 @@ jobs:
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
       editor_browser_matrix: ${{ steps.plan.outputs.editor_browser_matrix }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
+      ci_test_runs: ${{ steps.plan.outputs.ci_test_runs }}
+      cd_test_runs: ${{ steps.plan.outputs.cd_test_runs }}
+      manual_test_runs: ${{ steps.plan.outputs.manual_test_runs }}
+      all_browser_matrix: ${{ steps.plan.outputs.all_browser_matrix }}
+      all_editor_browser_matrix: ${{ steps.plan.outputs.all_editor_browser_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
       RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
@@ -128,11 +133,14 @@ jobs:
     if: ${{ !cancelled() && (needs.plan.outputs.workflows == 'true' || needs.plan-test-run.outputs.workflows == 'true') }}
     uses: ./.github/workflows/ci-workflows.yml
     permissions:
-      actions: read
+      actions: write
       contents: read
-      pull-requests: read
+      packages: read
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
+      # Only the regular PR run dispatches CD test runs; a test run must not dispatch another test run.
+      cd_test_runs: ${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}
+      head_sha: ${{ github.event.pull_request.head.sha || github.sha }}
   platform:
     name: platform
     needs: [switch, plan, plan-test-run]
@@ -217,12 +225,128 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' }}
 
+  # A changed CI workflow is proved by calling it in test-run mode here. These calls are static because GitHub cannot
+  # build a reusable call from a matrix; the planner output only decides whether each call runs. None runs inside a
+  # test run, so a test run cannot dispatch itself. CD workflows cannot be called: ci-workflows dispatches them.
+  test-ci-apps-core-demo:
+    name: (test run) apps-core-demo
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-apps-core-demo.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-apps-core-demo.yml')) }}
+    uses: ./.github/workflows/ci-apps-core-demo.yml
+    with:
+      test_run: true
+  test-ci-apps-editor:
+    name: (test run) apps-editor
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-apps-editor.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-apps-editor.yml')) }}
+    uses: ./.github/workflows/ci-apps-editor.yml
+    with:
+      test_run: true
+      browser_matrix: ${{ needs.plan.outputs.all_browser_matrix || needs.plan-test-run.outputs.all_browser_matrix }}
+      phone_tests: all
+  test-ci-apps-web:
+    name: (test run) apps-web
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-apps-web.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-apps-web.yml')) }}
+    uses: ./.github/workflows/ci-apps-web.yml
+    with:
+      test_run: true
+      browser_matrix: ${{ needs.plan.outputs.all_browser_matrix || needs.plan-test-run.outputs.all_browser_matrix }}
+      phone_tests: all
+  test-ci-backend:
+    name: (test run) backend
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-backend.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-backend.yml')) }}
+    uses: ./.github/workflows/ci-backend.yml
+    with:
+      test_run: true
+  test-ci-browser-image:
+    name: (test run) browser-image
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-browser-image.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-browser-image.yml')) }}
+    uses: ./.github/workflows/ci-browser-image.yml
+    with:
+      test_run: true
+  test-ci-contracts:
+    name: (test run) contracts
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-contracts.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-contracts.yml')) }}
+    uses: ./.github/workflows/ci-contracts.yml
+    with:
+      test_run: true
+  test-ci-data:
+    name: (test run) data
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-data.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-data.yml')) }}
+    uses: ./.github/workflows/ci-data.yml
+    with:
+      test_run: true
+  test-ci-docs:
+    name: (test run) docs
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-docs.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-docs.yml')) }}
+    uses: ./.github/workflows/ci-docs.yml
+    with:
+      test_run: true
+  test-ci-map-core:
+    name: (test run) map-core
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-map-core.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-map-core.yml')) }}
+    uses: ./.github/workflows/ci-map-core.yml
+    with:
+      test_run: true
+  test-ci-platform:
+    name: (test run) platform
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-platform.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-platform.yml')) }}
+    uses: ./.github/workflows/ci-platform.yml
+    with:
+      test_run: true
+  test-ci-publish:
+    name: (test run) publish
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-publish.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-publish.yml')) }}
+    # checkCalledWorkflow sees production publish jobs even though only their test-run twins execute here.
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      test_run: true
+      commit: ${{ github.event.pull_request.head.sha || github.sha }}
+  test-ci-tests:
+    name: (test run) tests
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-tests.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-tests.yml')) }}
+    uses: ./.github/workflows/ci-tests.yml
+    with:
+      test_run: true
+  test-ci-transit-relay:
+    name: (test run) transit-relay
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-transit-relay.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-transit-relay.yml')) }}
+    uses: ./.github/workflows/ci-transit-relay.yml
+    with:
+      test_run: true
+  test-ci-workflows:
+    name: (test run) workflows
+    needs: [switch, plan, plan-test-run]
+    if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (contains(needs.plan.outputs.ci_test_runs, 'ci-workflows.yml') || contains(needs.plan-test-run.outputs.ci_test_runs, 'ci-workflows.yml')) }}
+    # checkCalledWorkflow sees ci-workflows' CD dispatcher even when its input is empty in a test run.
+    permissions:
+      actions: write
+      contents: read
+      packages: read
+    uses: ./.github/workflows/ci-workflows.yml
+    with:
+      test_run: true
+
   # No test-run twin: a skipped job counts as passed, so a skipped gate could report a pass under the required name.
   # It holds no permissions and only reads results. Keep this name: main's ruleset requires it.
   gate:
     name: CI gate
     if: always()
-    needs: [approval, switch, plan, plan-test-run, docs, workflows, platform, browser-image, contracts, data, backend, transit-relay, tests, map-core, apps-web, apps-editor, apps-core-demo]
+    needs: [approval, switch, plan, plan-test-run, docs, workflows, platform, browser-image, contracts, data, backend, transit-relay, tests, map-core, apps-web, apps-editor, apps-core-demo, test-ci-apps-core-demo, test-ci-apps-editor, test-ci-apps-web, test-ci-backend, test-ci-browser-image, test-ci-contracts, test-ci-data, test-ci-docs, test-ci-map-core, test-ci-platform, test-ci-publish, test-ci-tests, test-ci-transit-relay, test-ci-workflows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -231,6 +355,7 @@ jobs:
       RESULTS: ${{ toJSON(needs) }}
       PLAN_RESULT: ${{ needs.plan.result }}
       PLAN_TEST_RUN_RESULT: ${{ needs.plan-test-run.result }}
+      CD_TEST_RUNS: ${{ needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]' }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN_ID: ${{ github.run_id }}
@@ -274,6 +399,7 @@ jobs:
           # End = now (the gate step's time).
           # Verdict: ok (under aim), warn (between aim and limit), fail (over limit), unreadable (bad input).
           # Only "fail" causes the gate to fail; "warn" and "unreadable" emit warnings (timings are advisory).
+          # A PR waiting for CD test runs is exempt: the waiter has its own 30-minute limit.
           run_started_at=""
           attempt_file=$(mktemp)
           if gh api "repos/$GH_REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" > "$attempt_file" 2>"$attempt_file.err"; then
@@ -288,7 +414,7 @@ jobs:
             echo "Run budget: unreadable — could not fetch jobs" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" "$run_started_at" 2>&1) && exit_status=0 || exit_status=$?
+          output=$(node platform/tools/run-budget.mjs "$jobs_file" "$APPROVAL_JOB_NAME" "$EVENT_NAME" "$RUN_AIM_SECONDS" "$RUN_LIMIT_SECONDS" "$run_started_at" "$CD_TEST_RUNS" 2>&1) && exit_status=0 || exit_status=$?
           echo "$output" | tee -a "$GITHUB_STEP_SUMMARY"
           verdict=$(echo "$output" | tail -1)
           if [ "$exit_status" -ne 0 ]; then
