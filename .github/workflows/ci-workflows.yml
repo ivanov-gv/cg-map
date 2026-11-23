@@ -12,6 +12,11 @@ on:
         type: string
         required: false
         default: '[]'
+      prove_cd_test_runs:
+        description: Run the dispatcher with an empty list to prove an in-place workflow change
+        type: boolean
+        required: false
+        default: false
       head_sha:
         description: Commit whose changes selected the workflows
         type: string
@@ -57,10 +62,11 @@ jobs:
     environment: test-run
     steps: *lint-steps
   # The CI test runs are reusable calls in ci-pr-checks; CD workflows cannot be reusable, so this job dispatches and
-  # waits for them. It has no test-run twin: a test run must not dispatch itself.
+  # waits for them. It has no test-run twin: a test run must not dispatch itself. An in-place workflows change runs the
+  # empty-list path below so the job itself is proved when no CD workflow changed.
   cd-test-runs:
     name: CD workflow test runs
-    if: ${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}
+    if: ${{ inputs.cd_test_runs != '' && (inputs.cd_test_runs != '[]' || inputs.prove_cd_test_runs == true || inputs.prove_cd_test_runs == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

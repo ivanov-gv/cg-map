@@ -161,10 +161,11 @@ for (const [name, files] of [
 test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 9);
+  assert.equal(lines.length, FOLDERS.length + 10);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
+  assert.ok(lines.includes('prove_cd_test_runs=false'));
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
   assert.ok(lines.includes(`smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`));
@@ -201,6 +202,51 @@ test('a changed folder workflow runs in place, while other changed workflows kee
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
   assert.ok(lines.includes('ci_in_place_test_runs=["ci-apps-web.yml","ci-docs.yml","ci-workflows.yml"]'));
   assert.ok(lines.includes('ci_test_runs=["ci-apps-editor.yml","ci-publish.yml"]'));
+});
+
+test('an in-place browser workflow with no selected areas still proves its browser job', () => {
+  const cases = [
+    {
+      name: 'web',
+      workflow: 'ci-apps-web.yml',
+      source: 'apps/web/tests/offline.test.mjs',
+      output: 'browser_matrix',
+      smoke: SMOKE_BROWSER_MATRIX
+    },
+    {
+      name: 'editor',
+      workflow: 'ci-apps-editor.yml',
+      source: 'apps/editor/tests/offline.test.mjs',
+      output: 'editor_browser_matrix',
+      smoke: SMOKE_EDITOR_BROWSER_MATRIX
+    }
+  ];
+  for (const {name, workflow, source, output, smoke} of cases) {
+    const changedFiles = [`.github/workflows/${workflow}`, source];
+    const plan = planChanges(changedFiles);
+    const areaList = name === 'web' ? plan.areas : plan.editorAreas;
+    assert.deepEqual(areaList, [], `${name} diff should select no browser area`);
+    const lines = formatOutputs(plan, changedFiles).split('\n');
+    assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), `${name} call is not in place`);
+    assert.ok(lines.includes(`${output}=${smoke}`), `${name} regular call does not use the smoke matrix`);
+
+    const regularFiles = [source];
+    const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
+    assert.ok(regularLines.includes(`${output}={"include":[]}`), `${name} call without a workflow change stays empty`);
+  }
+});
+
+test('an in-place workflows call with no CD changes still proves its dispatcher', () => {
+  const changedFiles = ['.github/workflows/ci-workflows.yml'];
+  const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
+  assert.ok(lines.includes('ci_in_place_test_runs=["ci-workflows.yml"]'));
+  assert.ok(lines.includes('cd_test_runs=[]'));
+  assert.ok(lines.includes('prove_cd_test_runs=true'));
+
+  const regularFiles = ['.github/workflows/cd-map-core.yml'];
+  const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
+  assert.ok(regularLines.includes('cd_test_runs=["cd-map-core.yml"]'));
+  assert.ok(regularLines.includes('prove_cd_test_runs=false'));
 });
 
 test('command line selects everything when it has no base or the diff fails', () => {

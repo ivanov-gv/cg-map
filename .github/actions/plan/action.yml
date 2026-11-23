@@ -53,10 +53,10 @@ outputs:
     description: Run the apps-core-demo pipeline.
     value: ${{ steps.plan.outputs.apps-core-demo }}
   browser_matrix:
-    description: Browser test matrix for apps-web.
+    description: Browser test matrix for apps-web; an in-place workflow with no area uses the smoke matrix.
     value: ${{ steps.plan.outputs.browser_matrix }}
   editor_browser_matrix:
-    description: Browser test matrix for apps-editor.
+    description: Browser test matrix for apps-editor; an in-place workflow with no area uses the smoke matrix.
     value: ${{ steps.plan.outputs.editor_browser_matrix }}
   image_matrix:
     description: Image build matrix for publishing.
@@ -70,6 +70,9 @@ outputs:
   cd_test_runs:
     description: CD workflows to dispatch with test_run true for a workflow change.
     value: ${{ steps.plan.outputs.cd_test_runs }}
+  prove_cd_test_runs:
+    description: Run the CD dispatcher with an empty list to prove an in-place workflows change.
+    value: ${{ steps.plan.outputs.prove_cd_test_runs }}
   manual_test_runs:
     description: Workflows that still need a manual test run.
     value: ${{ steps.plan.outputs.manual_test_runs }}

@@ -208,7 +208,10 @@ The gate's planner selects the workflows a change touches and the gate proves th
   call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short area —
   `smoke_browser_matrix` (web's `discover`, five tests) or `smoke_editor_browser_matrix` (editor's `selection`, eight
   tests) — and the default tagged phone tests; it proves the workflow's jobs and steps, not every test. The regular
-  browser calls keep the full planned matrices. A shared action is proved by a workflow that really executes it.
+  browser calls keep the full planned matrices, except that an in-place call with no selected area uses the matching
+  smoke matrix so its browser job still runs. An in-place `ci-workflows` call with no changed CD workflows still runs
+  `cd-test-runs` with the empty list, whose script reports that no CD workflows need a test run. A shared action is
+  proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
   test-run mode. Only a test run of `ci-pr-checks` suppresses dispatch, so a dispatched test run cannot dispatch another
   test run.

@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
 const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'utf8'));
+const CD_DISPATCHER_IF = "${{ inputs.cd_test_runs != '' && (inputs.cd_test_runs != '[]' || inputs.prove_cd_test_runs == true || inputs.prove_cd_test_runs == 'true') }}";
 
 function githubYamlFiles(directory = path.join(repoRoot, '.github')) {
   return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
@@ -32,17 +33,18 @@ function expressionCode(expression) {
     .replace(/"(?:\\.|[^"\\])*"/g, '""');
 }
 
-function evaluateCdTestRunsCondition(condition, cdTestRuns) {
+function evaluateCdTestRunsCondition(condition, cdTestRuns, proveCdTestRuns = false) {
   const expression = String(condition)
     .trim()
     .replace(/^\$\{\{\s*/, '')
     .replace(/\s*\}\}$/, '')
     .trim();
-  return expression.split(/\s*&&\s*/).every(term => {
-    const comparison = /^inputs\.cd_test_runs\s*!=\s*'([^']*)'$/.exec(term.trim());
-    assert.ok(comparison, `unsupported term in CD dispatcher condition: ${term}`);
-    return cdTestRuns !== comparison[1];
-  });
+  const match =
+    /^inputs\.cd_test_runs != '' && \(inputs\.cd_test_runs != '([^']*)' \|\| inputs\.prove_cd_test_runs == true \|\| inputs\.prove_cd_test_runs == 'true'\)$/.exec(
+      expression
+    );
+  assert.ok(match, `unsupported CD dispatcher condition: ${expression}`);
+  return cdTestRuns !== '' && (cdTestRuns !== match[1] || proveCdTestRuns === true || proveCdTestRuns === 'true');
 }
 
 test('GitHub expressions in .github use no unsupported array or string properties', () => {
@@ -782,11 +784,17 @@ test('ci-pr-checks dispatches CD test runs on a regular PR run even when workflo
     "${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}",
     'only a test run of ci-pr-checks suppresses dispatch, not an in-place test run of ci-workflows'
   );
+  assert.equal(
+    call.with.prove_cd_test_runs,
+    '${{ needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs }}',
+    'the planner must tell an in-place call to prove an empty dispatcher'
+  );
   assert.equal(call.with.head_sha, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(jobs['test-ci-workflows'].with.cd_test_runs, undefined, 'the static test call must not dispatch CD workflows');
+  assert.equal(jobs['test-ci-workflows'].with.prove_cd_test_runs, undefined, 'the static test call must not prove the dispatcher');
   const dispatcher = load('ci-workflows.yml').jobs['cd-test-runs'];
-  assert.equal(dispatcher.if, "${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}");
-  assert.doesNotMatch(dispatcher.if, /inputs\.test_run/, 'the dispatcher is gated on the list, not on test-run mode');
+  assert.equal(dispatcher.if, CD_DISPATCHER_IF);
+  assert.doesNotMatch(dispatcher.if, /inputs\.test_run/, 'the dispatcher is gated on the list or an in-place proof');
 });
 
 test('ci-workflows dispatches and waits for a real CD test run, never a dry run', () => {
@@ -794,10 +802,11 @@ test('ci-workflows dispatches and waits for a real CD test run, never a dry run'
   assert.deepEqual(Object.keys(on).sort(), ['pull_request', 'workflow_call', 'workflow_dispatch']);
   assert.ok(on.workflow_call.inputs.cd_test_runs, 'callers must be able to pass the changed CD workflows');
   assert.equal(on.workflow_call.inputs.cd_test_runs.type, 'string');
+  assert.equal(on.workflow_call.inputs.prove_cd_test_runs.type, 'boolean', 'an in-place call can prove an empty list');
   assert.ok(on.workflow_call.inputs.head_sha, 'callers must pass the head commit');
   const dispatcher = jobs['cd-test-runs'];
   assert.ok(dispatcher, 'the old evidence job must be replaced by a dispatcher');
-  assert.equal(dispatcher.if, "${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}");
+  assert.equal(dispatcher.if, CD_DISPATCHER_IF);
   assert.doesNotMatch(dispatcher.if, /github\.event_name/, 'the caller is a PR, not a workflow_call event');
   assert.equal(dispatcher.permissions.actions, 'write');
   assert.equal(dispatcher.permissions.packages, 'read');
@@ -823,11 +832,13 @@ test('the CD dispatcher fetches main history before reading source commits', () 
   assert.ok(scriptIndex > fetchIndex, 'the selector must run after the fetch');
 });
 
-test('the CD dispatcher condition is true only for a non-empty input list', () => {
+test('the CD dispatcher runs for selected workflows or an in-place proof, never for an empty list alone', () => {
   const {jobs} = load('ci-workflows.yml');
   const condition = jobs['cd-test-runs'].if;
   assert.equal(evaluateCdTestRunsCondition(condition, ''), false, 'an unset input must not dispatch');
+  assert.equal(evaluateCdTestRunsCondition(condition, '', true), false, 'an unset input cannot be proved');
   assert.equal(evaluateCdTestRunsCondition(condition, '[]'), false, 'the planner emits [] for an empty selection');
+  assert.equal(evaluateCdTestRunsCondition(condition, '[]', true), true, 'an in-place change proves the empty-list job');
   assert.equal(evaluateCdTestRunsCondition(condition, '["cd-dev-pages.yml"]'), true, 'a selected CD workflow must dispatch');
 });
 
@@ -1261,6 +1272,7 @@ test('the plan action and both plan jobs expose the same test-run and smoke outp
   const outputNames = [
     'ci_in_place_test_runs',
     'ci_test_runs',
+    'prove_cd_test_runs',
     'smoke_browser_matrix',
     'smoke_editor_browser_matrix'
   ];
@@ -1286,6 +1298,7 @@ test('the planner has an output on the plan job for every folder and every test-
       'ci_in_place_test_runs',
       'ci_test_runs',
       'cd_test_runs',
+      'prove_cd_test_runs',
       'manual_test_runs',
       'smoke_browser_matrix',
       'smoke_editor_browser_matrix'

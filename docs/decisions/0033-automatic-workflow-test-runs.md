@@ -71,5 +71,8 @@ splits its selection into `ci_in_place_test_runs` and `ci_test_runs`. A separate
 area to prove the workflow's jobs and steps, not every test, and keeps the default tagged phone tests. The `workflows`
 call still dispatches changed CD workflows on a regular PR run: its in-place test-run mode is not a test run of
 `ci-pr-checks`, and only the latter suppresses dispatch. Published images also carry a moving `:dev` tag and an
-`org.opencontainers.image.revision` label so a consumer can tie that tag to an exact commit. The decision above is
-unchanged; only the cost and destination of the same evidence changed.
+`org.opencontainers.image.revision` label so a consumer can tie that tag to an exact commit. A review closed the
+empty-list gaps in the same approach: an in-place web or editor call uses the smoke matrix when the diff selects no
+area, and an in-place workflows call runs the CD dispatcher's no-op path when no CD workflow changed, so every job of
+the changed workflow still runs. The decision above is unchanged; only the cost and destination of the same evidence
+changed.

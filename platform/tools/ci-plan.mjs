@@ -292,18 +292,36 @@ function partitionCiTestRuns(ciWorkflows, folders) {
   return {inPlace, separate: ciWorkflows.filter(workflow => !inPlace.includes(workflow))};
 }
 
+// An in-place call must prove every job of the changed workflow. An empty plan would skip its browser job, so the
+// regular call gets the same smoke area a separate test call would use. Other empty plans still run no browser area.
+function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, areaTable = BROWSER_AREAS) {
+  if (areas.length === 0 && inPlace.includes(workflow)) return smokeMatrix;
+  return JSON.stringify(browserMatrix(areas, areaTable));
+}
+
 export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   const testRuns = selectWorkflowTestRuns(changedFiles);
   const {inPlace, separate} = partitionCiTestRuns(testRuns.ci, folders);
+  const browserMatrixForCall = matrixForInPlaceBrowserCall(areas, 'ci-apps-web.yml', inPlace, SMOKE_BROWSER_MATRIX);
+  const editorBrowserMatrixForCall = matrixForInPlaceBrowserCall(
+    editorAreas,
+    'ci-apps-editor.yml',
+    inPlace,
+    SMOKE_EDITOR_BROWSER_MATRIX,
+    EDITOR_BROWSER_AREAS
+  );
+  // The dispatcher would skip an in-place workflows change with no CD changes. Its empty-list path can prove the job.
+  const proveCdTestRuns = inPlace.includes('ci-workflows.yml') && testRuns.cd.length === 0;
   return [
     ...folderLines,
-    `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
-    `editor_browser_matrix=${JSON.stringify(browserMatrix(editorAreas, EDITOR_BROWSER_AREAS))}`,
+    `browser_matrix=${browserMatrixForCall}`,
+    `editor_browser_matrix=${editorBrowserMatrixForCall}`,
     `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
     `ci_in_place_test_runs=${JSON.stringify(inPlace)}`,
     `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
+    `prove_cd_test_runs=${proveCdTestRuns}`,
     `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
     `smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`,
     `smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`

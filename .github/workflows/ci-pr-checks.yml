@@ -95,6 +95,7 @@ jobs:
       ci_in_place_test_runs: ${{ steps.plan.outputs.ci_in_place_test_runs }}
       ci_test_runs: ${{ steps.plan.outputs.ci_test_runs }}
       cd_test_runs: ${{ steps.plan.outputs.cd_test_runs }}
+      prove_cd_test_runs: ${{ steps.plan.outputs.prove_cd_test_runs }}
       manual_test_runs: ${{ steps.plan.outputs.manual_test_runs }}
       smoke_browser_matrix: ${{ steps.plan.outputs.smoke_browser_matrix }}
       smoke_editor_browser_matrix: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
@@ -143,9 +144,11 @@ jobs:
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-workflows.yml"') }}
       # A regular PR run dispatches CD test runs even when this call itself runs in-place in test-run mode: the caller
-      # is still the PR, and ci-workflows' CD job is gated only on the list. Only a real test run of ci-pr-checks
-      # suppresses dispatch, so a dispatched test run never dispatches another one.
+      # is still the PR, not a test run of ci-pr-checks. ci-pr-checks empties the list in its own test runs, so a
+      # dispatched test run cannot dispatch another one. A changed workflows workflow with no CD changes gets the
+      # planner's proof flag so its empty-list dispatcher job still runs.
       cd_test_runs: ${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}
+      prove_cd_test_runs: ${{ needs.plan.outputs.prove_cd_test_runs || needs.plan-test-run.outputs.prove_cd_test_runs }}
       head_sha: ${{ github.event.pull_request.head.sha || github.sha }}
   platform:
     name: platform
