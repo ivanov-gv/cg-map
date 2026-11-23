@@ -1,4 +1,4 @@
-import {basemapColors as colors} from './basemap-palette.js';
+import {basemapColors as colors, colorChannels} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 
 const source = 'basemap';
@@ -25,7 +25,7 @@ function slopeLayer(aspect, group, color) {
 const summitHeight = ['round', ['coalesce', ['get', 'ele'], ['get', 'demElevation']]];
 const hasName = ['all', ['has', 'name'], ['!=', ['get', 'name'], '']];
 // "Gorica · 130 m"; an unnamed summit shows its height only.
-const summitText = [
+export const summitText = [
   'case',
   hasName,
   ['concat', ['get', 'name'], ' · ', ['to-string', summitHeight], ' m'],
@@ -98,7 +98,7 @@ export function hillLabelLayers() {
 export function summitIcon() {
   const size = summitIconSizePixels * summitIconPixelRatio;
   const data = new Uint8Array(size * size * 4);
-  const [red, green, blue] = [1, 3, 5].map(offset => parseInt(colors.summit.slice(offset, offset + 2), 16));
+  const [red, green, blue] = colorChannels(colors.summit);
   for (let row = 0; row < size; row++) {
     // Rows widen from the apex at the top to the full base at the bottom.
     const halfWidth = ((row + 1) / size) * (size / 2);

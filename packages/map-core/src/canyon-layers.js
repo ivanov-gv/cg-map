@@ -1,4 +1,4 @@
-import {basemapColors as colors} from './basemap-palette.js';
+import {basemapColors as colors, colorChannels} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 
 // Penpot Core rules: the wall band is as wide as the canyon is deep, about 30 px for the Morača and 10 px for the
@@ -25,9 +25,10 @@ const riverWallWidth = [
 ];
 
 function mixedColor(fromHex, toHex, fraction) {
-  const channel = (hex, index) => parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16);
-  const mixed = [0, 1, 2].map(index => {
-    const value = channel(fromHex, index) + (channel(toHex, index) - channel(fromHex, index)) * fraction;
+  const fromChannels = colorChannels(fromHex);
+  const toChannels = colorChannels(toHex);
+  const mixed = fromChannels.map((fromChannel, index) => {
+    const value = fromChannel + (toChannels[index] - fromChannel) * fraction;
     return Math.round(value).toString(16).padStart(2, '0');
   });
   return `#${mixed.join('')}`;
