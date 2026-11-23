@@ -74,27 +74,33 @@ from source and pushes the image. [cd-dev-pages](../../.github/workflows/cd-dev-
 it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs every night by calling ci-pr-checks with
 `run_all: true`.
 
-| Changed                                                     | Runs                                                                                        |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Markdown, except under `apps/*/public`                      | `docs` only: no code checks                                                                 |
-| Backend Go code                                             | `backend` only                                                                              |
-| `services/transit-relay`                                    | `transit-relay`                                                                             |
-| `platform/pages`                                            | `platform`, `apps-web`, every browser area                                                  |
-| `platform/tools/serve.py`, `dev-port.mjs`                   | `platform`, every map application, every browser area                                       |
-| `platform/browser-image`                                    | `browser-image`, `platform`                                                                 |
-| `platform/tools/lan_certificate.py`                         | `platform`, `apps-editor`                                                                   |
-| `tests`, `data/tools`, `data/tests`, the rest of `platform` | That folder, except as listed below                                                         |
-| `apps/web`                                                  | `apps-web`, `tests`, `platform`, and the browser areas below                                |
-| `apps/editor`                                               | `apps-editor`, `tests`, and the editor browser areas below                                  |
-| `apps/core-demo`                                            | `apps-core-demo`                                                                            |
-| `packages/map-core`                                         | `map-core`, every map application, `tests`, `platform`, every browser area                  |
-| `data/tools/editor-bundle.mjs`                              | `data`, `apps-editor`, `tests`                                                              |
-| `data/tools` changeset importer, data check, level policy   | `data`, `tests`                                                                             |
-| `data/tests/fixtures`                                       | `data`, `apps-web`, `tests`, `platform`, every browser area                                 |
-| `data/sources`, `artifacts`, `imagery`                      | `data`, every map application, `tests`, `platform`, every browser area                      |
-| `packages/contracts`                                        | `contracts`, `data`, `tests`, `platform`: no browser areas                                  |
-| `.github`, the planner                                      | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md) |
-| Root files such as `package-lock.json`, or unknown paths    | Everything                                                                                  |
+| Changed                                                        | Runs                                                                                                                                                                                          |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Markdown, except under `apps/*/public`                         | `docs` only: no code checks                                                                                                                                                                   |
+| Backend Go code                                                | `backend` only                                                                                                                                                                                |
+| `services/transit-relay`                                       | `transit-relay`                                                                                                                                                                               |
+| `platform/pages`                                               | `platform`, `apps-web`, every browser area                                                                                                                                                    |
+| `platform/tools/serve.py`, `dev-port.mjs`                      | `platform`, every map application, every browser area                                                                                                                                         |
+| `platform/browser-image`                                       | `browser-image`, `platform`                                                                                                                                                                   |
+| `platform/tools/lan_certificate.py`                            | `platform`, `apps-editor`                                                                                                                                                                     |
+| `tests`, `data/tools`, `data/tests`, the rest of `platform`    | That folder, except as listed below                                                                                                                                                           |
+| `apps/web`                                                     | `apps-web`, `tests`, `platform`, and the browser areas below                                                                                                                                  |
+| `apps/editor`                                                  | `apps-editor`, `tests`, and the editor browser areas below                                                                                                                                    |
+| `apps/core-demo`                                               | `apps-core-demo`                                                                                                                                                                              |
+| `packages/map-core`                                            | `map-core`, every map application, `tests`, `platform`, every browser area                                                                                                                    |
+| `data/tools/editor-bundle.mjs`                                 | `data`, `apps-editor`, `tests`                                                                                                                                                                |
+| `data/tools` changeset importer, data check, level policy      | `data`, `tests`                                                                                                                                                                               |
+| `data/tests/fixtures`                                          | `data`, `apps-web`, `tests`, `platform`, every browser area                                                                                                                                   |
+| `data/sources`, `artifacts`, `imagery`                         | `data`, every map application, `tests`, `platform`, every browser area                                                                                                                        |
+| `packages/contracts`                                           | `contracts`, `data`, `tests`, `platform`: no browser areas                                                                                                                                    |
+| `.github`, the planner                                         | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md)                                                                                                   |
+| Root `Makefile`                                                | Only the folders whose CI calls it: `docs`, `workflows`, `platform`, `contracts`, `data`, `transit-relay`, `tests`, `map-core`, `apps-web`, `apps-editor`, `apps-core-demo`; no browser areas |
+| Other root files such as `package-lock.json`, or unknown paths | Everything                                                                                                                                                                                    |
+
+The root Makefile rule follows its CI callers: `make verify PKG=<path>` in the folder workflows and `make check-docs` in
+ci-docs, plus the `workflows` folder for its lint-workflows and act targets. Browser jobs, the backend and the browser
+image use their own project Makefiles, so they select no browser areas here; every other root file still runs
+everything.
 
 Check a branch with `make ci-plan BASE=origin/main`.
 
