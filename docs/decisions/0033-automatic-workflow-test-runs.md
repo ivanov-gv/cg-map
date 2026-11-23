@@ -90,9 +90,9 @@ from a temporary directory, outside the repository's `.npmrc`, and distinguishes
 
 ## Update (moving tags in test runs, 2026-11-23)
 
-The owner eased the CD rule this design follows (ivanov-gv/agents 2.2.0, `cicd-general`, CD workflows rules 7 and 8): CD
-deploys to dev, staging and production only by an immutable identifier tied to one commit, never by a moving tag, while
-a test run may resolve its source through a moving tag because it publishes only to an ephemeral destination, and must
-log the commit it resolved. CD test runs here already meet the stricter form: they read the `:dev` label without pulling
-the tag, log `<workflow>: dev tag resolves to <commit>`, and pull and dispatch by that commit. Nothing changes in the
-code.
+The owner eased the CD rule this design follows ([ivanov-gv/agents#9](https://github.com/ivanov-gv/agents/pull/9),
+version 2.2.0, `cicd-general`, CD workflows rules 7 and 8): CD deploys to dev, staging and production only by an
+immutable identifier tied to one commit, never by a moving tag, while a test run may resolve its source through a moving
+tag because it publishes only to an ephemeral destination, and must log the commit it resolved. CD test runs here
+already meet the stricter form: they read the `:dev` label without pulling the tag, log
+`<workflow>: dev tag resolves to <commit>`, and pull and dispatch by that commit. Nothing changes in the code.
