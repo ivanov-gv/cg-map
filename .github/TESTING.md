@@ -14,16 +14,17 @@ tooling they run (`platform/tools/ci-plan.mjs`, `platform/tools/workflow-test-ru
 
 Options to prove a change before it reaches `main`:
 
-| Option                    | Command                                                                                                 | Proves                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Lint                      | `make lint-workflows` (pinned actionlint and shellcheck)                                                | Syntax, expressions, shell                                                             |
-| Platform tests            | `make verify PKG=platform`, with a failure proof for each new assertion                                 | Structure, selection logic, inputs                                                     |
-| act dry run               | `make test-<workflow> ACT="$ACT -n"`                                                                    | That the workflow parses; never a test                                                 |
-| act test run              | `make test-<workflow>`                                                                                  | Steps and their order, locally, in `test_run` mode                                     |
-| PR gate test runs         | Push the branch; `CI gate` calls changed `ci-*` workflows and dispatches changed `cd-*` ones            | The PR's own workflows on GitHub, in `test_run` mode                                   |
-| Branch dispatch           | `gh workflow run <file> --ref <branch> -f test_run=true …`, with inputs that reach the path             | Any path the gate does not reach: fallbacks, other commits or versions, error branches |
-| Dry-run publishing        | The `test_run` dispatch of a publishing workflow, whose test-run environment publishes with `--dry-run` | Publishing steps without a real release                                                |
-| Fix on the failing branch | Cherry-pick the fix onto the branch that showed the bug and read that branch's run                      | That the fix fixes the failure that was seen                                           |
+| Option                    | Command                                                                                                                                                                                         | Proves                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Lint                      | `make lint-workflows` (pinned actionlint and shellcheck)                                                                                                                                        | Syntax, expressions, shell                                                                                       |
+| Platform tests            | `make verify PKG=platform`, with a failure proof for each new assertion                                                                                                                         | Structure, selection logic, inputs                                                                               |
+| act dry run               | `make test-<workflow> ACT="$ACT -n"`                                                                                                                                                            | That the workflow parses; never a test                                                                           |
+| act test run              | `make test-<workflow>`                                                                                                                                                                          | Steps and their order, locally, in `test_run` mode                                                               |
+| PR gate test runs         | Push the branch; `CI gate` calls changed `ci-*` workflows and dispatches changed `cd-*` ones                                                                                                    | The PR's own workflows on GitHub, in `test_run` mode                                                             |
+| Branch dispatch           | `gh workflow run <file> --ref <branch> -f test_run=true …`, with inputs that reach the path                                                                                                     | Any path the gate does not reach: fallbacks, other commits or versions, error branches                           |
+| Proof branch              | A throwaway branch on top of the PR with a small change that selects the path, then `gh workflow run ci-pr-checks.yml --ref <proof branch> -f test_run=false -f run_all=false`; delete it after | Paths the PR's own diff does not select: an in-place call with no browser area, a publish job, every CD dispatch |
+| Dry-run publishing        | The `test_run` dispatch of a publishing workflow, whose test-run environment publishes with `--dry-run`                                                                                         | Publishing steps without a real release                                                                          |
+| Fix on the failing branch | Cherry-pick the fix onto the branch that showed the bug and read that branch's run                                                                                                              | That the fix fixes the failure that was seen                                                                     |
 
 A fix to a bug found after a merge follows the same rule: its own PR must run the path it fixes before it merges.
 
@@ -85,6 +86,11 @@ are exempt, as are PRs that wait for CD test runs: an external browser-image bui
 `cd-test-runs` has its own 30-minute limit. The `CI gate` summary names the wait that grants the exemption. Unreadable
 timings only warn — they do not fail the gate.
 
+The budget includes time spent waiting for runners. The Free plan runs at most 20 jobs at once, so a run's job count
+drives its wall time as much as its slowest job: PR #358 ran 102 jobs and took 565 s while no job took more than 200 s.
+Keep selections narrow rather than raising the limit; for example, a root `Makefile` change selects only the folders
+whose CI calls it, without browser areas (Bug #383), and the same PR then ran 32 jobs in 206 s.
+
 ## Test-run mode
 
 Every job has a `-test-run` twin with the same steps, selected by a `test_run` input. The exceptions are the `switch`
@@ -119,6 +125,10 @@ image gets a moving `:dev` tag next to `:<commit>` and an `org.opencontainers.im
 commit, in both environments. The browser image gets the same label through
 `make -C platform browser-image REVISION=<commit>`. `ci-publish` keeps the newest dev-pages versions, so cleanup never
 deletes the version `:dev` points at.
+
+A new moving tag exists only after its first publish. Pipelines that read it, such as the CD test runs, fail until then,
+and an artifact published only when its inputs change (the browser image) may not get it for weeks. After adding one,
+run `gh workflow run ci-publish.yml --ref main -f test_run=false -f run_all=true` once and check the tag.
 
 Production jobs reference the `dev` environment only when they read its variables or secrets (via `${{ vars.* }}` or
 `${{ secrets.* }}` anywhere in an expression). Jobs that read nothing carry no environment at all. Test-run twins
