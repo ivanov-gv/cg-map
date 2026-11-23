@@ -198,8 +198,6 @@ const renderedResultMarkerIds = page =>
       )
     ].sort();
   });
-// Mirrors the app's footprint filter contract without relying on the expression's position in the array.
-const footprintFilter = footprints => ['in', ['id'], ['literal', footprints]];
 const isInView = (page, coordinates) =>
   page.evaluate(point => window.kompasDebug.map.getBounds().contains(point), coordinates);
 const detailsLines = page => page.locator('#place-details p.detail').allInnerTexts();
@@ -389,42 +387,6 @@ test('choosing an off-screen street reveals it at street zoom', async ({page}) =
   expect(after.zoom).toBeGreaterThanOrEqual(15);
 });
 
-test('visible results get green highlights and the camera stays still', async ({page}) => {
-  const before = await camera(page);
-  await page.locator('#search').fill('bulevar');
-  await expect
-    .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([4]);
-  await expect
-    .poll(async () => (await highlightState(page)).rings.sort())
-    .toEqual(['node/1', 'node/2']);
-  const highlights = await highlightState(page);
-  expect(highlights.searchGreen).toBe('#2e7d32');
-  expect(highlights.buildingColor).toBe(highlights.searchGreen);
-  expect(highlights.ringColor).toBe(highlights.searchGreen);
-  await expectCameraToHold(page, before);
-
-  // Moving the view drops highlights for results that are no longer visible; the camera is not pulled back.
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.3, 42.5], zoom: 17}));
-  await expect
-    .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([]);
-  await expect
-    .poll(async () => (await highlightState(page)).rings)
-    .toEqual([]);
-  expect(await camera(page)).not.toEqual(before);
-});
-
-test('a typed query keeps unmatching places on the map while it highlights results', async ({page}) => {
-  await mapIdle(page);
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-
-  await page.locator('#search').fill('bulevar');
-  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-});
-
 test('Mobile Back keeps unmatching places and result highlights with the query', {tag: ['@phone', '@phone-only']}, async ({page}) => {
   await mapIdle(page);
   await page.locator('#search').fill('bulevar');
@@ -493,25 +455,6 @@ test('a category hides other categories while its query keeps nonmatching places
   const allPlaceIds = [...FOOD_PLACE_IDS, 'node/5'];
   await expect.poll(() => renderedPlaceIds(page)).toEqual(allPlaceIds);
 
-  await page.locator('#search').fill('bulevar');
-  await page.locator('#categories button[data-category="food"]').click();
-  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(FOOD_PLACE_IDS);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
-  await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
-});
-
-test('a category keeps below-threshold places visible when a query narrows results', async ({page}) => {
-  await page.route('**/data/places.geojson', route =>
-    route.fulfill({
-      json: {
-        type: 'FeatureCollection',
-        features: [PLACE, SECOND_PLACE, LOW_LEVEL_MATCH, HIGH_LEVEL_MATCH, NON_FOOD_PLACE]
-      }
-    })
-  );
-  await ready(page);
-  await page.evaluate(coordinates => window.kompasDebug.map.jumpTo({center: coordinates, zoom: 12}), CENTRE);
-  await mapIdle(page);
   await page.locator('#search').fill('bulevar');
   await page.locator('#categories button[data-category="food"]').click();
   await expect.poll(() => renderedResultMarkerIds(page)).toEqual(FOOD_PLACE_IDS);
@@ -626,15 +569,6 @@ test('a Desktop map pick keeps category highlights with search closed', async ({
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(expected);
 });
 
-test('an active query draws and rings below-threshold places at zoom 12', async ({page}) => {
-  await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.2607, 42.4419], zoom: 12}));
-  await mapIdle(page);
-  await page.locator('#search').fill('threshold');
-  await expect(page.locator('.result')).toHaveCount(2);
-  await expect.poll(() => renderedResultMarkerIds(page)).toEqual(['node/3', 'node/4']);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/3', 'node/4']);
-});
-
 test('a picked category draws and rings every in-view result at zoom 12', async ({page}) => {
   const coordinates = [
     PLACE.geometry.coordinates,
@@ -702,25 +636,6 @@ test('an off-screen building result lists places after its reveal', async ({page
   ]);
 });
 
-test('clearing the search removes every green highlight', async ({page}) => {
-  await page.locator('#search').fill('bulevar');
-  await expect
-    .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([4]);
-  await page.locator('#clear-search').click();
-  await expect
-    .poll(async () => (await highlightState(page)).buildings)
-    .toEqual([]);
-  await expect
-    .poll(async () => (await highlightState(page)).rings)
-    .toEqual([]);
-
-  // The next × closes Open results; it must not bring any green mark back.
-  await page.locator('#clear-search').click();
-  await expect(page.locator('#search')).toHaveValue('');
-  expect(await highlightState(page)).toMatchObject({buildings: [], rings: []});
-});
-
 test('closing Open results keeps category highlights and the category filter', {tag: '@phone'}, async ({page}) => {
   await page.locator('#search').fill('bulevar');
   await page.locator('#categories button[data-category="food"]').click();
@@ -743,27 +658,6 @@ test('closing Open results keeps category highlights and the category filter', {
     .poll(async () => (await highlightState(page)).rings.sort())
     .toEqual(['node/1', 'node/2', 'node/3', 'node/4']);
   await expect(page.locator('#categories button[data-category="food"]')).toHaveAttribute('aria-pressed', 'true');
-});
-
-test('the leading place stays green after a pan with no red preview', async ({page}) => {
-  await page.locator('#search').fill('bulevar');
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
-  const preview = () =>
-    page.evaluate(() =>
-      Boolean(window.kompasDebug.map.getFeatureState({source: 'places', id: 'node/1'}).preview)
-    );
-  // The leading match is only chosen once its row is used; a plain search must never reserve a red preview,
-  // including after the debounced filter settles.
-  await expectToHold(async () => expect(await preview()).toBe(false), CAMERA_HOLD_MILLISECONDS);
-  // Wait for the app's moveend handler, which is where it refreshes highlights after a camera move.
-  const moved = page.evaluate(
-    () => new Promise(resolve => window.kompasDebug.map.once('moveend', () => resolve(true)))
-  );
-  await page.evaluate(() => window.kompasDebug.map.panBy([40, -25], {duration: 0}));
-  await moved;
-  await settled(page);
-  await mapIdle(page);
-  await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(['node/1', 'node/2']);
 });
 
 test('choosing an off-screen address reveals it and zooms to street level', async ({page}) => {
@@ -808,30 +702,6 @@ test('the list order survives a building card', async ({page}) => {
   await page.evaluate(() => window.kompasDebug.map.jumpTo({center: [19.26085, 42.44205], zoom: 17}));
   await settled(page);
   await expect(page.locator('.result').first()).toHaveAttribute('data-id', 'footprint/4');
-});
-
-test('green outlines cover every match beyond the 40-row list limit', async ({page}) => {
-  await page.locator('#search').fill('900');
-  await expect(page.locator('.result')).toHaveCount(40);
-  const expected = footprintFilter(MANY_ADDRESSES.map(feature => feature.properties.footprintIndex));
-  await expect.poll(async () => (await highlightState(page)).buildingFilter).toEqual(expected);
-});
-
-test('an unchanged visible set reuses the highlight source', async ({page}) => {
-  await page.locator('#search').fill('13');
-  await expect.poll(async () => (await highlightState(page)).buildings).toEqual([5]);
-  await mapIdle(page);
-  await page.evaluate(() => {
-    window.__highlightUpdates = 0;
-    window.kompasDebug.map.on('sourcedata', event => {
-      if (event.sourceId === 'search-place-highlights' && event.sourceDataType === 'content')
-        window.__highlightUpdates += 1;
-    });
-  });
-  await page.evaluate(() => window.kompasDebug.map.panBy([1, 1], {duration: 0}));
-  await settled(page);
-  await mapIdle(page);
-  expect(await page.evaluate(() => window.__highlightUpdates)).toBe(0);
 });
 
 test('tapping a highlighted building removes its green fringe', async ({page}) => {

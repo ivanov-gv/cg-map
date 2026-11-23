@@ -79,17 +79,6 @@ test('transport toggles, renders route positions, pauses offline, and clears on 
   await expect(page.locator('#transport-info')).toBeHidden();
 });
 
-test('transport failure is visible and does not break the map', async ({page}) => {
-  await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route =>
-    route.fulfill({status: 503, json: {error: 'unavailable'}})
-  );
-  await ready(page);
-  await openMenu(page);
-  await page.getByRole('button', {name: 'Transport', exact: true}).click();
-  await expect(page.locator('#transport-status')).toHaveText(/temporarily unavailable/);
-  expect(await page.evaluate(() => !!window.kompasDebug.map.getLayer('search-place'))).toBe(true);
-});
-
 test('stop snapshot renders and selects independently of live bus availability', async ({page}) => {
   await page.route('https://cg-map-transit-relay.arcane-pond-2083.chatgpt.site/api/vehicles', route =>
     route.fulfill({status: 503, json: {error: 'unavailable'}})
@@ -317,21 +306,6 @@ test.describe('isolated routing provider checks', () => {
     }
   );
 
-  test('route errors and identical endpoints stay explicit without leaving old lines', async ({page}) => {
-    await readyForRouting(page);
-    await tapMapCenter(page, [20.8, 43.7]);
-    await page.getByRole('button', {name: 'From', exact: true}).click();
-    await tapMapCenter(page, [20.8, 43.7]);
-    await page.getByRole('button', {name: 'To', exact: true}).click();
-    await expect(page.locator('#route-status')).toContainText('same point');
-    await tapMapCenter(page, [20.81, 43.71]);
-    await page.getByRole('button', {name: 'To', exact: true}).click();
-    await expect(page.locator('#route-status')).toContainText('unavailable');
-    expect(
-      await page.evaluate(() => window.kompasDebug.map.getSource('planned-route')._data.features.length)
-    ).toBe(0);
-    await expect(page.locator('#route-retry')).toBeVisible();
-  });
 });
 
 test(

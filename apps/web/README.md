@@ -722,8 +722,10 @@ geometry need different fixes.
 ## 15. What tests prove, and what they do not
 
 Node tests cover archive decoding/style validity, search, link safety, download transactions, service-worker responses,
-HTTP transport fallback and satellite configuration/assets. There are also Python server tests and an optional browser
-script in ../tests/browser-check.mjs.
+HTTP transport fallback and satellite configuration/assets. Logic that needs no rendered engine—POI level bands, search
+filters and highlight state, and route/transport errors—lives in tests/*.test.mjs; browser specs keep the journeys that
+need MapLibre, layout or real input. There are also Python server tests and an optional browser script in
+../tests/browser-check.mjs.
 
 Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is
 smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.

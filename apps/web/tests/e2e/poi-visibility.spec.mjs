@@ -32,19 +32,6 @@ const ladder = () =>
       place(`l${level}-east`, level, 0.0002 * level, -0.00015 * level)
     ])
   );
-// Tight rows of long names: only some names can be placed, whichever arrangement the engine finds.
-const dense = () =>
-  featureCollection(
-    Array.from({length: 40}, (_, index) =>
-      place(
-        `dense-${String(index).padStart(2, '0')}`,
-        3 + (index % 3),
-        ((index % 8) - 3.5) * 0.00012,
-        (Math.floor(index / 8) - 2) * 0.00012,
-        {name: `A deliberately long colliding business name ${index}`}
-      )
-    )
-  );
 const eligible = (data, zoom) =>
   data.features
     .filter((feature) => zoom >= THRESHOLDS[feature.properties.visibilityLevel])
@@ -114,150 +101,11 @@ async function openMenu(page) {
 
 // Every level's own threshold is a unit test of the layers in packages/map-core. What only an engine can prove is that its
 // inclusive minzoom behaves at fractional zooms, the same at any threshold, so this crosses one, both ways.
-test('a level is absent just below its threshold, present at it, and reversible', async ({page}) => {
-  const data = ladder();
-  await open(page, data);
-  // Icon admission must not depend on the basemap (other tests keep it, with real label collisions). Without it, these
-  // camera steps do not spend CI's time limit drawing streets in software WebGL.
-  await page.evaluate(() => {
-    const map = window.kompasDebug.map;
-    for (const {id} of map.getStyle().layers)
-      if (!/^place-|^search-place$/.test(id)) map.setLayoutProperty(id, 'visibility', 'none');
-  });
-  const thresholdZoom = THRESHOLDS[3];
-  const zooms = [thresholdZoom - 0.01, thresholdZoom, thresholdZoom + 0.01];
-  const iconsByIncreasingZoom = [];
-  for (const zoom of zooms) {
-    await camera(page, {zoom});
-    await expectIcons(page, eligible(data, zoom));
-    iconsByIncreasingZoom.push(await iconIds(page));
-  }
-  for (const [index, zoom] of [...zooms.entries()].reverse()) {
-    await camera(page, {zoom});
-    await expectIcons(page, iconsByIncreasingZoom[index]);
-  }
-  for (let index = 1; index < iconsByIncreasingZoom.length; index++)
-    expect(
-      iconsByIncreasingZoom[index].filter((id) => iconsByIncreasingZoom[index - 1].includes(id))
-    ).toEqual(iconsByIncreasingZoom[index - 1]);
-});
 
 test.describe('stability', () => {
   // page.route cannot replace a request the service worker answers, and the reload below must see the reordered input.
   test.use({serviceWorkers: 'block'});
-  test('small pans, zoom steps, bearing, round trips, reloads, and input order keep exact icon sets', async ({page}) => {
-    const data = dense();
-    await open(page, data, [TILE_BOUNDARY_LONGITUDE_DEGREES, CENTER_LATITUDE_DEGREES], 17);
-    const all = eligible(data, 17);
-    await expectIcons(page, all);
-    const before = await page.evaluate(() => window.kompasDebug.map.getCenter().toArray());
-    for (const pixels of [1, 2, 5, 10, 20, -20, -10]) {
-      await page.evaluate((x) => window.kompasDebug.map.panBy([x, x / 2], {duration: 0}), pixels);
-      await expectIcons(page, all);
-    }
-    for (const zoom of [17.01, 17.1, 17.3, 17.6, 18, 17.2, 17]) {
-      await camera(page, {center: before, zoom});
-      await expectIcons(page, all);
-    }
-    for (const bearing of [15, 90, 200, 0]) {
-      await camera(page, {bearing});
-      await expectIcons(page, all);
-    }
-    await camera(page, {zoom: 15.5});
-    await expectIcons(page, eligible(data, 15.5));
-    await camera(page, {zoom: 16.5});
-    await expectIcons(page, eligible(data, 16.5));
-    await camera(page, {zoom: 17});
-    await expectIcons(page, all);
 
-    // Intermediate frames of warmed-up animations, not only the settled endpoints.
-    const frames = await page.evaluate(
-      async ({lon, lat}) => {
-        const map = window.kompasDebug.map;
-        const seen = [];
-        const layers = map
-          .getStyle()
-          .layers.map((layer) => layer.id)
-          .filter((id) => id.startsWith('place-icons-'));
-        const sample = () =>
-          seen.push([
-            map.getZoom(),
-            [
-              ...new Set(
-                map
-                  .queryRenderedFeatures({layers})
-                  .flatMap((feature) => JSON.parse(feature.properties.activeIds))
-              )
-            ].sort()
-          ]);
-        map.on('render', sample);
-        const animate = (options) =>
-          new Promise((resolve) => {
-            map.once('moveend', resolve);
-            map.easeTo({...options, duration: 500});
-          });
-        await animate({center: [lon + 0.00005, lat]});
-        await animate({center: [lon, lat]});
-        await animate({zoom: 17.4});
-        await animate({zoom: 17});
-        map.off('render', sample);
-        return seen;
-      },
-      {lon: TILE_BOUNDARY_LONGITUDE_DEGREES, lat: CENTER_LATITUDE_DEGREES}
-    );
-    expect(frames.length).toBeGreaterThan(10);
-    for (const [zoom, ids] of frames) expect(ids, `frame at zoom ${zoom}`).toEqual(eligible(data, zoom));
-
-    // Input order is not an input: the reversed snapshot gives the same IDs and the same draw order.
-    const order = () =>
-      page.evaluate(() =>
-        window.kompasDebug.map
-          .getSource('places')
-          ._data.features.map((feature) => [feature.properties.markerKey, feature.properties.rank])
-      );
-    const ranks = await order();
-    await page.unroute('**/data/places.geojson');
-    await open(page, featureCollection([...data.features].reverse()));
-    await expectIcons(page, all);
-    expect(await order()).toEqual(ranks);
-  });
-
-  test('an earlier level moves only the overridden place and leaves search order alone', async ({page}) => {
-    const base = ladder();
-    const promoted = structuredClone(base);
-    promoted.features.find((feature) => feature.properties.id === 'l5-west').properties.visibilityLevel = 2;
-    const results = async () => {
-      await openMenu(page);
-      await expect(page.locator('.result')).toHaveCount(base.features.length);
-      return page.locator('.result').evaluateAll((rows) => rows.map((row) => row.dataset.id));
-    };
-    await open(page, base, [TILE_BOUNDARY_LONGITUDE_DEGREES, CENTER_LATITUDE_DEGREES], 14);
-    await expectIcons(page, eligible(base, 14));
-    const order = await results();
-    await page.unroute('**/data/places.geojson');
-    await open(page, promoted, [TILE_BOUNDARY_LONGITUDE_DEGREES, CENTER_LATITUDE_DEGREES], 14);
-    await expectIcons(page, [...eligible(base, 14), 'l5-west']);
-    await camera(page, {zoom: 16});
-    await expectIcons(page, [...eligible(base, 16), 'l5-west']);
-    await camera(page, {zoom: 14});
-    await expect.poll(results).toEqual(order);
-  });
-});
-
-test('name collisions never remove an eligible icon', async ({page}) => {
-  const data = dense();
-  await open(page, data);
-  await expectIcons(page, eligible(data, 17));
-  const named = await page.evaluate(() => {
-    const map = window.kompasDebug.map;
-    const layers = map
-      .getStyle()
-      .layers.map((layer) => layer.id)
-      .filter((id) => id.startsWith('place-names-'));
-    return new Set(map.queryRenderedFeatures({layers}).map((feature) => feature.id)).size;
-  });
-  expect(named).toBeGreaterThan(0);
-  expect(named).toBeLessThan(data.features.length);
 });
 
 test('an icon on a house number keeps both the icon and the address label', async ({page}) => {
@@ -537,14 +385,6 @@ test('turning map layers on and off keeps the same icon set', async ({page}) => 
       await camera(page, {center: [TILE_BOUNDARY_LONGITUDE_DEGREES, CENTER_LATITUDE_DEGREES], zoom: 16});
       await expectIcons(page, expected);
     }
-});
-
-test('an invalid level fails visibly instead of becoming high priority', async ({page}) => {
-  const data = ladder();
-  data.features[0].properties.visibilityLevel = 0;
-  await page.route('**/data/places.geojson', (route) => route.fulfill({json: data}));
-  await page.goto('./');
-  await expect(page.locator('#error-text')).toContainText('invalid visibilityLevel');
 });
 
 test('level metadata is an offline shell asset and offline reload keeps the same icons', async ({

@@ -8,6 +8,7 @@ import {
   matchesStreetName,
   collectStreetCandidates,
   placesForMapLayer,
+  rankSearchResults,
   selectNearestPlaces,
   selectSearchResults,
   safeWebsite
@@ -273,6 +274,17 @@ test('categories list places only and an empty query lists no buildings', () => 
   });
   assert.equal(browsing.length, 1);
   assert.equal(browsing[0].kind, 'place');
+});
+
+test('ranking keeps only the nearest forty results and their order', () => {
+  const center = [19.26, 42.44];
+  const results = Array.from({length: 41}, (_, index) => ({
+    id: `place-${index}`,
+    coordinates: [19.26 + index / 10000, 42.44]
+  }));
+  const ranked = rankSearchResults(results, center);
+  assert.equal(ranked.length, 40);
+  assert.deepEqual(ranked.map(result => result.id), results.slice(0, 40).map(result => result.id));
 });
 
 test('place URLs reject executable and malformed schemes', () => {

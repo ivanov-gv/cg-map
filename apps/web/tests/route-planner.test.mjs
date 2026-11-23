@@ -129,6 +129,37 @@ test('a cancelled walking refinement propagates cancellation instead of using a 
   });
 });
 
+test('coincident endpoints show a clear status instead of calling the provider', async testContext => {
+  let requests = 0;
+  const router = {
+    route: async () => {
+      requests++;
+      return {legs: []};
+    }
+  };
+  const {planner, elementById, publishedRoutes} = plannerEnvironment(testContext, {router});
+  planner.endpoints = {from, to: {coordinates: [...from.coordinates]}};
+  await planner.calculate();
+  assert.match(elementById('route-status').textContent, /same point/);
+  assert.equal(requests, 0);
+  assert.equal(publishedRoutes.at(-1).features.length, 0);
+});
+
+test('a provider failure shows its message and offers a retry without stale geometry', async testContext => {
+  const router = {
+    route: async () => {
+      throw new Error('Routing service unavailable. Try again shortly.');
+    }
+  };
+  const {planner, elementById, publishedRoutes} = plannerEnvironment(testContext, {router});
+  planner.endpoints = {from, to};
+  await planner.calculate();
+  assert.equal(elementById('route-status').textContent, 'Routing service unavailable. Try again shortly.');
+  assert.equal(elementById('route-status').dataset.state, 'error');
+  assert.equal(elementById('route-retry').hidden, false);
+  assert.equal(publishedRoutes.at(-1).features.length, 0);
+});
+
 // Preserve the route planner's existing live preference, independent of the startup camera policy.
 test('route framing reads reduced motion for each camera move and includes both endpoints', (testContext) => {
   const {planner, cameraMoves, installGlobal} = plannerEnvironment(testContext);
