@@ -6,7 +6,7 @@ import {entranceBearing} from './building-entrances.mjs';
 import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
-import {reversedCanyonRims, reversedSummitContours} from './relief-directions.mjs';
+import {reversedCanyonRims, reversedClosedContours} from './relief-directions.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const nameFields = new Set(['name', 'name:en']);
 
@@ -971,9 +971,9 @@ function validateReliefDirections(root) {
   const source = name => JSON.parse(fs.readFileSync(path.join(root, 'data/sources', name)));
   const reversedRims = reversedCanyonRims(source('canyon-rims.geojson'), source('water.geojson'));
   requireValue(reversedRims.length === 0, `canyon-rims.geojson: ${reversedRims.length} rims run with the river on their left`);
-  const contours = reversedSummitContours(source('contours.geojson'), source('summits.geojson'));
-  requireValue(contours.checkedCount > 0, 'contours.geojson: no closed contour around a summit to check its direction');
-  requireValue(contours.reversed.length === 0, `contours.geojson: ${contours.reversed.length} contours around a summit run with higher ground on their right`);
+  const contours = reversedClosedContours(source('contours.geojson'), source('summits.geojson'));
+  requireValue(contours.judgedCount > 0, 'contours.geojson: no closed contour to check its direction');
+  requireValue(contours.reversed.length === 0, `contours.geojson: ${contours.reversed.length} closed contours run with higher ground on their right`);
 }
 
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {

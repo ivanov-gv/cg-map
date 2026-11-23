@@ -25,6 +25,7 @@
     "./tools/green-area-labels.mjs": "./tools/green-area-labels.mjs",
     "./tools/green-areas.mjs": "./tools/green-areas.mjs",
     "./tools/relief-directions.mjs": "./tools/relief-directions.mjs",
+    "./tools/ring-geometry.mjs": "./tools/ring-geometry.mjs",
     "./tools/source-json.mjs": "./tools/source-json.mjs",
     "./tools/tile-layers.mjs": "./tools/tile-layers.mjs"
   },
@@ -59,6 +60,7 @@
     "tools/green-area-labels.mjs",
     "tools/green-areas.mjs",
     "tools/relief-directions.mjs",
+    "tools/ring-geometry.mjs",
     "tools/source-json.mjs",
     "tools/tile-layers.mjs"
   ]

@@ -2,6 +2,8 @@
 // footpaths. Derived when tiles are built, like municipality labels: roads.geojson stays an editable OSM source
 // without a fact that would go stale after a land or road edit.
 
+import {isInsideRing} from './ring-geometry.mjs';
+
 const walkingKinds = new Set(['footway', 'pedestrian', 'path', 'track', 'cycleway', 'steps']);
 
 // Returns the bounding box [west, south, east, north] of a ring list.
@@ -21,21 +23,9 @@ function ringsBounds(rings) {
   return [west, south, east, north];
 }
 
-// Even-odd ray casting: a point inside a hole crosses one more ring edge and counts as outside.
-function isInsideRings([longitude, latitude], rings) {
-  let isInside = false;
-  for (const ring of rings) {
-    for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
-      const [startLongitude, startLatitude] = ring[previous];
-      const [endLongitude, endLatitude] = ring[index];
-      const crossesLatitude = (startLatitude > latitude) !== (endLatitude > latitude);
-      if (!crossesLatitude) continue;
-      const crossingLongitude =
-        startLongitude + ((latitude - startLatitude) / (endLatitude - startLatitude)) * (endLongitude - startLongitude);
-      if (longitude < crossingLongitude) isInside = !isInside;
-    }
-  }
-  return isInside;
+// A point inside a hole lies inside two rings, outer and hole, and so counts as outside.
+function isInsideRings(point, rings) {
+  return rings.filter(ring => isInsideRing(point, ring)).length % 2 === 1;
 }
 
 function polygonRingLists(geometry) {

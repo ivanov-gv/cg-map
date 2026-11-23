@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {reversedCanyonRims, reversedSummitContours} from '../tools/relief-directions.mjs';
+import {reversedCanyonRims, reversedClosedContours} from '../tools/relief-directions.mjs';
 
 const collection = features => ({type: 'FeatureCollection', features});
 const line = (coordinates, properties) => ({type: 'Feature', properties, geometry: {type: 'LineString', coordinates}});
@@ -14,13 +14,16 @@ test('a canyon rim with its river on the left is reported', () => {
   assert.deepEqual(reversedCanyonRims(collection([eastward, westward]), water), [westward]);
 });
 
-// The closest ring around a summit must run counter-clockwise, keeping the rising ground on its left.
-test('a contour ring around a summit running clockwise is reported', () => {
-  const square = [[19.0, 42.0], [19.01, 42.0], [19.01, 42.01], [19.0, 42.01], [19.0, 42.0]];
-  const counterClockwise = line(square, {elevation: 100});
-  const clockwise = line([...square].reverse(), {elevation: 120});
-  const summit = elevation => ({type: 'Feature', properties: {enclosingContourElevation: elevation}, geometry: {type: 'Point', coordinates: [19.005, 42.005]}});
-  const result = reversedSummitContours(collection([counterClockwise, clockwise]), collection([summit(100), summit(120)]));
-  assert.equal(result.checkedCount, 2);
-  assert.deepEqual(result.reversed, [clockwise]);
+// Around a hill, rings run counter-clockwise; around a hollow, clockwise. The innermost ring is judged by its summit.
+test('closed contours with higher ground on their right are reported', () => {
+  const square = size => [[19 - size, 42 - size], [19 + size, 42 - size], [19 + size, 42 + size], [19 - size, 42 + size], [19 - size, 42 - size]];
+  const ring = (size, elevation, isClockwise) =>
+    line(isClockwise ? [...square(size)].reverse() : square(size), {elevation});
+  const hillFoot = ring(0.03, 100, false);
+  const hillMiddle = ring(0.02, 120, true);
+  const hillTop = ring(0.01, 140, false);
+  const summit = {type: 'Feature', properties: {enclosingContourElevation: 140}, geometry: {type: 'Point', coordinates: [19, 42]}};
+  const result = reversedClosedContours(collection([hillFoot, hillMiddle, hillTop]), collection([summit]));
+  assert.equal(result.judgedCount, 3);
+  assert.deepEqual(result.reversed, [hillMiddle]);
 });

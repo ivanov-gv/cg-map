@@ -44,7 +44,8 @@ the summit is above OSM height or the OSM/DEM difference exceeds 25 m, and `ok` 
 on the feature; the report in `.build` adds the full mismatch list and build inputs. Contours are 20 m apart with 100 m
 index lines, one `LineString` per connected line, checked against crossing contours before publication. Each contour
 runs with higher ground on its left, judged on the smoothed grid it was traced from, so a label along it reads facing
-uphill.
+uphill. `make -C data check` judges every closed contour that has a ring one interval inside it or a summit inside it
+(`data/tools/relief-directions.mjs`); lines cut open by the detail area's edge are covered by the builder's test.
 
 Slopes are one `Polygon` per connected light class inside the reviewed green areas. A ridge is the shared boundary
 between adjacent sunlit and shaded slope polygons: one simplified, connected `LineString` per boundary, dropping pieces
