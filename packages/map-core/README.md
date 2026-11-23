@@ -25,6 +25,10 @@ Hills use the relief layers inside green areas: a shaded and a sunlit tone, a su
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
 it, since the style has no sprite.
 
+Contour lines are one faint type every 20 m. Their heights are labels along each line, kept un-flipped: the relief
+contract runs every contour with higher ground on its left, so the digits face uphill. MapLibre spaces the labels along
+each line; the wiki's single column down a hill's sunlit slope is not reproduced.
+
 ## Lifecycle
 
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite
