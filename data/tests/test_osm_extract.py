@@ -20,6 +20,7 @@ sys.path.insert(0, str(TOOLS))
 
 from osm_extract import ExtractionState, cli  # noqa: E402
 from osm_extract.identity import content_version  # noqa: E402
+from osm_extract.protected_areas import protected_area_tag  # noqa: E402
 from osm_extract.roads import classify_path, road_level  # noqa: E402
 from osm_extract.settlements import (  # noqa: E402
     NEAREST_MUNICIPALITY_LIMIT_DEGREES, SettlementsLayer, municipality_at,
@@ -988,6 +989,17 @@ class OsmExtractTest(unittest.TestCase):
             after['buildings.geojson'], before['buildings.geojson']
         )
         self.assertEqual(after['roads.geojson'], before['roads.geojson'])
+
+
+class ProtectedAreaTagTest(unittest.TestCase):
+    """A named protected area is a map name; an unnamed one or plain land cover is not."""
+
+    def test_named_reserves_and_protected_areas_are_kept_by_their_first_tag(self):
+        gorica = {'name': 'Park šuma Gorica', 'leisure': 'nature_reserve', 'boundary': 'protected_area'}
+        self.assertEqual(protected_area_tag(gorica), 'leisure=nature_reserve')
+        self.assertEqual(protected_area_tag({'name': 'Zeta', 'boundary': 'protected_area'}), 'boundary=protected_area')
+        self.assertIsNone(protected_area_tag({'leisure': 'nature_reserve'}))
+        self.assertIsNone(protected_area_tag({'name': 'Zlatica', 'leisure': 'park'}))
 
 
 class PathClassTest(unittest.TestCase):

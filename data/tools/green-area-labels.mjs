@@ -1,5 +1,6 @@
 // Label lines for named green areas: a park name reads along the long side of its hill (wiki UI 3.Core), and a
-// MapLibre line label follows its line. Derived when tiles are built, from land.geojson, like municipality labels.
+// MapLibre line label follows its line. Derived when tiles are built, from land.geojson and protected-areas.geojson,
+// like municipality labels.
 
 // The line covers this share of the area's long side, so a name centred on it stays inside the area.
 const labelLineShare = 0.8;
@@ -81,18 +82,24 @@ export function longAxisLine(outerRing) {
   return [toDegrees(start), toDegrees(end)];
 }
 
-// One label line per named polygon part of a green kind; greenKinds is the relief build's reviewed list.
-export function greenAreaLabelLines(landFeatures, greenKinds) {
-  const named = landFeatures.filter(feature => greenKinds.includes(feature.properties.kind) && feature.properties.name);
-  return named.flatMap(feature => {
-    const polygons = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
-    return polygons
-      .map(([outerRing]) => longAxisLine(outerRing))
-      .filter(Boolean)
-      .map(coordinates => ({
-        type: 'Feature',
-        geometry: {type: 'LineString', coordinates},
-        properties: feature.properties
-      }));
-  });
+function labelLines(feature) {
+  const polygons = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates];
+  return polygons
+    .map(([outerRing]) => longAxisLine(outerRing))
+    .filter(Boolean)
+    .map(coordinates => ({
+      type: 'Feature',
+      geometry: {type: 'LineString', coordinates},
+      properties: feature.properties
+    }));
+}
+
+// One label line per named polygon part of a green kind (greenKinds is the relief build's reviewed list), and per named
+// protected area. A park forest such as Park šuma Gorica is named only as a protected area over unnamed woods; a
+// protected area whose name a green area already shows adds no second label.
+export function greenAreaLabelLines(landFeatures, greenKinds, protectedAreas = []) {
+  const namedGreenAreas = landFeatures.filter(feature => greenKinds.includes(feature.properties.kind) && feature.properties.name);
+  const shownNames = new Set(namedGreenAreas.map(feature => feature.properties.name));
+  const namedProtectedAreas = protectedAreas.filter(feature => !shownNames.has(feature.properties.name));
+  return [...namedGreenAreas, ...namedProtectedAreas].flatMap(labelLines);
 }

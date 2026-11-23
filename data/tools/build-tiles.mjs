@@ -58,7 +58,8 @@ function layerFeatures(layer, collection) {
     return collection.features.map(feature => municipalityLabel(feature, layer.fields));
   }
   if (layer.name === 'green_area_labels') {
-    return greenAreaLabelLines(collection.features, greenKinds()).map(line => ({
+    const protectedAreas = readSource('protected-areas.geojson').features;
+    return greenAreaLabelLines(collection.features, greenKinds(), protectedAreas).map(line => ({
       ...line,
       properties: selectedProperties(line.properties, layer.fields)
     }));

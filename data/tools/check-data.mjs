@@ -957,6 +957,20 @@ export function validateRoads(data, {contractsDirectory} = {}) {
   return count;
 }
 
+// Named protected areas carry names for the map, not land cover: one kind, a name and the OSM tag that selected them.
+const protectedAreaTags = new Set(['leisure=nature_reserve', 'boundary=protected_area', 'boundary=national_park']);
+
+export function validateProtectedAreas(data, {label = 'protected-areas.geojson', requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {label, geometryTypes: ['Polygon', 'MultiPolygon'], requireKind: true, requireAdopted, contractsDirectory});
+  for (const feature of data.features) {
+    const properties = feature.properties;
+    requireValue(properties.kind === 'protected-area', `${label}: wrong kind ${properties.kind}`);
+    requireValue(typeof properties.name === 'string' && properties.name.trim().length > 0, `${label}: a protected area needs its name`);
+    requireValue(protectedAreaTags.has(properties.osmTag), `${label}: unsupported osmTag ${properties.osmTag}`);
+  }
+  return count;
+}
+
 function validateReliefSource(data, {label, requireAdopted = false, contractsDirectory}) {
   const count = validateRelief(data, {label, contractsDirectory});
   if (requireAdopted) {
@@ -1017,6 +1031,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     'slopes.geojson': validateReliefSource,
     'ridges.geojson': validateReliefSource,
     'canyon-rims.geojson': validateReliefSource,
+    'protected-areas.geojson': validateProtectedAreas,
   };
   for (const [name, expected] of Object.entries(provenance.layers)) {
     requireValue(/^[\w-]+(\.geojson|\.json)$/.test(name), 'Unsafe provenance layer path');

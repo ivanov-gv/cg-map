@@ -21,6 +21,7 @@ from .country import CountryLayer
 from .identity import adopt_collection
 from .land import LandLayer
 from .places import PlacesLayer
+from .protected_areas import ProtectedAreasLayer
 from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
 from .settlements import SettlementsLayer
@@ -45,12 +46,14 @@ LAYER_GROUPS = {
     'settlements': (SettlementsLayer,),
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
+    'protected-areas': (ProtectedAreasLayer,),
 }
 # Country geometry is finalised before borders clip municipalities to land;
 # settlements then use those areas to assign their municipality. Water and
 # places finish last with the reviewed outline and building footprints.
 FINISH_ORDER = (
-    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places'
+    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places',
+    'protected-areas'
 )
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
