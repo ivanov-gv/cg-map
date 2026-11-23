@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 22778580,
+    "bytes": 23149168,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -66,6 +66,14 @@
         },
         "bytes": 23241
       },
+      "protected_areas": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 694143,
+          "9-12": 23179
+        },
+        "bytes": 717322
+      },
       "ridges": {
         "byZoomBand": {
           "0-8": 0,
@@ -123,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-0af23370f0a1b736.pmtiles",
-    "sha256": "0af23370f0a1b736f9f8325b0bf4ecaf3f483b0b0e10a25a414b54d239241fd6",
+    "file": "montenegro-566a9be61e898be8.pmtiles",
+    "sha256": "566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9",
     "tiles": 229422
   },
   "building_details": {

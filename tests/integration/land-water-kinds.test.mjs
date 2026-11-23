@@ -30,6 +30,7 @@ function selectedName(kind) {
     geometry: {coordinates: [19, 42]}
   };
   const map = {
+    getLayer: () => ({}),
     queryRenderedFeatures(_point, {layers}) {
       return layers.includes('land') ? [hit] : [];
     }

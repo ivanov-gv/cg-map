@@ -88,6 +88,16 @@ function landLayers() {
       type: 'background',
       paint: {'background-color': colors.background}
     }),
+    // Protected areas such as Park šuma Gorica name the land without covering it: an invisible fill keeps them
+    // hit-testable, so an application can pick the named area over the unnamed woods or water inside it.
+    inDrawingGroup('land', {
+      id: 'protected-areas',
+      type: 'fill',
+      source,
+      'source-layer': 'protected_areas',
+      minzoom: 10,
+      paint: {'fill-color': colors.land, 'fill-opacity': 0}
+    }),
     inDrawingGroup('land', {
       id: 'land',
       type: 'fill',

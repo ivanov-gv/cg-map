@@ -208,8 +208,8 @@ remain in their own provenance files.
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-0af23370f0a1b736.pmtiles`, 22,778,580 bytes with SHA-256
-`0af23370f0a1b736f9f8325b0bf4ecaf3f483b0b0e10a25a414b54d239241fd6`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-566a9be61e898be8.pmtiles`, 23,149,168 bytes with SHA-256
+`566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,

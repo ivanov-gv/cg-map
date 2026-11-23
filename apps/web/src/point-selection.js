@@ -287,6 +287,7 @@ function pointKind(layer, properties) {
   if (ENTRANCE_LAYERS.includes(layer)) return 'Entrance';
   if (['buildings', 'building-numbers'].includes(layer)) return 'Building';
   if (layer === 'land') return properties.kind === 'park' ? 'Park' : 'Land';
+  if (layer === 'protected-areas') return 'Protected area';
   if (['water', 'rivers'].includes(layer)) return 'Water';
   if (!layer) return 'Map point';
   return properties.bridge && properties.bridge !== 'no' ? 'Bridge' : 'Road';
@@ -443,7 +444,7 @@ export function describePoint(feature, coordinates, buildingAddresses = new Map(
       source: layer ? 'OpenStreetMap' : '',
       sourceDate: undefined,
       addressLine,
-      typeLabel: isEntrance ? kind : undefined
+      typeLabel: isEntrance || layer === 'protected-areas' ? kind : undefined
     })
   };
 }
