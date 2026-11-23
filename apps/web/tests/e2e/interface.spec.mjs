@@ -2513,22 +2513,16 @@ for (const {name, viewport} of deviceCases) {
   });
 }
 
-for (const {name, viewport} of deviceCases) {
-  test(`keyboard zoom still works on ${name}`, async ({page}) => {
-    async function check() {
-      await ready(page);
-      const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
-      // Focus the map canvas and press '+' to zoom in
-      await page.locator('#map canvas').focus();
-      await page.keyboard.press('+');
-      await expect
-        .poll(async () => page.evaluate(() => window.kompasDebug.map.getZoom()))
-        .toBeGreaterThan(startZoom);
-    }
-
-    await atViewport(page, viewport, check);
-  });
-}
+test('keyboard zoom still works', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+  await ready(page);
+  const startZoom = await page.evaluate(() => window.kompasDebug.map.getZoom());
+  // Focus the map canvas and press '+' to zoom in
+  await page.locator('#map canvas').focus();
+  await page.keyboard.press('+');
+  await expect
+    .poll(async () => page.evaluate(() => window.kompasDebug.map.getZoom()))
+    .toBeGreaterThan(startZoom);
+});
 
 // ---------------------------------------------------------------------------
 // GPS follow location (issue #99, reviewed in #127) — real geolocation
@@ -2544,154 +2538,130 @@ async function waitForLiveFix(page) {
     .toBe('live');
 }
 
-test.describe('GPS follow location', () => {
+test.describe('GPS follow location', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
   // Test a: Click centres and sets data-following/aria-pressed true.
   // Pan the camera far from the fix first, so the centre assertion is meaningful.
-  for (const {name, viewport} of deviceCases) {
-    test(`clicking position button starts following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('clicking position button starts following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Pan far from the fix so the centre check is not trivial.
-        await page.evaluate(() =>
-          window.kompasDebug.map.jumpTo({center: [19.0, 42.2]})
-        );
-        await settled(page);
+    // Pan far from the fix so the centre check is not trivial.
+    await page.evaluate(() =>
+      window.kompasDebug.map.jumpTo({center: [19.0, 42.2]})
+    );
+    await settled(page);
 
-        // Click the position button to start following.
-        await page.locator('#position-action').click();
-        await settled(page);
+    // Click the position button to start following.
+    await page.locator('#position-action').click();
+    await settled(page);
 
-        // data-following should be true.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        // aria-pressed should be true.
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
-        // Camera should centre on the fix.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(150);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // data-following should be true.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // aria-pressed should be true.
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'true');
+    // Camera should centre on the fix.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(150);
+  });
 
   // Test b: A new fix moves the camera while following.
-  for (const {name, viewport} of deviceCases) {
-    test(`new GPS fix moves camera while following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('new GPS fix moves camera while following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Simulate a new fix at a different location.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
+    // Simulate a new fix at a different location.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
 
-        // Camera should have moved to the new fix — wait until it is there.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              SECOND_FIX
-            )
-          )
-          .toBeLessThan(150);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Camera should have moved to the new fix — wait until it is there.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          SECOND_FIX
+        )
+      )
+      .toBeLessThan(150);
+  });
 
   // Test c: Second click stops following; a later fix does not move the camera.
-  for (const {name, viewport} of deviceCases) {
-    test(`second click stops following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('second click stops following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Second click stops following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+    // Second click stops following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
 
-        // Record the camera position after stopping.
-        const stoppedCamera = await camera(page);
+    // Record the camera position after stopping.
+    const stoppedCamera = await camera(page);
 
-        // A new fix should not move the camera.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
+    // A new fix should not move the camera.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
 
-        // Camera should not have moved.
-        expect(await camera(page)).toEqual(stoppedCamera);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Camera should not have moved.
+    expect(await camera(page)).toEqual(stoppedCamera);
+  });
 
   // Test d: Drag the map stops following; a new fix after drag does not move the camera.
-  for (const {name, viewport} of deviceCases) {
-    test(`dragging map stops following on ${name}`, {tag: '@phone'}, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('dragging map stops following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Drag the map on the canvas (simulates user gesture with originalEvent).
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
+    // Drag the map on the canvas (simulates user gesture with originalEvent).
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
 
-        // Following should be off.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
+    // Following should be off.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#position-action')).toHaveAttribute('aria-pressed', 'false');
 
-        // Deliver a new fix — camera should hold.
-        const afterDrag = await camera(page);
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterDrag);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Deliver a new fix — camera should hold.
+    const afterDrag = await camera(page);
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterDrag);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3265,46 +3235,40 @@ test.describe('Flip search bar', () => {
 });
 
 // Test e: Geolocation permission denied — click shows recovery message in #error.
-test.describe('GPS follow location — denied', () => {
-  for (const {name, viewport} of deviceCases) {
-    test(`clicking position button with geolocation denied on ${name}`, async ({page}) => {
-      async function check() {
-        // Simulate denied state: override permissions.query to return 'denied' for geolocation,
-        // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
-        await page.addInitScript(() => {
-          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = async (permissionDescriptor) => {
-            if (permissionDescriptor?.name === 'geolocation') {
-              return {state: 'denied', addEventListener: () => {}};
-            }
-            return originalQuery(permissionDescriptor);
-          };
-          const originalWatchPosition = navigator.geolocation.watchPosition;
-          navigator.geolocation.watchPosition = function(success, error, options) {
-            if (error) error({code: 1, message: 'Permission denied'});
-            return originalWatchPosition.call(this, success, error, options);
-          };
-        });
-        await ready(page);
-        // The tracker sees permission 'denied' from the query, so start() sets 'denied' immediately.
-        await expect
-          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
-          .toBe('denied');
-
-        // Click the position button — it should trigger requestPosition, which shows the recovery message.
-        await page.locator('#position-action').click();
-        await settled(page);
-
-        // data-following should remain false.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        // The error panel should show the recovery message.
-        await expect(page.locator('#error')).toBeVisible();
-        await expect(page.locator('#error-text')).toHaveText(/Location blocked/);
-      }
-
-      await atViewport(page, viewport, check);
+test.describe('GPS follow location — denied', {tag: ['@mobile-only', '@phone']}, () => {
+  test('clicking position button with geolocation denied', async ({page}) => {
+    // Simulate denied state: override permissions.query to return 'denied' for geolocation,
+    // and have watchPosition call the error callback with code 1 (PERMISSION_DENIED).
+    await page.addInitScript(() => {
+      const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = async (permissionDescriptor) => {
+        if (permissionDescriptor?.name === 'geolocation') {
+          return {state: 'denied', addEventListener: () => {}};
+        }
+        return originalQuery(permissionDescriptor);
+      };
+      const originalWatchPosition = navigator.geolocation.watchPosition;
+      navigator.geolocation.watchPosition = function(success, error, options) {
+        if (error) error({code: 1, message: 'Permission denied'});
+        return originalWatchPosition.call(this, success, error, options);
+      };
     });
-  }
+    await ready(page);
+    // The tracker sees permission 'denied' from the query, so start() sets 'denied' immediately.
+    await expect
+      .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+      .toBe('denied');
+
+    // Click the position button — it should trigger requestPosition, which shows the recovery message.
+    await page.locator('#position-action').click();
+    await settled(page);
+
+    // data-following should remain false.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // The error panel should show the recovery message.
+    await expect(page.locator('#error')).toBeVisible();
+    await expect(page.locator('#error-text')).toHaveText(/Location blocked/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3313,314 +3277,270 @@ test.describe('GPS follow location — denied', () => {
 
 // Defect 1: Click the follow button *before* any usable fix arrives.
 // Uses holdGeolocationFixes so the first fix is queued until after the click.
-test.describe('GPS follow — click before fix arrives', () => {
+test.describe('GPS follow — click before fix arrives', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`start following before fix arrives on ${name}`, async ({page, context}) => {
-      async function check() {
-        await holdGeolocationFixes(page);
-        await ready(page);
-        // State is 'acquiring' because the fix is held.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+  test('start following before fix arrives', async ({page, context}) => {
+    await holdGeolocationFixes(page);
+    await ready(page);
+    // State is 'acquiring' because the fix is held.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Click to start following — fix has not arrived yet.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+    // Click to start following — fix has not arrived yet.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Release the held fix — the tracker receives it.
-        await page.evaluate(() => window.releaseHeldFixes());
-        await waitForLiveFix(page);
-        await settled(page);
+    // Release the held fix — the tracker receives it.
+    await page.evaluate(() => window.releaseHeldFixes());
+    await waitForLiveFix(page);
+    await settled(page);
 
-        // Following should still be active and camera centred on the fix.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(150);
+    // Following should still be active and camera centred on the fix.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(150);
 
-        // Record camera while following (centered on FIRST_FIX).
-        const whileFollowing = await camera(page);
+    // Record camera while following (centered on FIRST_FIX).
+    const whileFollowing = await camera(page);
 
-        // Drag the map — should stop following without re-centring.
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Drag the map — should stop following without re-centring.
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // The drag must not have re-centred the camera (defect 1: #isLocationRequested not cleared
-        // by the follow branch causes refresh() to re-center on the old fix).
-        const afterDrag = await camera(page);
-        const reCentered = await page.evaluate(
-          ({whileFollowingCenter}) => {
-            return window.kompasDebug.map.getCenter().distanceTo({
-              lng: whileFollowingCenter[0],
-              lat: whileFollowingCenter[1]
-            }) < 100;
-          },
-          {whileFollowingCenter: whileFollowing.center}
-        );
-        expect(reCentered).toBe(false);
+    // The drag must not have re-centred the camera (defect 1: #isLocationRequested not cleared
+    // by the follow branch causes refresh() to re-center on the old fix).
+    const afterDrag = await camera(page);
+    const reCentered = await page.evaluate(
+      ({whileFollowingCenter}) => {
+        return window.kompasDebug.map.getCenter().distanceTo({
+          lng: whileFollowingCenter[0],
+          lat: whileFollowingCenter[1]
+        }) < 100;
+      },
+      {whileFollowingCenter: whileFollowing.center}
+    );
+    expect(reCentered).toBe(false);
 
-        // Deliver another fix — camera should hold at the dragged position.
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterDrag);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Deliver another fix — camera should hold at the dragged position.
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterDrag);
+  });
 });
 
 // Acquiring style: the button uses the filled toggle style while following even without a fix.
 // Uses holdGeolocationFixes so the fix is held until after the click.
-test.describe('GPS follow — acquiring style', () => {
+test.describe('GPS follow — acquiring style', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`position button uses filled style while acquiring on ${name}`, async ({page}) => {
-      async function check() {
-        await holdGeolocationFixes(page);
-        await ready(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+  test('position button uses filled style while acquiring', async ({page}) => {
+    await holdGeolocationFixes(page);
+    await ready(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // Read the not-following background first.
-        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
+    // Read the not-following background first.
+    const backgroundNotFollowing = await page.locator('#position-action').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-        // Click to start following — state is still 'acquiring' but following is active.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
+    // Click to start following — state is still 'acquiring' but following is active.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'acquiring');
 
-        // The button background should differ from the not-following background.
-        const backgroundAcquiring = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
+    // The button background should differ from the not-following background.
+    const backgroundAcquiring = await page.locator('#position-action').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-        expect(backgroundAcquiring).not.toEqual(backgroundNotFollowing);
+    expect(backgroundAcquiring).not.toEqual(backgroundNotFollowing);
 
-        // Verify it matches --green from the root.
-        const greenColor = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
-        );
-        const red = parseInt(greenColor.slice(1, 3), 16);
-        const green = parseInt(greenColor.slice(3, 5), 16);
-        const blue = parseInt(greenColor.slice(5, 7), 16);
-        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(backgroundAcquiring).toBe(expectedRgb);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Verify it matches --green from the root.
+    const greenColor = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
+    );
+    const red = parseInt(greenColor.slice(1, 3), 16);
+    const green = parseInt(greenColor.slice(3, 5), 16);
+    const blue = parseInt(greenColor.slice(5, 7), 16);
+    const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
+    expect(backgroundAcquiring).toBe(expectedRgb);
+  });
 });
 
 // Defect 2: Follow, then choose a search result; a new fix should not move the camera.
-test.describe('GPS follow — search result stops following', () => {
+test.describe('GPS follow — search result stops following', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`choosing a search result stops following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('choosing a search result stops following', async ({page, context}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // On Flip the search field is hidden until the dock opens, so open the menu first.
-        if (await page.locator('body').getAttribute('data-device') === 'flip') {
-          await openMenu(page);
-        }
-        // Search and choose a result — this moves the camera, which stops following.
-        await page.locator('#search').fill('Nearby place 0');
-        await expect(page.locator('.result')).toHaveCount(1);
-        await page.locator('.result').click();
-        await settled(page);
+    // Search and choose a result — this moves the camera, which stops following.
+    await page.locator('#search').fill('Nearby place 0');
+    await expect(page.locator('.result')).toHaveCount(1);
+    await page.locator('.result').click();
+    await settled(page);
 
-        // Following should be off.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Following should be off.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // Deliver a new fix — camera should hold.
-        const afterSearch = await camera(page);
-        await context.setGeolocation(SECOND_FIX);
-        await waitForLiveFix(page);
-        await settled(page);
-        await expectCameraToHold(page, afterSearch);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Deliver a new fix — camera should hold.
+    const afterSearch = await camera(page);
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterSearch);
+  });
 });
 
 // Restart with the same coordinates: follow, drag (stops), click again after the fix goes stale.
 // The stale state forces #startFollowing through requestPosition(), which is where the old code
 // failed to reset #lastFollowedCoordinates and never moved the camera on the retry.
-test.describe('GPS follow — restart with same coordinates', () => {
+test.describe('GPS follow — restart with same coordinates', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`restart following with same coordinates on ${name}`, async ({page, context}) => {
-      async function check() {
-        // Install the clock before the page loads so the PositionTracker's reevaluation interval
-        // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
-        // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
-        await page.clock.install();
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('restart following with same coordinates', async ({page, context}) => {
+    // Install the clock before the page loads so the PositionTracker's reevaluation interval
+    // uses the controlled clock. After making the fix stale, we switch to setSystemTime so
+    // that Date.now() advances naturally and MapLibre's easeTo animations work normally.
+    await page.clock.install();
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Drag the map to stop following.
-        const canvas = page.locator('#map canvas');
-        const box = await canvas.boundingBox();
-        const centerX = box.x + box.width / 2;
-        const centerY = box.y + box.height / 2;
-        await page.mouse.move(centerX, centerY);
-        await page.mouse.down();
-        await page.mouse.move(centerX + 100, centerY + 100);
-        await page.mouse.up();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Drag the map to stop following.
+    const canvas = page.locator('#map canvas');
+    const box = await canvas.boundingBox();
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 100, centerY + 100);
+    await page.mouse.up();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        // Fast-forward past the freshness limit so the fix becomes stale.
-        // This is essential: when the state is still 'live', #startFollowing moves the camera
-        // directly and the old code works. Only a stale state forces the requestPosition() path.
-        await page.clock.fastForward(31_000);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
+    // Fast-forward past the freshness limit so the fix becomes stale.
+    // This is essential: when the state is still 'live', #startFollowing moves the camera
+    // directly and the old code works. Only a stale state forces the requestPosition() path.
+    await page.clock.fastForward(31_000);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-state', 'stale');
 
-        // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
-        // The state remains 'stale' because the snapshot was already updated by the clock.
-        await page.clock.setSystemTime(new Date());
+    // Switch to system time so MapLibre's easeTo animations (requestAnimationFrame) work normally.
+    // The state remains 'stale' because the snapshot was already updated by the clock.
+    await page.clock.setSystemTime(new Date());
 
-        // Click again — the stale state forces a retry, which delivers the same coordinates.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Click again — the stale state forces a retry, which delivers the same coordinates.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Camera should centre on the fix — this is the key assertion.
-        // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
-        // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
-        // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
-              FIRST_FIX
-            )
-          )
-          .toBeLessThan(50);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Camera should centre on the fix — this is the key assertion.
+    // On the old code, #lastFollowedCoordinates was not reset, so #isNewFollowFix returned false
+    // and the camera stayed where the drag left it (~150 m from the fix) even though data-following
+    // was 'true'. A tight tolerance distinguishes 'camera at fix' from 'camera where drag left it'.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (fix) => window.kompasDebug.map.getCenter().distanceTo({lng: fix.longitude, lat: fix.latitude}),
+          FIRST_FIX
+        )
+      )
+      .toBeLessThan(50);
+  });
 });
 
 // Resize while following: following should not stop.
 // The old code stopped following on every movestart that wasn't tagged by the follower.
 // A viewport resize fires movestart synchronously, so following was incorrectly stopped.
-test.describe('GPS follow — resize while following', () => {
+test.describe('GPS follow — resize while following', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`map resize does not stop following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('map resize does not stop following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Start following and wait for the camera animation to fully settle.
-        // Without this wait, the follow ease may still be running when we resize,
-        // and MapLibre fires no movestart while already moving — so the old code's
-        // stopFollowingOnForeignMove never fires and the test passes by accident.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-        await expectCameraToHold(page, await camera(page));
+    // Start following and wait for the camera animation to fully settle.
+    // Without this wait, the follow ease may still be running when we resize,
+    // and MapLibre fires no movestart while already moving — so the old code's
+    // stopFollowingOnForeignMove never fires and the test passes by accident.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    await expectCameraToHold(page, await camera(page));
 
-        // Resize the viewport by a clear amount so the map container actually changes size.
-        const resizedViewport = name === 'desktop'
-          ? {width: 1000, height: 700}
-          : name === 'mobile'
-            ? {width: 390, height: 844}
-            : {width: 360, height: 360};
-        await page.setViewportSize(resizedViewport);
-        await settled(page);
+    // Resize the viewport by a clear amount so the map container actually changes size.
+    const resizedViewport = {width: 390, height: 844};
+    await page.setViewportSize(resizedViewport);
+    await settled(page);
 
-        // Following should still be active after resize.
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    // Following should still be active after resize.
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+  });
 });
 
 // Dismissed prompt: start with permission not granted, click triggers error callback.
-test.describe('GPS follow — dismissed prompt', () => {
-  for (const {name, viewport} of deviceCases) {
-    test(`dismissed permission prompt shows error on ${name}`, async ({page}) => {
-      async function check() {
-        // Simulate permission not granted: watchPosition calls error callback with code 1.
-        await page.addInitScript(() => {
-          const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = async (permissionDescriptor) => {
-            if (permissionDescriptor?.name === 'geolocation') {
-              return {state: 'prompt', addEventListener: () => {}};
-            }
-            return originalQuery(permissionDescriptor);
-          };
-          const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
-          navigator.geolocation.watchPosition = function(success, error, options) {
-            // Simulate the error callback being called (permission dismissed).
-            if (error) error({code: 1, message: 'Permission dismissed'});
-            return originalWatchPosition(success, error, options);
-          };
-        });
-        await ready(page);
-        // State is 'prompt' after the error callback (code 1 with permission !== 'denied').
-        await expect
-          .poll(() => page.locator('#position-badge').getAttribute('data-state'))
-          .toBe('prompt');
-
-        // Click the position button — following should not start, error should be visible.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
-        await expect(page.locator('#error')).toBeVisible();
-      }
-
-      await atViewport(page, viewport, check);
+test.describe('GPS follow — dismissed prompt', {tag: ['@mobile-only', '@phone']}, () => {
+  test('dismissed permission prompt shows error', async ({page}) => {
+    // Simulate permission not granted: watchPosition calls error callback with code 1.
+    await page.addInitScript(() => {
+      const originalQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = async (permissionDescriptor) => {
+        if (permissionDescriptor?.name === 'geolocation') {
+          return {state: 'prompt', addEventListener: () => {}};
+        }
+        return originalQuery(permissionDescriptor);
+      };
+      const originalWatchPosition = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+      navigator.geolocation.watchPosition = function(success, error, options) {
+        // Simulate the error callback being called (permission dismissed).
+        if (error) error({code: 1, message: 'Permission dismissed'});
+        return originalWatchPosition(success, error, options);
+      };
     });
-  }
+    await ready(page);
+    // State is 'prompt' after the error callback (code 1 with permission !== 'denied').
+    await expect
+      .poll(() => page.locator('#position-badge').getAttribute('data-state'))
+      .toBe('prompt');
+
+    // Click the position button — following should not start, error should be visible.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    await expect(page.locator('#error')).toBeVisible();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -4228,47 +4148,43 @@ test.describe('Flip dock content derived from state', () => {
 // Desktop and Mobile dock footer visibility (review finding 4)
 // ---------------------------------------------------------------------------
 
-test.describe('Desktop and Mobile dock footer visibility', () => {
+test.describe('Dock footer visibility', () => {
   test.beforeEach(({page}) => stubRouting(page));
 
+  test('open dock shows Satellite, Transport, Download', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+    await openMenu(page);
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
+
+    // Footer should be visible with all controls.
+    await expect(page.locator('.dock-footer')).toBeVisible();
+    await expect(page.locator('#satellite-toggle')).toBeVisible();
+    await expect(page.locator('#transport-toggle')).toBeVisible();
+    await expect(page.locator('#download')).toBeVisible();
+  });
+
+  test('burger label toggles Open/Close menu', {tag: ['@mobile-only', '@phone']}, async ({page}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
+    await ready(page);
+
+    // Dock closed: "Open menu".
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+
+    // Open dock: "Close menu".
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
+
+    // Close dock: "Open menu" again.
+    await page.locator('#menu-toggle').click();
+    await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
+  });
+
+  // The dock footer's top padding is 16 px on Desktop and Mobile (guarded #155).
   for (const {name, viewport} of [
     {name: 'desktop', viewport: {width: 1280, height: 800}},
     {name: 'mobile', viewport: {width: 412, height: 840}}
   ]) {
-    test(`open dock shows Satellite, Transport, Download on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-        await expect(page.locator('body')).toHaveAttribute('data-view', 'dock');
-
-        // Footer should be visible with all controls.
-        await expect(page.locator('.dock-footer')).toBeVisible();
-        await expect(page.locator('#satellite-toggle')).toBeVisible();
-        await expect(page.locator('#transport-toggle')).toBeVisible();
-        await expect(page.locator('#download')).toBeVisible();
-      });
-    });
-
-    test(`burger label toggles Open/Close menu on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-
-        // Dock closed: "Open menu".
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
-
-        // Open dock: "Close menu".
-        await page.locator('#menu-toggle').click();
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Close menu');
-
-        // Close dock: "Open menu" again.
-        await page.locator('#menu-toggle').click();
-        await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
-      });
-    });
-
-    // The dock footer's top padding is 16 px on Desktop and Mobile (guarded #155).
     test(`dock footer top padding is 16 px on ${name}`, async ({page}) => {
       await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
       await atViewport(page, viewport, async () => {
@@ -4395,96 +4311,85 @@ test.describe('Escape closes dock and restores focus', () => {
 });
 
 // Layer toggle while following: following should stop on the camera move.
-test.describe('GPS follow — layer toggle stops following', () => {
+test.describe('GPS follow — layer toggle stops following', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`toggling satellite layer stops following on ${name}`, async ({page, context}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-      await page.setViewportSize(viewport);
-      await ready(page);
-      await context.setGeolocation(FIRST_FIX);
-      await waitForLiveFix(page);
+  test('toggling satellite layer stops following', async ({page, context}) => {
+    await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-      // Start following.
-      await page.locator('#position-action').click();
-      await settled(page);
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-      // Open the menu to access the satellite toggle, then toggle it.
-      await openMenu(page);
-      // On Flip, cycle to the modes state to reach the satellite toggle.
-      if (name === 'flip') await page.locator('#menu-toggle').click();
-      await page.locator('#satellite-toggle').click();
-      await settled(page);
+    // Open the menu to access the satellite toggle, then toggle it.
+    await openMenu(page);
+    await page.locator('#satellite-toggle').click();
+    await settled(page);
 
-      // Following should be off (the camera move from the satellite toggle stops it).
-      await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Following should be off (the camera move from the satellite toggle stops it).
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-      // Deliver a new fix — camera should hold.
-      const afterToggle = await camera(page);
-      await context.setGeolocation(SECOND_FIX);
-      await waitForLiveFix(page);
-      await settled(page);
-      await expectCameraToHold(page, afterToggle);
-    });
-  }
+    // Deliver a new fix — camera should hold.
+    const afterToggle = await camera(page);
+    await context.setGeolocation(SECOND_FIX);
+    await waitForLiveFix(page);
+    await settled(page);
+    await expectCameraToHold(page, afterToggle);
+  });
 });
 
 // Defect 3: The computed background of #position-action differs between following and not following.
-test.describe('GPS follow — button style', () => {
+test.describe('GPS follow — button style', {tag: ['@mobile-only', '@phone']}, () => {
   test.use({permissions: ['geolocation'], geolocation: FIRST_FIX});
 
-  for (const {name, viewport} of deviceCases) {
-    test(`position button background differs when following on ${name}`, async ({page, context}) => {
-      async function check() {
-        await ready(page);
-        await context.setGeolocation(FIRST_FIX);
-        await waitForLiveFix(page);
+  test('position button background differs when following', async ({page, context}) => {
+    await ready(page);
+    await context.setGeolocation(FIRST_FIX);
+    await waitForLiveFix(page);
 
-        // Read the CSS custom property --green from the root computed style.
-        const greenColor = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
-        );
+    // Read the CSS custom property --green from the root computed style.
+    const greenColor = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--green').trim()
+    );
 
-        // Not following: background is transparent (or near-transparent).
-        const backgroundNotFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
+    // Not following: background is transparent (or near-transparent).
+    const backgroundNotFollowing = await page.locator('#position-action').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-        // Start following.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
+    // Start following.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'true');
 
-        // Following: background should match --green.
-        const backgroundFollowing = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
+    // Following: background should match --green.
+    const backgroundFollowing = await page.locator('#position-action').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-        expect(backgroundFollowing).not.toEqual(backgroundNotFollowing);
-        // Convert hex --green to rgb for comparison (e.g. #193f36 → rgb(25, 63, 54)).
-        const red = parseInt(greenColor.slice(1, 3), 16);
-        const green = parseInt(greenColor.slice(3, 5), 16);
-        const blue = parseInt(greenColor.slice(5, 7), 16);
-        const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
-        expect(backgroundFollowing).toBe(expectedRgb);
+    expect(backgroundFollowing).not.toEqual(backgroundNotFollowing);
+    // Convert hex --green to rgb for comparison (e.g. #193f36 → rgb(25, 63, 54)).
+    const red = parseInt(greenColor.slice(1, 3), 16);
+    const green = parseInt(greenColor.slice(3, 5), 16);
+    const blue = parseInt(greenColor.slice(5, 7), 16);
+    const expectedRgb = `rgb(${red}, ${green}, ${blue})`;
+    expect(backgroundFollowing).toBe(expectedRgb);
 
-        // Stop following — background should no longer be green.
-        await page.locator('#position-action').click();
-        await settled(page);
-        await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
+    // Stop following — background should no longer be green.
+    await page.locator('#position-action').click();
+    await settled(page);
+    await expect(page.locator('#position-badge')).toHaveAttribute('data-following', 'false');
 
-        const backgroundAfterStop = await page.locator('#position-action').evaluate(
-          el => getComputedStyle(el).backgroundColor
-        );
+    const backgroundAfterStop = await page.locator('#position-action').evaluate(
+      el => getComputedStyle(el).backgroundColor
+    );
 
-        expect(backgroundAfterStop).not.toBe(expectedRgb);
-      }
-
-      await atViewport(page, viewport, check);
-    });
-  }
+    expect(backgroundAfterStop).not.toBe(expectedRgb);
+  });
 
 });
 
