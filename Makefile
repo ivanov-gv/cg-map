@@ -66,10 +66,10 @@ lint-workflows:
 	fi
 
 # Local workflow runs, always in test-run mode: see .github/TESTING.md. Dry run: make test-all-workflows ACT="$ACT -n"
-ACT ?= gh act
-# The default works only after the gh act binary is the pinned build; see .github/TESTING.md.
-# Workflows use environment.deployment, which released act rejects. See .github/TESTING.md for the pinned build.
-ACT_PINNED_COMMIT := 0f761c049dc3
+# Workflows use environment.deployment, which released act (0.2.98) rejects. Until nektos/act#6243 is merged and
+# released, run act built from that pull request's commit (.github/TESTING.md); then return to the released act.
+ACT ?= act
+ACT_PINNED_COMMIT := 0f761c0
 act-pinned:
 	@version="$$($(ACT) --version 2>&1)"; \
 	case "$$version" in \

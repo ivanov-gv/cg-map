@@ -137,19 +137,20 @@ names an environment, and a deployment shows only its chosen job's status.
 
 ## Locally with act
 
-Needs Docker and the pinned act build. Workflows use `environment.deployment`, which released 0.2.88 and 0.2.98 reject;
-build the schema fix from [nektos/act#6243](https://github.com/nektos/act/pull/6243) once:
+Needs Docker and act built from [nektos/act#6243](https://github.com/nektos/act/pull/6243). Workflows use
+`environment.deployment`, which released act 0.2.98 rejects. Use this build until that pull request is merged and
+released, then go back to the released act (or `gh act`) and drop the version check. Install it once; `go install`
+cannot fetch a pull request's commit by itself, so check it out first:
 
 ```sh
-git clone https://github.com/nektos/act "$HOME/.cache/cg-map/act-src"
-git -C "$HOME/.cache/cg-map/act-src" fetch origin refs/pull/6243/head
+git clone --filter=blob:none https://github.com/nektos/act "$HOME/.cache/cg-map/act-src"
+git -C "$HOME/.cache/cg-map/act-src" fetch origin pull/6243/head
 git -C "$HOME/.cache/cg-map/act-src" checkout 0f761c049dc3ef82fb686a4af7b917d9f3ef831d
-go build -o "$HOME/.local/bin/act-pinned" .
-export ACT="$HOME/.local/bin/act-pinned"
+(cd "$HOME/.cache/cg-map/act-src" && go install -ldflags "-X main.version=0.2.98-pr6243-0f761c0" .)
 ```
 
-`make` checks that `$(ACT) --version` names that commit and refuses a released build; `gh act` works only after its
-local binary is replaced with the same build. The image is private, so a new machine needs
+That puts `act` in `$(go env GOPATH)/bin`, and `make` uses it (`ACT ?= act`). `make` checks that `act --version` names
+the commit and refuses any other build. The image is private, so a new machine needs
 `gh auth token | docker login ghcr.io --username <you> --password-stdin` once, with `read:packages`. Every target runs
 on [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs
 run the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
