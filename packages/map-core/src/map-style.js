@@ -319,10 +319,10 @@ export function mapStyle(basemapURL, assetBaseURL) {
     },
     layers: [
       ...landLayers(),
+      ...slopeLayers(),
       ...canyonLayers(),
       ...waterLayers(),
       ...buildingLayers(),
-      ...slopeLayers(),
       ...streetLayers(),
       ...bridgeLayers(),
       ...walkingLayers(),
