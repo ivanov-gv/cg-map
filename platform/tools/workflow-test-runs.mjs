@@ -217,7 +217,6 @@ function hasDispatchInput(workflowText, inputName) {
   return new RegExp(`^\\s{6}${inputName}:\\s*$`, 'm').test(section);
 }
 
-
 function commandFailureText(error) {
   return `${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`;
 }
