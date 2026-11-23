@@ -10,6 +10,8 @@ import {
   FOLDERS,
   SHARED_EDITOR_SOURCES,
   SHARED_WEB_SOURCES,
+  ALL_BROWSER_MATRIX,
+  ALL_EDITOR_BROWSER_MATRIX,
   browserMatrix,
   classify,
   formatOutputs,
@@ -100,6 +102,7 @@ const cases = [
   ['composite action', ['.github/actions/setup-web/action.yml'], ['workflows', 'platform'], []],
   ['Markdown under .github', ['.github/pull_request_template.md'], ['docs'], []],
   ['the planner itself', ['platform/tools/ci-plan.mjs'], ['workflows', 'platform'], []],
+  ['the workflow test-run helper', ['platform/tools/workflow-test-runs.mjs'], ['workflows', 'platform'], []],
   ['both sides of a rename', ['docs/old.md', 'services/backend/new.go'], ['docs', 'backend'], []]
 ];
 
@@ -155,11 +158,16 @@ for (const [name, files] of [
   });
 }
 
-test('outputs give every folder a value and a usable matrix', () => {
-  const lines = formatOutputs(planChanges(['apps/web/src/interface.js'])).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 3);
+test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
+  const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
+  const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
+  assert.equal(lines.length, FOLDERS.length + 8);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
+  assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
+  assert.ok(lines.includes('ci_test_runs=[]'));
+  assert.ok(lines.includes(`all_browser_matrix=${ALL_BROWSER_MATRIX}`));
+  assert.ok(lines.includes(`all_editor_browser_matrix=${ALL_EDITOR_BROWSER_MATRIX}`));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
     include: [
@@ -390,6 +398,13 @@ test('the browser matrix contains exactly the requested areas', () => {
   // A job of a split area is named after it, such as journeys-1.
   const areaOfEachJob = browserMatrix(ALL_AREAS).include.map(({area}) => area.replace(/-\d+$/, ''));
   assert.deepEqual(new Set(areaOfEachJob), new Set(ALL_AREAS));
+});
+
+test('workflow test-run calls cover every browser area, not just the changed files', () => {
+  const webAreas = JSON.parse(ALL_BROWSER_MATRIX).include.map(({area}) => area.replace(/-\d+$/, ''));
+  const editorAreas = JSON.parse(ALL_EDITOR_BROWSER_MATRIX).include.map(({area}) => area.replace(/-\d+$/, ''));
+  assert.deepEqual(new Set(webAreas), new Set(ALL_AREAS));
+  assert.deepEqual(new Set(editorAreas), new Set(ALL_EDITOR_AREAS));
 });
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.

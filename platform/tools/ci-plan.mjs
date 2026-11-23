@@ -4,6 +4,7 @@
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {formatWorkflowTestRuns, selectWorkflowTestRuns} from './workflow-test-runs.mjs';
 
 export const FOLDERS = [
   'docs',
@@ -195,7 +196,7 @@ export function classify(file) {
   const isMarkdown = file.endsWith('.md') && !isPublishedFile;
   if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json')
     return {folders: ['docs'], areas: []};
-  if (file.startsWith('.github/') || /^platform\/(tools|tests)\/ci-plan\./.test(file))
+  if (file.startsWith('.github/') || /^platform\/(tools|tests)\/(ci-plan|workflow-test-runs)\./.test(file))
     return {folders: ['workflows', 'platform'], areas: []};
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
@@ -270,32 +271,44 @@ export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
   return {include: areas.flatMap(area => browserJobs(area, areaTable))};
 }
 
+// Workflow test-run calls prove the changed workflow itself, so they run every browser area rather than the changed
+// files' narrow selection. A workflow that edits the planner needs the same full matrix in both test-run modes.
+export const ALL_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_AREAS));
+export const ALL_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(ALL_EDITOR_AREAS, EDITOR_BROWSER_AREAS));
+
 // A change to an app, or to what it is built from, publishes that app's image.
 export function imageMatrix(folders) {
   const apps = MAP_APPLICATIONS.filter(folder => folders.includes(folder));
   return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
-export function formatOutputs({folders, areas, editorAreas}) {
+export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
+  const testRuns = selectWorkflowTestRuns(changedFiles);
   return [
     ...folderLines,
     `browser_matrix=${JSON.stringify(browserMatrix(areas))}`,
     `editor_browser_matrix=${JSON.stringify(browserMatrix(editorAreas, EDITOR_BROWSER_AREAS))}`,
-    `image_matrix=${JSON.stringify(imageMatrix(folders))}`
+    `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
+    `ci_test_runs=${JSON.stringify(testRuns.ci)}`,
+    `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
+    `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
+    `all_browser_matrix=${ALL_BROWSER_MATRIX}`,
+    `all_editor_browser_matrix=${ALL_EDITOR_BROWSER_MATRIX}`
   ].join('\n');
 }
 
-export function formatSummary({folders, areas, editorAreas, everything}, reason) {
+export function formatSummary({folders, areas, editorAreas, everything}, reason, changedFiles = []) {
   return [
     `Selected ${everything ? 'everything' : 'a subset of pipelines'}${reason ? ` (${reason})` : ''}.`,
     `- Folders: ${folders.join(', ') || 'none'}`,
     `- Browser areas: ${areas.join(', ') || 'none'}`,
-    `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`
+    `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`,
+    formatWorkflowTestRuns(selectWorkflowTestRuns(changedFiles))
   ].join('\n');
 }
 
-function changedFiles(base, head) {
+function listChangedFiles(base, head) {
   // --no-renames lists both sides of a rename, so both folders are checked.
   const diff = execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...${head}`], {encoding: 'utf8'});
   return diff.split('\n').filter(Boolean);
@@ -311,6 +324,7 @@ function main(args) {
   const isZeroBase = /^0+$/.test(base);
 
   let plan;
+  let changedFiles = [];
   let reason = '';
   if (args.includes('--all')) {
     plan = planChanges([]);
@@ -320,7 +334,8 @@ function main(args) {
     reason = 'no base commit';
   } else {
     try {
-      plan = planChanges(changedFiles(base, head));
+      changedFiles = listChangedFiles(base, head);
+      plan = planChanges(changedFiles);
     } catch (error) {
       console.log(`::warning::Could not diff ${base}...${head}, so everything runs: ${error.message}`);
       plan = planChanges([]);
@@ -328,10 +343,10 @@ function main(args) {
     }
   }
 
-  const summary = formatSummary(plan, reason);
+  const summary = formatSummary(plan, reason, changedFiles);
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
-  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${formatOutputs(plan)}\n`);
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `${formatOutputs(plan, changedFiles)}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main(process.argv.slice(2));
