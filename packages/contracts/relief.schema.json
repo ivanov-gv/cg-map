@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/relief/v1",
   "title": "Relief source features v1",
-  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; a canyon rim runs with the river on its right; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
+  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; a canyon rim runs with the river on its right and a contour with higher ground on its left; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
   "type": "object",
   "required": ["type", "entitySchemaVersion", "features"],
   "properties": {

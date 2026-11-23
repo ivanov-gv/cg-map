@@ -5,6 +5,7 @@ import vtpbf from 'vt-pbf';
 import {fileURLToPath} from 'node:url';
 import {MAX_GENERATED_ZOOM, MAX_TILE_ZOOM, TILE_LAYERS, tileLayerMetadata} from './tile-layers.mjs';
 import {greenAreaTest} from './green-areas.mjs';
+import {greenAreaLabelLines} from './green-area-labels.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const tileDirectory = path.join(root, '.build/tiles');
@@ -38,10 +39,14 @@ function readSource(fileName) {
   return JSON.parse(fs.readFileSync(path.join(sourceDirectory, fileName), 'utf8'));
 }
 
-// Paths through parks and woods are drawn as park routes; the green kinds are the relief build's reviewed list.
+// The relief build's reviewed list of green land kinds; derived layers use it so all agree on what is green.
+function greenKinds() {
+  return readSource('provenance.json').relief.buildParameters.greenKinds;
+}
+
+// Paths through parks and woods are drawn as park routes.
 function roadsWithGreenAreaFlag(roads) {
-  const {greenKinds} = readSource('provenance.json').relief.buildParameters;
-  const isInGreenArea = greenAreaTest(readSource('land.geojson').features, greenKinds);
+  const isInGreenArea = greenAreaTest(readSource('land.geojson').features, greenKinds());
   return roads.map(road => {
     if (!isInGreenArea(road)) return road;
     return {...road, properties: {...road.properties, inGreenArea: true}};
@@ -51,6 +56,12 @@ function roadsWithGreenAreaFlag(roads) {
 function layerFeatures(layer, collection) {
   if (layer.name === 'municipalities') {
     return collection.features.map(feature => municipalityLabel(feature, layer.fields));
+  }
+  if (layer.name === 'green_area_labels') {
+    return greenAreaLabelLines(collection.features, greenKinds()).map(line => ({
+      ...line,
+      properties: selectedProperties(line.properties, layer.fields)
+    }));
   }
   const sourceFeatures = layer.name === 'roads' ? roadsWithGreenAreaFlag(collection.features) : collection.features;
   return sourceFeatures.map(feature => ({

@@ -90,6 +90,27 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertIsNone(derivations._parse_elevation('12m34'))
         self.assertIsNone(derivations._parse_elevation(''))
 
+    def test_contours_run_with_uphill_on_their_left(self):
+        import numpy as np
+        longitudes = np.linspace(19.0, 19.01, 41)
+        latitudes = np.linspace(42.01, 42.0, 41)
+        column_grid, row_grid = np.meshgrid(np.arange(41), np.arange(41))
+        # One round hill in the middle of the grid, 200 m high at its top.
+        heights = 200.0 - np.hypot(column_grid - 20, row_grid - 20) * 8
+        grid = {'longitudes': longitudes, 'latitudes': latitudes, 'heights': heights}
+        features, _ = derivations.build_contours(grid)
+        # Lines cut by the grid's edge have no inside; closed rings around the summit show the direction.
+        rings = [f for f in features if f['geometry']['coordinates'][0] == f['geometry']['coordinates'][-1]]
+        self.assertTrue(rings)
+        for feature in rings:
+            coordinates = feature['geometry']['coordinates']
+            signed_area = sum(
+                start_x * end_y - end_x * start_y
+                for (start_x, start_y), (end_x, end_y) in zip(coordinates[:-1], coordinates[1:])
+            )
+            # Counter-clockwise around the summit keeps the hill on the left.
+            self.assertGreater(signed_area, 0, feature['properties'])
+
     def test_enclosing_contour_uses_highest_enclosing_level(self):
         land = {'features': [{
             'properties': {'kind': 'country', 'entityId': 'relation/53296'},

@@ -22,6 +22,7 @@
     "./tools/contracts.mjs": "./tools/contracts.mjs",
     "./tools/editor-bundle.mjs": "./tools/editor-bundle.mjs",
     "./tools/entity-identity.mjs": "./tools/entity-identity.mjs",
+    "./tools/green-area-labels.mjs": "./tools/green-area-labels.mjs",
     "./tools/green-areas.mjs": "./tools/green-areas.mjs",
     "./tools/source-json.mjs": "./tools/source-json.mjs",
     "./tools/tile-layers.mjs": "./tools/tile-layers.mjs"
@@ -54,6 +55,7 @@
     "tools/contracts.mjs",
     "tools/editor-bundle.mjs",
     "tools/entity-identity.mjs",
+    "tools/green-area-labels.mjs",
     "tools/green-areas.mjs",
     "tools/source-json.mjs",
     "tools/tile-layers.mjs"

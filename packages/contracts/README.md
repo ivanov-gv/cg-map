@@ -152,9 +152,9 @@ contour above OSM height around the summit or an OSM/DEM difference over 25 m, a
 fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
 OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
 and `method: "dem-canyon-bank"`. Every rim line runs with the river on its right, so a style can offset a canyon wall
-toward the water with one sign. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM
-elevations, height checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology
-proof.
+toward the water with one sign. Every contour runs with higher ground on its left, so a label along it faces uphill.
+Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height checks and rim
+methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and

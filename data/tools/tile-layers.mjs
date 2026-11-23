@@ -107,6 +107,13 @@ export const TILE_LAYERS = [
     keep: (tags, zoom) => zoom >= MINOR_SUMMIT_ZOOM || Boolean(tags.name)
   },
   {
+    name: 'green_area_labels',
+    sourceFile: 'land.geojson',
+    minZoom: 13,
+    // The tile builder derives one long-axis line per named green area (green-area-labels.mjs) for its name label.
+    fields: ['name', 'name:en']
+  },
+  {
     name: 'settlements',
     sourceFile: 'settlements.geojson',
     minZoom: Math.min(...Object.values(SETTLEMENT_RANK_ZOOMS), SETTLEMENT_OTHER_ZOOM),

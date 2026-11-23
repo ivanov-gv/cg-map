@@ -150,6 +150,43 @@ def _simplify_path(path):
     return coordinates
 
 
+def _grid_height(heights, longitudes, latitudes, longitude, latitude):
+    """Return the height of the grid cell nearest a point, clamped to the grid's edge."""
+    column = round((longitude - longitudes[0]) / (longitudes[1] - longitudes[0]))
+    row = round((latitude - latitudes[0]) / (latitudes[1] - latitudes[0]))
+    column = min(max(column, 0), len(longitudes) - 1)
+    row = min(max(row, 0), len(latitudes) - 1)
+    return float(heights[row, column])
+
+
+def _with_uphill_on_left(path, heights, longitudes, latitudes):
+    """Return the contour path running with higher ground on its left.
+
+    A map label placed along a line has the top of its digits on the line's left, so this direction makes every
+    contour height read facing uphill. Every segment votes with the heights one grid cell to each side.
+    """
+    cell_longitude = abs(float(longitudes[1] - longitudes[0]))
+    cell_latitude = abs(float(latitudes[1] - latitudes[0]))
+    uphill_on_left = 0.0
+    for (start_x, start_y), (end_x, end_y) in zip(path[:-1], path[1:]):
+        east = (end_x - start_x) / cell_longitude
+        north = (end_y - start_y) / cell_latitude
+        length = math.hypot(east, north)
+        if length == 0:
+            continue
+        middle_x = (start_x + end_x) / 2
+        middle_y = (start_y + end_y) / 2
+        left_x = middle_x - north / length * cell_longitude
+        left_y = middle_y + east / length * cell_latitude
+        right_x = middle_x + north / length * cell_longitude
+        right_y = middle_y - east / length * cell_latitude
+        uphill_on_left += (
+            _grid_height(heights, longitudes, latitudes, left_x, left_y)
+            - _grid_height(heights, longitudes, latitudes, right_x, right_y)
+        )
+    return path if uphill_on_left >= 0 else path[::-1]
+
+
 def _contour_paths(grid, interval):
     heights = smooth_heights(smooth_heights(grid['heights']))
     generator = contour_generator(
@@ -161,7 +198,10 @@ def _contour_paths(grid, interval):
         for path in separate_line_paths(generator.lines(level)):
             simplified = _simplify_path(path)
             if len(simplified) >= 2:
-                paths.append((level, simplified))
+                oriented = _with_uphill_on_left(
+                    simplified, heights, grid['longitudes'], grid['latitudes']
+                )
+                paths.append((level, oriented))
     return paths, levels
 
 
