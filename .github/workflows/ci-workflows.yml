@@ -1,19 +1,40 @@
 name: ci-workflows
-# Lints workflows on every change to them. Running them is what proves them: see .github/TESTING.md.
+# Lints workflows on every change to them. Changed CD workflows get a real test run through ci-pr-checks:
+# see .github/TESTING.md.
 on:
   workflow_call:
     inputs:
       test_run:
         type: boolean
         required: true
+      cd_test_runs:
+        description: JSON array of changed CD workflows that need a dispatch and wait
+        type: string
+        required: false
+        default: '[]'
+      head_sha:
+        description: Commit whose changes selected the workflows
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/**
+      - platform/tools/workflow-test-runs.mjs
+      - platform/tests/workflow-test-runs.test.mjs
+      - platform/tests/workflows.test.mjs
+      - Makefile
+
 permissions:
   contents: read
+
 jobs:
   lint:
     name: Lint workflows
@@ -35,93 +56,36 @@ jobs:
     timeout-minutes: 5
     environment: test-run
     steps: *lint-steps
-  # No test-run twin: this looks for a successful test run of this commit, so inside a test run it could never pass.
-  test-run-evidence:
-    name: Workflows were test-run
-    if: ${{ github.event_name == 'pull_request' }}
+  # The CI test runs are reusable calls in ci-pr-checks; CD workflows cannot be reusable, so this job dispatches and
+  # waits for them. It has no test-run twin: a test run must not dispatch itself.
+  cd-test-runs:
+    name: CD workflow test runs
+    if: ${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     permissions:
-      actions: read
+      actions: write
       contents: read
-      pull-requests: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      BRANCH: ${{ github.head_ref }}
+      packages: read
     steps:
-      - name: Require a successful test run of this commit
-        run: |
-          # An "everything" plan also runs this job, but only workflow changes need test runs.
-          changed=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
-          workflow_changes=$(echo "$changed" | grep -E '^\.github/|^platform/(tools|tests)/ci-plan\.' | grep -v '\.md$' || true)
-          if [ -z "$workflow_changes" ]; then
-            echo "No workflow changes, so no test runs are needed." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          has_qualifying_run() { # <workflow file> <required run-name text>
-            # A workflow can be dispatched only once it exists on main, so its first PR cannot have test runs.
-            # Only a 404 means that: any other API failure must not pass this check.
-            # Fetch the contents endpoint once with --jq .content to get the base64 payload in one call.
-            if ! base64_content=$(gh api "repos/$GH_REPO/contents/.github/workflows/$1" --jq .content 2>&1); then
-              if ! echo "$base64_content" | grep -q 'HTTP 404'; then
-                echo "::error::Could not look up $1: $base64_content" >&2
-                return 1
-              fi
-              echo "::notice::$1 is not on the default branch yet, so it cannot be dispatched."
-              return 0
-            fi
-            # Decode the workflow YAML and check for workflow_dispatch.
-            content=$(echo "$base64_content" | base64 -d 2>/dev/null) || {
-              echo "::error::Could not decode $1 content from main." >&2
-              return 1
-            }
-            if ! echo "$content" | grep -q 'workflow_dispatch:'; then
-              echo "::notice::$1 on main has no workflow_dispatch trigger, so it cannot be dispatched yet."
-              return 0
-            fi
-            matches=$(gh run list --workflow "$1" --event workflow_dispatch --commit "$HEAD_SHA" --status success \
-              --json displayTitle --jq "[.[] | select(.displayTitle | contains(\"$2\"))] | length")
-            [ "$matches" -gt 0 ]
-          }
-          missing=0
-          if ! has_qualifying_run ci-pr-checks.yml 'test_run=true run_all=true'; then
-            echo "::error::Run: gh workflow run ci-pr-checks.yml --ref $BRANCH -f test_run=true -f run_all=true, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-browser-image\.yml$\|^\.github/actions/\(promote-browser-image\|resolve-release\)/' \
-            && ! has_qualifying_run cd-browser-image.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-browser-image.yml --ref $BRANCH -f test_run=true -f version=<new revision> -f commit=<SHA built on main>, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-core\.yml$\|^\.github/actions/' \
-            && ! has_qualifying_run cd-map-core.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-map-core.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-data\.yml$\|^\.github/actions/' \
-            && ! has_qualifying_run cd-map-data.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-map-data.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-map-contracts\.yml$\|^\.github/actions/' \
-            && ! has_qualifying_run cd-map-contracts.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-map-contracts.yml --ref $BRANCH -f test_run=true -f version=<version> -f commit=<SHA built on main>, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/ci-publish\.yml$\|^\.github/actions/\(plan\|publish-image\|publish-dev-package\|publish-browser-image\|setup-web\|run-check\|validate-commit\)/' \
-            && ! has_qualifying_run ci-publish.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run ci-publish.yml --ref $BRANCH -f test_run=true, then re-run this check."
-            missing=1
-          fi
-          if echo "$workflow_changes" | grep -q '^\.github/workflows/cd-dev-pages\.yml$\|^\.github/actions/\(test_run\|validate-commit\)/' \
-            && ! has_qualifying_run cd-dev-pages.yml 'test_run=true'; then
-            echo "::error::Run: gh workflow run cd-dev-pages.yml --ref $BRANCH -f test_run=true -f commit=<SHA on main with a ci-publish run>, then re-run this check."
-            missing=1
-          fi
-          result="Test-run evidence for $HEAD_SHA: $([ "$missing" -eq 0 ] && echo found || echo missing)"
-          echo "$result" | tee -a "$GITHUB_STEP_SUMMARY"
-          exit "$missing"
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+            platform
+            package.json
+            package-lock.json
+            .node-version
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Reuse or dispatch and wait for CD test runs
+        env:
+          CD_TEST_RUNS: ${{ inputs.cd_test_runs }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: node platform/tools/workflow-test-runs.mjs

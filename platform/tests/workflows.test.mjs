@@ -7,6 +7,7 @@ import {promisify} from 'node:util';
 import os from 'node:os';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
 import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
+import {CALLABLE_CI_WORKFLOWS, CD_WORKFLOWS} from '../tools/workflow-test-runs.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -15,11 +16,69 @@ const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
 const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'utf8'));
 
+function githubYamlFiles(directory = path.join(repoRoot, '.github')) {
+  return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return githubYamlFiles(fullPath);
+    return /\.ya?ml$/.test(entry.name) ? [fullPath] : [];
+  });
+}
+
+// GitHub expressions support object properties, not JavaScript array or string properties. Strip quoted strings so a
+// literal such as '{"include":[]}' cannot be mistaken for an unsupported property.
+function expressionCode(expression) {
+  return expression
+    .replace(/'(?:''|[^'])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+}
+
+function evaluateCdTestRunsCondition(condition, cdTestRuns) {
+  const expression = String(condition)
+    .trim()
+    .replace(/^\$\{\{\s*/, '')
+    .replace(/\s*\}\}$/, '')
+    .trim();
+  return expression.split(/\s*&&\s*/).every(term => {
+    const comparison = /^inputs\.cd_test_runs\s*!=\s*'([^']*)'$/.exec(term.trim());
+    assert.ok(comparison, `unsupported term in CD dispatcher condition: ${term}`);
+    return cdTestRuns !== comparison[1];
+  });
+}
+
+test('GitHub expressions in .github use no unsupported array or string properties', () => {
+  const unsupported = [
+    'length', 'size', 'empty', 'includes', 'startsWith', 'endsWith', 'indexOf',
+    'flat', 'at', 'push', 'pop', 'shift', 'unshift', 'slice', 'splice',
+    'concat', 'keys', 'values', 'entries', 'toLowerCase', 'toUpperCase', 'toString'
+  ];
+  for (const file of githubYamlFiles()) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+      const code = expressionCode(match[1]);
+      for (const property of unsupported) {
+        assert.doesNotMatch(
+          code,
+          new RegExp(`\\.\\s*${property}(?![A-Za-z0-9_-])`),
+          `${path.relative(repoRoot, file)}: \${{ ${match[1].trim()} }} uses unsupported .${property}`
+        );
+      }
+    }
+  }
+});
+
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
-  'ci-pr-checks.yml': ['approval', 'switch', 'gate', 'job-times', ...FOLDERS],
+  'ci-pr-checks.yml': [
+    'approval',
+    'switch',
+    'gate',
+    'job-times',
+    ...FOLDERS,
+    ...CALLABLE_CI_WORKFLOWS.map(workflow => `test-${workflow.replace('.yml', '')}`)
+  ],
   'ci-nightly.yml': ['run'],
-  'ci-workflows.yml': ['test-run-evidence'],
+  // The CD dispatcher has no twin: a test run must not dispatch another test run.
+  'ci-workflows.yml': ['cd-test-runs'],
   'cd-map-core.yml': ['switch'],
   'cd-map-data.yml': ['switch'],
   'cd-map-contracts.yml': ['switch'],
@@ -80,8 +139,8 @@ for (const file of newWorkflowFiles) {
         /\$\{\{\s*(secrets|vars)\./,
         `${name} steps must read secrets and vars through env`
       );
-      // The switch reads the input, and the evidence check searches for runs by name.
-      const namesTheMode = ['switch', 'test-run-evidence'].includes(name);
+      // The switch reads the input, and the CD dispatcher names its runs after it.
+      const namesTheMode = ['switch', 'cd-test-runs'].includes(name);
       if (!namesTheMode) assert.doesNotMatch(stepsText, /test_run/, `${name} steps must not know the mode`);
     }
   });
@@ -285,6 +344,18 @@ test('only the publish workflow writes packages, and only from main unless it is
   const others = newWorkflowFiles.filter(file => file.startsWith('ci-') && file !== 'ci-publish.yml');
   for (const file of others) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
+      // A static reusable call must grant what the called workflow's production jobs request, even though only its
+      // test-run twins execute. Bound the exception to those two calls, not to any other job in either caller.
+      if (file === 'ci-pr-checks.yml' && name === 'test-ci-publish') {
+        assert.equal(job.uses, './.github/workflows/ci-publish.yml');
+        assert.deepEqual(job.permissions, {contents: 'read', packages: 'write'});
+        continue;
+      }
+      if (file === 'ci-nightly.yml' && name === 'run') {
+        assert.equal(job.uses, './.github/workflows/ci-pr-checks.yml');
+        assert.deepEqual(job.permissions, {actions: 'write', contents: 'read', packages: 'write', 'pull-requests': 'read'});
+        continue;
+      }
       assert.notEqual(job.permissions?.packages, 'write', `${file} ${name} must leave publishing to ci-publish`);
     }
   }
@@ -293,11 +364,18 @@ test('only the publish workflow writes packages, and only from main unless it is
 // The aim is 5 minutes, which the job-times job in ci-pr-checks warns about. 7 is the limit: see ADR 0006.
 const JOB_TIME_LIMIT_MINUTES = 7;
 
-test('every job that runs has a time limit of at most 7 minutes', () => {
+// A CD test run waits for a browser-image build, so it needs longer than one job's limit. It polls rather than working.
+const LONG_WAIT_JOBS = {'ci-workflows.yml': ['cd-test-runs']};
+
+test('every job that runs has a time limit of at most 7 minutes, except the CD waiter', () => {
   for (const file of newWorkflowFiles) {
     for (const [name, job] of Object.entries(load(file).jobs)) {
       if (job.uses) continue;
       assert.ok(job['timeout-minutes'], `${file} ${name} needs timeout-minutes`);
+      if (LONG_WAIT_JOBS[file]?.includes(name)) {
+        assert.equal(job['timeout-minutes'], 30, `${file} ${name} must cover a browser-image test run`);
+        continue;
+      }
       assert.ok(job['timeout-minutes'] <= JOB_TIME_LIMIT_MINUTES, `${file} ${name} may run over the limit`);
     }
   }
@@ -463,11 +541,13 @@ test('ci-publish pages job validates commit before it checks out source', () => 
   assert.ok(source > validation);
 });
 
-test('ci-publish has commit input for workflow_dispatch', () => {
+test('ci-publish has a commit input for both dispatch and reusable test calls', () => {
   const {on} = load('ci-publish.yml');
-  assert.ok(on.workflow_dispatch.inputs.commit, 'ci-publish must have commit input');
-  assert.equal(on.workflow_dispatch.inputs.commit.type, 'string');
-  assert.equal(on.workflow_dispatch.inputs.commit.required, false);
+  for (const trigger of ['workflow_dispatch', 'workflow_call']) {
+    assert.ok(on[trigger].inputs.commit, `ci-publish must have commit input for ${trigger}`);
+    assert.equal(on[trigger].inputs.commit.type, 'string');
+    assert.equal(on[trigger].inputs.commit.required, false);
+  }
 });
 
 test('cd-dev-pages find validates commit as 40-character SHA', () => {
@@ -589,279 +669,138 @@ test('a pull request runs nothing until it is approved', () => {
   for (const name of Object.keys(jobs)) assert.ok(reachesApproval(name), `${name} would run before approval`);
 });
 
-// ci-workflows test-run-evidence must require a qualifying test run when workflow files change.
-// Run the real step script with a fake `gh` stub (platform/tests/fixtures/fake-gh.sh).
-const ciWorkflowsScript = load('ci-workflows.yml').jobs['test-run-evidence'].steps[0].run;
-const fakeGhPath = path.join(repoRoot, 'platform/tests/fixtures/fake-gh.sh');
-
-// Set up a temporary directory with the fake gh stub and run the test-run-evidence script.
-// Returns {code, stdout, stderr} from executing the script.
-async function runEvidenceTest(prFiles, stubFiles) {
-  const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ci-workflows-test-'));
-  const stubDirectory = path.join(temporaryDirectory, 'stub');
-  await fs.promises.mkdir(stubDirectory);
-  await fs.promises.writeFile(path.join(stubDirectory, 'pr-files'), prFiles.join('\n'));
-  for (const [name, content] of Object.entries(stubFiles)) {
-    await fs.promises.writeFile(path.join(stubDirectory, name), content);
+// A changed CI workflow is proved by a static reusable call in ci-pr-checks. The planner output decides which calls
+// run; GitHub cannot build reusable calls from a matrix.
+test('ci-pr-checks calls every callable CI workflow in test-run mode when it changes', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  for (const workflow of CALLABLE_CI_WORKFLOWS) {
+    const name = `test-${workflow.replace('.yml', '')}`;
+    const call = jobs[name];
+    assert.ok(call, `${workflow} needs a ${name} test-run call`);
+    assert.equal(call.uses, `./.github/workflows/${workflow}`, `${name} calls the wrong workflow`);
+    assert.equal(call.with.test_run, true, `${name} must really run in test-run mode`);
+    assert.match(call.if, /needs\.switch\.outputs\.test_run != 'true'/, `${name} must not dispatch itself`);
+    // Plain string containment also evaluates to false for act's unresolved placeholder, so a dry run still parses.
+    assert.match(
+      call.if,
+      new RegExp(`contains\\(needs\\.plan\\.outputs\\.ci_test_runs, '${workflow.replaceAll('.', '\\.')}'\\)`)
+    );
+    assert.ok(call.needs.includes('plan-test-run'), `${name} must also cover an everything run`);
+    const called = load(workflow);
+    for (const [input, value] of Object.entries(call.with)) {
+      assert.ok(called.on.workflow_call?.inputs?.[input], `${workflow} has no workflow_call input ${input}`);
+      if (typeof value === 'string') assert.doesNotMatch(value, /needs\.plan\.result/, `${input} must not read a job result`);
+    }
   }
-  const ghPath = path.join(temporaryDirectory, 'gh');
-  await fs.promises.copyFile(fakeGhPath, ghPath);
-  await fs.promises.chmod(ghPath, 0o755);
-
-  const env = {
-    PATH: temporaryDirectory + ':' + process.env.PATH,
-    GH_TOKEN: 'fake-token',
-    GH_REPO: 'owner/repo',
-    HEAD_SHA: 'abc123',
-    PR_NUMBER: '42',
-    BRANCH: 'feature-branch',
-    GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
-    FAKE_GH_DIR: stubDirectory,
-  };
-
-  try {
-    const result = await execFileAsync('bash', ['-c', ciWorkflowsScript], {env, cwd: temporaryDirectory});
-    return {code: 0, stdout: result.stdout, stderr: result.stderr};
-  } catch (err) {
-    return {code: err.code, stdout: err.stdout, stderr: err.stderr};
-  } finally {
-    await fs.promises.rm(temporaryDirectory, {recursive: true, force: true});
-  }
-}
-
-test('ci-workflows: ci-publish.yml changed, no qualifying run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'ci-publish.yml changed without qualifying run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
-    'error must name the ci-publish dispatch command'
-  );
-});
-
-test('ci-workflows: ci-publish.yml changed, with qualifying run must pass', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[]',
-    }
-  );
-  assert.equal(result.code, 0, 'ci-publish.yml changed with qualifying run must exit 0');
-});
-
-test('ci-workflows: cd-map-data.yml changed, no qualifying run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/cd-map-data.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-map-data.yml': '[{"displayTitle":"other run"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'cd-map-data.yml changed without qualifying run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run cd-map-data\.yml --ref.*-f test_run=true/,
-    'error must name the cd-map-data dispatch command'
-  );
-});
-
-test('ci-workflows: cd-map-data.yml changed, with qualifying run must pass', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/cd-map-data.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
-    }
-  );
-  assert.equal(result.code, 0, 'cd-map-data.yml changed with qualifying run must exit 0');
-});
-
-test('ci-workflows: cd-map-contracts.yml changed, no qualifying run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/cd-map-contracts.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-map-contracts.yml': '[{"displayTitle":"other run"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'cd-map-contracts.yml changed without qualifying run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run cd-map-contracts\.yml --ref.*-f test_run=true/,
-    'error must name the cd-map-contracts dispatch command'
-  );
-});
-
-test('ci-workflows: cd-map-contracts.yml changed, with qualifying run must pass', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/cd-map-contracts.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]',
-    }
-  );
-  assert.equal(result.code, 0, 'cd-map-contracts.yml changed with qualifying run must exit 0');
-});
-
-test('ci-workflows: setup-web changed, no ci-publish run must fail', async () => {
-  const result = await runEvidenceTest(
-    ['.github/actions/setup-web/action.yml'],
-    {
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
-      'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
-      'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'setup-web changed without ci-publish run must exit 1');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
-    'error must name the ci-publish dispatch command'
-  );
-});
-
-// setup-web is checked by the ci-publish test-run-evidence check because ci-publish builds the site.
-
-test('ci-workflows: validate-commit changed needs both ci-publish and cd-dev-pages runs', async () => {
-  const otherRuns = {
-    'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    'runs-cd-map-core.yml': '[{"displayTitle":"cd-map-core test_run=true"}]',
-    'runs-cd-map-data.yml': '[{"displayTitle":"cd-map-data test_run=true"}]',
-    'runs-cd-map-contracts.yml': '[{"displayTitle":"cd-map-contracts test_run=true"}]'
-  };
-  const missing = await runEvidenceTest(['.github/actions/validate-commit/action.yml'], {
-    ...otherRuns,
-    'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
-    'runs-cd-dev-pages.yml': '[{"displayTitle":"other run"}]'
-  });
-  assert.equal(missing.code, 1);
-  assert.match(missing.stdout, /gh workflow run ci-publish\.yml/);
-  assert.match(missing.stdout, /gh workflow run cd-dev-pages\.yml/);
-
-  const found = await runEvidenceTest(['.github/actions/validate-commit/action.yml'], {
-    ...otherRuns,
-    'runs-ci-publish.yml': '[{"displayTitle":"ci-publish test_run=true"}]',
-    'runs-cd-dev-pages.yml': '[{"displayTitle":"cd-dev-pages test_run=true"}]'
-  });
-  assert.equal(found.code, 0);
-});
-
-test('ci-workflows: non-publish workflow changed does not require ci-publish run', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-apps-web.yml'],
-    {
-      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 0, 'ci-apps-web.yml changed does not require ci-publish run');
-});
-
-test('ci-workflows: ci-publish.yml not on main is exempt from test-run requirement', async () => {
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'contents-ci-publish.yml': 'HTTP 404 NOT FOUND',
-      'runs-ci-publish.yml': '[]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[]',
-    }
-  );
-  assert.equal(result.code, 0, 'ci-publish.yml not on main is exempt');
-});
-
-test('ci-workflows: a workflow on main without workflow_dispatch is exempt', async () => {
-  // Simulate ci-publish.yml on main with only workflow_call (no workflow_dispatch).
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n',
-      'runs-ci-publish.yml': '[]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-      'runs-cd-browser-image.yml': '[]',
-      'runs-cd-map-core.yml': '[]',
-    }
-  );
-  assert.equal(result.code, 0, 'workflow without workflow_dispatch on main is exempt');
-  assert.match(result.stdout, /no workflow_dispatch trigger/, 'must explain the exemption');
-});
-
-test('ci-workflows: a workflow on main with workflow_dispatch but no run still fails', async () => {
-  // Simulate ci-publish.yml on main with workflow_dispatch, but no qualifying run.
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'contents-ci-publish.yml': 'name: ci-publish\non:\n  workflow_call:\n    inputs:\n      test_run:\n        type: boolean\n  workflow_dispatch:\n    inputs:\n      test_run:\n        type: boolean\n',
-      'runs-ci-publish.yml': '[{"displayTitle":"other run"}]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'workflow with workflow_dispatch but no qualifying run must fail');
-  assert.match(
-    result.stdout,
-    /gh workflow run ci-publish\.yml --ref.*-f test_run=true/,
-    'error must name the ci-publish dispatch command'
-  );
-});
-
-test('ci-workflows: an API failure on the contents lookup fails the check', async () => {
-  // Simulate an HTTP 500 on the metadata lookup (the single --jq .content call).
-  // The check must fail, not exempt the workflow.
-  const result = await runEvidenceTest(
-    ['.github/workflows/ci-publish.yml'],
-    {
-      'contents-ci-publish.yml': 'error',
-      'runs-ci-publish.yml': '[]',
-      'runs-ci-pr-checks.yml': '[{"displayTitle":"ci-pr-checks test_run=true run_all=true"}]',
-    }
-  );
-  assert.equal(result.code, 1, 'API failure on contents lookup must fail the check, not exempt');
-  assert.match(
-    result.stderr,
-    /Could not look up ci-publish\.yml/,
-    'must report the API failure on stderr'
-  );
-});
-
-// Every workflow that has_qualifying_run asks for must define a run-name
-// whose workflow_dispatch branch formats test_run={0} from inputs.test_run,
-// so a real dispatch title contains the search string the evidence check looks for.
-test('every workflow checked by has_qualifying_run defines a run-name with test_run', () => {
-  // Parse the ci-workflows script for all has_qualifying_run calls.
-  const calls = ciWorkflowsScript.matchAll(/has_qualifying_run\s+(\S+)\s+'([^']+)'/g);
-  const workflowFiles = [...calls].map(([, file]) => file);
-  assert.ok(workflowFiles.length > 0, 'has_qualifying_run must be called at least once');
-  for (const file of workflowFiles) {
-    const workflow = load(file);
-    assert.ok(workflow['run-name'], `${file} must define run-name for has_qualifying_run to match`);
-    const runName = String(workflow['run-name']);
-    assert.ok(
-      runName.includes('workflow_dispatch'),
-      `${file} run-name must branch on workflow_dispatch`
-    );
-    assert.ok(
-      runName.includes('test_run='),
-      `${file} run-name must format test_run= for dispatch runs`
-    );
-    assert.ok(
-      runName.includes('inputs.test_run'),
-      `${file} run-name must include inputs.test_run value`
-    );
+  for (const [name, job] of Object.entries(jobs)) {
+    if (!name.startsWith('test-ci-')) continue;
+    assert.ok(CALLABLE_CI_WORKFLOWS.includes(`${job.uses.replace('./.github/workflows/', '')}`), `${name} is an unknown test call`);
   }
 });
 
+test('the browser test calls run every browser area and every phone test', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  for (const [name, output] of [
+    ['test-ci-apps-web', 'all_browser_matrix'],
+    ['test-ci-apps-editor', 'all_browser_matrix']
+  ]) {
+    const call = jobs[name];
+    assert.equal(call.with.browser_matrix, `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`);
+    assert.equal(call.with.phone_tests, 'all');
+  }
+});
+
+// CD workflows cannot be reusable, so ci-workflows dispatches them and waits for the real conclusion.
+test('ci-pr-checks passes the changed CD workflows to the workflows call only on a regular run', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  const call = jobs.workflows;
+  assert.equal(call.uses, './.github/workflows/ci-workflows.yml');
+  assert.match(call.if, /!cancelled\(\)/);
+  assert.equal(call.permissions.actions, 'write', 'the CD dispatcher needs to dispatch workflows');
+  assert.equal(call.permissions.packages, 'read', 'the artifact checks need to read packages');
+  assert.equal(
+    call.with.cd_test_runs,
+    "${{ needs.switch.outputs.test_run == 'true' && '[]' || (needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]') }}",
+    'a test run must not dispatch more test runs'
+  );
+  assert.equal(call.with.head_sha, '${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.equal(jobs['test-ci-workflows'].with.cd_test_runs, undefined, 'the static test call must not dispatch CD workflows');
+});
+
+test('ci-workflows dispatches and waits for a real CD test run, never a dry run', () => {
+  const {on, jobs} = load('ci-workflows.yml');
+  assert.deepEqual(Object.keys(on).sort(), ['pull_request', 'workflow_call', 'workflow_dispatch']);
+  assert.ok(on.workflow_call.inputs.cd_test_runs, 'callers must be able to pass the changed CD workflows');
+  assert.equal(on.workflow_call.inputs.cd_test_runs.type, 'string');
+  assert.ok(on.workflow_call.inputs.head_sha, 'callers must pass the head commit');
+  const dispatcher = jobs['cd-test-runs'];
+  assert.ok(dispatcher, 'the old evidence job must be replaced by a dispatcher');
+  assert.equal(dispatcher.if, "${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}");
+  assert.doesNotMatch(dispatcher.if, /github\.event_name/, 'the caller is a PR, not a workflow_call event');
+  assert.equal(dispatcher.permissions.actions, 'write');
+  assert.equal(dispatcher.permissions.packages, 'read');
+  assert.equal(dispatcher.permissions['contents'], 'read');
+  assert.equal(dispatcher.environment, undefined, 'the dispatcher itself is not a test-run twin');
+  const stepsText = JSON.stringify(dispatcher.steps);
+  assert.match(stepsText, /workflow-test-runs\.mjs/, 'must run the real orchestrator');
+  assert.match(stepsText, /sparse-checkout/, 'must check out only the orchestrator and its dependencies');
+  assert.match(stepsText, /RUN_ID/, 'must pass a unique run id for the test version');
+  assert.match(stepsText, /BRANCH/, 'must dispatch on the pull request branch');
+  assert.doesNotMatch(stepsText, /--dry-run|-n\b/, 'only act parses; the workflow must run the dispatch');
+});
+
+test('the CD dispatcher condition is true only for a non-empty input list', () => {
+  const {jobs} = load('ci-workflows.yml');
+  const condition = jobs['cd-test-runs'].if;
+  assert.equal(evaluateCdTestRunsCondition(condition, ''), false, 'an unset input must not dispatch');
+  assert.equal(evaluateCdTestRunsCondition(condition, '[]'), false, 'the planner emits [] for an empty selection');
+  assert.equal(evaluateCdTestRunsCondition(condition, '["cd-dev-pages.yml"]'), true, 'a selected CD workflow must dispatch');
+});
+
+test('every CD workflow can accept the inputs the dispatcher sends', () => {
+  for (const workflow of CD_WORKFLOWS) {
+    const {on} = load(workflow);
+    const inputs = on.workflow_dispatch.inputs;
+    for (const input of ['test_run', 'commit']) assert.ok(inputs[input], `${workflow} has no ${input} dispatch input`);
+    assert.equal(inputs.test_run.type, 'boolean');
+    assert.match(String(load(workflow)['run-name']), /test_run=/, `${workflow} must title its test runs`);
+    if (workflow === 'cd-dev-pages.yml') {
+      assert.ok(inputs.test_id, 'cd-dev-pages needs a unique test id because it has no version input');
+    } else {
+      assert.ok(inputs.version, `${workflow} needs a version input for a collision-free test run`);
+    }
+  }
+  const {on} = load('cd-dev-pages.yml');
+  assert.match(String(load('cd-dev-pages.yml')['run-name']), /inputs\.test_id/, 'the test id must reach the run name');
+  assert.equal(on.workflow_dispatch.inputs.test_id.type, 'string');
+});
+
+test('dispatchable workflows title their test runs with test_run=true', () => {
+  for (const workflow of [...CD_WORKFLOWS, 'ci-publish.yml', 'ci-pr-checks.yml']) {
+    const runName = String(load(workflow)['run-name']);
+    assert.match(runName, /workflow_dispatch/, `${workflow} run-name must branch on workflow_dispatch`);
+    assert.match(runName, /test_run=/, `${workflow} run-name must format test_run=`);
+    assert.match(runName, /inputs\.test_run/, `${workflow} run-name must include the requested mode`);
+    assert.doesNotMatch(runName, /workflow_call/, `${workflow} must not depend on the caller's event name`);
+  }
+});
+
+test('ci-publish is callable in test-run mode with the caller commit', () => {
+  const {on} = load('ci-publish.yml');
+  assert.equal(on.workflow_call.inputs.test_run.type, 'boolean');
+  assert.equal(on.workflow_call.inputs.test_run.required, true);
+  assert.equal(on.workflow_call.inputs.commit.type, 'string');
+  const plan = load('ci-publish.yml').jobs.plan;
+  assert.match(plan.env.RUN_ALL, /inputs\.test_run/, 'a reusable test run must plan every job');
+  assert.doesNotMatch(plan.env.RUN_ALL, /workflow_call/, 'the caller of a reusable run is a PR event');
+});
+
+test('reusable calls work under the caller pull_request event', () => {
+  const {jobs} = load('ci-workflows.yml');
+  assert.ok(!/github\.event_name/.test(String(jobs['cd-test-runs'].if)), 'CD dispatch must not need workflow_call');
+  const plan = load('ci-publish.yml').jobs.plan;
+  assert.ok(!/github\.event_name == 'workflow_call'/.test(String(plan.env.RUN_ALL)), 'publish test must read its input');
+});
 
 test('ci-publish has a pages job that writes packages only from main', () => {
   const {jobs} = load('ci-publish.yml');
@@ -883,11 +822,13 @@ test('ci-nightly calls ci-pr-checks with run_all and phone_tests set to all', ()
   assert.equal(runJob.uses, './.github/workflows/ci-pr-checks.yml', 'ci-nightly must call ci-pr-checks');
   assert.equal(runJob.with.run_all, true, 'ci-nightly must pass run_all: true');
   assert.equal(runJob.with.phone_tests, 'all', 'ci-nightly must pass phone_tests: all');
+  assert.equal(runJob.permissions.actions, 'write', 'the reusable calls need actions: write statically');
+  assert.equal(runJob.permissions.packages, 'write', 'the reusable calls need packages: write statically');
 });
 
-test('ci-publish triggers on push to main and workflow dispatch', () => {
+test('ci-publish triggers on push to main, workflow dispatch, and reusable test calls', () => {
   const {on} = load('ci-publish.yml');
-  assert.deepEqual(Object.keys(on).sort(), ['push', 'workflow_dispatch'], 'ci-publish trigger set');
+  assert.deepEqual(Object.keys(on).sort(), ['push', 'workflow_call', 'workflow_dispatch'], 'ci-publish trigger set');
   assert.deepEqual(on.push.branches, ['main'], 'ci-publish must only trigger on main');
 });
 
@@ -1042,7 +983,9 @@ test('CI gate checks run budget with aim and limit env vars', () => {
   assert.match(stepsText, /Check run budget/, 'gate must have a run budget step');
   assert.equal(gate.env.RUN_AIM_SECONDS, 300, 'gate must define RUN_AIM_SECONDS');
   assert.equal(gate.env.RUN_LIMIT_SECONDS, 420, 'gate must define RUN_LIMIT_SECONDS');
+  assert.match(String(gate.env.CD_TEST_RUNS), /cd_test_runs/, 'gate must know when it waits for CD test runs');
   assert.match(stepsText, /run-budget\.mjs/, 'run budget step must use run-budget.mjs');
+  assert.match(stepsText, /\$CD_TEST_RUNS/, 'the budget must receive the CD test runs');
 });
 
 // Behavior tests for the real "Check run budget" step.
@@ -1065,7 +1008,7 @@ function makeJobsJson(secondsAgo) {
 // Run the "Check run budget" step script in a temp dir with a fake `gh` and the real run-budget.mjs.
 // The fake gh serves both the attempt endpoint (for run_started_at) and the jobs endpoint.
 // Returns {code, stdout, stderr}.
-async function runBudgetBehaviorTest(jobsJson, shouldFailGh, attemptJson) {
+async function runBudgetBehaviorTest(jobsJson, shouldFailGh, attemptJson, cdTestRuns = '[]') {
   const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'run-budget-behavior-'));
 
   // Create the fake gh script that distinguishes between the attempt and jobs endpoints.
@@ -1108,6 +1051,7 @@ esac
     RUN_AIM_SECONDS: '300',
     RUN_LIMIT_SECONDS: '420',
     APPROVAL_JOB_NAME: 'Approve CI run',
+    CD_TEST_RUNS: cdTestRuns,
     GITHUB_STEP_SUMMARY: path.join(temporaryDirectory, 'summary'),
   };
 
@@ -1126,6 +1070,13 @@ test('run budget: over the limit exits 1 with ::error::', async () => {
   const result = await runBudgetBehaviorTest(makeJobsJson(500), false);
   assert.equal(result.code, 1, 'over the limit must exit 1');
   assert.match(result.stdout, /::error::/, 'over the limit must emit ::error::');
+});
+
+test('run budget: waiting for CD test runs exempts the whole PR run', async () => {
+  const result = await runBudgetBehaviorTest(makeJobsJson(500), false, undefined, '["cd-browser-image.yml"]');
+  assert.equal(result.code, 0, 'the CD waiter has its own timeout, so the gate must not fail');
+  assert.match(result.stdout, /waiting for CD test runs: cd-browser-image\.yml/, 'the exemption must be visible');
+  assert.doesNotMatch(result.stdout, /::error::/, 'an exempt run must not emit ::error::');
 });
 
 test('run budget: between aim and limit exits 0 with ::warning::', async () => {
@@ -1199,8 +1150,9 @@ test('only the new pipelines run on the repository', () => {
   assert.deepEqual(others, [], 'a workflow outside ci-pr-checks would run on every PR whatever changed');
   // ci-publish runs on push to main and workflow_dispatch;
   // cd-dev-pages runs on workflow_run (ci-publish completed on main) and workflow_dispatch;
+  // ci-workflows also lints on PRs that change workflow files, without running those workflows;
   // ci-nightly runs on schedule and workflow_dispatch; all other ci-* workflows only run when called or dispatched.
-  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
+  for (const file of newWorkflowFiles.filter(name => name !== 'ci-pr-checks.yml' && name !== 'ci-publish.yml' && name !== 'ci-nightly.yml' && name !== 'ci-workflows.yml' && name !== 'cd-dev-pages.yml' && !name.startsWith('cd-'))) {
     assert.deepEqual(
       Object.keys(load(file).on).sort(),
       ['workflow_call', 'workflow_dispatch'],
@@ -1228,9 +1180,22 @@ test('browser jobs run only the planned areas, and none when there are none', ()
   }
 });
 
-test('the planner has an output on the plan job for every folder', () => {
+test('the planner has an output on the plan job for every folder and every test-run selector', () => {
   const {plan} = load('ci-pr-checks.yml').jobs;
-  assert.deepEqual(new Set(Object.keys(plan.outputs)), new Set([...FOLDERS, 'browser_matrix', 'editor_browser_matrix', 'image_matrix']));
+  assert.deepEqual(
+    new Set(Object.keys(plan.outputs)),
+    new Set([
+      ...FOLDERS,
+      'browser_matrix',
+      'editor_browser_matrix',
+      'image_matrix',
+      'ci_test_runs',
+      'cd_test_runs',
+      'manual_test_runs',
+      'all_browser_matrix',
+      'all_editor_browser_matrix'
+    ])
+  );
 });
 
 test('a release version of the browser image must say which Playwright is inside, and never changes', () => {

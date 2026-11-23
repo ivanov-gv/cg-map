@@ -21,10 +21,11 @@ jobs:
   run:
     name: Run all checks
     uses: ./.github/workflows/ci-pr-checks.yml
+    # ci-pr-checks statically needs write scopes for its reusable calls, even when no test run is selected.
     permissions:
-      actions: read
+      actions: write
       contents: read
-      packages: read
+      packages: write
       pull-requests: read
     with:
       test_run: ${{ inputs.test_run == true || inputs.test_run == 'true' }}
