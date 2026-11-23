@@ -128,7 +128,9 @@ is a CD workflow, not CI.
 
 ## Locally with act
 
-Needs Docker and `gh extension install nektos/gh-act`. The image is private, so a new machine needs
+Needs Docker and `gh extension install nektos/gh-act`. Workflows use `environment.deployment`, so the extension must be
+act 0.2.98 built with the schema fix from [nektos/act#6243](https://github.com/nektos/act/pull/6243) (commit `0f761c0`):
+released 0.2.88 and 0.2.98 reject that key. The image is private, so a new machine needs
 `gh auth token | docker login ghcr.io --username <you> --password-stdin` once, with `read:packages`. Every target runs
 on [the pinned browser image](../docs/decisions/0007-browser-test-image.md), which it pulls if needed, so browser jobs
 run the same tools on any machine as on GitHub. A machine with a GPU renders on it, and GitHub's runners use software
