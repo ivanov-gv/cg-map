@@ -22,6 +22,7 @@ let archiveURL;
 let overlayFeature;
 let isSatelliteVisible = false;
 let isOverlayVisible = true;
+let isOverlayEditable = false;
 const overlayShiftPixels = 20;
 
 // Errors stay visible even if only part of a map rendered successfully.
@@ -77,6 +78,8 @@ async function createConceptMap() {
   isOverlayVisible = true;
   elementById('satellite').setAttribute('aria-pressed', 'false');
   elementById('overlay-toggle').setAttribute('aria-pressed', 'true');
+  isOverlayEditable = false;
+  elementById('overlay-editable').setAttribute('aria-pressed', 'false');
   elementById('selection').textContent = 'Nothing selected';
   map = createMap({engine: maplibregl, container: 'map', basemapURL: archiveURL, assetBaseURL: location.href});
   // Exposed for browser tests and manual inspection, like the public app's kompasDebug.
@@ -168,6 +171,13 @@ function toggleOverlay() {
   elementById('overlay-toggle').setAttribute('aria-pressed', String(isOverlayVisible));
 }
 
+// Editable is the Editor's state for objects that can be edited; the selection stays Highlighted either way.
+function toggleOverlayEditable() {
+  isOverlayEditable = !isOverlayEditable;
+  overlay.setState(isOverlayEditable ? 'editable' : 'default');
+  elementById('overlay-editable').setAttribute('aria-pressed', String(isOverlayEditable));
+}
+
 function clearOverlaySelection() {
   overlay.setSelection(null);
   elementById('selection').textContent = 'Nothing selected';
@@ -183,6 +193,7 @@ function registerConceptControls() {
   elementById('shift').onclick = shiftOverlay;
   elementById('replace').onclick = replaceOverlayWithPolygon;
   elementById('overlay-toggle').onclick = toggleOverlay;
+  elementById('overlay-editable').onclick = toggleOverlayEditable;
   elementById('clear-selection').onclick = clearOverlaySelection;
 }
 

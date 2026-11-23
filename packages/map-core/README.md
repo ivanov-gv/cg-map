@@ -42,11 +42,13 @@ visibly. Dispose with `map.remove()`; the core disconnects its resize observer a
 `registerArchiveProtocol` takes the vendored PMTiles module and, optionally, an archive source for the public app's
 offline adapter. The caller owns archive/offline policy.
 
-`createGeoJSONOverlay` renders mixed points, lines and polygons and holds an independent selection source. It accepts
-GeoJSON without changing caller-owned features, and `setSelection` also accepts `hitTest` results. Rendered geometry is
-clipped to tile boundaries, so pass source features when a large polygon must highlight whole. Source editing, source
-identity and cross-file validation belong to the editor and data tooling, not this rendering helper. `installPlaces`
-uses the same policy and palette as the public app; public search/selection orchestration stays in the public app.
+`createGeoJSONOverlay` renders mixed points, lines and polygons and holds an independent selection source. The overlay
+starts in the Default state and `setState('editable')` switches it to the Editor's thin green outline; the selection is
+always drawn Highlighted, a red outline over a light red fill, from the Penpot primitives card. It accepts GeoJSON
+without changing caller-owned features, and `setSelection` also accepts `hitTest` results. Rendered geometry is clipped
+to tile boundaries, so pass source features when a large polygon must highlight whole. Source editing, source identity
+and cross-file validation belong to the editor and data tooling, not this rendering helper. `installPlaces` uses the
+same policy and palette as the public app; public search/selection orchestration stays in the public app.
 
 assets/ holds the vendored MapLibre and PMTiles bundles and fonts. tools/assemble.mjs is the build-time half of the
 contract: each application's own build tool uses it to copy the runtime, assets and verified map data into its artifact.

@@ -9,9 +9,9 @@ at root or under a URL prefix. `make verify PKG=apps/core-demo` builds and check
 runs tests/e2e on desktop and mobile.
 
 Use the street/overview buttons to compare POI thresholds; select the green overlay, shift its point by 20 screen
-pixels, replace it with a polygon, toggle it, then recreate the map. Errors and stalled startup remain visible. This app
-has no service worker, search, live transport, source editing or export. Its purpose is to keep shared features
-independently visible and reviewable, not to be another product interface.
+pixels, replace it with a polygon, toggle it, switch it to the Editable state, then recreate the map. Errors and stalled
+startup remain visible. This app has no service worker, search, live transport, source editing or export. Its purpose is
+to keep shared features independently visible and reviewable, not to be another product interface.
 
 Add a simple control here whenever core gains a capability. Assets retain their single source in packages/map-core and
 data; the build copies them into separate artifacts. See [map-core](../../packages/map-core/README.md).
