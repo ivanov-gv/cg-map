@@ -75,8 +75,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Workflow: task, plan, PR, decisions log
 
-Work starts in the human-written wiki: read it, never edit it; propose changes as issue comments. See
-[the workflow and PR rules](docs/management/AGENTS.md): Feature PRs start as drafts; an Epic's Features form a stack.
+Work starts in the human-written wiki: read it, never edit it; propose changes as issue comments. Before anything with
+issues, pull requests, Feature branches, stacks or merges, read [docs/management/AGENTS.md](docs/management/AGENTS.md).
 
 1. Find or open the task's issue; every PR needs one. Inspect git status and open PRs; preserve unrelated work.
 2. Read component instructions and language guidelines. Track work spanning sessions in an issue, with its plan as
