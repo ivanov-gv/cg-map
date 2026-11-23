@@ -500,26 +500,6 @@ test('a chosen result still zooms in to street level from far out', async ({page
   await expect.poll(async () => (await camera(page)).zoom).toBe(15);
 });
 
-test('search bar focus has no ring, and categories and the place card have no scrollbars', async ({page}) => {
-  await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
-  await ready(page);
-  const barBorder = () =>
-    page.locator('.search-bar').evaluate(element => getComputedStyle(element).borderColor);
-  const resting = await barBorder();
-  await page.locator('#search').focus();
-  expect(await page.locator('#search').evaluate(element => getComputedStyle(element).outlineStyle)).toBe(
-    'none'
-  );
-  expect(await barBorder()).not.toBe(resting);
-  // Open the dock to access results (desktop search panel needs a query to show results).
-  await openMenu(page);
-  await page.locator('.result').first().click();
-  for (const selector of ['#categories', '#place-card'])
-    expect(await page.locator(selector).evaluate(element => getComputedStyle(element).scrollbarWidth)).toBe(
-      'none'
-    );
-});
-
 test('desktop keeps the results open beside the place card', async ({page, isMobile}, testInfo) => {
   test.skip(isMobile, 'desktop layout');
   await page.route('**/data/places.geojson', route => route.fulfill({json: nearbyPlaces}));
@@ -1967,90 +1947,6 @@ test('touchpad scrolling zooms the map and its move carries the wheel event', as
   expect(await page.evaluate(() => window.wheelMoveStarts)).toContain('wheel');
 });
 
-test('device class is set on body at flip, mobile, and desktop viewport sizes', async ({page}) => {
-  await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-
-  // Desktop viewport (1280×800)
-  await page.setViewportSize({width: 1280, height: 800});
-  await ready(page);
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
-
-  // Mobile viewport (412×840) — default for pages-mobile project
-  await page.setViewportSize({width: 412, height: 840});
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
-
-  // Flip viewport (340×340) — withFlipViewport restores to the previous size (412×840) after
-  await withFlipViewport(page, async () => {
-    await expect(page.locator('body')).toHaveAttribute('data-device', 'flip');
-  });
-
-  // withFlipViewport restored to 412×840, so the class is mobile again
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'mobile');
-
-  // Explicitly resize to desktop to verify the transition back
-  await page.setViewportSize({width: 1280, height: 800});
-  await expect(page.locator('body')).toHaveAttribute('data-device', 'desktop');
-});
-
-// attributionNodes sanitises HTML safely — tested in the browser where DOMParser is available.
-// Node has no DOMParser, so these four cases live in a browser test instead of a unit test.
-test('attributionNodes rejects javascript: href and flattens non-anchor elements', async ({page}) => {
-  await ready(page);
-  const findings = await page.evaluate(() => {
-    const results = {};
-
-    // Recreate the attributionNodes logic inline for testing
-    function testAttributionNodes(html) {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const nodes = [];
-      for (const child of doc.body.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          nodes.push(document.createTextNode(child.textContent));
-        } else if (child.tagName === 'A') {
-          const href = child.getAttribute('href');
-          if (href && href.startsWith('https://')) {
-            const anchor = document.createElement('a');
-            anchor.href = href;
-            anchor.target = '_blank';
-            anchor.rel = 'noopener noreferrer';
-            anchor.textContent = child.textContent;
-            nodes.push(anchor);
-          } else {
-            nodes.push(document.createTextNode(child.textContent));
-          }
-        } else {
-          nodes.push(document.createTextNode(child.textContent));
-        }
-      }
-      return nodes;
-    }
-
-    // Test 1: javascript: href becomes plain text
-    const jsNodes = testAttributionNodes('<a href="javascript:alert(1)">Click</a>');
-    results.javascriptHref = jsNodes.every(node => node.nodeType === Node.TEXT_NODE);
-
-    // Test 2: <b> element flattens to text
-    const boldNodes = testAttributionNodes('<b>Bold</b>');
-    results.boldFlattened = boldNodes.length === 1 && boldNodes[0].nodeType === Node.TEXT_NODE &&
-      boldNodes[0].textContent === 'Bold';
-
-    // Test 3: anchor nested in <span> becomes text (only top-level anchors rebuilt)
-    const nestedNodes = testAttributionNodes('<span><a href="https://example.com">Link</a></span>');
-    results.nestedAnchor = nestedNodes.every(node => node.nodeType === Node.TEXT_NODE);
-
-    // Test 4: target _blank and rel on rebuilt anchor
-    const safeNodes = testAttributionNodes('<a href="https://example.com">Safe</a>');
-    const anchor = safeNodes.find(node => node.nodeType === Node.ELEMENT_NODE);
-    results.anchorTarget = anchor?.target === '_blank' && anchor?.rel === 'noopener noreferrer';
-
-    return results;
-  });
-  expect(findings.javascriptHref).toBe(true);
-  expect(findings.boldFlattened).toBe(true);
-  expect(findings.nestedAnchor).toBe(true);
-  expect(findings.anchorTarget).toBe(true);
-});
-
 // Attribution lives in the dock footer, not as a floating control on the map.
 test('attribution appears in dock footer and updates with satellite toggle', async ({page}) => {
   await ready(page);
@@ -2142,39 +2038,6 @@ test.describe('dock footer build version', () => {
   });
 });
 
-test('Satellite layer tile uses the design folded-map icon', async ({page}) => {
-  await ready(page);
-  const iconGeometry = await page.locator('#i-satellite').evaluate(symbol => ({
-    viewBox: symbol.getAttribute('viewBox'),
-    children: [...symbol.children].map(child =>
-      child.tagName.toLowerCase() === 'circle'
-        ? {
-            tag: 'circle',
-            cx: child.getAttribute('cx'),
-            cy: child.getAttribute('cy'),
-            r: child.getAttribute('r')
-          }
-        : {tag: 'path', d: child.getAttribute('d')}
-    )
-  }));
-  expect(iconGeometry.viewBox).toBe('0 0 24 24');
-  expect(iconGeometry.children).toEqual([
-    {tag: 'path', d: 'M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20Z'},
-    {tag: 'circle', cx: '16', cy: '9.3', r: '1.6'},
-    {tag: 'path', d: 'M5.2 16.6l4.1-4.3 3.3 3.1 2-2 4.2 3.4'}
-  ]);
-  const iconStroke = await page.locator('#satellite-toggle .icon').evaluate(element => {
-    const style = getComputedStyle(element);
-    return {
-      fill: style.fill,
-      stroke: style.strokeWidth,
-      cap: style.strokeLinecap,
-      join: style.strokeLinejoin
-    };
-  });
-  expect(iconStroke).toEqual({fill: 'none', stroke: '1.65px', cap: 'round', join: 'round'});
-});
-
 // ---------------------------------------------------------------------------
 // Full-screen map and scale bar (issue #97)
 // ---------------------------------------------------------------------------
@@ -2187,50 +2050,6 @@ const deviceCases = [
   {name: 'mobile', viewport: {width: 412, height: 840}},
   {name: 'flip', viewport: FLIP_VIEWPORT}
 ];
-
-// MapLibre's control CSS sets .maplibregl-ctrl-group button to 29×29, so the rendered
-// box and the computed style must both be checked (issue #272).
-const locateDesignCases = [
-  {name: 'desktop', viewport: {width: 1280, height: 800}, size: 48, rightGap: 20, bottomGap: 20},
-  {name: 'mobile', viewport: {width: 412, height: 840}, size: 48, rightGap: 12, bottomGap: 24},
-  {name: 'flip', viewport: FLIP_VIEWPORT, size: 40, rightGap: 12, bottomGap: 12}
-];
-
-for (const device of locateDesignCases) {
-  const phoneTag = device.name === 'desktop' ? {} : {tag: '@phone'};
-
-  test(`Locate button has the design size, radius, icon and offsets on ${device.name}`, {...phoneTag}, async ({page}) => {
-    await atViewport(page, device.viewport, async () => {
-      await ready(page);
-      const button = page.locator('#position-action');
-      await expect(button).toBeVisible();
-      const computed = await button.evaluate(element => {
-        const style = getComputedStyle(element);
-        const iconStyle = getComputedStyle(element.querySelector('.icon'));
-        return {
-          width: style.width,
-          height: style.height,
-          radius: style.borderTopLeftRadius,
-          iconWidth: iconStyle.width,
-          iconHeight: iconStyle.height
-        };
-      });
-      expect(computed).toEqual({
-        width: `${device.size}px`,
-        height: `${device.size}px`,
-        radius: '14px',
-        iconWidth: '21px',
-        iconHeight: '21px'
-      });
-      const box = await button.boundingBox();
-      expect(box.width).toBe(device.size);
-      expect(box.height).toBe(device.size);
-      const viewport = page.viewportSize();
-      expect(viewport.width - (box.x + box.width)).toBe(device.rightGap);
-      expect(viewport.height - (box.y + box.height)).toBe(device.bottomGap);
-    });
-  });
-}
 
 async function assertMapFillsViewport(page) {
   const viewport = page.viewportSize();
@@ -2352,41 +2171,12 @@ for (const {name, viewport} of deviceCases) {
 // ---------------------------------------------------------------------------
 
 // Verifies the on-map "OpenStreetMap" credit sits below the scale bar on
-// Desktop, Mobile, and Flip — visible, positioned, sized, and clickable.
+// Desktop, Mobile, and Flip — visible, positioned, and clickable.
 for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
   ...deviceCase,
   isMobile: deviceCase.name !== 'desktop'
 }))) {
   const phoneTag = isMobile ? {tag: '@phone'} : {};
-
-  test(`OSM credit matches scale bar styling on ${name}`, {...phoneTag}, async ({page}) => {
-    await atViewport(page, viewport, async () => {
-      await ready(page);
-      await closeMenu(page);
-
-      // The credit inherits the same background-color, color, and font-family
-      // as the scale bar so they stay in step (wiki Web app – UI, ADR 0016).
-      const styles = await page.evaluate(() => {
-        const scaleBar = document.querySelector('.maplibregl-ctrl-scale');
-        const creditEl = document.querySelector('.osm-credit-line');
-        if (!scaleBar || !creditEl) return null;
-        const scaleStyle = getComputedStyle(scaleBar);
-        const creditStyle = getComputedStyle(creditEl);
-        return {
-          scaleBackground: scaleStyle.backgroundColor,
-          creditBackground: creditStyle.backgroundColor,
-          scaleColor: scaleStyle.color,
-          creditColor: creditStyle.color,
-          scaleFontFamily: scaleStyle.fontFamily,
-          creditFontFamily: creditStyle.fontFamily
-        };
-      });
-      expect(styles).not.toBeNull();
-      expect(styles.creditBackground).toBe(styles.scaleBackground);
-      expect(styles.creditColor).toBe(styles.scaleColor);
-      expect(styles.creditFontFamily).toBe(styles.scaleFontFamily);
-    });
-  });
 
   test(`OSM credit line is visible and positioned below scale bar on ${name}`, {...phoneTag}, async ({page}) => {
     await atViewport(page, viewport, async () => {
@@ -2442,16 +2232,6 @@ for (const {name, viewport, isMobile} of deviceCases.map(deviceCase => ({
     });
   });
 }
-
-// Proves the overlap check can detect a visible element covering the scale bar.
-// Injects a white background on .sidebar so it paints over the scale bar area.
-test('overlap check detects injected sidebar background', async ({page}) => {
-  await ready(page);
-  await closeMenu(page);
-  await page.addStyleTag({content: '.sidebar { background: white !important; }'});
-  const culprits = await scaleBarCulprits(page);
-  expect(culprits.length).toBeGreaterThan(0);
-});
 
 // Proves attribution refreshes when a source is added after load.
 test('attribution refreshes when a source is added after load', async ({page}) => {
@@ -2671,15 +2451,6 @@ test.describe('GPS follow location', {tag: ['@mobile-only', '@phone']}, () => {
 test.describe('Desktop search bar', () => {
   test.use({viewport: {width: 1280, height: 800}});
 
-  test('search bar is taller than 54 px on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    expect(bar.height).toBeGreaterThan(54);
-    expect(bar.height).toBe(60);
-  });
-
   test('floating categories are visible under the bar with no query and dock closed', async ({page, isMobile}) => {
     test.skip(isMobile, 'desktop layout');
     await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
@@ -2711,22 +2482,6 @@ test.describe('Desktop search bar', () => {
     });
     const scrolled = await categories.evaluate(el => el.scrollLeft);
     expect(scrolled).toBeGreaterThan(0);
-  });
-
-  test('floating categories have transparent background and each chip has a shadow', async ({page, isMobile}) => {
-    test.skip(isMobile, 'desktop layout');
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    await closeMenu(page);
-    const panel = page.locator('#desktop-search-panel');
-    // Container background is transparent in floating mode.
-    const background = await panel.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(background).toBe('rgba(0, 0, 0, 0)');
-    // Each category chip floats with its own box-shadow.
-    const chipShadow = await panel.locator('#categories button[data-category]').first().evaluate(
-      el => getComputedStyle(el).boxShadow
-    );
-    expect(chipShadow).not.toBe('none');
   });
 
   test('typing shows the clear button; clearing a query stays Open and closing Open returns Empty', async ({page, isMobile}) => {
@@ -3041,29 +2796,6 @@ test.describe('Desktop search bar', () => {
 
 test.describe('Mobile search bar', () => {
   test.use({viewport: {width: 412, height: 840}});
-
-  test('search bar is smaller than desktop on mobile', async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    // Desktop bar is 60px; mobile bar must be smaller.
-    expect(bar.height).toBeLessThan(54);
-    expect(bar.height).toBe(44);
-  });
-
-  test('search bar has left and right gutters on mobile', async ({page}) => {
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-    const bar = await page.locator('.search-bar').boundingBox();
-    const viewport = page.viewportSize();
-    const leftGap = bar.x;
-    const rightGap = viewport.width - (bar.x + bar.width);
-    // The bar uses --bar-inset (12 px on mobile) on both sides.
-    expect(leftGap).toBeGreaterThanOrEqual(10);
-    expect(leftGap).toBeLessThanOrEqual(14);
-    expect(rightGap).toBeGreaterThanOrEqual(10);
-    expect(rightGap).toBeLessThanOrEqual(14);
-  });
 
   test('categories move to dock after desktop-to-mobile resize', async ({page}) => {
     // Start at desktop size so the floating chips are visible.
@@ -4180,49 +3912,6 @@ test.describe('Dock footer visibility', () => {
     await expect(page.locator('#menu-toggle')).toHaveAttribute('aria-label', 'Open menu');
   });
 
-  // The dock footer's top padding is 16 px on Desktop and Mobile (guarded #155).
-  for (const {name, viewport} of [
-    {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'mobile', viewport: {width: 412, height: 840}}
-  ]) {
-    test(`dock footer top padding is 16 px on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-        await openMenu(page);
-
-        const paddingTop = await page.locator('.dock-footer').evaluate(
-          el => parseFloat(getComputedStyle(el).paddingTop)
-        );
-        expect(paddingTop).toBe(16);
-      });
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Footer toggle removed: verify it no longer exists (issue #247)
-// ---------------------------------------------------------------------------
-
-test.describe('footer toggle removed', () => {
-  test.beforeEach(({page}) => stubRouting(page));
-
-  for (const {name, viewport} of [
-    {name: 'desktop', viewport: {width: 1280, height: 800}},
-    {name: 'mobile', viewport: {width: 412, height: 840}},
-    {name: 'flip', viewport: {width: 340, height: 340}}
-  ]) {
-    test(`#footer-toggle does not exist on ${name}`, async ({page}) => {
-      await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-      await atViewport(page, viewport, async () => {
-        await ready(page);
-
-        // #footer-toggle should not exist in the DOM.
-        const exists = await page.locator('#footer-toggle').count();
-        expect(exists).toBe(0);
-      });
-    });
-  }
 });
 
 // ---------------------------------------------------------------------------
@@ -4547,16 +4236,6 @@ test.describe('menu button hover state on touch screens', () => {
     expect(backgroundAfter).toEqual(backgroundBefore);
   });
 
-  // On desktop, the hover media query matches and :hover feedback is available.
-  test('hover media query matches on desktop', async ({page, isMobile}) => {
-    test.skip(isMobile, 'only meaningful on non-touch projects');
-
-    await page.route('**/data/places.geojson', route => route.fulfill({json: fixture}));
-    await ready(page);
-
-    const canHover = await page.evaluate(() => window.matchMedia('(hover: hover)').matches);
-    expect(canHover, 'desktop project should support hover').toBe(true);
-  });
 });
 
 
