@@ -48,3 +48,10 @@ same scopes to its call for the same reason. The static calls and dispatcher are
 `platform/tests/workflows.test.mjs`, alongside pure selection tests in `platform/tests/workflow-test-runs.test.mjs`. A
 new CD workflow still cannot be dispatched until it has landed on `main`; its first PR is proved by the CI paths and by
 a manual test run of what it calls.
+
+## Outcome note (issue #366, 2026-11-23)
+
+The fallback now takes its candidates from main's history: the last 20 commits of `origin/main`, newest first, rather
+than from successful `ci-publish` runs. A run can fail after one of its jobs has published a dev package or image, so
+its conclusion is not evidence that the commit has no artifact. Every candidate is still checked at the registry and the
+search stops at the first artifact, which bounds the dispatcher's work.

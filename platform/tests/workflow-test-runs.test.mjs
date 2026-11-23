@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   browserImageTestVersion,
-  chooseSourceCommit,
   dispatchArguments,
   dispatchAvailability,
   findDispatchedRun,
@@ -10,7 +9,9 @@ import {
   isTestRunTitle,
   packageTestVersion,
   playwrightVersionFromLock,
-  selectWorkflowTestRuns
+  readMainCommitLog,
+  selectWorkflowTestRuns,
+  sourceCommitFor
 } from '../tools/workflow-test-runs.mjs';
 
 for (const [name, file, expected] of [
@@ -107,20 +108,76 @@ test('test versions are unique and follow each registry\'s rules', () => {
   assert.throws(() => browserImageTestVersion('latest', 12), /three numbers/);
 });
 
+test('main history is read from the fetched origin/main ref', () => {
+  const commit = '2222222222222222222222222222222222222222';
+  const log = `${commit}\n`;
+  let call;
+  const runGit = (command, args, options) => {
+    call = {command, args, options};
+    return log;
+  };
+
+  assert.equal(readMainCommitLog(runGit), log);
+  assert.equal(call.command, 'git');
+  assert.deepEqual(call.args, ['log', '--max-count=20', '--format=%H', 'refs/remotes/origin/main']);
+  assert.equal(call.options.encoding, 'utf8');
+  assert.equal(call.options.env, process.env);
+});
+
 test('source commit uses head when it has an artifact, otherwise the newest main commit', () => {
-  const head = '1111111111111111111111111111111111111111';
-  const main = '2222222222222222222222222222222222222222';
+  const headCommit = '1111111111111111111111111111111111111111';
+  const mainCommit = '2222222222222222222222222222222222222222';
+  const mainCommitLog = `${mainCommit}\n3333333333333333333333333333333333333333`;
+
   assert.deepEqual(
-    chooseSourceCommit({headCommit: head, headHasArtifact: true, mainCommitsWithArtifact: [main]}),
-    {commit: head, isFallback: false}
+    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === headCommit),
+    {commit: headCommit, isFallback: false}
   );
   assert.deepEqual(
-    chooseSourceCommit({headCommit: head, headHasArtifact: false, mainCommitsWithArtifact: [main]}),
-    {commit: main, isFallback: true}
+    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === mainCommit),
+    {commit: mainCommit, isFallback: true}
   );
+  assert.throws(
+    () => sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, () => false),
+    /no dev artifact exists/
+  );
+});
+
+test('the fallback checks main commits newest first until one has an artifact', () => {
+  const headCommit = '1111111111111111111111111111111111111111';
+  const commitWithArtifact = '2222222222222222222222222222222222222222';
+  const newestCommit = '3333333333333333333333333333333333333333';
+  const olderCommit = '4444444444444444444444444444444444444444';
+  const checkedCommits = [];
+  // Issue #366: run status is no longer an input. A commit can belong to a failed ci-publish run and still have the
+  // artifact another job published, so the registry answer is the only evidence the fallback needs.
+  const artifactExists = commit => {
+    checkedCommits.push(commit);
+    return commit === commitWithArtifact;
+  };
+
+  const source = sourceCommitFor(
+    'cd-map-contracts.yml',
+    headCommit,
+    `${newestCommit}\n${commitWithArtifact}\n${olderCommit}`,
+    artifactExists
+  );
+
+  assert.deepEqual(source, {commit: commitWithArtifact, isFallback: true});
   assert.deepEqual(
-    chooseSourceCommit({headCommit: head, headHasArtifact: false, mainCommitsWithArtifact: [head]}),
-    {commit: '', isFallback: false}
+    checkedCommits,
+    [headCommit, newestCommit, commitWithArtifact],
+    'checks newest first and stops at the artifact'
+  );
+});
+
+test('source commit checks at most the newest twenty main commits', () => {
+  const commits = Array.from({length: 21}, (_, index) => String(index).padStart(40, '0'));
+  const oldestCommit = commits.at(-1);
+
+  assert.throws(
+    () => sourceCommitFor('cd-map-core.yml', 'f'.repeat(40), commits.join('\n'), commit => commit === oldestCommit),
+    /no dev artifact exists/
   );
 });
 

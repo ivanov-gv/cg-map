@@ -123,9 +123,10 @@ successful push build on main — never for a CI test run, a dispatched CI run, 
 but main. Run it with `make test-cd-dev-pages COMMIT=<full SHA>`.
 
 `test-cd-dev-pages-dispatch` simulates a manual dispatch via `workflow_dispatch`. Pass a commit on `main` that has a
-`dev-pages:<commit>` image. Find one with
-`gh run list --workflow ci-publish.yml --branch main --status success --json headSha --jq '.[0].headSha'`. Run it with
-`make test-cd-dev-pages-dispatch COMMIT=<full SHA>`.
+`dev-pages:<commit>` image. Fetch main and list recent commits with `git fetch origin main` and
+`git log --max-count=20 --format=%H origin/main`, then confirm the image with
+`docker manifest inspect ghcr.io/ivanov-gv/cg-map/dev-pages:<full SHA>`. A successful `ci-publish` run is not a
+substitute for that check. Run it with `make test-cd-dev-pages-dispatch COMMIT=<full SHA>`.
 
 Under `act`, the image pull needs a real token and a real `ci-publish` run, so both paths pull from an actual CI run.
 Under `act`, `IMAGE_REPOSITORY` is `ttl.sh/ivanov-gv-cg-map` (from `var.env`), so the test run of `ci-publish` must have
@@ -176,7 +177,8 @@ The gate's planner selects the workflows a change touches and the gate proves th
 - Every changed `cd-*` workflow is dispatched by `ci-workflows` with `test_run=true`, the head commit, and a unique test
   `VERSION` (or `test_id` for cd-dev-pages). The job reuses an existing successful test run of the head commit when one
   exists; otherwise it dispatches and waits for the real conclusion. If the head commit has no dev package or image, it
-  uses the newest main commit that has one and says so in the job summary.
+  checks the last 20 commits of main, newest first, uses the first with an artifact and says so in the job summary. A
+  `ci-publish` conclusion is not a filter: a run can fail after another of its jobs published an artifact.
 - A workflow not yet registered on `main`, or one whose `main` version lacks `workflow_dispatch`, `test_run` and
   `commit`, cannot be dispatched and is exempt with a reason in the job summary. `ci-pr-checks.yml` and `ci-nightly.yml`
   are always manual exceptions: a reusable call to either would form a cycle. Dispatch them with the first command below

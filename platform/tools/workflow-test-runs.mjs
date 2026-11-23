@@ -79,6 +79,7 @@ const PLANNER_FILES = [
 
 const DEV_IMAGE_REPOSITORY = 'ghcr.io/ivanov-gv/cg-map';
 const TEST_IMAGE_REPOSITORY = 'ttl.sh/ivanov-gv-cg-map';
+const MAIN_HISTORY_LIMIT = 20;
 
 function inOrder(selected, order) {
   const known = order.filter(name => selected.has(name));
@@ -156,12 +157,24 @@ export function browserImageTestVersion(playwrightVersion, runId) {
   return `${playwrightVersion}-r${String(runId)}`;
 }
 
-// A head commit normally has no dev artifact, because publishing happens on main. Fall back to the newest available
-// main commit and say so; the caller has already checked that each candidate has the artifact this workflow promotes.
-export function chooseSourceCommit({headCommit, headHasArtifact, mainCommitsWithArtifact}) {
-  if (headHasArtifact) return {commit: headCommit, isFallback: false};
-  const fallback = mainCommitsWithArtifact.find(commit => commit !== headCommit);
-  return {commit: fallback ?? '', isFallback: Boolean(fallback)};
+// main's history, not ci-publish's conclusions, is the candidate list: a run can fail in one job after another job
+// published its artifact. Newest first keeps the registry checks in a predictable order.
+export function recentMainCommits(logText, limit = MAIN_HISTORY_LIMIT) {
+  return logText
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+// Each artifact check is a registry call, so check the head first, then main's commits newest first, and stop at the
+// first match. The caller reports a fallback when the source is not the head commit.
+export function sourceCommitFor(workflow, headCommit, mainCommitLog, artifactExists) {
+  if (artifactExists(headCommit)) return {commit: headCommit, isFallback: false};
+  const mainCommits = recentMainCommits(mainCommitLog);
+  const fallback = mainCommits.find(commit => commit !== headCommit && artifactExists(commit));
+  if (!fallback) throw new Error(`${workflow}: no dev artifact exists for ${headCommit} or a recent main commit`);
+  return {commit: fallback, isFallback: true};
 }
 
 export function findDispatchedRun(runs, {headCommit, marker, minimumId = 0}) {
@@ -314,32 +327,17 @@ function artifactExists(workflow, commit) {
   return Boolean(imageName && imageExists(imageName, commit));
 }
 
-function recentMainCommits() {
-  const runs = ghJson([
-    'run',
-    'list',
-    '--workflow',
-    'ci-publish.yml',
-    '--branch',
-    'main',
-    '--status',
-    'success',
-    '--json',
-    'headSha',
-    '--limit',
-    '10'
-  ]);
-  return [...new Set(runs.map(run => run.headSha).filter(Boolean))];
-}
-
-function sourceCommitFor(workflow, headCommit, mainCommits) {
-  const choice = chooseSourceCommit({
-    headCommit,
-    headHasArtifact: artifactExists(workflow, headCommit),
-    mainCommitsWithArtifact: mainCommits.filter(commit => commit !== headCommit && artifactExists(workflow, commit))
-  });
-  if (!choice.commit) throw new Error(`${workflow}: no dev artifact exists for ${headCommit} or a recent main commit`);
-  return choice;
+// The CD dispatcher fetches origin/main before this script runs; a shallow PR checkout alone would not have its history.
+export function readMainCommitLog(runGit = execFileSync) {
+  try {
+    return runGit(
+      'git',
+      ['log', `--max-count=${MAIN_HISTORY_LIMIT}`, '--format=%H', 'refs/remotes/origin/main'],
+      {encoding: 'utf8', env: process.env}
+    );
+  } catch (error) {
+    throw new Error(`Could not read ${MAIN_HISTORY_LIMIT} commits from origin/main: ${error.message}`, {cause: error});
+  }
 }
 
 // The CD test run reads from the temporary registry, so copy the dev image there without changing it.
@@ -428,7 +426,7 @@ function main() {
   const playwrightVersion = playwrightVersionFromLock(fs.readFileSync('package-lock.json', 'utf8'));
   const needsImage = workflows.some(workflow => IMAGE_BY_WORKFLOW[workflow]);
   if (needsImage) loginToGithubRegistry();
-  const mainCommits = recentMainCommits();
+  const mainCommitLog = readMainCommitLog();
   const pending = [];
   for (const workflow of workflows) {
     if (hasSuccessfulTestRun(workflow, headCommit)) {
@@ -440,7 +438,7 @@ function main() {
       report(`${workflow}: exempt — ${availability.reason}, so it cannot be dispatched.`);
       continue;
     }
-    const source = sourceCommitFor(workflow, headCommit, mainCommits);
+    const source = sourceCommitFor(workflow, headCommit, mainCommitLog, commit => artifactExists(workflow, commit));
     if (source.isFallback)
       report(
         `${workflow}: no dev package or image exists for ${headCommit}; using ${source.commit}, the newest main commit with one.`
