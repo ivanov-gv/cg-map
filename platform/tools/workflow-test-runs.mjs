@@ -80,7 +80,9 @@ const PLANNER_FILE_WORKFLOWS = {
 
 const DEV_IMAGE_REPOSITORY = 'ghcr.io/ivanov-gv/cg-map';
 const TEST_IMAGE_REPOSITORY = 'ttl.sh/ivanov-gv-cg-map';
-const MAIN_HISTORY_LIMIT = 20;
+const DEV_IMAGE_LABEL = 'org.opencontainers.image.revision';
+const IMAGE_INSPECT_FORMAT = '{{json .Image}}';
+const NPM_REGISTRY_USER_CONFIG = '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n';
 
 function inOrder(selected, order) {
   const known = order.filter(name => selected.has(name));
@@ -157,24 +159,84 @@ export function browserImageTestVersion(playwrightVersion, runId) {
   return `${playwrightVersion}-r${String(runId)}`;
 }
 
-// main's history, not ci-publish's conclusions, is the candidate list: a run can fail in one job after another job
-// published its artifact. Newest first keeps the registry checks in a predictable order.
-export function recentMainCommits(logText, limit = MAIN_HISTORY_LIMIT) {
-  return logText
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .slice(0, limit);
+// The @dev npm spec and its missing-version error always name the same scoped package.
+export function devPackageTarget(packageName) {
+  const coordinate = `@ivanov-gv/${packageName}`;
+  return {
+    spec: `${coordinate}@dev`,
+    missingVersionMessage: `no dev version published for ${coordinate} (tag dev)`
+  };
 }
 
-// Each artifact check is a registry call, so check the head first, then main's commits newest first, and stop at the
-// first match. The caller reports a fallback when the source is not the head commit.
-export function sourceCommitFor(workflow, headCommit, mainCommitLog, artifactExists) {
-  if (artifactExists(headCommit)) return {commit: headCommit, isFallback: false};
-  const mainCommits = recentMainCommits(mainCommitLog);
-  const fallback = mainCommits.find(commit => commit !== headCommit && artifactExists(commit));
-  if (!fallback) throw new Error(`${workflow}: no dev artifact exists for ${headCommit} or a recent main commit`);
-  return {commit: fallback, isFallback: true};
+// imagetools reads the manifest without pulling the moving tag; an OCI index .Image is keyed by platform.
+export function devImageInspectCommand(name) {
+  const image = `${DEV_IMAGE_REPOSITORY}/${name}:dev`;
+  return {image, args: ['buildx', 'imagetools', 'inspect', '--format', IMAGE_INSPECT_FORMAT, image]};
+}
+
+// npm view runs from a temporary directory so the repository .npmrc cannot override the token (issue #370).
+export function devPackageViewCommand(packageName, directory, auth) {
+  const target = devPackageTarget(packageName);
+  const userConfig = path.join(directory, '.npmrc');
+  return {
+    args: [
+      'view',
+      target.spec,
+      'version',
+      '--registry',
+      'https://npm.pkg.github.com',
+      '--userconfig',
+      userConfig
+    ],
+    options: {cwd: directory, encoding: 'utf8', stdio: 'pipe', env: auth.env}
+  };
+}
+
+// ci-publish versions each dev package as 0.0.0-dev.<full 40-digit commit>; any other shape is not a dev artifact.
+export function commitFromDevVersion(version) {
+  const match = /^0\.0\.0-dev\.([0-9a-f]{40})$/.exec(String(version).trim());
+  if (!match) throw new Error(`unexpected dev version: ${version}`);
+  return match[1];
+}
+
+function revisionFromLabels(labels) {
+  const commit = labels?.[DEV_IMAGE_LABEL];
+  if (!/^[0-9a-f]{40}$/.test(String(commit))) throw new Error(`missing ${DEV_IMAGE_LABEL} label`);
+  return commit;
+}
+
+// imagetools .Image is one image config, or a platform-keyed map for an OCI index.
+export function commitFromImageInspect(text) {
+  let image;
+  try {
+    image = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`unreadable image inspect output: ${text}`, {cause: error});
+  }
+  const entry = image?.config ? image : image?.['linux/amd64'];
+  if (!entry?.config) throw new Error('unexpected image inspect output: no single image or linux/amd64 platform');
+  return revisionFromLabels(entry.config.Labels);
+}
+
+// Only a not-found answer means the dev package is absent. Any other npm failure (401, 403, a network error) must stop
+// the run instead of looking like a missing artifact.
+export function isPackageVersionMissing(failureText) {
+  return /\bE404\b/.test(String(failureText));
+}
+
+// imagetools reports a missing :dev tag as MANIFEST_UNKNOWN, NAME_UNKNOWN or a 404; auth and network errors must not
+// look like one.
+export function isImageTagMissing(failureText) {
+  const text = String(failureText);
+  const authOrNetworkFailure =
+    /\b(?:401|403)\b|unauthori[sz]ed|forbidden|denied|authentication|network|no such host|timed? out/i;
+  if (authOrNetworkFailure.test(text)) return false;
+  return /manifest[_ ]unknown|name[_ ]unknown|\b404\b|not found/i.test(text);
+}
+
+// npm expands NODE_AUTH_TOKEN when it reads the config, so the token stays in the environment and not on disk.
+export function npmAuthForRegistry(token, environment) {
+  return {userConfig: NPM_REGISTRY_USER_CONFIG, env: {...environment, NODE_AUTH_TOKEN: token}};
 }
 
 export function findDispatchedRun(runs, {headCommit, marker, minimumId = 0}) {
@@ -202,15 +264,6 @@ function report(line) {
   console.log(line);
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (summaryPath) fs.appendFileSync(summaryPath, `${line}\n`);
-}
-
-function commandSucceeds(command, args, options = {}) {
-  try {
-    execFileSync(command, args, {stdio: 'pipe', ...options});
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function ghJson(args) {
@@ -285,24 +338,28 @@ export function isTestRunTitle(title) {
   return /\btest_run=true\b/.test(String(title));
 }
 
-function packageExists(packageName, commit) {
-  const token = requireEnv('GH_TOKEN');
+function devCommitForPackage(packageName) {
+  const target = devPackageTarget(packageName);
+  const auth = npmAuthForRegistry(requireEnv('GH_TOKEN'), process.env);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-package-check-'));
   const userConfig = path.join(directory, '.npmrc');
-  fs.writeFileSync(userConfig, `//npm.pkg.github.com/:_authToken=${token}\n`, {mode: 0o600});
-  const args = [
-    'view',
-    `@ivanov-gv/${packageName}@0.0.0-dev.${commit}`,
-    'version',
-    '--registry',
-    'https://npm.pkg.github.com',
-    '--userconfig',
-    userConfig
-  ];
+  fs.writeFileSync(userConfig, auth.userConfig, {mode: 0o600});
+  const {args, options} = devPackageViewCommand(packageName, directory, auth);
+  let version;
   try {
-    return commandSucceeds('npm', args, {env: process.env});
+    // cwd is the temporary directory, outside the repository .npmrc (issue #370).
+    version = execFileSync('npm', args, options);
+  } catch (error) {
+    const failureText = commandFailureText(error);
+    if (isPackageVersionMissing(failureText)) throw new Error(target.missingVersionMessage, {cause: error});
+    throw new Error(`could not check ${target.spec}: ${failureText}`, {cause: error});
   } finally {
     fs.rmSync(directory, {recursive: true, force: true});
+  }
+  try {
+    return commitFromDevVersion(version);
+  } catch (error) {
+    throw new Error(`unexpected version for ${target.spec}: ${version}`, {cause: error});
   }
 }
 
@@ -314,30 +371,30 @@ function loginToGithubRegistry() {
   );
 }
 
-function imageExists(name, commit) {
-  return commandSucceeds('docker', ['manifest', 'inspect', `${DEV_IMAGE_REPOSITORY}/${name}:${commit}`], {
-    env: process.env
-  });
-}
-
-function artifactExists(workflow, commit) {
-  const packageName = PACKAGE_BY_WORKFLOW[workflow];
-  if (packageName) return packageExists(packageName, commit);
-  const imageName = IMAGE_BY_WORKFLOW[workflow];
-  return Boolean(imageName && imageExists(imageName, commit));
-}
-
-// The CD dispatcher fetches origin/main before this script runs; a shallow PR checkout alone would not have its history.
-export function readMainCommitLog(runGit = execFileSync) {
+function devCommitForImage(name) {
+  const {image, args} = devImageInspectCommand(name);
+  let inspectText;
   try {
-    return runGit(
-      'git',
-      ['log', `--max-count=${MAIN_HISTORY_LIMIT}`, '--format=%H', 'refs/remotes/origin/main'],
-      {encoding: 'utf8', env: process.env}
-    );
+    inspectText = execFileSync('docker', args, {encoding: 'utf8', stdio: 'pipe', env: process.env});
   } catch (error) {
-    throw new Error(`Could not read ${MAIN_HISTORY_LIMIT} commits from origin/main: ${error.message}`, {cause: error});
+    const failureText = commandFailureText(error);
+    if (isImageTagMissing(failureText))
+      throw new Error(`${image}: no dev tag published; ci-publish on main publishes it`, {cause: error});
+    throw new Error(`could not inspect ${image}: ${failureText}`, {cause: error});
   }
+  try {
+    return commitFromImageInspect(inspectText);
+  } catch (error) {
+    throw new Error(`${image}: no valid ${DEV_IMAGE_LABEL} label; ci-publish on main publishes it`, {cause: error});
+  }
+}
+
+function devCommitForWorkflow(workflow) {
+  const packageName = PACKAGE_BY_WORKFLOW[workflow];
+  if (packageName) return devCommitForPackage(packageName);
+  const imageName = IMAGE_BY_WORKFLOW[workflow];
+  if (!imageName) throw new Error(`No dev artifact is defined for ${workflow}`);
+  return devCommitForImage(imageName);
 }
 
 // The CD test run reads from the temporary registry, so copy the dev image there without changing it.
@@ -426,7 +483,6 @@ function main() {
   const playwrightVersion = playwrightVersionFromLock(fs.readFileSync('package-lock.json', 'utf8'));
   const needsImage = workflows.some(workflow => IMAGE_BY_WORKFLOW[workflow]);
   if (needsImage) loginToGithubRegistry();
-  const mainCommitLog = readMainCommitLog();
   const pending = [];
   for (const workflow of workflows) {
     if (hasSuccessfulTestRun(workflow, headCommit)) {
@@ -438,15 +494,12 @@ function main() {
       report(`${workflow}: exempt — ${availability.reason}, so it cannot be dispatched.`);
       continue;
     }
-    const source = sourceCommitFor(workflow, headCommit, mainCommitLog, commit => artifactExists(workflow, commit));
-    if (source.isFallback)
-      report(
-        `${workflow}: no dev package or image exists for ${headCommit}; using ${source.commit}, the newest main commit with one.`
-      );
+    const commit = devCommitForWorkflow(workflow);
+    report(`${workflow}: dev tag resolves to ${commit}`);
     const imageName = IMAGE_BY_WORKFLOW[workflow];
-    if (imageName) prepareTestImage(imageName, source.commit);
+    if (imageName) prepareTestImage(imageName, commit);
     const marker = testMarkerFor(workflow, {playwrightVersion, runId});
-    const minimumId = dispatch(workflow, branch, {commit: source.commit, marker});
+    const minimumId = dispatch(workflow, branch, {commit, marker});
     pending.push({workflow, headCommit, marker, minimumId});
     report(`${workflow}: dispatched test_run=true with ${marker}.`);
   }

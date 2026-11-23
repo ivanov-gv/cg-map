@@ -1,17 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import {
   browserImageTestVersion,
+  commitFromDevVersion,
+  commitFromImageInspect,
+  devImageInspectCommand,
+  devPackageTarget,
+  devPackageViewCommand,
   dispatchArguments,
   dispatchAvailability,
   findDispatchedRun,
   formatWorkflowTestRuns,
+  isImageTagMissing,
+  isPackageVersionMissing,
   isTestRunTitle,
+  npmAuthForRegistry,
   packageTestVersion,
   playwrightVersionFromLock,
-  readMainCommitLog,
-  selectWorkflowTestRuns,
-  sourceCommitFor
+  selectWorkflowTestRuns
 } from '../tools/workflow-test-runs.mjs';
 
 for (const [name, file, expected] of [
@@ -115,77 +123,96 @@ test('test versions are unique and follow each registry\'s rules', () => {
   assert.throws(() => browserImageTestVersion('latest', 12), /three numbers/);
 });
 
-test('main history is read from the fetched origin/main ref', () => {
-  const commit = '2222222222222222222222222222222222222222';
-  const log = `${commit}\n`;
-  let call;
-  const runGit = (command, args, options) => {
-    call = {command, args, options};
-    return log;
-  };
-
-  assert.equal(readMainCommitLog(runGit), log);
-  assert.equal(call.command, 'git');
-  assert.deepEqual(call.args, ['log', '--max-count=20', '--format=%H', 'refs/remotes/origin/main']);
-  assert.equal(call.options.encoding, 'utf8');
-  assert.equal(call.options.env, process.env);
+test('dev package lookups and errors name the same scoped package', () => {
+  const target = devPackageTarget('map-core');
+  assert.equal(target.spec, '@ivanov-gv/map-core@dev');
+  assert.equal(target.missingVersionMessage, 'no dev version published for @ivanov-gv/map-core (tag dev)');
 });
 
-test('source commit uses head when it has an artifact, otherwise the newest main commit', () => {
-  const headCommit = '1111111111111111111111111111111111111111';
-  const mainCommit = '2222222222222222222222222222222222222222';
-  const mainCommitLog = `${mainCommit}\n3333333333333333333333333333333333333333`;
+test('image labels are read with imagetools without pulling the dev tag', () => {
+  const {image, args} = devImageInspectCommand('map-core');
+  assert.equal(image, 'ghcr.io/ivanov-gv/cg-map/map-core:dev');
+  assert.deepEqual(args, ['buildx', 'imagetools', 'inspect', '--format', '{{json .Image}}', image]);
+  assert.ok(!args.includes('pull'));
+});
 
-  assert.deepEqual(
-    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === headCommit),
-    {commit: headCommit, isFallback: false}
-  );
-  assert.deepEqual(
-    sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, commit => commit === mainCommit),
-    {commit: mainCommit, isFallback: true}
+test('npm view runs in a temporary directory with env-only auth', () => {
+  const directory = path.join(os.tmpdir(), 'cg-map-npm-view-check');
+  const auth = npmAuthForRegistry('secret-token', {PATH: '/usr/bin'});
+  const {args, options} = devPackageViewCommand('map-core', directory, auth);
+  assert.equal(args[0], 'view');
+  assert.equal(args[1], '@ivanov-gv/map-core@dev');
+  assert.equal(options.cwd, directory);
+  assert.equal(args[args.indexOf('--userconfig') + 1], path.join(directory, '.npmrc'));
+  assert.equal(options.env.NODE_AUTH_TOKEN, 'secret-token');
+});
+
+test('a dev package version names the commit it was published from', () => {
+  const commit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  assert.equal(commitFromDevVersion(`0.0.0-dev.${commit}\n`), commit);
+  assert.throws(() => commitFromDevVersion('0.1.0'), /unexpected dev version/);
+  assert.throws(() => commitFromDevVersion(`0.0.0-dev.${'A'.repeat(40)}`), /unexpected dev version/);
+  assert.throws(() => commitFromDevVersion(`0.0.0-test.${commit}`), /unexpected dev version/);
+});
+
+test('a single imagetools image config names the dev tag commit', () => {
+  const commit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const image = {config: {Labels: {'org.opencontainers.image.revision': commit}}};
+  assert.equal(commitFromImageInspect(JSON.stringify(image)), commit);
+});
+
+test('an OCI index uses the linux/amd64 config', () => {
+  const commit = 'cccccccccccccccccccccccccccccccccccccccc';
+  const image = {
+    'linux/arm64': {config: {Labels: {'org.opencontainers.image.revision': 'd'.repeat(40)}}},
+    'linux/amd64': {config: {Labels: {'org.opencontainers.image.revision': commit}}}
+  };
+  assert.equal(commitFromImageInspect(JSON.stringify(image)), commit);
+});
+
+test('an imagetools image without a usable revision label is rejected', () => {
+  assert.throws(
+    () => commitFromImageInspect(JSON.stringify({config: {Labels: {}}})),
+    /missing org\.opencontainers\.image\.revision label/
   );
   assert.throws(
-    () => sourceCommitFor('cd-map-core.yml', headCommit, mainCommitLog, () => false),
-    /no dev artifact exists/
+    () => commitFromImageInspect(JSON.stringify({'linux/amd64': {config: {Labels: {}}}})),
+    /missing org\.opencontainers\.image\.revision label/
   );
-});
-
-test('the fallback checks main commits newest first until one has an artifact', () => {
-  const headCommit = '1111111111111111111111111111111111111111';
-  const commitWithArtifact = '2222222222222222222222222222222222222222';
-  const newestCommit = '3333333333333333333333333333333333333333';
-  const olderCommit = '4444444444444444444444444444444444444444';
-  const checkedCommits = [];
-  // Issue #366: run status is no longer an input. A commit can belong to a failed ci-publish run and still have the
-  // artifact another job published, so the registry answer is the only evidence the fallback needs.
-  const artifactExists = commit => {
-    checkedCommits.push(commit);
-    return commit === commitWithArtifact;
-  };
-
-  const source = sourceCommitFor(
-    'cd-map-contracts.yml',
-    headCommit,
-    `${newestCommit}\n${commitWithArtifact}\n${olderCommit}`,
-    artifactExists
-  );
-
-  assert.deepEqual(source, {commit: commitWithArtifact, isFallback: true});
-  assert.deepEqual(
-    checkedCommits,
-    [headCommit, newestCommit, commitWithArtifact],
-    'checks newest first and stops at the artifact'
-  );
-});
-
-test('source commit checks at most the newest twenty main commits', () => {
-  const commits = Array.from({length: 21}, (_, index) => String(index).padStart(40, '0'));
-  const oldestCommit = commits.at(-1);
-
+  assert.throws(() => commitFromImageInspect('not json'), /unreadable image inspect output/);
+  assert.throws(() => commitFromImageInspect('null'), /unexpected image inspect output/);
   assert.throws(
-    () => sourceCommitFor('cd-map-core.yml', 'f'.repeat(40), commits.join('\n'), commit => commit === oldestCommit),
-    /no dev artifact exists/
+    () => commitFromImageInspect(JSON.stringify({'linux/arm64': {config: {Labels: {}}}})),
+    /unexpected image inspect output/
   );
+});
+
+test('only a missing npm tag is a missing dev package', () => {
+  assert.equal(isPackageVersionMissing('npm error code E404\nnpm error 404 Not Found'), true);
+  assert.equal(isPackageVersionMissing('npm error 401 Unauthorized - unauthenticated'), false);
+  assert.equal(isPackageVersionMissing('npm error code E403\nnpm error 403 Forbidden'), false);
+});
+
+test('a missing image tag is told apart from a registry failure', () => {
+  assert.equal(isImageTagMissing('ERROR: MANIFEST_UNKNOWN: manifest tagged by "dev" is not found'), true);
+  assert.equal(isImageTagMissing('ERROR: NAME_UNKNOWN: repository name not known to registry'), true);
+  assert.equal(isImageTagMissing('unexpected status from GET request: 404 Not Found'), true);
+  assert.equal(isImageTagMissing('unexpected status from GET request: 403 Forbidden'), false);
+});
+
+test('auth and network failures are not a missing image tag', () => {
+  assert.equal(isImageTagMissing('failed to fetch anonymous token: 401 Unauthorized'), false);
+  assert.equal(isImageTagMissing('authentication failed: token endpoint returned 404 Not Found'), false);
+  assert.equal(isImageTagMissing('network error: 404 Not Found while reading manifest'), false);
+});
+
+test('npm auth keeps the token in the environment, not the registry config', () => {
+  const environment = {PATH: '/usr/bin'};
+  const auth = npmAuthForRegistry('secret-token', environment);
+  assert.equal(auth.userConfig, '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n');
+  assert.equal(auth.env.NODE_AUTH_TOKEN, 'secret-token');
+  assert.equal(environment.NODE_AUTH_TOKEN, undefined);
+  assert.ok(!auth.userConfig.includes('secret-token'));
 });
 
 test('a dispatched run is matched by its new id, head commit, and unique title', () => {
