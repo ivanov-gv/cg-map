@@ -81,7 +81,7 @@ const PLANNER_FILE_WORKFLOWS = {
 const DEV_IMAGE_REPOSITORY = 'ghcr.io/ivanov-gv/cg-map';
 const TEST_IMAGE_REPOSITORY = 'ttl.sh/ivanov-gv-cg-map';
 const DEV_IMAGE_LABEL = 'org.opencontainers.image.revision';
-const IMAGE_CONFIG_LABELS_FORMAT = '{{json .Config.Labels}}';
+const IMAGE_INSPECT_FORMAT = '{{json .Image}}';
 const NPM_REGISTRY_USER_CONFIG = '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}\n';
 
 function inOrder(selected, order) {
@@ -168,13 +168,27 @@ export function devPackageTarget(packageName) {
   };
 }
 
-// Pull the moving tag first: image inspect reads the pulled image's config, not an OCI index's per-platform map.
-export function devImageCommands(name) {
+// imagetools reads the manifest without pulling the moving tag; an OCI index .Image is keyed by platform.
+export function devImageInspectCommand(name) {
   const image = `${DEV_IMAGE_REPOSITORY}/${name}:dev`;
+  return {image, args: ['buildx', 'imagetools', 'inspect', '--format', IMAGE_INSPECT_FORMAT, image]};
+}
+
+// npm view runs from a temporary directory so the repository .npmrc cannot override the token (issue #370).
+export function devPackageViewCommand(packageName, directory, auth) {
+  const target = devPackageTarget(packageName);
+  const userConfig = path.join(directory, '.npmrc');
   return {
-    image,
-    pull: ['pull', '--quiet', image],
-    inspect: ['image', 'inspect', '--format', IMAGE_CONFIG_LABELS_FORMAT, image]
+    args: [
+      'view',
+      target.spec,
+      'version',
+      '--registry',
+      'https://npm.pkg.github.com',
+      '--userconfig',
+      userConfig
+    ],
+    options: {cwd: directory, encoding: 'utf8', stdio: 'pipe', env: auth.env}
   };
 }
 
@@ -185,17 +199,23 @@ export function commitFromDevVersion(version) {
   return match[1];
 }
 
-// docker image inspect prints the config labels as JSON. The revision label is the source commit of the dev tag.
-export function commitFromImageLabels(labelText) {
-  let labels;
-  try {
-    labels = JSON.parse(labelText);
-  } catch (error) {
-    throw new Error(`unreadable image labels: ${labelText}`, {cause: error});
-  }
+function revisionFromLabels(labels) {
   const commit = labels?.[DEV_IMAGE_LABEL];
   if (!/^[0-9a-f]{40}$/.test(String(commit))) throw new Error(`missing ${DEV_IMAGE_LABEL} label`);
   return commit;
+}
+
+// imagetools .Image is one image config, or a platform-keyed map for an OCI index.
+export function commitFromImageInspect(text) {
+  let image;
+  try {
+    image = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`unreadable image inspect output: ${text}`, {cause: error});
+  }
+  const entry = image?.config ? image : image?.['linux/amd64'];
+  if (!entry?.config) throw new Error('unexpected image inspect output: no single image or linux/amd64 platform');
+  return revisionFromLabels(entry.config.Labels);
 }
 
 // Only a not-found answer means the dev package is absent. Any other npm failure (401, 403, a network error) must stop
@@ -204,14 +224,14 @@ export function isPackageVersionMissing(failureText) {
   return /\bE404\b/.test(String(failureText));
 }
 
-// docker pull reports a missing :dev tag as "manifest unknown" or "not found"; access and network errors must not look
-// like one.
+// imagetools reports a missing :dev tag as MANIFEST_UNKNOWN, NAME_UNKNOWN or a 404; auth and network errors must not
+// look like one.
 export function isImageTagMissing(failureText) {
   const text = String(failureText);
   const authOrNetworkFailure =
     /\b(?:401|403)\b|unauthori[sz]ed|forbidden|denied|authentication|network|no such host|timed? out/i;
   if (authOrNetworkFailure.test(text)) return false;
-  return /manifest unknown|not found/i.test(text);
+  return /manifest[_ ]unknown|name[_ ]unknown|\b404\b|not found/i.test(text);
 }
 
 // npm expands NODE_AUTH_TOKEN when it reads the config, so the token stays in the environment and not on disk.
@@ -324,20 +344,11 @@ function devCommitForPackage(packageName) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-package-check-'));
   const userConfig = path.join(directory, '.npmrc');
   fs.writeFileSync(userConfig, auth.userConfig, {mode: 0o600});
-  const args = [
-    'view',
-    target.spec,
-    'version',
-    '--registry',
-    'https://npm.pkg.github.com',
-    '--userconfig',
-    userConfig
-  ];
+  const {args, options} = devPackageViewCommand(packageName, directory, auth);
   let version;
   try {
-    // Run outside the repository: its .npmrc maps the token to NODE_AUTH_TOKEN and would override this userconfig,
-    // making npm view return 401 (issue #370).
-    version = execFileSync('npm', args, {cwd: directory, encoding: 'utf8', stdio: 'pipe', env: auth.env});
+    // cwd is the temporary directory, outside the repository .npmrc (issue #370).
+    version = execFileSync('npm', args, options);
   } catch (error) {
     const failureText = commandFailureText(error);
     if (isPackageVersionMissing(failureText)) throw new Error(target.missingVersionMessage, {cause: error});
@@ -361,25 +372,18 @@ function loginToGithubRegistry() {
 }
 
 function devCommitForImage(name) {
-  const {image, pull, inspect} = devImageCommands(name);
+  const {image, args} = devImageInspectCommand(name);
+  let inspectText;
   try {
-    // Pull once into the local daemon: buildx inspect's .Image is a per-platform map for an OCI index, while image
-    // inspect reads the pulled image's config. The later commit pull reuses these layers.
-    execFileSync('docker', pull, {encoding: 'utf8', stdio: 'pipe', env: process.env});
+    inspectText = execFileSync('docker', args, {encoding: 'utf8', stdio: 'pipe', env: process.env});
   } catch (error) {
     const failureText = commandFailureText(error);
     if (isImageTagMissing(failureText))
       throw new Error(`${image}: no dev tag published; ci-publish on main publishes it`, {cause: error});
-    throw new Error(`could not pull ${image}: ${failureText}`, {cause: error});
-  }
-  let labelText;
-  try {
-    labelText = execFileSync('docker', inspect, {encoding: 'utf8', stdio: 'pipe', env: process.env});
-  } catch (error) {
-    throw new Error(`could not read labels of ${image}: ${commandFailureText(error)}`, {cause: error});
+    throw new Error(`could not inspect ${image}: ${failureText}`, {cause: error});
   }
   try {
-    return commitFromImageLabels(labelText);
+    return commitFromImageInspect(inspectText);
   } catch (error) {
     throw new Error(`${image}: no valid ${DEV_IMAGE_LABEL} label; ci-publish on main publishes it`, {cause: error});
   }

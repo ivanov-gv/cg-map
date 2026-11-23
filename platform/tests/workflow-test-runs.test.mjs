@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 import {
   browserImageTestVersion,
   commitFromDevVersion,
-  commitFromImageLabels,
-  devImageCommands,
+  commitFromImageInspect,
+  devImageInspectCommand,
   devPackageTarget,
+  devPackageViewCommand,
   dispatchArguments,
   dispatchAvailability,
   findDispatchedRun,
@@ -126,11 +129,22 @@ test('dev package lookups and errors name the same scoped package', () => {
   assert.equal(target.missingVersionMessage, 'no dev version published for @ivanov-gv/map-core (tag dev)');
 });
 
-test('image labels come from a pulled image, not an OCI index', () => {
-  const {image, pull, inspect} = devImageCommands('map-core');
+test('image labels are read with imagetools without pulling the dev tag', () => {
+  const {image, args} = devImageInspectCommand('map-core');
   assert.equal(image, 'ghcr.io/ivanov-gv/cg-map/map-core:dev');
-  assert.deepEqual(pull, ['pull', '--quiet', image]);
-  assert.deepEqual(inspect, ['image', 'inspect', '--format', '{{json .Config.Labels}}', image]);
+  assert.deepEqual(args, ['buildx', 'imagetools', 'inspect', '--format', '{{json .Image}}', image]);
+  assert.ok(!args.includes('pull'));
+});
+
+test('npm view runs in a temporary directory with env-only auth', () => {
+  const directory = path.join(os.tmpdir(), 'cg-map-npm-view-check');
+  const auth = npmAuthForRegistry('secret-token', {PATH: '/usr/bin'});
+  const {args, options} = devPackageViewCommand('map-core', directory, auth);
+  assert.equal(args[0], 'view');
+  assert.equal(args[1], '@ivanov-gv/map-core@dev');
+  assert.equal(options.cwd, directory);
+  assert.equal(args[args.indexOf('--userconfig') + 1], path.join(directory, '.npmrc'));
+  assert.equal(options.env.NODE_AUTH_TOKEN, 'secret-token');
 });
 
 test('a dev package version names the commit it was published from', () => {
@@ -141,15 +155,35 @@ test('a dev package version names the commit it was published from', () => {
   assert.throws(() => commitFromDevVersion(`0.0.0-test.${commit}`), /unexpected dev version/);
 });
 
-test('an image label names the commit its dev tag was published from', () => {
+test('a single imagetools image config names the dev tag commit', () => {
   const commit = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-  const labels = {'org.opencontainers.image.revision': commit};
-  assert.equal(commitFromImageLabels(JSON.stringify(labels)), commit);
-  assert.throws(() => commitFromImageLabels('null'), /missing org\.opencontainers\.image\.revision label/);
-  assert.throws(() => commitFromImageLabels('not json'), /unreadable image labels/);
+  const image = {config: {Labels: {'org.opencontainers.image.revision': commit}}};
+  assert.equal(commitFromImageInspect(JSON.stringify(image)), commit);
+});
+
+test('an OCI index uses the linux/amd64 config', () => {
+  const commit = 'cccccccccccccccccccccccccccccccccccccccc';
+  const image = {
+    'linux/arm64': {config: {Labels: {'org.opencontainers.image.revision': 'd'.repeat(40)}}},
+    'linux/amd64': {config: {Labels: {'org.opencontainers.image.revision': commit}}}
+  };
+  assert.equal(commitFromImageInspect(JSON.stringify(image)), commit);
+});
+
+test('an imagetools image without a usable revision label is rejected', () => {
   assert.throws(
-    () => commitFromImageLabels(JSON.stringify({'org.opencontainers.image.revision': 'main'})),
+    () => commitFromImageInspect(JSON.stringify({config: {Labels: {}}})),
     /missing org\.opencontainers\.image\.revision label/
+  );
+  assert.throws(
+    () => commitFromImageInspect(JSON.stringify({'linux/amd64': {config: {Labels: {}}}})),
+    /missing org\.opencontainers\.image\.revision label/
+  );
+  assert.throws(() => commitFromImageInspect('not json'), /unreadable image inspect output/);
+  assert.throws(() => commitFromImageInspect('null'), /unexpected image inspect output/);
+  assert.throws(
+    () => commitFromImageInspect(JSON.stringify({'linux/arm64': {config: {Labels: {}}}})),
+    /unexpected image inspect output/
   );
 });
 
@@ -160,22 +194,16 @@ test('only a missing npm tag is a missing dev package', () => {
 });
 
 test('a missing image tag is told apart from a registry failure', () => {
-  const image = 'ghcr.io/ivanov-gv/cg-map/map-core:dev';
-  assert.equal(
-    isImageTagMissing(`Error response from daemon: manifest for ${image} not found: manifest unknown`),
-    true
-  );
-  assert.equal(isImageTagMissing('Error response from daemon: manifest unknown'), true);
-  assert.equal(
-    isImageTagMissing('Error response from daemon: pull access denied for map-core, repository does not exist'),
-    false
-  );
+  assert.equal(isImageTagMissing('ERROR: MANIFEST_UNKNOWN: manifest tagged by "dev" is not found'), true);
+  assert.equal(isImageTagMissing('ERROR: NAME_UNKNOWN: repository name not known to registry'), true);
+  assert.equal(isImageTagMissing('unexpected status from GET request: 404 Not Found'), true);
+  assert.equal(isImageTagMissing('unexpected status from GET request: 403 Forbidden'), false);
 });
 
 test('auth and network failures are not a missing image tag', () => {
-  assert.equal(isImageTagMissing('Error response from daemon: access denied'), false);
-  assert.equal(isImageTagMissing('error during connect: dial tcp: lookup docker.example.com: no such host'), false);
+  assert.equal(isImageTagMissing('failed to fetch anonymous token: 401 Unauthorized'), false);
   assert.equal(isImageTagMissing('authentication failed: token endpoint returned 404 Not Found'), false);
+  assert.equal(isImageTagMissing('network error: 404 Not Found while reading manifest'), false);
 });
 
 test('npm auth keeps the token in the environment, not the registry config', () => {

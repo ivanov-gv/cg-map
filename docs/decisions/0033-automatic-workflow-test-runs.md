@@ -81,8 +81,9 @@ changed.
 
 CD test runs no longer check the PR head and then walk main's history. They read the dev tag once per changed workflow:
 the version behind `@ivanov-gv/<pkg>@dev` for a package, or the `org.opencontainers.image.revision` label on
-`<repository>/<name>:dev` for an image. Both must name a full commit, which the dispatcher logs and uses for the pull
-and the CD dispatch; the moving tag is never pulled. This supersedes the fallback described in the #366 outcome note and
-removes the `git fetch` of main. Reusing an earlier successful test run of the head commit stays. The #370 fix also runs
-`npm view` from a temporary directory, outside the repository's `.npmrc`, and distinguishes E404 from other registry
-failures.
+`<repository>/<name>:dev` for an image. The label comes from
+`docker buildx imagetools inspect --format '{{json .Image}}'` (the `linux/amd64` entry when it is an OCI index), so the
+moving tag is inspected rather than pulled. Both must name a full commit, which the dispatcher logs and uses for the CD
+dispatch and the commit-tag image pull. This supersedes the fallback described in the #366 outcome note and removes the
+`git fetch` of main. Reusing an earlier successful test run of the head commit stays. The #370 fix also runs `npm view`
+from a temporary directory, outside the repository's `.npmrc`, and distinguishes E404 from other registry failures.
