@@ -51,9 +51,9 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 ## Hard rules
 
 - **Merge only when [tests pass on GitHub](.github/TESTING.md)**; locally the pre-push `make check` is required.
+- **No CI/CD change reaches main unproved:** [prove it on the branch](.github/TESTING.md#prove-cicd-before-main).
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
-- Never edit or commit in the main checkout; it is for reading and pulling main. Work in your own worktree:
-  `make worktree NAME=<branch>`. A pre-commit hook rejects commits there.
+- Never edit or commit in the main checkout (for reading and pulling main only); use `make worktree NAME=<branch>`.
 - Never hand-edit generated output: dist/web, .build, .claude/rules. Edit the source and regenerate.
 - Do not refresh data or regenerate geography as an incidental step in another task.
 - Read [readability](docs/engineering/readability.md) before planning, editing, or reviewing any code, in any language,

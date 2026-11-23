@@ -1,5 +1,32 @@
 # Testing workflows
 
+## Prove CI/CD before main
+
+**No CI/CD change reaches `main` unproved.** This covers `.github/**` (workflows, composite actions) and the platform
+tooling they run (`platform/tools/ci-plan.mjs`, `platform/tools/workflow-test-runs.mjs` and the like). Before merging:
+
+1. **Name every path the change touches:** each changed job, step, condition, input, fallback and error branch.
+2. **Prove each one on the task branch** with the options below, cheapest first, and **link the log line that shows it
+   ran** in the PR. A green `CI gate` is not proof when it skipped the changed job, never reached the new step, or took
+   another branch of the condition.
+3. **If a path cannot be reached before merge, make it reachable** (an input, a variable, a test-run target). "Not
+   testable before merge" is never an accepted outcome.
+
+Options to prove a change before it reaches `main`:
+
+| Option                    | Command                                                                                                 | Proves                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Lint                      | `make lint-workflows` (pinned actionlint and shellcheck)                                                | Syntax, expressions, shell                                                             |
+| Platform tests            | `make verify PKG=platform`, with a failure proof for each new assertion                                 | Structure, selection logic, inputs                                                     |
+| act dry run               | `make test-<workflow> ACT="$ACT -n"`                                                                    | That the workflow parses; never a test                                                 |
+| act test run              | `make test-<workflow>`                                                                                  | Steps and their order, locally, in `test_run` mode                                     |
+| PR gate test runs         | Push the branch; `CI gate` calls changed `ci-*` workflows and dispatches changed `cd-*` ones            | The PR's own workflows on GitHub, in `test_run` mode                                   |
+| Branch dispatch           | `gh workflow run <file> --ref <branch> -f test_run=true …`, with inputs that reach the path             | Any path the gate does not reach: fallbacks, other commits or versions, error branches |
+| Dry-run publishing        | The `test_run` dispatch of a publishing workflow, whose test-run environment publishes with `--dry-run` | Publishing steps without a real release                                                |
+| Fix on the failing branch | Cherry-pick the fix onto the branch that showed the bug and read that branch's run                      | That the fix fixes the failure that was seen                                           |
+
+A fix to a bug found after a merge follows the same rule: its own PR must run the path it fixes before it merges.
+
 **A PR merges only when its tests pass on GitHub**: its PR run (`CI gate`). A change to `.github/**` makes the gate call
 every changed `ci-*` workflow in `test_run` mode and dispatch/wait for every changed `cd-*` workflow, using a real
 commit and a collision-free test version. There is no evidence job to re-run: the gate fails if a proved workflow fails.
