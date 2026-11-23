@@ -890,6 +890,20 @@ test('every static test call passes inputs meant for its workflow', () => {
   }
 });
 
+test('the browser test calls run the smoke area with the default phone tests', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  const browserMatrixInputs = {
+    'test-ci-apps-web': 'smoke_browser_matrix',
+    'test-ci-apps-editor': 'smoke_editor_browser_matrix'
+  };
+  for (const [name, output] of Object.entries(browserMatrixInputs)) {
+    const call = jobs[name];
+    assert.equal(call.with.browser_matrix, plannerMatrixInput(output), `${name} passes another project's matrix`);
+  }
+  assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, undefined, 'the editor test call keeps the tagged default');
+  assert.equal(jobs['test-ci-apps-web'].with.phone_tests, undefined, 'web no longer has a phone_tests input');
+});
+
 // CD workflows cannot be reusable, so ci-workflows dispatches them and waits for the real conclusion.
 test('ci-pr-checks dispatches CD test runs on a regular PR run even when workflows runs in place', () => {
   const {jobs} = load('ci-pr-checks.yml');
@@ -1451,15 +1465,19 @@ test('browser jobs and local runs pin one image, whose version matches the repos
   assert.match([...pins][0], expected);
 });
 
-test('a PR runs the phone layout only for tagged tests, and the nightly run runs them all', () => {
+test('web runs only tagged phone tests; the editor keeps the PR and nightly phone inputs', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  for (const app of ['apps-web', 'apps-editor']) {
-    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
-    const {browser} = load(`ci-${app}.yml`).jobs;
-    assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
-    const config = fs.readFileSync(path.join(repoRoot, app.replace('-', '/'), 'playwright.config.mjs'), 'utf8');
-    assert.match(config, /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
-  }
+  const app = name => load(`ci-apps-${name}.yml`).jobs.browser;
+  const config = name =>
+    fs.readFileSync(path.join(repoRoot, 'apps', name, 'playwright.config.mjs'), 'utf8');
+
+  assert.equal(jobs['apps-web'].with.phone_tests, undefined);
+  assert.equal(app('web').env.E2E_PHONE, undefined);
+  assert.match(config('web'), /grep: \/@phone\/, grepInvert: \/@desktop\//);
+
+  assert.equal(jobs['apps-editor'].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
+  assert.equal(app('editor').env.E2E_PHONE, '${{ inputs.phone_tests }}');
+  assert.match(config('editor'), /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
 });
 
 test('the browser image runs the Node version the repository pins', () => {

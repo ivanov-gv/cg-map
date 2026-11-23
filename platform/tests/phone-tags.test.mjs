@@ -74,6 +74,12 @@ test('the tag check lets a desktop-only test through, in its body or from its de
     test('hovers', async ({page}) => { await page.reload(); });
   });`;
   assert.deepEqual(untaggedPhoneTests(inDescribe), []);
+  const tagged = `test('hovers', {tag: '@desktop'}, async ({page, isMobile}) => { await page.reload(); });`;
+  assert.deepEqual(untaggedPhoneTests(tagged), []);
+  const inTaggedDescribe = `test.describe('hover', {tag: '@desktop'}, () => {
+    test('hovers', async ({page, isMobile}) => { await page.reload(); });
+  });`;
+  assert.deepEqual(untaggedPhoneTests(inTaggedDescribe), []);
 });
 
 test('the tag check ignores a helper named as only choosing how to press', () => {

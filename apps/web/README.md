@@ -646,8 +646,9 @@ make e2e E2E_ARGS='--project=pages-mobile --grep="transport toggles"'
 npm run test:e2e -- --project=pages-mobile --grep '@mobile-only' --list
 ```
 
-A test tagged `@mobile-only` runs only in `pages-mobile`; it also carries `@phone` so a PR keeps it. Prefer this to a
-device loop inside a spec, which repeats the case in both projects. See
+`pages-mobile` always runs only `@phone` tests, including in nightly CI. A test tagged `@mobile-only` or `@phone-only`
+runs only there and also carries `@phone`. `@desktop` runs only in `root-desktop`. Prefer a tag to a device loop inside
+a spec, which repeats the case in both projects. See
 [phone layout tests](../../docs/verification/testing.md#phone-layout-tests).
 
 `--grep` is a regular expression over test titles; combine it with a file and `--project` to narrow the selection. Both
@@ -721,8 +722,10 @@ geometry need different fixes.
 ## 15. What tests prove, and what they do not
 
 Node tests cover archive decoding/style validity, search, link safety, download transactions, service-worker responses,
-HTTP transport fallback and satellite configuration/assets. There are also Python server tests and an optional browser
-script in ../tests/browser-check.mjs.
+HTTP transport fallback and satellite configuration/assets. Logic that needs no rendered engine—POI level bands, search
+filters and highlight state, and route/transport errors—lives in tests/*.test.mjs; browser specs keep the journeys that
+need MapLibre, layout or real input. There are also Python server tests and an optional browser script in
+../tests/browser-check.mjs.
 
 Unit tests can prove a generated style is valid or original tile hashes match. They cannot prove a phone's pinch zoom is
 smooth, a GPU draws the expected pixels, or an offline browser retains files indefinitely.

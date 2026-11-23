@@ -22,8 +22,10 @@ const port = Number(
 const workers = Number(process.env.E2E_WORKERS ?? 1);
 const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
 
-// A PR runs on the phone layout only what depends on it, and the nightly run runs everything: docs/verification/testing.md.
-const phoneTests = process.env.E2E_PHONE === 'tagged' ? {grep: /@phone/} : {};
+// Only tagged tests run on the phone layout, in PRs and nightly alike: docs/verification/testing.md.
+// @desktop and @phone-only tests choose their project here, so their bodies no longer skip after setup and page load.
+const desktopFilter = {grepInvert: /@mobile-only|@phone-only/};
+const phoneFilter = {grep: /@phone/, grepInvert: /@desktop/};
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -49,16 +51,15 @@ export default defineConfig({
     }
   },
   projects: [
-    // A test tagged @mobile-only needs the phone project's layout, so the desktop project must not repeat it.
-    // It also carries @phone for the PR run's phone project; see docs/verification/testing.md.
+    // @desktop, @mobile-only and @phone-only tests run in one project. The phone-only ones also carry @phone for a PR.
     {
       name: 'root-desktop',
-      grepInvert: /@mobile-only/,
+      ...desktopFilter,
       use: {baseURL: `http://127.0.0.1:${port}/`, viewport: {width: 1280, height: 800}}
     },
     {
       name: 'pages-mobile',
-      ...phoneTests,
+      ...phoneFilter,
       use: {
         baseURL: `http://127.0.0.1:${port}/cg-map/`,
         viewport: {width: 412, height: 840},
