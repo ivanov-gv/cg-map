@@ -16,6 +16,56 @@ const workflowDir = path.join(repoRoot, '.github/workflows');
 const newWorkflowFiles = fs.readdirSync(workflowDir).filter(file => /^(ci|cd)-.*\.yml$/.test(file));
 const load = file => parseYaml(fs.readFileSync(path.join(workflowDir, file), 'utf8'));
 
+function githubYamlFiles(directory = path.join(repoRoot, '.github')) {
+  return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return githubYamlFiles(fullPath);
+    return /\.ya?ml$/.test(entry.name) ? [fullPath] : [];
+  });
+}
+
+// GitHub expressions support object properties, not JavaScript array or string properties. Strip quoted strings so a
+// literal such as '{"include":[]}' cannot be mistaken for an unsupported property.
+function expressionCode(expression) {
+  return expression
+    .replace(/'(?:''|[^'])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+}
+
+function evaluateCdTestRunsCondition(condition, cdTestRuns) {
+  const expression = String(condition)
+    .trim()
+    .replace(/^\$\{\{\s*/, '')
+    .replace(/\s*\}\}$/, '')
+    .trim();
+  return expression.split(/\s*&&\s*/).every(term => {
+    const comparison = /^inputs\.cd_test_runs\s*!=\s*'([^']*)'$/.exec(term.trim());
+    assert.ok(comparison, `unsupported term in CD dispatcher condition: ${term}`);
+    return cdTestRuns !== comparison[1];
+  });
+}
+
+test('GitHub expressions in .github use no unsupported array or string properties', () => {
+  const unsupported = [
+    'length', 'size', 'empty', 'includes', 'startsWith', 'endsWith', 'indexOf',
+    'flat', 'at', 'push', 'pop', 'shift', 'unshift', 'slice', 'splice',
+    'concat', 'keys', 'values', 'entries', 'toLowerCase', 'toUpperCase', 'toString'
+  ];
+  for (const file of githubYamlFiles()) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+      const code = expressionCode(match[1]);
+      for (const property of unsupported) {
+        assert.doesNotMatch(
+          code,
+          new RegExp(`\\.\\s*${property}(?![A-Za-z0-9_-])`),
+          `${path.relative(repoRoot, file)}: \${{ ${match[1].trim()} }} uses unsupported .${property}`
+        );
+      }
+    }
+  }
+});
+
 // Jobs that stand alone, each with its reason in the workflow's comments.
 const NO_TWIN = {
   'ci-pr-checks.yml': [
@@ -685,7 +735,7 @@ test('ci-workflows dispatches and waits for a real CD test run, never a dry run'
   assert.ok(on.workflow_call.inputs.head_sha, 'callers must pass the head commit');
   const dispatcher = jobs['cd-test-runs'];
   assert.ok(dispatcher, 'the old evidence job must be replaced by a dispatcher');
-  assert.match(dispatcher.if, /fromJSON\(inputs\.cd_test_runs \|\| '\[\]'\)\.length > 0/);
+  assert.equal(dispatcher.if, "${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}");
   assert.doesNotMatch(dispatcher.if, /github\.event_name/, 'the caller is a PR, not a workflow_call event');
   assert.equal(dispatcher.permissions.actions, 'write');
   assert.equal(dispatcher.permissions.packages, 'read');
@@ -697,6 +747,14 @@ test('ci-workflows dispatches and waits for a real CD test run, never a dry run'
   assert.match(stepsText, /RUN_ID/, 'must pass a unique run id for the test version');
   assert.match(stepsText, /BRANCH/, 'must dispatch on the pull request branch');
   assert.doesNotMatch(stepsText, /--dry-run|-n\b/, 'only act parses; the workflow must run the dispatch');
+});
+
+test('the CD dispatcher condition is true only for a non-empty input list', () => {
+  const {jobs} = load('ci-workflows.yml');
+  const condition = jobs['cd-test-runs'].if;
+  assert.equal(evaluateCdTestRunsCondition(condition, ''), false, 'an unset input must not dispatch');
+  assert.equal(evaluateCdTestRunsCondition(condition, '[]'), false, 'the planner emits [] for an empty selection');
+  assert.equal(evaluateCdTestRunsCondition(condition, '["cd-dev-pages.yml"]'), true, 'a selected CD workflow must dispatch');
 });
 
 test('every CD workflow can accept the inputs the dispatcher sends', () => {

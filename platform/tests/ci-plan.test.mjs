@@ -497,3 +497,9 @@ test('each browser project checks only itself, and only the public app reaches t
   assert.doesNotMatch(editorWorkflow, /WEB_ARTIFACT|dist\/web/);
   assert.doesNotMatch(webWorkflow, /dist\/editor|dist\/core-demo/);
 });
+
+test('outputs: an empty CD selection is the exact [] the dispatcher compares', () => {
+  const lines = formatOutputs(planChanges([]), []).split('\n');
+  assert.ok(lines.includes('cd_test_runs=[]'));
+  assert.ok(lines.includes('ci_test_runs=[]'));
+});

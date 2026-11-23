@@ -60,7 +60,7 @@ jobs:
   # waits for them. It has no test-run twin: a test run must not dispatch itself.
   cd-test-runs:
     name: CD workflow test runs
-    if: ${{ fromJSON(inputs.cd_test_runs || '[]').length > 0 }}
+    if: ${{ inputs.cd_test_runs != '' && inputs.cd_test_runs != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
