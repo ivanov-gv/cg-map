@@ -8,6 +8,17 @@ It owns common cartography, category symbols and visibility policy, satellite im
 hit-testing helpers, and replaceable GeoJSON/selection overlays. It has no application screens, search, routes, storage,
 service worker, editor modes or writes. See [architecture](../../docs/system-architecture/architecture.md).
 
+## Cartography
+
+`mapStyle` draws the basemap as designed on the wiki page
+[UI 3.Core](https://github.com/ivanov-gv/cg-map/wiki/UI---3.Core) and the Penpot card "7 · Map primitives (Core)".
+[src/basemap-palette.js](src/basemap-palette.js) holds one colour token per primitive part.
+[src/drawing-order.js](src/drawing-order.js) lists the drawing groups bottom to top; every basemap layer records its
+group in `metadata`, and a unit test fails when a layer is out of order. Applications install points of interest after
+the style; both apps place them below street labels today.
+
+## Lifecycle
+
 `createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite
 sources. Call `whenMapReady` before installing overlays or POIs; handle its rejection and the map's `error` events
 visibly. Dispose with `map.remove()`; the core disconnects its resize observer and number-scale listeners.
