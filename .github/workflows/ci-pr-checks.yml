@@ -47,7 +47,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: ci-approval
+    environment:
+      name: ci-approval
+      deployment: false
     permissions: {}
     steps:
       - run: echo "Approved by $GITHUB_TRIGGERING_ACTOR" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -117,7 +119,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     outputs: *plan-outputs
     env: *plan-env
     steps: *plan-steps

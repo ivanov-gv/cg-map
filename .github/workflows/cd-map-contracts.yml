@@ -89,7 +89,9 @@ jobs:
     if: needs.switch.outputs.test_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read

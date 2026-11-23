@@ -92,7 +92,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.result == 'success' && needs.switch.outputs.test_run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     outputs:
       map-core: ${{ steps.plan.outputs.map-core }}
       data: ${{ steps.plan.outputs.data }}
@@ -127,7 +129,9 @@ jobs:
     # Pinned: the build needs the same tools as the app's own checks.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -156,7 +160,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && needs.select.outputs.image_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
@@ -172,7 +178,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -193,7 +201,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.map-core == 'true' || needs.plan-test-run.outputs.map-core == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
@@ -206,7 +216,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -242,7 +254,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.data == 'true' || needs.plan-test-run.outputs.data == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
@@ -255,7 +269,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -270,7 +286,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.contracts == 'true' || needs.plan-test-run.outputs.contracts == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
@@ -283,7 +301,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -303,7 +323,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && (needs.plan.outputs.browser-image == 'true' || needs.plan-test-run.outputs.browser-image == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
@@ -317,7 +339,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -389,7 +413,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run != 'true' && needs.pages.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: dev
+    environment:
+      name: dev
+      deployment: false
     permissions:
       packages: write
     env:
@@ -409,7 +435,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' && needs.pages-test-run.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       packages: read
     env:
@@ -422,7 +450,9 @@ jobs:
     if: ${{ !cancelled() && needs.switch.outputs.test_run == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 7
-    environment: test-run
+    environment:
+      name: test-run
+      deployment: false
     permissions:
       contents: read
       packages: read
