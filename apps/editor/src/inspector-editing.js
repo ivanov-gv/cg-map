@@ -35,7 +35,7 @@ const closingDistancePixels = 14;
 const beginNewByShape = {Point: beginNewPoint, LineString: beginNewLine, Polygon: beginNewPolygon};
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
-// context: {commands, session, rules, levels, handles, overlay, map, activeLayer(), isPhone(), behaviorContext(),
+// context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
 // onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), showInspector(), hideInspector(),
 // releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
 // and returns whether the inspector held focus, so the status is focused only when it was needed.

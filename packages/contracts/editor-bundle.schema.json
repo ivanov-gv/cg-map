@@ -3,46 +3,21 @@
   "title": "Pinned editor source bundle",
   "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle. Versions are frozen once released.",
   "type": "object",
-  "required": [
-    "version",
-    "layers"
-  ],
+  "required": ["version", "layers"],
   "additionalProperties": false,
   "properties": {
-    "version": {
-      "enum": [
-        1,
-        2,
-        3
-      ]
-    },
+    "version": {"enum": [1, 2, 3]},
     "layers": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "filename",
-          "sha256",
-          "bytes",
-          "featureCount"
-        ],
+        "required": ["filename", "sha256", "bytes", "featureCount"],
         "properties": {
-          "filename": {
-            "type": "string"
-          },
-          "sha256": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "bytes": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "featureCount": {
-            "type": "integer",
-            "minimum": 0
-          }
+          "filename": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "bytes": {"type": "integer", "minimum": 1},
+          "featureCount": {"type": "integer", "minimum": 0}
         }
       }
     }
@@ -50,9 +25,7 @@
   "oneOf": [
     {
       "properties": {
-        "version": {
-          "const": 1
-        },
+        "version": {"const": 1},
         "layers": {
           "minItems": 8,
           "maxItems": 8,
@@ -77,9 +50,7 @@
     },
     {
       "properties": {
-        "version": {
-          "const": 2
-        },
+        "version": {"const": 2},
         "layers": {
           "minItems": 13,
           "maxItems": 13,
@@ -109,9 +80,7 @@
     },
     {
       "properties": {
-        "version": {
-          "const": 3
-        },
+        "version": {"const": 3},
         "layers": {
           "minItems": 21,
           "maxItems": 21,

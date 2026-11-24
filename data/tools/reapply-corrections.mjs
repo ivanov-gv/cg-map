@@ -7,12 +7,17 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyChangeset} from './apply-changeset.mjs';
 import {entityKey, isLocalId} from './changeset-derivations.mjs';
+import {checkOperationRules} from './changeset-rules.mjs';
 import {parseSource} from './changeset-sources.mjs';
-import {contractsDirectoryFrom} from './contracts.mjs';
+import {contractsDirectoryFrom, readContract} from './contracts.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sourcesPath = 'data/sources';
 const ledgerPath = `${sourcesPath}/editor-corrections.json`;
+const buildingsFile = 'buildings.geojson';
+const labelsFile = 'building-labels.geojson';
+const placesFile = 'places.geojson';
+const buildingPartFiles = [labelsFile, 'building-entrances.geojson', placesFile];
 // Positions and joins follow the sources; the importer computes them again.
 const derivedNames = new Set(['footprintIndex', 'addr:streetEntityId', 'addr:streetEntityIds']);
 const identityNames = new Set(['entityId', 'entityVersion', 'entityPart']);
@@ -118,7 +123,7 @@ function correctionsByObject(corrections) {
 
 // Label positions belong to a snapshot, so an added label is stated by its building again.
 function restatedLabel(filename, feature, buildings) {
-  const isAddedLabel = filename === 'building-labels.geojson' && feature && isLocalId(feature.id);
+  const isAddedLabel = filename === labelsFile && feature && isLocalId(feature.id);
   if (!isAddedLabel) return feature;
   const restated = structuredClone(feature);
   const {properties} = restated;
@@ -128,8 +133,78 @@ function restatedLabel(filename, feature, buildings) {
   return restated;
 }
 
+const nameOf = ({filename, reference}) => `${filename} ${reference.entityId ?? reference.localId}`;
+
+// Leaves out what the rules of today refuse, by name, so one such correction does not stop the others.
+function allowedOperations(operations, {rules, levels}) {
+  const report = [];
+  const allowed = operations.filter(operation => {
+    try {
+      checkOperationRules(operation, rules, levels);
+      return true;
+    } catch (error) {
+      report.push(`${nameOf(operation)}: left out, ${error.message}`);
+      return false;
+    }
+  });
+  return {operations: allowed, report};
+}
+
+// Which building an object belongs to, or undefined. A label of the sources states a position, an added one an ID.
+function buildingIdOf(filename, {properties}, sourceBuildings) {
+  if (filename !== labelsFile || properties.footprintIndex === undefined) return properties.buildingEntityId;
+  return sourceBuildings[properties.footprintIndex]?.properties.entityId;
+}
+
+// What happens to a refreshed object whose building the ledger deleted: its address and entrances go with it, and a
+// place stands on its own.
+function withoutBuilding(filename, key, feature) {
+  if (filename !== placesFile) return operationReaching(filename, key, feature, null);
+  const properties = {...feature.properties, standalone: true};
+  delete properties.buildingEntityId;
+  return operationReaching(filename, key, feature, {...feature, properties});
+}
+
+// A building and the objects on it come from different files, so a refresh can leave one without the other.
+function operationsKeepingBuildings(operations, readSource) {
+  const sourceBuildings = [...readSource(buildingsFile).values()];
+  const buildingOperations = operations.filter(({filename}) => filename === buildingsFile);
+  const deletedIds = new Set(
+    buildingOperations.filter(({operation}) => operation === 'delete').map(({reference}) => reference.entityId)
+  );
+  const knownIds = new Set([
+    ...sourceBuildings.map(({properties}) => properties.entityId),
+    ...buildingOperations.map(({reference}) => reference.localId ?? reference.entityId)
+  ]);
+  const report = [];
+  const isBuildingKnown = ({filename, after}) => {
+    if (!after || !buildingPartFiles.includes(filename)) return true;
+    const buildingId = buildingIdOf(filename, after, sourceBuildings);
+    return buildingId === undefined || (knownIds.has(buildingId) && !deletedIds.has(buildingId));
+  };
+  const kept = operations.filter(operation => {
+    if (isBuildingKnown(operation)) return true;
+    report.push(`${nameOf(operation)}: left out, its building is gone`);
+    return false;
+  });
+  const handledKeys = new Set(
+    kept.map(({filename, reference}) => `${filename}:${reference.localId ?? entityKey(reference)}`)
+  );
+  for (const filename of buildingPartFiles) {
+    for (const [key, feature] of readSource(filename)) {
+      const isStranded = deletedIds.has(buildingIdOf(filename, feature, sourceBuildings));
+      if (!isStranded || handledKeys.has(`${filename}:${key}`)) continue;
+      const operation = withoutBuilding(filename, key, feature);
+      kept.push(operation);
+      const outcome = filename === placesFile ? 'stands on its own' : 'goes too';
+      report.push(`${nameOf(operation)}: its building was deleted in the editor, so it ${outcome}`);
+    }
+  }
+  return {operations: kept, report};
+}
+
 // Returns the changeset that brings the current sources to what the ledger says, and a report for the reviewer.
-export function replayChangeset(root, now) {
+export function replayChangeset(root, now, contractsDirectory) {
   const ledgerFile = path.join(root, ledgerPath);
   const ledger = fs.existsSync(ledgerFile) ? JSON.parse(fs.readFileSync(ledgerFile, 'utf8')) : {corrections: []};
   const {groups, unfollowed} = correctionsByObject(ledger.corrections);
@@ -145,8 +220,8 @@ export function replayChangeset(root, now) {
     }
     return sources.get(filename);
   };
-  const buildings = JSON.parse(fs.readFileSync(path.join(root, sourcesPath, 'buildings.geojson')));
-  const operations = [];
+  const buildings = JSON.parse(fs.readFileSync(path.join(root, sourcesPath, buildingsFile)));
+  const replayedOperations = [];
   for (const [groupKey, corrections] of groups) {
     const {filename} = corrections[0];
     const key = groupKey.slice(filename.length + 1);
@@ -155,8 +230,13 @@ export function replayChangeset(root, now) {
     report.push(...replayed.report);
     const feature = restatedLabel(filename, replayed.feature, buildings);
     const operation = operationReaching(filename, key, sourceFeature, sourceFeature ? replayed.feature : feature);
-    if (operation) operations.push(operation);
+    if (operation) replayedOperations.push(operation);
   }
+  const rules = readContract(contractsDirectory, 'editor-layers.json');
+  const levels = new Set(readContract(contractsDirectory, 'place-visibility.json').levels.map(({level}) => level));
+  const allowed = allowedOperations(replayedOperations, {rules, levels});
+  const {operations, report: buildingReport} = operationsKeepingBuildings(allowed.operations, readSource);
+  report.push(...allowed.report, ...buildingReport);
   const usedFiles = new Set(operations.map(({filename}) => filename));
   const usedBases = Object.fromEntries(Object.entries(bases).filter(([filename]) => usedFiles.has(filename)));
   const changeset = {
@@ -173,7 +253,7 @@ export function replayChangeset(root, now) {
 
 // Applies the ledger and returns what changed and what needs a reviewer. The ledger itself is not changed.
 export function reapplyCorrections(root, {now = new Date().toISOString(), contractsDirectory, ...options} = {}) {
-  const {changeset, report} = replayChangeset(root, now);
+  const {changeset, report} = replayChangeset(root, now, contractsDirectory);
   if (changeset.operations.length === 0) return {operations: 0, report};
   applyChangeset(changeset, root, {now, contractsDirectory, ...options, recordsCorrections: false});
   return {operations: changeset.operations.length, report};

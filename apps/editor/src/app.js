@@ -315,7 +315,11 @@ function showApplied(message) {
 }
 
 function travelHistory(travel) {
-  if (!activeLayer || editing.hasUnappliedEdit) return;
+  if (!activeLayer) return;
+  if (editing.hasUnappliedEdit) {
+    setStatus(applyOrCancelMessage, true);
+    return;
+  }
   if (travel() !== null) showSessionChange();
 }
 
@@ -324,6 +328,11 @@ function changeFieldItems(change, message, undoChange) {
   change();
   showSessionChange();
   const undo = () => {
+    // Redrawing closes the inspector, so a typed edit waits for its own decision first.
+    if (editing.hasUnappliedEdit) {
+      setStatus(applyOrCancelMessage, true);
+      return;
+    }
     undoChange();
     showSessionChange();
   };
