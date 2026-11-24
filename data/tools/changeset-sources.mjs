@@ -19,6 +19,7 @@ export function parseSource(filename, text) {
   const listName = recordLists.get(filename);
   if (!listName) return parsed;
   const {[listName]: records, ...envelope} = parsed;
+  if (!Array.isArray(records)) throw new Error(`${filename}: expected a ${listName} list`);
   return {
     type: 'FeatureCollection',
     entitySchemaVersion: parsed.entitySchemaVersion,

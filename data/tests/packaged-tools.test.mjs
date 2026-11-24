@@ -74,7 +74,11 @@ test('writeEditorBundle reads an injected source directory and contract', async 
   const sourceDirectory = path.join(directory, 'sources');
   fileSystem.mkdirSync(sourceDirectory);
   for (const filename of filenames) {
-    fileSystem.writeFileSync(path.join(sourceDirectory, filename), '{"type":"FeatureCollection","features":[]}');
+    const isRecordFile = filename.endsWith('.json');
+    const content = isRecordFile
+      ? '{"routes":[],"restrictions":[]}'
+      : '{"type":"FeatureCollection","features":[]}';
+    fileSystem.writeFileSync(path.join(sourceDirectory, filename), content);
   }
 
   const outputDirectory = path.join(directory, 'bundle');

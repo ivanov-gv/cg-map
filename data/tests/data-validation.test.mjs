@@ -904,14 +904,15 @@ test('the extractor and check-data accept the same protected-area tags', () => {
   assert.deepEqual(extractorTags.sort(), [...protectedAreaTags].sort());
 });
 
-test('the editor bundle keeps its thirteen editable sources and excludes relief files', async t => {
+test('the editor bundle holds the source of every object on the map, relief and transit records included', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
-  assert.equal(manifest.layers.length, 13);
-  assert.ok(manifest.layers.every(layer => !reliefFiles.includes(layer.filename)));
-  assert.deepEqual(fs.readdirSync(directory).filter(name => name.endsWith('.geojson')).sort(),
-    manifest.layers.map(layer => layer.filename).sort());
+  const filenames = manifest.layers.map(layer => layer.filename);
+  const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
+  assert.deepEqual([...filenames].sort(), [...everyGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
+  assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
+  assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());
 });
 
 // --- Transit route validation tests ---
