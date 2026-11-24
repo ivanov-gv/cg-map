@@ -16,7 +16,7 @@ shared-edge and settlement checks; make verify PKG=data and make -C data verify 
 
 ## Relief sources
 
-Five read-only vectors are derived from local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed
+Five vectors are derived from local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed
 `land.geojson`/`water.geojson`. Install the pinned GIS dependencies in a dedicated cache venv, then build with that
 interpreter:
 
@@ -194,11 +194,11 @@ place-only command above with `--update-provenance --accept-new-facts`. Never pa
 The reviewed extract copies OSM building tags into `buildings.geojson`, folds only case and whitespace when joining
 `addr:street` to one connected group of same-named road ways, names the group's lowest way ID in `addr:streetEntityId`,
 lists all its members in `addr:streetEntityIds`, and records no-number placeholders as `nohousenumber: "yes"`. It also
-writes `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints. It can add
-`buildingEntityId` to places inside those footprints when the `places` group is refreshed with `buildings`; this Feature
-keeps the reviewed places snapshot from the branch below, so no published place carries that join. The version-2 editor
-bundle lists the new entrance, settlement, municipality and shared-border files; the editor can inspect them but cannot
-change them, and still accepts a version-1 bundle with the original eight files. The separate `entrances` array in
+writes `building-entrances.geojson`, the OSM entrance nodes near published footprints. It can add `buildingEntityId` to
+places inside those footprints when the `places` group is refreshed with `buildings`; this Feature keeps the reviewed
+places snapshot from the branch below, so no published place carries that join. The version-2 editor bundle lists the
+new entrance, settlement, municipality and shared-border files; the editor can inspect them but cannot change them, and
+still accepts a version-1 bundle with the original eight files. The separate `entrances` array in
 `building-labels.geojson` remains the runtime arrow/label format and is not generated from this source file. See
 [building addresses](../map-data/building-numbers.md), [decision 0023](../decisions/0023-osm-building-source-details.md)
 and [decision 0024](../decisions/0024-editor-bundle-versions.md).
@@ -213,10 +213,10 @@ archive rebuild.
 ## Settlements and shared municipality edges
 
 The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
-from the reviewed PBF. They are read-only in the editor: refresh them with a full extract or the named `--layers`
-groups, never with a changeset. The shared-edge construction and simplification rule are recorded in
-[decision 0028](../decisions/0028-shared-border-edges.md); the current gap partition rule is in
-[decision 0029](../decisions/0029-derived-unassigned-water-areas.md).
+from the reviewed PBF. Refresh them with a full extract or the named `--layers` groups. The editor corrects them with
+changesets, and a refresh keeps those corrections with `make -C data reapply-corrections`. The shared-edge construction
+and simplification rule are recorded in [decision 0028](../decisions/0028-shared-border-edges.md); the current gap
+partition rule is in [decision 0029](../decisions/0029-derived-unassigned-water-areas.md).
 
 ```sh
 python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers borders settlements \
@@ -288,8 +288,8 @@ changing it. Browser tests also exercise the actual reviewed archive and imagery
 The `land` layer publishes named kinds and the OSM tag that selected each one. When an object carries several candidate
 tags, the first rule in `data/tools/osm_extract/land.py` wins. Only a land-cover tag creates a feature: a protected-area
 boundary or `place=locality` alone is not green cover. Named protected areas (`leisure=nature_reserve`,
-`boundary=protected_area`, `boundary=national_park`) go to their own read-only `protected-areas.geojson` instead, from
-the `protected-areas` extract group: a park forest such as Park šuma Gorica is named only there, over unnamed woods. A
+`boundary=protected_area`, `boundary=national_park`) go to their own `protected-areas.geojson` instead, from the
+`protected-areas` extract group: a park forest such as Park šuma Gorica is named only there, over unnamed woods. A
 meadow or grass area gets `destination: true` when it is named, is mapped as a common (`leisure=common`), or contains a
 named place, POI or peak node in the detail box. Green multipolygons keep their holes.
 
