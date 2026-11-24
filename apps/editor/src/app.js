@@ -139,8 +139,9 @@ function layerStatus() {
   return `${activeLayer.name} · ${objectCount} objects · ${isEditable ? 'editable' : 'read-only'}`;
 }
 
-// Kinds that only follow from other objects are drawn and never picked.
-const isPickable = ({filename, feature}) => isLayerObject(filename, feature);
+// Kinds that only follow from other objects, and files another layer edits, are drawn and never picked.
+const isPickable = ({filename, feature}) =>
+  isLayerObject(filename, feature) && !activeLayer?.contextFiles.includes(filename);
 
 // What a layer's behavior may read, never a way around the commands.
 function behaviorContext() {
@@ -219,8 +220,9 @@ function clearSelection() {
 // A filter shows other objects over the map as it is, without drawing the files of its layer again.
 const shownFiles = () => {
   if (activeFilter) return [];
-  const isLimited = phoneLayout.matches && activeLayer?.phoneFiles;
-  return (isLimited ? activeLayer.phoneFiles : activeLayer?.files) ?? [];
+  if (!activeLayer) return [];
+  const isLimited = phoneLayout.matches && activeLayer.phoneFiles;
+  return [...(isLimited ? activeLayer.phoneFiles : activeLayer.files), ...activeLayer.contextFiles];
 };
 
 // The active layer's files and every changed file use the public cartography with their working features. The others
@@ -326,7 +328,8 @@ function renderCommandAvailability() {
 function renderTools() {
   elementById('edit-guides').hidden = !activeLayer;
   elementById('edit-guides-hint').hidden = !activeLayer;
-  const buttons = drawChoicesOf(activeLayer, rules).map(choice => {
+  const choices = drawChoicesOf(activeLayer, rules).filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
+  const buttons = choices.map(choice => {
     const button = createElementWithText('button', choice.label);
     button.type = 'button';
     button.onclick = () => startNewFeature(choice);

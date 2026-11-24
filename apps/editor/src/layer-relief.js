@@ -1,8 +1,8 @@
 // Contour lines that never cross, summits higher than the lines around them, and ridges that split light from shade.
 import {createElementWithText} from './dom.js';
-import {crossesContours, highestContourAround, keptClosed} from './contour-rules.js';
+import {crossesContours, highestContourAround, isClosedLine, keptClosed, surrounds} from './contour-rules.js';
 import {roundedCoordinate} from './geometry-editing.js';
-import {changedStretch, followingEdits} from './shared-shapes.js';
+import {changedStretch, crossesItself, followingEdits} from './shared-shapes.js';
 
 const contoursFile = 'contours.geojson';
 const summitsFile = 'summits.geojson';
@@ -14,6 +14,9 @@ const ridgeToleranceMetres = 60;
 const positionTimeoutMilliseconds = 15000;
 const smallestDragFraction = 1 / 256;
 const crossingMessage = 'Contour lines never cross.';
+
+// Lines need a big screen; their fields do not.
+const isDesk = context => !context.isPhone();
 
 const otherContourLines = (key, context) =>
   context
@@ -51,13 +54,28 @@ function limitedContour(geometry, {key, previousGeometry}, context) {
   return {...geometry, coordinates: farthestAllowedLine(previousLine, line, isCrossing)};
 }
 
+// Summits that a closed line would pass at or above their own height.
+function summitsBelow({geometry, properties}, context) {
+  if (!isClosedLine(geometry.coordinates)) return [];
+  return context.entriesOf(summitsFile).filter(({feature}) => {
+    const {ele} = feature.properties;
+    const isBelow = Number.isFinite(ele) && ele <= properties.elevation;
+    return isBelow && surrounds(geometry.coordinates, feature.geometry.coordinates);
+  });
+}
+
 function contourProblem({key, feature, before}, context) {
   const isCrossing = crossesContours(
     feature.geometry.coordinates,
     before?.geometry.coordinates,
     otherContourLines(key, context)
   );
-  return isCrossing ? crossingMessage : null;
+  if (isCrossing) return crossingMessage;
+  const knownKeys = new Set(before ? summitsBelow(before, context).map(summit => summit.key) : []);
+  const summit = summitsBelow(feature, context).find(entry => !knownKeys.has(entry.key));
+  if (!summit) return null;
+  const {name, ele} = summit.feature.properties;
+  return `${name || 'A summit'} inside this line is ${ele} m, so the line must be lower.`;
 }
 
 const withIndexFlag = feature => ({
@@ -72,9 +90,13 @@ function summitProblem({feature}, context) {
   return `A summit here must be higher than ${height} m, the highest contour around it.`;
 }
 
+const hasNoHeight = ({properties}) => properties.ele === null || properties.ele === undefined;
+
 // Phone height is only good to about 10 m, so it fills a gap and never replaces a height the map has.
 function useOwnHeight(edit) {
   const onPosition = ({coords: {altitude}}) => {
+    const isStillWanted = edit.isOpen() && hasNoHeight(edit.typedFeature());
+    if (!isStillWanted) return;
     if (altitude === null) edit.showProblem('This device does not know its height.');
     else edit.setProperties({ele: Math.round(altitude)});
   };
@@ -85,9 +107,8 @@ function useOwnHeight(edit) {
   });
 }
 
-function summitTools({properties}, edit) {
-  const isMissing = properties.ele === null || properties.ele === undefined;
-  if (!edit.context.isPhone() || !isMissing) return [];
+function summitTools(feature, edit) {
+  if (!edit.context.isPhone() || !hasNoHeight(feature)) return [];
   return [{label: 'Use my height', run: () => useOwnHeight(edit)}];
 }
 
@@ -99,7 +120,7 @@ function renderSummitExtras(container, {feature, context}) {
   note.className = 'hint';
   container.append(note);
   if (!context.isPhone()) return;
-  const phoneNote = createElementWithText('p', 'Phone height is ±10 m. Use it only where the map has none.');
+  const phoneNote = createElementWithText('p', 'Phone height is ±10 m at best, and some phones count about 40 m higher here. Use it only where the map has none.');
   phoneNote.className = 'hint';
   container.append(phoneNote);
 }
@@ -118,6 +139,18 @@ function slopeEdits({feature, before}, context) {
   return stretch ? followingEdits(context.entriesOf(slopesFile), stretch, ridgeToleranceMetres) : [];
 }
 
+// Light and shade that cannot follow would no longer meet at the ridge, so that is refused.
+function ridgeProblem(edit, context) {
+  const {feature, before} = edit;
+  if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
+  const slopes = slopeEdits(edit, context);
+  if (slopes.length === 0) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';
+  const isCrossing = slopes.some(({filename, key, after}) =>
+    crossesItself(context.session.workingFeature(filename, key).geometry, after.geometry)
+  );
+  return isCrossing ? 'A slope beside this ridge would cross itself here.' : null;
+}
+
 function renderRidgeExtras(container, {feature, context}) {
   const {summit, summitName} = feature.properties;
   const entry = summit && context.findEntity(summitsFile, summit);
@@ -134,7 +167,8 @@ export const reliefBehaviors = {
     prepared: withIndexFlag,
     problem: contourProblem,
     limitedGeometry: limitedContour,
-    closesLines: true
+    closesLines: true,
+    isReshapable: isDesk
   },
   [summitsFile]: {
     title: ({properties}) => properties.name || 'Summit',
@@ -146,7 +180,9 @@ export const reliefBehaviors = {
   [ridgesFile]: {
     title: ({properties}) => properties.name || properties.summitName || 'Ridge',
     sections: () => [{title: 'Ridge', fields: ['name']}],
+    isReshapable: isDesk,
     limitedGeometry: ridgeWithFixedEnds,
+    problem: ridgeProblem,
     companionEdits: slopeEdits,
     renderExtras: renderRidgeExtras
   }

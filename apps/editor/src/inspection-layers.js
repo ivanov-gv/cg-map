@@ -36,9 +36,18 @@ function lineLayer(id, filename, color, widthPixels, dashes) {
   return {id, type: 'line', filter: fromFile(filename), paint};
 }
 
+// Soft enough to leave what stands on the slopes readable.
+const slopeLayer = {
+  id: 'editor-slopes',
+  type: 'fill',
+  filter: fromFile('slopes.geojson'),
+  paint: {'fill-color': ['match', ['get', 'aspect'], 'sunlit', '#c9ddb2', '#8fb06f'], 'fill-opacity': 0.4}
+};
+
 function inspectionLayers() {
   const below = {'text-anchor': 'top', 'text-offset': [0, 1.4]};
   return [
+    slopeLayer,
     lineLayer('editor-country-outlines', 'context-countries.geojson', '#aeac98', 1),
     lineLayer('editor-borders', 'border-edges.geojson', '#7d6a8f', 1.5, [4, 2]),
     lineLayer('editor-contours', 'contours.geojson', '#b59a72', 1),

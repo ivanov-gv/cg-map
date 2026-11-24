@@ -57,6 +57,8 @@ export const editorLayers = [
     summary: 'Contour lines and summits',
     files: ['contours.geojson', 'summits.geojson', 'ridges.geojson', 'canyon-rims.geojson'],
     linkedFiles: ['slopes.geojson'],
+    // Light and shade, so that moving a ridge shows at once. They follow from the ridges and are never picked.
+    contextFiles: ['slopes.geojson'],
     guideMinZoom: 13
   },
   {
@@ -107,6 +109,7 @@ export function availableLayers(filenames) {
       ...layer,
       files: layer.files.filter(isAvailable),
       linkedFiles: layer.linkedFiles.filter(isAvailable),
+      contextFiles: (layer.contextFiles ?? []).filter(isAvailable),
       ...(layer.phoneFiles ? {phoneFiles: layer.phoneFiles.filter(isAvailable)} : {})
     }))
     .filter(layer => layer.files.length > 0);

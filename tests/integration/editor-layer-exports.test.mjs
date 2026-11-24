@@ -224,3 +224,48 @@ test('a river moved at its joint and a reversed one pass', async testContext => 
   const written = editor.written('water.geojson').find(({properties}) => properties.entityId === river.feature.properties.entityId);
   assert.ok(written);
 });
+
+const movedAtMiddle = entry => ({...entry.feature, geometry: movedMiddle(entry.feature)});
+const isLongLine = ({geometry}) => geometry.coordinates.length > 10;
+
+test('a ridge with its slopes, a contour and a new summit pass', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const ridge = editor.find('ridges.geojson', isLongLine);
+  assert.equal(editor.apply(ridge.filename, ridge.key, movedAtMiddle(ridge)), null);
+  const contour = editor.find('contours.geojson', isLongLine);
+  const smoothed = structuredClone(contour.feature);
+  smoothed.geometry.coordinates.splice(5, 1);
+  assert.equal(editor.apply(contour.filename, contour.key, smoothed), null);
+  const summit = {
+    type: 'Feature',
+    properties: {kind: 'summit', natural: 'peak', name: 'New summit', ele: 2000},
+    geometry: {type: 'Point', coordinates: [19.27, 42.5]}
+  };
+  assert.equal(editor.apply('summits.geojson', newLocalId(), summit), null);
+  const operations = await editor.exportAndImport();
+  assert.deepEqual(filesOf(operations), ['contours.geojson', 'ridges.geojson', 'slopes.geojson', 'summits.geojson']);
+});
+
+test('a border with both its municipalities, a country border, a town and a neighbour name pass', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const isInner = ({properties}) => [properties.left, properties.right].every(side => side.startsWith('ME-'));
+  const isCountry = ({properties}) =>
+    properties.left !== 'sea' && properties.right !== 'sea' && [properties.left, properties.right].some(side => !side.startsWith('ME-') && !side.startsWith('derived:'));
+  for (const isWanted of [isInner, isCountry]) {
+    const border = editor.find('border-edges.geojson', feature => isWanted(feature) && isLongLine(feature));
+    assert.equal(editor.apply(border.filename, border.key, movedAtMiddle(border)), null);
+  }
+  const town = {
+    type: 'Feature',
+    properties: {kind: 'settlement', source: editor.context.rules.localPlaceSource, name: 'New town', rank: 'village'},
+    geometry: {type: 'Point', coordinates: [19.26, 42.44]}
+  };
+  assert.equal(editor.apply('settlements.geojson', newLocalId(), town), null);
+  const [neighbour] = editor.session.workingEntries('context-countries.geojson');
+  const renamed = structuredClone(neighbour.feature);
+  renamed.properties.name = 'Renamed neighbour';
+  assert.equal(editor.apply(neighbour.filename, neighbour.key, renamed), null);
+  await editor.exportAndImport();
+  const written = editor.written('settlements.geojson').find(({properties}) => properties.name === 'New town');
+  assert.match(written.properties.municipality, /^ME-/);
+});

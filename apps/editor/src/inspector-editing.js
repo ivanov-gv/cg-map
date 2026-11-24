@@ -180,7 +180,8 @@ export class InspectorEditing {
     const geometryType = feature.geometry?.type;
     const isShape = Boolean(geometryType) && geometryType !== 'Point';
     const {canReshape, canDelete} = featureCapabilities(feature, this.#rule);
-    const canEditShape = (isNew || canReshape) && Boolean(geometryType);
+    const isReshapableHere = this.#behavior.isReshapable(this.#context.behaviorContext());
+    const canEditShape = (isNew || canReshape) && Boolean(geometryType) && isReshapableHere;
     elementById('tool-move').hidden = !canEditShape;
     elementById('tool-vertices').hidden = !canEditShape || !isShape;
     elementById('tool-vertices').textContent = geometryType === 'LineString' ? 'Edit points' : 'Edit corners';
@@ -204,7 +205,6 @@ export class InspectorEditing {
     elementById('edit-facts').replaceChildren(...facts.map(fact => createElementWithText('p', fact)));
   }
 
-  // What a layer's own controls need: the pending feature, and ways to change it inside this edit.
   // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
   // once its edit is closed it changes nothing, and never the edit opened since.
   #editContext() {

@@ -69,7 +69,7 @@ export function keptClosed(line, previousLine) {
 }
 
 // Ray casting on a closed line.
-function surrounds(line, [longitude, latitude]) {
+export function surrounds(line, [longitude, latitude]) {
   let isInside = false;
   for (const [start, end] of segmentsOf(line)) {
     if (start[1] > latitude === end[1] > latitude) continue;

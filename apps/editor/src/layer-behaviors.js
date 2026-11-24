@@ -20,6 +20,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   closesLines                   a drawn line ends on its first point when that is tapped
+//   isReshapable(context)         whether its shape can be changed on this screen
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // companionEdits and problem get {filename, key, feature, before, extras}.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
@@ -51,6 +52,7 @@ const defaultBehavior = filename => ({
   vertexTools: () => [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
+  isReshapable: () => true,
   dragTarget: () => null
 });
 
@@ -93,7 +95,8 @@ const drawChoices = {
       label: 'Draw contour',
       filename: 'contours.geojson',
       shape: 'LineString',
-      properties: {kind: 'contour', index: false}
+      properties: {kind: 'contour', index: false},
+      isDesktopOnly: true
     },
     {
       label: 'Add summit',
