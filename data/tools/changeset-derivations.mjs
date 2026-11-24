@@ -1,6 +1,7 @@
 // Facts the pipeline computes from the sources, brought back in step after an editor changeset: joins between files,
 // measures of a changed shape and the direction of a contour. Everything here follows from reviewed objects; nothing
 // is an editorial choice, so a changeset never carries it.
+import {entranceBearing} from './building-entrances.mjs';
 import {reversedClosedContours} from './relief-directions.mjs';
 import {requireThat} from './changeset-rules.mjs';
 
@@ -52,6 +53,26 @@ export function labelsFollowingBuildings(labels, previousBuildings, buildings) {
     requireThat(nextIndex !== undefined, `${labelsFile}: label ${number} belongs to a deleted building`);
     if (nextIndex === footprintIndex) return label;
     return {...label, properties: {...label.properties, footprintIndex: nextIndex}};
+  });
+  return {...labels, features};
+}
+
+// A located entrance points into its building, so it turns when the walls around it change. Labels of untouched
+// buildings keep their reviewed bearings.
+export function labelsWithBearings(labels, previousLabels, buildings, changedBuildingKeys) {
+  const previousById = new Map(previousLabels.features.map(label => [label.id, label]));
+  const features = labels.features.map(label => {
+    const {entrances, footprintIndex} = label.properties;
+    const building = buildings.features[footprintIndex];
+    if (!entrances || !building) return label;
+    const previousEntrances = previousById.get(label.id)?.properties.entrances;
+    const isMoved = JSON.stringify(previousEntrances) !== JSON.stringify(entrances);
+    if (!isMoved && !changedBuildingKeys.has(entityKey(building.properties))) return label;
+    const turned = entrances.map(entrance => ({
+      ...entrance,
+      bearing: entranceBearing(entrance.coordinates, building.geometry)
+    }));
+    return {...label, properties: {...label.properties, entrances: turned}};
   });
   return {...labels, features};
 }

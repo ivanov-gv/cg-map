@@ -97,14 +97,15 @@
                   }
                 },
                 "type": {
-                  "description": "Text when absent. directions is the ordered stop list of a route; integers and list are arrays.",
+                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; integers and list are arrays.",
                   "enum": [
                     "integer",
                     "number",
                     "boolean",
                     "list",
                     "integers",
-                    "directions"
+                    "directions",
+                  "entrances"
                   ]
                 },
                 "minimum": {

@@ -239,6 +239,35 @@ test('a renamed road gives its street join to the buildings on that street', tes
   assert.equal(after.properties['addr:streetEntityId'], undefined);
 });
 
+test('entrances move with their building and turn with its walls, and nothing else about them may change', testContext => {
+  const root = temporaryRoot(testContext);
+  const buildings = readSource(root, 'buildings.geojson').features;
+  const label = readSource(root, 'building-labels.geojson').features.find(({properties}) => properties.entrances);
+  const building = buildings[label.properties.footprintIndex];
+  const offsetDegrees = 0.0001;
+  const shifted = ([longitude, latitude]) => [longitude + offsetDegrees, latitude];
+  const moveAll = builder => {
+    builder.change('buildings.geojson', building, feature => {
+      feature.geometry.coordinates = feature.geometry.coordinates.map(ring => ring.map(shifted));
+    });
+    builder.change('building-labels.geojson', label, feature => {
+      feature.geometry.coordinates = shifted(feature.geometry.coordinates);
+      for (const entrance of feature.properties.entrances) entrance.coordinates = shifted(entrance.coordinates);
+    });
+  };
+  const tampered = new ChangesetBuilder(root);
+  moveAll(tampered);
+  tampered.operations[1].after.properties.entrances[0].id = 'node/1';
+  assert.throws(() => apply(root, tampered.build()), /entrances can only move with their building/);
+  const builder = new ChangesetBuilder(root);
+  moveAll(builder);
+  apply(root, builder.build());
+  const moved = readSource(root, 'building-labels.geojson').features.find(({id}) => id === label.id);
+  const [entrance] = moved.properties.entrances;
+  assert.deepEqual(entrance.coordinates, shifted(label.properties.entrances[0].coordinates));
+  assert.ok(Math.abs(entrance.bearing - label.properties.entrances[0].bearing) < 0.2, 'a moved wall keeps its direction');
+});
+
 test('an object changed since the export is refused, and other changes of the file are not', testContext => {
   const root = temporaryRoot(testContext);
   const first = new ChangesetBuilder(root);

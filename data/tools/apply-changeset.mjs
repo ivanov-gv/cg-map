@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
-import {entityKey, isLocalId, labelsFollowingBuildings, withDerivedFacts} from './changeset-derivations.mjs';
+import {entityKey, isLocalId, labelsFollowingBuildings, labelsWithBearings, withDerivedFacts} from './changeset-derivations.mjs';
 import {checkOperationRules, requireSupportedRules, requireThat} from './changeset-rules.mjs';
 import {isRecordFile, parseSource, serializeSource} from './changeset-sources.mjs';
 import {checkData, validateBuildingLabels, validateBuildingSources, validateCollection} from './check-data.mjs';
@@ -377,7 +377,8 @@ function nextCollections(changeset, sources, operations, read) {
     ? parseSource(buildingsFile, serializeSource(buildingsFile, next.get(buildingsFile)))
     : read(buildingsFile);
   const labels = labelsFollowingBuildings(next.get(labelsFile) ?? read(labelsFile), read(buildingsFile), buildings);
-  next.set(labelsFile, labels);
+  const changedBuildingKeys = changedKeysByFile.get(buildingsFile) ?? new Set();
+  next.set(labelsFile, labelsWithBearings(labels, read(labelsFile), buildings, changedBuildingKeys));
   return next;
 }
 

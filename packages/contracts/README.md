@@ -124,16 +124,17 @@ the editor verifies the whole bundle. It is built into dist/editor only. See
 types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
 source value of a new place. Anything unlisted is locked, which preserves unknown fields, attribution and identity.
 `limitedKinds` narrows kinds that are derived or only frame the map; `derivedGeometry` marks shapes the editor computes
-from another edit; `addOnly` values become identity once written. `editor-changeset.schema.json` defines the export.
-Version 2 names an existing object by `entityId` (and `entityPart`) with a fingerprint and full before/after features; a
-new object keeps its `local:` ID as its entity ID. `featureIndex`, bound to one snapshot, remains for routes and for
-version 1. `fieldItems` carry rough work from the field, which the importer never writes. The importer computes label
-positions, street joins, measures, summit checks, contour direction and provenance, so a changeset never carries them;
-an added label states `buildingEntityId` instead of `footprintIndex`. `fixtures/editor-geometry-cases.json` and
-`fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
-against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger of what was applied, replayed over a fresh extract. For land and
-water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a published kind nor invent one.
+from another edit; `addOnly` values become identity once written; a label's located `entrances` may only move with their
+building. `editor-changeset.schema.json` defines the export. Version 2 names an existing object by `entityId` (and
+`entityPart`) with a fingerprint and full before/after features; a new object keeps its `local:` ID as its entity ID.
+`featureIndex`, bound to one snapshot, remains for routes and for version 1. `fieldItems` carry rough work from the
+field, which the importer never writes. The importer computes label positions, street joins, measures, summit checks,
+contour direction and provenance, so a changeset never carries them; an added label states `buildingEntityId` instead of
+`footprintIndex`. `fixtures/editor-geometry-cases.json` and `fixtures/editor-property-cases.json` define the geometry
+and property rules; the editor and the importer both test against them, and tests/integration/editor-changeset.test.mjs
+runs one's output through the other. `editor-corrections.schema.json` defines the ledger of what was applied, replayed
+over a fresh extract. For land and water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a
+published kind nor invent one.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those

@@ -77,13 +77,21 @@ function directionsProblem(name, value) {
   return null;
 }
 
+// Located entrances of a label. An edit may only move them with their building: what an entrance is stays as it was.
+function entrancesProblem(name, value) {
+  const areLocated =
+    Array.isArray(value) && value.every(entrance => typeof entrance?.id === 'string' && isCoordinatePair(entrance.coordinates));
+  return areLocated ? null : `${name} need an ID and a position each`;
+}
+
 const problemByType = {
   integer: numberProblem,
   number: numberProblem,
   boolean: (name, value) => (typeof value === 'boolean' ? null : `${name} must be yes or no`),
   list: listProblem,
   integers: integersProblem,
-  directions: directionsProblem
+  directions: directionsProblem,
+  entrances: entrancesProblem
 };
 
 function levelProblem(name, properties, propertyRule, levels) {
@@ -183,9 +191,17 @@ function checkAddedFeature(operation, rule, localPlaceSource) {
   if (filename === stopsFile) checkAddedStop(after, localId);
 }
 
+// What an entrance is comes from OSM and stays locked; only where it is on the wall follows its building.
+function changesEntranceFacts(before, after) {
+  const factsOf = feature =>
+    (feature.properties.entrances ?? []).map(entrance => ({...entrance, coordinates: null, bearing: null}));
+  return !isSameJSON(factsOf(before), factsOf(after));
+}
+
 function checkModification({before, after}, rule, limits, featureLabel) {
   const lockedField = changedLockedField(before, after, rule, limits);
   requireThat(!lockedField, `${featureLabel}: ${lockedField} is not editable`);
+  requireThat(!changesEntranceFacts(before, after), `${featureLabel}: entrances can only move with their building`);
   const {kind} = before.properties;
   const isListedKind =
     !rule.editableKinds || rule.editableKinds.includes(kind) || Object.hasOwn(rule.limitedKinds ?? {}, kind);

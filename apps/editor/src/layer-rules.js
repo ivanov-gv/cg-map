@@ -79,13 +79,21 @@ function directionsProblem(name, value) {
   return null;
 }
 
+// Located entrances of a label. An edit may only move them with their building: what an entrance is stays as it was.
+function entrancesProblem(name, value) {
+  const areLocated =
+    Array.isArray(value) && value.every(entrance => typeof entrance?.id === 'string' && isCoordinatePair(entrance.coordinates));
+  return areLocated ? null : `${name} need an ID and a position each`;
+}
+
 const problemByType = {
   integer: numberProblem,
   number: numberProblem,
   boolean: (name, value) => (typeof value === 'boolean' ? null : `${name} must be yes or no`),
   list: listProblem,
   integers: integersProblem,
-  directions: directionsProblem
+  directions: directionsProblem,
+  entrances: entrancesProblem
 };
 
 function levelProblem(name, properties, propertyRule, levels) {
@@ -149,6 +157,13 @@ export function featureProblem(feature, rule, levels, before = null) {
   return hasRequiredAny ? null : `one of ${rule.requiredAny.join(', ')} is required`;
 }
 
+// What an entrance is comes from OSM and stays locked; only where it is on the wall follows its building.
+function changesEntranceFacts(before, after) {
+  const factsOf = feature =>
+    (feature.properties.entrances ?? []).map(entrance => ({...entrance, coordinates: null, bearing: null}));
+  return !isSameJSON(factsOf(before), factsOf(after));
+}
+
 // Only listed properties and the geometry may differ, so unknown fields, attribution and identity survive.
 function lockedFieldProblem(before, after, rule) {
   const limits = rulesForFeature(rule, before);
@@ -164,6 +179,7 @@ function lockedFieldProblem(before, after, rule) {
     const isEditable = isListed && (!limits.propertyNames || limits.propertyNames.includes(name));
     if (!isEditable && !isSameJSON(before.properties[name], after.properties[name])) return `${name} is not editable`;
   }
+  if (changesEntranceFacts(before, after)) return 'entrances can only move with their building';
   return isListedKind(before, rule) ? null : 'this kind is inspect-only';
 }
 

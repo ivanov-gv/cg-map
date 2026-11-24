@@ -118,7 +118,8 @@
           "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
         },
         "addr:street": {"maxLength": 120},
-        "buildingEntityId": {"maxLength": 64, "reference": "buildings.geojson", "requiredOnAdd": true, "addOnly": true}
+        "buildingEntityId": {"maxLength": 64, "reference": "buildings.geojson", "requiredOnAdd": true, "addOnly": true},
+        "entrances": {"type": "entrances"}
       },
       "requiredAny": ["addr:housenumber", "building_number", "entrances"]
     },
