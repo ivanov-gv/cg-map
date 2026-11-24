@@ -514,11 +514,25 @@ test('a footprint or label edit that breaks their join is reported, without rewr
   session.recordEdit('buildings.geojson', '0', moved);
   const [problem] = labelJoinProblems(session);
   assert.equal(problem.filename, 'building-labels.geojson');
-  assert.match(problem.message, /outside footprint 0/);
+  assert.match(problem.message, /outside its building 0/);
   assert.deepEqual(session.changedFiles(), ['buildings.geojson']);
   const followingLabel = {...labelFeature(), geometry: translateGeometry(labelFeature().geometry, 0.01, 0)};
   session.recordEdit('building-labels.geojson', '0', followingLabel);
   assert.deepEqual(labelJoinProblems(session), []);
+});
+
+test('a label keeps its building when another building is deleted, and is reported when its own is', () => {
+  const other = {...footprintFeature(), properties: {kind: 'building', entityId: 'way/2'}};
+  const label = {...labelFeature(), properties: {...labelFeature().properties, footprintIndex: 1}};
+  const sources = sourcesWith({
+    'buildings.geojson': [other, footprintFeature()],
+    'building-labels.geojson': [label]
+  });
+  const session = new EditSession(sources);
+  session.recordEdits('buildings', [{filename: 'buildings.geojson', key: '0', after: null}]);
+  assert.deepEqual(labelJoinProblems(session), []);
+  session.recordEdits('buildings', [{filename: 'buildings.geojson', key: '1', after: null}]);
+  assert.match(labelJoinProblems(session)[0].message, /has no building/);
 });
 
 test('a label inside a hole is outside its footprint', () => {
