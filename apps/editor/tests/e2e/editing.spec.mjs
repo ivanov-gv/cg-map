@@ -323,7 +323,7 @@ test.describe('source editing', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('.inspector')).toBeHidden();
     await expect(page.locator('#status')).toBeFocused();
-    expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading places.geojson…');
+    expect(await page.evaluate(() => window.statusAtFocus)).toBe('Loading Places & points…');
     await expect(page.locator('#status')).not.toHaveClass(/attention/);
     await expect(page.locator('#status')).toBeFocused();
     expect(await page.evaluate(() => window.statusFocusCount)).toBe(1);
@@ -1424,7 +1424,8 @@ test.describe('source editing', () => {
 
   test('footprint corners are edited through handles and stay a closed ring', async ({page}, testInfo) => {
     await openEditor(page);
-    const {footprint} = await selectNumberedBuilding(page);
+    const {footprint, label} = await selectNumberedBuilding(page);
+    await centerMapOn(page, label.geometry.coordinates, 19);
     await openInspector(page);
     await startMode(page, 'tool-vertices');
     await expect(page.locator('#vertex-remove')).toBeDisabled();

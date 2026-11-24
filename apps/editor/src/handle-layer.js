@@ -11,7 +11,7 @@ const handleColor = '#ffffff';
 const selectedHandleColor = '#c8372d';
 const midpointRadiusPixels = 5;
 // A side shorter than this on screen has no room for its own handle between the two corners.
-const shortestSidePixels = 48;
+const shortestSidePixels = 36;
 
 function handleFeature({coordinate, isMidpoint = false, polygonIndex, ringIndex, vertexIndex}, selectedHandle) {
   const handle = {vertexIndex};
