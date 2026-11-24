@@ -206,8 +206,11 @@ export function createSourceOverlay(map) {
   }
   const guideLayerIds = [...overlay.layerIds.filter(id => !id.endsWith('-fill')), 'editor-missing'];
   const setData = (source, features) => map.getSource(source).setData(collectionOf(features));
-  const setGuideMinZoom = minimumZoom => {
-    for (const layerId of guideLayerIds) map.setLayerZoomRange(layerId, minimumZoom, maximumZoom);
+  const setGuideMinZoom = (minimumZoom, pointMinimumZoom = minimumZoom) => {
+    for (const layerId of guideLayerIds) {
+      const isPointLayer = layerId === `${sourceName}-point`;
+      map.setLayerZoomRange(layerId, isPointLayer ? pointMinimumZoom : minimumZoom, maximumZoom);
+    }
   };
   setGuideMinZoom(guideMinZoom);
   return {

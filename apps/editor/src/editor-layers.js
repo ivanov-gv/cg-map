@@ -68,7 +68,9 @@ export const editorLayers = [
     linkedFiles: ['municipalities.geojson', 'land.geojson'],
     // Borders need a big screen.
     phoneFiles: ['settlements.geojson'],
-    guideMinZoom: 7
+    guideMinZoom: 7,
+    // The country's towns seen together would cover its borders with rings.
+    pointGuideMinZoom: 11
   },
   {
     id: 'stops',

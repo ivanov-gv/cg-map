@@ -274,7 +274,7 @@ function refreshOverlay() {
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
   overlay.setDeletions(markedFeatures());
-  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom);
+  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom, activeLayer?.pointGuideMinZoom);
   try {
     workingMap.show(workingFeatures(collection.features), new Set(shownFiles()));
   } catch (error) {
