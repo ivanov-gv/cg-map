@@ -413,7 +413,7 @@ test('an area limited to one project has a partner covering the other', () => {
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 
 for (const [name, files, expectedAreas] of [
-  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile']],
+  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile', 'layers']],
   ['a source the offline tests edit through', ['apps/editor/src/review-panel.js'], ALL_EDITOR_AREAS],
   ['a source that opens an edit on selection', ['apps/editor/src/inspector-editing.js'], ALL_EDITOR_AREAS],
   ['the source behind the rules', ['apps/editor/src/geometry-validation.js'], ALL_EDITOR_AREAS],

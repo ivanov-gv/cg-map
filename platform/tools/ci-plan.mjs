@@ -96,7 +96,9 @@ const EDITING_ONLY_SOURCES = [
   'geometry-measures.js',
   'handle-layer.js',
   'mode-bar.js',
-  'deletion-dialog.js'
+  'deletion-dialog.js',
+  'interior-point.js',
+  'layer-buildings.js'
 ];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
@@ -130,9 +132,9 @@ export const EDITOR_BROWSER_AREAS = {
     sources: OFFLINE_SOURCES
   },
   layers: {
-    specs: 'tests/e2e/layers.spec.mjs',
-    specFiles: ['layers.spec.mjs'],
-    sources: ['drawing-hints.js', 'geometry-measures.js', 'mode-bar.js', 'deletion-dialog.js']
+    specs: 'tests/e2e/layers.spec.mjs tests/e2e/buildings.spec.mjs',
+    specFiles: ['layers.spec.mjs', 'buildings.spec.mjs'],
+    sources: EDITING_ONLY_SOURCES
   },
   selection: {
     specs: 'tests/e2e/selection.spec.mjs',
