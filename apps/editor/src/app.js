@@ -24,7 +24,9 @@ import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './
 import {buildingBehaviors} from './layer-buildings.js';
 import {buildingAt, placeBehaviors} from './layer-places.js';
 import {greenBehaviors} from './layer-green.js';
+import {reliefBehaviors} from './layer-relief.js';
 import {roadBehaviors} from './layer-roads.js';
+import {settlementBehaviors} from './layer-settlements.js';
 import {waterBehaviors} from './layer-water.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
@@ -51,6 +53,8 @@ registerBehaviors(placeBehaviors);
 registerBehaviors(roadBehaviors);
 registerBehaviors(greenBehaviors);
 registerBehaviors(waterBehaviors);
+registerBehaviors(reliefBehaviors);
+registerBehaviors(settlementBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
 const basemapLayers = {
@@ -212,7 +216,11 @@ function clearSelection() {
 }
 
 // A filter shows other objects over the map as it is, without drawing the files of its layer again.
-const shownFiles = () => (activeFilter ? [] : (activeLayer?.files ?? []));
+const shownFiles = () => {
+  if (activeFilter) return [];
+  const isLimited = phoneLayout.matches && activeLayer?.phoneFiles;
+  return (isLimited ? activeLayer.phoneFiles : activeLayer?.files) ?? [];
+};
 
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context.

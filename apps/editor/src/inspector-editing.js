@@ -558,7 +558,8 @@ export class InspectorEditing {
   #isClosingTap(event) {
     const [firstPoint] = this.#transaction.drawnPoints;
     if (!firstPoint || !canFinishDrawing(this.#transaction)) return false;
-    if (this.#transaction.tool === editTools.drawLine) return false;
+    const isOpenLine = this.#transaction.tool === editTools.drawLine && !this.#behavior.closesLines;
+    if (isOpenLine) return false;
     return event.point.dist(this.#context.map.project(firstPoint)) <= closingDistancePixels;
   }
 
@@ -589,6 +590,8 @@ export class InspectorEditing {
       return;
     }
     if (this.#isClosingTap(event)) {
+      const {tool, drawnPoints} = this.#transaction;
+      if (tool === editTools.drawLine) this.#addDrawnPoint(drawnPoints[0]);
       this.#finishDrawing();
       return;
     }

@@ -66,6 +66,8 @@ export const editorLayers = [
     summary: 'City names, municipalities, country',
     files: ['settlements.geojson', 'border-edges.geojson', 'context-countries.geojson'],
     linkedFiles: ['municipalities.geojson', 'land.geojson'],
+    // Borders need a big screen.
+    phoneFiles: ['settlements.geojson'],
     guideMinZoom: 7
   },
   {
@@ -102,7 +104,8 @@ export function availableLayers(filenames) {
     .map(layer => ({
       ...layer,
       files: layer.files.filter(isAvailable),
-      linkedFiles: layer.linkedFiles.filter(isAvailable)
+      linkedFiles: layer.linkedFiles.filter(isAvailable),
+      ...(layer.phoneFiles ? {phoneFiles: layer.phoneFiles.filter(isAvailable)} : {})
     }))
     .filter(layer => layer.files.length > 0);
 }

@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {applyEdit, chooseLayer, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
@@ -19,7 +19,7 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
 
   await tapAt(page, [-3, 0]);
   await expect(page.locator('#selection-title')).toHaveText('Main street');
-  await page.locator('#tool-vertices').click();
+  await editCorners(page);
   await tapAt(page, [0, 0]);
   await page.locator('#vertex-split').click();
   await expect(page.locator('#change-count')).toHaveText('3');

@@ -175,7 +175,7 @@ function cityFeatures() {
           municipality: 'ME-01',
           source: 'OpenStreetMap'
         },
-        point(0, 8)
+        point(-3, 8)
       )
     ],
     'border-edges.geojson': [
