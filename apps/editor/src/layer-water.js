@@ -3,7 +3,7 @@ import {createElementWithText} from './dom.js';
 import {valueLabel} from './field-catalog.js';
 import {formatLength, lineLengthMetres} from './geometry-measures.js';
 import {areaFacts, holeTool, renderHoles} from './layer-green.js';
-import {changedStretch, followingEdits} from './shared-shapes.js';
+import {changedStretch, crossesItself, followingEdits, hasOutlineAlong} from './shared-shapes.js';
 import {flowsInto, linesKeepingJoins, riverEndingOnShores, riversKeepingShore} from './water-joins.js';
 
 const waterFile = 'water.geojson';
@@ -21,17 +21,36 @@ const isFollowingLand = ({feature}) => feature.properties.kind === 'country';
 const isSea = ({feature}) => feature.properties.kind === 'ocean';
 const isSeaBorder = ({feature}) => [feature.properties.left, feature.properties.right].includes('sea');
 
-// The sea is everything beyond the coastline, and the land and its borders end at it.
-function coastFollowers(before, after, context) {
+// The sea is everything beyond the coastline, and the land and its borders end at it: each with a name for the message.
+const coastFollowers = context => [
+  {name: 'sea', entries: context.entriesOf(waterFile).filter(isSea)},
+  {name: 'country', entries: context.entriesOf(landFile).filter(isFollowingLand)},
+  {name: 'sea border', entries: context.entriesOf(bordersFile).filter(isSeaBorder)},
+  {name: 'municipality', entries: context.entriesOf(municipalitiesFile)}
+];
+
+function coastEdits(before, after, context) {
   const stretch = changedStretch(before.geometry.coordinates, after.geometry.coordinates);
   if (!stretch) return [];
-  const followers = [
-    ...context.entriesOf(waterFile).filter(isSea),
-    ...context.entriesOf(landFile).filter(isFollowingLand),
-    ...context.entriesOf(bordersFile).filter(isSeaBorder),
-    ...context.entriesOf(municipalitiesFile)
-  ];
-  return followingEdits(followers, stretch, coastToleranceMetres);
+  return coastFollowers(context).flatMap(({entries}) => followingEdits(entries, stretch, coastToleranceMetres));
+}
+
+// A shape that runs along the coast and cannot follow it would leave a gap between land and sea, so Apply refuses that.
+function coastProblem({feature, before}, context) {
+  if (!before || !isCoastline(feature)) return null;
+  const stretch = changedStretch(before.geometry.coordinates, feature.geometry.coordinates);
+  if (!stretch) return null;
+  const behind = coastFollowers(context).find(({name, entries}) => {
+    const mustFollow = name === 'sea' || hasOutlineAlong(entries, stretch, coastToleranceMetres);
+    return mustFollow && followingEdits(entries, stretch, coastToleranceMetres).length === 0;
+  });
+  if (behind) return `The ${behind.name} cannot follow this change. Move fewer points, or points farther from the ends.`;
+  const isCrossing =
+    crossesItself(before.geometry, feature.geometry) ||
+    coastEdits(before, feature, context).some(({filename, key, after}) =>
+      crossesItself(context.session.workingFeature(filename, key).geometry, after.geometry)
+    );
+  return isCrossing ? 'The coast, or a shape that follows it, would cross itself here.' : null;
 }
 
 function waterEdits({key, feature, before}, context) {
@@ -39,7 +58,7 @@ function waterEdits({key, feature, before}, context) {
   const waterEntries = context.entriesOf(waterFile);
   if (isLine(feature)) {
     const joins = linesKeepingJoins(key, before.geometry, feature.geometry, waterEntries);
-    return isCoastline(feature) ? [...joins, ...coastFollowers(before, feature, context)] : joins;
+    return isCoastline(feature) ? [...joins, ...coastEdits(before, feature, context)] : joins;
   }
   if (feature.geometry.type !== 'Polygon') return [];
   return riversKeepingShore(before.geometry, feature.geometry, waterEntries);
@@ -110,6 +129,7 @@ export const waterBehaviors = {
     tools: waterTools,
     renderExtras: renderWaterExtras,
     prepared: preparedWater,
+    problem: coastProblem,
     companionEdits: waterEdits,
     measures: waterFacts
   }

@@ -27,6 +27,10 @@ refresh.
 - **The ledger is replayed over a fresh extract** (`make -C data reapply-corrections`). An edit wins over upstream for
   exactly the facts it changed, and every conflict is reported.
 
+- **Not every object can be added or deleted.** A ridge, a canyon rim and a border line are edges between shapes the
+  pipeline partitioned, so there is nothing a new one could bound. Ridges and borders are moved, rims are moved or
+  deleted. Neighbour countries and the sea frame the map. This narrows the wiki's "any object" for these kinds.
+
 ## Consequences
 
 Two changesets of one file apply in either order when they touch different objects. A derived shape needs the topology

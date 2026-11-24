@@ -112,4 +112,13 @@ export function availableLayers(filenames) {
     .filter(layer => layer.files.length > 0);
 }
 
+// Which layer's history holds an edit of this file that came from elsewhere: the layer that edits the file itself, or
+// else one that changes it along.
+export function layerIdOfFile(filename) {
+  const owner =
+    editorLayers.find(({files}) => files.includes(filename)) ??
+    editorLayers.find(({linkedFiles}) => linkedFiles.includes(filename));
+  return owner?.id ?? filename;
+}
+
 export const layerFiles = layer => [...layer.files, ...layer.linkedFiles];

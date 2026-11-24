@@ -203,6 +203,7 @@ function showFeature(entry) {
 
 // Returns the inspector to its empty state for the active layer.
 function clearSelection() {
+  cancelPick();
   editing.close();
   hideInspector();
   elementById('selection-details').open = false;
@@ -387,7 +388,11 @@ function showApplied(message) {
 }
 
 function travelHistory(travel) {
-  if (!activeLayer || editing.hasUnappliedEdit) return;
+  if (!activeLayer) return;
+  if (editing.hasUnappliedEdit) {
+    setStatus(applyOrCancelMessage, true);
+    return;
+  }
   if (travel() !== null) showSessionChange();
 }
 
@@ -396,6 +401,11 @@ function changeFieldItems(change, message, undoChange) {
   change();
   showSessionChange();
   const undo = () => {
+    // Redrawing closes the inspector, so a typed edit waits for its own decision first.
+    if (editing.hasUnappliedEdit) {
+      setStatus(applyOrCancelMessage, true);
+      return;
+    }
     undoChange();
     showSessionChange();
   };
@@ -458,7 +468,7 @@ function setLayer(layer) {
     elementById('layer-switch-dialog').showModal();
     return false;
   }
-  if (pendingPick) finishPick(null);
+  cancelPick();
   editing.close();
   hideToast();
   activeFilter = null;
@@ -539,6 +549,13 @@ function entryUnderPick(event) {
   const shown = hits.find(entry => entry.filename === filename);
   if (shown || filename !== 'buildings.geojson') return shown;
   return buildingAt(event.lngLat.toArray(), behaviorContext());
+}
+
+// Whoever asked gets no object, so the question does not outlive the edit that asked it. Returns whether one was open.
+function cancelPick() {
+  if (!pendingPick) return false;
+  finishPick(null);
+  return true;
 }
 
 function finishPick(entry) {
@@ -699,7 +716,7 @@ function installWorkspaceControls() {
     cancelActiveGesture: () => Boolean(editing?.cancelActiveGesture()),
     isSwitchDialogOpen: () => elementById('layer-switch-dialog').open,
     closeSwitchDialog: closeLayerSwitchDialog,
-    leaveMode: () => Boolean(editing?.leaveModeOnEscape())
+    leaveMode: () => cancelPick() || Boolean(editing?.leaveModeOnEscape())
   });
   installLayerSwitchDialog();
   installInspectorViewport();

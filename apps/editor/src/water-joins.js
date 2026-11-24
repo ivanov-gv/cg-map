@@ -1,6 +1,6 @@
 // Where rivers meet rivers and water areas. A join is kept when either side moves.
 import {roundedCoordinate} from './geometry-editing.js';
-import {nearestPointOnOutline} from './geometry-measures.js';
+import {distanceMetres, nearestPointOnOutline} from './geometry-measures.js';
 import {endsOf, isSamePoint} from './road-shapes.js';
 
 // Source lines end on an outline up to rounding and simplification.
@@ -12,10 +12,31 @@ const isArea = ({feature}) => feature.geometry.type === 'Polygon';
 // The same line the other way around moves no point, only the order in which they are passed.
 const isReversal = (before, after) => JSON.stringify(before) === JSON.stringify(after.toReversed());
 
-// The points that an edit moved, as pairs. A point added or removed moves none.
+const hasPoint = (line, coordinate) => line.some(point => isSamePoint(point, coordinate));
+
+function nearestPoint(points, coordinate) {
+  return points.reduce((nearest, point) =>
+    distanceMetres(point, coordinate) < distanceMetres(nearest, coordinate) ? point : nearest
+  );
+}
+
+// Where a point that a line no longer has went. With as many points as before that is the one in its place. Where points
+// were added or removed too it is the nearest new one, or the nearest one left.
+function successorOf(point, index, before, after) {
+  if (index === 0) return after[0];
+  if (index === before.length - 1) return after.at(-1);
+  const inItsPlace = after[index];
+  if (before.length === after.length && !hasPoint(before, inItsPlace)) return inItsPlace;
+  const newPoints = after.filter(candidate => !hasPoint(before, candidate));
+  return nearestPoint(newPoints.length > 0 ? newPoints : after, point);
+}
+
+// The points that an edit moved or took away, each with the one that stands for it now.
 export function movedPoints(before, after) {
-  if (before.length !== after.length || isReversal(before, after)) return [];
-  return before.flatMap((point, index) => (isSamePoint(point, after[index]) ? [] : [{from: point, to: after[index]}]));
+  if (isReversal(before, after)) return [];
+  return before.flatMap((point, index) =>
+    hasPoint(after, point) ? [] : [{from: point, to: successorOf(point, index, before, after)}]
+  );
 }
 
 function withPointsMoved(line, moves) {

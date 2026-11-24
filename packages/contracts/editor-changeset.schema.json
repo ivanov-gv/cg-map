@@ -3,131 +3,43 @@
   "title": "Reviewable editor changeset",
   "description": "A feature fingerprint is the lowercase SHA-256 of JSON.stringify(feature), keeping the key order of the pinned source. Version 2 names an object by its entity ID, so a change still applies after other objects of the file changed; version 1 named it by its position in one snapshot. Both are readable.",
   "type": "object",
-  "required": [
-    "version",
-    "id",
-    "createdAt",
-    "author",
-    "reason",
-    "bases",
-    "operations"
-  ],
+  "required": ["version", "id", "createdAt", "author", "reason", "bases", "operations"],
   "additionalProperties": false,
   "properties": {
-    "version": {
-      "enum": [
-        1,
-        2
-      ]
-    },
-    "id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "createdAt": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "author": {
-      "type": "string",
-      "minLength": 1
-    },
-    "reason": {
-      "type": "string",
-      "minLength": 1
-    },
+    "version": {"enum": [1, 2]},
+    "id": {"type": "string", "minLength": 1},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "author": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
     "bases": {
       "description": "SHA-256 of each changed source file. Version 1 stops at any difference; version 2 stops only where a reference is a feature index.",
       "type": "object",
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
-      }
+      "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
     },
     "operations": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": [
-          "filename",
-          "operation",
-          "reference",
-          "beforeFingerprint",
-          "before",
-          "after"
-        ],
+        "required": ["filename", "operation", "reference", "beforeFingerprint", "before", "after"],
         "additionalProperties": false,
         "properties": {
-          "filename": {
-            "type": "string",
-            "pattern": "^[a-z][a-z-]*\\.(geojson|json)$"
-          },
-          "operation": {
-            "enum": [
-              "add",
-              "modify",
-              "delete"
-            ]
-          },
+          "filename": {"type": "string", "pattern": "^[a-z][a-z-]*\\.(geojson|json)$"},
+          "operation": {"enum": ["add", "modify", "delete"]},
           "reference": {
             "description": "entityId (with entityPart for a split object) for existing objects; featureIndex, bound to one snapshot, for objects without source identity; localId for new ones, which the object keeps as its entity ID.",
             "type": "object",
             "additionalProperties": false,
-            "oneOf": [
-              {
-                "required": [
-                  "featureIndex"
-                ]
-              },
-              {
-                "required": [
-                  "localId"
-                ]
-              },
-              {
-                "required": [
-                  "entityId"
-                ]
-              }
-            ],
+            "oneOf": [{"required": ["featureIndex"]}, {"required": ["localId"]}, {"required": ["entityId"]}],
             "properties": {
-              "featureIndex": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "localId": {
-                "type": "string",
-                "pattern": "^local:"
-              },
-              "entityId": {
-                "type": "string",
-                "minLength": 1
-              },
-              "entityPart": {
-                "type": "integer",
-                "minimum": 0
-              }
+              "featureIndex": {"type": "integer", "minimum": 0},
+              "localId": {"type": "string", "pattern": "^local:"},
+              "entityId": {"type": "string", "minLength": 1},
+              "entityPart": {"type": "integer", "minimum": 0}
             }
           },
-          "beforeFingerprint": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "before": {
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "after": {
-            "type": [
-              "object",
-              "null"
-            ]
-          }
+          "beforeFingerprint": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+          "before": {"type": ["object", "null"]},
+          "after": {"type": ["object", "null"]}
         }
       }
     },
@@ -136,88 +48,28 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": [
-          "id",
-          "type",
-          "createdAt",
-          "layer"
-        ],
+        "required": ["id", "type", "createdAt", "layer"],
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^local:"
-          },
-          "type": {
-            "enum": [
-              "sketch",
-              "note",
-              "deletion"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "layer": {
-            "type": "string",
-            "minLength": 1
-          },
-          "what": {
-            "type": "string",
-            "maxLength": 64
-          },
-          "note": {
-            "type": "string",
-            "maxLength": 2000
-          },
-          "geometry": {
-            "type": [
-              "object",
-              "null"
-            ]
-          },
+          "id": {"type": "string", "pattern": "^local:"},
+          "type": {"enum": ["sketch", "note", "deletion"]},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "layer": {"type": "string", "minLength": 1},
+          "what": {"type": "string", "maxLength": 64},
+          "note": {"type": "string", "maxLength": 2000},
+          "geometry": {"type": ["object", "null"]},
           "target": {
             "type": "object",
-            "required": [
-              "filename",
-              "reference",
-              "name"
-            ],
+            "required": ["filename", "reference", "name"],
             "additionalProperties": false,
-            "properties": {
-              "filename": {
-                "type": "string"
-              },
-              "reference": {
-                "type": "object"
-              },
-              "name": {
-                "type": "string"
-              }
-            }
+            "properties": {"filename": {"type": "string"}, "reference": {"type": "object"}, "name": {"type": "string"}}
           }
         }
       }
     }
   },
   "anyOf": [
-    {
-      "properties": {
-        "operations": {
-          "minItems": 1
-        }
-      }
-    },
-    {
-      "required": [
-        "fieldItems"
-      ],
-      "properties": {
-        "fieldItems": {
-          "minItems": 1
-        }
-      }
-    }
+    {"properties": {"operations": {"minItems": 1}}},
+    {"required": ["fieldItems"], "properties": {"fieldItems": {"minItems": 1}}}
   ]
 }
