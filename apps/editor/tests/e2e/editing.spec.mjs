@@ -347,7 +347,7 @@ test.describe('source editing', () => {
     await selectPlace(page);
     const inspector = page.locator('.inspector');
     const actions = page.locator('#edit-actions');
-    const field = page.locator('[name="opening_hours"]');
+    const field = page.locator('[name="website"]');
     const inspectorBounds = await inspector.boundingBox();
     if (testInfo.project.name === 'pages-mobile') {
       expect(inspectorBounds.height).toBeLessThanOrEqual(840 / 2);
@@ -359,7 +359,7 @@ test.describe('source editing', () => {
     await testInfo.attach('inspector-open', {path: testInfo.outputPath('inspector-open.png'), contentType: 'image/png'});
     const initialActions = await actions.boundingBox();
     await field.focus();
-    await field.fill('Mo-Fr 09:00-17:00');
+    await field.fill('https://example.me');
     expect(await actions.boundingBox()).toEqual(initialActions);
     const sourceDetails = page.locator('#selection-details summary');
     await sourceDetails.scrollIntoViewIfNeeded();
@@ -401,7 +401,7 @@ test.describe('source editing', () => {
       window.visualViewport.dispatchEvent(new Event('resize'));
     });
     const {changeset} = await exportChangeset(page, testInfo);
-    expect(changeset.operations[0].after.properties.opening_hours).toBe('Mo-Fr 09:00-17:00');
+    expect(changeset.operations[0].after.properties.website).toBe('https://example.me');
   });
 
   test('a wrapped validation message preserves the active field and actions with a short keyboard', {tag: '@phone'}, async ({page}) => {
@@ -409,7 +409,7 @@ test.describe('source editing', () => {
     await selectPlace(page);
     await page.locator('[name="category"]').selectOption('food');
     await page.locator('[name="visibilityLevel"]').selectOption('1');
-    const field = page.locator('[name="opening_hours"]');
+    const field = page.locator('[name="website"]');
     await field.focus();
     await page.evaluate(() => {
       const viewport = window.visualViewport;
