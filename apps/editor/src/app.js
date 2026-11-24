@@ -23,6 +23,7 @@ import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layer-
 import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layer-behaviors.js';
 import {buildingBehaviors} from './layer-buildings.js';
 import {buildingAt, placeBehaviors} from './layer-places.js';
+import {roadBehaviors} from './layer-roads.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
 import {hideModeBar, showModeBar} from './mode-bar.js';
@@ -45,6 +46,7 @@ import {
 registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);
 registerBehaviors(placeBehaviors);
+registerBehaviors(roadBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
 const basemapLayers = {

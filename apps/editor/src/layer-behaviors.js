@@ -14,10 +14,13 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, edit, context) where a drag must stop
 //   measures(feature, before)     lines of facts shown under the form
+//   controls(edit)                controls that replace single fields, {name: value => element}
+//   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
 //   suggestions(feature, context) usual values of free fields, {name: [value]}
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
+// companionEdits and problem get {filename, key, feature, before, extras}.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
 // select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
 const behaviors = new Map();
@@ -43,6 +46,8 @@ const defaultBehavior = filename => ({
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
   suggestions: () => ({}),
+  controls: () => ({}),
+  vertexTools: () => [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
   dragTarget: () => null
@@ -65,7 +70,10 @@ const drawChoices = {
     }
   ],
   places: [{label: 'Add place', filename: 'places.geojson', shape: 'Point', properties: {}}],
-  roads: [{label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}}],
+  roads: [
+    {label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}},
+    {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}}
+  ],
   green: [{label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}}],
   water: [
     {label: 'Draw water area', filename: 'water.geojson', shape: 'Polygon', properties: {}},

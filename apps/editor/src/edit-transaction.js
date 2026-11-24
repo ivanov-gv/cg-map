@@ -23,7 +23,8 @@ export const editTools = {
 const drawingTools = new Set([editTools.drawLine, editTools.drawPolygon, editTools.cutHole]);
 const minimumPointsByTool = {[editTools.drawLine]: 2, [editTools.drawPolygon]: 3, [editTools.cutHole]: 3};
 
-// drawnPoints are the points of the shape or hole being drawn, in order and open.
+// drawnPoints are the points of the shape or hole being drawn, in order and open. extras are choices a layer records
+// beside the feature, such as the turns at a junction.
 const newTransaction = (key, feature, tool, isNew) => ({
   key,
   feature,
@@ -32,6 +33,7 @@ const newTransaction = (key, feature, tool, isNew) => ({
   selectedHandle: null,
   gesture: null,
   drawnPoints: [],
+  extras: {},
   hasTypedDetails: false,
   hasUnappliedEdit: isNew
 });

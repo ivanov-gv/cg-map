@@ -1085,3 +1085,18 @@ fieldset {
   font-family: ui-monospace, monospace;
   font-size: 13px;
 }
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin: 0;
+  color: var(--green);
+  font-size: 13px;
+}
+.choice-row input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+}

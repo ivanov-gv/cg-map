@@ -112,7 +112,7 @@ export class InspectorEditing {
       id: 'mode-add',
       label: `Add ${pointWord}`,
       isPrimary: true,
-      run: () => this.#addDrawnPoint(this.#context.map.getCenter().toArray())
+      run: () => this.#addPointUnderCross()
     };
     return [
       {
@@ -152,7 +152,8 @@ export class InspectorEditing {
       isDisabled: !this.#transaction.selectedHandle,
       run: () => this.#removeSelectedVertex()
     };
-    return [remove, done];
+    const {feature, selectedHandle} = this.#transaction;
+    return [remove, ...this.#behavior.vertexTools(feature, selectedHandle, this.#editContext()), done];
   }
 
   #renderModeBar() {
@@ -210,6 +211,9 @@ export class InspectorEditing {
       isNew: this.#transaction.isNew,
       context: this.#context.behaviorContext(),
       setProperties: properties => this.#setProperties(properties),
+      extras: this.#transaction.extras,
+      setExtras: extras => this.#setExtras(extras),
+      setFeature: feature => this.#setFeature(feature),
       setGeometry: geometry => this.#update(withGeometry(this.#transaction, geometry)),
       startTool: tool => this.#startTool(tool),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
@@ -230,13 +234,28 @@ export class InspectorEditing {
     this.#update(this.#transaction);
   }
 
+  #setExtras(extras) {
+    const {feature} = this.#transaction;
+    const changed = {...withTypedDetails(this.#transaction), extras: {...this.#transaction.extras, ...extras}};
+    this.#transaction = {...changed, feature: {...feature, properties: this.#currentFeature().properties}};
+    this.#renderForm();
+    this.#update(this.#transaction);
+  }
+
+  // Replaces the pending feature, its typed details included.
+  #setFeature(feature) {
+    this.#transaction = {...withTypedDetails(this.#transaction), feature};
+    this.#renderForm();
+    this.#update(this.#transaction);
+  }
+
   #renderForm() {
     const {levels} = this.#context;
     const {feature} = this.#transaction;
     const editContext = this.#editContext();
     renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
       sections: this.#behavior.sections(feature, editContext),
-      controls: formControls(editContext),
+      controls: {...formControls(editContext), ...this.#behavior.controls(editContext)},
       suggestions: this.#behavior.suggestions(feature, editContext.context)
     });
     const extras = elementById('inspector-extras');
@@ -336,7 +355,8 @@ export class InspectorEditing {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
     const {feature, problem} = this.#validatedFeature();
     if (problem) return this.#refuse(problem);
-    const edit = {filename: this.#filename, key: this.#transaction.key, feature, before: this.#workingBefore()};
+    const {key, extras} = this.#transaction;
+    const edit = {filename: this.#filename, key, feature, extras, before: this.#workingBefore()};
     const behaviorContext = this.#context.behaviorContext();
     const companions = this.#behavior.companionEdits(edit, behaviorContext);
     const edits = [{filename: this.#filename, key: edit.key, after: feature}, ...companions, ...extraEdits];
@@ -423,6 +443,12 @@ export class InspectorEditing {
     this.#update(afterDrawnPoint(this.#transaction, coordinate));
   }
 
+  #addPointUnderCross() {
+    const {map} = this.#context;
+    const lngLat = map.getCenter();
+    this.#addDrawnPoint(this.#snappedPoint({lngLat, point: map.project(lngLat)}) ?? lngLat.toArray());
+  }
+
   #placeUnderCross() {
     const {map} = this.#context;
     const lngLat = map.getCenter();
@@ -476,7 +502,7 @@ export class InspectorEditing {
       this.#renderModeBar();
     };
     this.#context.map.on('mousemove', event => {
-      this.#pointer = this.#drawnCoordinate(event);
+      this.#pointer = this.#angledCoordinate(event);
       renderWhileDrawing();
     });
     this.#context.map.on('move', () => {
@@ -541,11 +567,18 @@ export class InspectorEditing {
 
   // Shift keeps right angles while drawing a building or any other shape. A layer can join a tap to what is there.
   #drawnCoordinate(event) {
+    return this.#isAngleKept(event) ? this.#angledCoordinate(event) : (this.#snappedPoint(event) ?? event.lngLat.toArray());
+  }
+
+  #isAngleKept(event) {
+    return Boolean(event.originalEvent?.shiftKey) && this.#transaction?.tool !== editTools.drawLine;
+  }
+
+  // Where the pointer is, kept at a right angle while Shift is held.
+  #angledCoordinate(event) {
     const coordinate = event.lngLat.toArray();
-    if (!isDrawing(this.#transaction)) return coordinate;
-    const {drawnPoints, tool} = this.#transaction;
-    if (event.originalEvent?.shiftKey && tool !== editTools.drawLine) return rightAngledCorner(drawnPoints, coordinate);
-    return this.#snappedPoint(event) ?? coordinate;
+    const isAngled = isDrawing(this.#transaction) && this.#isAngleKept(event);
+    return isAngled ? rightAngledCorner(this.#transaction.drawnPoints, coordinate) : coordinate;
   }
 
   tap(event) {
