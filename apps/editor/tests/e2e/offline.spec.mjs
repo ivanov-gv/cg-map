@@ -4,6 +4,7 @@ import fileSystem from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {browseStatus, drawChoice, layerButton} from './workspace.mjs';
 
 // Each test runs against its own server, so that it can publish a new release or disappear altogether.
 const artifactDirectory = fileURLToPath(new URL('../../../../dist/editor/', import.meta.url));
@@ -110,7 +111,7 @@ function publishNewMap(server, servedArchiveBytes = null) {
 const editorCaches = page => page.evaluate(() => caches.keys());
 const isShellCacheOf = (name, release) => name === `editor-shell-${release}`;
 
-const expectBrowse = page => expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+const expectBrowse = page => expect(page.locator('#status')).toHaveText(browseStatus);
 
 const openUntilOffline = async (page, server) => {
   await page.goto(server.url);
@@ -180,18 +181,15 @@ test.describe('offline-first install', () => {
     await expect.poll(() => renderedBasemapFeatures(page)).toBeGreaterThan(0);
 
     await openPanel(page, 'Layers');
-    await page.locator('[data-mode="places.geojson"]').click();
-    await expect(page.locator('#status')).toContainText('source features · editable');
+    await layerButton(page, 'places.geojson').click();
+    await expect(page.locator('#status')).toContainText('editable');
     await openPanel(page, 'Tools');
-    await page.locator('#add-feature').click();
-    await page.locator('#close-inspector').click();
-    await page.locator('#map').scrollIntoViewIfNeeded();
+    await drawChoice(page).click();
     const center = await page.evaluate(() => {
       const bounds = window.editorDebug.map.getCanvas().getBoundingClientRect();
       return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
     });
     await page.mouse.click(center.x, center.y);
-    await page.locator('#open-inspector').click();
     await page.locator('[name="name"]').fill('Added offline');
     await page.locator('[name="category"]').selectOption('food');
     await page.locator('[name="kind"]').fill('cafe');
@@ -248,12 +246,12 @@ test.describe('offline-first install', () => {
     await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     await openPanel(page, 'Layers');
-    await page.locator('[data-mode="places.geojson"]').click();
+    await layerButton(page, 'places.geojson').click();
     await expect(page.locator('#status')).toContainText('editable');
     await openPanel(page, 'Tools');
-    await page.locator('#add-feature').click();
+    await drawChoice(page).click();
     await expect(page.locator('#update-app')).toBeDisabled();
-    await page.locator('#cancel-edit').click();
+    await page.locator('#mode-cancel').click();
     await expect(page.locator('#update-app')).toBeEnabled();
   });
 
@@ -386,10 +384,11 @@ test.describe('offline-first install', () => {
       await expectBrowse(editorWindow);
     }
     await openPanel(busyWindow, 'Layers');
-    await busyWindow.locator('[data-mode="places.geojson"]').click();
+    await layerButton(busyWindow, 'places.geojson').click();
     await expect(busyWindow.locator('#status')).toContainText('editable');
     await openPanel(busyWindow, 'Tools');
-    await busyWindow.locator('#add-feature').click();
+    await drawChoice(busyWindow).click();
+    await busyWindow.locator('.maplibregl-canvas').click();
     await busyWindow.locator('[name="name"]').fill('Still typing');
 
     publishNewRelease(server, 'second-release');
@@ -448,21 +447,18 @@ test.describe('offline-first install', () => {
     await openPanel(page, 'Layers');
     await expect(page.locator('#update-app')).toBeVisible({timeout: 60000});
     await openPanel(page, 'Layers');
-    await page.locator('[data-mode="places.geojson"]').click();
+    await layerButton(page, 'places.geojson').click();
     await expect(page.locator('#status')).toContainText('editable');
     await page.evaluate(() => {
       window.isStorageFull = true;
     });
     await openPanel(page, 'Tools');
-    await page.locator('#add-feature').click();
-    await page.locator('#close-inspector').click();
-    await page.locator('#map').scrollIntoViewIfNeeded();
+    await drawChoice(page).click();
     const center = await page.evaluate(() => {
       const bounds = window.editorDebug.map.getCanvas().getBoundingClientRect();
       return {x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2};
     });
     await page.mouse.click(center.x, center.y);
-    await page.locator('#open-inspector').click();
     await page.locator('[name="name"]').fill('Only in memory');
     await page.locator('[name="category"]').selectOption('food');
     await page.locator('[name="kind"]').fill('cafe');

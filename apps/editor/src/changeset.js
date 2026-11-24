@@ -1,3 +1,4 @@
+import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
 
@@ -25,7 +26,9 @@ export async function buildChangeset(session, sources, {id, createdAt, author, r
       operations.push({filename, operation, reference: exported, beforeFingerprint, before, after});
     }
   }
-  return {version: changesetVersion, id, createdAt, author, reason, bases, operations};
+  const fieldItems = session.fieldItems();
+  const changeset = {version: changesetVersion, id, createdAt, author, reason, bases, operations};
+  return fieldItems.length > 0 ? {...changeset, fieldItems} : changeset;
 }
 
 // A plain GeoJSON view of one changed file for GIS inspection. It never replaces a source file.
@@ -73,8 +76,10 @@ async function checkOperation(operation, key, sources, rules, levels) {
 export async function importChangeset(changeset, session, sources, rules, levels) {
   requireImportable(readableVersions.includes(changeset?.version), 'unsupported changeset version');
   const {operations, bases} = changeset;
-  requireImportable(Array.isArray(operations) && operations.length > 0, 'no operations');
-  requireImportable(session.changedFiles().length === 0, 'export or discard the current changes first');
+  const fieldItems = changeset.fieldItems ?? [];
+  const hasContent = Array.isArray(operations) && operations.length + fieldItems.length > 0;
+  requireImportable(hasContent, 'no operations');
+  requireImportable(!session.hasChanges(), 'export or discard the current changes first');
   const boundFiles = new Set(
     operations
       .filter(({reference}) => changeset.version === 1 || reference?.featureIndex !== undefined)
@@ -96,5 +101,10 @@ export async function importChangeset(changeset, session, sources, rules, levels
   for (const [index, operation] of operations.entries()) {
     await checkOperation(operation, keys[index], sources, rules, levels);
   }
+  for (const item of fieldItems) {
+    const problem = fieldItemProblem(item, [...sources.keys()]);
+    requireImportable(!problem, problem);
+  }
   operations.forEach(({filename, after}, index) => session.recordEdit(filename, keys[index], after));
+  fieldItems.forEach(item => session.saveFieldItem(item));
 }

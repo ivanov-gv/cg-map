@@ -80,7 +80,7 @@ button:disabled {
 }
 #browse,
 #satellite,
-#preview {
+#open-objects {
   width: 100%;
   margin: 8px 0;
 }
@@ -171,7 +171,6 @@ select {
   display: none;
 }
 #update-app,
-#add-feature,
 #export-changeset,
 #discard-changes,
 #delete-feature {
@@ -446,7 +445,8 @@ select {
   scroll-padding-block: 0;
 }
 /* Layer switch dialog centers over the map and blocks all interactions. */
-#layer-switch-dialog {
+#layer-switch-dialog,
+#delete-dialog {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -460,18 +460,22 @@ select {
   border-radius: 10px;
   box-shadow: 0 8px 30px #0006;
 }
-#layer-switch-dialog::backdrop {
+#layer-switch-dialog::backdrop,
+#delete-dialog::backdrop {
   background: #0006;
 }
-#layer-switch-dialog h3 {
+#layer-switch-dialog h3,
+#delete-dialog h3 {
   margin: 0 0 8px;
   font-size: 14px;
 }
-#layer-switch-dialog p {
+#layer-switch-dialog p,
+#delete-dialog p {
   margin: 0 0 14px;
   font-size: 13px;
 }
-#layer-switch-dialog .button-row {
+#layer-switch-dialog .button-row,
+#delete-dialog .button-row {
   margin-bottom: 0;
 }
 
@@ -725,4 +729,286 @@ select {
 #objects-list button {
   width: 100%;
   margin-bottom: 6px;
+}
+
+/* Workspace of the Penpot page "Editor": a floating toolbar, the current layer and one inspector. */
+.workspace-toolbar {
+  gap: 0;
+  padding: 4px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0002;
+}
+.workspace-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  border: 0;
+  font-weight: 600;
+}
+.workspace-toolbar button[aria-expanded='true'] {
+  background: #e6f0e8;
+}
+.badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #d4891a;
+  color: white;
+  font-size: 12px;
+  text-align: center;
+}
+#current-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 12px #0002;
+}
+.layer-mark {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #c9c6bc;
+  border-radius: 4px;
+}
+.has-layer .layer-mark {
+  border-color: #2e8b57;
+}
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.close-panel {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  font-size: 22px;
+  text-align: center;
+}
+#layer-choices h3,
+#layers-panel > h3,
+legend,
+.kind,
+.section-title {
+  margin: 14px 0 6px;
+  padding: 0;
+  color: #6f7d55;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.kind {
+  margin: 0;
+}
+.layer-choice {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: 6px;
+  background: #f6f7f1;
+  border: 1px solid transparent;
+}
+.layer-choice span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.layer-choice[aria-pressed='true'] {
+  background: #e6f0e8;
+  border-color: #2e8b57;
+  color: var(--green);
+}
+.stack button {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.primary {
+  background: var(--green);
+  color: white;
+}
+.danger {
+  color: #a72c25;
+}
+.button-row .primary,
+.button-row .danger,
+#edit-actions button,
+#mode-buttons button,
+.tool-row button {
+  text-align: center;
+}
+.inspector-name {
+  flex: 1;
+  min-width: 0;
+}
+.inspector-heading h2 {
+  font-size: 18px;
+}
+fieldset {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+.field-grid label:only-child,
+.field-grid label:has(input[name='name']),
+.field-grid label:has(input[name='opening_hours']),
+.field-grid label:has(input[name='website']) {
+  grid-column: 1 / -1;
+}
+.field-grid input[type='checkbox'] {
+  width: 22px;
+  min-height: 22px;
+}
+.tool-group {
+  display: contents;
+}
+#mode-bar {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  left: 50%;
+  width: min(440px, 45vw);
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px #0003;
+}
+#mode-bar h2 {
+  margin: 0;
+  font-size: 16px;
+}
+#mode-bar .button-row {
+  margin: 8px 0 0;
+}
+#map-cross {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #c8372d;
+  border-radius: 50%;
+  pointer-events: none;
+}
+#map-cross::before,
+#map-cross::after {
+  content: '';
+  position: absolute;
+  background: #c8372d;
+}
+#map-cross::before {
+  top: 50%;
+  left: -8px;
+  right: -8px;
+  height: 2px;
+  margin-top: -1px;
+}
+#map-cross::after {
+  left: 50%;
+  top: -8px;
+  bottom: -8px;
+  width: 2px;
+  margin-left: -1px;
+}
+#toast {
+  position: absolute;
+  z-index: 4;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 16px;
+  transform: translateX(-50%);
+  background: var(--green);
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px #0003;
+}
+#toast button {
+  background: transparent;
+  color: white;
+  border: 0;
+  font-weight: 700;
+}
+#delete-options label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  color: var(--green);
+  font-size: 13px;
+}
+#delete-options input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .workspace-toolbar {
+    padding: 2px;
+  }
+  .workspace-toolbar button {
+    justify-content: center;
+  }
+  #mode-bar {
+    top: auto;
+    bottom: calc(64px + env(safe-area-inset-bottom) + var(--viewport-bottom, 0px));
+    left: 8px;
+    right: 8px;
+    width: auto;
+    transform: none;
+  }
+  #toast {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: max-content;
+    max-width: calc(100vw - 16px);
+  }
+  #open-inspector {
+    position: absolute;
+    top: 64px;
+    right: 8px;
+    max-width: 60%;
+  }
+}
+
+.field-items {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.field-items li {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.field-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f6f7f1;
+}
+.field-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.field-item-deletion strong {
+  color: #c8372d;
 }

@@ -1,12 +1,15 @@
 import {buildChangeset, importChangeset, materializedLayer} from './changeset.js';
 import {labelJoinProblems} from './cross-file-checks.js';
 import {createElementWithText, downloadJSON, elementById} from './dom.js';
+import {fieldItemLabel} from './field-items.js';
+import {objectName} from './object-names.js';
 import {diffProperties, formatValue, geometryChanged, summarizeGeometryChange} from './feature-diff.js';
 
 // Lists pending changes and handles what crosses the browser's boundary: export, import and discarding.
 // The panel renders both the wide (two-pane) and narrow (stacked) layouts; CSS media queries control
 // which one is visible. This avoids re-rendering on resize.
-// context: {session, sources, rules, levels, hasOpenEdit(), onChanged()}
+// context: {session, sources, rules, levels, hasOpenEdit(), onChanged(), onFieldItemChosen(item),
+// onFieldItemDismissed(item)}
 export class ReviewPanel {
   #context;
   #exportButton;
@@ -31,7 +34,8 @@ export class ReviewPanel {
     const {session, hasOpenEdit} = this.#context;
     const changedFiles = session.changedFiles();
     const problems = labelJoinProblems(session);
-    elementById('review-empty').hidden = changedFiles.length > 0;
+    elementById('review-empty').hidden = session.hasChanges();
+    this.#renderFieldItems();
     elementById('review-files').replaceChildren(...changedFiles.map(filename =>
       this.#fileSection(session, filename)
     ));
@@ -39,9 +43,34 @@ export class ReviewPanel {
       ...problems.map(({filename, message}) => createElementWithText('li', `${filename}: ${message}`))
     );
     const isBlocked = hasOpenEdit();
-    elementById('export-changeset').disabled = isBlocked || changedFiles.length === 0 || problems.length > 0;
-    elementById('discard-changes').disabled = isBlocked || changedFiles.length === 0;
+    elementById('export-changeset').disabled = isBlocked || !session.hasChanges() || problems.length > 0;
+    elementById('discard-changes').disabled = isBlocked || !session.hasChanges();
     elementById('import-changeset').disabled = isBlocked;
+  }
+
+  // Rough work from the field waits here for the desk, above what was applied.
+  #renderFieldItems() {
+    const {session, onFieldItemChosen, onFieldItemDismissed, hasOpenEdit} = this.#context;
+    const items = session.fieldItems();
+    elementById('field-items-heading').hidden = items.length === 0;
+    elementById('field-items').replaceChildren(
+      ...items.map(item => {
+        const row = document.createElement('li');
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = `field-item field-item-${item.type}`;
+        const {title, detail} = fieldItemLabel(item);
+        open.append(createElementWithText('strong', title), createElementWithText('span', detail));
+        open.disabled = hasOpenEdit();
+        open.onclick = () => onFieldItemChosen(item);
+        const dismiss = createElementWithText('button', 'Dismiss');
+        dismiss.type = 'button';
+        dismiss.disabled = hasOpenEdit();
+        dismiss.onclick = () => onFieldItemDismissed(item);
+        row.append(open, dismiss);
+        return row;
+      })
+    );
   }
 
   // Build the changeset and trigger the download. Returns an error message on failure.
@@ -61,7 +90,8 @@ export class ReviewPanel {
     try {
       const changeset = JSON.parse(await file.text());
       await importChangeset(changeset, session, sources, rules, levels);
-      this.showMessage(`Imported ${changeset.operations.length} changes from ${file.name}.`);
+      const changeCount = changeset.operations.length + (changeset.fieldItems?.length ?? 0);
+      this.showMessage(`Imported ${changeCount} changes from ${file.name}.`);
       onChanged();
     } catch (error) {
       this.showMessage(error.message);
@@ -87,7 +117,7 @@ export class ReviewPanel {
         this.#errorElement.hidden = false;
         return;
       }
-      const changeCount = result.operations.length;
+      const changeCount = result.operations.length + (result.fieldItems?.length ?? 0);
       this.#closeDialogAndFocusOpener();
       this.showMessage(
         `Exported ${changeCount} changes. Apply them with make -C data apply-changeset CHANGESET=<absolute path>.`
@@ -181,7 +211,7 @@ export class ReviewPanel {
   #fileSection(session, filename) {
     const section = document.createElement('section');
     section.dataset.changedFile = filename;
-    const changes = session.changes(filename);
+    const changes = session.changes(filename).map(change => ({...change, filename}));
     const changeWord = changes.length === 1 ? 'change' : 'changes';
     section.append(createElementWithText('h3', `${filename} · ${changes.length} ${changeWord}`));
 
@@ -281,9 +311,9 @@ export class ReviewPanel {
     detailPane.replaceChildren(this.#changeDetailView(changes[index]));
   }
 
-  #changeTarget({operation, reference, before, after}) {
-    const {name, 'addr:housenumber': houseNumber} = (after ?? before).properties;
-    const target = name || houseNumber || reference.localId || `feature ${reference.featureIndex}`;
+  #changeTarget({filename, operation, reference, before, after}) {
+    const name = objectName(after ?? before, filename);
+    const target = name === 'Unnamed' ? (reference.localId ?? `feature ${reference.featureIndex}`) : name;
     return `${operation} · ${target}`;
   }
 

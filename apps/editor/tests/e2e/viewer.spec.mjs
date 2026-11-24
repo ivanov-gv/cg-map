@@ -1,13 +1,17 @@
 import {test, expect} from '@playwright/test';
+import {browseStatus, drawChoice, layerButton, layerNameOf, openObjects, openTools} from './workspace.mjs';
 
 // Asserts source inspection against this app's own built artifact. Editing has its own spec.
 test.describe('source viewer', () => {
+  // Shapes that only frame the map, such as neighbour countries, are drawn and never counted as objects.
+  const framingCounts = {'land.geojson': 7, 'water.geojson': 1};
   const modeStatus = (manifest, filename) => {
     const {featureCount} = manifest.layers.find(layer => layer.filename === filename);
+    const objectCount = featureCount - (framingCounts[filename] ?? 0);
     const access = ['context-countries.geojson', 'transport-stops.geojson'].includes(filename)
       ? 'read-only'
       : 'editable';
-    return `${filename} · ${featureCount} source features · ${access}`;
+    return `${layerNameOf(filename)} · ${objectCount} objects · ${access}`;
   };
 
   const fetchSource = async (page, filename) => {
@@ -61,22 +65,22 @@ test.describe('source viewer', () => {
       )
       .toBeGreaterThan(0);
 
-  test('real source viewer has one mode per file and selects full source metadata independently', {tag: '@phone'}, async ({page}) => {
+  test('real source viewer has every layer of its bundle and selects full source metadata', {tag: '@phone'}, async ({page}) => {
     const scriptErrors = [];
     page.on('pageerror', error => scriptErrors.push(error.message));
     await page.goto('./');
-    await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
-    await expect(page.locator('[data-mode]')).toHaveCount(8);
+    await expect(page.locator('#status')).toHaveText(browseStatus);
+    await expect(page.locator('[data-layer]')).toHaveCount(8);
     await expect(page.locator('[data-source]')).toHaveCount(8);
     const manifest = await fetchSource(page, 'manifest.json');
     for (const layer of manifest.layers) {
       await page.getByRole('button', {name: 'Layers', exact: true}).click();
-      await page.locator(`[data-mode="${layer.filename}"]`).click();
+      await layerButton(page, layer.filename).click();
       await expect(page.locator('#status')).toHaveText(modeStatus(manifest, layer.filename));
-      await expect(page.locator('[data-mode][aria-pressed="true"]')).toHaveCount(1);
+      await expect(page.locator('[data-layer][aria-pressed="true"]')).toHaveCount(1);
     }
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="places.geojson"]').click();
+    await layerButton(page, 'places.geojson').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'places.geojson'));
     const places = await fetchSource(page, 'places.geojson');
     const place = places.features.find(
@@ -111,7 +115,7 @@ test.describe('source viewer', () => {
       .toBeGreaterThan(0);
     await expect(page.locator('.inspector')).toBeVisible();
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="transport-stops.geojson"]').click();
+    await layerButton(page, 'transport-stops.geojson').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'transport-stops.geojson'));
     const stops = await fetchSource(page, 'transport-stops.geojson');
     const stop = stops.features.find(feature => isIsolatedPoint(feature, stops.features));
@@ -119,25 +123,25 @@ test.describe('source viewer', () => {
     await clickMapCenter(page, 'editor-source-point');
     await expect(page.locator('#source-id')).toHaveText(`Source feature ID: ${stop.id}`);
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="building-labels.geojson"]').click();
+    await layerButton(page, 'building-labels.geojson').click();
     await expect(page.locator('#properties')).toBeEmpty();
     await expect(page.locator('#source-id')).toBeEmpty();
-    await expect(page.locator('#selection-source')).toHaveText('Inspecting building-labels.geojson');
+    await expect(page.locator('.inspector')).toBeHidden();
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="buildings.geojson"]').click();
-    await expect(page.locator('[data-mode="building-labels.geojson"]')).toHaveAttribute('aria-pressed', 'false');
+    await layerButton(page, 'buildings.geojson').click();
+    await expect(layerButton(page, 'building-labels.geojson')).toHaveAttribute('aria-pressed', 'false');
     const publishedBuildingsFilter = () => page.evaluate(() => window.editorDebug.map.getFilter('buildings') ?? null);
     expect(await publishedBuildingsFilter()).not.toBeNull();
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('#browse').click();
     expect(await publishedBuildingsFilter()).toBeNull();
-    await expect(page.locator('[data-mode][aria-pressed="true"]')).toHaveCount(0);
-    await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+    await expect(page.locator('[data-layer][aria-pressed="true"]')).toHaveCount(0);
+    await expect(page.locator('#status')).toHaveText(browseStatus);
     // Browse selects nothing and offers no feature tools. Editing.spec covers what happens with pending changes.
     await clickMapCenter(page, 'buildings');
     await expect(page.locator('#selection-title')).toHaveText('Select an object');
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-    await expect(page.locator('#add-feature')).toHaveAttribute('hidden', '');
+    await expect(drawChoice(page)).toHaveCount(0);
     await expect(page.locator('#undo')).toBeDisabled();
     await expect(page.locator('#redo')).toBeDisabled();
     await expect(page.locator('#error')).toBeHidden();
@@ -146,12 +150,12 @@ test.describe('source viewer', () => {
 
   test('source viewer selects polygons and lines from full source geometry, and toggles satellite', async ({page}) => {
     await page.goto('./');
-    await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+    await expect(page.locator('#status')).toHaveText(browseStatus);
     const manifest = await fetchSource(page, 'manifest.json');
     const closeZoom = 18;
 
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="buildings.geojson"]').click();
+    await layerButton(page, 'buildings.geojson').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'buildings.geojson'));
     const buildings = await fetchSource(page, 'buildings.geojson');
     // A four-corner footprint is taken to be convex, so the average of its corners lies inside it.
@@ -164,7 +168,7 @@ test.describe('source viewer', () => {
     await expectRenderedSelection(page, 'editor-source-selection-line');
 
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
-    await page.locator('[data-mode="roads.geojson"]').click();
+    await layerButton(page, 'roads.geojson').click();
     await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'roads.geojson'));
     const roads = await fetchSource(page, 'roads.geojson');
     const straightRoad = roads.features.find(feature => feature.geometry.coordinates.length === 2);
@@ -175,7 +179,7 @@ test.describe('source viewer', () => {
 
     const satelliteVisibility = () =>
       page.evaluate(() => window.editorDebug.map.getLayoutProperty('satellite-preview', 'visibility'));
-    await page.getByRole('button', {name: 'Tools', exact: true}).click();
+    await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await page.locator('#satellite').click();
     await expect(page.locator('#satellite')).toHaveAttribute('aria-pressed', 'true');
     expect(await satelliteVisibility()).toBe('visible');
@@ -191,7 +195,7 @@ test.describe('source viewer', () => {
     );
     await page.goto('./');
     await expect(page.locator('#error')).toContainText('Source integrity mismatch: buildings.geojson');
-    await expect(page.locator('[data-mode]')).toHaveCount(0);
+    await expect(page.locator('[data-layer]')).toHaveCount(0);
     await expect(page.locator('#browse')).toBeDisabled();
   });
 });
@@ -199,7 +203,7 @@ test.describe('source viewer', () => {
 test('workspace keeps the map and layer when its available space changes', {tag: '@phone'}, async ({page}) => {
   await page.setViewportSize({width: 360, height: 740});
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const attribution = page.locator('.maplibregl-ctrl-attrib');
   await expect(attribution).not.toHaveAttribute('open', '');
   await attribution.locator('summary').click();
@@ -228,15 +232,15 @@ test('workspace keeps the map and layer when its available space changes', {tag:
   expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(740);
 
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
-  await page.locator('[data-mode="places.geojson"]').click();
-  await expect(page.locator('#current-layer')).toHaveText('POIs');
-  await expect(page.locator('#status')).toContainText('source features');
+  await layerButton(page, 'places.geojson').click();
+  await expect(page.locator('#current-layer')).toContainText('Places & points');
+  await expect(page.locator('#status')).toContainText('objects');
   const initialView = await page.evaluate(() => ({
     center: window.editorDebug.map.getCenter().toArray(),
     zoom: window.editorDebug.map.getZoom()
   }));
   await page.setViewportSize({width: 900, height: 500});
-  await expect(page.locator('#current-layer')).toHaveText('POIs');
+  await expect(page.locator('#current-layer')).toContainText('Places & points');
   expect(await page.evaluate(() => ({
     center: window.editorDebug.map.getCenter().toArray(),
     zoom: window.editorDebug.map.getZoom()
@@ -249,8 +253,8 @@ test('workspace keeps the map and layer when its available space changes', {tag:
 
 async function chooseMode(page, filename) {
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
-  await page.locator(`[data-mode="${filename}"]`).click();
-  await expect(page.locator('#status')).toContainText('source features');
+  await layerButton(page, filename).click();
+  await expect(page.locator('#status')).toContainText('objects');
 }
 
 async function setView(page, center, zoom) {
@@ -259,10 +263,10 @@ async function setView(page, center, zoom) {
 }
 
 async function toggleGuides(page) {
-  await page.getByRole('button', {name: 'Tools', exact: true}).click();
+  await openTools(page);
   await page.locator('#edit-guides').click();
   await page.getByRole('button', {name: 'Tools', exact: true}).click();
-  await expect(page.locator('#status')).toContainText('source features');
+  await expect(page.locator('#status')).toContainText('objects');
 }
 
 async function clickCoordinate(page, coordinate) {
@@ -297,7 +301,7 @@ async function renderedPlaceIds(page) {
 
 test('hollow POI guides preserve public icons and labels, and hidden objects never take taps', {tag: '@phone'}, async ({page}, testInfo) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const feature = await isolatedPlace(page);
   const coordinate = feature.geometry.coordinates;
   await chooseMode(page, 'places.geojson');
@@ -343,7 +347,7 @@ test('hollow POI guides preserve public icons and labels, and hidden objects nev
 
 test('applied changes use amber guides, refresh normal rendering, and undo restores green', {tag: '@phone'}, async ({page}) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const feature = await isolatedPlace(page);
   await chooseMode(page, 'places.geojson');
   await setView(page, feature.geometry.coordinates, 17);
@@ -351,25 +355,23 @@ test('applied changes use amber guides, refresh normal rendering, and undo resto
   await page.locator('[name="name"]').fill('Amber guide test');
   await page.locator('[name="name:en"]').fill('Amber guide test');
   await page.locator('#apply-edit').click();
-  await expect(page.locator('#status')).toContainText('source features');
+  await expect(page.locator('#status')).toContainText('objects');
   const changedState = () => page.evaluate(id => {
     const {map} = window.editorDebug;
     return {
-      guide: map.querySourceFeatures('editor-source').find(hit => hit.properties.id === id)?.properties.isChanged,
+      guide: map.querySourceFeatures('editor-source').find(hit => hit.properties.id === id)?.properties.objectState,
       label: map.querySourceFeatures('places').find(hit => JSON.parse(hit.properties.activeIds).includes(id))?.properties.label
     };
   }, feature.properties.id);
-  await expect.poll(changedState).toEqual({guide: true, label: 'Amber guide test'});
-  expect(await page.evaluate(() => window.editorDebug.map.getPaintProperty('editor-source-point', 'circle-stroke-color')))
-    .toEqual(['case', ['get', 'isChanged'], '#a66a12', '#32634d']);
+  await expect.poll(changedState).toEqual({guide: 'applied', label: 'Amber guide test'});
   await page.getByRole('button', {name: 'Tools', exact: true}).click();
   await page.locator('#undo').click();
-  await expect.poll(changedState).toEqual({guide: false, label: feature.properties['name:en'] ?? feature.properties.name});
+  await expect.poll(changedState).toEqual({guide: 'editable', label: feature.properties['name:en'] ?? feature.properties.name});
 });
 
 test('every file keeps normal cartography and guide-off hits require rendered geometry', async ({page}, testInfo) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   for (const filename of ['buildings.geojson', 'roads.geojson', 'land.geojson', 'water.geojson', 'building-labels.geojson']) {
     const normal = await page.evaluate(filename => {
       const {map} = window.editorDebug;
@@ -406,7 +408,7 @@ test('every file keeps normal cartography and guide-off hits require rendered ge
 
 test('a resumed shared-location move installs its public zoom bands with guides off', {tag: '@phone'}, async ({page}) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const [sourceResponse, manifestResponse] = await Promise.all([
     page.request.get(new URL('sources/places.geojson', page.url()).href),
     page.request.get(new URL('sources/manifest.json', page.url()).href)
@@ -428,7 +430,7 @@ test('a resumed shared-location move installs its public zoom bands with guides 
   };
   await page.evaluate(draft => localStorage.setItem('kompas-editor-draft-v1', JSON.stringify(draft)), draft);
   await page.reload();
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   await chooseMode(page, 'places.geojson');
   await toggleGuides(page);
   await setView(page, destination.geometry.coordinates, 15);
@@ -442,15 +444,22 @@ test('a resumed shared-location move installs its public zoom bands with guides 
   await setView(page, destination.geometry.coordinates, 16);
   await expect.poll(() => renderedPlaceIds(page)).toContain(destination.properties.id);
   await expect.poll(() => renderedPlaceIds(page)).toContain(before.properties.id);
+  // The applied move stays on the map outside its layer, and taking it back removes what it needed.
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
   await page.locator('#browse').click();
-  await expect.poll(() => page.evaluate(() => Boolean(window.editorDebug.map.getLayer('place-icons-3-4')))).toBe(false);
+  const hasMovedBand = () => page.evaluate(() => Boolean(window.editorDebug.map.getLayer('place-icons-3-4')));
+  await expect.poll(hasMovedBand).toBe(true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Changes', exact: true}).click();
+  await page.locator('#review-secondary summary').click();
+  await page.locator('#discard-changes').click();
+  await expect.poll(hasMovedBand).toBe(false);
   await expect(page.locator('#error')).toBeHidden();
 });
 
 test('a corrupt saved visibility level reports an error while the active mode remains consistent', async ({page}) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const [sourceResponse, manifestResponse] = await Promise.all([
     page.request.get(new URL('sources/places.geojson', page.url()).href),
     page.request.get(new URL('sources/manifest.json', page.url()).href)
@@ -466,10 +475,10 @@ test('a corrupt saved visibility level reports an error while the active mode re
   }}};
   await page.evaluate(draft => localStorage.setItem('kompas-editor-draft-v1', JSON.stringify(draft)), draft);
   await page.reload();
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#error')).toContainText('invalid visibilityLevel 99');
   await chooseMode(page, 'places.geojson');
   await expect(page.locator('#error')).toContainText('invalid visibilityLevel 99');
-  await expect(page.locator('[data-mode="places.geojson"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(layerButton(page, 'places.geojson')).toHaveAttribute('aria-pressed', 'true');
   await setView(page, before.geometry.coordinates, 17);
   await clickCoordinate(page, before.geometry.coordinates);
   await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 0');
@@ -477,15 +486,14 @@ test('a corrupt saved visibility level reports an error while the active mode re
 
 test('Objects list follows guide visibility for below-threshold POIs', {tag: '@phone'}, async ({page}) => {
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   const feature = await isolatedPlace(page);
   await chooseMode(page, 'places.geojson');
   await setView(page, feature.geometry.coordinates, 15);
   await toggleGuides(page);
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await expect(page.locator('#objects-list')).not.toContainText(feature.properties.name);
-  await page.locator('#open-objects').click();
   await toggleGuides(page);
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await expect(page.locator('#objects-list')).toContainText(feature.properties.name);
 });

@@ -4,15 +4,18 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 [JavaScript](../../docs/engineering/javascript.md), [UI](../../docs/engineering/ui.md),
 [readability](../../docs/engineering/readability.md), and [contracts](../../packages/contracts/README.md).
 
-- One source GeoJSON file equals one editing mode, keyed by its filename. Footprints and labels are independent;
-  road/path kinds share roads.geojson. Every command and undo/redo may change only the active file.
+- Layers are the wiki's ten, listed with their files in src/editor-layers.js. One layer is active; a command or undo
+  step may change only that layer's files, as one step
+  ([ADR 0038](../../docs/decisions/0038-editor-layers-span-files.md)). What a layer does differently belongs in its
+  behavior (src/layer-behaviors.js), never in app.js.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
 - Dev builds on main use the repository data root and the one tools/contracts-root.mjs default for contracts. A future
   app production release pins every dependency (no production release exists yet).
 - tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
   `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins. Bump a pin only in its own change after a release; never
-  point tests at repository data/ or packages/contracts/. Test targets set both roots.
+  point tests at repository data/ or packages/contracts/. Test targets set both roots. Layers the pins lack are tested
+  on the fixture city (tests/e2e/fixture-city.mjs), the app's own files.
 - Edits stay in the browser until exported as a changeset; only data/tools/apply-changeset.mjs writes reviewed sources.
   What each file allows comes from the contracts selected for the run: repository HEAD in a dev build, the app pin in
   tests. Never use a copy here or another relative path into `packages/contracts`. Keep editor validation in step with

@@ -1,0 +1,368 @@
+{
+  "version": 2,
+  "localPlaceSource": "Local correction",
+  "layers": {
+    "places.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "name:sr-Latn": {"maxLength": 120},
+        "category": {"required": true, "enum": ["food", "sights", "shops", "stay", "essentials"]},
+        "kind": {"required": true, "maxLength": 64},
+        "standalone": {"type": "boolean"},
+        "visibilityLevel": {"required": true, "isLevel": true, "landmarkLevel": 1, "landmarkCategory": "sights"},
+        "addr:street": {"maxLength": 120},
+        "addr:housenumber": {"maxLength": 128},
+        "phone": {"maxLength": 64},
+        "website": {"maxLength": 512},
+        "email": {"maxLength": 128},
+        "opening_hours": {"maxLength": 256},
+        "wheelchair": {"maxLength": 64},
+        "level": {"maxLength": 16},
+        "cuisine": {"maxLength": 128},
+        "wikidata": {"maxLength": 64},
+        "wikipedia": {"maxLength": 128},
+        "buildingEntityId": {"maxLength": 64, "reference": "buildings.geojson"}
+      }
+    },
+    "building-entrances.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["entrance"]},
+        "entrance": {"required": true, "enum": ["main", "service", "garage", "emergency", "staircase", "home", "yes"]},
+        "buildingEntityId": {"required": true, "maxLength": 64, "reference": "buildings.geojson"},
+        "ref": {"maxLength": 128},
+        "level": {"maxLength": 64},
+        "wheelchair": {"enum": ["yes", "limited", "no"]},
+        "door": {"maxLength": 128},
+        "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]},
+        "addr:street": {"maxLength": 120},
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "nohousenumber": {"enum": ["yes"]}
+      }
+    },
+    "settlements.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["settlement"]},
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "rank": {"required": true, "enum": ["capital", "city", "town", "village"]},
+        "place": {"required": true, "maxLength": 32},
+        "municipality": {"required": true, "pattern": "^ME-[0-9]+$"},
+        "source": {"required": true, "maxLength": 64},
+        "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
+      }
+    },
+    "border-edges.geojson": {
+      "operations": ["modify"],
+      "geometries": ["LineString"],
+      "properties": {}
+    },
+    "municipalities.geojson": {
+      "operations": ["modify"],
+      "derivedGeometry": true,
+      "geometries": ["Polygon", "MultiPolygon"],
+      "properties": {
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120}
+      }
+    },
+    "buildings.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["building"]},
+        "building": {"required": true, "maxLength": 64},
+        "building:levels": {"maxLength": 32},
+        "building:material": {"maxLength": 128},
+        "start_date": {"maxLength": 32},
+        "roof:levels": {"maxLength": 32},
+        "energy_class": {"enum": ["A+", "A", "B", "C", "D", "E", "F", "G"]},
+        "name": {"maxLength": 120},
+        "addr:street": {"maxLength": 120},
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "nohousenumber": {"enum": ["yes"]}
+      }
+    },
+    "building-labels.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["building"]},
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "display_number": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "building_number": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "addr:street": {"maxLength": 120},
+        "buildingEntityId": {"maxLength": 64, "reference": "buildings.geojson", "requiredOnAdd": true, "addOnly": true}
+      },
+      "requiredAny": ["addr:housenumber", "building_number", "entrances"]
+    },
+    "roads.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["LineString"],
+      "properties": {
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "kind": {
+          "required": true,
+          "enum": [
+            "motorway",
+            "motorway_link",
+            "trunk",
+            "trunk_link",
+            "primary",
+            "primary_link",
+            "secondary",
+            "secondary_link",
+            "tertiary",
+            "unclassified",
+            "residential",
+            "living_street",
+            "service",
+            "pedestrian",
+            "footway",
+            "path",
+            "track",
+            "cycleway",
+            "steps"
+          ]
+        },
+        "bridge": {"maxLength": 64},
+        "tunnel": {"maxLength": 64},
+        "layer": {"maxLength": 16},
+        "oneway": {"maxLength": 16},
+        "access": {"maxLength": 64},
+        "motor_vehicle": {"maxLength": 64},
+        "foot": {"maxLength": 64},
+        "bicycle": {"maxLength": 64},
+        "maxspeed": {"maxLength": 32},
+        "surface": {"maxLength": 64},
+        "lit": {"maxLength": 16},
+        "sac_scale": {"maxLength": 64},
+        "smoothness": {"maxLength": 64},
+        "parking:left": {"maxLength": 128},
+        "parking:right": {"maxLength": 128},
+        "parking:both": {"maxLength": 128},
+        "junction": {"maxLength": 64},
+        "ref": {"maxLength": 120},
+        "pathClass": {"enum": ["main", "trail"]},
+        "startLevel": {"type": "integer", "minimum": -5, "maximum": 5},
+        "endLevel": {"type": "integer", "minimum": -5, "maximum": 5},
+        "startNode": {"type": "integer", "minimum": 1},
+        "endNode": {"type": "integer", "minimum": 1},
+        "parking:lane:left": {"maxLength": 128},
+        "parking:lane:right": {"maxLength": 128},
+        "parking:lane:both": {"maxLength": 128}
+      }
+    },
+    "road-nodes.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "kind": {
+          "required": true,
+          "enum": ["traffic_signals", "crossing", "stop", "give_way", "mini_roundabout", "turning_circle"]
+        },
+        "crossing": {"maxLength": 64},
+        "traffic_signals": {"maxLength": 64}
+      }
+    },
+    "land.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon", "MultiPolygon"],
+      "editableKinds": [
+        "park",
+        "garden",
+        "woods",
+        "meadow",
+        "grass",
+        "scrub",
+        "sports",
+        "cemetery",
+        "playground"
+      ],
+      "properties": {
+        "kind": {
+          "required": true,
+          "enum": ["park", "garden", "woods", "meadow", "grass", "scrub", "sports", "cemetery", "playground"]
+        },
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "destination": {"type": "boolean"}
+      },
+      "limitedKinds": {
+        "country": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en"]},
+        "context": {"operations": ["modify"], "geometry": false, "properties": ["name", "name:en"]}
+      }
+    },
+    "water.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon", "MultiPolygon", "LineString"],
+      "editableKinds": [
+        "lake",
+        "river",
+        "reservoir",
+        "pond",
+        "basin",
+        "water",
+        "stream",
+        "canal",
+        "ditch",
+        "drain",
+        "coastline"
+      ],
+      "properties": {
+        "kind": {
+          "required": true,
+          "enum": [
+            "lake",
+            "river",
+            "reservoir",
+            "pond",
+            "basin",
+            "water",
+            "stream",
+            "canal",
+            "ditch",
+            "drain",
+            "coastline"
+          ]
+        },
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "intermittent": {"maxLength": 32},
+        "tunnel": {"maxLength": 32}
+      },
+      "limitedKinds": {
+        "ocean": {"operations": ["modify"], "geometry": true, "properties": []}
+      }
+    },
+    "context-countries.geojson": {
+      "operations": ["modify"],
+      "geometries": [],
+      "properties": {
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120}
+      }
+    },
+    "transport-stops.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "stopId": {"required": true, "maxLength": 64, "addOnly": true},
+        "side": {"enum": ["left", "right"]},
+        "lines": {"type": "list", "maxLength": 64}
+      }
+    },
+    "contours.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["LineString"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["contour"]},
+        "elevation": {"type": "integer", "minimum": 0, "maximum": 2600, "multipleOf": 20, "required": true},
+        "index": {"required": true, "type": "boolean"}
+      }
+    },
+    "summits.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["summit"]},
+        "natural": {"required": true, "enum": ["peak", "hill"]},
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "ele": {"required": true, "type": "number", "minimum": -10, "maximum": 2600, "allowsNull": true},
+        "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
+      }
+    },
+    "slopes.geojson": {
+      "operations": ["modify"],
+      "derivedGeometry": true,
+      "geometries": ["Polygon"],
+      "properties": {}
+    },
+    "ridges.geojson": {
+      "operations": ["modify"],
+      "geometries": ["LineString"],
+      "properties": {
+        "name": {"maxLength": 120}
+      }
+    },
+    "canyon-rims.geojson": {
+      "operations": ["modify", "delete"],
+      "geometries": ["LineString"],
+      "properties": {}
+    },
+    "transit-routes.json": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["None"],
+      "properties": {
+        "number": {"maxLength": 32},
+        "name": {"maxLength": 120},
+        "network": {"required": true, "enum": ["bus", "intercity"]},
+        "colour": {"pattern": "^#[0-9a-fA-F]{6}$"},
+        "directions": {"required": true, "type": "directions"}
+      }
+    },
+    "turn-restrictions.json": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["None"],
+      "properties": {
+        "restriction": {
+          "required": true,
+          "enum": [
+            "no_left_turn",
+            "no_right_turn",
+            "no_u_turn",
+            "no_straight_on",
+            "only_left_turn",
+            "only_right_turn",
+            "only_u_turn",
+            "only_straight_on",
+            "no_entry",
+            "no_exit"
+          ]
+        },
+        "from": {"type": "integer", "minimum": 1, "required": true},
+        "to": {"type": "integer", "minimum": 1, "required": true},
+        "viaNodes": {"type": "integers"},
+        "viaWays": {"type": "integers"}
+      }
+    },
+    "protected-areas.geojson": {
+      "operations": ["modify", "delete"],
+      "geometries": ["Polygon", "MultiPolygon"],
+      "properties": {
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120}
+      }
+    }
+  }
+}

@@ -88,8 +88,16 @@ export const SHARED_WEB_SOURCES = [
   'attribution.js'
 ];
 
-// Only moving geometry or previewing all edits reaches these, which the offline and viewer tests never do.
-const EDITING_ONLY_SOURCES = ['drag-gestures.js', 'geometry-editing.js', 'handle-layer.js', 'edit-preview.js'];
+// Only moving, drawing or deleting reaches these, which the offline and viewer tests never do.
+const EDITING_ONLY_SOURCES = [
+  'drag-gestures.js',
+  'drawing-hints.js',
+  'geometry-editing.js',
+  'geometry-measures.js',
+  'handle-layer.js',
+  'mode-bar.js',
+  'deletion-dialog.js'
+];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
@@ -121,6 +129,11 @@ export const EDITOR_BROWSER_AREAS = {
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
+  layers: {
+    specs: 'tests/e2e/layers.spec.mjs',
+    specFiles: ['layers.spec.mjs'],
+    sources: ['drawing-hints.js', 'geometry-measures.js', 'mode-bar.js', 'deletion-dialog.js']
+  },
   selection: {
     specs: 'tests/e2e/selection.spec.mjs',
     specFiles: ['selection.spec.mjs'],
@@ -140,6 +153,19 @@ export const EDITOR_BROWSER_AREAS = {
 // and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
+  'draft-keeper.js',
+  'editor-layers.js',
+  'field-catalog.js',
+  'field-items.js',
+  'inspection-layers.js',
+  'keyboard-shortcuts.js',
+  'layer-behaviors.js',
+  'layers-panel.js',
+  'object-names.js',
+  'object-states.js',
+  'toast.js',
+  'working-map.js',
+  'workspace-panels.js',
   'feature-diff.js',
   'dom.js',
   'hashing.js',
@@ -149,7 +175,7 @@ export const SHARED_EDITOR_SOURCES = [
   'layer-rules.js',
   'source-overlay.js',
   'geometry-validation.js',
-  'active-file-commands.js',
+  'active-layer-commands.js',
   'changeset.js',
   'cross-file-checks.js',
   'edit-session.js',
