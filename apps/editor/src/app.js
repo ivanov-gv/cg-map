@@ -289,7 +289,7 @@ function refreshOverlay() {
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
   overlay.setDeletions(markedFeatures());
   overlay.setSketches(sketchFeatures());
-  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom);
+  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom, activeLayer?.pointGuideMinZoom);
   try {
     workingMap.show(workingFeatures(collection.features), new Set(shownFiles()));
   } catch (error) {
