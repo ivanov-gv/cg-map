@@ -425,6 +425,8 @@ test('field items travel in the changeset and in the draft, and never as operati
   const resumed = new EditSession(sources);
   resumed.restoreDraft(session.exportDraft());
   assert.deepEqual(resumed.fieldItems(), [mark]);
+  const shapeless = {...changeset, fieldItems: [{...mark, type: 'sketch', what: 'Park', geometry: null}]};
+  await assert.rejects(importChangeset(shapeless, new EditSession(sources), sources, rules, levels), /needs what it is and a shape/);
   const tampered = {...changeset, fieldItems: [{...mark, type: 'shopping'}]};
   await assert.rejects(importChangeset(tampered, new EditSession(sources), sources, rules, levels), /unsupported field item/);
 });

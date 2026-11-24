@@ -35,6 +35,7 @@ export class ReviewPanel {
     const changedFiles = session.changedFiles();
     const problems = labelJoinProblems(session);
     elementById('review-empty').hidden = session.hasChanges();
+    elementById('applied-heading').hidden = changedFiles.length === 0;
     this.#renderFieldItems();
     elementById('review-files').replaceChildren(...changedFiles.map(filename =>
       this.#fileSection(session, filename)

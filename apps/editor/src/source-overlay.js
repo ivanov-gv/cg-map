@@ -9,6 +9,7 @@ const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
 const pathSource = 'editor-path';
+const sketchSource = 'editor-sketches';
 const placesFile = 'places.geojson';
 // Guides become useful at neighbourhood scale. Below this, select the normal rendered cartography instead.
 export const guideMinZoom = 15;
@@ -95,13 +96,15 @@ function styleSelection(map) {
 }
 
 // Dashes cannot depend on a feature's data, so each dashed state has its own layer.
-function stateLayers() {
-  const dashedLine = (id, source, color, widthPixels, dashes) => ({
-    id,
-    type: 'line',
-    source,
-    paint: {'line-color': color, 'line-width': widthPixels, 'line-dasharray': dashes}
-  });
+const dashedLine = (id, source, color, widthPixels, dashes) => ({
+  id,
+  type: 'line',
+  source,
+  paint: {'line-color': color, 'line-width': widthPixels, 'line-dasharray': dashes}
+});
+
+// What has been done to objects: applied, missing something or marked for deletion.
+function objectStateLayers() {
   return [
     {
       ...dashedLine('editor-missing', sourceName, stateColors.applied, 1.5, [3, 2]),
@@ -139,7 +142,13 @@ function stateLayers() {
         'text-ignore-placement': true
       },
       paint: {'text-color': stateColors.highlighted, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5}
-    },
+    }
+  ];
+}
+
+// What belongs to the edit in progress, and what waits from the field.
+function workLayers() {
+  return [
     {
       id: 'editor-path',
       type: 'line',
@@ -152,6 +161,29 @@ function stateLayers() {
       type: 'line',
       source: targetSource,
       paint: {'line-color': stateColors.editable, 'line-width': 3}
+    },
+    {
+      id: 'editor-sketch-fill',
+      type: 'fill',
+      source: sketchSource,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: {'fill-color': stateColors.sketch, 'fill-opacity': 0.12}
+    },
+    {
+      ...dashedLine('editor-sketch-line', sketchSource, stateColors.sketch, 2, [3, 2]),
+      filter: ['all', ['!=', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'sketch']]
+    },
+    {
+      id: 'editor-sketch-pin',
+      type: 'circle',
+      source: sketchSource,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 9,
+        'circle-color': stateColors.sketch,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2
+      }
     },
     dashedLine('editor-ghost', ghostSource, stateColors.ghost, 1, [3, 3]),
     {
@@ -182,10 +214,10 @@ function drawingFeatures(points, nextPoint) {
 }
 
 function installStateLayers(map) {
-  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource, pathSource]) {
+  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource, pathSource, sketchSource]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
-  const layers = stateLayers();
+  const layers = [...objectStateLayers(), ...workLayers()];
   for (const layer of layers) map.addLayer(layer);
   return layers.map(({id}) => id);
 }
@@ -220,6 +252,7 @@ export function createSourceOverlay(map) {
     setTarget: feature => setData(targetSource, feature ? [feature] : []),
     setPath: (coordinates, colour = '#1b75bb') =>
       setData(pathSource, coordinates.length > 1 ? [lineFeature(coordinates, {colour})] : []),
+    setSketches: features => setData(sketchSource, features),
     setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,

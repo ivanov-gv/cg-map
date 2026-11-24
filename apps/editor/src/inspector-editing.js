@@ -43,7 +43,7 @@ const beginNewByShape = {
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, activeLayer(), isPhone(), behaviorContext(),
-// onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), showInspector(), hideInspector(),
+// onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), onNoteWanted(entry, name), isResolving(), showInspector(), hideInspector(),
 // releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
 // and returns whether the inspector held focus, so the status is focused only when it was needed.
 export class InspectorEditing {
@@ -277,7 +277,9 @@ export class InspectorEditing {
     elementById('editor').hidden = false;
     elementById('edit-actions').hidden = false;
     elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
-    elementById('apply-edit').textContent = this.#behavior.applyLabel(this.#editContext());
+    const applyLabel = this.#behavior.applyLabel(this.#editContext());
+    elementById('apply-edit').textContent = this.#context.isResolving() ? 'Apply and resolve' : applyLabel;
+    elementById('leave-note').hidden = this.#transaction.isNew;
     this.#renderToolButtons();
     this.#renderFacts();
     this.#renderGeometry();
@@ -365,6 +367,7 @@ export class InspectorEditing {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
     const {feature, problem} = this.#validatedFeature();
     if (problem) return this.#refuse(problem);
+    if (this.#behavior.record) return this.#recordElsewhere(feature);
     const {key, extras} = this.#transaction;
     const edit = {filename: this.#filename, key, feature, extras, before: this.#workingBefore()};
     const behaviorContext = this.#context.behaviorContext();
@@ -375,6 +378,15 @@ export class InspectorEditing {
     const {afterApply} = this.#behavior;
     this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null));
     afterApply({feature, filename: edit.filename, key: edit.key}, behaviorContext);
+    return {success: true};
+  }
+
+  // A sketch is no edit of a source, so no command records it.
+  #recordElsewhere(feature) {
+    const {record} = this.#behavior;
+    const {key} = this.#transaction;
+    const behaviorContext = this.#context.behaviorContext();
+    this.#finishEdit(() => record({key, feature}, behaviorContext));
     return {success: true};
   }
 
@@ -420,6 +432,12 @@ export class InspectorEditing {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
       if (optionEdits) this.#recordDeletion([ownEdit, ...edits, ...optionEdits], title);
     });
+  }
+
+  #leaveNote() {
+    const entry = {filename: this.#filename, key: this.#transaction.key, feature: this.#workingBefore()};
+    const title = this.#behavior.title(entry.feature, this.#context.behaviorContext());
+    this.#context.onNoteWanted(entry, title);
   }
 
   #removeSelectedVertex() {
@@ -534,6 +552,7 @@ export class InspectorEditing {
     onClick('tool-vertices', () => this.#startTool(editTools.vertices));
     onClick('cancel-edit', () => this.discardEdit());
     onClick('delete-feature', () => this.#deleteFeature());
+    onClick('leave-note', () => this.#leaveNote());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
     elementById('property-form').onsubmit = event => {
       event.preventDefault();

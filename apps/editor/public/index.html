@@ -81,6 +81,8 @@
       <section id="tools-panel" class="utility-panel" hidden>
         <header class="panel-heading"><h2>Tools</h2><button type="button" class="close-panel" data-close-panel aria-label="Close">×</button></header>
         <div id="draw-choices" class="stack"></div>
+        <h3 class="section-title">In the field</h3>
+        <div id="sketch-choices" class="stack"></div>
         <button id="open-objects" type="button" disabled>Objects in view</button>
         <button id="edit-guides" type="button" aria-pressed="true" hidden>Edit guides</button>
         <p id="edit-guides-hint" class="hint" hidden>Green marks what you can edit, amber what you applied. Guides appear when you zoom in.</p>
@@ -105,6 +107,7 @@
         </p>
         <h3 id="field-items-heading" class="section-title" hidden>From the field</h3>
         <ul id="field-items" class="field-items"></ul>
+        <h3 id="applied-heading" class="section-title" hidden>Applied here</h3>
         <div id="review-files"></div>
         <ul id="review-problems" role="alert"></ul>
         <div id="review-actions">
@@ -155,6 +158,14 @@
         <p id="error" role="alert" hidden></p>
       </div>
     </main>
+    <section id="resolve-bar" aria-label="From the field" hidden>
+      <div>
+        <strong id="resolve-title"></strong>
+        <p id="resolve-detail" class="hint"></p>
+      </div>
+      <div id="resolve-choices" class="button-row"></div>
+      <button id="resolve-close" type="button">Put back</button>
+    </section>
     <section id="mode-bar" aria-label="Mode" hidden>
       <h2 id="mode-title"></h2>
       <p id="mode-hint" class="hint" role="status"></p>
@@ -186,6 +197,7 @@
           <form id="property-form"></form>
           <div id="inspector-extras"></div>
           <div id="edit-facts" class="hint"></div>
+          <button id="leave-note" type="button" hidden>Leave a note for the desk</button>
           <button id="delete-feature" class="danger" hidden>Delete</button>
         </div>
         <details id="selection-details">
@@ -226,6 +238,14 @@
         <button id="hours-back" type="button">Back</button>
         <button id="hours-clear" type="button">Not recorded</button>
         <button id="hours-done" class="primary" type="button">Done</button>
+      </div>
+    </dialog>
+    <dialog id="note-dialog" aria-labelledby="note-title">
+      <h3 id="note-title"></h3>
+      <label>What should change <textarea id="note-text" rows="4" maxlength="2000"></textarea></label>
+      <div class="button-row">
+        <button id="note-cancel" type="button">Cancel</button>
+        <button id="note-save" class="primary" type="button">Save note</button>
       </div>
     </dialog>
     <dialog id="delete-dialog" aria-labelledby="delete-title">

@@ -20,6 +20,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   closesLines                   a drawn line ends on its first point when that is tapped
+//   record({key, feature}, context)  keeps the object somewhere else than in a source file
 //   isViewOnly(context)           the object can be read and not changed here
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // companionEdits and problem get {filename, key, feature, before, extras}.
