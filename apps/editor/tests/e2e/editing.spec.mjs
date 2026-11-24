@@ -566,7 +566,7 @@ test.describe('source editing', () => {
     await expect(details).not.toHaveAttribute('open', '');
     await placeAtCentre(page);
     await page.locator('#close-inspector').click();
-    await expect(page.locator('#open-inspector')).toHaveText('Selection: Add POI');
+    await expect(page.locator('#open-inspector')).toHaveText('Selection: Add place');
   });
 
   test('invalid details are refused and record nothing', async ({page}) => {
@@ -720,7 +720,7 @@ test.describe('source editing', () => {
     await expect(page.locator('[name="addr:housenumber"]')).toHaveValue('n/a');
   });
 
-  test('Add POI waits for typed details, and for a new feature in progress', async ({page}) => {
+  test('Add place waits for typed details, and for a new feature in progress', async ({page}) => {
     await openEditor(page);
     await selectPlace(page);
     await expect(drawChoice(page)).toBeEnabled();
@@ -1245,7 +1245,7 @@ test.describe('source editing', () => {
 
     await openPanel(page, 'Tools');
     await drawChoice(page).click();
-    await expect(drawChoice(page)).toHaveText('Add POI');
+    await expect(drawChoice(page)).toHaveText('Add place');
     await expect(page.locator('.inspector')).toBeHidden();
     await tapMapAt(page, await coordinateOffsetBy(page, feature.geometry.coordinates, 70, 40));
     await openInspector(page);

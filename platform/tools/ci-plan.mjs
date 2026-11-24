@@ -98,7 +98,11 @@ const EDITING_ONLY_SOURCES = [
   'mode-bar.js',
   'deletion-dialog.js',
   'interior-point.js',
-  'layer-buildings.js'
+  'layer-buildings.js',
+  'opening-hours-dialog.js',
+  'opening-hours.js',
+  'street-choices.js',
+  'street-dialog.js'
 ];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
@@ -132,8 +136,8 @@ export const EDITOR_BROWSER_AREAS = {
     sources: OFFLINE_SOURCES
   },
   layers: {
-    specs: 'tests/e2e/layers.spec.mjs tests/e2e/buildings.spec.mjs',
-    specFiles: ['layers.spec.mjs', 'buildings.spec.mjs'],
+    specs: 'tests/e2e/layers.spec.mjs tests/e2e/buildings.spec.mjs tests/e2e/addresses.spec.mjs',
+    specFiles: ['layers.spec.mjs', 'buildings.spec.mjs', 'addresses.spec.mjs'],
     sources: EDITING_ONLY_SOURCES
   },
   selection: {
@@ -162,6 +166,9 @@ export const SHARED_EDITOR_SOURCES = [
   'inspection-layers.js',
   'keyboard-shortcuts.js',
   'layer-behaviors.js',
+  'form-controls.js',
+  'layer-addresses.js',
+  'layer-places.js',
   'layers-panel.js',
   'object-names.js',
   'object-states.js',

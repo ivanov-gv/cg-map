@@ -14,13 +14,21 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, edit, context) where a drag must stop
 //   measures(feature, before)     lines of facts shown under the form
+//   suggestions(feature, context) usual values of free fields, {name: [value]}
+//   applyLabel(edit)              what Apply is called
+//   afterApply(entry, context)    what happens once the edit is recorded
+//   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
 // select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
 const behaviors = new Map();
 
-// Adds what a layer does differently, by file name.
-export function registerBehaviors(behaviorByFile) {
-  for (const [filename, behavior] of Object.entries(behaviorByFile)) behaviors.set(filename, behavior);
+const behaviorKey = (filename, layerId) => (layerId ? `${layerId}/${filename}` : filename);
+
+// Adds what a layer does differently, by file name. With a layer, only while that layer is active.
+export function registerBehaviors(behaviorByFile, layerId = null) {
+  for (const [filename, behavior] of Object.entries(behaviorByFile)) {
+    behaviors.set(behaviorKey(filename, layerId), behavior);
+  }
 }
 
 const defaultBehavior = filename => ({
@@ -33,10 +41,18 @@ const defaultBehavior = filename => ({
   problem: () => null,
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
-  measures: () => []
+  measures: () => [],
+  suggestions: () => ({}),
+  applyLabel: () => 'Apply',
+  afterApply: () => {},
+  dragTarget: () => null
 });
 
-export const behaviorOf = filename => ({...defaultBehavior(filename), ...behaviors.get(filename)});
+export const behaviorOf = (filename, layerId = null) => ({
+  ...defaultBehavior(filename),
+  ...behaviors.get(filename),
+  ...behaviors.get(behaviorKey(filename, layerId))
+});
 
 // What can be added on each layer. properties are the facts the choice itself states.
 const drawChoices = {
@@ -48,7 +64,7 @@ const drawChoices = {
       properties: {kind: 'building', building: 'yes'}
     }
   ],
-  places: [{label: 'Add POI', filename: 'places.geojson', shape: 'Point', properties: {}}],
+  places: [{label: 'Add place', filename: 'places.geojson', shape: 'Point', properties: {}}],
   roads: [{label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}}],
   green: [{label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}}],
   water: [

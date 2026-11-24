@@ -89,7 +89,8 @@ function installEscape(hooks) {
     const isImeKey = event.isComposing || event.keyCode === 229;
     if (event.key !== 'Escape' || event.defaultPrevented || isImeKey) return;
     // Dialogs handle Escape themselves; don't close panels while one is open.
-    if (isExportDialogVisible() || elementById('delete-dialog').open) return;
+    const isOwnDialogOpen = document.querySelector('dialog[open]:not(#layer-switch-dialog)') !== null;
+    if (isExportDialogVisible() || isOwnDialogOpen) return;
     if (hooks.cancelActiveGesture()) {
       event.preventDefault();
       return;

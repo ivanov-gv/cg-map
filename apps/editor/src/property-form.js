@@ -62,7 +62,26 @@ function flagField(name, value) {
   return input;
 }
 
-function fieldControl(name, value, propertyRule, levels) {
+const valueSuggestions = {
+  'building:material': ['brick', 'concrete', 'stone', 'plaster', 'wood', 'glass', 'metal']
+};
+
+// Free text with the usual values offered.
+function suggestedField(name, value, propertyRule, suggestions) {
+  const input = textField(name, value, propertyRule);
+  const list = document.createElement('datalist');
+  list.id = `suggestions-${name}`;
+  list.append(...suggestions.map(suggestion => optionElement(name, suggestion, '')));
+  input.setAttribute('list', list.id);
+  const wrapper = document.createElement('span');
+  wrapper.append(input, list);
+  return wrapper;
+}
+
+function fieldControl(name, value, propertyRule, levels, {controls, suggestions}) {
+  if (controls[name]) return controls[name](value);
+  const offered = suggestions[name] ?? valueSuggestions[name];
+  if (offered) return suggestedField(name, value, propertyRule, offered);
   if (propertyRule.isLevel) return selectField(name, value, [...levels], propertyRule.required);
   if (isOnlyYes(propertyRule)) return flagField(name, value);
   if (propertyRule.enum) return selectField(name, value, propertyRule.enum, propertyRule.required);
@@ -80,32 +99,43 @@ export function isFormField(propertyRule) {
 }
 
 // One labelled control for a property the rules list.
-export function propertyField(name, value, propertyRule, levels) {
+export function propertyField(name, value, propertyRule, levels, customization = {controls: {}, suggestions: {}}) {
   const label = createElementWithText('label', fieldLabel(name) + (propertyRule.required ? ' (required)' : ''));
-  label.append(fieldControl(name, value, propertyRule, levels));
+  label.append(fieldControl(name, value, propertyRule, levels, customization));
   return label;
 }
 
-function sectionElement({title, fields, isCollapsed}, properties, propertyRules, levels) {
+function sectionElement({title, fields, isCollapsed}, properties, propertyRules, levels, customization) {
   const section = document.createElement(isCollapsed ? 'details' : 'fieldset');
   if (title) section.append(createElementWithText(isCollapsed ? 'summary' : 'legend', title));
   const grid = document.createElement('div');
   grid.className = 'field-grid';
-  grid.append(...fields.map(name => propertyField(name, properties[name], propertyRules[name], levels)));
+  grid.append(
+    ...fields.map(name => propertyField(name, properties[name], propertyRules[name], levels, customization))
+  );
   section.append(grid);
   return section;
 }
 
 // The form of one object: its sections in order, each with the fields the rules allow. Everything else stays out of
 // reach.
-export function renderPropertyForm(form, properties, propertyRules, levels, sections = null) {
+// controls replace single fields, {name: value => element}; suggestions offer usual values, {name: [value]}.
+export function renderPropertyForm(
+  form,
+  properties,
+  propertyRules,
+  levels,
+  {sections = null, controls = {}, suggestions = {}} = {}
+) {
   const allowedNames = Object.keys(propertyRules).filter(name => isFormField(propertyRules[name]));
   const wantedSections = sections ?? [{title: '', fields: allowedNames}];
   const shownSections = wantedSections
     .map(section => ({...section, fields: section.fields.filter(name => allowedNames.includes(name))}))
     .filter(({fields}) => fields.length > 0);
   form.replaceChildren(
-    ...shownSections.map(section => sectionElement(section, properties, propertyRules, levels))
+    ...shownSections.map(section =>
+      sectionElement(section, properties, propertyRules, levels, {controls, suggestions})
+    )
   );
 }
 

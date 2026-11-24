@@ -72,7 +72,14 @@ const valueLabels = {
   network: {bus: 'Bus', intercity: 'Intercity'},
   natural: {peak: 'Peak', hill: 'Hill'},
   opens_onto: {street: 'Street', courtyard: 'Courtyard', passage: 'Passage', parking: 'Parking'},
-  kind: {traffic_signals: 'Traffic light'}
+  kind: {traffic_signals: 'Traffic light'},
+  visibilityLevel: {
+    1: 'Landmark · city view',
+    2: 'District view',
+    3: 'Neighbourhood view',
+    4: 'Street level',
+    5: 'Close up'
+  }
 };
 
 const capitalized = text => text.charAt(0).toUpperCase() + text.slice(1);

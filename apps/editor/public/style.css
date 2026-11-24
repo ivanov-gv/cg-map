@@ -446,7 +446,9 @@ select {
 }
 /* Layer switch dialog centers over the map and blocks all interactions. */
 #layer-switch-dialog,
-#delete-dialog {
+#delete-dialog,
+#street-dialog,
+#hours-dialog {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -461,21 +463,20 @@ select {
   box-shadow: 0 8px 30px #0006;
 }
 #layer-switch-dialog::backdrop,
-#delete-dialog::backdrop {
+#delete-dialog::backdrop,
+#street-dialog::backdrop,
+#hours-dialog::backdrop {
   background: #0006;
 }
-#layer-switch-dialog h3,
-#delete-dialog h3 {
+dialog h3 {
   margin: 0 0 8px;
   font-size: 14px;
 }
-#layer-switch-dialog p,
-#delete-dialog p {
+dialog p {
   margin: 0 0 14px;
   font-size: 13px;
 }
-#layer-switch-dialog .button-row,
-#delete-dialog .button-row {
+dialog .button-row {
   margin-bottom: 0;
 }
 
@@ -1030,4 +1031,57 @@ fieldset {
   border: 0;
   text-align: center;
   font-weight: 600;
+}
+
+.chosen-field {
+  display: flex;
+  gap: 6px;
+  align-items: end;
+}
+.chosen-field input {
+  min-width: 0;
+}
+.chosen-field button {
+  min-height: 38px;
+  padding: 8px;
+}
+#hours-dialog {
+  max-width: 460px;
+}
+.dialog-list {
+  max-height: 45dvh;
+  margin-bottom: 10px;
+  overflow: auto;
+}
+.day-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.day-boxes label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  margin: 0;
+}
+.day-boxes input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+}
+.interval-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.interval-row input {
+  margin: 0;
+}
+#hours-stored {
+  display: block;
+  margin-bottom: 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
 }

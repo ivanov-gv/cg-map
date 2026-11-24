@@ -24,6 +24,7 @@ import {
 } from './edit-transaction.js';
 import {removeVertex} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
+import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
 import {featureCapabilities, featureProblem} from './layer-rules.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
@@ -54,7 +55,7 @@ export class InspectorEditing {
   }
 
   get #behavior() {
-    return behaviorOf(this.#filename);
+    return behaviorOf(this.#filename, this.#context.behaviorContext().layer?.id);
   }
 
   get #isVertexTool() {
@@ -74,6 +75,13 @@ export class InspectorEditing {
     elementById('edit-problem').hidden = !message;
   }
 
+  // What a moved object would belong to where it is now, such as the building a place is dragged over.
+  #dragTarget() {
+    const {tool, feature} = this.#transaction;
+    const isPositioning = tool === editTools.move && feature.geometry;
+    return isPositioning ? this.#behavior.dragTarget(feature.geometry, this.#context.behaviorContext()) : null;
+  }
+
   // Where the next drawn point would go: under the fixed cross on a phone, under the pointer at the desk.
   #nextDrawnPoint() {
     if (this.#context.isPhone()) return this.#context.map.getCenter().toArray();
@@ -90,6 +98,7 @@ export class InspectorEditing {
     const original = this.#context.session.workingFeature(this.#filename, this.#transaction.key);
     const isReshaped = original && JSON.stringify(original.geometry) !== JSON.stringify(geometry);
     overlay.setGhost(isReshaped ? original.geometry : null);
+    overlay.setTarget(this.#dragTarget()?.feature ?? null);
     if (isDrawing(this.#transaction)) handles.showPoints(drawnPoints);
     else if (this.#isVertexTool) handles.show(geometry, selectedHandle);
     else handles.clear();
@@ -156,7 +165,7 @@ export class InspectorEditing {
     const isPhone = this.#context.isPhone();
     const title = this.#behavior.title(transaction.feature, this.#context.behaviorContext());
     const measure = drawingMeasure(transaction, this.#nextDrawnPoint());
-    const hint = [drawingHint(transaction.tool, isPhone), measure].filter(Boolean).join(' · ');
+    const hint = [this.#dragTarget()?.label, drawingHint(transaction.tool, isPhone), measure].filter(Boolean).join(' · ');
     let buttons = this.#reshapingButtons();
     if (this.#isPlacing) buttons = this.#placingButtons();
     else if (isDrawing(transaction)) buttons = this.#drawingButtons();
@@ -205,7 +214,9 @@ export class InspectorEditing {
       startTool: tool => this.#startTool(tool),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: message => this.showProblem(message),
-      applyWith: edits => this.#applyWith(edits)
+      applyWith: edits => this.#applyWith(edits),
+      replaceWith: (edits, message) => this.#replaceWith(edits, message),
+      discard: () => this.discardEdit()
     };
   }
 
@@ -222,8 +233,12 @@ export class InspectorEditing {
   #renderForm() {
     const {levels} = this.#context;
     const {feature} = this.#transaction;
-    const sections = this.#behavior.sections(feature, this.#editContext());
-    renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, sections);
+    const editContext = this.#editContext();
+    renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
+      sections: this.#behavior.sections(feature, editContext),
+      controls: formControls(editContext),
+      suggestions: this.#behavior.suggestions(feature, editContext.context)
+    });
     const extras = elementById('inspector-extras');
     extras.replaceChildren();
     this.#behavior.renderExtras(extras, this.#editContext());
@@ -234,6 +249,7 @@ export class InspectorEditing {
     this.showProblem(null);
     elementById('editor').hidden = false;
     elementById('edit-actions').hidden = false;
+    elementById('apply-edit').textContent = this.#behavior.applyLabel(this.#editContext());
     this.#renderToolButtons();
     this.#renderFacts();
     this.#renderGeometry();
@@ -273,6 +289,7 @@ export class InspectorEditing {
     handles.clear();
     overlay.setSelection(null);
     overlay.setGhost(null);
+    overlay.setTarget(null);
     overlay.setDrawing([], null);
     this.#context.onEditStateChanged();
   }
@@ -325,8 +342,16 @@ export class InspectorEditing {
     const edits = [{filename: this.#filename, key: edit.key, after: feature}, ...companions, ...extraEdits];
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
+    const {afterApply} = this.#behavior;
     this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null));
+    afterApply({feature, filename: edit.filename, key: edit.key}, behaviorContext);
     return {success: true};
+  }
+
+  // Drops the open edit and records others in its place, such as marking the building as having no number.
+  #replaceWith(edits, message) {
+    this.#context.commands.recordEdits(edits);
+    this.#finishEdit(() => this.#context.onRecorded(message));
   }
 
   #refuse(problem) {
