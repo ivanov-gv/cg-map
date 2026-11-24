@@ -44,6 +44,8 @@ export class InspectorEditing {
   #transaction = null;
   #filename = null;
   #pointer = null;
+  // Counts the edits opened, to tell one from the next.
+  #opening = 0;
 
   constructor(context) {
     this.#context = context;
@@ -193,19 +195,29 @@ export class InspectorEditing {
   }
 
   // What a layer's own controls need: the pending feature, and ways to change it inside this edit.
+  // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
+  // once its edit is closed it changes nothing, and never the edit opened since.
   #editContext() {
+    const opening = this.#opening;
+    const isOpen = () => this.#transaction !== null && this.#opening === opening;
+    const whileOpen = run => (...values) => {
+      if (isOpen()) run(...values);
+    };
     return {
+      isOpen,
+      // The feature with what is typed in the form.
+      typedFeature: () => this.#currentFeature(),
       feature: this.#transaction.feature,
       key: this.#transaction.key,
       filename: this.#filename,
       isNew: this.#transaction.isNew,
       context: this.#context.behaviorContext(),
-      setProperties: properties => this.#setProperties(properties),
-      setGeometry: geometry => this.#update(withGeometry(this.#transaction, geometry)),
-      startTool: tool => this.#startTool(tool),
+      setProperties: whileOpen(properties => this.#setProperties(properties)),
+      setGeometry: whileOpen(geometry => this.#update(withGeometry(this.#transaction, geometry))),
+      startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
-      showProblem: message => this.showProblem(message),
-      applyWith: edits => this.#applyWith(edits)
+      showProblem: whileOpen(message => this.showProblem(message)),
+      applyWith: whileOpen(edits => this.#applyWith(edits))
     };
   }
 
@@ -242,6 +254,7 @@ export class InspectorEditing {
   }
 
   #open(filename, transaction) {
+    this.#opening += 1;
     this.#filename = filename;
     this.#transaction = transaction;
     this.#renderForm();

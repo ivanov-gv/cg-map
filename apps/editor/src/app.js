@@ -183,6 +183,7 @@ function showFeature(entry) {
 
 // Returns the inspector to its empty state for the active layer.
 function clearSelection() {
+  cancelPick();
   editing.close();
   hideInspector();
   elementById('selection-details').open = false;
@@ -395,7 +396,7 @@ function setLayer(layer) {
     elementById('layer-switch-dialog').showModal();
     return false;
   }
-  if (pendingPick) finishPick(null);
+  cancelPick();
   editing.close();
   hideToast();
   activeLayer = activeLayer?.id === layer?.id ? null : layer;
@@ -464,6 +465,13 @@ function pickObject(filename, prompt) {
     const cancel = {id: 'mode-cancel', label: 'Cancel', run: () => finishPick(null)};
     showModeBar({title: prompt, hint: 'Tap it on the map', buttons: [cancel]});
   });
+}
+
+// Whoever asked gets no object, so the question does not outlive the edit that asked it. Returns whether one was open.
+function cancelPick() {
+  if (!pendingPick) return false;
+  finishPick(null);
+  return true;
 }
 
 function finishPick(entry) {
@@ -625,7 +633,7 @@ function installWorkspaceControls() {
     cancelActiveGesture: () => Boolean(editing?.cancelActiveGesture()),
     isSwitchDialogOpen: () => elementById('layer-switch-dialog').open,
     closeSwitchDialog: closeLayerSwitchDialog,
-    leaveMode: () => Boolean(editing?.leaveModeOnEscape())
+    leaveMode: () => cancelPick() || Boolean(editing?.leaveModeOnEscape())
   });
   installLayerSwitchDialog();
   installInspectorViewport();
