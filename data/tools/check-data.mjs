@@ -955,10 +955,11 @@ export function validateRoads(data, {contractsDirectory} = {}) {
       if (levelValue !== undefined) {
         requireValue(Number.isInteger(levelValue), `${name}: ${levelField} must be an integer`);
       }
-      // A level may stand alone: an end drawn in the editor is not an OSM node.
       const hasNode = nodeValue !== undefined;
       const hasLevel = levelValue !== undefined;
-      requireValue(!hasNode || hasLevel, `${name}: ${nodeField} needs ${levelField}`);
+      // An end drawn in the editor has a level but is not an OSM node.
+      const isDrawnEnd = isLocalId(properties.entityId) && !hasNode;
+      requireValue(isDrawnEnd || hasNode === hasLevel, `${name}: ${nodeField} and ${levelField} must appear together`);
     }
   }
   requireValue(count > 0, 'Empty roads snapshot');
