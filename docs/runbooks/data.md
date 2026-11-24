@@ -197,11 +197,12 @@ lists all its members in `addr:streetEntityIds`, and records no-number placehold
 writes `building-entrances.geojson`, the OSM entrance nodes near published footprints. It can add `buildingEntityId` to
 places inside those footprints when the `places` group is refreshed with `buildings`; this Feature keeps the reviewed
 places snapshot from the branch below, so no published place carries that join. The version-2 editor bundle lists the
-new entrance, settlement, municipality and shared-border files; the editor can inspect them but cannot change them, and
-still accepts a version-1 bundle with the original eight files. The separate `entrances` array in
-`building-labels.geojson` remains the runtime arrow/label format and is not generated from this source file. See
-[building addresses](../map-data/building-numbers.md), [decision 0023](../decisions/0023-osm-building-source-details.md)
-and [decision 0024](../decisions/0024-editor-bundle-versions.md).
+new entrance, settlement, municipality and shared-border files; the editor corrects them
+([decision 0037](../decisions/0037-every-layer-editable.md)) and still accepts a version-1 bundle with the original
+eight files. The separate `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is
+not generated from this source file. See [building addresses](../map-data/building-numbers.md),
+[decision 0023](../decisions/0023-osm-building-source-details.md) and
+[decision 0024](../decisions/0024-editor-bundle-versions.md).
 
 Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
 `building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed
