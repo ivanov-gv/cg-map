@@ -1,6 +1,7 @@
 import {sha256Hex} from './hashing.js';
+import {collectionOf} from './source-records.js';
 
-// Version 1 is frozen; later Features extend version 2 until the stack merges.
+// Every version is frozen: a reviewed bundle of an earlier one stays readable.
 const version1Files = [
   'building-labels.geojson',
   'buildings.geojson',
@@ -27,10 +28,33 @@ export const bundleFilesByVersion = {
     'settlements.geojson',
     'transport-stops.geojson',
     'water.geojson'
+  ],
+  3: [
+    'border-edges.geojson',
+    'building-entrances.geojson',
+    'building-labels.geojson',
+    'buildings.geojson',
+    'canyon-rims.geojson',
+    'context-countries.geojson',
+    'contours.geojson',
+    'land.geojson',
+    'municipalities.geojson',
+    'places.geojson',
+    'protected-areas.geojson',
+    'ridges.geojson',
+    'road-nodes.geojson',
+    'roads.geojson',
+    'settlements.geojson',
+    'slopes.geojson',
+    'summits.geojson',
+    'transit-routes.json',
+    'transport-stops.geojson',
+    'turn-restrictions.json',
+    'water.geojson'
   ]
 };
 
-export const currentBundleVersion = 2;
+export const currentBundleVersion = 3;
 export const sourceFiles = bundleFilesByVersion[currentBundleVersion];
 
 // Reject unknown/duplicate/missing sources rather than silently providing incomplete editing modes.
@@ -40,7 +64,7 @@ export function validateBundleManifest(manifest) {
   const filenames = manifest.layers.map(layer => layer.filename).sort();
   const hasEverySourceOnce = JSON.stringify(filenames) === JSON.stringify([...expectedFiles].sort());
   if (!hasEverySourceOnce) {
-    throw new Error(`Source bundle must contain exactly the ${expectedFiles.length} supported GeoJSON files.`);
+    throw new Error(`Source bundle must contain exactly the ${expectedFiles.length} supported files.`);
   }
   for (const layer of manifest.layers) {
     const hasValidMetadata =
@@ -62,7 +86,7 @@ export async function decodeSource(bytes, metadata) {
   if (bytes.byteLength !== metadata.bytes || sha256 !== metadata.sha256) {
     throw new Error(`Source integrity mismatch: ${metadata.filename}. Rebuild the source bundle.`);
   }
-  const collection = JSON.parse(new TextDecoder().decode(bytes));
+  const collection = collectionOf(metadata.filename, JSON.parse(new TextDecoder().decode(bytes)));
   const hasValidCollection =
     collection?.type === 'FeatureCollection' &&
     Array.isArray(collection.features) &&

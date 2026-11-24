@@ -5,9 +5,11 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyVisibility, placesProvenance, resolveLevel, serializePlaces} from './apply-place-visibility.mjs';
-import {checkData, validateBuildingLabels, validateCollection} from './check-data.mjs';
+import {entityKey, isLocalId, labelsFollowingBuildings, withDerivedFacts} from './changeset-derivations.mjs';
+import {checkOperationRules, requireSupportedRules, requireThat} from './changeset-rules.mjs';
+import {isRecordFile, parseSource, serializeSource} from './changeset-sources.mjs';
+import {checkData, validateBuildingLabels, validateBuildingSources, validateCollection} from './check-data.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
-import {serializeSourceCollection} from './source-json.mjs';
 
 const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sourcesPath = 'data/sources';
@@ -15,217 +17,35 @@ const policyPath = 'data/sources/place-visibility-policy.json';
 const provenancePath = 'data/sources/provenance.json';
 const labelProvenancePath = 'data/sources/building-labels.provenance.json';
 const ledgerPath = 'data/sources/editor-corrections.json';
-// Source coordinates have at most six or so decimals, so a smaller cross product can only mean collinear points.
-const collinearToleranceDegreesSquared = 1e-13;
-const placeIdentityFields = ['id', 'source'];
-const newFeatureFields = ['type', 'properties', 'geometry'];
-const sourceIdentityFields = ['entityId', 'entityVersion', 'entityPart'];
+const buildingsFile = 'buildings.geojson';
+const labelsFile = 'building-labels.geojson';
+const placesFile = 'places.geojson';
 const localEntityIdPattern = /^local:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// Their own provenance files, beside the one for the extracted layers.
+const ownProvenance = new Map([
+  ['transport-stops.geojson', {path: 'data/sources/transport-stops.provenance.json', countField: 'features'}],
+  ['transit-routes.json', {path: 'data/sources/transit-routes.provenance.json', countField: 'routes'}]
+]);
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const fingerprint = feature => sha256(JSON.stringify(feature));
 const isSameJSON = (first, second) => JSON.stringify(first) === JSON.stringify(second);
 
-function requireThat(condition, message) {
-  if (!condition) throw new Error(`Changeset refused: ${message}`);
+// Adopted collections and the record files carry source identity on every object. Routes are the exception: their
+// identity is on each direction.
+function carriesIdentity(filename, source) {
+  return filename !== 'transit-routes.json' && source.entitySchemaVersion === 1;
 }
 
-const isValidCoordinate = coordinate =>
-  Array.isArray(coordinate) &&
-  coordinate.length === 2 &&
-  coordinate.every(Number.isFinite) &&
-  Math.abs(coordinate[0]) <= 180 &&
-  Math.abs(coordinate[1]) <= 90;
-
-// Twice the signed area of a triangle, in degrees squared; near zero means the points are collinear.
-function crossProduct(first, second, third) {
-  return (second[0] - first[0]) * (third[1] - first[1]) - (second[1] - first[1]) * (third[0] - first[0]);
+// Version 2 keeps the local ID an object had in the editor, so other objects can refer to it before the import.
+// Version 1 places had their own random identity.
+function localEntityId(changeset, operation, newEntityId) {
+  return changeset.version === 1 ? newEntityId(operation.after) : operation.reference.localId;
 }
 
-function pointTouchesSegment(start, end, point) {
-  const isCollinear = Math.abs(crossProduct(start, end, point)) < collinearToleranceDegreesSquared;
-  const isInsideBounds =
-    point[0] >= Math.min(start[0], end[0]) &&
-    point[0] <= Math.max(start[0], end[0]) &&
-    point[1] >= Math.min(start[1], end[1]) &&
-    point[1] <= Math.max(start[1], end[1]);
-  return isCollinear && isInsideBounds;
-}
-
-function segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
-  const isSecondAcrossFirst =
-    crossProduct(firstStart, firstEnd, secondStart) * crossProduct(firstStart, firstEnd, secondEnd) < 0;
-  const isFirstAcrossSecond =
-    crossProduct(secondStart, secondEnd, firstStart) * crossProduct(secondStart, secondEnd, firstEnd) < 0;
-  if (isSecondAcrossFirst && isFirstAcrossSecond) return true;
-  return (
-    pointTouchesSegment(firstStart, firstEnd, secondStart) ||
-    pointTouchesSegment(firstStart, firstEnd, secondEnd) ||
-    pointTouchesSegment(secondStart, secondEnd, firstStart) ||
-    pointTouchesSegment(secondStart, secondEnd, firstEnd)
-  );
-}
-
-function ringHasIntersectingEdges(ring) {
-  const edgeCount = ring.length - 1;
-  for (let first = 0; first < edgeCount; first += 1) {
-    for (let second = first + 2; second < edgeCount; second += 1) {
-      const isClosingNeighbor = first === 0 && second === edgeCount - 1;
-      if (isClosingNeighbor) continue;
-      if (segmentsIntersect(ring[first], ring[first + 1], ring[second], ring[second + 1])) return true;
-    }
-  }
-  return false;
-}
-
-// Ray casting: a horizontal ray from the point crosses a ring's edges an odd number of times when inside.
-function pointInsideRing([longitude, latitude], ring) {
-  let isInside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
-    const [startLongitude, startLatitude] = ring[index];
-    const [endLongitude, endLatitude] = ring[previous];
-    const spansLatitude = startLatitude > latitude !== endLatitude > latitude;
-    if (!spansLatitude) continue;
-    const crossingLongitude =
-      startLongitude + ((latitude - startLatitude) / (endLatitude - startLatitude)) * (endLongitude - startLongitude);
-    if (longitude < crossingLongitude) isInside = !isInside;
-  }
-  return isInside;
-}
-
-function ringsCross(firstRing, secondRing) {
-  for (let first = 0; first < firstRing.length - 1; first += 1) {
-    for (let second = 0; second < secondRing.length - 1; second += 1) {
-      if (segmentsIntersect(firstRing[first], firstRing[first + 1], secondRing[second], secondRing[second + 1])) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Returns why a closed ring is unusable, or null. The editor applies the same rules to the same shared fixture.
-export function ringProblem(ring) {
-  if (!Array.isArray(ring) || ring.length < 4) return 'ring needs at least three corners';
-  if (!ring.every(isValidCoordinate)) return 'ring has an invalid coordinate';
-  if (JSON.stringify(ring[0]) !== JSON.stringify(ring.at(-1))) return 'ring is not closed';
-  const corners = ring.slice(0, -1);
-  if (new Set(corners.map(String)).size !== corners.length) return 'ring repeats a corner';
-  if (ringHasIntersectingEdges(ring)) return 'ring edges cross or touch';
-  const twiceArea = corners.reduce((area, corner, index) => {
-    const next = ring[index + 1];
-    return area + corner[0] * next[1] - next[0] * corner[1];
-  }, 0);
-  return Math.abs(twiceArea) < collinearToleranceDegreesSquared ? 'ring has no area' : null;
-}
-
-// Returns why an open line is unusable, or null.
-export function lineProblem(line) {
-  if (!Array.isArray(line) || line.length < 2) return 'line needs at least two points';
-  if (!line.every(isValidCoordinate)) return 'line has an invalid coordinate';
-  return new Set(line.map(String)).size < 2 ? 'line needs two distinct points' : null;
-}
-
-// Returns why a polygon's rings do not form one shape with holes, or null.
-export function polygonProblem(rings) {
-  if (!Array.isArray(rings) || rings.length === 0) return 'polygon has no rings';
-  const invalidRing = rings.map(ringProblem).find(Boolean);
-  if (invalidRing) return invalidRing;
-  const [outerRing, ...holes] = rings;
-  if (holes.some(hole => !hole.every(corner => pointInsideRing(corner, outerRing)))) {
-    return 'hole is outside its polygon';
-  }
-  for (let first = 0; first < rings.length; first += 1) {
-    for (let second = first + 1; second < rings.length; second += 1) {
-      if (ringsCross(rings[first], rings[second])) return 'polygon rings cross or touch';
-    }
-  }
-  return null;
-}
-
-function geometryProblem(geometry, allowedTypes) {
-  if (!allowedTypes.includes(geometry?.type)) return `geometry type ${geometry?.type} is not editable in this file`;
-  if (geometry.type === 'Point')
-    return isValidCoordinate(geometry.coordinates) ? null : 'point is not a WGS84 coordinate';
-  if (geometry.type === 'LineString') return lineProblem(geometry.coordinates);
-  return polygonProblem(geometry.coordinates);
-}
-
-function isForbiddenValue(value, propertyRule) {
-  if (!propertyRule.forbiddenValues) return false;
-  const ignoredCharacters = new RegExp(propertyRule.ignoredCharactersPattern, 'g');
-  return propertyRule.forbiddenValues.includes(value.toLowerCase().replace(ignoredCharacters, ''));
-}
-
-// Returns why these properties cannot be recorded, or null. A value equal to the source's stands as it is: most roads
-// have a blank name, and editing their geometry must not have to invent one.
-export function propertyProblem(properties, propertyRules, levels, previousProperties = {}) {
-  for (const [name, propertyRule] of Object.entries(propertyRules)) {
-    const value = properties[name];
-    if (value === undefined) {
-      if (propertyRule.required) return `${name} is required`;
-      continue;
-    }
-    // A level stands as it was only while the category it depends on does too.
-    const isCategoryChange = propertyRule.isLevel && !isSameJSON(properties.category, previousProperties.category);
-    if (isSameJSON(value, previousProperties[name]) && !isCategoryChange) continue;
-    if (propertyRule.isLevel) {
-      if (!levels.has(value)) return `${name} is not a supported level`;
-      if (value === propertyRule.landmarkLevel && properties.category !== propertyRule.landmarkCategory) {
-        return `${name} ${value} is reserved for ${propertyRule.landmarkCategory} landmarks`;
-      }
-      continue;
-    }
-    if (typeof value !== 'string' || value.trim().length === 0) return `${name} must be nonempty text`;
-    if (propertyRule.maxLength && value.length > propertyRule.maxLength) return `${name} is too long`;
-    if (propertyRule.enum && !propertyRule.enum.includes(value)) return `${name} is not an allowed value`;
-    if (isForbiddenValue(value, propertyRule)) return `${name} is a placeholder, not a value`;
-  }
-  return null;
-}
-
-// Only listed properties and the geometry may differ, so unknown fields, attribution and identity survive.
-function changedLockedField(before, after, rule) {
-  const featureFields = new Set([...Object.keys(before), ...Object.keys(after)]);
-  for (const name of featureFields) {
-    const isEditable = name === 'properties' || name === 'geometry';
-    if (!isEditable && !isSameJSON(before[name], after[name])) return `feature ${name}`;
-  }
-  const names = new Set([...Object.keys(before.properties), ...Object.keys(after.properties)]);
-  for (const name of names) {
-    const isEditable = Object.hasOwn(rule.properties, name);
-    if (!isEditable && !isSameJSON(before.properties[name], after.properties[name])) return name;
-  }
-  return null;
-}
-
-// A new feature claims nothing beyond what the rules list, so it can never pass for an imported upstream fact.
-function checkAddedFeature(operation, rule, localPlaceSource) {
-  const {filename, reference, before, beforeFingerprint, after} = operation;
-  const {localId} = reference;
-  requireThat(
-    typeof localId === 'string' && localId.startsWith('local:'),
-    `${filename}: a new feature needs a local ID`
-  );
-  requireThat(before === null && beforeFingerprint === null, `${filename}: a new feature has no before state`);
-  const unlistedField = Object.keys(after).find(name => !newFeatureFields.includes(name));
-  requireThat(!unlistedField, `${filename}: a new feature must not claim a feature ${unlistedField}`);
-  const isPlace = filename === 'places.geojson';
-  const allowedNames = new Set([...Object.keys(rule.properties), ...(isPlace ? placeIdentityFields : [])]);
-  const claimedIdentity = sourceIdentityFields.find(name => Object.hasOwn(after.properties, name));
-  requireThat(!claimedIdentity, `${filename}: a new feature must not claim ${claimedIdentity}`);
-  const unlistedName = Object.keys(after.properties).find(name => !allowedNames.has(name));
-  requireThat(!unlistedName, `${filename}: a new feature must not claim ${unlistedName}`);
-  if (!isPlace) return;
-  requireThat(after.properties.id === localId, 'a new place must use its local ID as its id');
-  requireThat(after.properties.source === localPlaceSource, `a new place must have source "${localPlaceSource}"`);
-}
-
-// An adopted file requires identity on every feature, so the importer assigns it to additions. The version is a
+// An adopted file requires identity on every feature, so the importer writes it on additions. The version is a
 // content hash of the reviewed export: it is a base token, not a claim about an upstream object.
-function adoptAddedFeature(feature, source, newEntityId, usedIds) {
-  if (source.entitySchemaVersion !== 1) return feature;
-  const entityId = newEntityId(feature);
+function adoptAddedFeature(feature, entityId, usedIds) {
   requireThat(localEntityIdPattern.test(entityId), `invalid local entity ID ${entityId}`);
   requireThat(!usedIds.has(entityId), `duplicate local entity ID ${entityId}`);
   usedIds.add(entityId);
@@ -239,53 +59,29 @@ function adoptAddedFeature(feature, source, newEntityId, usedIds) {
   };
 }
 
-function checkExistingFeature(operation, source) {
-  const {featureIndex} = operation.reference;
-  const current = source.features[featureIndex];
-  requireThat(current, `${operation.filename}: feature ${featureIndex} does not exist in this snapshot`);
-  requireThat(
-    fingerprint(current) === operation.beforeFingerprint,
-    `${operation.filename}: feature ${featureIndex} differs from the reviewed fingerprint`
-  );
+// Position of the object an operation names, in this snapshot. Refuses a name that matches nothing.
+function referencedIndex({filename, reference}, source, indexByKey) {
+  if (reference.entityId === undefined) return reference.featureIndex;
+  const index = indexByKey.get(entityKey(reference));
+  requireThat(index !== undefined, `${filename}: ${reference.entityId} does not exist in the current sources`);
+  return index;
+}
+
+function checkExistingFeature(operation, index, source) {
+  const {filename, reference} = operation;
+  const current = source.features[index];
+  const name = reference.entityId ?? `feature ${index}`;
+  requireThat(current, `${filename}: ${name} does not exist in this snapshot`);
+  const isReviewed = fingerprint(current) === operation.beforeFingerprint;
+  requireThat(isReviewed, `${filename}: ${name} differs from the reviewed fingerprint`);
   requireThat(
     isSameJSON(current, operation.before),
-    `${operation.filename}: feature ${featureIndex} differs from its recorded before state`
+    `${filename}: ${name} differs from its recorded before state`
   );
-}
-
-function checkModification({before, after}, rule, featureLabel) {
-  const lockedField = changedLockedField(before, after, rule);
-  requireThat(!lockedField, `${featureLabel}: ${lockedField} is not editable`);
-  if (rule.editableKinds) {
-    requireThat(rule.editableKinds.includes(before.properties.kind), `${featureLabel}: this kind is inspect-only`);
-  }
-}
-
-// Throws unless this one operation is allowed by the rules of its file and matches the pinned snapshot.
-function checkOperation(operation, sources, rules, levels) {
-  const {filename, operation: operationKind, reference, before, after} = operation;
-  const rule = rules.layers[filename];
-  requireThat(rule, `unknown source file ${filename}`);
-  requireThat(rule.operations.includes(operationKind), `${operationKind} is not allowed in ${filename}`);
-  const featureLabel = `${filename} ${JSON.stringify(reference)}`;
-  if (operationKind === 'delete') {
-    requireThat(after === null, `${featureLabel}: a deletion has no after state`);
-    checkExistingFeature(operation, sources.get(filename));
-    return;
-  }
-  requireThat(after?.type === 'Feature' && after.properties, `${filename}: invalid feature`);
-  if (operationKind === 'add') checkAddedFeature(operation, rule, rules.localPlaceSource);
-  else checkExistingFeature(operation, sources.get(filename));
-  const isSameGeometry = before && isSameJSON(before.geometry, after.geometry);
-  const invalidGeometry = isSameGeometry ? null : geometryProblem(after.geometry, rule.geometries);
-  requireThat(!invalidGeometry, `${featureLabel}: ${invalidGeometry}`);
-  const invalidProperty = propertyProblem(after.properties, rule.properties, levels, before?.properties);
-  requireThat(!invalidProperty, `${featureLabel}: ${invalidProperty}`);
-  if (operationKind === 'modify') checkModification(operation, rule, featureLabel);
 }
 
 function checkEnvelope(changeset) {
-  requireThat(changeset?.version === 1, 'unsupported version');
+  requireThat([1, 2].includes(changeset?.version), 'unsupported version');
   for (const field of ['id', 'author', 'reason']) {
     requireThat(typeof changeset[field] === 'string' && changeset[field].trim().length > 0, `${field} is required`);
   }
@@ -293,23 +89,55 @@ function checkEnvelope(changeset) {
   requireThat(Array.isArray(changeset.operations) && changeset.operations.length > 0, 'no operations');
   const references = changeset.operations.map(({filename, reference}) => `${filename}:${JSON.stringify(reference)}`);
   requireThat(new Set(references).size === references.length, 'two operations target the same feature');
-  for (const {filename} of changeset.operations) {
+  for (const {filename, reference} of changeset.operations) {
     requireThat(Object.hasOwn(changeset.bases ?? {}, filename), `${filename} has no base hash`);
+    const isSupported = changeset.version === 2 || reference?.entityId === undefined;
+    requireThat(isSupported, 'references by entity ID need version 2');
   }
 }
 
-// Reads each changed source and stops if it is not the revision this changeset was made from.
+// Reads each changed source. A feature index means nothing on another revision, so it stops there; an entity ID still
+// names the same object.
 function readPinnedSources(changeset, root) {
   const sources = new Map();
-  const originalBytes = new Map();
   for (const [filename, expectedHash] of Object.entries(changeset.bases)) {
-    requireThat(/^[a-z][a-z-]*\.geojson$/.test(filename), `unsafe source file ${filename}`);
+    requireThat(/^[a-z][a-z-]*\.(geojson|json)$/.test(filename), `unsafe source file ${filename}`);
     const bytes = fs.readFileSync(path.join(root, sourcesPath, filename));
-    requireThat(sha256(bytes) === expectedHash, `${filename} differs from the base of this changeset`);
-    sources.set(filename, JSON.parse(bytes));
-    originalBytes.set(filename, bytes);
+    const isBoundToRevision = changeset.operations.some(
+      operation => operation.filename === filename && operation.reference?.featureIndex !== undefined
+    );
+    const isSameRevision = sha256(bytes) === expectedHash;
+    requireThat(
+      isSameRevision || (changeset.version === 2 && !isBoundToRevision),
+      `${filename} differs from the base of this changeset`
+    );
+    sources.set(filename, parseSource(filename, bytes));
   }
-  return {sources, originalBytes};
+  return sources;
+}
+
+// Resolves every reference to a position and checks the object there is still the reviewed one.
+function resolvedOperations(changeset, sources, rules, levels) {
+  const indexByFile = new Map(
+    [...sources].map(([filename, source]) => [
+      filename,
+      new Map(source.features.map(({properties}, index) => [entityKey(properties), index]))
+    ])
+  );
+  const resolved = changeset.operations.map(operation => {
+    requireThat(rules.layers[operation.filename], `unknown source file ${operation.filename}`);
+    checkOperationRules(operation, rules, levels);
+    if (operation.operation === 'add') return operation;
+    const source = sources.get(operation.filename);
+    const index = referencedIndex(operation, source, indexByFile.get(operation.filename));
+    checkExistingFeature(operation, index, source);
+    return {...operation, index};
+  });
+  const targets = resolved
+    .filter(({index}) => index !== undefined)
+    .map(({filename, index}) => `${filename}:${index}`);
+  requireThat(new Set(targets).size === targets.length, 'two operations target the same feature');
+  return resolved;
 }
 
 // Existing features keep their index until deletions are applied last, so references stay valid while applying.
@@ -318,7 +146,7 @@ function applyOperations(source, operations) {
   const added = [];
   for (const operation of operations) {
     if (operation.operation === 'add') added.push(operation.after);
-    else features[operation.reference.featureIndex] = operation.after;
+    else features[operation.index] = operation.after;
   }
   return {...source, features: [...features.filter(Boolean), ...added]};
 }
@@ -388,35 +216,84 @@ function readLedger(root) {
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {version: 1, corrections: []};
 }
 
-function provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfigBytes) {
+const featureCount = (filename, bytes) => parseSource(filename, bytes).features.length;
+
+// Extracted labels are counted by how their address was found; those added in the editor are counted apart.
+function labelCounts(labels) {
+  const local = labels.features.filter(({id}) => isLocalId(id)).length;
+  const direct = labels.features.filter(({id, properties}) => !isLocalId(id) && properties.address_sources.includes(id));
+  return {
+    features: labels.features.length,
+    direct_building_addresses: direct.length,
+    node_derived_addresses: labels.features.length - direct.length - local,
+    local_addresses: local
+  };
+}
+
+function nextLabelProvenance(provenance, labelBytes, buildingBytes) {
+  const {local_addresses: localAddresses, ...counts} = labelCounts(JSON.parse(labelBytes));
+  return {
+    ...provenance,
+    ...counts,
+    ...(localAddresses > 0 ? {local_addresses: localAddresses} : {}),
+    bytes: Buffer.byteLength(labelBytes),
+    sha256: sha256(labelBytes),
+    buildings_sha256: sha256(buildingBytes)
+  };
+}
+
+function nextBuildingDetails(details, bytesOf, contractsDirectory) {
+  const [buildings, roads, entrances, places] = [
+    buildingsFile,
+    'roads.geojson',
+    'building-entrances.geojson',
+    placesFile
+  ].map(filename => JSON.parse(bytesOf(filename)));
+  const counts = validateBuildingSources(buildings, roads, entrances, places, {contractsDirectory});
+  return {...details, ...counts};
+}
+
+function ownProvenanceWrites(root, nextBytes) {
+  return [...ownProvenance]
+    .filter(([filename]) => nextBytes.has(filename))
+    .map(([filename, {path: provenanceFile, countField}]) => {
+      const bytes = nextBytes.get(filename);
+      const provenance = {
+        ...JSON.parse(fs.readFileSync(path.join(root, provenanceFile), 'utf8')),
+        [countField]: featureCount(filename, bytes),
+        bytes: Buffer.byteLength(bytes),
+        sha256: sha256(bytes)
+      };
+      return [provenanceFile, JSON.stringify(provenance, null, 2) + '\n'];
+    });
+}
+
+function provenanceWrites(root, nextBytes, policyBytes, places, {visibilityConfigBytes, contractsDirectory}) {
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
   const provenance = JSON.parse(read(provenancePath));
   const labelProvenance = JSON.parse(read(labelProvenancePath));
-  const bytesOf = filename => nextBytes.get(filename) ?? fs.readFileSync(path.join(root, sourcesPath, filename));
+  const bytesOf = filename => nextBytes.get(filename) ?? read(`${sourcesPath}/${filename}`);
   for (const name of Object.keys(provenance.layers)) {
     const bytes = bytesOf(name);
-    const parsed = JSON.parse(bytes);
-    const count = parsed.features ? parsed.features.length : parsed.restrictions ? parsed.restrictions.length : 0;
     provenance.layers[name] = {
       ...provenance.layers[name],
-      features: count,
+      features: featureCount(name, bytes),
       bytes: Buffer.byteLength(bytes),
       sha256: sha256(bytes)
     };
   }
-  const labelBytes = bytesOf('building-labels.geojson');
-  labelProvenance.bytes = Buffer.byteLength(labelBytes);
-  labelProvenance.sha256 = sha256(labelBytes);
-  labelProvenance.buildings_sha256 = sha256(bytesOf('buildings.geojson'));
+  provenance.building_details = nextBuildingDetails(provenance.building_details, bytesOf, contractsDirectory);
   if (places) {
-    const placeBytes = nextBytes.get('places.geojson');
+    const placeBytes = nextBytes.get(placesFile);
     Object.assign(provenance, placesProvenance(placeBytes, places, policyBytes, visibilityConfigBytes), {
       places_count: places.features.length
     });
   }
+  const nextLabels = nextLabelProvenance(labelProvenance, bytesOf(labelsFile), bytesOf(buildingsFile));
   return [
     [provenancePath, JSON.stringify(provenance, null, 2) + '\n'],
-    [labelProvenancePath, JSON.stringify(labelProvenance, null, 2) + '\n']
+    [labelProvenancePath, JSON.stringify(nextLabels, null, 2) + '\n'],
+    ...ownProvenanceWrites(root, nextBytes)
   ];
 }
 
@@ -474,81 +351,71 @@ function writeStaged(root, writes) {
   return () => restoreOriginals(originals);
 }
 
+function checkChangedCollection(filename, collection, contractsDirectory) {
+  if (isRecordFile(filename)) return;
+  validateCollection(collection, {
+    label: filename,
+    requireKind: filename !== 'transport-stops.geojson',
+    contractsDirectory
+  });
+}
+
+// Every changed file after the edits and the derived facts that follow from them.
+function nextCollections(changeset, sources, operations, read) {
+  const edited = new Map();
+  const changedKeysByFile = new Map();
+  for (const [filename, source] of sources) {
+    const fileOperations = operations.filter(operation => operation.filename === filename);
+    edited.set(filename, applyOperations(source, fileOperations));
+    const changedKeys = fileOperations.filter(({after}) => after).map(({after}) => entityKey(after.properties));
+    changedKeysByFile.set(filename, new Set(changedKeys));
+  }
+  const next = withDerivedFacts(edited, sources, changedKeysByFile, read);
+  if (!next.has(buildingsFile) && !next.has(labelsFile)) return next;
+  // Positions are those of the written file, which is sorted.
+  const buildings = next.has(buildingsFile)
+    ? parseSource(buildingsFile, serializeSource(buildingsFile, next.get(buildingsFile)))
+    : read(buildingsFile);
+  const labels = labelsFollowingBuildings(next.get(labelsFile) ?? read(labelsFile), read(buildingsFile), buildings);
+  next.set(labelsFile, labels);
+  return next;
+}
+
 // The new bytes of every changed source, plus the policy and regenerated places when places changed.
-function serializedResults(changeset, sources, originalBytes, policyText, levelConfig, contractsDirectory) {
+function serializedResults(collections, changeset, operations, policyText, levelConfig, contractsDirectory) {
   const nextBytes = new Map();
   let policyBytes = policyText;
   let places = null;
-  for (const [filename, source] of sources) {
-    const operations = changeset.operations.filter(operation => operation.filename === filename);
-    const nextSource = applyOperations(source, operations);
-    if (filename === 'places.geojson') {
-      const policy = policyWithLevelEdits(JSON.parse(policyText), operations, changeset);
-      policyBytes = JSON.stringify(policy, null, 2) + '\n';
-      places = applyVisibility(nextSource, policy, levelConfig);
-      validateCollection(places, {places: true, label: 'places', contractsDirectory});
-      nextBytes.set(filename, serializePlaces(places));
-    } else {
-      validateCollection(nextSource, {
-        label: filename,
-        requireKind: filename !== 'transport-stops.geojson',
-        contractsDirectory
-      });
-      nextBytes.set(filename, serializeSourceCollection(nextSource));
+  for (const [filename, collection] of collections) {
+    if (filename !== placesFile) {
+      checkChangedCollection(filename, collection, contractsDirectory);
+      nextBytes.set(filename, serializeSource(filename, collection));
+      continue;
     }
+    const placeOperations = operations.filter(operation => operation.filename === filename);
+    const policy = policyWithLevelEdits(JSON.parse(policyText), placeOperations, changeset);
+    policyBytes = JSON.stringify(policy, null, 2) + '\n';
+    places = applyVisibility(collection, policy, levelConfig);
+    validateCollection(places, {places: true, label: 'places', contractsDirectory});
+    nextBytes.set(filename, serializePlaces(places));
   }
   return {nextBytes, policyBytes, places};
 }
 
-// Returns a summary. Throws before writing when anything fails validation, leaving reviewed inputs intact, and restores
-// them if the final check on the written files fails. checkFinalData exists so a test can fail that last step.
-export function applyChangeset(
-  changeset,
-  root = rootDirectory,
-  {
-    now = new Date().toISOString(),
-    checkFinalData = checkData,
-    contractsDirectory,
-    newEntityId = () => `local:${crypto.randomUUID()}`
-  } = {}
-) {
-  checkEnvelope(changeset);
-  const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-  const rules = readContract(contractsDirectory, 'editor-layers.json');
-  const visibilityConfigBytes = fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8');
-  const levelConfig = JSON.parse(visibilityConfigBytes);
-  const levels = new Set(levelConfig.levels.map(entry => entry.level));
-  const {sources, originalBytes} = readPinnedSources(changeset, root);
-  for (const operation of changeset.operations) checkOperation(operation, sources, rules, levels);
+function withLocalIdentity(changeset, operations, sources, newEntityId) {
   const usedIds = new Set(
-    [...sources.values()].flatMap(source =>
-      source.features.map(feature => feature.properties.entityId).filter(Boolean))
+    [...sources.values()].flatMap(source => source.features.map(({properties}) => properties.entityId).filter(Boolean))
   );
-  const appliedOperations = changeset.operations.map(operation => operation.operation === 'add' ? {
-    ...operation,
-    after: adoptAddedFeature(operation.after, sources.get(operation.filename), newEntityId, usedIds)
-  } : operation);
-  const appliedChangeset = {...changeset, operations: appliedOperations};
-  const {nextBytes, policyBytes, places} = serializedResults(
-    appliedChangeset,
-    sources,
-    originalBytes,
-    read(policyPath),
-    levelConfig,
-    contractsDirectory
-  );
-  const parsedSource = filename => JSON.parse(nextBytes.get(filename) ?? read(`${sourcesPath}/${filename}`));
-  validateBuildingLabels(parsedSource('building-labels.geojson'), parsedSource('buildings.geojson'), {
-    contractsDirectory
+  return operations.map(operation => {
+    const isAdoptedAddition =
+      operation.operation === 'add' && carriesIdentity(operation.filename, sources.get(operation.filename));
+    if (!isAdoptedAddition) return operation;
+    const entityId = localEntityId(changeset, operation, newEntityId);
+    return {...operation, after: adoptAddedFeature(operation.after, entityId, usedIds)};
   });
+}
 
-  const writes = [...nextBytes].map(([filename, bytes]) => [`${sourcesPath}/${filename}`, bytes]);
-  if (places) writes.push([policyPath, policyBytes]);
-  writes.push(...provenanceWrites(root, nextBytes, policyBytes, places, visibilityConfigBytes));
-  const ledger = readLedger(root);
-  ledger.corrections.push(...ledgerEntries(appliedChangeset, now));
-  writes.push([ledgerPath, JSON.stringify(ledger, null, 2) + '\n']);
-
+function writeChecked(root, writes, checkFinalData, contractsDirectory) {
   const restore = writeStaged(root, writes);
   try {
     checkFinalData(root, {contractsDirectory});
@@ -557,10 +424,65 @@ export function applyChangeset(
     const outcome = restoreNote ? 'reviewed files not fully restored' : 'reviewed files restored';
     throw new Error(`Changeset refused, ${outcome}: ${error.message}.${restoreNote}`, {cause: error});
   }
-  const needsTileRebuild = [...nextBytes.keys()].some(
-    filename => filename !== 'places.geojson' && filename !== 'building-labels.geojson'
+}
+
+const tileRebuildExceptions = new Set([placesFile, labelsFile, 'transport-stops.geojson', 'transit-routes.json']);
+
+// Returns a summary. Throws before writing when anything fails validation, leaving reviewed inputs intact, and restores
+// them if the final check on the written files fails. checkFinalData exists so a test can fail that last step.
+// recordsCorrections is off while replaying the ledger, whose entries are already recorded.
+export function applyChangeset(
+  changeset,
+  root = rootDirectory,
+  {
+    now = new Date().toISOString(),
+    checkFinalData = checkData,
+    contractsDirectory,
+    newEntityId = () => `local:${crypto.randomUUID()}`,
+    recordsCorrections = true
+  } = {}
+) {
+  checkEnvelope(changeset);
+  const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+  const readSource = filename => parseSource(filename, read(`${sourcesPath}/${filename}`));
+  const rules = readContract(contractsDirectory, 'editor-layers.json');
+  requireSupportedRules(rules);
+  const visibilityConfigBytes = fs.readFileSync(contractPath(contractsDirectory, 'place-visibility.json'), 'utf8');
+  const levelConfig = JSON.parse(visibilityConfigBytes);
+  const levels = new Set(levelConfig.levels.map(entry => entry.level));
+  const sources = readPinnedSources(changeset, root);
+  const resolved = resolvedOperations(changeset, sources, rules, levels);
+  const operations = withLocalIdentity(changeset, resolved, sources, newEntityId);
+  const collections = nextCollections(changeset, sources, operations, readSource);
+  const {nextBytes, policyBytes, places} = serializedResults(
+    collections,
+    changeset,
+    operations,
+    read(policyPath),
+    levelConfig,
+    contractsDirectory
   );
-  return {files: [...nextBytes.keys()], operations: changeset.operations.length, needsTileRebuild};
+  const parsedSource = filename => JSON.parse(nextBytes.get(filename) ?? read(`${sourcesPath}/${filename}`));
+  validateBuildingLabels(parsedSource(labelsFile), parsedSource(buildingsFile), {contractsDirectory});
+
+  const writes = [...nextBytes].map(([filename, bytes]) => [`${sourcesPath}/${filename}`, bytes]);
+  if (places) writes.push([policyPath, policyBytes]);
+  writes.push(
+    ...provenanceWrites(root, nextBytes, policyBytes, places, {visibilityConfigBytes, contractsDirectory})
+  );
+  if (recordsCorrections) {
+    const ledger = readLedger(root);
+    ledger.corrections.push(...ledgerEntries({...changeset, operations}, now));
+    writes.push([ledgerPath, JSON.stringify(ledger, null, 2) + '\n']);
+  }
+  writeChecked(root, writes, checkFinalData, contractsDirectory);
+  const changedFiles = [...nextBytes.keys()];
+  return {
+    files: changedFiles,
+    operations: changeset.operations.length,
+    fieldItems: changeset.fieldItems?.length ?? 0,
+    needsTileRebuild: changedFiles.some(filename => !tileRebuildExceptions.has(filename))
+  };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -576,6 +498,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(
     `Applied ${summary.operations} operations to ${summary.files.join(', ')}. Review the diff before committing.`
   );
+  if (summary.fieldItems > 0)
+    console.log(`${summary.fieldItems} field items stay in the changeset: finish them in the editor.`);
   if (summary.needsTileRebuild)
     console.log('Display geometry changed: run make -C data build-data and review the release.');
 }

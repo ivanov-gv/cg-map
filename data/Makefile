@@ -1,7 +1,7 @@
 ROOT := ..
 PYTHON ?= python3
 
-.PHONY: verify lint check check-topology build-data build-relief apply-changeset test python-test python-check transit-routes
+.PHONY: verify lint check check-topology build-data build-relief apply-changeset reapply-corrections test python-test python-check transit-routes
 
 verify: lint check test python-test python-check check-topology
 
@@ -26,6 +26,10 @@ build-relief:
 apply-changeset:
 	$(if $(CHANGESET),,$(error Set CHANGESET to the absolute path of a changeset file))
 	cd $(ROOT) && node data/tools/apply-changeset.mjs $(abspath $(CHANGESET)) --contracts-directory $(abspath $(ROOT)/packages/contracts)
+
+# Puts the reviewed corrections back over freshly extracted sources and lists what needs a look. Never commits.
+reapply-corrections:
+	cd $(ROOT) && node data/tools/reapply-corrections.mjs --contracts-directory $(abspath $(ROOT)/packages/contracts)
 
 # Regenerate transport-stops and transit-routes from current sources.
 transit-routes:

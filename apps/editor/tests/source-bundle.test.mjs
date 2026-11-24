@@ -16,7 +16,7 @@ const sha256 = createHash('sha256').update(bytes).digest('hex');
 const metadata = filename => ({filename, sha256, bytes: bytes.length, featureCount: 0});
 const manifest = (version = currentBundleVersion) => ({version, layers: bundleFilesByVersion[version].map(metadata)});
 
-test('manifest accepts both bundle versions and requires one entry per supported filename', () => {
+test('manifest accepts every bundle version and requires one entry per supported filename', () => {
   assert.deepEqual(bundleFilesByVersion[1], [
     'building-labels.geojson',
     'buildings.geojson',
@@ -42,7 +42,18 @@ test('manifest accepts both bundle versions and requires one entry per supported
     'transport-stops.geojson',
     'water.geojson'
   ]);
-  for (const version of [1, 2]) {
+  const addedInVersion3 = bundleFilesByVersion[3].filter(filename => !bundleFilesByVersion[2].includes(filename));
+  assert.deepEqual(addedInVersion3, [
+    'canyon-rims.geojson',
+    'contours.geojson',
+    'protected-areas.geojson',
+    'ridges.geojson',
+    'slopes.geojson',
+    'summits.geojson',
+    'transit-routes.json',
+    'turn-restrictions.json'
+  ]);
+  for (const version of [1, 2, 3]) {
     assert.equal(
       validateBundleManifest(manifest(version)).layers.length,
       bundleFilesByVersion[version].length
@@ -50,19 +61,19 @@ test('manifest accepts both bundle versions and requires one entry per supported
   }
   const duplicate = manifest();
   duplicate.layers[1] = duplicate.layers[0];
-  assert.throws(() => validateBundleManifest(duplicate), /exactly the 13/);
+  assert.throws(() => validateBundleManifest(duplicate), /exactly the 21/);
   const v1WithEntrance = manifest(1);
   v1WithEntrance.layers.push(metadata('building-entrances.geojson'));
   assert.throws(() => validateBundleManifest(v1WithEntrance), /exactly the 8/);
   const withoutFile = filename => ({
-    version: 2,
+    version: 3,
     layers: sourceFiles.filter(entry => entry !== filename).map(metadata)
   });
   for (const filename of ['building-entrances.geojson', 'settlements.geojson']) {
-    assert.throws(() => validateBundleManifest(withoutFile(filename)), /exactly the 13/);
+    assert.throws(() => validateBundleManifest(withoutFile(filename)), /exactly the 21/);
   }
   for (const invalid of [
-    {version: 3, layers: sourceFiles.map(metadata)},
+    {version: 4, layers: sourceFiles.map(metadata)},
     {version: 1, layers: []},
     {version: 1, layers: bundleFilesByVersion[2].map(metadata)}
   ]) {

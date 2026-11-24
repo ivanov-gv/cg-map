@@ -6,6 +6,7 @@ import {entranceBearing} from './building-entrances.mjs';
 import {validateSourceEntities} from './entity-identity.mjs';
 import {applyVisibility, placesProvenance, serializePlaces} from './apply-place-visibility.mjs';
 import {contractPath, contractsDirectoryFrom, readContract} from './contracts.mjs';
+import {compareRoadIds, isLocalId} from './changeset-derivations.mjs';
 import {reversedCanyonRims, reversedClosedContours} from './relief-directions.mjs';
 const rootDirectory=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const nameFields = new Set(['name', 'name:en']);
@@ -86,7 +87,9 @@ function validateRingWinding(geometryValue, label) {
 function validateLandWaterProperties(properties, label, rules, expectedOsmTagKinds) {
   const definitions = rules.definitions;
   const {osmTag, name, 'name:en': englishName, destination, tunnel, intermittent} = properties;
-  if ((expectedOsmTagKinds ?? rules.requiredOsmTagKinds)?.has(properties.kind)) {
+  // An area or line drawn in the editor has no OSM tag to copy.
+  const isExtracted = !isLocalId(properties.entityId);
+  if (isExtracted && (expectedOsmTagKinds ?? rules.requiredOsmTagKinds)?.has(properties.kind)) {
     requireValue(typeof osmTag === 'string' && osmTag.length > 0, `${label}: missing osmTag`);
   }
   if (osmTag !== undefined) {
@@ -181,6 +184,8 @@ export function validateRelief(data, {label, contractsDirectory}) {
         requireValue(!(key in properties) || typeof properties[key] === 'string', `${label}: invalid summit name`);
       }
       requireValue(properties.ele === null || Number.isFinite(properties.ele), `${label}: invalid OSM elevation`);
+      // A summit added in the editor was never compared with the terrain model.
+      if (isLocalId(properties.entityId)) continue;
       requireValue(Number.isFinite(properties.demElevation) && Number.isFinite(properties.surroundingDemElevation), `${label}: missing DEM elevation`);
       requireValue(['missing', 'mismatch', 'ok'].includes(properties.heightCheck), `${label}: invalid heightCheck`);
       requireValue(properties.heightCheck === 'missing' ? properties.ele === null : properties.ele !== null, `${label}: heightCheck disagrees with OSM elevation`);
@@ -200,7 +205,7 @@ export function validateRelief(data, {label, contractsDirectory}) {
       const hasSummit = 'summit' in properties || 'summitName' in properties;
       requireValue(!hasSummit || ('summit' in properties && 'summitName' in properties), `${label}: summit link and name must appear together`);
       if (hasSummit) {
-        requireValue(/^(node|way|relation)\/[1-9][0-9]*$/.test(properties.summit), `${label}: invalid summit identity`);
+        requireValue(/^(node|way|relation)\/[1-9][0-9]*$/.test(properties.summit) || isLocalId(properties.summit), `${label}: invalid summit identity`);
         requireValue(typeof properties.summitName === 'string', `${label}: invalid summit name`);
       }
     }
@@ -412,9 +417,10 @@ export function validateTransitRoutes(data) {
       requireValue(typeof direction.headsign === 'string', `${routeLabel}: direction missing headsign`);
       // entityId/entityVersion are required for OSM directions
       if (route.network === 'intercity' || direction.entityId) {
-        requireValue(typeof direction.entityId === 'string' && /^relation\/\d+$/.test(direction.entityId),
+        const isLocal = isLocalId(direction.entityId);
+        requireValue(isLocal || (typeof direction.entityId === 'string' && /^relation\/\d+$/.test(direction.entityId)),
           `${routeLabel}: direction missing entityId`);
-        requireValue(Number.isInteger(direction.entityVersion) && direction.entityVersion >= 1,
+        requireValue(isLocal || (Number.isInteger(direction.entityVersion) && direction.entityVersion >= 1),
           `${routeLabel}: direction missing entityVersion`);
       }
       requireValue(Array.isArray(direction.stops) && direction.stops.length >= 2, `${routeLabel}: direction has fewer than 2 stops`);
@@ -422,9 +428,11 @@ export function validateTransitRoutes(data) {
         if (typeof stop === 'string') {
           // City route stop ID
           requireValue(stop.length > 0, `${routeLabel}: empty stop ID in direction`);
+        } else if (stop.turn !== undefined) {
+          position(stop.turn, `${routeLabel}: turn point`);
         } else {
           // OSM stop object with position
-          requireValue(typeof stop.id === 'string' && /^node\/\d+$/.test(stop.id),
+          requireValue(typeof stop.id === 'string' && (/^node\/\d+$/.test(stop.id) || isLocalId(stop.id)),
             `${routeLabel}: OSM stop missing node ID`);
           requireValue(Array.isArray(stop.coordinates) && stop.coordinates.length === 2,
             `${routeLabel}: OSM stop missing coordinates`);
@@ -440,7 +448,8 @@ export function validateTransitRoutes(data) {
 function collectRouteStopIds(direction) {
   const stopIds = [];
   for (const stop of direction.stops) {
-    stopIds.push(typeof stop === 'string' ? stop : stop.id);
+    const isTurnPoint = typeof stop === 'object' && stop.turn !== undefined;
+    if (!isTurnPoint) stopIds.push(typeof stop === 'string' ? stop : stop.id);
   }
   for (const variant of direction.variants || []) {
     for (const stop of variant.stops) {
@@ -637,18 +646,19 @@ export function validateBuildingLabels(data, buildings, {requireAdopted = false,
     const hasNumber = properties['addr:housenumber'] !== undefined || properties.building_number !== undefined;
     const hasEntrances = Array.isArray(properties.entrances) && properties.entrances.length > 0;
     requireValue(properties.kind === 'building' && (hasNumber || hasEntrances), 'Missing building address or entrances');
-    for (const field of ['addr:housenumber', 'building_number', 'lamela', 'addr:street']) {
+    for (const field of ['addr:housenumber', 'building_number', 'display_number', 'lamela', 'addr:street']) {
       const value = properties[field];
       if (value === undefined) continue;
-      const isNumber = ['addr:housenumber', 'building_number'].includes(field);
+      const isNumber = ['addr:housenumber', 'building_number', 'display_number'].includes(field);
       requireValue(addressText(value) && (!isNumber || !noNumber(value, houseNumber)), `Invalid building ${field}`);
     }
-    const hasUniqueSource = typeof feature.id === 'string' && /^way\/\d+$/.test(feature.id) && properties.osm_id === feature.id && !sourceIDs.has(feature.id);
+    const hasKnownId = /^way\/\d+$/.test(feature.id) || isLocalId(feature.id);
+    const hasUniqueSource = typeof feature.id === 'string' && hasKnownId && properties.osm_id === feature.id && !sourceIDs.has(feature.id);
     requireValue(hasUniqueSource, 'Invalid or duplicate building source ID');
     const hasUniqueFootprint = Number.isInteger(footprintIndex) && footprintIndex >= 0 && footprintIndex < buildings.features.length && !footprints.has(footprintIndex);
     requireValue(hasUniqueFootprint, 'Invalid or duplicate footprint reference');
     const addressSources = properties.address_sources;
-    const hasSources = Array.isArray(addressSources) && addressSources.length > 0 && addressSources.every(identifier => /^(way|node)\/\d+$/.test(identifier));
+    const hasSources = Array.isArray(addressSources) && addressSources.length > 0 && addressSources.every(identifier => /^(way|node)\/\d+$/.test(identifier) || isLocalId(identifier));
     requireValue(hasSources, 'Building address source missing');
     const polygon = buildings.features[footprintIndex].geometry;
     const anchor = feature.geometry.coordinates;
@@ -676,7 +686,7 @@ function copiedText(properties, name, rules, label) {
     return false;
   }
   const rule = rules[name];
-  const isAllowed = addressText(value) && (!rule || value.length <= rule.maxLength);
+  const isAllowed = addressText(value) && value.length <= (rule?.maxLength ?? Infinity);
   requireValue(isAllowed, `${label}: invalid ${name}`);
   return true;
 }
@@ -701,10 +711,6 @@ function countCopiedBuildingTags(properties, counts, rules) {
   }
 }
 
-function wayNumber(entityId) {
-  return Number.parseInt(String(entityId).split('/')[1], 10);
-}
-
 function validateBuildingStreetJoin(properties, streetGroups, counts, rules) {
   const hasStreet = copiedText(properties, 'addr:street', rules.building, 'building');
   const matchingRoads = hasStreet
@@ -716,7 +722,7 @@ function validateBuildingStreetJoin(properties, streetGroups, counts, rules) {
   if (streetEntityId !== undefined || streetEntityIds !== undefined) {
     requireValue(hasStreet, 'building: street join without a street name');
     // Published roads carry no OSM node IDs, so the source must declare its whole connected group.
-    const expectedIds = [...matchingRoads].sort((first, second) => wayNumber(first) - wayNumber(second));
+    const expectedIds = [...matchingRoads].sort(compareRoadIds);
     const isWholeGroup = Array.isArray(streetEntityIds) &&
       streetEntityIds.length > 0 &&
       streetEntityIds.length === expectedIds.length &&
@@ -840,7 +846,7 @@ export function validateRoadNodes(data, {contractsDirectory} = {}) {
     const name = `road-nodes.geojson feature ${index}`;
     const properties = feature.properties;
     requireValue(ROAD_NODE_KINDS.has(properties.kind), `${name}: unknown road node kind: ${properties.kind}`);
-    requireValue(/^node\/\d+$/.test(properties.entityId), `${name}: invalid OSM node identity`);
+    requireValue(/^node\/\d+$/.test(properties.entityId) || isLocalId(properties.entityId), `${name}: invalid node identity`);
     requireValue(!seenEntityIds.has(properties.entityId), `${name}: duplicate entityId`);
     seenEntityIds.add(properties.entityId);
   }
@@ -887,9 +893,10 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
 
   for (const [index, restriction] of data.restrictions.entries()) {
     const label = `restriction ${index} (${restriction.entityId})`;
-    requireValue(/^relation\/\d+$/.test(restriction.entityId), `${label}: invalid entityId`);
+    const isLocal = isLocalId(restriction.entityId);
+    requireValue(isLocal || /^relation\/\d+$/.test(restriction.entityId), `${label}: invalid entityId`);
     requireValue(
-      Number.isSafeInteger(restriction.entityVersion) && restriction.entityVersion >= 1,
+      isLocal || (Number.isSafeInteger(restriction.entityVersion) && restriction.entityVersion >= 1),
       `${label}: invalid entityVersion`
     );
     requireValue(
@@ -948,9 +955,10 @@ export function validateRoads(data, {contractsDirectory} = {}) {
       if (levelValue !== undefined) {
         requireValue(Number.isInteger(levelValue), `${name}: ${levelField} must be an integer`);
       }
+      // A level may stand alone: an end drawn in the editor is not an OSM node.
       const hasNode = nodeValue !== undefined;
       const hasLevel = levelValue !== undefined;
-      requireValue(hasNode === hasLevel, `${name}: ${nodeField} and ${levelField} must appear together`);
+      requireValue(!hasNode || hasLevel, `${name}: ${nodeField} needs ${levelField}`);
     }
   }
   requireValue(count > 0, 'Empty roads snapshot');
@@ -991,6 +999,14 @@ function validateReliefDirections(root) {
   requireValue(contours.reversed.length === 0, `contours.geojson: ${contours.reversed.length} closed contours run with higher ground on their right`);
 }
 
+// The source files that reviewed editor changesets changed after their build.
+function filesWithCorrections(root) {
+  const ledgerPath = path.join(root, 'data/sources/editor-corrections.json');
+  if (!fs.existsSync(ledgerPath)) return new Set();
+  const {corrections} = JSON.parse(fs.readFileSync(ledgerPath));
+  return new Set(corrections.map(({filename}) => filename));
+}
+
 export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const buildingBytes=fs.readFileSync(path.join(root,'data/sources/buildings.geojson'));
   const labelBytes=fs.readFileSync(path.join(root,'data/sources/building-labels.geojson'));
@@ -1021,7 +1037,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
 
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'data/sources/provenance.json')));
   const landWaterContractRules = landWaterRules(contractsDirectory);
-  requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses===labelCount, 'Building label source/count metadata mismatch');
+  requireValue(labelProvenance.upstream_snapshot===provenance.upstream_snapshot && labelProvenance.direct_building_addresses+labelProvenance.node_derived_addresses+(labelProvenance.local_addresses ?? 0)===labelCount, 'Building label source/count metadata mismatch');
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   const specificValidators = {
     'border-edges.geojson': validateBorderEdges,
@@ -1120,6 +1136,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(parameters.canyonRimJoinGapMetres === 60 && parameters.canyonRimMinimumLengthMetres === 100, 'Relief rim parameters changed without review');
   requireValue(relief.retiredBuildParameters?.radiusMetres === 400, 'Retired ridge radius missing from relief provenance');
   requireValue(relief.sources && ['contour', 'summit', 'slope', 'ridge', 'canyon-rim'].every(kind => typeof relief.sources[kind] === 'string' && relief.sources[kind].length > 0), 'Relief layer sources missing from provenance');
+  const correctedFiles = filesWithCorrections(root);
   const reportPath = path.join(root, relief.reportFile);
   if (fs.existsSync(reportPath)) {
     const reportBytes = fs.readFileSync(reportPath);
@@ -1130,6 +1147,8 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
     requireValue(report.canyonRims.riverBanks.length === 4, 'Relief report must describe both banks of both rivers');
     requireValue(report.license.attribution === copernicusAttribution, 'Copernicus attribution changed');
     for (const [name, expected] of Object.entries(report.layers)) {
+      // A reviewed correction came after the build this report describes.
+      if (correctedFiles.has(name)) continue;
       requireValue(provenance.layers[name]?.features === expected.features && provenance.layers[name]?.bytes === expected.bytes && provenance.layers[name]?.sha256 === expected.sha256, `${name}: relief report differs from provenance`);
     }
   }

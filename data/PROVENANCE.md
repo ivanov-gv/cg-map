@@ -17,7 +17,7 @@ bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
 eight without `building-entrances.geojson` or the later settlement and border files.
-`sources/building-entrances.geojson` is a read-only OSM extract of 157 tagged entrance nodes on or within one metre of a
+`sources/building-entrances.geojson` is an OSM extract of 157 tagged entrance nodes on or within one metre of a
 published footprint, with 28 nearby candidates left unjoined. The refreshed `sources/buildings.geojson` carries 43,978
 `building` values, 445 `building:levels`, three `building:material`, one `start_date`, 265 `name`, 142 `roof:levels`,
 896 `addr:street` and 1,003 `addr:housenumber` values. Six no-number placeholders were omitted and recorded as
@@ -69,14 +69,14 @@ named protected areas that reach the detail box (`leisure=nature_reserve`, `boun
 `boundary=national_park`), among them way 28132307, Park šuma Gorica. They are names for the map, not land cover; see
 [decision 0036](../docs/decisions/0036-protected-areas-name-the-map-not-land.md).
 
-Issue #328 adds three OSM-derived read-only sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009
-named place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26
-areas (25 municipalities and one derived unassigned-water area). Together they are 2,605,818 bytes; counts, byte sizes
-and SHA-256 for each file are in `sources/provenance.json`. Settlement properties copy the OSM name, population,
-capital, admin level and Wikidata facts, add the `rank` and municipality code, keep the original `node/N` identity, and
-sort features by `entityId` then `entityPart`. Suburb, quarter and neighbourhood nodes are limited to the whole-city
-detail box; 34 place nodes outside the reviewed country outline were assigned to the nearest municipality, with a
-maximum offset of 0.022884 degrees. The fallback is bounded at 0.025 degrees.
+Issue #328 adds three OSM-derived sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009 named
+place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26 areas
+(25 municipalities and one derived unassigned-water area). Together they are 2,605,818 bytes; counts, byte sizes and
+SHA-256 for each file are in `sources/provenance.json`. Settlement properties copy the OSM name, population, capital,
+admin level and Wikidata facts, add the `rank` and municipality code, keep the original `node/N` identity, and sort
+features by `entityId` then `entityPart`. Suburb, quarter and neighbourhood nodes are limited to the whole-city detail
+box; 34 place nodes outside the reviewed country outline were assigned to the nearest municipality, with a maximum
+offset of 0.022884 degrees. The fallback is bounded at 0.025 degrees.
 
 Twenty-nine edge features keep an exact `way/N` identity; the other 112 use `derived:edge-<left>-<right>-<n>` and record
 their contributing OSM ways. Each shared edge is simplified once, and the municipality polygons are rebuilt in edge

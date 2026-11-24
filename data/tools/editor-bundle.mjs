@@ -1,13 +1,14 @@
 import {readFile, readdir, mkdir, writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
+import {parseSource} from './changeset-sources.mjs';
 
 const contractFilename = 'editor-bundle.schema.json';
 
-// Version 2 is open while the Feature stack merges: later Features add their files to this list before shipping.
-export const currentBundleVersion = 2;
+// Every source of an object on the map. Earlier versions are frozen; the editor still reads them.
+export const currentBundleVersion = 3;
 
-// The pinned 0.1.0 contract is flat, while HEAD lists its versions in oneOf. Only HEAD can publish version 2.
+// The pinned 0.1.0 contract is flat, while HEAD lists its versions in oneOf. Only HEAD can publish the current version.
 function contractVersion(contract) {
   if (!contract.oneOf) {
     return 1;
@@ -59,14 +60,14 @@ export async function writeEditorBundle(sourceDirectory, outputDirectory, contra
   const contractFiles = contractFileSet(contract, version);
   const directoryEntries = await readdir(sourceDirectory);
   const sourceFiles = directoryEntries
-    .filter(name => name.endsWith('.geojson') && contractFiles.includes(name))
+    .filter(name => contractFiles.includes(name))
     .sort();
   assertContractFileSet(sourceFiles, contractFiles);
   const layers = [];
   await mkdir(outputDirectory, {recursive: true});
   for (const filename of sourceFiles) {
     const bytes = await readFile(path.join(sourceDirectory, filename));
-    const collection = JSON.parse(bytes);
+    const collection = parseSource(filename, bytes);
     if (collection.type !== 'FeatureCollection' || !Array.isArray(collection.features)) {
       throw new Error(`Editor bundle: ${filename} is not a FeatureCollection`);
     }

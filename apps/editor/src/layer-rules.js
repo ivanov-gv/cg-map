@@ -1,36 +1,99 @@
-import {isValidCoordinate, lineProblem, polygonProblem} from './geometry-validation.js';
+import {derivedGeometryProblem, geometryProblem} from './geometry-validation.js';
 
 // The same checks as data/tools/apply-changeset.mjs, so a refusal happens at the edit and not after the export.
 // The shared fixtures in the pinned @ivanov-gv/map-contracts package and tests/integration keep the two in step; the
 // importer stays the final authority.
 const placesFile = 'places.geojson';
+const stopsFile = 'transport-stops.geojson';
+// Version 1 rules lack typed values and limited kinds. The editor still reads them with an older reviewed bundle.
+const supportedRulesVersions = [1, 2];
 const placeIdentityFields = ['id', 'source'];
 const newFeatureFields = ['type', 'properties', 'geometry'];
 const isSameJSON = (first, second) => JSON.stringify(first) === JSON.stringify(second);
 
 // Reads the pinned editor-layers contract. A file without rules could never be exported, so fail at startup.
 export function validateLayerRules(rules, sourceFiles) {
-  if (rules?.version !== 1 || !rules.layers) throw new Error('Unsupported editing rules.');
+  if (!supportedRulesVersions.includes(rules?.version) || !rules.layers) throw new Error('Unsupported editing rules.');
   for (const filename of sourceFiles) {
     if (!rules.layers[filename]) throw new Error(`Editing rules do not cover ${filename}.`);
   }
   return rules;
 }
 
-function geometryProblem(geometry, allowedTypes) {
-  if (!allowedTypes.includes(geometry?.type))
-    return `${geometry?.type ?? 'This'} geometry is not editable in this file`;
-  if (geometry.type === 'Point') {
-    return isValidCoordinate(geometry.coordinates) ? null : 'point is not a WGS84 coordinate';
-  }
-  if (geometry.type === 'LineString') return lineProblem(geometry.coordinates);
-  return polygonProblem(geometry.coordinates);
-}
-
 function isForbiddenValue(value, propertyRule) {
   if (!propertyRule.forbiddenValues) return false;
   const ignoredCharacters = new RegExp(propertyRule.ignoredCharactersPattern, 'g');
   return propertyRule.forbiddenValues.includes(value.toLowerCase().replace(ignoredCharacters, ''));
+}
+
+function textProblem(name, value, propertyRule) {
+  if (typeof value !== 'string' || value.trim().length === 0) return `${name} must be nonempty text`;
+  if (propertyRule.maxLength && value.length > propertyRule.maxLength) return `${name} is too long`;
+  if (propertyRule.enum && !propertyRule.enum.includes(value)) return `${name} is not an allowed value`;
+  if (propertyRule.pattern && !new RegExp(propertyRule.pattern).test(value)) return `${name} has an unsupported format`;
+  return isForbiddenValue(value, propertyRule) ? `${name} is a placeholder, not a value` : null;
+}
+
+function numberProblem(name, value, propertyRule) {
+  const isRightType = propertyRule.type === 'integer' ? Number.isInteger(value) : Number.isFinite(value);
+  if (!isRightType) return `${name} must be ${propertyRule.type === 'integer' ? 'a whole number' : 'a number'}`;
+  if (value < (propertyRule.minimum ?? -Infinity)) return `${name} is below ${propertyRule.minimum}`;
+  if (value > (propertyRule.maximum ?? Infinity)) return `${name} is above ${propertyRule.maximum}`;
+  const isOnStep = !propertyRule.multipleOf || value % propertyRule.multipleOf === 0;
+  return isOnStep ? null : `${name} must be a multiple of ${propertyRule.multipleOf}`;
+}
+
+function listProblem(name, value, propertyRule) {
+  const isTextList =
+    Array.isArray(value) &&
+    value.every(
+      entry => typeof entry === 'string' && entry.trim().length > 0 && entry.length <= propertyRule.maxLength
+    );
+  return isTextList ? null : `${name} must be a list of nonempty texts`;
+}
+
+function integersProblem(name, value) {
+  const isIntegerList = Array.isArray(value) && value.every(entry => Number.isSafeInteger(entry) && entry > 0);
+  return isIntegerList ? null : `${name} must be a list of whole numbers`;
+}
+
+const isCoordinatePair = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
+
+// A stop of a route is a stop ID, a positioned stop outside the stop file, or a turn point the route must pass.
+function isRouteStop(stop) {
+  if (typeof stop === 'string') return stop.length > 0;
+  if (isCoordinatePair(stop?.turn)) return true;
+  return typeof stop?.id === 'string' && isCoordinatePair(stop.coordinates);
+}
+
+const isTurnPoint = stop => typeof stop === 'object' && stop !== null && Object.hasOwn(stop, 'turn');
+
+function directionsProblem(name, value) {
+  if (!Array.isArray(value) || value.length === 0) return `${name} needs at least one direction`;
+  for (const direction of value) {
+    if (typeof direction?.headsign !== 'string') return `${name} needs a headsign`;
+    if (!Array.isArray(direction.stops) || !direction.stops.every(isRouteStop)) return `${name} has an invalid stop`;
+    const servedStops = direction.stops.filter(stop => !isTurnPoint(stop));
+    if (servedStops.length < 2) return `${name} needs at least two stops`;
+  }
+  return null;
+}
+
+const problemByType = {
+  integer: numberProblem,
+  number: numberProblem,
+  boolean: (name, value) => (typeof value === 'boolean' ? null : `${name} must be yes or no`),
+  list: listProblem,
+  integers: integersProblem,
+  directions: directionsProblem
+};
+
+function levelProblem(name, properties, propertyRule, levels) {
+  const value = properties[name];
+  if (!levels.has(value)) return `${name} is not a supported level`;
+  const isReserved =
+    value === propertyRule.landmarkLevel && properties.category !== propertyRule.landmarkCategory;
+  return isReserved ? `${name} ${value} is reserved for ${propertyRule.landmarkCategory} landmarks` : null;
 }
 
 // Returns why these properties cannot be recorded, or null. A value equal to the source's stands as it is: most roads
@@ -45,43 +108,73 @@ export function propertyProblem(properties, propertyRules, levels, previousPrope
     // A level stands as it was only while the category it depends on does too.
     const isCategoryChange = propertyRule.isLevel && !isSameJSON(properties.category, previousProperties.category);
     if (isSameJSON(value, previousProperties[name]) && !isCategoryChange) continue;
-    if (propertyRule.isLevel) {
-      if (!levels.has(value)) return `${name} is not a supported level`;
-      if (value === propertyRule.landmarkLevel && properties.category !== propertyRule.landmarkCategory) {
-        return `${name} ${value} is reserved for ${propertyRule.landmarkCategory} landmarks`;
-      }
-      continue;
-    }
-    if (typeof value !== 'string' || value.trim().length === 0) return `${name} must be nonempty text`;
-    if (propertyRule.maxLength && value.length > propertyRule.maxLength) return `${name} is too long`;
-    if (propertyRule.enum && !propertyRule.enum.includes(value)) return `${name} is not an allowed value`;
-    if (isForbiddenValue(value, propertyRule)) return `${name} is a placeholder, not a value`;
+    if (value === null && propertyRule.allowsNull) continue;
+    const findProblem = problemByType[propertyRule.type] ?? textProblem;
+    const problem = propertyRule.isLevel
+      ? levelProblem(name, properties, propertyRule, levels)
+      : findProblem(name, value, propertyRule);
+    if (problem) return problem;
   }
   return null;
+}
+
+// What this feature allows. A kind the pipeline derives, such as the ocean, is limited further than its file.
+function rulesForFeature(rule, feature) {
+  const limits = rule.limitedKinds?.[feature?.properties?.kind];
+  if (!limits) return {operations: rule.operations, allowsGeometry: true, isDerived: rule.derivedGeometry === true};
+  return {
+    operations: limits.operations,
+    allowsGeometry: limits.geometry,
+    isDerived: true,
+    propertyNames: limits.properties
+  };
+}
+
+// Whether the rules of its file cover this kind at all.
+function isListedKind(feature, rule) {
+  const {kind} = feature.properties;
+  return !rule.editableKinds || rule.editableKinds.includes(kind) || Object.hasOwn(rule.limitedKinds ?? {}, kind);
 }
 
 // Returns why a working feature cannot be recorded, or null. before is its source state, if it has one: geometry
 // left as it was is not judged again, so two source footprints with a repeated corner can still be repaired.
 export function featureProblem(feature, rule, levels, before = null) {
+  const {isDerived} = rulesForFeature(rule, before);
+  const findGeometryProblem = isDerived ? derivedGeometryProblem : geometryProblem;
   const isSameGeometry = before && isSameJSON(before.geometry, feature.geometry);
-  const invalidGeometry = isSameGeometry ? null : geometryProblem(feature.geometry, rule.geometries);
-  return invalidGeometry ?? propertyProblem(feature.properties, rule.properties, levels, before?.properties);
+  const invalidGeometry = isSameGeometry ? null : findGeometryProblem(feature.geometry, rule.geometries);
+  const problem = invalidGeometry ?? propertyProblem(feature.properties, rule.properties, levels, before?.properties);
+  if (problem) return problem;
+  const hasRequiredAny = !rule.requiredAny || rule.requiredAny.some(name => feature.properties[name] !== undefined);
+  return hasRequiredAny ? null : `one of ${rule.requiredAny.join(', ')} is required`;
 }
 
 // Only listed properties and the geometry may differ, so unknown fields, attribution and identity survive.
 function lockedFieldProblem(before, after, rule) {
+  const limits = rulesForFeature(rule, before);
   const featureFields = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const name of featureFields) {
-    const isEditable = name === 'properties' || name === 'geometry';
+    const isEditable = name === 'properties' || (name === 'geometry' && limits.allowsGeometry);
     if (!isEditable && !isSameJSON(before[name], after[name])) return `feature ${name} is not editable`;
   }
   const names = new Set([...Object.keys(before.properties), ...Object.keys(after.properties)]);
   for (const name of names) {
-    const isEditable = Object.hasOwn(rule.properties, name);
+    const propertyRule = Object.hasOwn(rule.properties, name) ? rule.properties[name] : null;
+    const isListed = propertyRule && !propertyRule.addOnly;
+    const isEditable = isListed && (!limits.propertyNames || limits.propertyNames.includes(name));
     if (!isEditable && !isSameJSON(before.properties[name], after.properties[name])) return `${name} is not editable`;
   }
-  if (rule.editableKinds && !rule.editableKinds.includes(before.properties.kind)) return 'this kind is inspect-only';
-  return null;
+  return isListedKind(before, rule) ? null : 'this kind is inspect-only';
+}
+
+function addedPlaceProblem({properties}, localId, localPlaceSource) {
+  if (properties.id !== localId) return 'a new place must use its local ID as its id';
+  return properties.source === localPlaceSource ? null : `a new place must have source "${localPlaceSource}"`;
+}
+
+function addedStopProblem(after, localId) {
+  const isOwnIdentity = after.id === localId && after.properties.stopId === localId;
+  return isOwnIdentity ? null : 'a new stop must use its local ID as its stop ID';
 }
 
 // A new feature claims nothing beyond what the rules list, so it can never pass for an imported upstream fact.
@@ -89,15 +182,20 @@ function addedFeatureProblem({filename, reference, before, after}, rule, localPl
   const {localId} = reference;
   if (typeof localId !== 'string' || !localId.startsWith('local:')) return 'a new feature needs a local ID';
   if (before !== null) return 'a new feature has no before state';
-  const unlistedField = Object.keys(after).find(name => !newFeatureFields.includes(name));
+  const allowedFields = filename === stopsFile ? [...newFeatureFields, 'id'] : newFeatureFields;
+  const unlistedField = Object.keys(after).find(name => !allowedFields.includes(name));
   if (unlistedField) return `a new feature must not claim a feature ${unlistedField}`;
   const isPlace = filename === placesFile;
   const allowedNames = new Set([...Object.keys(rule.properties), ...(isPlace ? placeIdentityFields : [])]);
   const unlistedName = Object.keys(after.properties).find(name => !allowedNames.has(name));
   if (unlistedName) return `a new feature must not claim ${unlistedName}`;
-  if (!isPlace) return null;
-  if (after.properties.id !== localId) return 'a new place must use its local ID as its id';
-  return after.properties.source === localPlaceSource ? null : `a new place must have source "${localPlaceSource}"`;
+  const missing = Object.entries(rule.properties).find(
+    ([name, propertyRule]) => propertyRule.requiredOnAdd && after.properties[name] === undefined
+  );
+  if (missing) return `a new feature needs ${missing[0]}`;
+  if (Object.hasOwn(rule.limitedKinds ?? {}, after.properties.kind)) return `${after.properties.kind} cannot be added`;
+  if (isPlace) return addedPlaceProblem(after, localId, localPlaceSource);
+  return filename === stopsFile ? addedStopProblem(after, localId) : null;
 }
 
 // Returns why one changeset operation is not allowed by the rules of its file, or null.
@@ -105,7 +203,7 @@ export function operationProblem(operation, rules, levels) {
   const {filename, operation: operationKind, before, after} = operation;
   const rule = rules.layers[filename];
   if (!rule) return 'unknown source file';
-  if (!rule.operations.includes(operationKind)) return `${operationKind} is not allowed`;
+  if (!rulesForFeature(rule, before).operations.includes(operationKind)) return `${operationKind} is not allowed`;
   if (operationKind === 'delete') return after === null ? null : 'a deletion has no after state';
   if (after?.type !== 'Feature' || !after.properties) return 'invalid feature';
   const identityProblem =
@@ -123,12 +221,16 @@ export function layerLockReason(rule) {
 // What an existing feature allows. Kinds and geometries outside the rules stay inspect-only:
 // the ocean polygon is a MultiPolygon derived by the pipeline, and country shapes mirror their source.
 export function featureCapabilities(feature, rule) {
+  const limits = rulesForFeature(rule, feature);
   const isListedGeometry = !feature.geometry || rule.geometries.includes(feature.geometry.type);
-  const isListedKind = !rule.editableKinds || rule.editableKinds.includes(feature.properties.kind);
-  const canModify = rule.operations.includes('modify') && isListedGeometry && isListedKind;
+  // A shape outside the rules can still be renamed when the rules say exactly what it allows.
+  const isEditableShape = isListedGeometry || Boolean(limits.propertyNames) || rule.geometries.length === 0;
+  const isAllowed = isEditableShape && isListedKind(feature, rule);
+  const canModify = isAllowed && limits.operations.includes('modify');
   return {
     canModify,
-    canDelete: rule.operations.includes('delete') && isListedGeometry && isListedKind,
+    canReshape: canModify && limits.allowsGeometry && !limits.isDerived && isListedGeometry,
+    canDelete: isAllowed && limits.operations.includes('delete'),
     lockReason: canModify ? null : (rule.inspectOnlyReason ?? rule.readOnlyReason ?? 'This feature is inspect-only.')
   };
 }

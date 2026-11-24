@@ -32,13 +32,12 @@
       "properties": {
         "entityId": {
           "type": "string",
-          "pattern": "^relation/\\d+$",
+          "pattern": "^(relation/\\d+|local:[0-9a-f-]{36})$",
           "description": "OSM relation identity"
         },
         "entityVersion": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "OSM relation version"
+          "oneOf": [{"type": "integer", "minimum": 1}, {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}],
+          "description": "OSM relation version, or a content version for a local restriction"
         },
         "restriction": {
           "type": "string",

@@ -2,10 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Editing rules per source file",
   "type": "object",
-  "required": ["version", "localPlaceSource", "layers"],
+  "required": [
+    "version",
+    "localPlaceSource",
+    "layers"
+  ],
   "additionalProperties": false,
   "properties": {
-    "version": {"const": 1},
+    "version": {
+      "const": 2
+    },
     "localPlaceSource": {
       "description": "The source property of a place created in the editor.",
       "type": "string",
@@ -15,35 +21,165 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["operations", "geometries", "properties"],
+        "required": [
+          "operations",
+          "geometries",
+          "properties"
+        ],
         "additionalProperties": false,
         "properties": {
-          "operations": {"type": "array", "items": {"enum": ["add", "modify", "delete"]}},
-          "geometries": {"type": "array", "items": {"enum": ["Point", "LineString", "Polygon"]}},
-          "editableKinds": {"type": "array", "items": {"type": "string"}},
-          "inspectOnlyReason": {"type": "string"},
-          "readOnlyReason": {"type": "string"},
+          "operations": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "add",
+                "modify",
+                "delete"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "geometries": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "Point",
+                "LineString",
+                "Polygon",
+                "MultiPolygon",
+                "None"
+              ]
+            }
+          },
+          "editableKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "properties": {
             "type": "object",
             "additionalProperties": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "required": {"type": "boolean"},
-                "maxLength": {"type": "integer", "minimum": 1},
-                "enum": {"type": "array", "items": {"type": "string"}},
-                "isLevel": {"type": "boolean"},
+                "required": {
+                  "type": "boolean"
+                },
+                "maxLength": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "enum": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "isLevel": {
+                  "type": "boolean"
+                },
                 "landmarkLevel": {
                   "description": "A level only places in landmarkCategory may have.",
                   "type": "integer"
                 },
-                "landmarkCategory": {"type": "string"},
+                "landmarkCategory": {
+                  "type": "string"
+                },
                 "ignoredCharactersPattern": {
                   "description": "Removed, with case folding, before comparing a value with forbiddenValues.",
                   "type": "string"
                 },
-                "forbiddenValues": {"type": "array", "items": {"type": "string"}}
+                "forbiddenValues": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "type": {
+                  "description": "Text when absent. directions is the ordered stop list of a route; integers and list are arrays.",
+                  "enum": [
+                    "integer",
+                    "number",
+                    "boolean",
+                    "list",
+                    "integers",
+                    "directions"
+                  ]
+                },
+                "minimum": {
+                  "type": "number"
+                },
+                "maximum": {
+                  "type": "number"
+                },
+                "multipleOf": {
+                  "type": "number"
+                },
+                "pattern": {
+                  "type": "string"
+                },
+                "allowsNull": {
+                  "description": "A missing fact is recorded as null.",
+                  "type": "boolean"
+                },
+                "reference": {
+                  "description": "The value is the entity ID of an object in this file.",
+                  "type": "string"
+                },
+                "addOnly": {
+                  "description": "Only a new object states it; afterwards it is identity and stays locked.",
+                  "type": "boolean"
+                },
+                "requiredOnAdd": {
+                  "type": "boolean"
+                }
               }
+            }
+          },
+          "limitedKinds": {
+            "description": "What a kind the pipeline derives, or that only frames the map, allows instead of the file's rules.",
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "operations",
+                "geometry",
+                "properties"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "operations": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "add",
+                      "modify",
+                      "delete"
+                    ]
+                  }
+                },
+                "geometry": {
+                  "type": "boolean"
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "derivedGeometry": {
+            "description": "The editor computes this geometry from an edit of another object, such as a shared border; only its structure is checked.",
+            "type": "boolean"
+          },
+          "requiredAny": {
+            "description": "A feature needs at least one of these properties.",
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }

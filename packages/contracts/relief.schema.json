@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/relief/v1",
   "title": "Relief source features v1",
-  "description": "Read-only relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; a canyon rim runs with the river on its right and a contour with higher ground on its left; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
+  "description": "Relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; a canyon rim runs with the river on its right and a contour with higher ground on its left; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
   "type": "object",
   "required": ["type", "entitySchemaVersion", "features"],
   "properties": {
@@ -51,7 +51,9 @@
     "summit": {
       "if": {"properties": {"kind": {"const": "summit"}}, "required": ["kind"]},
       "then": {
-        "required": ["natural", "ele", "demElevation", "surroundingDemElevation", "enclosingContourElevation", "heightCheck", "mismatch", "mismatchReasons"],
+        "required": ["natural", "ele"],
+        "if": {"properties": {"entityId": {"not": {"pattern": "^local:"}}}},
+        "then": {"required": ["demElevation", "surroundingDemElevation", "enclosingContourElevation", "heightCheck", "mismatch", "mismatchReasons"]},
         "properties": {
           "natural": {"enum": ["peak", "hill"]},
           "name": {"type": "string"},
@@ -62,7 +64,8 @@
           "enclosingContourElevation": {"type": ["integer", "null"]},
           "heightCheck": {"enum": ["missing", "mismatch", "ok"]},
           "mismatch": {"type": "boolean"},
-          "mismatchReasons": {"type": "array", "items": {"type": "string"}}
+          "mismatchReasons": {"type": "array", "items": {"type": "string"}},
+          "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
         }
       }
     },
@@ -85,8 +88,9 @@
         "required": ["sunlitSide", "shadedSide"],
         "dependentRequired": {"summit": ["summitName"], "summitName": ["summit"]},
         "properties": {
-          "summit": {"type": "string", "pattern": "^(node|way|relation)/[1-9][0-9]*$"},
+          "summit": {"type": "string", "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"},
           "summitName": {"type": "string"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 120},
           "sunlitSide": {"type": "string"},
           "shadedSide": {"type": "string"},
           "radiusMetres": false

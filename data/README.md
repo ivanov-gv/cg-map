@@ -16,7 +16,7 @@ requirements in `tools/requirements.txt`; install them in a virtualenv as descri
 [data runbook](../docs/runbooks/data.md#geometry-edits-or-refreshes). CI installs the same requirements before data
 verification; tests are not skipped when `osmium` is missing.
 
-Full rebuild: `make -C data build-data`. The five read-only relief sources are rebuilt separately with
+Full rebuild: `make -C data build-data`. The five relief sources are rebuilt separately with
 `make -C data build-relief PYTHON=~/.cache/cg-map/venv/bin/python` after installing the pinned GIS packages in that
 venv; their raster inputs and derivation report stay outside Git, and their vectors, counts and hashes are reviewed
 here.

@@ -250,15 +250,29 @@ git diff data/sources
 make -C data check
 ```
 
-The importer checks everything before the first write: version, base hashes, fingerprints, allowed operations and
-properties, geometry and label joins. It then stages its writes, and restores the reviewed files if the final data check
-fails. It never commits. A level edit becomes a policy override, so regenerating levels keeps it, and each change is
-recorded with its author, reason and both values in data/sources/editor-corrections.json; see
-[provenance](../../data/PROVENANCE.md). New features use a `local:` reference and claim nothing the rules do not list; a
-new place also takes the contract's local source value, never a fabricated upstream ID. In an adopted collection the
-importer assigns the addition a fresh `local:<uuid v4>` source identity and a `sha256:` base version; a changeset must
-not claim those fields. An edit or deletion that would replace or remove a commercial override is refused by name:
-review it in the policy first.
+The importer checks everything before the first write: version, fingerprints, allowed operations and values, geometry
+and joins. It then stages its writes, and restores the reviewed files if the final data check fails. It never commits. A
+version 2 changeset names objects by entity ID, so it applies after other objects of the file changed; an object that
+changed itself is refused by name. A feature index (routes, version 1) needs the exact base file. A level edit becomes a
+policy override, so regenerating levels keeps it. Each change is recorded with its author, reason and both values in
+data/sources/editor-corrections.json; see [provenance](../../data/PROVENANCE.md). New objects keep their
+`local:<uuid v4>` ID, get a `sha256:` base version and claim nothing the rules do not list; a new place also takes the
+contract's local source value. An edit or deletion that would replace or remove a commercial override is refused by
+name: review it in the policy first. Field items in a changeset (sketches, notes, deletion marks) are counted and left
+there.
+
+Label positions, street joins, slope areas, rim lengths, summit checks, contour direction, ring order and provenance
+follow from the edits and are computed by the importer. After border, coastline or country edits also run
+`make -C data check-topology`.
+
+After a fresh OSM extract, put the reviewed corrections back and read what it reports:
+
+```sh
+make -C data reapply-corrections
+```
+
+An edit wins over upstream for exactly what it changed. The report names objects that are gone and facts that upstream
+changed too.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the

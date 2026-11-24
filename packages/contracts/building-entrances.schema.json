@@ -33,12 +33,13 @@
                 "properties": {
                   "kind": {"const": "entrance"},
                   "entrance": {"type": "string", "minLength": 1, "maxLength": 64},
-                  "buildingEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"},
+                  "buildingEntityId": {"type": "string", "pattern": "^((way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"},
                   "ref": {"type": "string", "minLength": 1, "maxLength": 128},
                   "level": {"type": "string", "minLength": 1, "maxLength": 64},
                   "wheelchair": {"type": "string", "minLength": 1, "maxLength": 64},
                   "door": {"type": "string", "minLength": 1, "maxLength": 128},
-                  "nohousenumber": {"const": "yes"}
+                  "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]},
+                    "nohousenumber": {"const": "yes"}
                 },
                 "patternProperties": {
                   "^addr:": {"type": "string", "minLength": 1, "maxLength": 128}

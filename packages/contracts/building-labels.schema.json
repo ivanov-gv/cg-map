@@ -14,7 +14,7 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^way/[0-9]+$"
+      "pattern": "^(way/[0-9]+|local:[0-9a-f-]{36})$"
     },
     "geometry": {
       "type": "object",
@@ -50,7 +50,7 @@
         },
         "osm_id": {
           "type": "string",
-          "pattern": "^way/[0-9]+$"
+          "pattern": "^(way/[0-9]+|local:[0-9a-f-]{36})$"
         },
         "footprintIndex": {
           "type": "integer",
@@ -69,8 +69,14 @@
           "minItems": 1,
           "items": {
             "type": "string",
-            "pattern": "^(way|node)/[0-9]+$"
+            "pattern": "^((way|node)/[0-9]+|local:[0-9a-f-]{36})$"
           }
+        },
+        "display_number": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Shown on the map instead of the house number."
         },
         "building_number": {
           "type": "string",

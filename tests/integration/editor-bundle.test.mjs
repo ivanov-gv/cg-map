@@ -13,6 +13,7 @@ import {
   validateBundleManifest,
   decodeSource
 } from '../../apps/editor/src/source-bundle.js';
+import {collectionOf} from '../../apps/editor/src/source-records.js';
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
 const editorBundleContractURL = contractURL('editor-bundle.schema.json');
@@ -35,7 +36,7 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
     assert.deepEqual(bundled, original);
     const decoded = await decodeSource(bundled, metadata);
     assert.equal(decoded.features.length, metadata.featureCount);
-    assert.deepEqual(decoded, JSON.parse(original));
+    assert.deepEqual(decoded, collectionOf(metadata.filename, JSON.parse(original)));
   }
 });
 

@@ -208,6 +208,159 @@
         "visibilityLevel": 1
       },
       "isValid": false
+    },
+    {
+      "name": "contour on the 20 m step",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 60,
+        "index": false
+      },
+      "isValid": true
+    },
+    {
+      "name": "contour between two steps",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 70,
+        "index": false
+      },
+      "isValid": false
+    },
+    {
+      "name": "contour height as text",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": "60",
+        "index": false
+      },
+      "isValid": false
+    },
+    {
+      "name": "contour index as text",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 60,
+        "index": "no"
+      },
+      "isValid": false
+    },
+    {
+      "name": "summit without a known height",
+      "filename": "summits.geojson",
+      "properties": {
+        "kind": "summit",
+        "natural": "peak",
+        "ele": null
+      },
+      "isValid": true
+    },
+    {
+      "name": "summit above the highest allowed",
+      "filename": "summits.geojson",
+      "properties": {
+        "kind": "summit",
+        "natural": "peak",
+        "ele": 9000
+      },
+      "isValid": false
+    },
+    {
+      "name": "settlement with a municipality code",
+      "filename": "settlements.geojson",
+      "properties": {
+        "kind": "settlement",
+        "name": "Town",
+        "rank": "town",
+        "place": "town",
+        "municipality": "ME-06",
+        "source": "Local correction"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement with a malformed municipality code",
+      "filename": "settlements.geojson",
+      "properties": {
+        "kind": "settlement",
+        "name": "Town",
+        "rank": "town",
+        "place": "town",
+        "municipality": "Cetinje",
+        "source": "Local correction"
+      },
+      "isValid": false
+    },
+    {
+      "name": "stop with a blank line",
+      "filename": "transport-stops.geojson",
+      "properties": {
+        "name": "Stop",
+        "stopId": "1",
+        "lines": [
+          "6",
+          " "
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "route with a turn point between two stops",
+      "filename": "transit-routes.json",
+      "properties": {
+        "network": "bus",
+        "directions": [
+          {
+            "headsign": "A",
+            "stops": [
+              "1",
+              {
+                "turn": [
+                  19.2,
+                  42.4
+                ]
+              },
+              "2"
+            ]
+          }
+        ]
+      },
+      "isValid": true
+    },
+    {
+      "name": "route whose second stop is only a turn point",
+      "filename": "transit-routes.json",
+      "properties": {
+        "network": "bus",
+        "directions": [
+          {
+            "headsign": "A",
+            "stops": [
+              "1",
+              {
+                "turn": [
+                  19.2,
+                  42.4
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "turn restriction with a missing way",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_u_turn",
+        "from": 1
+      },
+      "isValid": false
     }
   ]
 }

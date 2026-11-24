@@ -252,7 +252,7 @@ test('an import is refused whole when the snapshot, fingerprint or rules disagre
     assert.deepEqual(target.changedFiles(), []);
   };
   await refuses({...changeset, bases: {'places.geojson': 'b'.repeat(64)}}, /differs from this snapshot/);
-  await refuses({...changeset, version: 2}, /unsupported changeset version/);
+  await refuses({...changeset, version: 3}, /unsupported changeset version/);
   const mismatched = structuredClone(changeset);
   mismatched.operations[0].beforeFingerprint = 'c'.repeat(64);
   await refuses(mismatched, /has changed/);
@@ -260,6 +260,23 @@ test('an import is refused whole when the snapshot, fingerprint or rules disagre
   invalid.operations[0].after.properties.name = ' ';
   await refuses(invalid, /nonempty/);
   await assert.rejects(importChangeset(changeset, session, sources, rules, levels), /export or discard/);
+});
+
+test('an object with source identity is named by it, and is found after others of its file were removed', async () => {
+  const identified = number => ({
+    ...placeFeature(),
+    properties: {...placeFeature().properties, id: `node/${number}`, entityId: `node/${number}`, entityVersion: 1}
+  });
+  const sources = sourcesWith({'places.geojson': [identified(1), identified(2)]});
+  const session = new EditSession(sources);
+  session.recordEdit('places.geojson', '1', renamed(identified(2), 'Renamed'));
+  const changeset = await buildChangeset(session, sources, envelope);
+  assert.deepEqual(changeset.operations[0].reference, {entityId: 'node/2'});
+  const refreshed = sourcesWith({'places.geojson': [identified(2)]});
+  refreshed.get('places.geojson').metadata.sha256 = 'b'.repeat(64);
+  const resumed = new EditSession(refreshed);
+  await importChangeset(changeset, resumed, refreshed, rules, levels);
+  assert.equal(resumed.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
 });
 
 function memoryStorage() {
