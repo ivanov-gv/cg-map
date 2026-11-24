@@ -523,6 +523,8 @@ export class InspectorEditing {
       return;
     }
     const handle = this.#isVertexTool ? this.#context.handles.handleAt(event.point) : null;
+    // The press that began this tap already added the point, and the handles may not have been drawn again yet.
+    if (handle?.isMidpoint) return;
     this.#update(afterMapTap(this.#transaction, event.lngLat.toArray(), handle));
   }
 
