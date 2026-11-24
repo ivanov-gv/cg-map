@@ -214,7 +214,7 @@ export class InspectorEditing {
       extras: this.#transaction.extras,
       setExtras: extras => this.#setExtras(extras),
       setFeature: feature => this.#setFeature(feature),
-      setGeometry: geometry => this.#update(withGeometry(this.#transaction, geometry)),
+      setGeometry: geometry => this.#setFeature({...this.#currentFeature(), geometry}),
       startTool: tool => this.#startTool(tool),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: message => this.showProblem(message),
@@ -424,6 +424,8 @@ export class InspectorEditing {
   leaveMode() {
     if (!this.#transaction?.tool) return;
     this.#update(withTool(this.#transaction, null));
+    // What the inspector says about the object may depend on where it is now.
+    this.#renderForm();
     this.#context.showInspector();
   }
 

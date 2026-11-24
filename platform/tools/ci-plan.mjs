@@ -99,18 +99,22 @@ const EDITING_ONLY_SOURCES = [
   'deletion-dialog.js',
   'interior-point.js',
   'layer-buildings.js',
+  'layer-green.js',
   'layer-roads.js',
+  'layer-water.js',
   'opening-hours-dialog.js',
   'opening-hours.js',
+  'shared-shapes.js',
   'street-choices.js',
   'road-junctions.js',
   'road-shapes.js',
-  'street-dialog.js'
+  'street-dialog.js',
+  'water-joins.js'
 ];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
 // One spec per layer on the fixture city, small enough to share a job.
-const LAYER_SPECS = ['layers.spec.mjs', 'buildings.spec.mjs', 'addresses.spec.mjs', 'roads.spec.mjs'];
+const LAYER_SPECS = ['layers.spec.mjs', 'buildings.spec.mjs', 'addresses.spec.mjs', 'roads.spec.mjs', 'nature.spec.mjs'];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
 // one project has a partner for the other, and both run the same sources.

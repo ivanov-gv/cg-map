@@ -48,7 +48,7 @@ export const editorLayers = [
     name: 'Water',
     summary: 'Lakes, rivers, the coastline',
     files: ['water.geojson'],
-    linkedFiles: ['land.geojson']
+    linkedFiles: ['land.geojson', 'border-edges.geojson', 'municipalities.geojson']
   },
   {
     id: 'relief',
