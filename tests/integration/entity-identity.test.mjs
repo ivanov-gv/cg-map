@@ -24,9 +24,13 @@ test('entity-aware sources pass producer validation and reach editor and web wit
     assert.equal(validateCollection(collection, {label: filename, places: filename === 'places.geojson', contractsDirectory}), 1);
     await writeFile(path.join(sourceDirectory, filename), JSON.stringify(collection));
   }
-  // Route and turn records carry no feature identity of their own; only their presence in the bundle matters here.
-  for (const [filename, listName] of [['transit-routes.json', 'routes'], ['turn-restrictions.json', 'restrictions']]) {
-    await writeFile(path.join(sourceDirectory, filename), JSON.stringify({[listName]: []}));
+  // The fixture states identity cases for the files that had them first; the bundle also needs the later files present.
+  const bundledFiles = readContractJSON('editor-bundle.schema.json').oneOf.at(-1).properties.layers.items.properties.filename.enum;
+  for (const filename of bundledFiles.filter(name => !Object.hasOwn(fixture.sources, name))) {
+    const emptyContent = filename.endsWith('.json')
+      ? {routes: [], restrictions: []}
+      : {type: 'FeatureCollection', entitySchemaVersion: 1, features: []};
+    await writeFile(path.join(sourceDirectory, filename), JSON.stringify(emptyContent));
   }
   assert.equal(validateStops(fixture.sources['transport-stops.geojson'], {contractsDirectory}), 1);
   assert.equal(validateBuildingLabels(fixture.sources['building-labels.geojson'], fixture.sources['buildings.geojson'], {contractsDirectory}), 1);
