@@ -19,6 +19,11 @@ export function buildingOfLabel({properties}, context) {
   return context.entriesOf(buildingsFile).find(building => building.key === key);
 }
 
+function labelOfBuilding(building, context) {
+  const isOfBuilding = ({feature}) => buildingOfLabel(feature, context)?.key === building.key;
+  return context.entriesOf(labelsFile).find(isOfBuilding);
+}
+
 function withValues(properties, values) {
   const next = {...properties};
   for (const [name, value] of Object.entries(values)) {
@@ -57,20 +62,26 @@ function noNumberEdits(label, context) {
 
 // An address that belongs to another building is a new one there.
 async function moveToBuilding(edit) {
-  const {context, key, feature} = edit;
-  const isLocated = locatedFactNames.some(name => feature.properties[name] !== undefined);
+  const {context, key} = edit;
+  const isLocated = locatedFactNames.some(name => edit.feature.properties[name] !== undefined);
   if (isLocated) {
     edit.showProblem('This address is located by the entrances of its building and cannot move to another one.');
     return;
   }
   const target = await context.pick(buildingsFile, 'Pick the building this address belongs to');
-  if (!target) return;
+  if (!target || !edit.isOpen()) return;
+  const previous = buildingOfLabel(edit.feature, context);
+  if (target.key === previous?.key) return;
+  if (labelOfBuilding(target, context)) {
+    edit.showProblem('That building already has an address. Change or delete it first.');
+    return;
+  }
+  const feature = edit.typedFeature();
   const properties = {kind: 'building', buildingEntityId: buildingId(target)};
   for (const name of [...addressNames, 'display_number']) {
     if (feature.properties[name] !== undefined) properties[name] = feature.properties[name];
   }
   const geometry = {type: 'Point', coordinates: interiorPoint(target.feature.geometry.coordinates)};
-  const previous = buildingOfLabel(feature, context);
   const address = Object.fromEntries(addressNames.map(name => [name, properties[name]]));
   const edits = [
     {filename: labelsFile, key, after: null},
@@ -81,7 +92,7 @@ async function moveToBuilding(edit) {
       after: {...target.feature, properties: withValues(target.feature.properties, {...address, nohousenumber: undefined})}
     }
   ];
-  if (previous && previous.key !== target.key) {
+  if (previous) {
     const cleared = withValues(previous.feature.properties, {'addr:housenumber': undefined, 'addr:street': undefined});
     edits.push({filename: buildingsFile, key: previous.key, after: {...previous.feature, properties: cleared}});
   }

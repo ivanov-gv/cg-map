@@ -286,6 +286,35 @@ test('an object changed since the export is refused, and other changes of the fi
   assert.deepEqual(names, ['First', 'Other']);
 });
 
+test('a replay takes what a refresh put on a deleted building with it, and names what it leaves out', testContext => {
+  const root = temporaryRoot(testContext);
+  const builder = new ChangesetBuilder(root);
+  const deletedId = removeNumberedBuilding(root, builder);
+  const [renamed] = readSource(root, 'settlements.geojson').features;
+  builder.change('settlements.geojson', renamed, feature => (feature.properties.name = 'Reviewed name'));
+  const town = readSource(root, 'settlements.geojson').features[1];
+  builder.change('settlements.geojson', town, feature => (feature.properties.name = 'Second name'));
+  const ledgerPath = sourcePath(root, 'editor-corrections.json');
+  apply(root, builder.build());
+  const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+  // The rules of a later day refuse this value.
+  const refused = ledger.corrections.find(({after}) => after?.properties.name === 'Second name');
+  refused.after.properties.name = '';
+
+  fs.cpSync(path.join(repositoryRoot, 'data/sources'), path.join(root, 'data/sources'), {recursive: true});
+  // The refresh no longer has the label the editor deleted, and has another one there.
+  ledger.corrections = ledger.corrections.filter(({filename}) => filename !== 'building-labels.geojson');
+  fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
+
+  const {report} = reapplyCorrections(root, {now, contractsDirectory});
+  const buildings = readSource(root, 'buildings.geojson').features;
+  assert.ok(!buildings.some(({properties}) => properties.entityId === deletedId));
+  const names = readSource(root, 'settlements.geojson').features.map(({properties}) => properties.name);
+  assert.ok(names.includes('Reviewed name'));
+  assert.ok(report.some(line => line.includes('its building was deleted in the editor')), report.join('\n'));
+  assert.ok(report.some(line => line.includes(`${town.properties.entityId}: left out`)), report.join('\n'));
+});
+
 test('corrections are replayed over refreshed sources and conflicts are reported', testContext => {
   const root = temporaryRoot(testContext);
   const builder = new ChangesetBuilder(root);

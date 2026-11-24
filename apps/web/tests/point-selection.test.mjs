@@ -181,6 +181,9 @@ test('building selection, entrance selection and map labels use the same reviewe
   const index = buildingAddressIndex(labels);
   const features = entranceFeatures(labels);
   assert.equal(buildingMapFeatures(labels).features[0].properties.display_number, 'Zgrada 1, 27-32');
+  const reviewed = structuredClone(labels);
+  reviewed.features[0].properties.display_number = '27';
+  assert.equal(buildingMapFeatures(reviewed).features[0].properties.display_number, '27');
   assert.equal(features.features.length, 2);
   const point = describePoint(
     {

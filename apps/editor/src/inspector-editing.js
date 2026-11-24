@@ -36,7 +36,7 @@ const closingDistancePixels = 14;
 const beginNewByShape = {Point: beginNewPoint, LineString: beginNewLine, Polygon: beginNewPolygon};
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
-// context: {commands, session, rules, levels, handles, overlay, map, activeLayer(), isPhone(), behaviorContext(),
+// context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
 // onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), showInspector(), hideInspector(),
 // releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
 // and returns whether the inspector held focus, so the status is focused only when it was needed.
@@ -45,6 +45,8 @@ export class InspectorEditing {
   #transaction = null;
   #filename = null;
   #pointer = null;
+  // Counts the edits opened, to tell one from the next.
+  #opening = 0;
 
   constructor(context) {
     this.#context = context;
@@ -202,21 +204,31 @@ export class InspectorEditing {
   }
 
   // What a layer's own controls need: the pending feature, and ways to change it inside this edit.
+  // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
+  // once its edit is closed it changes nothing, and never the edit opened since.
   #editContext() {
+    const opening = this.#opening;
+    const isOpen = () => this.#transaction !== null && this.#opening === opening;
+    const whileOpen = run => (...values) => {
+      if (isOpen()) run(...values);
+    };
     return {
+      isOpen,
+      // The feature with what is typed in the form.
+      typedFeature: () => this.#currentFeature(),
       feature: this.#transaction.feature,
       key: this.#transaction.key,
       filename: this.#filename,
       isNew: this.#transaction.isNew,
       context: this.#context.behaviorContext(),
-      setProperties: properties => this.#setProperties(properties),
-      setGeometry: geometry => this.#update(withGeometry(this.#transaction, geometry)),
-      startTool: tool => this.#startTool(tool),
+      setProperties: whileOpen(properties => this.#setProperties(properties)),
+      setGeometry: whileOpen(geometry => this.#update(withGeometry(this.#transaction, geometry))),
+      startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
-      showProblem: message => this.showProblem(message),
-      applyWith: edits => this.#applyWith(edits),
-      replaceWith: (edits, message) => this.#replaceWith(edits, message),
-      discard: () => this.discardEdit()
+      showProblem: whileOpen(message => this.showProblem(message)),
+      applyWith: whileOpen(edits => this.#applyWith(edits)),
+      replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
+      discard: whileOpen(() => this.discardEdit())
     };
   }
 
@@ -258,6 +270,7 @@ export class InspectorEditing {
   }
 
   #open(filename, transaction) {
+    this.#opening += 1;
     this.#filename = filename;
     this.#transaction = transaction;
     this.#renderForm();

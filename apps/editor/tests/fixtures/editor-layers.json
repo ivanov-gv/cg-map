@@ -14,7 +14,11 @@
         "standalone": {"type": "boolean"},
         "visibilityLevel": {"required": true, "isLevel": true, "landmarkLevel": 1, "landmarkCategory": "sights"},
         "addr:street": {"maxLength": 120},
-        "addr:housenumber": {"maxLength": 128},
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
         "phone": {"maxLength": 64},
         "website": {"maxLength": 512},
         "email": {"maxLength": 128},
@@ -358,9 +362,15 @@
       }
     },
     "protected-areas.geojson": {
-      "operations": ["modify", "delete"],
+      "operations": ["add", "modify", "delete"],
       "geometries": ["Polygon", "MultiPolygon"],
       "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["protected-area"]},
+        "osmTag": {
+          "requiredOnAdd": true,
+          "addOnly": true,
+          "enum": ["leisure=nature_reserve", "boundary=protected_area", "boundary=national_park"]
+        },
         "name": {"required": true, "maxLength": 120},
         "name:en": {"maxLength": 120}
       }
