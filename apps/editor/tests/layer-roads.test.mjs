@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {roadBehaviors} from '../src/layer-roads.js';
-import {turnKind, turnsAtEnd} from '../src/road-junctions.js';
+import {rulesLostBySplit, turnKind, turnRule, turnsAtEnd} from '../src/road-junctions.js';
 import {joinedRoad, splitProblem, splitRoad, withJunctionAt} from '../src/road-shapes.js';
 
 const road = (coordinates, properties = {}) => ({
@@ -107,6 +107,44 @@ test('a drawn road, a forbidden turn and a traffic light are one step', () => {
   const drawn = road([[19.2515, 42.44], [19.2515, 42.4405]]);
   const [junction] = companions({key: 'local:1', feature: drawn, before: null, extras: {}}, context);
   assert.deepEqual(junction.after.geometry.coordinates, [centre, [19.2515, 42.44], east]);
+});
+
+const ruleOf = properties => ({type: 'Feature', properties: {from: 1, viaNodes: [12], ...properties}, geometry: null});
+
+test('an "only" rule forbids the other turns of its junction, and a "no" rule its own turn', () => {
+  const entries = [ruleOf({restriction: 'only_straight_on', to: 2})].map((feature, index) => ({key: String(index), feature}));
+  assert.equal(turnRule(entries, 1, 2, 12).isForbidden, false);
+  assert.equal(turnRule(entries, 1, 3, 12).isForbidden, true);
+  assert.equal(turnRule(entries, 1, 3, 11).isForbidden, false, 'another junction');
+  const forbidding = [{key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})}];
+  assert.equal(turnRule(forbidding, 1, 3, 12).isForbidden, true);
+  assert.equal(turnRule(forbidding, 1, 2, 12).isForbidden, false);
+  // What an "only" rule says is never recorded or deleted as a single turn.
+  const context = contextWith({
+    'roads.geojson': [road([west, centre], {entityId: 'way/1', endNode: 12}), road([centre, east], {entityId: 'way/2'})],
+    'turn-restrictions.json': [ruleOf({restriction: 'only_right_turn', to: 9})]
+  });
+  const [main] = context.entriesOf('roads.geojson');
+  const {companionEdits} = roadBehaviors['roads.geojson'];
+  const edit = {key: '0', feature: main.feature, before: main.feature, extras: {'turn:1': false}};
+  assert.deepEqual(companionEdits(edit, context), []);
+});
+
+test('a split is refused while it would lose a turn rule at the end of the road', () => {
+  const whole = road([west, centre, east], {entityId: 'way/1', startNode: 11, endNode: 12});
+  const atEnd = {key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})};
+  const atStart = {key: '1', feature: ruleOf({restriction: 'no_u_turn', to: 1, viaNodes: [11]})};
+  assert.deepEqual(rulesLostBySplit([atEnd, atStart], whole), [atEnd]);
+  const problems = [];
+  const edit = {
+    isNew: false,
+    context: {...contextWith({'turn-restrictions.json': [atEnd.feature]}), isPhone: () => false},
+    showProblem: message => problems.push(message),
+    applyWith: () => assert.fail('nothing is split')
+  };
+  const [split] = roadBehaviors['roads.geojson'].vertexTools(whole, {vertexIndex: 1}, edit);
+  split.run();
+  assert.match(problems[0], /turn rules at its end/);
 });
 
 test('deleting a road takes its turn rules, which would name a road that is gone', () => {

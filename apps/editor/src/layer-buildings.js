@@ -1,5 +1,5 @@
 // Buildings with what belongs to them: their address, their entrances on the outline and the places inside.
-import {createElementWithText} from './dom.js';
+import {createElementWithText, elementById} from './dom.js';
 import {roundedCoordinate, translateGeometry} from './geometry-editing.js';
 import {nearestPointOnOutline} from './geometry-measures.js';
 import {interiorPoint, isInside} from './interior-point.js';
@@ -202,11 +202,17 @@ function startPlace(building, context) {
   });
 }
 
+// The form is already open, so this leads to where the address is typed.
+function focusHouseNumber() {
+  elementById('property-form').querySelector('[name="addr:housenumber"]').focus();
+}
+
 // Entrances and places belong to a building that exists, so a new one is applied first.
 function renderBelongings(container, edit) {
   const {context, key, feature, isNew} = edit;
   if (isNew) {
     container.append(createElementWithText('p', 'Not on the map until you apply it. Entrances and places come after.'));
+    if (!addressText(feature.properties)) container.append(actionButton('Add address', focusHouseNumber));
     return;
   }
   const building = {key, feature};

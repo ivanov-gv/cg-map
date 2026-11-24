@@ -15,7 +15,8 @@ test('a building is drawn, described, given an entrance and a place, and exporte
   await expect(page.locator('#inspector-extras')).toContainText('Not on the map until you apply it');
   await page.locator('[name="building:levels"]').fill('3');
   await page.locator('[name="energy_class"]').selectOption('B');
-  await page.locator('[name="addr:housenumber"]').fill('16');
+  await page.getByRole('button', {name: 'Add address'}).click();
+  await page.keyboard.type('16');
   await applyEdit(page);
   await expect(page.locator('#change-count')).toHaveText('2');
 

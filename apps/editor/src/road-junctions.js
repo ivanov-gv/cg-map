@@ -53,12 +53,28 @@ export function turnsAtEnd(road, roads) {
   return [...turns, {road, kind: 'uTurn'}];
 }
 
-// The restriction of one turn among the recorded ones, or undefined.
-export function recordedRestriction(restrictions, fromWay, toWay, junctionNode) {
-  return restrictions.find(({feature}) => {
-    const {from, to, viaNodes} = feature.properties;
-    return from === fromWay && to === toWay && (!viaNodes || viaNodes.includes(junctionNode));
-  });
+const isAtJunction = ({feature}, fromWay, junctionNode) =>
+  feature.properties.from === fromWay && Boolean(feature.properties.viaNodes?.includes(junctionNode));
+
+// What the recorded rules say about one turn: {isForbidden, recorded, onlyRule}. A "no" rule forbids its own turn and can
+// be edited as that turn. An "only" rule forbids every other turn of the road at once, so it is shown and not edited here.
+export function turnRule(restrictions, fromWay, toWay, junctionNode) {
+  const rules = restrictions.filter(restriction => isAtJunction(restriction, fromWay, junctionNode));
+  const recorded = rules.find(
+    ({feature}) => feature.properties.to === toWay && feature.properties.restriction.startsWith('no_')
+  );
+  const onlyRule = rules.find(({feature}) => feature.properties.restriction.startsWith('only_'));
+  const isForbiddenByOnly = onlyRule !== undefined && onlyRule.feature.properties.to !== toWay;
+  return {isForbidden: recorded !== undefined || isForbiddenByOnly, recorded, onlyRule};
+}
+
+// Turn rules that would no longer reach their junction if the end of this road became a road of its own.
+export function rulesLostBySplit(restrictions, {properties}) {
+  const way = wayNumber(properties.entityId);
+  if (!way) return [];
+  return restrictions.filter(
+    restriction => isOnWay(restriction, way) && !restriction.feature.properties.viaNodes?.includes(properties.startNode)
+  );
 }
 
 export const isOnWay = ({feature}, way) => {

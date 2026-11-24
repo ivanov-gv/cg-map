@@ -144,13 +144,13 @@ export function buildingAddressIndex(labels) {
   return addresses;
 }
 
-// Derive display text without changing reviewed source attributes or geometry.
+// Derive display text without changing reviewed source attributes or geometry. A reviewed display number wins.
 export function buildingMapFeatures(labels) {
   const features = labels.features.map(feature => ({
     ...feature,
     properties: {
       ...feature.properties,
-      display_number: buildingNumber(feature.properties)
+      display_number: feature.properties.display_number ?? buildingNumber(feature.properties)
     }
   }));
   return {...labels, features};

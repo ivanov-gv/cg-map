@@ -27,9 +27,16 @@ export function labelJoinProblems(session) {
   const changedLabels = changedKeys(session, labelsFile);
   if (changedFootprints.size === 0 && changedLabels.size === 0) return [];
   const problems = [];
+  const labelKeyByFootprint = new Map();
   for (const {key, feature: label} of session.workingEntries(labelsFile)) {
     const footprintKey = footprintKeyOf(label, session);
     const isAffected = changedLabels.has(key) || changedFootprints.has(footprintKey);
+    // A second address of one building is refused by the importer, whichever of the two changed.
+    const otherLabelKey = labelKeyByFootprint.get(footprintKey);
+    if (footprintKey !== null) labelKeyByFootprint.set(footprintKey, key);
+    if (otherLabelKey !== undefined && (isAffected || changedLabels.has(otherLabelKey))) {
+      problems.push({filename: labelsFile, message: `Building ${footprintKey} has two addresses (features ${otherLabelKey} and ${key}).`});
+    }
     if (!isAffected) continue;
     const footprint = footprintKey === null ? null : session.workingFeature(footprintsFile, footprintKey);
     const isInside = footprint && pointInsidePolygon(label.geometry.coordinates, footprint.geometry.coordinates);
