@@ -2,7 +2,7 @@
 import {createElementWithText} from './dom.js';
 import {formatArea, geometryAreaSquareMetres} from './geometry-measures.js';
 import {isInside} from './interior-point.js';
-import {changedStretch, followingEdits} from './shared-shapes.js';
+import {changedStretch, crossesItself, followingEdits} from './shared-shapes.js';
 
 const settlementsFile = 'settlements.geojson';
 const bordersFile = 'border-edges.geojson';
@@ -25,17 +25,15 @@ function municipalityAt(coordinate, context) {
 }
 
 // A town says which municipality it is in, wherever it is put.
-function placedSettlement(feature, context) {
+function placedSettlement(feature, context, {key}) {
+  const before = context.session.workingFeature(settlementsFile, key);
+  const isMoved = JSON.stringify(before?.geometry) !== JSON.stringify(feature.geometry);
+  const properties = {...feature.properties, place: feature.properties.place ?? feature.properties.rank};
   const municipality = municipalityAt(feature.geometry.coordinates, context)?.properties['ISO3166-2'];
-  const {properties} = feature;
-  return {
-    ...feature,
-    properties: {
-      ...properties,
-      place: properties.place ?? properties.rank,
-      ...(municipality ? {municipality} : {})
-    }
-  };
+  if (municipality) properties.municipality = municipality;
+  // Outside of every municipality, a moved town no longer belongs to the one it came from.
+  else if (isMoved) delete properties.municipality;
+  return {...feature, properties};
 }
 
 function settlementProblem({feature}) {
@@ -79,10 +77,17 @@ function borderProblem(edit, context) {
   const isMoved = JSON.stringify(before.geometry) !== JSON.stringify(feature.geometry);
   if (!isMoved) return null;
   if (isCoastBorder(feature)) return 'This border is the coastline. Move it on the Water layer.';
-  const followingFiles = new Set(borderFollowers(edit, context).map(({filename}) => filename));
+  const followers = borderFollowers(edit, context);
+  const followerCount = filename => followers.filter(entry => entry.filename === filename).length;
+  const innerSideCount = sidesOf(feature).filter(isInsideCountry).length;
   const isFollowed =
-    followingFiles.has(municipalitiesFile) && (!isCountryBorder(feature) || followingFiles.has(landFile));
-  return isFollowed ? null : 'The outlines beside this border do not run along it here, so they cannot follow.';
+    followerCount(municipalitiesFile) >= innerSideCount &&
+    (!isCountryBorder(feature) || followerCount(landFile) > 0);
+  if (!isFollowed) return 'The outlines beside this border do not run along it here, so they cannot follow.';
+  const isCrossing = [{filename: bordersFile, key: edit.key, after: feature}, ...followers].some(({filename, key, after}) =>
+    crossesItself(context.session.workingFeature(filename, key).geometry, after.geometry)
+  );
+  return isCrossing ? 'This border, or an outline that follows it, would cross itself here.' : null;
 }
 
 function areaText(geometry) {

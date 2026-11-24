@@ -62,6 +62,23 @@ function ringHasIntersectingEdges(ring) {
   return false;
 }
 
+const segmentsOf = lines => lines.flatMap(line => line.slice(1).map((end, index) => [line[index], end]));
+const segmentName = ends => ends.map(String).sort().join(' ');
+
+// Whether lines that were changed together cross or touch where they did not before. Only the new segments are compared,
+// so this stays quick for an outline with thousands of points.
+export function hasNewCrossing(linesBefore, linesAfter) {
+  const knownNames = new Set(segmentsOf(linesBefore).map(segmentName));
+  const segments = segmentsOf(linesAfter).map(ends => ({ends, names: ends.map(String)}));
+  const newSegments = segments.filter(({ends}) => !knownNames.has(segmentName(ends)));
+  return newSegments.some(({ends: [start, end], names}) =>
+    segments.some(other => {
+      const isNeighbor = other.names.some(name => names.includes(name));
+      return !isNeighbor && segmentsIntersect(start, end, ...other.ends);
+    })
+  );
+}
+
 // Returns why a closed ring is unusable, or null.
 export function ringProblem(ring) {
   if (!Array.isArray(ring) || ring.length < 4) return 'ring needs at least three corners';

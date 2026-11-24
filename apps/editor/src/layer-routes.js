@@ -102,18 +102,18 @@ function stopRow(stop, index, stops, edit) {
 
 // Stops are added one after another until someone is done.
 async function addStops(edit, editNow) {
-  for (;;) {
+  while (edit.isOpen()) {
     const count = directionsOf(editNow().feature)[shownDirectionIndex(editNow())].stops.filter(stop => !isTurnPoint(stop)).length;
     const picked = await edit.context.pick(stopsFile, `Click stops in the order the line serves them · ${count}`, 'Done');
-    if (!picked) return;
+    if (!picked || !edit.isOpen()) return;
     changeStops(editNow(), stops => [...stops, picked.feature.properties.stopId]);
   }
 }
 
 async function addTurn(edit, editNow) {
   const coordinate = await edit.context.pickPoint('Click the street the line must take');
-  if (!coordinate) return;
-  // Between the two stops whose way it bends least: after the last one unless it clearly lies before.
+  if (!coordinate || !edit.isOpen()) return;
+  // Between the two stops whose way it bends least.
   changeStops(editNow(), stops => {
     const positions = stops.map(stop => stopPosition(stop, edit.context));
     return stops.toSpliced(turnIndex(positions, coordinate), 0, {turn: coordinate});

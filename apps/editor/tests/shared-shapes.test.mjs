@@ -39,6 +39,32 @@ for (const [name, ring, expected] of [
   });
 }
 
+test('an outline simplified apart from the line follows it, and keeps its own corners elsewhere', () => {
+  // One long side runs along the whole stretch, with no corner near either end of it.
+  const simplified = ringOf([-5, 0.1], [7, 0.1], [7, 5], [-5, 5]);
+  const spliced = stepsOf(splicedRing(simplified, stretch, toleranceMetres));
+  for (const corner of [[-5, 0.1], [7, 0.1], [7, 5], [-5, 5], [1, 1]]) {
+    assert.ok(spliced.some(point => String(point) === String(corner)), `${corner} is kept`);
+  }
+  // It meets the line beside its ends, so the long side does not turn.
+  assert.ok(spliced.some(point => String(point) === String([0, 0.1])));
+  assert.ok(spliced.some(point => String(point) === String([2, 0.1])));
+});
+
+test('of two outlines near a short stretch only its own follows', () => {
+  const border = (key, coordinates) => ({
+    filename: 'border-edges.geojson',
+    key,
+    feature: {type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates}}
+  });
+  const edits = followingEdits(
+    [border('near', points([0, 0.1], [2, 0.1])), border('own', points([0, 0], [1, 0], [2, 0]))],
+    stretch,
+    toleranceMetres
+  );
+  assert.deepEqual(edits.map(({key}) => key), ['own']);
+});
+
 test('an outline elsewhere, or one that only meets the ends of the line, does not follow it', () => {
   assert.equal(splicedRing(ringOf([5, 0], [6, 0], [6, 1]), stretch, toleranceMetres), null);
   const aroundTheOtherWay = ringOf([0, 0], [0, -2], [2, -2], [2, 0], [4, 4]);
@@ -92,6 +118,14 @@ test('rivers keep their joins with each other and with a shore when either side 
   const movedRiver = {...river.feature.geometry, coordinates: points([2, 10], [3, 6], [2, 4])};
   const [joined] = linesKeepingJoins('river', river.feature.geometry, movedRiver, entries);
   assert.deepEqual(stepsOf(joined.after.geometry.coordinates), [[2, 8], [3, 6]]);
+
+  // The same joint, with a point added beside it in one edit, and with the joint taken away.
+  const withMore = {...river.feature.geometry, coordinates: points([2, 10], [2, 8.5], [3, 6], [2, 4])};
+  const [joinedAgain] = linesKeepingJoins('river', river.feature.geometry, withMore, entries);
+  assert.deepEqual(stepsOf(joinedAgain.after.geometry.coordinates).at(-1), [3, 6]);
+  const withoutJoint = {...river.feature.geometry, coordinates: points([2, 10], [2, 4])};
+  const [joinedToNearest] = linesKeepingJoins('river', river.feature.geometry, withoutJoint, entries);
+  assert.deepEqual(stepsOf(joinedToNearest.after.geometry.coordinates).at(-1), [2, 4]);
 
   const smallerLake = {type: 'Polygon', coordinates: [ringOf([0, 0], [4, 0], [4, 3], [0, 3])]};
   const [shortened] = riversKeepingShore(lake.feature.geometry, smallerLake, entries);

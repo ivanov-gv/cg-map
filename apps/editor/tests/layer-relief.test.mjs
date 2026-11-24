@@ -19,6 +19,9 @@ function contextWith(featuresByFile) {
     (featuresByFile[filename] ?? []).map((entry, index) => ({filename, key: String(index), feature: entry}));
   return {
     entriesOf,
+    session: {
+      workingFeature: (filename, key) => entriesOf(filename).find(entry => entry.key === key)?.feature ?? null
+    },
     findEntity: (filename, entityId) => entriesOf(filename).find(entry => entry.feature.properties.entityId === entityId)
   };
 }
@@ -94,10 +97,51 @@ const west = municipality('ME-01', 'West', [0, 0], [5, 0], [5, 5], [5, 10], [0, 
 const east = municipality('ME-02', 'East', [5, 0], [10, 0], [10, 10], [5, 10], [5, 5]);
 const border = (left, right, coordinates) => feature({kind: 'border', left, right}, {type: 'LineString', coordinates});
 
+test('a contour is lower than the summits inside it, unless it never was', () => {
+  const summit = feature({name: 'Peak', ele: 70}, {type: 'Point', coordinates: at([5, 5])});
+  const context = contextWith({'contours.geojson': [outer, inner], 'summits.geojson': [summit]});
+  const {problem} = reliefBehaviors['contours.geojson'];
+  const raised = elevation => ({...inner, properties: {...inner.properties, elevation}});
+  assert.equal(problem({key: '1', feature: raised(60), before: inner}, context), null);
+  assert.match(problem({key: '1', feature: raised(80), before: inner}, context), /Peak inside this line is 70 m/);
+  assert.equal(problem({key: '1', feature: raised(100), before: raised(80)}, context), null, 'the sources had it so');
+});
+
+test('the height of the phone fills a gap of the same summit only', () => {
+  const positions = [];
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {geolocation: {getCurrentPosition: onPosition => positions.push(onPosition)}}
+  });
+  const recorded = [];
+  const editOf = (ele, isOpen) => ({
+    context: {isPhone: () => true},
+    isOpen: () => isOpen,
+    typedFeature: () => ({properties: {ele}}),
+    setProperties: properties => recorded.push(properties),
+    showProblem: () => {}
+  });
+  const {tools} = reliefBehaviors['summits.geojson'];
+  const summit = {properties: {ele: null}};
+  for (const edit of [editOf(null, true), editOf(null, false), editOf(812, true)]) tools(summit, edit)[0].run();
+  for (const onPosition of positions) onPosition({coords: {altitude: 800.4}});
+  assert.deepEqual(recorded, [{ele: 800}], 'neither a closed edit nor a height typed meanwhile is changed');
+  assert.deepEqual(tools({properties: {ele: 812}}, editOf(812, true)), []);
+});
+
+test('a ridge is refused where no slope runs along it, and lines are not reshaped on a phone', () => {
+  const ridgeBehavior = reliefBehaviors['ridges.geojson'];
+  const before = feature({}, {type: 'LineString', coordinates: points([0, 0], [1, 1], [2, 0])});
+  const after = {...before, geometry: {type: 'LineString', coordinates: points([0, 0], [1, 2], [2, 0])}};
+  assert.match(ridgeBehavior.problem({feature: after, before}, contextWith({})), /cannot follow/);
+  assert.equal(ridgeBehavior.isReshapable({isPhone: () => true}), false);
+  assert.equal(reliefBehaviors['contours.geojson'].isReshapable({isPhone: () => false}), true);
+});
+
 test('a shared border moves both municipalities at once, and the coast is not a border to move', () => {
-  const context = contextWith({'municipalities.geojson': [west, east]});
-  const behavior = settlementBehaviors['border-edges.geojson'];
   const before = border('ME-01', 'ME-02', points([5, 0], [5, 5], [5, 10]));
+  const context = contextWith({'municipalities.geojson': [west, east], 'border-edges.geojson': [before]});
+  const behavior = settlementBehaviors['border-edges.geojson'];
   const after = {...before, geometry: {type: 'LineString', coordinates: points([5, 0], [6, 5], [5, 10])}};
   const edits = behavior.companionEdits({feature: after, before}, context);
   assert.deepEqual(edits.map(({key}) => key), ['0', '1']);
@@ -108,7 +152,9 @@ test('a shared border moves both municipalities at once, and the coast is not a 
   const elsewhere = border('ME-01', 'ME-02', points([50, 0], [50, 5], [50, 10]));
   const movedElsewhere = {...elsewhere, geometry: {type: 'LineString', coordinates: points([50, 0], [51, 5], [50, 10])}};
   assert.match(behavior.problem({feature: movedElsewhere, before: elsewhere}, context), /cannot follow/);
-  assert.equal(behavior.problem({feature: after, before}, context), null);
+  assert.equal(behavior.problem({key: '0', feature: after, before}, context), null);
+  const oneSide = contextWith({'municipalities.geojson': [west], 'border-edges.geojson': [before]});
+  assert.match(behavior.problem({key: '0', feature: after, before}, oneSide), /cannot follow/, 'both sides must follow');
 
   const coast = border('sea', 'ME-01', points([0, 0], [0, 5], [0, 10]));
   const movedCoast = {...coast, geometry: {type: 'LineString', coordinates: points([0, 0], [1, 5], [0, 10])}};
@@ -127,9 +173,12 @@ test('a town says which municipality it is in, and a neighbour has one name in b
   });
   const {prepared, problem} = settlementBehaviors['settlements.geojson'];
   const town = position => feature({kind: 'settlement', rank: 'town', name: 'New'}, {type: 'Point', coordinates: at(position)});
-  assert.equal(prepared(town([7, 5]), context).properties.municipality, 'ME-02');
-  assert.equal(prepared(town([7, 5]), context).properties.place, 'town');
-  assert.match(problem({feature: prepared(town([50, 50]), context)}), /inside a municipality/);
+  const newTown = {key: 'local:1'};
+  assert.equal(prepared(town([7, 5]), context, newTown).properties.municipality, 'ME-02');
+  assert.equal(prepared(town([7, 5]), context, newTown).properties.place, 'town');
+  const movedAway = town([50, 50]);
+  movedAway.properties.municipality = 'ME-02';
+  assert.match(problem({feature: prepared(movedAway, context, newTown)}), /inside a municipality/);
   const neighbour = feature({entityId: 'ne:NBR', name: 'New name'}, null);
   const [edit] = settlementBehaviors['context-countries.geojson'].companionEdits({feature: neighbour}, context);
   assert.deepEqual([edit.key, edit.after.properties.name], ['0', 'New name']);
