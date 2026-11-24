@@ -24,6 +24,10 @@ test('entity-aware sources pass producer validation and reach editor and web wit
     assert.equal(validateCollection(collection, {label: filename, places: filename === 'places.geojson', contractsDirectory}), 1);
     await writeFile(path.join(sourceDirectory, filename), JSON.stringify(collection));
   }
+  // Route and turn records carry no feature identity of their own; only their presence in the bundle matters here.
+  for (const [filename, listName] of [['transit-routes.json', 'routes'], ['turn-restrictions.json', 'restrictions']]) {
+    await writeFile(path.join(sourceDirectory, filename), JSON.stringify({[listName]: []}));
+  }
   assert.equal(validateStops(fixture.sources['transport-stops.geojson'], {contractsDirectory}), 1);
   assert.equal(validateBuildingLabels(fixture.sources['building-labels.geojson'], fixture.sources['buildings.geojson'], {contractsDirectory}), 1);
   const manifest = validateBundleManifest(await writeEditorBundle(sourceDirectory, outputDirectory, contractURL('editor-bundle.schema.json')));
@@ -31,7 +35,8 @@ test('entity-aware sources pass producer validation and reach editor and web wit
   for (const metadata of manifest.layers) {
     const bytes = await readFile(path.join(outputDirectory, metadata.filename));
     const decoded = await decodeSource(bytes, metadata);
-    assert.deepEqual(decoded, fixture.sources[metadata.filename]);
+    const source = fixture.sources[metadata.filename];
+    if (source) assert.deepEqual(decoded, source);
     decodedSources.set(metadata.filename, decoded);
   }
   const config = parseVisibilityConfig(readContractJSON('place-visibility.json'));
