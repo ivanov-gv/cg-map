@@ -71,7 +71,7 @@ export class EditSession {
     return true;
   }
 
-  // Imported operations are recorded one by one, each under its own file.
+  // One edit in the history of its own file.
   recordEdit(filename, key, after) {
     return this.recordEdits(filename, [{filename, key, after}]);
   }

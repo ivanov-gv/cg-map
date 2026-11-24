@@ -39,7 +39,7 @@
                   "wheelchair": {"type": "string", "minLength": 1, "maxLength": 64},
                   "door": {"type": "string", "minLength": 1, "maxLength": 128},
                   "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]},
-                    "nohousenumber": {"const": "yes"}
+                  "nohousenumber": {"const": "yes"}
                 },
                 "patternProperties": {
                   "^addr:": {"type": "string", "minLength": 1, "maxLength": 128}
