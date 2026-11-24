@@ -3,23 +3,41 @@ import {pointInsidePolygon} from './geometry-validation.js';
 const footprintsFile = 'buildings.geojson';
 const labelsFile = 'building-labels.geojson';
 
-// Footprint and label edits never rewrite each other, so a label left outside its footprint is reported here and
-// corrected explicitly in its own mode. footprintIndex is a revision-bound index, and footprints cannot be
-// added or deleted, so the join stays valid throughout a session.
+// A source label names its building by position in the snapshot, which is the session key; one added here by entity ID.
+function footprintKeyOf(label, session) {
+  const {footprintIndex, buildingEntityId} = label.properties;
+  if (buildingEntityId === undefined) return String(footprintIndex);
+  if (buildingEntityId.startsWith('local:')) return buildingEntityId;
+  const entry = session
+    .workingEntries(footprintsFile)
+    .find(({feature}) => feature.properties.entityId === buildingEntityId);
+  return entry?.key ?? null;
+}
+
+// Keys of the footprints and labels with pending changes.
+function changedKeys(session, filename) {
+  const keyOf = ({reference}) => reference.localId ?? String(reference.featureIndex);
+  return new Set(session.changes(filename).map(keyOf));
+}
+
+// Every label must be inside its building. The editor moves them together, so this reports what an import or an edit of
+// the label alone left behind.
 export function labelJoinProblems(session) {
-  const changedFootprints = new Set(session.changes(footprintsFile).map(({reference}) => reference.featureIndex));
-  const changedLabelKeys = new Set(session.changes(labelsFile).map(({reference}) => String(reference.featureIndex)));
-  if (changedFootprints.size === 0 && changedLabelKeys.size === 0) return [];
-  const footprints = session.workingEntries(footprintsFile).map(({feature}) => feature);
+  const changedFootprints = changedKeys(session, footprintsFile);
+  const changedLabels = changedKeys(session, labelsFile);
+  if (changedFootprints.size === 0 && changedLabels.size === 0) return [];
   const problems = [];
   for (const {key, feature: label} of session.workingEntries(labelsFile)) {
-    const {footprintIndex} = label.properties;
-    const isAffected = changedLabelKeys.has(key) || changedFootprints.has(footprintIndex);
+    const footprintKey = footprintKeyOf(label, session);
+    const isAffected = changedLabels.has(key) || changedFootprints.has(footprintKey);
     if (!isAffected) continue;
-    const footprint = footprints[footprintIndex];
+    const footprint = footprintKey === null ? null : session.workingFeature(footprintsFile, footprintKey);
     const isInside = footprint && pointInsidePolygon(label.geometry.coordinates, footprint.geometry.coordinates);
     if (isInside) continue;
-    const message = `Label ${label.properties['addr:housenumber']} (feature ${key}) is outside footprint ${footprintIndex}.`;
+    const number = label.properties['addr:housenumber'] ?? label.properties.building_number ?? '';
+    const message = footprint
+      ? `Address ${number} (feature ${key}) is outside its building ${footprintKey}.`
+      : `Address ${number} (feature ${key}) has no building.`;
     problems.push({filename: labelsFile, message});
   }
   return problems;
