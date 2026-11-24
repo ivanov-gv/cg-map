@@ -1,3 +1,4 @@
+import {layerIdOfFile} from './editor-layers.js';
 import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
@@ -72,7 +73,7 @@ async function checkOperation(operation, key, sources, rules, levels) {
 }
 
 // Resumes a reviewed changeset on this snapshot, with the same checks as the importer. Everything is checked before the
-// first edit is recorded, so a refused file leaves the session untouched.
+// first edit is recorded, so a refused file leaves the session untouched. What arrives is one step of each layer.
 export async function importChangeset(changeset, session, sources, rules, levels) {
   requireImportable(readableVersions.includes(changeset?.version), 'unsupported changeset version');
   const {operations, bases} = changeset;
@@ -105,6 +106,10 @@ export async function importChangeset(changeset, session, sources, rules, levels
     const problem = fieldItemProblem(item, [...sources.keys()]);
     requireImportable(!problem, problem);
   }
-  operations.forEach(({filename, after}, index) => session.recordEdit(filename, keys[index], after));
+  const editsByLayer = Map.groupBy(
+    operations.map(({filename, after}, index) => ({filename, key: keys[index], after})),
+    ({filename}) => layerIdOfFile(filename)
+  );
+  for (const [layerId, edits] of editsByLayer) session.recordEdits(layerId, edits);
   fieldItems.forEach(item => session.saveFieldItem(item));
 }

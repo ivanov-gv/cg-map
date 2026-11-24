@@ -238,6 +238,8 @@ test('a changeset carries base hashes, fingerprints and both states, and imports
   await importChangeset(changeset, resumed, sources, rules, levels);
   assert.equal(resumed.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
   assert.deepEqual(materializedLayer(resumed, 'places.geojson').features[0].properties.name, 'Renamed');
+  resumed.undo('places');
+  assert.equal(resumed.hasChanges(), false, 'an import can be taken back on its layer');
 });
 
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {

@@ -3,11 +3,11 @@ import {kindLabel, objectName} from './object-names.js';
 // What a layer does differently with the objects of one file. Every hook is optional:
 //   kind(feature)                 the small label above the name
 //   title(feature, context)       the name in the inspector
-//   sections(feature)             form sections in order, [{title, fields, isCollapsed}]
+//   sections(feature, edit)       form sections in order, [{title, fields, isCollapsed}]
 //   tools(feature, context)       extra tool buttons, [{label, run(), isDesktopOnly}]
-//   renderExtras(container, edit) anything else in the inspector, with edit = {feature, isNew, context, changed(...)}
+//   renderExtras(container, edit) anything else in the inspector, with edit = {feature, isNew, context}
 //   prepared(feature, context)    the feature as Apply will record it
-//   problem(feature, context)     why Apply must refuse it, or null
+//   problem(edit, context)        why Apply must refuse it, or null
 //   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
 //   deletion(entry, context)      {message, edits, options: [{label, edits}]}
 //   measures(feature, before)     lines of facts shown under the form
