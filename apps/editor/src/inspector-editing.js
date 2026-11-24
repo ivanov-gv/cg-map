@@ -128,7 +128,7 @@ export class InspectorEditing {
       id: 'mode-add',
       label: 'Place it here',
       isPrimary: true,
-      run: () => this.#placePoint(this.#context.map.getCenter().toArray())
+      run: () => this.#placeUnderCross()
     };
     const cancel = {id: 'mode-cancel', label: 'Cancel', run: () => this.discardEdit()};
     return this.#context.isPhone() ? [placeHere, cancel] : [cancel];
@@ -203,6 +203,7 @@ export class InspectorEditing {
       setProperties: properties => this.#setProperties(properties),
       setGeometry: geometry => this.#update(withGeometry(this.#transaction, geometry)),
       startTool: tool => this.#startTool(tool),
+      hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: message => this.showProblem(message),
       applyWith: edits => this.#applyWith(edits)
     };
@@ -252,9 +253,12 @@ export class InspectorEditing {
     this.#open(filename, beginExistingEdit(key, feature));
   }
 
-  openNew(filename, key, shape, fields) {
-    const transaction = beginNewByShape[shape](key, fields.properties);
-    this.#open(filename, fields.id ? {...transaction, feature: {...transaction.feature, id: fields.id}} : transaction);
+  // fields are {properties, id, geometry}. With a geometry the object already has its place, so its form opens at once.
+  openNew(filename, key, shape, {properties, id, geometry}) {
+    const transaction = beginNewByShape[shape](key, properties);
+    const feature = {...transaction.feature, ...(id ? {id} : {})};
+    const placed = geometry ? withTool({...transaction, feature: {...feature, geometry}}, null) : {...transaction, feature};
+    this.#open(filename, placed);
   }
 
   close() {
@@ -353,9 +357,10 @@ export class InspectorEditing {
     }
     const {message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
-    confirmDeletion({title: `Delete ${title}?`, message, options}, option =>
-      this.#recordDeletion([ownEdit, ...edits, ...(option?.edits ?? [])], title)
-    );
+    confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
+      const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
+      if (optionEdits) this.#recordDeletion([ownEdit, ...edits, ...optionEdits], title);
+    });
   }
 
   #removeSelectedVertex() {
@@ -393,6 +398,12 @@ export class InspectorEditing {
     this.#update(afterDrawnPoint(this.#transaction, coordinate));
   }
 
+  #placeUnderCross() {
+    const {map} = this.#context;
+    const lngLat = map.getCenter();
+    this.#placePoint(this.#snappedPoint({lngLat, point: map.project(lngLat)}) ?? lngLat.toArray());
+  }
+
   #placePoint(coordinate) {
     this.#update(afterMapTap(this.#transaction, coordinate, null));
     this.#renderForm();
@@ -414,7 +425,8 @@ export class InspectorEditing {
     const limit = this.#behavior.limitedGeometry;
     if (!limit) return moved;
     const behaviorContext = this.#context.behaviorContext();
-    const edit = {filename: this.#filename, key: transaction.key, previousGeometry: transaction.feature.geometry};
+    const {feature, key} = transaction;
+    const edit = {filename: this.#filename, key, feature, previousGeometry: feature.geometry};
     return withGeometry(moved, limit(moved.feature.geometry, edit, behaviorContext));
   }
 
@@ -497,20 +509,23 @@ export class InspectorEditing {
     return event.point.dist(this.#context.map.project(firstPoint)) <= closingDistancePixels;
   }
 
+  // Where a layer says a point belongs, such as on the outline of a building, or null.
+  #snappedPoint(event) {
+    return this.#behavior.snappedPoint?.(event, this.#context.behaviorContext(), this.#transaction.feature);
+  }
+
   // Shift keeps right angles while drawing a building or any other shape. A layer can join a tap to what is there.
   #drawnCoordinate(event) {
     const coordinate = event.lngLat.toArray();
     if (!isDrawing(this.#transaction)) return coordinate;
     const {drawnPoints, tool} = this.#transaction;
     if (event.originalEvent?.shiftKey && tool !== editTools.drawLine) return rightAngledCorner(drawnPoints, coordinate);
-    const snapped = this.#behavior.snappedPoint?.(event, this.#context.behaviorContext());
-    return snapped ?? coordinate;
+    return this.#snappedPoint(event) ?? coordinate;
   }
 
   tap(event) {
     if (this.#isPlacing) {
-      const snapped = this.#behavior.snappedPoint?.(event, this.#context.behaviorContext());
-      this.#placePoint(snapped ?? event.lngLat.toArray());
+      this.#placePoint(this.#snappedPoint(event) ?? event.lngLat.toArray());
       return;
     }
     if (this.#isClosingTap(event)) {

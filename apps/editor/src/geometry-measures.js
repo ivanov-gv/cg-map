@@ -23,6 +23,37 @@ export function lineLengthMetres(coordinates) {
   return coordinates.slice(1).reduce((length, end, index) => length + distanceMetres(coordinates[index], end), 0);
 }
 
+// The point of a segment nearest to a coordinate, in degrees; a local plane is precise enough at city scale.
+export function nearestPointOnSegment(coordinate, start, end) {
+  const side = metricOffset(end, start);
+  const offset = metricOffset(coordinate, start);
+  const squaredLength = side[0] ** 2 + side[1] ** 2;
+  const projection = squaredLength === 0 ? 0 : (offset[0] * side[0] + offset[1] * side[1]) / squaredLength;
+  const fraction = Math.max(0, Math.min(1, projection));
+  return [start[0] + fraction * (end[0] - start[0]), start[1] + fraction * (end[1] - start[1])];
+}
+
+// The nearest point of a line: {coordinate, segmentIndex, distanceMetres}.
+export function nearestPointOnLine(coordinate, line) {
+  let nearest = {coordinate: line[0], segmentIndex: 0, distanceMetres: Infinity};
+  for (let segmentIndex = 0; segmentIndex < line.length - 1; segmentIndex += 1) {
+    const candidate = nearestPointOnSegment(coordinate, line[segmentIndex], line[segmentIndex + 1]);
+    const candidateDistance = distanceMetres(candidate, coordinate);
+    if (candidateDistance < nearest.distanceMetres) {
+      nearest = {coordinate: candidate, segmentIndex, distanceMetres: candidateDistance};
+    }
+  }
+  return nearest;
+}
+
+// The nearest point of a shape's outline or of one of its holes.
+export function nearestPointOnOutline(coordinate, rings) {
+  const candidates = rings.map(ring => nearestPointOnLine(coordinate, ring));
+  return candidates.reduce((nearest, candidate) =>
+    candidate.distanceMetres < nearest.distanceMetres ? candidate : nearest
+  );
+}
+
 // Works for an open list of corners and for a closed ring.
 export function ringAreaSquareMetres(corners) {
   const points = corners.map(corner => metricOffset(corner, corners[0]));
