@@ -144,6 +144,7 @@ export const SHARED_EDITOR_SOURCES = [
   'dom.js',
   'hashing.js',
   'source-bundle.js',
+  'source-records.js',
   'draft-store.js',
   'layer-rules.js',
   'source-overlay.js',
@@ -227,9 +228,10 @@ export function classify(file) {
 
   if (file === 'data/tools/editor-bundle.mjs') return {folders: ['data', 'tests'], areas: []};
   // tests/integration proves that whatever the editor exports, this importer accepts.
-  if (
-    ['apply-changeset.mjs', 'check-data.mjs', 'apply-place-visibility.mjs'].some(tool => file === `data/tools/${tool}`)
-  ) {
+  const isImporterSource =
+    ['apply-changeset.mjs', 'check-data.mjs', 'apply-place-visibility.mjs'].some(tool => file === `data/tools/${tool}`) ||
+    /^data\/tools\/changeset-[a-z-]+\.mjs$/.test(file);
+  if (isImporterSource) {
     return {folders: ['data', 'tests'], areas: []};
   }
   // Web browser tests read this fixture from the pinned package, so it belongs to data's own pipeline.
