@@ -9,7 +9,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   prepared(feature, context)    the feature as Apply will record it
 //   problem(feature, context)     why Apply must refuse it, or null
 //   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
-//   deletion(entry, context)      {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
+//   deletion(entry, context)      {problem} when it must not be removed, else {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
 //                                 more on the map; it gives the edits, or null to keep the object
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, edit, context) where a drag must stop
@@ -20,6 +20,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   closesLines                   a drawn line ends on its first point when that is tapped
+//   isViewOnly(context)           the object can be read and not changed here
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // companionEdits and problem get {filename, key, feature, before, extras}.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
@@ -51,7 +52,8 @@ const defaultBehavior = filename => ({
   vertexTools: () => [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
-  dragTarget: () => null
+  dragTarget: () => null,
+  isViewOnly: () => false
 });
 
 export const behaviorOf = (filename, layerId = null) => ({
@@ -92,6 +94,16 @@ const drawChoices = {
       filename: 'summits.geojson',
       shape: 'Point',
       properties: {kind: 'summit', natural: 'peak'}
+    }
+  ],
+  stops: [{label: 'Add stop', filename: 'transport-stops.geojson', shape: 'Point', properties: {}}],
+  routes: [
+    {
+      label: 'New line',
+      filename: 'transit-routes.json',
+      shape: 'None',
+      properties: {network: 'bus', directions: [{headsign: '', stops: []}]},
+      isDesktopOnly: true
     }
   ],
   settlements: [

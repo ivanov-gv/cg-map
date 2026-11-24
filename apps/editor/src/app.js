@@ -26,7 +26,9 @@ import {buildingAt, placeBehaviors} from './layer-places.js';
 import {greenBehaviors} from './layer-green.js';
 import {reliefBehaviors} from './layer-relief.js';
 import {roadBehaviors} from './layer-roads.js';
+import {routeBehaviors} from './layer-routes.js';
 import {settlementBehaviors} from './layer-settlements.js';
+import {stopBehaviors} from './layer-stops.js';
 import {waterBehaviors} from './layer-water.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
@@ -55,6 +57,8 @@ registerBehaviors(greenBehaviors);
 registerBehaviors(waterBehaviors);
 registerBehaviors(reliefBehaviors);
 registerBehaviors(settlementBehaviors);
+registerBehaviors(stopBehaviors);
+registerBehaviors(routeBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
 const basemapLayers = {
@@ -139,8 +143,9 @@ function layerStatus() {
   return `${activeLayer.name} · ${objectCount} objects · ${isEditable ? 'editable' : 'read-only'}`;
 }
 
-// Kinds that only follow from other objects are drawn and never picked.
-const isPickable = ({filename, feature}) => isLayerObject(filename, feature);
+// Kinds that only follow from other objects, and files another layer edits, are drawn and never picked.
+const isPickable = ({filename, feature}) =>
+  isLayerObject(filename, feature) && !activeLayer?.contextFiles.includes(filename);
 
 // What a layer's behavior may read, never a way around the commands.
 function behaviorContext() {
@@ -159,6 +164,8 @@ function behaviorContext() {
     select: entry => selectObject(entry, true),
     startNew: startNewFeature,
     pick: pickObject,
+    pickPoint,
+    showPath: (coordinates, colour) => overlay.setPath(coordinates, colour),
     showNextGap
   };
 }
@@ -218,8 +225,9 @@ function clearSelection() {
 // A filter shows other objects over the map as it is, without drawing the files of its layer again.
 const shownFiles = () => {
   if (activeFilter) return [];
-  const isLimited = phoneLayout.matches && activeLayer?.phoneFiles;
-  return (isLimited ? activeLayer.phoneFiles : activeLayer?.files) ?? [];
+  if (!activeLayer) return [];
+  const isLimited = phoneLayout.matches && activeLayer.phoneFiles;
+  return [...(isLimited ? activeLayer.phoneFiles : activeLayer.files), ...activeLayer.contextFiles];
 };
 
 // The active layer's files and every changed file use the public cartography with their working features. The others
@@ -325,7 +333,8 @@ function renderCommandAvailability() {
 function renderTools() {
   elementById('edit-guides').hidden = !activeLayer;
   elementById('edit-guides-hint').hidden = !activeLayer;
-  const buttons = drawChoicesOf(activeLayer, rules).map(choice => {
+  const choices = drawChoicesOf(activeLayer, rules).filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
+  const buttons = choices.map(choice => {
     const button = createElementWithText('button', choice.label);
     button.type = 'button';
     button.onclick = () => startNewFeature(choice);
@@ -447,7 +456,7 @@ function startNewFeature({label, filename, shape, properties, geometry}) {
   const fields = newFeatureFields(filename, localId, rules);
   setHeading('New', label);
   elementById('selection-source').textContent = `${filename} · new feature`;
-  if (geometry) showInspector();
+  if (geometry || shape === 'None') showInspector();
   editing.openNew(filename, localId, shape, {...fields, geometry, properties: {...fields.properties, ...properties}});
 }
 
@@ -483,6 +492,10 @@ function chooseLayer(layer) {
 function afterLayerSwitch() {
   showPanel(null);
   elementById('current-layer').focus();
+  const hasOnlyRecords = activeLayer && activeEntries.length > 0 && activeEntries.filter(isPickable).every(({feature}) => !feature.geometry);
+  // Lines have no place of their own on the map, so they are picked from their list.
+  if (hasOnlyRecords) showPanel('objects-panel', elementById('open-objects'));
+  if (hasOnlyRecords) renderObjectList();
 }
 
 // Only visible guides or normal cartography supply candidates, both for clicks and the keyboard list.
@@ -504,7 +517,7 @@ function renderObjectList() {
     return;
   }
   const hits = map.queryRenderedFeatures({layers: selectableLayerIds()});
-  const unplacedEntries = activeEntries.filter(({feature}) => !feature.geometry);
+  const unplacedEntries = activeEntries.filter(entry => !entry.feature.geometry && isPickable(entry));
   objectList.render(clickCandidates ?? [...pickableEntries(hits), ...unplacedEntries], heading, '');
 }
 
@@ -523,11 +536,11 @@ function selectObject(entry, shouldFocus = false) {
 }
 
 // Asks for one object of a file on the map. Gives its entry, or null when someone cancels or leaves the layer.
-function pickObject(filename, prompt) {
+function pickObject(filename, prompt, cancelLabel = 'Cancel') {
   hideInspector();
   return new Promise(resolve => {
     pendingPick = {filename, resolve};
-    const cancel = {id: 'mode-cancel', label: 'Cancel', run: () => finishPick(null)};
+    const cancel = {id: 'mode-cancel', label: cancelLabel, run: () => finishPick(null)};
     showModeBar({title: prompt, hint: 'Tap it on the map', buttons: [cancel]});
   });
 }
@@ -535,17 +548,27 @@ function pickObject(filename, prompt) {
 // What the layer shows there, or a shape of another file that contains the tap.
 function entryUnderPick(event) {
   const {filename} = pendingPick;
-  const hits = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
+  if (filename === null) {
+    return {feature: {type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: event.lngLat.toArray()}}};
+  }
+  const hits = sourceEntriesForHits(hitTest(map, event.point, selectableLayerIds()), activeEntries);
   const shown = hits.find(entry => entry.filename === filename);
   if (shown || filename !== 'buildings.geojson') return shown;
   return buildingAt(event.lngLat.toArray(), behaviorContext());
 }
 
+// Asks for a place on the map. Gives its coordinate, or null when someone cancels.
+async function pickPoint(prompt) {
+  const picked = await pickObject(null, prompt);
+  return picked?.feature.geometry.coordinates ?? null;
+}
+
 function finishPick(entry) {
-  const {resolve} = pendingPick;
+  const {resolve, filename} = pendingPick;
   pendingPick = null;
   hideModeBar();
-  if (!entry) showInspector();
+  // A picked place ends the question; a picked object may be followed by another.
+  if (!entry || filename === null) showInspector();
   resolve(entry);
 }
 

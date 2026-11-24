@@ -1100,3 +1100,32 @@ fieldset {
   min-height: 20px;
   margin: 0;
 }
+
+.route-stops {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.route-stop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  padding-left: 10px;
+  background: #f6f7f1;
+  border-radius: 8px;
+}
+.route-stop span {
+  flex: 1;
+  min-width: 0;
+}
+.route-stop button {
+  min-width: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
+}
+.route-turn span {
+  color: var(--muted);
+}

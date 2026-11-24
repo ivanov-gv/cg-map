@@ -12,6 +12,7 @@ import {
   beginNewLine,
   beginNewPoint,
   beginNewPolygon,
+  beginNewRecord,
   canFinishDrawing,
   cancelGesture,
   editTools,
@@ -33,7 +34,12 @@ import {formValues, propertiesFromForm, renderPropertyForm} from './property-for
 // How close to the first corner, on screen, a tap closes a shape.
 const closingDistancePixels = 14;
 
-const beginNewByShape = {Point: beginNewPoint, LineString: beginNewLine, Polygon: beginNewPolygon};
+const beginNewByShape = {
+  Point: beginNewPoint,
+  LineString: beginNewLine,
+  Polygon: beginNewPolygon,
+  None: beginNewRecord
+};
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, activeLayer(), isPhone(), behaviorContext(),
@@ -212,6 +218,8 @@ export class InspectorEditing {
       context: this.#context.behaviorContext(),
       setProperties: properties => this.#setProperties(properties),
       extras: this.#transaction.extras,
+      // A control that outlives one rendering reads the edit as it is then.
+      latest: () => this.#editContext(),
       setExtras: extras => this.#setExtras(extras),
       setFeature: feature => this.#setFeature(feature),
       setGeometry: geometry => this.#setFeature({...this.#currentFeature(), geometry}),
@@ -268,6 +276,7 @@ export class InspectorEditing {
     this.showProblem(null);
     elementById('editor').hidden = false;
     elementById('edit-actions').hidden = false;
+    elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
     elementById('apply-edit').textContent = this.#behavior.applyLabel(this.#editContext());
     this.#renderToolButtons();
     this.#renderFacts();
@@ -309,6 +318,7 @@ export class InspectorEditing {
     overlay.setSelection(null);
     overlay.setGhost(null);
     overlay.setTarget(null);
+    overlay.setPath([]);
     overlay.setDrawing([], null);
     this.#context.onEditStateChanged();
   }
@@ -400,7 +410,11 @@ export class InspectorEditing {
       this.#finishEdit(() => this.#context.onMarkedForDeletion(entry, title));
       return;
     }
-    const {message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    const {problem, message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    if (problem) {
+      this.showProblem(problem);
+      return;
+    }
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
     confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);

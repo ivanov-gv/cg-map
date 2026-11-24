@@ -8,6 +8,7 @@ const ghostSource = 'editor-ghost';
 const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
+const pathSource = 'editor-path';
 const placesFile = 'places.geojson';
 // Guides become useful at neighbourhood scale. Below this, select the normal rendered cartography instead.
 export const guideMinZoom = 15;
@@ -57,11 +58,14 @@ const guideColor = [
   stateColors.applied,
   stateColors.editable
 ];
+// Shapes that only frame the map, or that another layer edits, have no guide.
+const isNotContext = ['!=', ['get', 'objectState'], 'context'];
 // A line has two outside rails; a polygon has just its boundary, never an interior tint.
 const lineGap = widthPixels => ['case', ['==', ['geometry-type'], 'LineString'], widthPixels, 0];
 
 function styleGuides(map) {
   map.setLayoutProperty(`${sourceName}-fill`, 'visibility', 'none');
+  map.setFilter(`${sourceName}-point`, ['all', ['==', ['geometry-type'], 'Point'], isNotContext]);
   map.setPaintProperty(`${sourceName}-point`, 'circle-opacity', 0);
   map.setPaintProperty(`${sourceName}-point`, 'circle-radius', 13);
   map.setPaintProperty(`${sourceName}-point`, 'circle-stroke-color', guideColor);
@@ -72,7 +76,8 @@ function styleGuides(map) {
   map.setFilter(`${sourceName}-line`, [
     'all',
     ['!=', ['geometry-type'], 'Point'],
-    ['!=', ['get', 'objectState'], 'missing']
+    ['!=', ['get', 'objectState'], 'missing'],
+    isNotContext
   ]);
 }
 
@@ -136,6 +141,13 @@ function stateLayers() {
       paint: {'text-color': stateColors.highlighted, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5}
     },
     {
+      id: 'editor-path',
+      type: 'line',
+      source: pathSource,
+      layout: {'line-join': 'round'},
+      paint: {'line-color': ['get', 'colour'], 'line-width': 5, 'line-opacity': 0.85}
+    },
+    {
       id: 'editor-target',
       type: 'line',
       source: targetSource,
@@ -170,7 +182,7 @@ function drawingFeatures(points, nextPoint) {
 }
 
 function installStateLayers(map) {
-  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource]) {
+  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource, pathSource]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
   const layers = stateLayers();
@@ -206,6 +218,8 @@ export function createSourceOverlay(map) {
     setApplied: features => setData(appliedSource, features),
     setDeletions: features => setData(deletionSource, features),
     setTarget: feature => setData(targetSource, feature ? [feature] : []),
+    setPath: (coordinates, colour = '#1b75bb') =>
+      setData(pathSource, coordinates.length > 1 ? [lineFeature(coordinates, {colour})] : []),
     setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
