@@ -54,6 +54,17 @@ test('a sketch is finished on the layer of what it is, and is saved without touc
   assert.deepEqual(saved[0].geometry, feature.geometry);
 });
 
+test('a rough sketch never offers the magnet', () => {
+  const behavior = sketchBehaviors[sketchFile];
+  const feature = {
+    type: 'Feature',
+    properties: {what: 'Other'},
+    geometry: {type: 'Polygon', coordinates: [[[19, 42], [19.1, 42], [19.1, 42.1], [19, 42]]]}
+  };
+  assert.equal(behavior.hasMagnet(feature), false);
+  assert.equal(behavior.hasMagnet(feature, true), false);
+});
+
 const sketchItem = {
   id: 'local:1',
   type: 'sketch',

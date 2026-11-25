@@ -151,3 +151,18 @@ test('an interior point is inside a shape whose centre is not', () => {
   ];
   assert.ok(isInside(interiorPoint(hook), hook));
 });
+
+test('the inspector title stays short, while an overlap says what an untitled building is', () => {
+  assert.equal(behavior.title(buildingFeature()), 'No address');
+  assert.equal(behavior.overlapTitle(buildingFeature()), 'a building without an address');
+  assert.equal(behavior.title(buildingFeature(19.25, {name: 'Corner cafe'})), 'Corner cafe');
+  assert.equal(behavior.overlapTitle(buildingFeature(19.25, {name: 'Corner cafe'})), 'Corner cafe');
+  assert.equal(
+    behavior.title(buildingFeature(19.25, {'addr:street': 'Main street', 'addr:housenumber': '14'})),
+    'Main street 14'
+  );
+  assert.equal(
+    behavior.overlapTitle(buildingFeature(19.25, {'addr:street': 'Main street', 'addr:housenumber': '14'})),
+    'Main street 14'
+  );
+});

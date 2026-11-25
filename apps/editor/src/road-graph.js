@@ -142,23 +142,43 @@ function membersByPoint(entries) {
   return members;
 }
 
-// Around what is asked for, so that the next questions of a drag find it ready.
+// Around what is asked for, so that the next questions of a drag find it ready. The session replaces a file's entries
+// as a whole, so the array's identity says when an answer must be found again. Each caller keeps its own answer: a road
+// member map and a list of reshapable areas are not interchangeable for the same file.
 const keptMarginDegrees = 0.002;
-let latestMembers = null;
 
 const contains = (outer, inner) =>
   outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
 
-// The members of every point within bounds. The session keeps one list of entries until something changes in it.
-function membersWithin(entries, bounds) {
-  const isKnown = latestMembers?.entries === entries && contains(latestMembers.bounds, bounds);
-  if (!isKnown) {
+// Makes a private cache. The scope distinguishes different questions of one kind, such as two editing rules.
+export function createKeptBox() {
+  const keptByEntries = new WeakMap();
+  return (entries, bounds, findWithin, scope = null) => {
+    let byScope = keptByEntries.get(entries);
+    if (!byScope) {
+      byScope = new Map();
+      keptByEntries.set(entries, byScope);
+    }
+    const kept = byScope.get(scope);
+    if (kept && contains(kept.bounds, bounds)) return kept.value;
     const [west, south, east, north] = bounds;
-    const margin = keptMarginDegrees;
-    const wideBounds = [west - margin, south - margin, east + margin, north + margin];
-    latestMembers = {entries, bounds: wideBounds, members: membersByPoint(entriesWithin(entries, wideBounds))};
-  }
-  return latestMembers.members;
+    const wideBounds = [
+      west - keptMarginDegrees,
+      south - keptMarginDegrees,
+      east + keptMarginDegrees,
+      north + keptMarginDegrees
+    ];
+    const value = findWithin(wideBounds);
+    byScope.set(scope, {bounds: wideBounds, value});
+    return value;
+  };
+}
+
+const keptMembersWithin = createKeptBox();
+
+// The members of every point within bounds, from one wide read of the file.
+function membersWithin(entries, bounds) {
+  return keptMembersWithin(entries, bounds, wideBounds => membersByPoint(entriesWithin(entries, wideBounds)));
 }
 
 // The roads of a point by level, as [{level, members}], the ground first.

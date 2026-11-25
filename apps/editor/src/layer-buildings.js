@@ -298,7 +298,10 @@ function pointOnWall(coordinate, entrance, context) {
 export const buildingBehaviors = {
   [buildingsFile]: {
     title: feature => addressText(feature.properties) || feature.properties.name || 'No address',
+    // The overlap bar says what the building is, where the inspector title stays short.
+    overlapTitle: feature => addressText(feature.properties) || feature.properties.name || 'a building without an address',
     sections: buildingSections,
+    mayContainOthers: false,
     prepared: preparedBuilding,
     renderExtras: renderBelongings,
     companionEdits: (edit, context) => [...labelEdit(edit, context), ...belongingEdits(edit, context)],

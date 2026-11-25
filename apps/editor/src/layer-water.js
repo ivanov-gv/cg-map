@@ -139,7 +139,7 @@ const joinTargets = (coordinate, {map, entriesOf}) => entriesWithin(entriesOf(wa
 function drawnWaterPoint({lngLat}, context, feature) {
   if (feature.geometry?.type !== 'LineString') return null;
   const coordinate = lngLat.toArray();
-  return joiningPoint(coordinate, joinableWater(coordinate, joinTargets(coordinate, context), new Set(), true), context.map);
+  return joiningPoint(coordinate, joinableWater(coordinate, joinTargets(coordinate, context), new Set(), true), context);
 }
 
 // Where the dragged point was when the edit was opened, or null when it was added since.
@@ -160,7 +160,7 @@ function snappedWhileDragged(geometry, change, context) {
   const along = origin ? targets.filter(entry => isWaterway(entry) && isSharing(entry)) : [];
   const ignored = new Set([change.key, ...along.map(({key}) => key)]);
   const isEnd = index === 0 || index === geometry.coordinates.length - 1;
-  const joined = joiningPoint(coordinate, joinableWater(coordinate, targets, ignored, isEnd), context.map);
+  const joined = joiningPoint(coordinate, joinableWater(coordinate, targets, ignored, isEnd), context);
   return joined ? withPoint(geometry, index, joined) : geometry;
 }
 
@@ -249,6 +249,8 @@ export const waterBehaviors = {
     prepared: preparedWater,
     snappedPoint: drawnWaterPoint,
     limitedGeometry: snappedWhileDragged,
+    joinsLines: true,
+    hasMagnet: feature => !isCoastline(feature),
     vertexTools: waterVertexTools,
     joinedPoints: (entry, context) => joinedWaterPoints(entry, context.entriesOf(waterFile)),
     problem: coastProblem,

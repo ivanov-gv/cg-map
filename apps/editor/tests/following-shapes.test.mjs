@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FollowingPreview, followingShapes} from '../src/following-preview.js';
+import {DragBudget} from '../src/drag-budget.js';
+import {followingEdits, followingShapes} from '../src/following-shapes.js';
 
 const lineTo = east => ({type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: [[0, 0], [east, 0]]}});
 
@@ -18,21 +19,31 @@ test('what moves, comes or goes is shown as it would be and as it is, and what o
   assert.deepEqual(ghosts, [lineTo(1), lineTo(3)]);
 });
 
+test('a companion edit the importer would refuse is named in the bar', () => {
+  const edits = [{filename: 'a', key: 'moved', after: lineTo(5)}];
+  const following = followingEdits(edits, () => lineTo(1), companionEdits =>
+    companionEdits === edits ? 'Road: too steep.' : null
+  );
+  assert.equal(following.problem, 'Road: too steep.');
+  assert.deepEqual(following.shapes, [lineTo(5)]);
+});
+
 test('a drag does not wait for what is slow to find, and its end shows it', testContext => {
   let now = 0;
   testContext.mock.method(performance, 'now', () => now);
-  const preview = new FollowingPreview();
+  const preview = new DragBudget();
   const found = {problem: null, shapes: [lineTo(1)], ghosts: []};
+  const nothing = {};
   let askedCount = 0;
   const find = () => {
     askedCount += 1;
     now += 100;
     return found;
   };
-  for (let move = 0; move < 5; move += 1) preview.of(find, true);
+  for (let move = 0; move < 5; move += 1) preview.of(find, true, nothing);
   assert.equal(askedCount, 3);
-  assert.deepEqual(preview.of(find, true).shapes, []);
-  assert.equal(preview.of(find, false), found);
+  assert.equal(preview.of(find, true, nothing), nothing);
+  assert.equal(preview.of(find, false, nothing), found);
   preview.forget();
-  assert.equal(preview.of(find, true), found, 'another object can be quick');
+  assert.equal(preview.of(find, true, nothing), found, 'another object can be quick');
 });

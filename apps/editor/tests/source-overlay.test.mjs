@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {objectLabel, objectName} from '../src/object-names.js';
+import {stateColors} from '../src/object-states.js';
 import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from '../src/source-overlay.js';
 
 const point = {type: 'Point', coordinates: [19.2, 42.4]};
@@ -125,6 +126,23 @@ test('guides have hollow interiors, and selection keeps its own visibility', () 
   assert.notEqual(layer('editor-source-selection-point').layout?.visibility, 'none');
   assert.notEqual(layer('editor-stops').layout?.visibility, 'none');
   assert.ok(!overlay.layerIds.includes('editor-source-fill'), 'invisible fills never take clicks');
+});
+
+test('an overlap has its own colour and carries no object state', () => {
+  const map = overlayMap();
+  const overlay = createSourceOverlay(map);
+  const layer = map.layers.find(({id}) => id === 'editor-overlap');
+  assert.equal(layer.paint['line-color'], stateColors.overlap);
+  for (const [state, colour] of Object.entries(stateColors)) {
+    if (state !== 'overlap') assert.notEqual(stateColors.overlap, colour, `distinct from ${state}`);
+  }
+  const geometry = {type: 'LineString', coordinates: [[19.2, 42.4], [19.3, 42.4]]};
+  const neighbour = {type: 'Feature', properties: {name: 'Neighbour'}, geometry};
+  overlay.setOverlaps([neighbour]);
+  assert.deepEqual(map.sources['editor-overlaps'].data, {
+    type: 'FeatureCollection',
+    features: [{type: 'Feature', properties: {}, geometry}]
+  });
 });
 
 test('shared public markers return every visible member once alongside guide hits', () => {

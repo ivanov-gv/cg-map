@@ -1,7 +1,9 @@
+import {isArea} from './area-magnet.js';
 import {kindLabel, objectName} from './object-names.js';
 
 // What a layer does differently with the objects of one file. Every hook is optional:
 //   kind(feature), title(feature, context)      the small label and the name in the inspector
+//   overlapTitle(feature, context)              the name in the overlap notice, when it needs more than the title
 //   sections(feature, edit)                     form sections in order, [{title, fields, isCollapsed}]
 //   controls(edit)                              controls that replace single fields, {name: value => element}
 //   usualValues(feature, context)               what free fields usually say, offered as a list, {name: [value]}
@@ -10,6 +12,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   renderExtras(container, edit)               anything else in the inspector
 //   tools(feature, edit)                        extra tool buttons, [{label, run(), isDesktopOnly}]
 //   vertexTools(feature, handle, edit)          what can be done at the picked point, [{id, label, run(), isDisabled}]
+//   joinsLines                                  whether the points of this line join others
 //   joinedPoints(entry, context)                the points of a line that others share
 //   marks(feature)                              letters on the map for the picked object, [{coordinate, label}]
 //   isDerived                                   it only stands for others: Apply records its companion edits, not itself
@@ -18,6 +21,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry,
 //                                             origins, draggedIndex}, the point of a line that is dragged or null
+//   hasMagnet(feature, isDrawingOutline)        whether its points go to what is close; areas and outlines do by default
+//   mayContainOthers                            whether an area inside another one is no overlap
 //   closesLines                                 a drawn line ends on its first point when that is tapped
 //   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
 //   prepared(feature, context, edit)            the feature as Apply will record it
@@ -43,9 +48,10 @@ export function registerBehaviors(behaviorByFile, layerId = null) {
   }
 }
 
-const defaultBehavior = filename => ({
+const defaultBehavior = (filename, layerId) => ({
   kind: () => kindLabel(filename),
   title: feature => objectName(feature, filename),
+  overlapTitle: (feature, context) => behaviorOf(filename, layerId).title(feature, context),
   sections: () => null,
   tools: () => [],
   renderExtras: () => {},
@@ -56,10 +62,13 @@ const defaultBehavior = filename => ({
   measures: () => [],
   controls: () => ({}),
   vertexTools: () => [],
+  joinsLines: false,
   joinedPoints: () => [],
   marks: () => [],
   isDerived: false,
   isReshapable: () => true,
+  hasMagnet: (feature, isDrawingOutline) => isDrawingOutline || isArea(feature.geometry),
+  mayContainOthers: true,
   isViewOnly: () => false,
   usualValues: () => ({}),
   listsDependOn: [],
@@ -69,7 +78,7 @@ const defaultBehavior = filename => ({
 });
 
 export const behaviorOf = (filename, layerId = null) => ({
-  ...defaultBehavior(filename),
+  ...defaultBehavior(filename, layerId),
   ...behaviors.get(filename),
   ...behaviors.get(behaviorKey(filename, layerId))
 });

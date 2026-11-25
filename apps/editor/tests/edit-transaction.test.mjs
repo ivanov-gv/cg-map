@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  afterDoubleClick,
   afterDrawnPoint,
   afterGestureMove,
   afterMapTap,
@@ -68,6 +69,23 @@ test('a polygon is drawn corner by corner, undone corner by corner, and closes o
   const finished = finishDrawing(three);
   assert.deepEqual(finished.feature.geometry, {type: 'Polygon', coordinates: [[...corners, corners[0]]]});
   assert.equal(finished.tool, null);
+});
+
+test('a double click drops the point its second tap added, whatever each tap snapped to', () => {
+  // Taps count as a double click even when the first snaps to a neighbour's corner and the second lands a little
+  // below it.
+  const corner = [19.2502, 42.4402];
+  const snappedPoints = [corner, [19.2502, 42.44016]];
+  const starts = {
+    outline: beginNewPolygon('local:1', {}),
+    hole: withTool(beginExistingEdit('0', building), editTools.cutHole),
+    line: beginNewLine('local:1', {})
+  };
+  for (const [name, start] of Object.entries(starts)) {
+    const drawn = snappedPoints.reduce(afterDrawnPoint, start);
+    assert.deepEqual(afterDoubleClick(drawn, [[100, 100], [102, 100]]).drawnPoints, [corner], name);
+    assert.equal(afterDoubleClick(drawn, [[100, 100], [130, 100]]), drawn, name);
+  }
 });
 
 test('a hole is drawn inside a shape without changing its outline, and leaving the mode drops it', () => {

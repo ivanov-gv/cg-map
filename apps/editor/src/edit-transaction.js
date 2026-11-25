@@ -99,6 +99,22 @@ export const afterDrawnPoint = (transaction, coordinate) =>
 
 export const afterUndoneDrawnPoint = transaction => withDrawnPoints(transaction, transaction.drawnPoints.slice(0, -1));
 
+// Two taps a few pixels apart are one double click, whatever each of them snapped to.
+const doubleClickDistancePixels = 6;
+
+export const isDoubleClickTaps = taps => {
+  const [first, second] = taps.slice(-2);
+  return Boolean(
+    first && second && Math.hypot(second[0] - first[0], second[1] - first[1]) <= doubleClickDistancePixels
+  );
+};
+
+// The second tap of a double click added one point too many, wherever it went.
+export const afterDoubleClick = (transaction, taps) =>
+  isDoubleClickTaps(taps) && transaction.drawnPoints.length > 0
+    ? afterUndoneDrawnPoint(transaction)
+    : transaction;
+
 // Leaves the drawing tool with the finished shape. Callers check canFinishDrawing first.
 export function finishDrawing(transaction) {
   const {tool, feature, drawnPoints} = transaction;

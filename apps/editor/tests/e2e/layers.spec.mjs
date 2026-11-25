@@ -109,7 +109,16 @@ test('a phone draws with the fixed cross and only marks for deletion', {tag: '@p
   await chooseLayer(page, 'buildings');
   await startDrawing(page, 'Draw building');
   await expect(page.locator('#map-cross')).toBeVisible();
-  for (const corner of [[1, -3], [3, -3], [3, -1]]) await addUnderCross(page, corner);
+  await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
+  // The cross goes to the corner of the neighbouring house under it, even on a touch screen.
+  await addUnderCross(page, [3.05, 1.05]);
+  // Pressing Add again without moving the cross says so in the visible bar, instead of adding a second corner.
+  await addUnderCross(page, [3.05, 1.05]);
+  await expect(page.locator('#mode-notice')).toHaveText('That corner is already the last one.');
+  await expect(page.locator('#mode-notice')).toBeVisible();
+  await addUnderCross(page, [5, 1]);
+  await expect(page.locator('#mode-notice')).toBeHidden();
+  for (const corner of [[5, 3], [3.05, 2.95]]) await addUnderCross(page, corner);
   await page.locator('#mode-done').click();
   await expect(page.locator('#map-cross')).toBeHidden();
   await applyEdit(page);
@@ -127,10 +136,11 @@ test('a phone draws with the fixed cross and only marks for deletion', {tag: '@p
   const [added] = operationsOn(changeset, 'buildings.geojson');
   expect(added.operation).toBe('add');
   expect(added.after.geometry.coordinates[0].map(stepsOf)).toEqual([
-    [1, -3],
-    [3, -3],
-    [3, -1],
-    [1, -3]
+    [3, 1],
+    [5, 1],
+    [5, 3],
+    [3, 3],
+    [3, 1]
   ]);
   expect(changeset.operations).toHaveLength(1);
   expect(changeset.fieldItems.map(({type, target}) => [type, target.reference])).toEqual([
