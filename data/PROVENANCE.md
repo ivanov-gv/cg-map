@@ -157,12 +157,12 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 
 `contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived vectors
 rebuilt from pinned inputs; [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md) describes the build,
-and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. Canyon rims allow add,
-change and delete with only an optional height in the changeset; the importer computes identity, kind, method and
-length. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and
-the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and
-are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are
-recorded in `sources/provenance.json`.
+and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. The shared
+[contract](../packages/contracts/README.md) owns which rim facts an editor may state; the measured-height decision is in
+[ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md). `make -C data build-relief` rebuilds them from the
+local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The raster
+tiles, PBF and full report are external build artifacts and are not committed; their checksums, the DEM
+EULA/attribution, and all output counts, bytes and SHA-256 values are recorded in `sources/provenance.json`.
 
 The current build has 5,411 Montenegro summits (4,542 `ok`, 418 `mismatch`, 451 `missing`), 445 contour lines across 32
 levels, 186 slope polygons, 31 ridge lines, and 50 canyon-rim segments across the four river banks. The full report is

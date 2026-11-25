@@ -7,16 +7,16 @@ canyon-rim guidance in [ADR 0037](0037-every-layer-editable.md).
 
 ## Context
 
-On main, a canyon rim could be modified or deleted but not added. Its properties were locked, no rim carried a bank-rise
-measurement, and the wall style selected a canyon by river name. The build measured bank rise to decide where a rim runs
-but published only that decision, so a rim drawn by hand had no height it could state.
+Before this decision, a canyon rim could be modified or deleted but not added. Its properties were locked, no rim
+carried a bank-rise measurement, and the wall style selected a canyon by river name. The build measured bank rise to
+decide where a rim runs but published only that decision, so a rim drawn by hand had no height it could state.
 
 ## Decision
 
 - The relief build publishes one `height` per finished rim: the median of the bank-rise samples, rounded to whole metres
   with halves upward. An OSM cliff uses only samples measured beside that part; without samples it has no height.
-- An added rim states only an optional integer `height`. The importer assigns identity, `kind`, `method: editor-drawn`
-  and `lengthMetres`; a height-only edit of a measured rim keeps its reviewed length.
+- An added rim states only an optional integer `height`; the importer assigns its `local:` ID, `kind`, `editor-drawn`
+  method and `lengthMetres`, and a height-only edit keeps the reviewed length.
 - Every rim keeps the low side on its right. An edge with no river has no centreline to compare, but is not exempt.
 - `editor-layers.json` owns the height range and `check-data` reads it from there. An out-of-range measurement fails
   validation. Cliff-part selection keeps its existing half-search-reach constant; height association measures the same

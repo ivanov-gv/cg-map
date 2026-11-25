@@ -35,7 +35,8 @@ CANYON_SEARCH_DISTANCE_METRES = 60
 CANYON_SEARCH_STEP_METRES = 10
 CANYON_RIM_JOIN_GAP_METRES = 60
 CANYON_RIM_MINIMUM_LENGTH_METRES = 100
-# Cliff parts are selected within half of the bank search reach of a derived rim.
+# The sampler places rim points on the bank 10-60 m from the river. Half that reach is the band where
+# cliff-part selection and height association measure the bank beside an OSM cliff.
 CANYON_BANK_SAMPLE_NEARBY_METRES = CANYON_SEARCH_DISTANCE_METRES / 2
 
 
@@ -141,16 +142,6 @@ def join_short_gap_groups(paths, gap_metres, longitude_metres_per_degree, latitu
         groups.append([index])
     return groups
 
-
-def join_short_gaps(paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree):
-    """Join ordered paths when the gap between one end and the next start is under a limit."""
-    groups = join_short_gap_groups(
-        paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree
-    )
-    return [
-        [list(point) for index in group for point in paths[index]]
-        for group in groups
-    ]
 
 
 def drop_short_paths(paths, minimum_length_metres, longitude_metres_per_degree,

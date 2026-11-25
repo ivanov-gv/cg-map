@@ -14,7 +14,7 @@ test('a canyon rim with its river on the left is reported', () => {
   assert.deepEqual(reversedCanyonRims(collection([eastward, westward]), water), [westward]);
 });
 
-// A person may draw a rim before its river is known; there is no direction to check until the river is named.
+// A drawn rim names no river, so no centreline can judge it
 test('a drawn rim without a river is not judged for direction', () => {
   const water = collection([]);
   const drawn = line([[19.002, 42.0003], [19.008, 42.0003]], {method: 'editor-drawn'});

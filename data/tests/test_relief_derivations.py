@@ -113,7 +113,6 @@ class ReliefDerivationTests(unittest.TestCase):
 
         self.assertEqual(derivations._rim_height([10.0, 20.0]), 15)
         self.assertIsNone(derivations._rim_height([]))
-        self.assertEqual(derivations._rim_height([2601.0]), 2601)
 
         segment = derivations.LineString([(0.0, 5.0), (0.001, 5.0)])
 

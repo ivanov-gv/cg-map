@@ -984,7 +984,7 @@ def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitud
                 properties['entityPart'] = index
             nearby_samples = _nearby_rim_samples(
                 part, dem_segments, latitude_metres, longitude_metres,
-                CANYON_SEARCH_DISTANCE_METRES / 2,
+                CANYON_BANK_SAMPLE_NEARBY_METRES,
             )
             height = _rim_height([rise for _, rise in nearby_samples])
             if height is not None:
@@ -1023,7 +1023,7 @@ def _dem_rim_features(segments, river_name, bank, latitude_metres, longitude_met
     return derived_parts(f'canyon-rim-{entity_slug(river_name)}-{bank}', parts)
 
 
-def _bank_report(river_name, bank, dem_features, cliff_features):
+def _bank_report(river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres):
     dem_length = sum(
         feature['properties']['lengthMetres'] for feature in dem_features
     )
@@ -1104,7 +1104,9 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
             )
             features.extend(cliff_features)
             features.extend(dem_features)
-            river_banks.append(_bank_report(river_name, bank, dem_features, cliff_features))
+            river_banks.append(_bank_report(
+                river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres
+            ))
 
     report = {
         'riverBanks': river_banks,

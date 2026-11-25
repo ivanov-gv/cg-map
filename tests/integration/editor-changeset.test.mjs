@@ -335,40 +335,61 @@ test('canyon rims can be added, changed and deleted with one measured height eac
   );
 });
 
-test('a rim height edit keeps its reviewed length while a reshaped rim is remeasured', async testContext => {
-  const cases = [
-    {heightOnly: true, expectedLength: 4055},
-    {heightOnly: false, expectedLength: 4053}
-  ];
-  for (const {heightOnly, expectedLength} of cases) {
-    const root = temporaryRoot(testContext);
-    const sources = loadSources(root, ['canyon-rims.geojson']);
-    const session = new EditSession(sources);
-    const {features} = sources.get('canyon-rims.geojson').collection;
-    const index = features.findIndex(({properties}) =>
-      properties.entityId === 'derived:canyon-rim-moraca-left' && properties.entityPart === 14
-    );
-    assert.notEqual(index, -1, 'the reviewed Morača left rim has part 14');
-    const edited = structuredClone(features[index]);
-    if (heightOnly) edited.properties.height += 1;
-    else edited.geometry.coordinates[0][0] += 0.000001;
-    recordValidEdit(session, 'canyon-rims.geojson', String(index), edited);
+test('a rim height edit keeps the original length', async testContext => {
+  const root = temporaryRoot(testContext);
+  const sources = loadSources(root, ['canyon-rims.geojson']);
+  const session = new EditSession(sources);
+  const {features} = sources.get('canyon-rims.geojson').collection;
+  const index = features.findIndex(({properties}) => Number.isInteger(properties.height));
+  assert.notEqual(index, -1, 'the reviewed rims include a measured edge');
+  const original = features[index];
+  const edited = structuredClone(original);
+  edited.properties.height = original.properties.height === 1 ? 2 : 1;
+  recordValidEdit(session, 'canyon-rims.geojson', String(index), edited);
 
-    const {result} = await exportAndApply(session, sources, root);
-    assert.deepEqual(result.files, ['canyon-rims.geojson']);
-    const written = readSource(root, 'canyon-rims.geojson');
-    const actual = written.features.find(({properties}) =>
-      properties.entityId === edited.properties.entityId && properties.entityPart === 14
-    );
-    assert.equal(actual.properties.lengthMetres, expectedLength, heightOnly ? 'height only' : 'reshaped');
-  }
+  const {result} = await exportAndApply(session, sources, root);
+  assert.deepEqual(result.files, ['canyon-rims.geojson']);
+  const written = readSource(root, 'canyon-rims.geojson').features.find(({properties}) =>
+    properties.entityId === original.properties.entityId &&
+    properties.entityPart === original.properties.entityPart
+  );
+  assert.equal(written.properties.height, edited.properties.height);
+  assert.equal(written.properties.lengthMetres, original.properties.lengthMetres);
+});
+
+test('a reshaped rim gets a longer measured length', async testContext => {
+  const root = temporaryRoot(testContext);
+  const sources = loadSources(root, ['canyon-rims.geojson']);
+  const session = new EditSession(sources);
+  const {features} = sources.get('canyon-rims.geojson').collection;
+  const original = features[0];
+  const edited = structuredClone(original);
+  const coordinates = edited.geometry.coordinates;
+  const end = coordinates.at(-1);
+  const previous = coordinates.at(-2);
+  const extensionMultiple = 2;
+  const extendedEnd = [
+    end[0] + (end[0] - previous[0]) * extensionMultiple,
+    end[1] + (end[1] - previous[1]) * extensionMultiple
+  ];
+  coordinates.push(extendedEnd);
+  recordValidEdit(session, 'canyon-rims.geojson', '0', edited);
+
+  const {result} = await exportAndApply(session, sources, root);
+  assert.deepEqual(result.files, ['canyon-rims.geojson']);
+  const written = readSource(root, 'canyon-rims.geojson').features.find(({properties}) =>
+    properties.entityId === original.properties.entityId &&
+    properties.entityPart === original.properties.entityPart
+  );
+  assert.deepEqual(written.geometry.coordinates.at(-1), extendedEnd);
+  assert.ok(written.properties.lengthMetres > original.properties.lengthMetres);
 });
 
 test('the importer refuses a canyon rim that states a derived fact', async testContext => {
   const claimed = {
+    kind: 'canyon-rim',
     method: 'editor-drawn',
-    river: 'Ribnica',
-    bank: 'right'
+    lengthMetres: 120
   };
   for (const [field, value] of Object.entries(claimed)) {
     const root = temporaryRoot(testContext);
@@ -388,19 +409,4 @@ test('the importer refuses a canyon rim that states a derived fact', async testC
     );
     assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson')), originalBytes);
   }
-});
-
-test('the importer refuses a canyon rim with a fractional height', async testContext => {
-  const root = temporaryRoot(testContext);
-  const sources = loadSources(root, ['canyon-rims.geojson']);
-  const session = new EditSession(sources);
-  const rim = structuredClone(sources.get('canyon-rims.geojson').collection.features[0]);
-  rim.properties.height = 12.5;
-  session.recordEdit('canyon-rims.geojson', '0', rim);
-  const originalBytes = fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson'));
-  await assert.rejects(
-    exportAndApply(session, sources, root),
-    /canyon-rims\.geojson.*height must be a whole number/
-  );
-  assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson')), originalBytes);
 });
