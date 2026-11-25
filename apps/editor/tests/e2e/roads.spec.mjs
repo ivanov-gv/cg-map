@@ -161,6 +161,22 @@ test('a moved junction shows its roads where they will be, and Cancel leaves not
   await expect(page.locator('#change-count')).toBeHidden();
 });
 
+test('a line that loses its points is refused in the bar, and nothing breaks', async ({page}) => {
+  // Both its points are below the bar.
+  await centreOn(page, [6, 3], 18.5);
+  await tapAt(page, [6, 3]);
+  await editCorners(page);
+  for (const point of [[6, 5], [6, 0]]) {
+    await tapAt(page, point);
+    await page.locator('#vertex-remove').click();
+    await expect(page.locator('#mode-notice')).toBeVisible();
+  }
+  await page.locator('#mode-done').click();
+  await page.locator('#cancel-edit').click();
+  await tapAt(page, [6, 3]);
+  await expect(page.locator('#selection-title')).toHaveText('Side street');
+});
+
 test('one level is shown at a time, and roads under it are neither picked nor joined', async ({page}) => {
   await tapAt(page, [-3, 0]);
   await page.locator('[name="layer"]').evaluate(select => select.closest('details').setAttribute('open', ''));

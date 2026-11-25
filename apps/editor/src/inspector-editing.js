@@ -130,16 +130,28 @@ export class InspectorEditing {
     return !isNew && JSON.stringify(feature.geometry) !== JSON.stringify(this.#openedGeometry);
   }
 
+  // Why the shape of the open edit is none, or null.
+  #shapeProblem() {
+    const {feature} = this.#transaction;
+    const shapeRule = {...this.#rule, properties: {}, requiredAny: undefined};
+    return featureProblem({...feature, properties: {}}, shapeRule, this.#context.levels, this.#baseFeature);
+  }
+
   // What the layer would record beside the open edit as it is now, and why it would refuse it.
   #findFollowing() {
     const behaviorContext = this.#context.behaviorContext();
+    const refusedFor = problem => ({problem, shapes: [], ghosts: []});
+    // A shape that is none yet, such as a line of one point, has nothing that follows it.
+    const shapeProblem = this.#shapeProblem();
+    if (shapeProblem) return refusedFor(shapeProblem);
     const prepared = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
     const change = this.#change(prepared);
     const problem = this.#behavior.problem(change, behaviorContext);
-    if (problem) return {problem, shapes: [], ghosts: []};
+    if (problem) return refusedFor(problem);
     const edits = this.#behavior.companionEdits(change, behaviorContext);
     const {session} = this.#context;
-    return {problem, ...followingShapes(edits, (filename, key) => session.workingFeature(filename, key))};
+    const following = followingShapes(edits, (filename, key) => session.workingFeature(filename, key));
+    return {problem: this.#problemOf(edits), ...following};
   }
 
   // Everything that goes along is shown where it would be, with a thin ghost of where it is.
