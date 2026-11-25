@@ -1,5 +1,15 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {
+  applyEdit,
+  centreOn,
+  chooseLayer,
+  dragFromTo,
+  editCorners,
+  exportChangeset,
+  operationsOn,
+  startDrawing,
+  tapAt
+} from './city-steps.mjs';
 import {at, openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
@@ -87,36 +97,74 @@ test('a moved building takes everything with it in one step, and its removal ask
 
 const overlapCount = page =>
   page.evaluate(async () => (await window.editorDebug.map.getSource('editor-overlaps').getData()).features.length);
+// Point handles show the drawn corners before a line has two points and appears in the drawing source.
+const drawnCorners = page =>
+  page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-handles').getData();
+    return features.map(({geometry}) => geometry.coordinates.map(stepsOf));
+  });
+const selectedCorners = page =>
+  page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-source-selection').getData();
+    return features[0]?.geometry.coordinates[0].map(stepsOf) ?? [];
+  });
 
 test('a building is drawn and moved against its neighbour, and an overlap is said and shown', async ({page}, testInfo) => {
   await startDrawing(page, 'Draw building');
+  await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
   // Beside the house: the first corners go to its corner and its side.
-  for (const corner of [[-0.95, 1.05], [0.5, 1], [0.5, 2], [-0.96, 2]]) await tapAt(page, corner);
+  await tapAt(page, [-0.95, 1.05]);
+  await expect.poll(() => drawnCorners(page)).toEqual([[-1, 1]]);
+  for (const corner of [[0.5, 1], [0.5, 2], [-0.96, 2]]) await tapAt(page, corner);
   await page.locator('#mode-done').click();
   await expect(page.locator('#edit-facts')).not.toContainText('Overlaps');
   await applyEdit(page);
 
   await tapAt(page, [0, 1.5]);
   await editCorners(page);
+  await expect.poll(() => selectedCorners(page)).toEqual([
+    [-1, 1],
+    [1, 1],
+    [1, 2],
+    [-1, 2]
+  ]);
+  // At a wider zoom the whole step is within reach, so the corner goes to the house's far corner and not beside it.
+  await centreOn(page, [-1, 2], 17);
+  await dragFromTo(page, [-1, 2], [-0.95, 3.05]);
+  await expect.poll(() => selectedCorners(page)).toEqual([
+    [-1, 1],
+    [1, 1],
+    [1, 2],
+    [-1, 3]
+  ]);
+  await page.locator('#mode-done').click();
+  await page.locator('#cancel-edit').click();
+  await centreOn(page, [0, 0]);
+
+  await tapAt(page, [0, 1.5]);
+  await editCorners(page);
   await dragFromTo(page, [-1, 2], [-2, 2]);
-  await expect(page.locator('#mode-notice')).toHaveText('Overlaps Main street 14');
+  await expect(page.locator('#mode-notice')).toHaveText('Overlaps 1 area: Main street 14');
   await expect.poll(() => overlapCount(page)).toBe(1);
   await page.locator('#mode-done').click();
-  await expect(page.locator('#edit-facts')).toContainText('Overlaps Main street 14');
+  await expect(page.locator('#edit-facts')).toContainText('Overlaps 1 area: Main street 14');
   await page.locator('#cancel-edit').click();
   await expect.poll(() => overlapCount(page)).toBe(0);
 
-  // With the magnet off a corner stays where it is put, and the switch is remembered.
+  // With the magnet off a corner stays where it is put, and the switch is remembered after a reload.
   await tapAt(page, [0, 1.5]);
   await editCorners(page);
-  await page.getByRole('button', {name: 'Magnet on'}).click();
-  await expect(page.getByRole('button', {name: 'Magnet off'})).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', {name: 'Magnet'}).click();
+  await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'false');
   await dragFromTo(page, [0.5, 2], [0.95, 2.95]);
   await page.locator('#mode-done').click();
   await applyEdit(page);
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('Browse');
+  await chooseLayer(page, 'buildings');
   await tapAt(page, [2, 2]);
   await page.locator('#tool-move').click();
-  await expect(page.getByRole('button', {name: 'Magnet off'})).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'false');
   await page.locator('#mode-done').click();
   await page.locator('#cancel-edit').click();
 

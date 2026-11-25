@@ -1,5 +1,5 @@
 // Whether two areas share ground. Walls and borders that only touch do not: sources are rounded, so a little is allowed.
-import {polygonsOf} from './area-magnet.js';
+import {hasOutline, polygonsOf} from './area-magnet.js';
 import {interiorPoint} from './interior-point.js';
 import {metricOffset, nearestPointOnOutline} from './geometry-measures.js';
 import {pointInsidePolygon} from './geometry-validation.js';
@@ -68,7 +68,18 @@ function doPolygonsOverlap(rings, otherRings, isInsideAllowed) {
 
 // A part of a city is inside the city, so for some kinds an area inside another one is no overlap.
 export function doOverlap(geometry, otherGeometry, isInsideAllowed) {
+  if (!hasOutline(geometry) || !hasOutline(otherGeometry)) return false;
   return polygonsOf(geometry).some(rings =>
     polygonsOf(otherGeometry).some(otherRings => doPolygonsOverlap(rings, otherRings, isInsideAllowed))
   );
+}
+
+// The count tells how many neighbours are met; names make the message useful. A long list is cut short in the bar.
+export function overlapNotice(overlaps, titleOf, limit = 3) {
+  const count = overlaps.length;
+  if (count === 0) return null;
+  const titles = [...new Set(overlaps.map(overlap => titleOf(overlap)))];
+  const named = titles.slice(0, limit);
+  const names = titles.length > named.length ? `${named.join(', ')} and ${titles.length - named.length} more` : named.join(', ');
+  return `Overlaps ${count} ${count === 1 ? 'area' : 'areas'}: ${names}`;
 }

@@ -6,9 +6,8 @@ const joinDistancePixels = 12;
 // How far a disconnected end is pulled back along its line, so that nobody reads it as joined.
 const pulledBackMetres = 1.5;
 
-// Where a point put at this place joins a line close to it on the screen, or null. With the magnet off it stays where it is
-// put. candidates are
-// [{coordinate, distanceMetres, points}]: the nearest place of each line, and its own points.
+// Where a point put at this place joins a line close to it on the screen, or null. With the magnet off it stays where
+// it was put. Each candidate is {coordinate, distanceMetres, points}: the nearest place of one line and its own points.
 export function joiningPoint(coordinate, candidates, {map, isMagnetOn = () => true}) {
   if (candidates.length === 0 || !isMagnetOn()) return null;
   const nearest = candidates.reduce((first, second) => (second.distanceMetres < first.distanceMetres ? second : first));

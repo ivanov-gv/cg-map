@@ -127,6 +127,18 @@ test('guides have hollow interiors, and selection keeps its own visibility', () 
   assert.ok(!overlay.layerIds.includes('editor-source-fill'), 'invisible fills never take clicks');
 });
 
+test('an overlap is put on the map with its own object state', () => {
+  const map = overlayMap();
+  const overlay = createSourceOverlay(map);
+  const geometry = {type: 'LineString', coordinates: [[19.2, 42.4], [19.3, 42.4]]};
+  const neighbour = {type: 'Feature', properties: {name: 'Neighbour'}, geometry};
+  overlay.setOverlaps([neighbour]);
+  assert.deepEqual(map.sources['editor-overlaps'].data, {
+    type: 'FeatureCollection',
+    features: [{type: 'Feature', properties: {objectState: 'overlap'}, geometry}]
+  });
+});
+
 test('shared public markers return every visible member once alongside guide hits', () => {
   const first = {...stop, properties: {id: 'node/1'}};
   const second = {...stop, properties: {id: 'node/2'}};

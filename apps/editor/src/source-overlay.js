@@ -224,7 +224,7 @@ function workLayers() {
       id: 'editor-overlap',
       type: 'line',
       source: overlapSource,
-      paint: {'line-color': stateColors.applied, 'line-width': 4}
+      paint: {'line-color': stateColors.overlap, 'line-width': 4}
     },
     {
       id: 'editor-following-point',
@@ -351,7 +351,10 @@ export function createSourceOverlay(map) {
       setData(ghostSource, geometries.map(geometry => ({type: 'Feature', properties: {}, geometry}))),
     // The neighbours that the open area lies over.
     setOverlaps: features =>
-      setData(overlapSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
+      setData(
+        overlapSource,
+        features.map(({geometry}) => ({type: 'Feature', properties: {objectState: 'overlap'}, geometry}))
+      ),
     setFollowing: features =>
       setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),

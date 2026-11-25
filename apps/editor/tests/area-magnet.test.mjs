@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {magneticallyMoved, magneticPoint, neighbouringAreas} from '../src/area-magnet.js';
-import {doOverlap} from '../src/area-overlap.js';
+import {doOverlap, overlapNotice} from '../src/area-overlap.js';
 
 // About eight metres east and eleven north.
 const step = 0.0001;
@@ -65,4 +65,31 @@ test('an area inside another one overlaps it only where that is not meant, and o
   assert.equal(doOverlap(house.feature.geometry, inner, true), false);
   const courtyard = {type: 'Polygon', coordinates: [house.feature.geometry.coordinates[0], inner.coordinates[0]]};
   assert.equal(doOverlap(courtyard, inner, false), false);
+});
+
+test('a corner is never magnetised onto a point the shape already has', () => {
+  const firstCorner = at(2, 0);
+  const nearby = at(2.1, 0.1);
+  assert.deepEqual(magneticPoint(nearby, [house], reach), firstCorner);
+  assert.notDeepEqual(magneticPoint(nearby, [house], reach, [firstCorner]), firstCorner);
+});
+
+test('an emptied area has no outline to pull or to overlap', () => {
+  const emptiedRing = {type: 'Polygon', coordinates: [[]]};
+  const emptiedShape = {type: 'MultiPolygon', coordinates: []};
+  for (const empty of [emptiedRing, emptiedShape]) {
+    assert.equal(doOverlap(empty, house.feature.geometry, false), false);
+    assert.equal(doOverlap(house.feature.geometry, empty, false), false);
+    assert.equal(magneticallyMoved(empty, [house], reach), empty);
+  }
+});
+
+test('the overlap notice counts neighbours and names as many as fit', () => {
+  const nameOf = ({name}) => name;
+  const named = name => ({name});
+  assert.equal(overlapNotice([], nameOf), null);
+  assert.equal(overlapNotice([named('House')], nameOf), 'Overlaps 1 area: House');
+  assert.equal(overlapNotice([named('House'), named('House')], nameOf), 'Overlaps 2 areas: House');
+  const five = ['A', 'B', 'C', 'D', 'E'].map(named);
+  assert.equal(overlapNotice(five, nameOf), 'Overlaps 5 areas: A, B, C and 2 more');
 });
