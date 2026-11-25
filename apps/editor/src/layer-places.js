@@ -7,6 +7,25 @@ import {addressText} from './object-names.js';
 const buildingsFile = 'buildings.geojson';
 const placesFile = 'places.geojson';
 
+const usualCuisines = [
+  'balkan',
+  'barbecue',
+  'burger',
+  'chinese',
+  'coffee_shop',
+  'fish',
+  'ice_cream',
+  'indian',
+  'international',
+  'italian',
+  'japanese',
+  'pizza',
+  'regional',
+  'sandwich',
+  'seafood',
+  'turkish'
+];
+
 const buildingId = ({key, feature}) => feature.properties.entityId ?? key;
 
 function mayContain([longitude, latitude], ring) {
@@ -74,7 +93,7 @@ function renderWhere(container, {feature, context}) {
 }
 
 // The kinds other places of the category have, most common first.
-function kindSuggestions({properties}, context) {
+function usualPlaceValues({properties}, context) {
   const counts = new Map();
   for (const {feature} of context.entriesOf(placesFile)) {
     const {category, kind} = feature.properties;
@@ -83,14 +102,15 @@ function kindSuggestions({properties}, context) {
     }
   }
   const kinds = [...counts].sort((first, second) => second[1] - first[1]).map(([kind]) => kind);
-  return {kind: kinds};
+  return {kind: kinds, cuisine: usualCuisines};
 }
 
 export const placeBehaviors = {
   [placesFile]: {
     kind: ({properties}) => (properties.standalone ? 'Point' : 'Place'),
     sections: placeSections,
-    suggestions: kindSuggestions,
+    usualValues: usualPlaceValues,
+    listsDependOn: ['category'],
     prepared: placedFeature,
     renderExtras: renderWhere,
     dragTarget(geometry, context) {

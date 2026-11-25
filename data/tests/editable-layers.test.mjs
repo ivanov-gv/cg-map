@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyChangeset} from '../tools/apply-changeset.mjs';
+import {entityKey} from '../tools/changeset-derivations.mjs';
 import {parseSource, serializeSource} from '../tools/changeset-sources.mjs';
 import {reapplyCorrections} from '../tools/reapply-corrections.mjs';
 
@@ -237,6 +238,30 @@ test('a renamed road gives its street join to the buildings on that street', tes
     ({properties}) => properties.entityId === joined.properties.entityId
   );
   assert.equal(after.properties['addr:streetEntityId'], undefined);
+});
+
+test('a road end taken away from its junction gets one of its own, and roads moved together keep theirs', testContext => {
+  const root = temporaryRoot(testContext);
+  const builder = new ChangesetBuilder(root);
+  const roads = readSource(root, 'roads.geojson').features;
+  const startNodes = new Set(roads.map(({properties}) => properties.startNode));
+  // Two roads that end there, and none that starts there.
+  const roadsByEnd = Map.groupBy(roads, ({properties}) => properties.endNode);
+  const [leaving, together] = [...roadsByEnd]
+    .filter(([node, meeting]) => node !== undefined && meeting.length === 2 && !startNodes.has(node))
+    .map(([, meeting]) => meeting);
+  const moveEnd = feature => {
+    const end = feature.geometry.coordinates.at(-1);
+    feature.geometry.coordinates[feature.geometry.coordinates.length - 1] = [end[0] + 0.00001, end[1]];
+  };
+  builder.change('roads.geojson', leaving[0], moveEnd);
+  for (const road of together) builder.change('roads.geojson', road, moveEnd);
+  apply(root, builder.build());
+  const written = new Map(readSource(root, 'roads.geojson').features.map(road => [entityKey(road.properties), road]));
+  const endNodeNow = road => written.get(entityKey(road.properties)).properties.endNode;
+  assert.match(endNodeNow(leaving[0]), /^local:/);
+  assert.equal(endNodeNow(leaving[1]), leaving[1].properties.endNode);
+  assert.deepEqual(together.map(endNodeNow), together.map(({properties}) => properties.endNode));
 });
 
 test('entrances move with their building and turn with its walls, and nothing else about them may change', testContext => {

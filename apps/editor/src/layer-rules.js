@@ -52,9 +52,14 @@ function listProblem(name, value, propertyRule) {
   return isTextList ? null : `${name} must be a list of nonempty texts`;
 }
 
-function integersProblem(name, value) {
-  const isIntegerList = Array.isArray(value) && value.every(entry => Number.isSafeInteger(entry) && entry > 0);
-  return isIntegerList ? null : `${name} must be a list of whole numbers`;
+const localIdPattern = /^local:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+// The OSM number of a road or junction, or the local ID of one that came from the editor.
+const isIdentifier = value => (Number.isSafeInteger(value) && value > 0) || localIdPattern.test(value);
+
+function identifiersProblem(name, value) {
+  const areIdentifiers = Array.isArray(value) && value.every(isIdentifier);
+  return areIdentifiers ? null : `${name} must be a list of OSM numbers or local IDs`;
 }
 
 const isCoordinatePair = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
@@ -91,7 +96,8 @@ const problemByType = {
   number: numberProblem,
   boolean: (name, value) => (typeof value === 'boolean' ? null : `${name} must be yes or no`),
   list: listProblem,
-  integers: integersProblem,
+  identifier: (name, value) => (isIdentifier(value) ? null : `${name} must be an OSM number or a local ID`),
+  identifiers: identifiersProblem,
   directions: directionsProblem,
   entrances: entrancesProblem
 };

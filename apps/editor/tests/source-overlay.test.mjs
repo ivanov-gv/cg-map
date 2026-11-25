@@ -97,6 +97,7 @@ function overlayMap() {
       const layer = layers.find(layer => layer.id === id);
       layer.paint[property] = value;
     },
+    getFilter: () => ['==', ['geometry-type'], 'Point'],
     setFilter: (id, filter) => { layers.find(layer => layer.id === id).filter = filter; },
     setLayerZoomRange: (id, minimum, maximum) => {
       Object.assign(layers.find(layer => layer.id === id), {minzoom: minimum, maxzoom: maximum});

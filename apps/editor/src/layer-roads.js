@@ -1,116 +1,74 @@
-// Roads and paths: drawing that joins what it touches, splitting and joining, who may use a road, and at the desk the
-// road graph with its levels, turns and traffic lights.
+// Roads and paths: drawing that joins what it touches, reshaping that keeps the joins, splitting and joining, and who may
+// use a road. The junctions themselves are edited in layer-junctions.js.
 import {createElementWithText} from './dom.js';
 import {valueLabel} from './field-catalog.js';
 import {roundedCoordinate} from './geometry-editing.js';
 import {formatLength, lineLengthMetres, nearestPointOnLine} from './geometry-measures.js';
-import {
-  isOnWay,
-  restrictionFor,
-  rulesLostBySplit,
-  trafficLightAt,
-  turnRule,
-  turnsAtEnd,
-  wayNumber
-} from './road-junctions.js';
-import {endsOf, isSamePoint, joinedRoad, splitProblem, splitRoad, withJunctionAt} from './road-shapes.js';
+import {junctionEntry, jointStatusText} from './layer-junctions.js';
+import {disconnectedRoad, followingEdits, movedPoints, roadWithEnds, touchedRoadEdits} from './road-edits.js';
+import {entriesWithin, jointAt, levelAt, levelAtPlace, nodeOf, pointKey, roadId} from './road-graph.js';
+import {isOnWay, rulesAfterSplit} from './road-junctions.js';
+import {endsOf, joinedRoad, splitProblem, splitRoad} from './road-shapes.js';
 
 const roadsFile = 'roads.geojson';
 const nodesFile = 'road-nodes.geojson';
 const restrictionsFile = 'turn-restrictions.json';
 const joinDistancePixels = 12;
-// A drawn point was put exactly on the other road, so only rounding can keep them apart.
-const junctionToleranceMetres = 0.2;
 const longestLinkMetres = 500;
+const highestLevel = 5;
 
 const kindGroups = [
   ['Streets', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service']],
   ['Links (ramps)', ['motorway_link', 'trunk_link', 'primary_link', 'secondary_link']],
   ['Walking and cycling', ['pedestrian', 'footway', 'path', 'track', 'cycleway', 'steps']]
 ];
-const accessValues = ['yes', 'no', 'designated', 'permissive', 'destination', 'private'];
-const turnLabels = {left: 'Left', right: 'Right', straight: 'Straight on', uTurn: 'U-turn'};
+const endLabels = {start: 'A', end: 'B'};
 
 const roadName = ({properties}) => properties.name?.trim() || valueLabel('kind', properties.kind ?? 'road');
 
-// Whether the box around a road overlaps the view; the exact distance is computed only for those.
-function mayCross(coordinates, bounds) {
-  const longitudes = coordinates.map(([longitude]) => longitude);
-  const latitudes = coordinates.map(([, latitude]) => latitude);
-  return (
-    Math.max(...longitudes) >= bounds.getWest() &&
-    Math.min(...longitudes) <= bounds.getEast() &&
-    Math.max(...latitudes) >= bounds.getSouth() &&
-    Math.min(...latitudes) <= bounds.getNorth()
-  );
-}
+const viewBounds = bounds => [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
 
-// The nearest road under the pointer, so that a click on it joins it there.
-function nearestRoadPoint(event, {map, entriesOf}) {
-  const coordinate = event.lngLat.toArray();
-  const bounds = map.getBounds();
+// Where a point put at this place joins a road close to it on the screen, or null. ignoredKeys are the roads that move
+// along. With one level shown, only its roads are joined.
+function joiningPoint(coordinate, {map, entriesOf, shownLevel}, ignoredKeys = new Set()) {
+  const point = map.project(coordinate);
+  const roads = entriesWithin(entriesOf(roadsFile), viewBounds(map.getBounds())).filter(({key}) => !ignoredKeys.has(key));
+  const level = shownLevel?.() ?? null;
   let nearest = null;
-  for (const {feature} of entriesOf(roadsFile)) {
+  for (const {feature} of roads) {
     const {coordinates} = feature.geometry;
-    if (!mayCross(coordinates, bounds)) continue;
     const candidate = nearestPointOnLine(coordinate, coordinates);
+    if (level !== null && levelAtPlace(feature, candidate.coordinate) !== level) continue;
     if (!nearest || candidate.distanceMetres < nearest.distanceMetres) nearest = {...candidate, coordinates};
   }
   if (!nearest) return null;
-  const isWithinReach = position => event.point.dist(map.project(position)) <= joinDistancePixels;
+  const isWithinReach = position => point.dist(map.project(position)) <= joinDistancePixels;
   // An existing point is joined rather than a new one beside it.
   const existingPoint = nearest.coordinates.find(isWithinReach);
   if (existingPoint) return existingPoint;
   return isWithinReach(nearest.coordinate) ? roundedCoordinate(nearest.coordinate) : null;
 }
 
-// Other roads get a point where a new or reshaped road touches them.
-function junctionEdits({key, feature, before}, context) {
-  const isKnownPoint = point => before?.geometry.coordinates.some(known => isSamePoint(known, point));
-  const newPoints = feature.geometry.coordinates.filter(point => !isKnownPoint(point));
-  if (newPoints.length === 0) return [];
-  const edits = [];
-  for (const road of context.entriesOf(roadsFile)) {
-    if (road.key === key) continue;
-    let next = road.feature;
-    for (const point of newPoints) next = withJunctionAt(next, point, junctionToleranceMetres) ?? next;
-    if (next !== road.feature) edits.push({filename: roadsFile, key: road.key, after: next});
-  }
-  return edits;
+// Roads that share a point with this one move with it, so the point does not stick to where they were.
+function joinedKeys(coordinate, entriesOf) {
+  const joint = jointAt(coordinate, entriesOf(roadsFile));
+  return (joint?.members ?? []).map(({entry}) => entry.key);
 }
 
-function restrictionEdit(road, turn, isForbidden, context) {
-  const fromWay = wayNumber(road.feature.properties.entityId);
-  const toWay = wayNumber(turn.road.feature.properties.entityId);
-  const junctionNode = road.feature.properties.endNode;
-  const {recorded, onlyRule} = turnRule(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
-  if (onlyRule || Boolean(recorded) === isForbidden) return [];
-  if (recorded) return [{filename: restrictionsFile, key: recorded.key, after: null}];
-  const properties = {restriction: restrictionFor(turn.kind), from: fromWay, to: toWay, viaNodes: [junctionNode]};
-  const key = `local:${crypto.randomUUID()}`;
-  return [{filename: restrictionsFile, key, after: {type: 'Feature', properties, geometry: null}}];
-}
-
-function trafficLightEdit({feature}, hasLight, context) {
-  const [, junction] = endsOf(feature);
-  const light = trafficLightAt(context.entriesOf(nodesFile), junction);
-  if (Boolean(light) === hasLight) return [];
-  if (light) return [{filename: nodesFile, key: light.key, after: null}];
-  const geometry = {type: 'Point', coordinates: junction};
-  const after = {type: 'Feature', properties: {kind: 'traffic_signals'}, geometry};
-  return [{filename: nodesFile, key: `local:${crypto.randomUUID()}`, after}];
-}
-
-// What was chosen in the junction controls, recorded with the road.
-function junctionChoiceEdits({key, feature, extras}, context) {
-  const road = {key, feature};
-  const turns = turnsAtEnd(road, context.entriesOf(roadsFile));
-  const turnEdits = turns.flatMap(turn => {
-    const choice = extras[`turn:${turn.road.key}`];
-    return choice === undefined ? [] : restrictionEdit(road, turn, choice, context);
-  });
-  const lightEdits = extras.hasLight === undefined ? [] : trafficLightEdit(road, extras.hasLight, context);
-  return [...turnEdits, ...lightEdits];
+// A dragged point joins the road it is dragged onto.
+function snappedWhileDragged(geometry, {key, feature, previousGeometry}, context) {
+  const previous = previousGeometry.coordinates;
+  if (previous.length !== geometry.coordinates.length) return geometry;
+  const movedIndexes = geometry.coordinates.flatMap((point, index) =>
+    pointKey(point) === pointKey(previous[index]) ? [] : [index]
+  );
+  if (movedIndexes.length !== 1) return geometry;
+  const [index] = movedIndexes;
+  const before = context.session.workingFeature(roadsFile, key) ?? feature;
+  const origin = movedPoints(before, {...feature, geometry}).find(({to}) => pointKey(to) === pointKey(geometry.coordinates[index]));
+  const ignored = new Set([key, ...(origin ? joinedKeys(origin.from, context.entriesOf) : [])]);
+  const snapped = joiningPoint(geometry.coordinates[index], context, ignored);
+  return snapped ? {...geometry, coordinates: geometry.coordinates.with(index, snapped)} : geometry;
 }
 
 // A select with its kinds in the groups people think in.
@@ -144,90 +102,131 @@ function roadSections({properties}, {context}) {
     isCollapsed: properties.bridge === undefined && properties.tunnel === undefined
   };
   if (context.isPhone()) return [{title: 'Road', fields: ['name', 'kind']}];
-  return [road, access, driving, {title: 'Ends and direction', fields: ['oneway', 'startLevel', 'endLevel']}, more];
+  return [road, access, {...driving, fields: ['oneway', ...driving.fields]}, more];
 }
 
-function checkbox(label, isChecked, onChange) {
-  const element = document.createElement('label');
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.checked = isChecked;
-  input.onchange = () => onChange(input.checked);
-  element.className = 'choice-row';
-  element.append(input, ` ${label}`);
-  return element;
+// The joint at one end of a road as it is drawn now, or null before it is drawn.
+function jointOfEnd(end, {feature, key, context}) {
+  const coordinate = endsOf(feature)[end === 'start' ? 0 : 1];
+  const roads = context.entriesOf(roadsFile).filter(entry => entry.key !== key);
+  return jointAt(coordinate, [...roads, {filename: roadsFile, key, feature}]);
 }
 
-// Turns can be recorded only between roads that have an OSM identity and meet at an OSM node.
-function turnRow(road, turn, edit) {
-  const {context} = edit;
-  const fromWay = wayNumber(road.feature.properties.entityId);
-  const toWay = wayNumber(turn.road.feature.properties.entityId);
-  const junctionNode = road.feature.properties.endNode;
-  if (!fromWay || !toWay || !junctionNode) return null;
-  const rule = turnRule(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
-  const choiceName = `turn:${turn.road.key}`;
-  const isForbidden = edit.extras[choiceName] ?? rule.isForbidden;
-  const target = turn.kind === 'uTurn' ? '' : ` onto ${roadName(turn.road.feature)}`;
-  const row = checkbox(`${turnLabels[turn.kind]}${target} allowed`, !isForbidden, isAllowed =>
-    edit.setExtras({[choiceName]: !isAllowed})
-  );
-  if (rule.onlyRule) {
-    const {restriction} = rule.onlyRule.feature.properties;
-    row.querySelector('input').disabled = true;
-    row.append(` · rule of the junction: ${restriction.replaceAll('_', ' ')}`);
+function openJunction(edit, coordinate) {
+  if (edit.hasUnappliedEdit()) edit.showProblem('Apply or Cancel this edit before you open a junction.');
+  else edit.context.select(junctionEntry(coordinate));
+}
+
+function levelSelect(name, value, isDisabled) {
+  const select = document.createElement('select');
+  for (let level = highestLevel; level >= -highestLevel; level -= 1) {
+    const option = createElementWithText('option', level === 0 ? '0 · on the ground' : String(level));
+    option.value = String(level);
+    select.append(option);
   }
+  select.value = String(value);
+  select.disabled = isDisabled;
+  select.setAttribute('aria-label', name);
+  return select;
+}
+
+// One end of the road: its letter on the map, what it joins, its level, and the way to its junction.
+function endRow(end, edit) {
+  const {feature, context} = edit;
+  const {coordinates} = feature.geometry;
+  const index = end === 'start' ? 0 : coordinates.length - 1;
+  const row = document.createElement('div');
+  row.className = 'end-row';
+  const letter = createElementWithText('span', endLabels[end]);
+  letter.className = 'end-letter';
+  const joint = jointOfEnd(end, edit);
+  const text = createElementWithText('span', jointStatusText(joint, edit.key));
+  const level = levelSelect(`Level at ${endLabels[end]}`, levelAt(feature, index), context.isPhone());
+  level.onchange = () => edit.setProperties({[`${end}Level`]: Number(level.value)});
+  const open = createElementWithText('button', 'Junction');
+  open.type = 'button';
+  open.setAttribute('aria-label', `Open the junction at ${endLabels[end]}`);
+  open.onclick = () => openJunction(edit, coordinates[index]);
+  row.append(letter, text, level, open);
   return row;
 }
 
-// The junction at the end of the road, at the desk only. Arrows on the map follow start to end.
-function renderJunction(container, edit) {
-  const {context, key, feature} = edit;
-  const isDrawn = feature.geometry?.coordinates.length > 1;
-  if (context.isPhone() || !isDrawn) return;
-  const road = {key, feature};
-  const rows = turnsAtEnd(road, context.entriesOf(roadsFile))
-    .map(turn => turnRow(road, turn, edit))
-    .filter(Boolean);
-  const [, junction] = endsOf(feature);
-  const hasLight = edit.extras.hasLight ?? Boolean(trafficLightAt(context.entriesOf(nodesFile), junction));
-  const heading = createElementWithText('h3', 'Junction at the end');
+// Both ends by the letters the map shows, so that nobody has to guess which end is meant.
+function renderEnds(container, edit) {
+  const isDrawn = edit.feature.geometry?.coordinates.length > 1;
+  if (!isDrawn || edit.isNew) return;
+  const heading = createElementWithText('h3', 'Ends');
   heading.className = 'section-title';
-  container.append(heading, checkbox('Traffic light', hasLight, isChecked => edit.setExtras({hasLight: isChecked})));
-  if (rows.length > 0) container.append(...rows);
-  else {
-    const note = createElementWithText('p', 'Turns need roads that already have an OSM node here.');
-    note.className = 'hint';
-    container.append(note);
-  }
+  container.append(heading, endRow('start', edit), endRow('end', edit));
 }
 
-// At the desk a road can be split at its picked point. Both halves are one step.
+const endMarks = feature => {
+  if (!(feature.geometry?.coordinates.length > 1)) return [];
+  const [start, end] = endsOf(feature);
+  return [{coordinate: start, label: endLabels.start}, {coordinate: end, label: endLabels.end}];
+};
+
+// The points of a road that other roads share on the same level.
+function joinedPoints({key, feature}, context) {
+  const roads = context.entriesOf(roadsFile).filter(entry => entry.key !== key);
+  return feature.geometry.coordinates.filter((coordinate, index) => {
+    const joint = jointAt(coordinate, roads);
+    const level = levelAt(feature, index);
+    return joint?.members.some(member => member.level === level) ?? false;
+  });
+}
+
+const freePointsOf = extras => new Set(extras?.freePoints ?? []);
+
+// Takes the picked point out of its joint, so that it moves alone from then on.
+function disconnectTool(feature, handle, edit) {
+  const coordinate = handle && feature.geometry.coordinates[handle.vertexIndex];
+  const isJoined = coordinate && joinedPoints(edit, edit.context).some(point => pointKey(point) === pointKey(coordinate));
+  return {
+    id: 'vertex-disconnect',
+    label: 'Disconnect',
+    isDisabled: !isJoined,
+    run: () => {
+      const disconnected = disconnectedRoad(feature, handle.vertexIndex);
+      if (!disconnected) return edit.showProblem('This road is too short to be pulled back.');
+      const freePoints = [...(edit.extras.freePoints ?? []), pointKey(coordinate)];
+      edit.setExtras({freePoints});
+      return edit.setFeature(disconnected);
+    }
+  };
+}
+
+// At the desk a road can be split at its picked point. Both halves are one step and meet at one junction.
 function splitTool(feature, handle, edit) {
   return {
     id: 'vertex-split',
     label: 'Split here',
     isDisabled: !handle || Boolean(splitProblem(feature, handle.vertexIndex)),
     run: () => {
-      const {context} = edit;
-      if (rulesLostBySplit(context.entriesOf(restrictionsFile), feature).length > 0) {
-        edit.showProblem('This road has turn rules at its end, which a split would lose. Remove them first.');
-        return;
-      }
-      const [first, second] = splitRoad(feature, handle.vertexIndex, context.rules.layers[roadsFile].properties);
+      const {context, key} = edit;
+      const secondKey = `local:${crypto.randomUUID()}`;
+      const {edits, problem} = rulesAfterSplit(context.entriesOf(restrictionsFile), {key, feature}, secondKey);
+      if (problem) return edit.showProblem(problem);
+      const coordinate = feature.geometry.coordinates[handle.vertexIndex];
+      const level = levelAt(feature, handle.vertexIndex);
+      const joint = jointAt(coordinate, context.entriesOf(roadsFile).filter(entry => entry.key !== key));
+      const others = joint?.members.filter(member => member.level === level) ?? [];
+      const junction = {level, node: nodeOf(others) ?? `local:${crypto.randomUUID()}`};
+      const [first, second] = splitRoad(feature, handle.vertexIndex, context.rules.layers[roadsFile].properties, junction);
       edit.setFeature(first);
-      edit.applyWith([{filename: roadsFile, key: `local:${crypto.randomUUID()}`, after: second}]);
+      return edit.applyWith([{filename: roadsFile, key: secondKey, after: second}, ...edits]);
     }
   };
 }
 
 // Turn rules of either road that a join would break: the other road's way is gone, and so is the junction between them.
-function hasRulesLostByJoin(feature, other, context) {
+function hasRulesLostByJoin({key, feature}, otherEntry, context) {
   const restrictions = context.entriesOf(restrictionsFile);
-  const otherWay = wayNumber(other.properties.entityId);
-  const way = wayNumber(feature.properties.entityId);
+  const other = otherEntry.feature;
+  const otherWay = roadId(otherEntry);
+  const way = roadId({key, feature});
   const [, end] = endsOf(feature);
-  const isJoinedAtEnd = endsOf(other).some(point => isSamePoint(point, end));
+  const isJoinedAtEnd = endsOf(other).some(point => pointKey(point) === pointKey(end));
   const joinedNode = isJoinedAtEnd ? feature.properties.endNode : feature.properties.startNode;
   return restrictions.some(restriction => {
     const isAtJoin = isOnWay(restriction, way) && restriction.feature.properties.viaNodes?.includes(joinedNode);
@@ -245,7 +244,7 @@ async function joinWithPicked(edit) {
     edit.showProblem('These roads do not meet end to end.');
     return;
   }
-  if (hasRulesLostByJoin(feature, other.feature, context)) {
+  if (hasRulesLostByJoin({key, feature}, other, context)) {
     edit.showProblem('These roads have turn rules that a join would lose. Remove them first.');
     return;
   }
@@ -262,13 +261,37 @@ function lengthFacts({geometry}, before) {
 }
 
 // Turn rules of a deleted road would name a road that is gone.
-function roadDeletion({feature}, context) {
-  const way = wayNumber(feature.properties.entityId);
-  const restrictions = way ? context.entriesOf(restrictionsFile).filter(restriction => isOnWay(restriction, way)) : [];
+function roadDeletion(entry, context) {
+  const way = roadId(entry);
+  const restrictions = context.entriesOf(restrictionsFile).filter(restriction => isOnWay(restriction, way));
   return {
     message: restrictions.length > 0 ? `${restrictions.length} turn rules go with it.` : '',
     edits: restrictions.map(({filename, key}) => ({filename, key, after: null}))
   };
+}
+
+function roadVertexTools(feature, handle, edit) {
+  if (edit.isNew) return [];
+  const disconnect = disconnectTool(feature, handle, edit);
+  return edit.context.isPhone() ? [disconnect] : [disconnect, splitTool(feature, handle, edit)];
+}
+
+// Rules from before roads had junctions of the editor cannot say where an end is.
+const canNameJunctions = ({rules}) => rules.layers[roadsFile].properties.startNode?.type === 'identifier';
+
+function preparedRoad(feature, context, {key, extras}) {
+  if (!canNameJunctions(context) || !feature.geometry) return feature;
+  const before = context.session.workingFeature(roadsFile, key);
+  const choices = {freePoints: freePointsOf(extras), preferredLevel: context.shownLevel?.() ?? null};
+  return roadWithEnds({key, feature, before}, context.entriesOf(roadsFile), choices);
+}
+
+// Roads joined to a moved point go with it, and roads that a new point touches get one there.
+function roadCompanions(edit, context) {
+  const following = followingEdits(edit, context, freePointsOf(edit.extras));
+  const followingKeys = new Set(following.map(({key}) => key));
+  const touched = touchedRoadEdits(edit, context).filter(({key}) => !followingKeys.has(key));
+  return [...touched, ...following];
 }
 
 export const roadBehaviors = {
@@ -277,21 +300,16 @@ export const roadBehaviors = {
     title: roadName,
     sections: roadSections,
     controls: () => ({kind: kindControl}),
-    suggestions: () => ({
-      motor_vehicle: accessValues,
-      foot: accessValues,
-      bicycle: accessValues,
-      access: accessValues,
-      oneway: ['yes', 'no', '-1'],
-      maxspeed: ['20', '30', '40', '50', '60', '80', '100'],
-      surface: ['asphalt', 'paving_stones', 'concrete', 'gravel', 'ground']
-    }),
     tools: (_feature, edit) => (edit.isNew ? [] : [{label: 'Join roads', isDesktopOnly: true, run: () => joinWithPicked(edit)}]),
-    vertexTools: (feature, handle, edit) => (edit.context.isPhone() || edit.isNew ? [] : [splitTool(feature, handle, edit)]),
-    snappedPoint: nearestRoadPoint,
+    vertexTools: roadVertexTools,
+    snappedPoint: ({lngLat}, context) => joiningPoint(lngLat.toArray(), context),
+    limitedGeometry: snappedWhileDragged,
     measures: lengthFacts,
-    renderExtras: renderJunction,
-    companionEdits: (edit, context) => [...junctionEdits(edit, context), ...junctionChoiceEdits(edit, context)],
+    renderExtras: renderEnds,
+    marks: endMarks,
+    joinedPoints,
+    prepared: preparedRoad,
+    companionEdits: roadCompanions,
     deletion: roadDeletion
   },
   [nodesFile]: {

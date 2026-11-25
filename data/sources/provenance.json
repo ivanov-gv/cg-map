@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23149168,
+    "bytes": 23563700,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -85,18 +85,18 @@
       "road_nodes": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 57371,
+          "13-16": 94686,
           "9-12": 0
         },
-        "bytes": 57371
+        "bytes": 94686
       },
       "roads": {
         "byZoomBand": {
-          "0-8": 534605,
-          "13-16": 4621305,
-          "9-12": 1896054
+          "0-8": 607774,
+          "13-16": 5208437,
+          "9-12": 2050226
         },
-        "bytes": 7051964
+        "bytes": 7866437
       },
       "settlements": {
         "byZoomBand": {
@@ -131,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-566a9be61e898be8.pmtiles",
-    "sha256": "566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9",
+    "file": "montenegro-64a035aaabc010af.pmtiles",
+    "sha256": "64a035aaabc010af69653334ae567232d0f776f6a694325c0506e2a6f8342009",
     "tiles": 229422
   },
   "building_details": {
@@ -247,14 +247,19 @@
       "sha256": "d04fa4e32fdbf898ca6b505cd03616836cb65cd974bc88d0d38c73c2b6c5bbe7"
     },
     "road-nodes.geojson": {
-      "bytes": 462217,
-      "features": 2534,
-      "sha256": "a1758607a9f417499ae970866c85b0139904be90779bebcf32d7b83e3fa9c67d"
+      "bytes": 665177,
+      "features": 3660,
+      "sha256": "41cc9063fc14ac17459e96ec4ef502ebe2bcb5c094d2143a9c339064e47bc4c2"
     },
     "roads.geojson": {
-      "bytes": 7110391,
-      "features": 21247,
-      "sha256": "6c7876a10f851669e89a4d037fcd66f1f7fe4f4ae370b93d2aecaf7661047c2a"
+      "bytes": 7932196,
+      "features": 21246,
+      "sha256": "2a65e35d64645c4150a315fe23fa251320cff2ccdfbac1e0622c8dcc3ef4dd9e"
+    },
+    "settlement-areas.geojson": {
+      "bytes": 792678,
+      "features": 257,
+      "sha256": "9b1add49b1437e4bdddac9532736efc566238ad9baa8cf02b7df2def21413910"
     },
     "settlements.geojson": {
       "bytes": 1102523,
@@ -272,9 +277,9 @@
       "sha256": "916f40724f43304d6861efe152f219487d826b3521f1f100a2a3d27d9ac206af"
     },
     "turn-restrictions.json": {
-      "bytes": 9471,
-      "features": 69,
-      "sha256": "a6365518a1982ea02ee474ff887b59d49d846ad23c61d56502074ca7525bff4e"
+      "bytes": 39365,
+      "features": 286,
+      "sha256": "bb3e8f177457997566f5ccadfbae01762c647a3a554ed392c446af5902c996e1"
     },
     "water.geojson": {
       "bytes": 2097403,

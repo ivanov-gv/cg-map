@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {roadBehaviors} from '../src/layer-roads.js';
-import {rulesLostBySplit, turnKind, turnRule, turnsAtEnd} from '../src/road-junctions.js';
+import {jointAt} from '../src/road-graph.js';
+import {rulesAfterSplit, turnKind, turnRule, turnsAt} from '../src/road-junctions.js';
 import {joinedRoad, splitProblem, splitRoad, withJunctionAt} from '../src/road-shapes.js';
 
 const road = (coordinates, properties = {}) => ({
@@ -69,19 +70,19 @@ test('a road gets a point where another touches it, and none where it already ha
 test('turns are named by their angle, and only roads on the same level meet', () => {
   assert.deepEqual([-90, 0, 90, 179].map(turnKind), ['left', 'straight', 'right', 'uTurn']);
   const entry = (key, feature) => ({key, feature});
-  const main = entry('0', road([west, centre]));
-  const turns = turnsAtEnd(main, [
-    main,
+  const joint = jointAt(centre, [
+    entry('0', road([west, centre])),
     entry('1', road([centre, east])),
     entry('2', road([north, centre])),
     entry('3', road([centre, [19.251, 42.439]], {startLevel: 1}))
   ]);
+  const {turns} = turnsAt(joint).find(({from}) => from.member.entry.key === '0');
   assert.deepEqual(
-    turns.map(({road: other, kind}) => [other.key, kind]),
+    turns.map(({to, kind}) => [to.member.entry.key, kind]),
     [
+      ['0', 'uTurn'],
       ['1', 'straight'],
-      ['2', 'left'],
-      ['0', 'uTurn']
+      ['2', 'left']
     ]
   );
 });
@@ -94,19 +95,16 @@ function contextWith(featuresByFile) {
   };
 }
 
-test('a drawn road, a forbidden turn and a traffic light are one step', () => {
-  const main = road([west, centre], {entityId: 'way/1', endNode: 12, endLevel: 0});
+test('a drawn road gives the road it touches a point there, on its own level only', () => {
   const context = contextWith({
-    'roads.geojson': [main, road([centre, east], {entityId: 'way/2', startNode: 12, startLevel: 0}), road([north, [19.252, 42.441]])]
+    'roads.geojson': [road([west, centre]), road([centre, east], {entityId: 'way/2', startNode: 12, startLevel: 0})]
   });
-  const companions = roadBehaviors['roads.geojson'].companionEdits;
-  const choices = companions({key: '0', feature: main, before: main, extras: {'turn:1': true, hasLight: true}}, context);
-  const [turn, light] = choices;
-  assert.deepEqual(turn.after.properties, {restriction: 'no_straight_on', from: 1, to: 2, viaNodes: [12]});
-  assert.deepEqual([light.after.properties.kind, light.after.geometry.coordinates], ['traffic_signals', centre]);
+  const {companionEdits} = roadBehaviors['roads.geojson'];
   const drawn = road([[19.2515, 42.44], [19.2515, 42.4405]]);
-  const [junction] = companions({key: 'local:1', feature: drawn, before: null, extras: {}}, context);
+  const [junction] = companionEdits({key: 'local:1', feature: drawn, before: null, extras: {}}, context);
   assert.deepEqual(junction.after.geometry.coordinates, [centre, [19.2515, 42.44], east]);
+  const raised = {...drawn, properties: {...drawn.properties, startLevel: 1}};
+  assert.deepEqual(companionEdits({key: 'local:1', feature: raised, before: null, extras: {}}, context), []);
 });
 
 const ruleOf = properties => ({type: 'Feature', properties: {from: 1, viaNodes: [12], ...properties}, geometry: null});
@@ -119,32 +117,29 @@ test('an "only" rule forbids the other turns of its junction, and a "no" rule it
   const forbidding = [{key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})}];
   assert.equal(turnRule(forbidding, 1, 3, 12).isForbidden, true);
   assert.equal(turnRule(forbidding, 1, 2, 12).isForbidden, false);
-  // What an "only" rule says is never recorded or deleted as a single turn.
-  const context = contextWith({
-    'roads.geojson': [road([west, centre], {entityId: 'way/1', endNode: 12}), road([centre, east], {entityId: 'way/2'})],
-    'turn-restrictions.json': [ruleOf({restriction: 'only_right_turn', to: 9})]
-  });
-  const [main] = context.entriesOf('roads.geojson');
-  const {companionEdits} = roadBehaviors['roads.geojson'];
-  const edit = {key: '0', feature: main.feature, before: main.feature, extras: {'turn:1': false}};
-  assert.deepEqual(companionEdits(edit, context), []);
 });
 
-test('a split is refused while it would lose a turn rule at the end of the road', () => {
+test('a split gives a rule at the far end to its half, and is refused while a rule leads through the road', () => {
   const whole = road([west, centre, east], {entityId: 'way/1', startNode: 11, endNode: 12});
-  const atEnd = {key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})};
-  const atStart = {key: '1', feature: ruleOf({restriction: 'no_u_turn', to: 1, viaNodes: [11]})};
-  assert.deepEqual(rulesLostBySplit([atEnd, atStart], whole), [atEnd]);
+  const entry = {key: '0', feature: whole};
+  const atEnd = {filename: 'turn-restrictions.json', key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})};
+  const atStart = {...atEnd, key: '1', feature: ruleOf({restriction: 'no_u_turn', to: 1, viaNodes: [11]})};
+  const {edits} = rulesAfterSplit([atEnd, atStart], entry, 'local:half');
+  assert.deepEqual(edits.map(({key, after}) => [key, after.properties.from]), [['0', 'local:half']]);
+  const through = {...atEnd, feature: ruleOf({restriction: 'no_left_turn', from: 5, to: 3, viaWays: [1], viaNodes: undefined})};
   const problems = [];
   const edit = {
     isNew: false,
-    context: {...contextWith({'turn-restrictions.json': [atEnd.feature]}), isPhone: () => false},
+    key: '0',
+    feature: whole,
+    extras: {},
+    context: {...contextWith({'turn-restrictions.json': [through.feature]}), isPhone: () => false},
     showProblem: message => problems.push(message),
     applyWith: () => assert.fail('nothing is split')
   };
-  const [split] = roadBehaviors['roads.geojson'].vertexTools(whole, {vertexIndex: 1}, edit);
+  const split = roadBehaviors['roads.geojson'].vertexTools(whole, {vertexIndex: 1}, edit).find(({id}) => id === 'vertex-split');
   split.run();
-  assert.match(problems[0], /turn rules at its end/);
+  assert.match(problems[0], /turn rules that a split would lose/);
 });
 
 test('deleting a road takes its turn rules, which would name a road that is gone', () => {

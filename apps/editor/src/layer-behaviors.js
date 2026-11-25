@@ -16,7 +16,12 @@ import {kindLabel, objectName} from './object-names.js';
 //   measures(feature, before)     lines of facts shown under the form
 //   controls(edit)                controls that replace single fields, {name: value => element}
 //   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
-//   suggestions(feature, context) usual values of free fields, {name: [value]}
+//   usualValues(feature, context) usual values of free fields, {name: [value]}
+//   joinedPoints(entry, context)  the points of a line that others share
+//   marks(feature)                letters on the map for the picked object, [{coordinate, label}]
+//   isDerived                     the object only stands for others: Apply records its companion edits and not itself
+//   isViewOnly(context)           the object can be read and not changed here
+//   isReshapable(context)         whether its shape can be changed on this screen
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
@@ -45,9 +50,15 @@ const defaultBehavior = filename => ({
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
-  suggestions: () => ({}),
   controls: () => ({}),
   vertexTools: () => [],
+  joinedPoints: () => [],
+  marks: () => [],
+  isDerived: false,
+  isReshapable: () => true,
+  isViewOnly: () => false,
+  usualValues: () => ({}),
+  listsDependOn: [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
   dragTarget: () => null
