@@ -1,18 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
 import {ESLint} from 'eslint';
-import {repoRoot} from '../agents/lib.mjs';
 
-// Lints sample code as if it lived at filePath, through the repository's real eslint.config.mjs, so a removed rule or a
+// Lints sample code as if it lived at filePath, through this project's real eslint.config.mjs, so a removed rule or a
 // narrowed files glob fails here even while every checked-in file is already clean.
 async function ruleIds(code, filePath) {
-  const eslint = new ESLint({cwd: repoRoot});
+  const eslint = new ESLint({cwd: fileURLToPath(new URL('..', import.meta.url))});
   const [result] = await eslint.lintText(code, {filePath});
   return result.messages.map(message => message.ruleId);
 }
 
-const sourcePath = 'apps/web/src/readability-probe.js';
-const testPath = 'apps/web/tests/readability-probe.test.mjs';
+const sourcePath = 'src/readability-probe.js';
+const testPath = 'tests/readability-probe.test.mjs';
 const longBody = count => Array.from({length: count}, (_, index) => `  total += ${index};`).join('\n');
 
 test('apps/ source rejects each mechanical readability violation', async () => {

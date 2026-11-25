@@ -266,6 +266,32 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
+// Platform owns the one ESLint rule module; these are the projects whose configs import it. No rule can change what a
+// browser does, so a change here selects their verifies and no browser areas.
+const ESLINT_PROJECT_FOLDERS = [
+  'apps-web',
+  'apps-editor',
+  'apps-core-demo',
+  'map-core',
+  'contracts',
+  'data',
+  'transit-relay',
+  'platform',
+  'tests'
+];
+const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
+// A project's config selects its own verify. The web readability test lives with web, so its config needs no exception.
+// Editor and core-demo keep their existing folder rules, so their configs still select what they did before; neither
+// needs an entry here.
+const ESLINT_CONFIG_FOLDERS = new Map([
+  ['apps/web/eslint.config.mjs', 'apps-web'],
+  ['packages/map-core/eslint.config.mjs', 'map-core'],
+  ['packages/contracts/eslint.config.mjs', 'contracts'],
+  ['data/eslint.config.mjs', 'data'],
+  ['services/transit-relay/eslint.config.mjs', 'transit-relay'],
+  ['platform/eslint.config.mjs', 'platform'],
+  ['tests/eslint.config.mjs', 'tests']
+]);
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
@@ -303,6 +329,15 @@ export function classify(file) {
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/(ci-plan|workflow-test-runs)\./.test(file))
     return {folders: ['workflows', 'platform'], areas: []};
   if (file === 'Makefile') return {folders: ROOT_MAKEFILE_FOLDERS, areas: [], editorAreas: []};
+  if (file === SHARED_ESLINT_RULES)
+    return {folders: ESLINT_PROJECT_FOLDERS, areas: [], editorAreas: []};
+  const lintConfigFolder = ESLINT_CONFIG_FOLDERS.get(file);
+  if (lintConfigFolder)
+    return {
+      folders: [lintConfigFolder],
+      areas: [],
+      editorAreas: []
+    };
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
   if (/^services\/backend\/(.*\.go|go\.mod|go\.sum)$/.test(file)) return {folders: ['backend'], areas: []};

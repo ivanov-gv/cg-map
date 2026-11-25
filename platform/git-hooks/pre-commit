@@ -14,9 +14,34 @@ staged=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -n "$staged" ] || exit 0
 
 js=$(printf '%s\n' "$staged" | grep -E '\.m?js$' || true)
+
+# ESLint finds each project's own config from the folder it runs in.
+project_of() {
+  case "$1" in
+    apps/*/*|packages/*/*)
+      prefix=${1%%/*}
+      remainder=${1#*/}
+      printf '%s/%s\n' "$prefix" "${remainder%%/*}"
+      ;;
+    services/transit-relay/*) printf '%s\n' services/transit-relay ;;
+    data/*|platform/*|tests/*) printf '%s\n' "${1%%/*}" ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ -n "$js" ]; then
-  # shellcheck disable=SC2086
-  npx --no-install eslint --no-warn-ignored $js
+  for file in $js; do
+    project_of "$file" >/dev/null || {
+      echo "No project ESLint config covers $file; put the file in a project." >&2
+      exit 1
+    }
+  done
+  projects=$(printf '%s\n' "$js" | while IFS= read -r file; do project_of "$file"; done | sort -u)
+  for project in $projects; do
+    files=$(printf '%s\n' "$js" | grep "^$project/" | sed "s|^$project/||")
+    # shellcheck disable=SC2086
+    (cd "$project" && npx --no-install eslint --no-warn-ignored $files) || exit 1
+  done
 fi
 
 go_files=$(printf '%s\n' "$staged" | grep -E '\.go$' || true)

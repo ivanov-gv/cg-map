@@ -16,6 +16,14 @@ it.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 
+## Lint configuration
+
+Each project that lints owns `eslint.config.mjs` beside its Makefile or package.json and chooses its own file patterns
+and globals; ESLint finds it from the folder the lint command runs in. Rule sets live in
+[platform/eslint-rules.mjs](../../platform/eslint-rules.mjs), which names no project file. Enforced: each project's lint
+target, the pre-commit hook and [ci-plan](../../platform/tools/ci-plan.mjs)'s tests. See
+[ADR 0040](../decisions/0040-project-owned-eslint-configurations.md).
+
 ## Code
 
 - Two-space indent, single quotes, semicolons, LF (.editorconfig). Do not reformat code you are not changing.

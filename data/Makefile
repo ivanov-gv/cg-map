@@ -6,7 +6,7 @@ PYTHON ?= python3
 verify: lint check test python-test python-check check-topology
 
 lint:
-	cd $(ROOT) && npx --no-install eslint data/tools data/tests
+	npx --no-install eslint tools tests
 
 check:
 	npm run -s check

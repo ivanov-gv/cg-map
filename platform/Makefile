@@ -5,7 +5,7 @@ ROOT := ..
 verify: lint markdown-check repo agents-check build-web test python-test python-check
 
 lint:
-	cd $(ROOT) && npx --no-install eslint platform eslint.config.mjs
+	npx --no-install eslint .
 
 markdown-check:
 	cd $(ROOT) && npm run -s lint:md

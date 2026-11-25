@@ -148,7 +148,7 @@ for (const [name, files] of [
   ['an unknown root file', ['.editorconfig']],
   ['the lockfile', ['package-lock.json']],
   ['the Node version', ['.node-version']],
-  ['the lint configuration', ['eslint.config.mjs']],
+  ['a removed root lint configuration', ['eslint.config.mjs']],
   ['an unknown file beside known ones', ['docs/README.md', 'brand-new.txt']]
 ]) {
   test(`plan: ${name} selects everything`, () => {
@@ -190,6 +190,43 @@ test('only the root Makefile narrows the plan; other root files still select eve
     assert.deepEqual(otherPlan.areas, ALL_AREAS, file);
     assert.deepEqual(otherPlan.editorAreas, Object.keys(EDITOR_BROWSER_AREAS), file);
   }
+});
+
+test('a project lint config selects its own verify and no browser areas', () => {
+  const cases = [
+    ['apps/web/eslint.config.mjs', ['apps-web']],
+    ['packages/map-core/eslint.config.mjs', ['map-core']],
+    ['packages/contracts/eslint.config.mjs', ['contracts']],
+    ['data/eslint.config.mjs', ['data']],
+    ['services/transit-relay/eslint.config.mjs', ['transit-relay']],
+    ['platform/eslint.config.mjs', ['platform']],
+    ['tests/eslint.config.mjs', ['tests']]
+  ];
+  for (const [file, folders] of cases) {
+    const plan = planChanges([file]);
+    assert.deepEqual(new Set(plan.folders), new Set(folders), file);
+    assert.deepEqual(plan.areas, [], file);
+    assert.deepEqual(plan.editorAreas, [], file);
+    assert.equal(plan.everything, false, file);
+  }
+});
+
+test('the shared ESLint rules select every consuming verify and no browser areas', () => {
+  const plan = planChanges(['platform/eslint-rules.mjs']);
+  assert.deepEqual(
+    new Set(plan.folders),
+    new Set(['apps-web', 'apps-editor', 'apps-core-demo', 'map-core', 'contracts', 'data', 'transit-relay', 'platform', 'tests'])
+  );
+  assert.deepEqual(plan.areas, []);
+  assert.deepEqual(plan.editorAreas, []);
+  assert.equal(plan.everything, false);
+});
+
+test('Editor and core-demo lint configs keep their existing selection', () => {
+  const editor = planChanges(['apps/editor/eslint.config.mjs']);
+  assert.deepEqual(new Set(editor.folders), new Set(['apps-editor', 'tests']));
+  assert.deepEqual(new Set(editor.editorAreas), new Set(Object.keys(EDITOR_BROWSER_AREAS)));
+  assert.deepEqual(planChanges(['apps/core-demo/eslint.config.mjs']).folders, ['apps-core-demo']);
 });
 
 test('the root Makefile folders match the workflows that call root make', () => {
