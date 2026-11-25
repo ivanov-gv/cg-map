@@ -25,7 +25,8 @@ refresh.
 - **Changeset version 2** names an object by entity ID and fingerprint. A new object keeps its `local:` ID, so others
   can refer to it before the import. Version 1 stays readable. Routes have no identity of their own and keep positions.
 - **The ledger is replayed over a fresh extract** (`make -C data reapply-corrections`). An edit wins over upstream for
-  exactly the facts it changed, and every conflict is reported.
+  exactly the facts it changed, and every conflict is reported. When not everything fits, what depends on each other is
+  placed or refused together: a building with what is on it, the outlines, the transport lines, the ridges.
 
 - **Not every object can be added or deleted.** A ridge, a canyon rim and a border line are edges between shapes the
   pipeline partitioned, so there is nothing a new one could bound. Ridges and borders are moved, rims are moved or

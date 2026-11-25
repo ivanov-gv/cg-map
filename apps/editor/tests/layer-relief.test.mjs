@@ -119,7 +119,7 @@ test('the height of the phone fills a gap of the same summit only', () => {
     isOpen: () => isOpen,
     typedFeature: () => ({properties: {ele}}),
     setProperties: properties => recorded.push(properties),
-    showProblem: () => {}
+    showMessage: () => {}
   });
   const {tools} = reliefBehaviors['summits.geojson'];
   const summit = {properties: {ele: null}};

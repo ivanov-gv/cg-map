@@ -245,6 +245,8 @@ export class InspectorEditing {
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: whileOpen(message => this.#refuse(message)),
+      // For an answer that comes late and interrupts nothing.
+      showMessage: whileOpen(message => this.showProblem(message)),
       applyWith: whileOpen(edits => this.#applyWith(edits)),
       replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
       discard: whileOpen(() => this.discardEdit())
