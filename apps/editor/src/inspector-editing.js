@@ -35,7 +35,7 @@ import {
   withTypedDetails
 } from './edit-transaction.js';
 import {DragBudget} from './drag-budget.js';
-import {followingShapes} from './following-shapes.js';
+import {followingEdits} from './following-shapes.js';
 import {isMagnetOn, setMagnetOn} from './magnet-switch.js';
 import {isSameHandle, moveVertex, vertexHandles} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
@@ -167,8 +167,8 @@ export class InspectorEditing {
     if (problem) return refusedFor(problem);
     const edits = this.#behavior.companionEdits(change, behaviorContext);
     const {session} = this.#context;
-    const following = followingShapes(edits, (filename, key) => session.workingFeature(filename, key));
-    return {problem: this.#problemOf(edits), ...following};
+    const workingFeature = (filename, key) => session.workingFeature(filename, key);
+    return followingEdits(edits, workingFeature, companionEdits => this.#problemOf(companionEdits));
   }
 
   // Everything that goes along is shown where it would be, with a thin ghost of where it is.

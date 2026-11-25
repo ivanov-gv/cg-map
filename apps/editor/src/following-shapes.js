@@ -12,3 +12,8 @@ export function followingShapes(edits, workingFeature) {
     ghosts: moved.map(({before}) => before).filter(hasPlace)
   };
 }
+
+// What the bar shows for edits that go along with an open one. problemOf says why the importer would refuse one of them.
+export function followingEdits(edits, workingFeature, problemOf) {
+  return {problem: problemOf(edits), ...followingShapes(edits, workingFeature)};
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DragBudget} from '../src/drag-budget.js';
-import {followingShapes} from '../src/following-shapes.js';
+import {followingEdits, followingShapes} from '../src/following-shapes.js';
 
 const lineTo = east => ({type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: [[0, 0], [east, 0]]}});
 
@@ -17,6 +17,15 @@ test('what moves, comes or goes is shown as it would be and as it is, and what o
   const {shapes, ghosts} = followingShapes(edits, (_filename, key) => features[key] ?? null);
   assert.deepEqual(shapes, [lineTo(5), lineTo(6)]);
   assert.deepEqual(ghosts, [lineTo(1), lineTo(3)]);
+});
+
+test('a companion edit the importer would refuse is named in the bar', () => {
+  const edits = [{filename: 'a', key: 'moved', after: lineTo(5)}];
+  const following = followingEdits(edits, () => lineTo(1), companionEdits =>
+    companionEdits === edits ? 'Road: too steep.' : null
+  );
+  assert.equal(following.problem, 'Road: too steep.');
+  assert.deepEqual(following.shapes, [lineTo(5)]);
 });
 
 test('a drag does not wait for what is slow to find, and its end shows it', testContext => {
