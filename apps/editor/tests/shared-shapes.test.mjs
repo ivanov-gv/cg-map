@@ -51,6 +51,16 @@ test('an outline simplified apart from the line follows it, and keeps its own co
   assert.ok(spliced.some(point => String(point) === String([2, 0.1])));
 });
 
+test('an outline follows the end of a line that moved, and keeps no corner where it was', () => {
+  const movedStart = {before: points([0, 0], [1, 0]), after: points([0, 1], [1, 0])};
+  const ring = ringOf([0, 0], [1, 0], [2, 0], [2, 3], [0, 3]);
+  const spliced = stepsOf(splicedRing(ring, movedStart, toleranceMetres)).map(String);
+  assert.ok(spliced.includes('0,1') && !spliced.includes('0,0'), spliced.join(' '));
+  assert.deepEqual(stepsOf(splicedLine(points([0, 0], [1, 0], [2, 0]), movedStart, toleranceMetres)), [[0, 1], [1, 0], [2, 0]]);
+  const against = splicedLine(points([2, 0], [1, 0], [0, 0]), movedStart, toleranceMetres);
+  assert.deepEqual(stepsOf(against), [[2, 0], [1, 0], [0, 1]]);
+});
+
 test('of two outlines near a short stretch only its own follows', () => {
   const border = (key, coordinates) => ({
     filename: 'border-edges.geojson',
@@ -135,6 +145,14 @@ test('rivers keep their joins with each other and with a shore when either side 
   const dragged = {...river.feature.geometry, coordinates: points([2, 10], [2, 6], [3, 4.5])};
   const kept = riverEndingOnShores(river.feature.geometry, dragged, entries);
   assert.deepEqual(stepsOf(kept.coordinates).at(-1), [3, 4]);
+
+  const draggedWithMore = {...river.feature.geometry, coordinates: points([2, 10], [2, 8], [3, 6], [3, 4.5])};
+  const keptWithMore = riverEndingOnShores(river.feature.geometry, draggedWithMore, entries);
+  assert.deepEqual(stepsOf(keptWithMore.coordinates), [[2, 10], [2, 8], [3, 6], [3, 4]]);
+  // The point taken away lay on the shore, and the mouth that stays is not the end that moved.
+  const throughLake = {type: 'LineString', coordinates: points([2, 10], [2, 4], [2, 1])};
+  const withoutShorePoint = {type: 'LineString', coordinates: points([2, 10], [2, 1])};
+  assert.deepEqual(riverEndingOnShores(throughLake, withoutShorePoint, entries), withoutShorePoint);
 
   const reversed = {...river.feature.geometry, coordinates: river.feature.geometry.coordinates.toReversed()};
   assert.deepEqual(riverEndingOnShores(river.feature.geometry, reversed, entries), reversed, 'a reversal moves nothing');

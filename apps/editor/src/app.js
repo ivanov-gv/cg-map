@@ -689,11 +689,11 @@ function cancelPick() {
 }
 
 function finishPick(entry) {
-  const {resolve, filename} = pendingPick;
+  const {resolve} = pendingPick;
   pendingPick = null;
   hideModeBar();
-  // A picked place ends the question; a picked object may be followed by another.
-  if (!entry || filename === null) showInspector();
+  // Whatever the edit does with the answer, its refusals and its buttons are in the inspector.
+  showInspector();
   resolve(entry);
 }
 

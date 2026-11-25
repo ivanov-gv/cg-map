@@ -54,7 +54,10 @@ export class EditSession {
 
   // Records one undoable step of any number of edits. Returns false when every feature already has this state, so that
   // applying an unchanged form leaves no empty history entry.
-  recordEdits(historyName, edits) {
+  //
+  // A step that came from elsewhere can span layers. It is then one step of each of their histories, sharedHistoryNames,
+  // and taking it back on one layer takes it back as a whole.
+  recordEdits(historyName, edits, sharedHistoryNames = []) {
     const changed = edits
       .map(({filename, key, after}) => ({
         filename,
@@ -65,9 +68,13 @@ export class EditSession {
       .filter(({previous, next}) => !isSameJSON(previous, next));
     if (changed.length === 0) return false;
     for (const {filename, key, next} of changed) this.#writeChange(filename, key, next);
-    const history = this.#historyOf(historyName);
-    history.undo.push({edits: changed});
-    history.redo = [];
+    const isShared = sharedHistoryNames.length > 1;
+    const step = {edits: changed, ...(isShared ? {id: crypto.randomUUID(), historyNames: sharedHistoryNames} : {})};
+    for (const name of isShared ? sharedHistoryNames : [historyName]) {
+      const history = this.#historyOf(name);
+      history.undo.push(step);
+      history.redo = [];
+    }
     return true;
   }
 
@@ -96,7 +103,16 @@ export class EditSession {
       this.#writeChange(edit.filename ?? historyName, edit.key, edit[stateToWrite]);
     }
     history[toStack].push(step);
+    for (const name of step.historyNames ?? []) {
+      if (name !== historyName) this.#moveSharedStep(this.#historyOf(name), step, fromStack, toStack);
+    }
     return stepEdits(step);
+  }
+
+  // Later steps of the other layer stay: they changed other objects, or this step could not be taken back.
+  #moveSharedStep(history, step, fromStack, toStack) {
+    history[fromStack] = history[fromStack].filter(({id}) => id !== step.id);
+    history[toStack].push(step);
   }
 
   undo(historyName) {

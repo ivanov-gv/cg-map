@@ -25,6 +25,11 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
   await expect(page.locator('#change-count')).toHaveText('3');
   await tapAt(page, [-3, 0]);
   await page.getByRole('button', {name: 'Join roads'}).click();
+  // The path meets neither end, and the refusal is on screen with the edit it is about.
+  await tapAt(page, [2, 1]);
+  await expect(page.locator('#edit-problem')).toBeVisible();
+  await expect(page.locator('#edit-problem')).toContainText('do not meet end to end');
+  await page.getByRole('button', {name: 'Join roads'}).click();
   await tapAt(page, [4, 0]);
   await expect(page.locator('#change-count')).toHaveText('2');
 
