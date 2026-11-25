@@ -19,10 +19,11 @@ import {
   finishDrawing,
   isDrawing,
   withGeometry,
+  withoutVertex,
+  withReplacedFeature,
   withTool,
   withTypedDetails
 } from './edit-transaction.js';
-import {removeVertex} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
@@ -231,6 +232,7 @@ export class InspectorEditing {
       context: this.#context.behaviorContext(),
       setProperties: whileOpen(properties => this.#setProperties(properties)),
       extras: this.#transaction.extras,
+      origins: this.#transaction.origins,
       setExtras: whileOpen(extras => this.#setExtras(extras)),
       setFeature: whileOpen(feature => this.#setFeature(feature)),
       setGeometry: whileOpen(geometry => this.#setFeature({...this.#currentFeature(), geometry})),
@@ -265,7 +267,7 @@ export class InspectorEditing {
 
   // Replaces the pending feature, its typed details included.
   #setFeature(feature) {
-    this.#transaction = {...withTypedDetails(this.#transaction), feature};
+    this.#transaction = withReplacedFeature(this.#transaction, feature);
     this.#renderForm();
     this.#update(this.#transaction);
   }
@@ -360,7 +362,7 @@ export class InspectorEditing {
     const behaviorContext = this.#context.behaviorContext();
     const feature = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
     const ruleProblem = featureProblem(feature, this.#rule, this.#context.levels, this.#baseFeature);
-    const edit = {filename: this.#filename, key: this.#transaction.key, feature, before: this.#workingBefore()};
+    const edit = this.#change(feature);
     return {feature, problem: ruleProblem ?? this.#behavior.problem(edit, behaviorContext)};
   }
 
@@ -381,17 +383,35 @@ export class InspectorEditing {
     return this.#applyWith([]);
   }
 
+  // The open edit as the layer sees it.
+  #change(feature) {
+    const {key, extras, origins} = this.#transaction;
+    return {filename: this.#filename, key, feature, extras, origins, before: this.#workingBefore()};
+  }
+
+  // Why the importer would refuse an edit that goes along with this one, or null. Nobody sees those before the export.
+  #problemOf(edits) {
+    const {rules, levels, session} = this.#context;
+    for (const {filename, key, after} of edits) {
+      if (!after) continue;
+      const problem = featureProblem(after, rules.layers[filename], levels, session.baseFeature(filename, key));
+      if (problem) return `${behaviorOf(filename).title(after, this.#context.behaviorContext())}: ${problem}.`;
+    }
+    return null;
+  }
+
   // Records the edit together with others of the same step.
   #applyWith(extraEdits) {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
     const {feature, problem} = this.#validatedFeature();
     if (problem) return this.#refuse(problem);
-    const {key, extras} = this.#transaction;
-    const edit = {filename: this.#filename, key, feature, extras, before: this.#workingBefore()};
+    const edit = this.#change(feature);
     const behaviorContext = this.#context.behaviorContext();
     const companions = this.#behavior.companionEdits(edit, behaviorContext);
     const ownEdits = this.#behavior.isDerived ? [] : [{filename: this.#filename, key: edit.key, after: feature}];
     const edits = [...ownEdits, ...companions, ...extraEdits];
+    const invalidEdit = this.#problemOf(edits);
+    if (invalidEdit) return this.#refuse(invalidEdit);
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
@@ -402,6 +422,11 @@ export class InspectorEditing {
 
   // Drops the open edit and records others in its place, such as marking the building as having no number.
   #replaceWith(edits, message) {
+    const invalidEdit = this.#problemOf(edits);
+    if (invalidEdit) {
+      this.#refuse(invalidEdit);
+      return;
+    }
     this.#context.commands.recordEdits(edits);
     this.#finishEdit(() => this.#context.onRecorded(message));
   }
@@ -445,9 +470,7 @@ export class InspectorEditing {
   }
 
   #removeSelectedVertex() {
-    const {selectedHandle, feature} = this.#transaction;
-    const geometry = removeVertex(feature.geometry, selectedHandle);
-    this.#update({...withGeometry(this.#transaction, geometry), selectedHandle: null});
+    this.#update(withoutVertex(this.#transaction, this.#transaction.selectedHandle));
   }
 
   #startTool(tool) {
@@ -515,7 +538,8 @@ export class InspectorEditing {
     if (!limit) return moved;
     const behaviorContext = this.#context.behaviorContext();
     const {feature, key} = transaction;
-    const edit = {filename: this.#filename, key, feature, previousGeometry: feature.geometry};
+    const draggedIndex = transaction.gesture.handle?.vertexIndex ?? null;
+    const edit = {filename: this.#filename, key, feature, previousGeometry: feature.geometry, origins: transaction.origins, draggedIndex};
     return withGeometry(moved, limit(moved.feature.geometry, edit, behaviorContext));
   }
 

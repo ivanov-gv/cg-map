@@ -910,6 +910,26 @@ function roadNodePointIds(roadNodes) {
   return nodeIds;
 }
 
+// The junctions each road ends at, by the ID that turn rules name it with.
+function junctionsByRoad(roads) {
+  const junctions = new Map();
+  for (const {properties: {entityId, startNode, endNode}} of roads.features) {
+    const match = entityId?.match(/^way\/(\d+)$/);
+    const id = match ? Number(match[1]) : entityId;
+    if (!junctions.has(id)) junctions.set(id, new Set());
+    for (const node of [startNode, endNode]) if (node !== undefined) junctions.get(id).add(node);
+  }
+  return junctions;
+}
+
+// A rule through one junction is about turning there, so both of its roads end there.
+function requireRoadsAtJunction({from, to, viaNodes, viaWays}, junctions, label) {
+  if (viaWays !== undefined || viaNodes?.length !== 1) return;
+  for (const road of [from, to]) {
+    requireValue(junctions.get(road).has(viaNodes[0]), `${label}: road ${road} does not end at junction ${viaNodes[0]}`);
+  }
+}
+
 // Turn restrictions: structured JSON with OSM identity and from/to/via refs.
 export function validateTurnRestrictions(data, roads, roadNodes) {
   requireValue(data?.entitySchemaVersion === 1, 'turn-restrictions.json: missing entitySchemaVersion');
@@ -918,6 +938,7 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
   const endNodeIds = roadEndNodeIds(roads);
   const nodeIds = roadNodePointIds(roadNodes);
   const allowedViaNodes = new Set([...nodeIds, ...endNodeIds]);
+  const junctions = junctionsByRoad(roads);
 
   for (const [index, restriction] of data.restrictions.entries()) {
     const label = `restriction ${index} (${restriction.entityId})`;
@@ -958,10 +979,12 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
       }
     }
   }
+  for (const [index, restriction] of data.restrictions.entries()) {
+    requireRoadsAtJunction(restriction, junctions, `restriction ${index} (${restriction.entityId})`);
+  }
   return {count: data.restrictions.length};
 }
 
-// Validate road features: pathClass, end nodes and levels.
 // Roads that end at one junction end at one place, or the junction would not be one.
 function requireSingleJunctionPositions(roads) {
   const positionByNode = new Map();
@@ -977,6 +1000,7 @@ function requireSingleJunctionPositions(roads) {
   }
 }
 
+// Validate road features: pathClass, end nodes and levels.
 export function validateRoads(data, {contractsDirectory} = {}) {
   const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString'], contractsDirectory});
   for (const [index, feature] of data.features.entries()) {

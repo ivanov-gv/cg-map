@@ -3,8 +3,8 @@ import {createElementWithText} from './dom.js';
 import {valueLabel} from './field-catalog.js';
 import {formatLength, lineLengthMetres, nearestPointOnLine} from './geometry-measures.js';
 import {areaFacts, holeTool, renderHoles} from './layer-green.js';
-import {draggedIndex, joiningPoint, withoutJoin, withPoint} from './line-joining.js';
-import {entriesWithin, pointKey} from './road-graph.js';
+import {joiningPoint, withoutJoin, withPoint} from './line-joining.js';
+import {boundsAround, entriesWithin, pointKey} from './road-graph.js';
 import {endsOf, isSamePoint} from './road-shapes.js';
 import {changedStretch, crossesItself, followingEdits, hasOutlineAlong} from './shared-shapes.js';
 import {
@@ -14,7 +14,6 @@ import {
   joinedWaterPoints,
   linesKeepingJoins,
   linesTouched,
-  movedPoints,
   riverEndingOnShores,
   riversKeepingShore
 } from './water-joins.js';
@@ -97,63 +96,71 @@ function coastProblem({feature, before}, context) {
   return isCrossing ? 'The coast, or a shape that follows it, would cross itself here.' : null;
 }
 
-const freePointsOf = extras => new Set(extras?.freePoints ?? []);
+// The open edit of a line as joins need it: where its points were, and which of them were disconnected.
+const joinFacts = ({origins, extras}) => ({origins: origins ?? undefined, freePoints: new Set(extras?.freePoints ?? [])});
 
-function waterEdits({key, feature, before, extras}, context) {
-  if (!before && isLine(feature)) return linesTouched(key, null, feature.geometry, context.entriesOf(waterFile));
-  if (!before || JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return [];
-  const waterEntries = context.entriesOf(waterFile);
-  if (isLine(feature)) {
-    const joins = linesKeepingJoins(key, before.geometry, feature.geometry, waterEntries, freePointsOf(extras));
-    if (!isCoastline(feature)) return withTouchedLines(joins, key, before, feature, waterEntries);
-    const edits = [...joins, ...coastEdits(before, feature, context)];
-    // The shapes it was found for are about to change.
-    latestFollowing = null;
-    return edits;
+// What other lines become, step by step: a line can move along and be touched in one edit.
+function editsInSteps(entries, steps) {
+  const editByKey = new Map();
+  for (const step of steps) {
+    const current = entries.map(entry => (editByKey.has(entry.key) ? {...entry, feature: editByKey.get(entry.key).after} : entry));
+    for (const edit of step(current)) editByKey.set(edit.key, edit);
   }
-  if (feature.geometry.type !== 'Polygon') return [];
-  return riversKeepingShore(before.geometry, feature.geometry, waterEntries);
+  return [...editByKey.values()];
 }
 
-// Lines that moved along have the point already.
-function withTouchedLines(joins, key, before, feature, waterEntries) {
-  const joinedKeys = new Set(joins.map(edit => edit.key));
-  const touched = linesTouched(key, before.geometry, feature.geometry, waterEntries).filter(edit => !joinedKeys.has(edit.key));
-  return [...joins, ...touched];
+function lineEdits(edit, waterEntries) {
+  const {key, feature, before} = edit;
+  const [previous, next] = [before.geometry, feature.geometry];
+  const keepJoins = entries => linesKeepingJoins(key, previous, next, entries, joinFacts(edit));
+  if (isCoastline(feature)) return editsInSteps(waterEntries, [keepJoins, entries => riversKeepingShore(previous, next, entries)]);
+  return editsInSteps(waterEntries, [keepJoins, entries => linesTouched(key, previous, next, entries)]);
 }
 
-function waterView({map, entriesOf}) {
-  const bounds = map.getBounds();
-  const view = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-  return entriesWithin(entriesOf(waterFile).filter(({feature}) => feature.geometry.type === 'LineString'), view);
+function waterEdits(edit, context) {
+  const {key, feature, before} = edit;
+  const waterEntries = context.entriesOf(waterFile);
+  if (!before) return isLine(feature) ? linesTouched(key, null, feature.geometry, waterEntries) : [];
+  if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return [];
+  if (feature.geometry.type === 'Polygon') return riversKeepingShore(before.geometry, feature.geometry, waterEntries);
+  if (!isLine(feature)) return [];
+  const edits = lineEdits(edit, waterEntries);
+  if (!isCoastline(feature)) return edits;
+  const following = coastEdits(before, feature, context);
+  // The shapes it was found for are about to change.
+  latestFollowing = null;
+  return [...edits, ...following];
 }
 
-// Waterways in the view and every area: shores are few and large.
-const joinTargets = context => [
-  ...waterView(context),
-  ...context.entriesOf(waterFile).filter(({feature}) => feature.geometry.type === 'Polygon')
-];
+// The water close to a point on the screen, for joining it.
+const joinTargets = (coordinate, {map, entriesOf}) => entriesWithin(entriesOf(waterFile), boundsAround(coordinate, map));
 
 // A drawn river joins the waterway or the shore it is put on.
 function drawnWaterPoint({lngLat}, context, feature) {
   if (feature.geometry?.type !== 'LineString') return null;
   const coordinate = lngLat.toArray();
-  return joiningPoint(coordinate, joinableWater(coordinate, joinTargets(context), new Set(), true), context.map);
+  return joiningPoint(coordinate, joinableWater(coordinate, joinTargets(coordinate, context), new Set(), true), context.map);
 }
 
-function snappedWhileDragged(geometry, {key, feature, previousGeometry}, context) {
-  const index = geometry.type === 'LineString' && !isCoastline(feature) ? draggedIndex(geometry, previousGeometry) : null;
-  if (index === null) return geometry;
-  const entries = joinTargets(context);
+// Where the dragged point was when the edit was opened, or null when it was added since.
+function originOfPoint(index, {key, feature, origins}, context) {
   const before = context.session.workingFeature(waterFile, key) ?? feature;
-  const dragged = pointKey(geometry.coordinates[index]);
-  const origin = movedPoints(before.geometry.coordinates, geometry.coordinates).find(({to}) => pointKey(to) === dragged);
-  const isSharing = entry => isWaterway(entry) && entry.feature.geometry.coordinates.some(point => pointKey(point) === pointKey(origin.from));
-  // What is joined here moves along, so the point does not stick to where it was.
-  const ignored = new Set([key, ...(origin ? entries.filter(isSharing).map(entry => entry.key) : [])]);
-  const isEnd = index === 0 || index === geometry.coordinates.length - 1;
+  const origin = origins ? origins[index] : index;
+  return Number.isInteger(origin) ? before.geometry.coordinates[origin] : null;
+}
+
+function snappedWhileDragged(geometry, change, context) {
+  const index = geometry.type === 'LineString' && !isCoastline(change.feature) ? change.draggedIndex : null;
+  if (index === null) return geometry;
   const coordinate = geometry.coordinates[index];
-  const joined = joiningPoint(coordinate, joinableWater(coordinate, entries, ignored, isEnd), context.map);
+  const targets = joinTargets(coordinate, context);
+  const origin = originOfPoint(index, change, context);
+  const isSharing = ({feature}) => feature.geometry.coordinates.some(point => isSamePoint(point, origin));
+  // What is joined here moves along, so the point does not stick to where it was.
+  const along = origin ? targets.filter(entry => isWaterway(entry) && isSharing(entry)) : [];
+  const ignored = new Set([change.key, ...along.map(({key}) => key)]);
+  const isEnd = index === 0 || index === geometry.coordinates.length - 1;
+  const joined = joiningPoint(coordinate, joinableWater(coordinate, targets, ignored, isEnd), context.map);
   return joined ? withPoint(geometry, index, joined) : geometry;
 }
 
@@ -172,12 +179,11 @@ function waterVertexTools(feature, handle, edit) {
   return [{id: 'vertex-disconnect', label: 'Disconnect', isDisabled, run: disconnect}];
 }
 
-function preparedWater(feature, context, {key, extras}) {
+function preparedWater(feature, context, edit) {
   if (!isLine(feature) || isCoastline(feature)) return feature;
-  const before = context.session.workingFeature(waterFile, key);
-  // An end that was disconnected no longer belongs to its shore.
-  if (freePointsOf(extras).size > 0) return feature;
-  return {...feature, geometry: riverEndingOnShores(before?.geometry, feature.geometry, context.entriesOf(waterFile))};
+  const before = context.session.workingFeature(waterFile, edit.key);
+  const geometry = riverEndingOnShores(before?.geometry, feature.geometry, context.entriesOf(waterFile), joinFacts(edit));
+  return {...feature, geometry};
 }
 
 // Only the kinds that fit the shape: a lake is no line.

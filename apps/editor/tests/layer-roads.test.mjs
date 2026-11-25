@@ -125,7 +125,7 @@ test('a split gives a rule at the far end to its half, and is refused while a ru
   const atEnd = {filename: 'turn-restrictions.json', key: '0', feature: ruleOf({restriction: 'no_left_turn', to: 3})};
   const atStart = {...atEnd, key: '1', feature: ruleOf({restriction: 'no_u_turn', to: 1, viaNodes: [11]})};
   const {edits} = rulesAfterSplit([atEnd, atStart], entry, 'local:half');
-  assert.deepEqual(edits.map(({key, after}) => [key, after.properties.from]), [['0', 'local:half']]);
+  assert.deepEqual(edits.map(({entry: rule, renamed}) => [rule.key, renamed(rule.feature.properties).from]), [['0', 'local:half']]);
   const through = {...atEnd, feature: ruleOf({restriction: 'no_left_turn', from: 5, to: 3, viaWays: [1], viaNodes: undefined})};
   const problems = [];
   const edit = {
@@ -133,9 +133,10 @@ test('a split gives a rule at the far end to its half, and is refused while a ru
     key: '0',
     feature: whole,
     extras: {},
-    context: {...contextWith({'turn-restrictions.json': [through.feature]}), isPhone: () => false},
+    context: {...contextWith({'turn-restrictions.json': [through.feature]}), rules: {layers: {'roads.geojson': {properties: {}}}}},
     showProblem: message => problems.push(message),
-    applyWith: () => assert.fail('nothing is split')
+    hasUnappliedEdit: () => false,
+    replaceWith: () => assert.fail('nothing is split')
   };
   const split = roadBehaviors['roads.geojson'].vertexTools(whole, {vertexIndex: 1}, edit).find(({id}) => id === 'vertex-split');
   split.run();

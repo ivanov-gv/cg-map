@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {junctionBehaviors, junctionEntry, junctionFile} from '../src/layer-junctions.js';
-import {disconnectEdits, followingEdits, joinEdits, junctionEdits, levelChoiceKey, movedPoints, roadWithEnds, splitEdits} from '../src/road-edits.js';
+import {originsAfter, movedPoints, startingOrigins} from '../src/line-origins.js';
+import {roadBehaviors} from '../src/layer-roads.js';
+import {
+  companionsOfRoad,
+  disconnectEdits,
+  disconnectProblem,
+  joinEdits,
+  junctionEdits,
+  levelChoiceKey,
+  roadWithEnds,
+  splitEdits
+} from '../src/road-edits.js';
 import {jointAt, jointNear, jointsIn, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
 import {ruleOfTurn, turnKey, turnsAt} from '../src/road-junctions.js';
 
@@ -86,7 +97,7 @@ test('a forbidden turn names roads and junctions of the editor too, and gives th
   const joint = jointAt(at(1, 0), roadsOf(context));
   const [{from, turns}] = turnsAt(joint);
   const left = turns.find(({kind}) => kind === 'left');
-  const edits = junctionEdits(joint, joint.coordinate, {[turnKey(from, left.to)]: false}, context);
+  const edits = junctionEdits(joint, joint.coordinate, {[turnKey(from, left.to)]: false}, context).edits;
   const rule = edits.find(({filename}) => filename === 'turn-restrictions.json').after;
   assert.deepEqual(rule.properties, {restriction: 'no_left_turn', from: 1, to: 'local:drawn', viaNodes: [12]});
   assert.deepEqual(
@@ -105,9 +116,9 @@ test('an allowed turn takes its rule back, and an "only" rule stays', () => {
   const left = turns.find(({kind}) => kind === 'left');
   assert.equal(ruleOfTurn(context.entriesOf('turn-restrictions.json'), from, left.to, members).isForbidden, true);
   const choice = {[turnKey(from, left.to)]: true};
-  assert.deepEqual(junctionEdits(joint, joint.coordinate, choice, context), [{filename: 'turn-restrictions.json', key: '0', after: null}]);
+  assert.deepEqual(junctionEdits(joint, joint.coordinate, choice, context).edits, [{filename: 'turn-restrictions.json', key: '0', after: null}]);
   const onlyContext = contextWith({roads, rules: [ruleOf({restriction: 'only_right_turn', to: 9})]});
-  assert.deepEqual(junctionEdits(joint, joint.coordinate, choice, onlyContext), []);
+  assert.deepEqual(junctionEdits(joint, joint.coordinate, choice, onlyContext).edits, []);
 });
 
 test('a light is put up, changed and taken down at a junction', () => {
@@ -115,14 +126,14 @@ test('a light is put up, changed and taken down at a junction', () => {
   const roads = [road([[0, 0], [1, 0]]), road([[1, 0], [1, 1]])];
   const bare = contextWith({roads});
   const joint = jointAt(at(1, 0), roadsOf(bare));
-  const [added] = junctionEdits(joint, joint.coordinate, {furniture: 'traffic_signals'}, bare);
+  const [added] = junctionEdits(joint, joint.coordinate, {furniture: 'traffic_signals'}, bare).edits;
   assert.deepEqual([added.after.properties, added.after.geometry.coordinates], [{kind: 'traffic_signals'}, at(1, 0)]);
   const lit = contextWith({roads, nodes: [light]});
-  const [changed] = junctionEdits(joint, joint.coordinate, {furniture: 'stop'}, lit);
+  const [changed] = junctionEdits(joint, joint.coordinate, {furniture: 'stop'}, lit).edits;
   assert.deepEqual(changed.after.properties, {kind: 'stop', entityId: 'node/5'});
-  const [removed] = junctionEdits(joint, joint.coordinate, {furniture: ''}, lit);
+  const [removed] = junctionEdits(joint, joint.coordinate, {furniture: ''}, lit).edits;
   assert.equal(removed.after, null);
-  const moved = junctionEdits(joint, at(1, 0.1), {}, lit);
+  const moved = junctionEdits(joint, at(1, 0.1), {}, lit).edits;
   const movedLight = moved.find(({filename}) => filename === 'road-nodes.geojson').after;
   assert.deepEqual(movedLight.geometry.coordinates, at(1, 0.1));
   assert.deepEqual(stepsOf(afterOf(moved, '0').geometry.coordinates.at(-1)), [1, 0.1]);
@@ -133,32 +144,32 @@ test('an end put on another level leaves the junction, and both share one again 
   const roads = [road([[0, 0], [1, 0]], {endNode: 12, endLevel: 0}), road([[1, 0], [2, 0]], {startNode: 12, startLevel: 0})];
   const context = contextWith({roads});
   const joint = jointAt(at(1, 0), roadsOf(context));
-  const edits = junctionEdits(joint, joint.coordinate, {[levelChoiceKey(joint.members[1])]: 1}, context);
+  const edits = junctionEdits(joint, joint.coordinate, {[levelChoiceKey(joint.members[1])]: 1}, context).edits;
   const raised = afterOf(edits, '1').properties;
   assert.equal(raised.startLevel, 1);
   assert.match(raised.startNode, /^local:/);
-  assert.equal(afterOf(edits, '0').properties.endNode, 12);
+  assert.equal(afterOf(edits, '0'), undefined, 'the junction stays with the road that stayed');
   const apart = contextWith({roads: [roads[0], afterOf(edits, '1')]});
   const apartJoint = jointAt(at(1, 0), roadsOf(apart));
   assert.equal(apartJoint.status, 'apart');
-  const {edits: joinedEdits} = joinEdits(apartJoint);
+  const {edits: joinedEdits} = joinEdits(apartJoint, apart);
   const joined = joinedEdits.map(({after}) => [after.properties.endNode ?? after.properties.startNode, after.properties.endLevel ?? after.properties.startLevel]);
-  assert.deepEqual(joined, [[12, 0], [12, 0]]);
+  assert.deepEqual(joined, [[12, 0]]);
 });
 
 test('roads that pass on different levels are not joined by force', () => {
   const roads = entriesFrom('roads.geojson', [road([[0, 0], [1, 0], [2, 0]]), road([[1, -1], [1, 0], [1, 1]], {tunnel: 'yes'})]);
-  assert.match(joinEdits(jointAt(at(1, 0), roads)).problem, /different levels/);
+  assert.match(joinEdits(jointAt(at(1, 0), roads), contextWith({roads: []})).problem, /different levels/);
 });
 
 test('an end that nearly meets a road is joined to it, and a crossing becomes a junction', () => {
-  const near = entriesFrom('roads.geojson', [road([[0, 0], [4, 0]]), road([[2, 0.05], [2, 1]], {startNode: 7, startLevel: 0})]);
-  const {edits} = joinEdits(jointNear(at(2, 0.05), near));
+  const near = contextWith({roads: [road([[0, 0], [4, 0]]), road([[2, 0.05], [2, 1]], {startNode: 7, startLevel: 0})]});
+  const {edits} = joinEdits(jointNear(at(2, 0.05), roadsOf(near)), near);
   assert.deepEqual(afterOf(edits, '0').geometry.coordinates.map(stepsOf), [[0, 0], [2, 0], [4, 0]]);
   assert.deepEqual(afterOf(edits, '1').geometry.coordinates.map(stepsOf), [[2, 0], [2, 1]]);
-  const crossing = entriesFrom('roads.geojson', [road([[0, 0], [4, 0]]), road([[2, -1], [2, 1]])]);
-  const [found] = jointsIn(everything, crossing).filter(({status}) => status === 'crossing');
-  const joined = joinEdits(found).edits;
+  const crossing = contextWith({roads: [road([[0, 0], [4, 0]]), road([[2, -1], [2, 1]])]});
+  const [found] = jointsIn(everything, roadsOf(crossing)).filter(({status}) => status === 'crossing');
+  const joined = joinEdits(found, crossing).edits;
   for (const {after} of joined) assert.deepEqual(stepsOf(after.geometry.coordinates[1]), [2, 0]);
   const after = entriesFrom('roads.geojson', joined.map(edit => edit.after));
   assert.equal(jointAt(joined[0].after.geometry.coordinates[1], after).status, 'joined');
@@ -171,12 +182,12 @@ test('a disconnected end is pulled back and leaves its junction and the rules th
     rules: [rule]
   });
   const joint = jointAt(at(1, 0), roadsOf(context));
-  const ending = disconnectEdits(joint, joint.members[0], context);
+  const ending = disconnectEdits(joint.members[0], context);
   const pulled = afterOf(ending.edits, '0');
   assert.ok(stepsOf(pulled.geometry.coordinates[1])[0] < 1);
   assert.match(pulled.properties.endNode, /^local:/);
   assert.deepEqual(ending.edits[1], {filename: 'turn-restrictions.json', key: '0', after: null});
-  const passing = disconnectEdits(joint, joint.members[1], context);
+  const passing = disconnectEdits(joint.members[1], context);
   assert.deepEqual(afterOf(passing.edits, '1').geometry.coordinates.map(stepsOf), [[1, -1], [1, 1]]);
 });
 
@@ -200,32 +211,161 @@ test('roads are split at a junction in one step, and a rule at the far end follo
   assert.match(splitEdits(jointAt(at(1, 0), roadsOf(through)), through).problem, /turn rules/);
 });
 
+// What Apply of a road records, the road itself first.
+function applied({key, before, coordinates, origins, properties = {}, freePoints = new Set()}, context) {
+  const feature = {...before, properties: {...before.properties, ...properties}, geometry: line(coordinates)};
+  const edit = {key, before, feature, origins, freePoints};
+  const own = roadWithEnds(edit, context);
+  const {edits, problem} = companionsOfRoad({...edit, feature: own}, context);
+  return {own, edits, problem};
+}
+
 test('joined roads and what stands on the junction go with a moved point, also when points were added', () => {
   const light = {type: 'Feature', properties: {kind: 'crossing'}, geometry: {type: 'Point', coordinates: at(1, 0)}};
   const before = road([[0, 0], [1, 0], [2, 0]]);
   const context = contextWith({roads: [before, road([[1, 0], [1, 1]]), road([[1, 0], [1, -1]], {startLevel: -1})], nodes: [light]});
-  const after = road([[0, 0], [0.5, 0], [1, 0.2], [2, 0]]);
-  assert.deepEqual(movedPoints(before, after).map(({from, to}) => [stepsOf(from), stepsOf(to)]), [[[1, 0], [1, 0.2]]]);
-  const edits = followingEdits({key: '0', before, feature: after}, context);
+  const change = {key: '0', before, coordinates: [[0, 0], [0.5, 0], [1, 0.2], [2, 0]], origins: [0, null, 1, 2]};
+  const {edits} = applied(change, context);
   assert.deepEqual(edits.map(({filename, key}) => `${filename} ${key}`), ['roads.geojson 1', 'road-nodes.geojson 0']);
   assert.deepEqual(stepsOf(afterOf(edits, '1').geometry.coordinates[0]), [1, 0.2]);
-  assert.deepEqual(followingEdits({key: '0', before, feature: after}, context, new Set(['19.250100 42.440000'])), []);
+  // Put where no other road is, so that it joins none.
+  const freeChange = {...change, coordinates: [[0, 0], [0.5, 0], [1.3, 0.2], [2, 0]]};
+  const freed = applied({...freeChange, freePoints: new Set(['19.250100 42.440000'])}, context);
+  assert.deepEqual(freed.edits, []);
+});
+
+test('a point that was taken out moves nobody, and one added beside it takes no join', () => {
+  const before = road([[0, 0], [1, 0], [2, 0], [3, 0]]);
+  const context = contextWith({roads: [before, road([[1, 0], [1, 1]])]});
+  // The joined point is removed and the next one dragged.
+  const removed = applied({key: '0', before, coordinates: [[0, 0], [2, 0.5], [3, 0]], origins: [0, 2, 3]}, context);
+  assert.deepEqual(removed.edits, []);
+  // A point is added just before the joined one, which is dragged far.
+  const added = applied({key: '0', before, coordinates: [[0, 0], [0.9, 0], [1, 5], [2, 0], [3, 0]], origins: [0, null, 1, 2, 3]}, context);
+  assert.deepEqual(stepsOf(afterOf(added.edits, '1').geometry.coordinates[0]), [1, 5]);
+});
+
+test('origins are followed through a reversal, and through a change whose steps are not known', () => {
+  const coordinates = line([[0, 0], [1, 0], [2, 0]]).coordinates;
+  const origins = startingOrigins({coordinates});
+  assert.deepEqual(originsAfter(coordinates, origins, coordinates.toReversed()), [2, 1, 0]);
+  assert.deepEqual(originsAfter(coordinates, origins, line([[0, 0], [1, 1], [2, 0]]).coordinates), [0, 1, 2]);
+  assert.deepEqual(originsAfter(coordinates, origins, line([[0, 0], [2, 0]]).coordinates), [0, 2]);
+  assert.deepEqual(originsAfter(coordinates, origins, line([[0, 0], [1, 0], [2, 0], [3, 0]]).coordinates), [0, 1, 2, null]);
+  assert.deepEqual(movedPoints({coordinates}, line([[0, 0], [2, 0]])), []);
 });
 
 test('a drawn end takes the junction and level it meets, and one taken away gets its own', () => {
-  const roads = entriesFrom('roads.geojson', [
-    road([[0, 0], [1, 0]], {endNode: 12, endLevel: -1}),
-    road([[4, 0], [6, 0]], {layer: '1'})
-  ]);
-  const drawn = roadWithEnds({key: 'local:1', feature: road([[1, 0], [5, 0]]), before: null}, roads);
+  const context = contextWith({roads: [road([[0, 0], [1, 0]], {endNode: 12, endLevel: -1}), road([[4, 0], [6, 0]], {layer: '1'})]});
+  const drawn = roadWithEnds({key: 'local:1', feature: road([[1, 0], [5, 0]]), before: null}, context);
   assert.deepEqual([drawn.properties.startNode, drawn.properties.startLevel], [12, -1]);
   assert.equal(drawn.properties.endLevel, 1, 'the level of the road it is put on');
   assert.match(drawn.properties.endNode, /^local:/);
-  const [{feature: before}] = roads;
-  const moved = road([[0, 0], [1, 1]], {endNode: 12, endLevel: -1});
-  assert.equal(roadWithEnds({key: '0', feature: moved, before}, roads).properties.endNode, 12, 'the junction moves along');
-  const freed = roadWithEnds({key: '0', feature: moved, before}, roads, {freePoints: new Set(['19.250100 42.440000'])});
-  assert.match(freed.properties.endNode, /^local:/);
+  const [{feature: before}] = roadsOf(context);
+  const change = {key: '0', before, coordinates: [[0, 0], [1, 1]]};
+  assert.equal(applied(change, context).own.properties.endNode, 12, 'the junction moves along');
+  assert.match(applied({...change, freePoints: new Set(['19.250100 42.440000'])}, context).own.properties.endNode, /^local:/);
+  // Without its last point the road ends somewhere else.
+  const shortened = road([[0, 0], [1, 0], [2, 0]], {endNode: 12, endLevel: 1});
+  const alone = contextWith({roads: [shortened]});
+  const {own} = applied({key: '0', before: shortened, coordinates: [[0, 0], [1, 0]], origins: [0, 1]}, alone);
+  assert.match(own.properties.endNode, /^local:/);
+  assert.equal(own.properties.endLevel, 0);
+});
+
+const ruleFor = properties => ({type: 'Feature', geometry: null, properties: {restriction: 'no_left_turn', viaNodes: [5], ...properties}});
+
+test('a joint dragged onto a bridge or another junction takes everyone to its level and its ID, with their rules', () => {
+  const first = road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const second = road([[1, 0], [1, -3]], {entityId: 'way/2', startNode: 5, startLevel: 0});
+  const rule = ruleFor({from: 1, to: 2});
+  const ontoBridge = contextWith({roads: [first, second, road([[2, -1], [2, 1]], {layer: '1'})], rules: [rule]});
+  const change = {key: '0', before: first, coordinates: [[0, 0], [2, 0]], origins: [0, 1]};
+  const bridge = applied(change, ontoBridge);
+  const follower = afterOf(bridge.edits, '1').properties;
+  assert.deepEqual([bridge.own.properties.endLevel, follower.startLevel], [1, 1]);
+  assert.equal(follower.startNode, bridge.own.properties.endNode);
+  assert.deepEqual(afterOf(bridge.edits, '2').geometry.coordinates.map(stepsOf), [[2, -1], [2, 0], [2, 1]]);
+  const other = road([[2, 0], [3, 0]], {entityId: 'way/3', startNode: 30, startLevel: 0});
+  const ontoJunction = contextWith({roads: [first, second, other], rules: [rule]});
+  const merged = applied(change, ontoJunction);
+  assert.deepEqual([merged.own.properties.endNode, afterOf(merged.edits, '1').properties.startNode], [30, 30]);
+  const [ruleEdit] = merged.edits.filter(({filename}) => filename === 'turn-restrictions.json');
+  assert.deepEqual(ruleEdit.after.properties.viaNodes, [30]);
+});
+
+test('a joint with a passing road is not put on another level', () => {
+  const ending = road([[0, 0], [1, 0]], {endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [ending, road([[1, -1], [1, 0], [1, 1]]), road([[2, -1], [2, 1]], {layer: '1'})]});
+  assert.match(applied({key: '0', before: ending, coordinates: [[0, 0], [2, 0]], origins: [0, 1]}, context).problem, /another level/);
+});
+
+test('a rule of a road that leaves its junction goes, whichever way it leaves', () => {
+  const first = road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const second = road([[1, 0], [1, 1]], {entityId: 'way/2', startNode: 5, startLevel: 0});
+  const roads = [first, second, road([[1, 0], [2, 0]], {entityId: 'way/3', startNode: 5, startLevel: 0})];
+  const rules = [ruleFor({from: 1, to: 2}), ruleFor({from: 2, to: 3}), ruleFor({from: 1, to: 1, restriction: 'no_u_turn'})];
+  const context = contextWith({roads, rules});
+  const deletedRules = edits => edits.filter(({filename, after}) => filename === 'turn-restrictions.json' && !after).map(({key}) => key);
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  // In the panel, as the first road of the joint: the junction stays with the others.
+  const {edits} = junctionEdits(joint, joint.coordinate, {[levelChoiceKey(joint.members[0])]: 1}, context);
+  assert.deepEqual(deletedRules(edits), ['0', '2']);
+  assert.deepEqual(edits.filter(({filename}) => filename === 'roads.geojson').map(({key}) => key), ['0']);
+  // In the form of the road, and by disconnecting it while its points are edited.
+  const raised = applied({key: '0', before: first, coordinates: [[0, 0], [1, 0]], properties: {endLevel: 1}}, context);
+  assert.deepEqual(deletedRules(raised.edits), ['0', '2']);
+  const freePoints = new Set(['19.250100 42.440000']);
+  assert.deepEqual(deletedRules(applied({key: '0', before: first, coordinates: [[0, 0], [0.8, 0]], freePoints}, context).edits), ['0', '2']);
+  // When all of them leave together, it is still the same junction.
+  const choices = Object.fromEntries(joint.members.map(member => [levelChoiceKey(member), 1]));
+  const together = junctionEdits(joint, joint.coordinate, choices, context).edits;
+  assert.deepEqual(deletedRules(together), []);
+  assert.deepEqual(new Set(together.map(({after}) => after.properties.endNode ?? after.properties.startNode)), new Set([5]));
+});
+
+test('a level and a turn chosen in one step are both recorded', () => {
+  const roads = [
+    road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0}),
+    road([[1, 0], [1, 1]], {entityId: 'way/2', startNode: 5, startLevel: 0}),
+    road([[1, 0], [2, 0]], {entityId: 'way/3', startNode: 5, startLevel: 0})
+  ];
+  const context = contextWith({roads});
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  const {from, turns} = turnsAt(joint).find(group => group.from.member.entry.key === '0');
+  const onto = key => turns.find(({to}) => to.member.entry.key === key).to;
+  const choices = {
+    [levelChoiceKey(joint.members[2])]: 1,
+    [turnKey(from, onto('1'))]: false,
+    // A turn onto the road that leaves the level is none any more.
+    [turnKey(from, onto('2'))]: false
+  };
+  const {edits} = junctionEdits(joint, joint.coordinate, choices, context);
+  assert.equal(afterOf(edits, '2').properties.startLevel, 1);
+  const added = edits.filter(({filename}) => filename === 'turn-restrictions.json');
+  assert.deepEqual(added.map(({after}) => [after.properties.from, after.properties.to]), [[1, 2]]);
+});
+
+test('a ring is at its junction once, stays whole, and its turns have rules', () => {
+  const ring = road([[0, 0], [1, 1], [2, 0], [1, -1], [0, 0]], {
+    entityId: 'way/9', junction: 'roundabout', oneway: 'yes', startNode: 5, endNode: 5, startLevel: 0, endLevel: 0
+  });
+  const arm = road([[-2, 0], [0, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [ring, arm]});
+  const joint = jointAt(at(0, 0), roadsOf(context));
+  assert.deepEqual(joint.members.map(({entry, isRing}) => [entry.key, isRing]), [['0', true], ['1', false]]);
+  assert.match(disconnectProblem(ring, 0), /ring/);
+  const {turns, from} = turnsAt(joint).find(group => group.from.member.entry.key === '1');
+  assert.deepEqual(turns.map(({canRecord}) => canRecord), [true, true]);
+  const {edits} = junctionEdits(joint, at(0, 0.2), {[turnKey(from, turns.at(-1).to)]: false}, context);
+  const {coordinates} = afterOf(edits, '0').geometry;
+  assert.deepEqual([stepsOf(coordinates[0]), stepsOf(coordinates.at(-1))], [[0, 0.2], [0, 0.2]]);
+  assert.equal(roadBehaviors['roads.geojson'].marks(ring).length, 1);
+});
+
+test('a road cut by the edge of the detailed map is no dead end', () => {
+  const roads = entriesFrom('roads.geojson', [road([[0, 0], [1, 0]], {entityId: 'way/1', startNode: 5, startLevel: 0})]);
+  assert.deepEqual([jointAt(at(0, 0), roads).status, jointAt(at(1, 0), roads).status], ['deadEnd', 'cutOff']);
 });
 
 test('a junction records its roads and never itself', () => {
