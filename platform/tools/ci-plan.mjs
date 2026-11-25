@@ -171,8 +171,12 @@ export const EDITOR_BROWSER_AREAS = {
   },
   layers: {
     specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
-    // 2 shards: layers took 330 s with 7 specs in one (#421); 2 took 201 and 139 s with 8 (#422).
-    jobs: 2,
+    // 3 shards: #441 took 367 and 222 s with 2 jobs against the 420 s gate. At CI's 2 workers, Playwright divides the
+    // 33 listed tests (both projects, tagged phone tests) into 11 each; the order of LAYER_SPECS does not move them.
+    // Shard 1 holds addresses, buildings, layers, nature and one relief test (~270 s per job); shard 2 holds four relief
+    // and seven roads tests (~230 s); shard 3 holds desktop sketches and transport plus five phone tests (~130 s).
+    // The estimates use #441's per-test times; all eight specs stay in the list.
+    jobs: 3,
     specFiles: LAYER_SPECS,
     sources: EDITING_ONLY_SOURCES
   },

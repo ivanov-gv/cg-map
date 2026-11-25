@@ -472,11 +472,12 @@ test('the editing spec on the mobile layout runs in two jobs', () => {
   );
 });
 
-test('the layer specs run in two jobs', () => {
+test('the layer specs run in three jobs', () => {
   const jobs = browserMatrix(['layers'], EDITOR_BROWSER_AREAS).include;
   assert.deepEqual(jobs, [
-    {area: 'layers-1', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=1/2`},
-    {area: 'layers-2', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=2/2`}
+    {area: 'layers-1', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=1/3`},
+    {area: 'layers-2', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=2/3`},
+    {area: 'layers-3', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=3/3`}
   ]);
 });
 
