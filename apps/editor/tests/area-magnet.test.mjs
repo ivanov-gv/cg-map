@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {magneticallyMoved, magneticPoint, neighbouringAreas} from '../src/area-magnet.js';
+import {magneticallyMoved, magneticPoint, neighbouringAreas, usedDrawingPoints} from '../src/area-magnet.js';
 import {doOverlap, overlapNotice} from '../src/area-overlap.js';
 
 // About eight metres east and eleven north.
@@ -83,6 +83,27 @@ test('a corner is never magnetised onto a point the shape already has', () => {
   const nearby = at(2.1, 0.1);
   assert.deepEqual(magneticPoint(nearby, [house], reach), firstCorner);
   assert.notDeepEqual(magneticPoint(nearby, [house], reach, [firstCorner]), firstCorner);
+});
+
+test('the two clicks of a double click beside a neighbour keep the same corner', () => {
+  const beside = at(2.1, 1.9);
+  const drawn = [at(4, 0), at(4, 2)];
+  const first = magneticPoint(beside, [house], reach, usedDrawingPoints(drawn));
+  assert.deepEqual(first, at(2, 2));
+  const second = magneticPoint(beside, [house], reach, usedDrawingPoints([...drawn, first]));
+  assert.deepEqual(second, at(2, 2));
+  // Once another corner is drawn, the old one is used again and is no longer a target.
+  const later = magneticPoint(beside, [house], reach, usedDrawingPoints([...drawn, first, at(5, 5)]));
+  assert.notDeepEqual(later, at(2, 2));
+});
+
+test('a hole corner stays off the outline it cuts', () => {
+  const open = square(0, 0);
+  const neighbour = entry('neighbour', square(2, 0));
+  const used = usedDrawingPoints([], open);
+  assert.deepEqual(magneticPoint(at(1.9, 1), [neighbour], reach, used), at(2, 1));
+  assert.equal(magneticPoint(at(1.9, 1), [neighbour], reach, used, open), null);
+  assert.notDeepEqual(magneticPoint(at(2.1, 1.9), [neighbour], reach, used, open), at(2, 2));
 });
 
 test('an emptied area has no outline to pull or to overlap', () => {

@@ -1,6 +1,6 @@
 // Areas of one kind that are put side by side share their corners and sides. A point close to a neighbour goes to it.
 import {roundedCoordinate, translateGeometry} from './geometry-editing.js';
-import {coordinateAtOffset, distanceMetres, nearestPointOnOutline} from './geometry-measures.js';
+import {coordinateAtOffset, distanceMetres, nearestPointOnOutline, nearestPointOnSegment} from './geometry-measures.js';
 import {featureCapabilities} from './layer-rules.js';
 import {boundsOf, createKeptBox, entriesWithin} from './road-graph.js';
 
@@ -78,38 +78,29 @@ function nearestOf(candidates) {
 
 const isSameCoordinate = ([east, north], [otherEast, otherNorth]) => east === otherEast && north === otherNorth;
 
-// A point already in the shape must not be pulled together with the one being placed, or the shape collapses.
+// A source coordinate is rounded to seven decimals. Twice that margin decides what lies on an outline.
+const outlineToleranceMetres = 0.02;
+
+export const outlineCorners = geometry =>
+  hasOutline(geometry) ? ringsOf(geometry).flatMap(ring => ring.slice(0, -1)) : [];
+
+// What a new corner must not repeat: the outline of a hole's object, and every drawn corner except the newest. The
+// newest is left out so a double click can repeat it exactly and be recognised as one point.
+export function usedDrawingPoints(drawnPoints, openGeometry = null) {
+  return [...outlineCorners(openGeometry), ...drawnPoints.slice(0, -1)];
+}
+
+// A point already used must not be pulled together with the one being placed, or the shape collapses.
 const notUsed = (points, usedPoints) => points.filter(point => !usedPoints.some(used => isSameCoordinate(point, used)));
 
-const cornersOf = entries =>
-  entries
-    .filter(({feature}) => hasOutline(feature.geometry))
-    .flatMap(({feature}) => ringsOf(feature.geometry).flatMap(ring => ring.slice(0, -1)));
+const cornersOf = entries => entries.flatMap(({feature}) => outlineCorners(feature.geometry));
 
 function nearestCorner(coordinate, corners) {
   return nearestOf(corners.map(corner => ({target: corner, distance: distanceMetres(corner, coordinate)})));
 }
 
-function nearestSide(coordinate, entries, usedPoints) {
-  const targets = entries
-    .filter(({feature}) => hasOutline(feature.geometry))
-    .map(({feature}) => nearestPointOnOutline(coordinate, ringsOf(feature.geometry)).coordinate)
-    .map(roundedCoordinate)
-    .filter(target => !usedPoints.some(used => isSameCoordinate(target, used)));
-  return nearestOf(targets.map(target => ({target, distance: distanceMetres(coordinate, target)})));
-}
-
-// Where a point goes: to the nearest corner within reach, otherwise onto the nearest side, or null.
-export function magneticPoint(coordinate, entries, reach, usedPoints = []) {
-  if (!(reach > 0)) return null;
-  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), usedPoints));
-  if (corner.distance <= reach) return corner.target;
-  const side = nearestSide(coordinate, entries, usedPoints);
-  return side.distance <= reach ? side.target : null;
-}
-
 // A cell is at least as wide as the reach in both directions, so a nearby corner is in one of the nine cells around a
-// point. Only those cells are read, which keeps a long outline quick to move.
+// point. Sides are filtered by the same reach box before any segment is measured, which keeps a long outline quick.
 const cellKey = (column, row) => `${column},${row}`;
 
 function reachInDegrees(coordinate, reach) {
@@ -125,6 +116,63 @@ function cellsOf(corners, sizeDegrees) {
     cells.get(key).push(corner);
   }
   return cells;
+}
+
+function sideIndex(entries) {
+  return entries.flatMap(({feature}) =>
+    outlineCorners(feature.geometry).map((start, index, corners) => {
+      const end = corners[(index + 1) % corners.length];
+      return {
+        start,
+        end,
+        bounds: [
+          Math.min(start[0], end[0]),
+          Math.min(start[1], end[1]),
+          Math.max(start[0], end[0]),
+          Math.max(start[1], end[1])
+        ]
+      };
+    })
+  );
+}
+
+function nearbySegments(segments, coordinate, sizeDegrees) {
+  const reachBox = [
+    coordinate[0] - sizeDegrees,
+    coordinate[1] - sizeDegrees,
+    coordinate[0] + sizeDegrees,
+    coordinate[1] + sizeDegrees
+  ];
+  return segments.filter(
+    ({bounds}) =>
+      bounds[0] <= reachBox[2] &&
+      bounds[2] >= reachBox[0] &&
+      bounds[1] <= reachBox[3] &&
+      bounds[3] >= reachBox[1]
+  );
+}
+
+function isOnOutline(target, geometry) {
+  if (!hasOutline(geometry)) return false;
+  return nearestPointOnOutline(target, ringsOf(geometry)).distanceMetres <= outlineToleranceMetres;
+}
+
+function nearestSideIn(segments, coordinate, sizeDegrees, usedPoints, avoidGeometry) {
+  const targets = nearbySegments(segments, coordinate, sizeDegrees)
+    .map(({start, end}) => roundedCoordinate(nearestPointOnSegment(coordinate, start, end)))
+    .filter(target => !usedPoints.some(used => isSameCoordinate(target, used)))
+    .filter(target => !isOnOutline(target, avoidGeometry));
+  return nearestOf(targets.map(target => ({target, distance: distanceMetres(coordinate, target)})));
+}
+
+// Where a point goes: to the nearest corner within reach, otherwise onto the nearest side, or null.
+export function magneticPoint(coordinate, entries, reach, usedPoints = [], avoidGeometry = null) {
+  if (!(reach > 0)) return null;
+  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), usedPoints));
+  if (corner.distance <= reach) return corner.target;
+  const sizeDegrees = reachInDegrees(coordinate, reach);
+  const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, usedPoints, avoidGeometry);
+  return side.distance <= reach ? side.target : null;
 }
 
 const adjacentOffsets = [-1, 0, 1];
@@ -157,7 +205,10 @@ export function magneticallyMoved(geometry, entries, reach) {
     const {corner, target} = closest;
     return translateGeometry(geometry, target[0] - corner[0], target[1] - corner[1]);
   }
-  const toSide = nearestOf(own.map(corner => ({corner, ...nearestSide(corner, entries, [])})));
+  const segments = sideIndex(entries);
+  const toSide = nearestOf(
+    own.map(corner => ({corner, ...nearestSideIn(segments, corner, sizeDegrees, [], null)}))
+  );
   if (toSide.distance > reach) return geometry;
   const {corner, target} = toSide;
   return translateGeometry(geometry, target[0] - corner[0], target[1] - corner[1]);

@@ -116,8 +116,8 @@ const selectedCorners = async page => {
 test('a building is drawn and moved against its neighbour, and an overlap is said and shown', async ({page}, testInfo) => {
   await startDrawing(page, 'Draw building');
   await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
-  // Beside the house: the first corners go to its corner and its side.
-  await tapAt(page, [-0.95, 1.05]);
+  // A double click beside the house's corner leaves one corner, not two close together.
+  await tapAt(page, [-0.95, 1.05], {clickCount: 2});
   await expect.poll(() => drawnCorners(page)).toEqual([[-1, 1]]);
   for (const corner of [[0.5, 1], [0.5, 2], [-0.96, 2]]) await tapAt(page, corner);
   await page.locator('#mode-done').click();
@@ -134,7 +134,7 @@ test('a building is drawn and moved against its neighbour, and an overlap is sai
     [0.5, 1],
     [-1, 1]
   ]);
-  // At a wider zoom the whole step is within reach, so the corner goes to the house's far corner and not beside it.
+  // At zoom 17 a 12 px reach is about 5 m, so only the target corner is close enough, not the rest of the step.
   await centreOn(page, [-1, 2], 17);
   await dragFromTo(page, [-1, 2], [-0.95, 3.05]);
   await expect.poll(() => selectedCorners(page)).toEqual([
