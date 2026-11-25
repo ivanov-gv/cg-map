@@ -5,8 +5,7 @@ import {
   magnetAvoidance,
   magneticallyMoved,
   magneticPoint,
-  neighbouringAreas,
-  usedDrawingPoints
+  neighbouringAreas
 } from '../src/area-magnet.js';
 import {doOverlap, overlapNotice} from '../src/area-overlap.js';
 
@@ -89,10 +88,8 @@ test('a corner is never magnetised onto a point the shape already has', () => {
   const firstCorner = at(2, 0);
   const nearby = at(2.1, 0.1);
   assert.deepEqual(magneticPoint(nearby, [house], reach), firstCorner);
-  const used = usedDrawingPoints([firstCorner]);
-  assert.deepEqual(used, [firstCorner], 'the list the probe asks for includes the newest point');
-  assert.notDeepEqual(magneticPoint(nearby, [house], reach, used), firstCorner);
   assert.notDeepEqual(magneticPoint(nearby, [house], reach, magnetAvoidance([firstCorner])), firstCorner);
+  assert.notDeepEqual(magneticPoint(nearby, [house], reach, drawingAvoidance([firstCorner])), firstCorner);
 });
 
 test('a side is never invented across separate parts or across a hole', () => {

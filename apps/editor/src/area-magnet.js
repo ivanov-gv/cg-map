@@ -86,10 +86,10 @@ export const outlineCorners = geometry =>
 
 // One value carries what a magnetised point must avoid: used corners, and an outline for a hole being cut.
 export const magnetAvoidance = (usedPoints = [], avoidGeometry = null) => ({usedPoints, avoidGeometry});
-export const noAvoidance = Object.freeze({usedPoints: [], avoidGeometry: null});
+export const noAvoidance = Object.freeze(magnetAvoidance());
 
 // The points a drawing must not repeat: the outline it cuts, and every point it has put down, newest included.
-export const usedDrawingPoints = (drawnPoints = [], openGeometry = null) => [
+const usedDrawingPoints = (drawnPoints = [], openGeometry = null) => [
   ...outlineCorners(openGeometry),
   ...drawnPoints
 ];
@@ -187,17 +187,13 @@ function nearestSideIn(segments, coordinate, sizeDegrees, avoidance) {
   return nearestOf(targets.map(target => ({target, distance: distanceMetres(coordinate, target)})));
 }
 
-// The probe passes a bare list of used points; that means there is no outline to avoid.
-const avoidanceOf = avoidance => (Array.isArray(avoidance) ? magnetAvoidance(avoidance) : avoidance ?? noAvoidance);
-
 // Where a point goes: to the nearest corner within reach, otherwise onto the nearest side, or null.
 export function magneticPoint(coordinate, entries, reach, avoidance = noAvoidance) {
   if (!(reach > 0)) return null;
-  const whatToAvoid = avoidanceOf(avoidance);
-  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), whatToAvoid.usedPoints));
+  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), avoidance.usedPoints));
   if (corner.distance <= reach) return corner.target;
   const sizeDegrees = reachInDegrees(coordinate, reach);
-  const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, whatToAvoid);
+  const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, avoidance);
   return side.distance <= reach ? side.target : null;
 }
 
