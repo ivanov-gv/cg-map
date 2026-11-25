@@ -10,6 +10,8 @@ import {
   startMode
 } from './workspace.mjs';
 
+const isPhone = testInfo => testInfo.project.name === 'pages-mobile';
+
 // Panel navigation keeps the same editing and review assertions usable at either viewport size.
 async function openPanel(page, name) {
   const button = page.getByRole('button', {name, exact: true});
@@ -1230,24 +1232,53 @@ test.describe('source editing', () => {
     expectCoordinateNear(changeset.operations[0].after.geometry.coordinates, expected);
   });
 
-  test('a new POI gets a local identity, and deleting a source POI can be undone', async ({page}, testInfo) => {
+  // With a fixed cross the map moves under it; at the desk the point is clicked.
+  const drawPointAt = async (page, coordinate) => {
+    await uncoverMap(page);
+    const addPoint = page.locator('#mode-add');
+    if (!(await addPoint.isVisible())) {
+      await tapMapAt(page, coordinate);
+      return;
+    }
+    await page.evaluate(center => window.editorDebug.map.jumpTo({center}), coordinate);
+    await addPoint.click();
+  };
+
+  test('a new POI gets a local identity, and deleting or marking a source POI can be undone', {tag: '@phone'}, async ({
+    page
+  }, testInfo) => {
     await openEditor(page);
     const {feature} = await selectPlace(page);
     await openInspector(page);
-    await deleteObject(page);
-    await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
-    await expect(page.locator(`[data-changed-file="${placesFile}"] .review-stacked-list > li > details > summary`)).toContainText('delete');
-    await openPanel(page, 'Tools');
-    await page.locator('#undo').click();
-    await openPanel(page, 'Changes');
-    await expect(page.locator('#review-empty')).toBeVisible();
-    await expect(page.locator('#status')).toContainText('objects');
+    if (isPhone(testInfo)) {
+      // The mark stays for the desk; only the mark itself is taken back here.
+      await expect(page.locator('#delete-feature')).toHaveText('Mark for deletion');
+      await deleteObject(page);
+      await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+      await expect(page.locator('#toast')).toContainText('Marked for deletion');
+      await openPanel(page, 'Changes');
+      await expect(page.locator('#field-items')).toContainText('Marked for deletion');
+      await expect(page.locator('#change-count')).toHaveText('1');
+      await page.locator('#toast-action').click();
+      await expect(page.locator('#field-items li')).toHaveCount(0);
+      await expect(page.locator('#review-empty')).toBeVisible();
+      await expect(page.locator('#status')).toContainText('objects');
+    } else {
+      await deleteObject(page);
+      await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
+      await expect(page.locator(`[data-changed-file="${placesFile}"] .review-stacked-list > li > details > summary`)).toContainText('delete');
+      await openPanel(page, 'Tools');
+      await page.locator('#undo').click();
+      await openPanel(page, 'Changes');
+      await expect(page.locator('#review-empty')).toBeVisible();
+      await expect(page.locator('#status')).toContainText('objects');
+    }
 
     await openPanel(page, 'Tools');
     await drawChoice(page).click();
     await expect(drawChoice(page)).toHaveText('Add POI');
     await expect(page.locator('.inspector')).toBeHidden();
-    await tapMapAt(page, await coordinateOffsetBy(page, feature.geometry.coordinates, 70, 40));
+    await drawPointAt(page, await coordinateOffsetBy(page, feature.geometry.coordinates, 70, 40));
     await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await openInspector(page);
@@ -1274,18 +1305,6 @@ test.describe('source editing', () => {
     expect(operation.after.properties.visibilityLevel).toBe(4);
     expect(operation.before).toBeNull();
   });
-
-  // With a fixed cross the map moves under it; at the desk the point is clicked.
-  const drawPointAt = async (page, coordinate) => {
-    await uncoverMap(page);
-    const addPoint = page.locator('#mode-add');
-    if (!(await addPoint.isVisible())) {
-      await tapMapAt(page, coordinate);
-      return;
-    }
-    await page.evaluate(center => window.editorDebug.map.jumpTo({center}), coordinate);
-    await addPoint.click();
-  };
 
   // Draws a short line from a coordinate. At the desk a double click could end it as well; Finish does on every device.
   const drawLine = async (page, center) => {
