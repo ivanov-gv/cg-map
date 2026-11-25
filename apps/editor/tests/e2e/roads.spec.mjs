@@ -127,6 +127,9 @@ test('a dragged point joins the road it is put on and takes joined roads along',
   await applyEdit(page);
   await tapAt(page, [-1, 0]);
   await editCorners(page);
+  // A tap on a joined point picks the point, not its junction.
+  await tapAt(page, [2, 0]);
+  await expect(page.locator('#vertex-disconnect')).toBeEnabled();
   await dragFromTo(page, [2, 0], [2, 1]);
   await page.locator('#mode-done').click();
   await applyEdit(page);
