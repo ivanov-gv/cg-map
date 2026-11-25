@@ -228,6 +228,7 @@ export const SHARED_EDITOR_SOURCES = [
   'inspector-editing.js',
   'inspector-viewport.js',
   'property-form.js',
+  'usual-values.js',
   'review-panel.js',
   'joint-layer.js',
   'layer-joints.js',

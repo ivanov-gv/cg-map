@@ -1,3 +1,5 @@
+import {lineColours} from './usual-values.js';
+
 // What each property is called in a form, and its values in plain words. Attributes come from the layer rules; the
 // catalog only names them.
 const fieldLabels = {
@@ -63,7 +65,8 @@ const fieldLabels = {
   stopId: 'Stop ID',
   number: 'Number',
   network: 'Network',
-  colour: 'Colour'
+  colour: 'Colour',
+  osmTag: 'Type'
 };
 
 const accessLabels = {yes: 'Allowed', no: 'Not allowed', designated: 'Meant for it', use_sidepath: 'Only beside the road'};
@@ -91,6 +94,12 @@ const valueLabels = {
   motor_vehicle: accessLabels,
   foot: accessLabels,
   bicycle: accessLabels,
+  colour: lineColours,
+  osmTag: {
+    'leisure=nature_reserve': 'Nature reserve',
+    'boundary=national_park': 'National park',
+    'boundary=protected_area': 'Protected area'
+  },
   bridge: {yes: 'Bridge', no: 'No bridge'},
   tunnel: {yes: 'Tunnel', no: 'No tunnel'}
 };
@@ -99,6 +108,10 @@ const capitalized = text => text.charAt(0).toUpperCase() + text.slice(1);
 const inWords = text => capitalized(String(text).replaceAll('_', ' '));
 
 export const fieldLabel = name => fieldLabels[name] ?? inWords(name);
+
+// What an optional field means while nothing is chosen.
+const noValueLabels = {minzoom: '— decided by the map', colour: '— the colour of its kind'};
+export const noValueLabel = name => noValueLabels[name] ?? '— not recorded';
 
 export const valueLabel = (name, value) => valueLabels[name]?.[value] ?? inWords(value);
 

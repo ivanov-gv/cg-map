@@ -299,18 +299,36 @@ export function splitEdits(joint, context) {
   return done([...roads.edits(), ...added, ...rules.edits()]);
 }
 
-function furnitureEdit(coordinate, kind, context) {
+// The facts of what stands at a junction that only one kind has.
+const furnitureFacts = ['crossing', 'traffic_signals'];
+
+// What stands at a junction once its choices are applied, or null for nothing.
+function furnitureAfter(known, choices) {
+  const properties = known?.feature.properties ?? {};
+  const kind = choices.furniture ?? properties.kind ?? '';
+  if (!kind) return null;
+  // A source can say both of a crossing with lights. Only another kind makes the facts of the one before wrong.
+  const isSameKind = kind === properties.kind;
+  const isKept = ([name]) => isSameKind || !furnitureFacts.includes(name);
+  const kept = Object.fromEntries(Object.entries(properties).filter(isKept));
+  const isChosen = furnitureFacts.includes(kind) && choices[kind] !== undefined;
+  const stated = {...kept, ...(isChosen ? {[kind]: choices[kind]} : {}), kind};
+  // Nothing recorded is no value.
+  return Object.fromEntries(Object.entries(stated).filter(([, value]) => value !== ''));
+}
+
+const isFurnitureChosen = choices => ['furniture', ...furnitureFacts].some(name => choices[name] !== undefined);
+
+function furnitureEdit(coordinate, choices, context) {
+  if (!isFurnitureChosen(choices)) return [];
   const known = nodeEntryAt(context.entriesOf(nodesFile), coordinate);
-  if ((known?.feature.properties.kind ?? '') === kind) return [];
-  if (!kind) return [{filename: nodesFile, key: known.key, after: null}];
-  if (known) {
-    const {crossing, traffic_signals: signals, ...kept} = known.feature.properties;
-    const ownFacts = {crossing: {crossing}, traffic_signals: {traffic_signals: signals}}[kind] ?? {};
-    const stated = Object.fromEntries(Object.entries(ownFacts).filter(([, value]) => value !== undefined));
-    return [{filename: nodesFile, key: known.key, after: {...known.feature, properties: {...kept, ...stated, kind}}}];
-  }
+  const properties = furnitureAfter(known, choices);
+  if (!properties) return known ? [{filename: nodesFile, key: known.key, after: null}] : [];
+  const isUnchanged = known && [...furnitureFacts, 'kind'].every(name => known.feature.properties[name] === properties[name]);
+  if (isUnchanged) return [];
+  if (known) return [{filename: nodesFile, key: known.key, after: {...known.feature, properties}}];
   const geometry = {type: 'Point', coordinates: coordinate};
-  return [{filename: nodesFile, key: newLocalId(), after: {type: 'Feature', properties: {kind}, geometry}}];
+  return [{filename: nodesFile, key: newLocalId(), after: {type: 'Feature', properties, geometry}}];
 }
 
 export const levelChoiceKey = ({entry, index}) => `level:${entry.key}/${index}`;
@@ -401,8 +419,7 @@ export function junctionEdits(joint, coordinate, choices, context) {
   applyLevelChoices(roads, withChosenLevels(joint, choices));
   const chosen = jointAfter(joint, roads);
   const addedRules = applyTurnChoices(roads, rules, chosen, choices, context);
-  const kind = choices.furniture ?? nodeEntryAt(context.entriesOf(nodesFile), joint.coordinate)?.feature.properties.kind ?? '';
-  const furniture = furnitureEdit(joint.coordinate, kind, context);
+  const furniture = furnitureEdit(joint.coordinate, choices, context);
   const isMoved = pointKey(coordinate) !== pointKey(joint.coordinate);
   const everyEdit = moved => done([...withRules(roads, context, rules).edits, ...addedRuleEdits(addedRules, roads), ...moved]);
   if (!isMoved) return everyEdit(furniture);

@@ -56,7 +56,7 @@ export const greenBehaviors = {
     measures: areaFacts
   },
   [protectedAreasFile]: {
-    sections: () => [{title: 'Name', fields: ['name', 'name:en']}],
+    sections: () => [{title: 'Type and name', fields: ['osmTag', 'name', 'name:en']}],
     measures: areaFacts
   }
 };

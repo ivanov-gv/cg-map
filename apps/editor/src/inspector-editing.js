@@ -31,6 +31,7 @@ import {behaviorOf} from './layer-behaviors.js';
 import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
 import {formValues, propertiesFromForm, renderPropertyForm} from './property-form.js';
+import {usualValuesOf} from './usual-values.js';
 
 // How close to the first corner, on screen, a tap closes a shape.
 const closingDistancePixels = 14;
@@ -301,7 +302,10 @@ export class InspectorEditing {
     renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
       sections: this.#behavior.sections(feature, editContext),
       controls: {...formControls(editContext), ...this.#behavior.controls(editContext)},
-      usualValues: this.#behavior.usualValues(feature, editContext.context)
+      usualValues: {
+        ...usualValuesOf(this.#filename, feature, editContext.context),
+        ...this.#behavior.usualValues(feature, editContext.context)
+      }
     });
     const extras = elementById('inspector-extras');
     extras.replaceChildren();

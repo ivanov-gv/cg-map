@@ -157,25 +157,34 @@ function openRoad(entry, edit) {
   else edit.context.select(entry);
 }
 
-function furnitureControl(joint, edit) {
-  const {context, extras} = edit;
-  const known = nodeEntryAt(context.entriesOf(nodesFile), joint.coordinate);
-  const kinds = context.rules.layers[nodesFile].properties.kind.enum;
-  const label = createElementWithText('label', 'What stands here');
+// One list of what stands here: what it is, or what kind of crossing or light.
+function furnitureList(title, name, value, edit, onChosen) {
+  const values = edit.context.rules.layers[nodesFile].properties[name].enum;
+  const label = createElementWithText('label', title);
   const select = document.createElement('select');
-  const none = createElementWithText('option', 'Nothing recorded');
-  none.value = '';
-  select.append(none);
-  for (const kind of kinds) {
-    const option = createElementWithText('option', valueLabel('kind', kind));
-    option.value = kind;
-    select.append(option);
-  }
-  select.value = extras.furniture ?? known?.feature.properties.kind ?? '';
-  select.disabled = context.isPhone();
-  select.onchange = () => edit.setExtras({furniture: select.value});
+  const options = ['', ...values].map(listed => {
+    const option = createElementWithText('option', listed === '' ? 'Nothing recorded' : valueLabel(name, listed));
+    option.value = listed;
+    return option;
+  });
+  select.append(...options);
+  select.value = value ?? '';
+  select.disabled = edit.context.isPhone();
+  select.onchange = () => onChosen(select.value);
   label.append(select);
   return label;
+}
+
+const furnitureDetails = {crossing: 'Kind of crossing', traffic_signals: 'Kind of light'};
+
+function furnitureControls(joint, edit) {
+  const {context, extras} = edit;
+  const known = nodeEntryAt(context.entriesOf(nodesFile), joint.coordinate)?.feature.properties ?? {};
+  const kind = extras.furniture ?? known.kind;
+  const main = furnitureList('What stands here', 'kind', kind, edit, value => edit.setExtras({furniture: value}));
+  if (!furnitureDetails[kind]) return [main];
+  const detail = extras[kind] ?? known[kind];
+  return [main, furnitureList(furnitureDetails[kind], kind, detail, edit, value => edit.setExtras({[kind]: value}))];
 }
 
 const turnLabels = {left: 'Left', right: 'Right', straight: 'Straight on', uTurn: 'U-turn'};
@@ -239,7 +248,7 @@ function renderJunction(container, edit) {
   container.append(...joinSection(joint, edit));
   if (joint.status === 'crossing') return;
   const rows = joint.members.map(member => roadRow(member, joint, edit));
-  container.append(heading('Roads'), ...rows, furnitureControl(joint, edit), ...turnSection(joint, edit));
+  container.append(heading('Roads'), ...rows, ...furnitureControls(joint, edit), ...turnSection(joint, edit));
 }
 
 function junctionTitle(feature, context) {
