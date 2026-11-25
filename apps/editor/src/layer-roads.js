@@ -107,6 +107,15 @@ const openedEndKey = (end, {key, feature, context}) => {
   return pointKey(opened.geometry.coordinates.at(end === 'start' ? 0 : -1));
 };
 
+// An end on another level than it was opened on leaves what it was joined to, also when it is dragged in the same edit.
+export function freePointsWithLevel(end, level, edit) {
+  const key = openedEndKey(end, edit);
+  const others = (edit.extras.freePoints ?? []).filter(point => point !== key);
+  const opened = edit.context.session.workingFeature(roadsFile, edit.key) ?? edit.feature;
+  const openedLevel = levelAt(opened, end === 'start' ? 0 : opened.geometry.coordinates.length - 1);
+  return level === openedLevel ? others : [...others, key];
+}
+
 // One end of the road: its letter on the map, what it joins, its level, and the way to its junction.
 function endRow(end, edit) {
   const {feature, context} = edit;
@@ -120,9 +129,7 @@ function endRow(end, edit) {
   const text = createElementWithText('span', jointStatusText(joint, edit.key));
   const level = levelSelect(`Level at ${endLabels[end]}`, levelAt(feature, index), context.isPhone() || isRing(feature));
   level.onchange = () => {
-    // An end on another level leaves what it was joined to, also when it is dragged in the same edit.
-    const freePoints = [...(edit.extras.freePoints ?? []), openedEndKey(end, edit)];
-    edit.setExtras({freePoints});
+    edit.setExtras({freePoints: freePointsWithLevel(end, Number(level.value), edit)});
     edit.setProperties({[`${end}Level`]: Number(level.value)});
   };
   const open = createElementWithText('button', 'Junction');
