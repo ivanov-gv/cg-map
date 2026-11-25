@@ -12,12 +12,21 @@ import {kindLabel, objectName} from './object-names.js';
 //   deletion(entry, context)      {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
 //                                 more on the map; it gives the edits, or null to keep the object
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
-//   limitedGeometry(geometry, edit, context) where a drag must stop
+//   limitedGeometry(geometry, edit, context) where a drag must stop, with edit = {key, feature, previousGeometry, origins,
+//                                 draggedIndex}, the point of a line that is dragged or null
 //   measures(feature, before)     lines of facts shown under the form
+//   controls(edit)                controls that replace single fields, {name: value => element}
+//   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
 //   usualValues(feature, context) usual values of free fields, {name: [value]}
+//   joinedPoints(entry, context)  the points of a line that others share
+//   marks(feature)                letters on the map for the picked object, [{coordinate, label}]
+//   isDerived                     the object only stands for others: Apply records its companion edits and not itself
+//   isViewOnly(context)           the object can be read and not changed here
+//   isReshapable(context)         whether its shape can be changed on this screen
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
+// companionEdits and problem get {filename, key, feature, before, extras, origins}; origins are those of line-origins.js.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
 // select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
 const behaviors = new Map();
@@ -42,6 +51,13 @@ const defaultBehavior = filename => ({
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
+  controls: () => ({}),
+  vertexTools: () => [],
+  joinedPoints: () => [],
+  marks: () => [],
+  isDerived: false,
+  isReshapable: () => true,
+  isViewOnly: () => false,
   usualValues: () => ({}),
   listsDependOn: [],
   applyLabel: () => 'Apply',
@@ -66,7 +82,10 @@ const drawChoices = {
     }
   ],
   places: [{label: 'Add place', filename: 'places.geojson', shape: 'Point', properties: {}}],
-  roads: [{label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}}],
+  roads: [
+    {label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}},
+    {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}}
+  ],
   green: [{label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}}],
   water: [
     {label: 'Draw water area', filename: 'water.geojson', shape: 'Polygon', properties: {}},

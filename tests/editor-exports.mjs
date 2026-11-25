@@ -13,6 +13,7 @@ import {behaviorOf, registerBehaviors} from '../apps/editor/src/layer-behaviors.
 import {addressBehaviors} from '../apps/editor/src/layer-addresses.js';
 import {buildingBehaviors} from '../apps/editor/src/layer-buildings.js';
 import {placeBehaviors} from '../apps/editor/src/layer-places.js';
+import {roadBehaviors} from '../apps/editor/src/layer-roads.js';
 import {operationProblem} from '../apps/editor/src/layer-rules.js';
 import {collectionOf} from '../apps/editor/src/source-records.js';
 
@@ -22,7 +23,7 @@ const envelope = {id: 'layer-export', createdAt: now, author: 'Integration Test'
 const rules = readContractJSON('editor-layers.json');
 const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
 
-for (const behaviors of [buildingBehaviors, addressBehaviors, placeBehaviors]) registerBehaviors(behaviors);
+for (const behaviors of [buildingBehaviors, addressBehaviors, placeBehaviors, roadBehaviors]) registerBehaviors(behaviors);
 
 export const newLocalId = () => `local:${crypto.randomUUID()}`;
 
@@ -67,11 +68,16 @@ export class HeadlessEditor {
     return entry;
   }
 
+  // What a command of the editor records as one step.
+  record(edits) {
+    this.session.recordEdits('layer', edits);
+  }
+
   // What Apply records. Returns why the editor refuses it, or null.
   apply(filename, key, feature, extras = {}) {
     const behavior = behaviorOf(filename);
     const before = this.session.workingFeature(filename, key);
-    const prepared = behavior.prepared(feature, this.context, {isNew: !before, key, filename});
+    const prepared = behavior.prepared(feature, this.context, {isNew: !before, key, filename, extras});
     const edit = {filename, key, feature: prepared, before, extras};
     const problem = behavior.problem(edit, this.context);
     if (problem) return problem;

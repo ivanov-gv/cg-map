@@ -10,19 +10,24 @@ import {
   whenMapReady
 } from '@ivanov-gv/map-core';
 import {createActiveLayerCommands} from './active-layer-commands.js';
+import {derivedFacts} from './derived-facts.js';
 import {DraftKeeper} from './draft-keeper.js';
 import {createElementWithText, elementById} from './dom.js';
 import {EditSession} from './edit-session.js';
 import {availableLayers, isLayerObject} from './editor-layers.js';
 import {isReferencedObject, newDeletionMark} from './field-items.js';
 import {createHandleLayer} from './handle-layer.js';
+import {createJointLayer, jointMinZoom} from './joint-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
 import {installInspectorViewport} from './inspector-viewport.js';
 import {installKeyboardShortcuts, updateShortcutHints} from './keyboard-shortcuts.js';
 import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layer-addresses.js';
 import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layer-behaviors.js';
 import {buildingBehaviors} from './layer-buildings.js';
+import {junctionBehaviors, junctionFile, junctionRule} from './layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layer-places.js';
+import {layerJoints, levelFacts, levelsByFile} from './layer-joints.js';
+import {roadBehaviors} from './layer-roads.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
 import {hideModeBar, showModeBar} from './mode-bar.js';
@@ -31,6 +36,7 @@ import {startOfflineCopy} from './offline-install.js';
 import {ReviewPanel} from './review-panel.js';
 import {loadSourceBundle} from './source-bundle.js';
 import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
+import {showLevelPicker} from './level-picker.js';
 import {hideToast, showToast} from './toast.js';
 import {WorkingMap} from './working-map.js';
 import {
@@ -45,6 +51,8 @@ import {
 registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);
 registerBehaviors(placeBehaviors);
+registerBehaviors(roadBehaviors);
+registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
 const basemapLayers = {
@@ -71,6 +79,8 @@ const phoneLayout = matchMedia('(max-width: 720px)');
 let map;
 let sources;
 let overlay;
+let jointLayer;
+let shownLevel = null;
 let workingMap;
 let layers = [];
 let activeLayer = null;
@@ -132,6 +142,9 @@ function layerStatus() {
 // Kinds that only follow from other objects are drawn and never picked.
 const isPickable = ({filename, feature}) => isLayerObject(filename, feature);
 
+// The working objects of a file, or none when the bundle does not have it.
+const entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
+
 // What a layer's behavior may read, never a way around the commands.
 function behaviorContext() {
   return {
@@ -141,11 +154,13 @@ function behaviorContext() {
     map,
     layer: activeLayer,
     isPhone: () => phoneLayout.matches,
-    entriesOf: filename => (sources.has(filename) ? session.workingEntries(filename) : []),
+    entriesOf,
     findEntity: (filename, entityId) =>
       behaviorContext()
         .entriesOf(filename)
         .find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
+    // The one level of the road graph that is shown, or null for all.
+    shownLevel: () => shownLevel,
     select: entry => selectObject(entry, true),
     startNew: startNewFeature,
     pick: pickObject,
@@ -169,6 +184,13 @@ function setHeading(kind, title) {
   elementById('open-inspector').textContent = `Selection: ${title}`;
 }
 
+// What stands for several objects, such as a junction, has no source of its own.
+function showIdentity({filename, key}) {
+  const hash = sources.get(filename)?.metadata.sha256;
+  elementById('selection-source').textContent = hash ? `${filename} · feature ${key}` : '';
+  elementById('identity').textContent = hash ? `Pinned source SHA-256: ${hash}. Feature indices are revision-bound.` : '';
+}
+
 // Objects are selected from full source geometry, never clipped tile coordinates. Upstream IDs are
 // shown here because overlay features use the array index as their ID instead.
 function showFeature(entry) {
@@ -177,9 +199,7 @@ function showFeature(entry) {
   showInspector();
   const behavior = behaviorOf(filename, activeLayer.id);
   setHeading(behavior.kind(feature), behavior.title(feature, behaviorContext()));
-  const hash = sources.get(filename).metadata.sha256;
-  elementById('selection-source').textContent = `${filename} · feature ${key}`;
-  elementById('identity').textContent = `Pinned source SHA-256: ${hash}. Feature indices are revision-bound.`;
+  showIdentity(entry);
   elementById('source-id').textContent = feature.id === undefined ? '' : `Source feature ID: ${feature.id}`;
   elementById('properties').replaceChildren();
   for (const [name, value] of Object.entries(feature.properties)) appendProperty(name, value);
@@ -209,6 +229,11 @@ function clearSelection() {
 // A filter shows other objects over the map as it is, without drawing the files of its layer again.
 const shownFiles = () => (activeFilter ? [] : (activeLayer?.files ?? []));
 
+function withDerivedFacts(entry) {
+  const {feature} = entry;
+  return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
+}
+
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context.
 function workingFeatures(displayFeatures) {
@@ -218,7 +243,7 @@ function workingFeatures(displayFeatures) {
   }
   for (const filename of session.changedFiles()) {
     if (featuresByFile.has(filename)) continue;
-    featuresByFile.set(filename, session.workingEntries(filename).map(({feature}) => feature));
+    featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
   return featuresByFile;
 }
@@ -247,7 +272,8 @@ function refreshOverlay() {
     if (!isPickable(entry)) return 'context';
     return changedFeatures.has(entry.feature) ? 'applied' : 'editable';
   };
-  const collection = overlayCollection(activeEntries, stateOf);
+  const factsOf = entry => ({...levelFacts(entry), ...derivedFacts(entry, entriesOf)});
+  const collection = overlayCollection(activeEntries, stateOf, factsOf);
   overlay.setData(collection);
   overlay.setInteriorsPickable(Boolean(activeFilter));
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
@@ -259,6 +285,53 @@ function refreshOverlay() {
   } catch (error) {
     showError(new Error(`Drawing the changes failed: ${error.message}`));
   }
+  renderLevels();
+  renderJoints();
+}
+
+// Where lines of the layer join, end or only touch, in the view. On one level, only its own.
+function renderJoints() {
+  const jointsOfLayer = layerJoints[activeLayer?.id];
+  if (!jointsOfLayer || activeFilter || map.getZoom() < jointMinZoom) {
+    jointLayer.show([]);
+    return;
+  }
+  // Where a road of the level goes on to another level is one of its connections.
+  const isOfShownLevel = ({entry}) => levelsByFile[entry.filename](entry.feature).includes(shownLevel);
+  const hasShownLevel = ({members, level}) =>
+    shownLevel === null || (members ? members.some(isOfShownLevel) : level === shownLevel);
+  jointLayer.show(jointsOfLayer.joints(viewBounds(), behaviorContext()).filter(hasShownLevel));
+}
+
+// The levels in the view, and always the shown one, so that it can be left.
+function renderLevelPicker() {
+  const levelsOfLayer = layerJoints[activeLayer?.id]?.levels;
+  const isShown = levelsOfLayer && !activeFilter && map.getZoom() >= jointMinZoom;
+  const viewLevels = isShown ? levelsOfLayer(viewBounds(), behaviorContext()) : [];
+  const shownLevels = shownLevel === null ? [] : [shownLevel];
+  showLevelPicker([...new Set([...viewLevels, ...shownLevels])], shownLevel, showLevel);
+}
+
+function renderLevels() {
+  overlay.setShownLevel(shownLevel);
+  workingMap.setShownLevel(shownLevel);
+  renderLevelPicker();
+}
+
+function renderView() {
+  renderLevelPicker();
+  renderJoints();
+}
+
+const viewBounds = () => {
+  const bounds = map.getBounds();
+  return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+};
+
+function showLevel(level) {
+  shownLevel = level;
+  renderLevels();
+  renderJoints();
 }
 
 // Toggling presentation preserves the open edit; clicks wait until the new visibility has rendered.
@@ -460,6 +533,7 @@ function setLayer(layer) {
   activeFilter = null;
   pendingSelection = null;
   activeLayer = activeLayer?.id === layer?.id ? null : layer;
+  shownLevel = null;
   elementById('current-layer-name').textContent = activeLayer ? activeLayer.name : 'Browse';
   elementById('current-layer').classList.toggle('has-layer', Boolean(activeLayer));
   refreshOverlay();
@@ -487,7 +561,12 @@ function selectableLayerIds() {
   return [...workingMap.layerIds, ...overlay.inspectionLayerIds, ...(areGuidesVisible ? overlay.layerIds : [])];
 }
 
-const pickableEntries = hits => sourceEntriesForHits(hits, activeEntries).filter(isPickable);
+// With one level shown, what fades behind it is not picked.
+const isOnShownLevel = ({filename, feature}) =>
+  shownLevel === null || (levelsByFile[filename]?.(feature).includes(shownLevel) ?? true);
+
+const pickableEntries = hits =>
+  sourceEntriesForHits(hits, activeEntries).filter(entry => isPickable(entry) && isOnShownLevel(entry));
 
 // Rendered hits limit the directory to visible objects in the current map view. Objects without geometry have no place
 // on the map, so they are always listed.
@@ -511,7 +590,8 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const feature = session.workingFeature(entry.filename, entry.key);
+  const isDerived = entry.filename === junctionFile;
+  const feature = isDerived ? entry.feature : session.workingFeature(entry.filename, entry.key);
   if (!feature) return false;
   showFeature({...entry, feature});
   if (shouldFocus) elementById('close-inspector').focus();
@@ -570,6 +650,12 @@ function selectFeatureAtClick(event) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
+  const joint = jointLayer.jointAt(event.point);
+  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint, behaviorContext());
+  if (jointEntry) {
+    selectObject(jointEntry);
+    return;
+  }
   const candidates = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
   const hadClickCandidates = clickCandidates !== null;
   clickCandidates = null;
@@ -608,6 +694,7 @@ function createInspectorEditing() {
     handles: createHandleLayer(map),
     isPhone: () => phoneLayout.matches,
     behaviorContext,
+    showMarks: marks => jointLayer.showMarks(marks),
     onRecorded: showApplied,
     onClosed: clearSelection,
     onMarkedForDeletion: markForDeletion,
@@ -742,6 +829,7 @@ function installMapLayers(visibilityConfig) {
     sharedSource: 'editor-source'
   });
   overlay = createSourceOverlay(map);
+  jointLayer = createJointLayer(map);
 }
 
 function installMapInteraction() {
@@ -757,6 +845,7 @@ function installMapInteraction() {
   map.on('dblclick', event => {
     if (editing.finishWithDoubleClick()) event.preventDefault();
   });
+  map.on('moveend', renderView);
   map.on('idle', finishLayerLoading);
 }
 
@@ -791,6 +880,7 @@ async function start() {
   ]);
   sources = bundle;
   rules = validateLayerRules(layerRules, [...sources.keys()]);
+  rules = {...rules, layers: {...rules.layers, [junctionFile]: junctionRule}};
   layers = availableLayers([...sources.keys()]);
   await createEditorMap(mapMetadata);
   installMapLayers(visibilityConfig);

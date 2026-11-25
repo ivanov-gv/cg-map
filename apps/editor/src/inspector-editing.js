@@ -19,14 +19,15 @@ import {
   finishDrawing,
   isDrawing,
   withGeometry,
+  withoutVertex,
+  withReplacedFeature,
   withTool,
   withTypedDetails
 } from './edit-transaction.js';
-import {removeVertex} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
-import {featureCapabilities, featureProblem} from './layer-rules.js';
+import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
 import {formValues, propertiesFromForm, renderPropertyForm} from './property-form.js';
 
@@ -90,6 +91,12 @@ export class InspectorEditing {
     return this.#pointer;
   }
 
+  // The points of the open line that others share.
+  #joinedPoints() {
+    const {key, feature} = this.#transaction;
+    return this.#behavior.joinedPoints({key, feature}, this.#context.behaviorContext());
+  }
+
   #renderGeometry() {
     const {overlay, handles} = this.#context;
     const {feature, drawnPoints, selectedHandle} = this.#transaction;
@@ -101,8 +108,9 @@ export class InspectorEditing {
     const isReshaped = original && JSON.stringify(original.geometry) !== JSON.stringify(geometry);
     overlay.setGhost(isReshaped ? original.geometry : null);
     overlay.setTarget(this.#dragTarget()?.feature ?? null);
+    this.#context.showMarks(this.#isVertexTool || isDrawing(this.#transaction) ? [] : this.#behavior.marks(feature));
     if (isDrawing(this.#transaction)) handles.showPoints(drawnPoints);
-    else if (this.#isVertexTool) handles.show(geometry, selectedHandle);
+    else if (this.#isVertexTool) handles.show(geometry, selectedHandle, this.#joinedPoints());
     else handles.clear();
   }
 
@@ -114,7 +122,7 @@ export class InspectorEditing {
       id: 'mode-add',
       label: `Add ${pointWord}`,
       isPrimary: true,
-      run: () => this.#addDrawnPoint(this.#context.map.getCenter().toArray())
+      run: () => this.#addPointUnderCross()
     };
     return [
       {
@@ -154,7 +162,8 @@ export class InspectorEditing {
       isDisabled: !this.#transaction.selectedHandle,
       run: () => this.#removeSelectedVertex()
     };
-    return [remove, done];
+    const {feature, selectedHandle} = this.#transaction;
+    return [remove, ...this.#behavior.vertexTools(feature, selectedHandle, this.#editContext()), done];
   }
 
   #renderModeBar() {
@@ -179,7 +188,8 @@ export class InspectorEditing {
     const geometryType = feature.geometry?.type;
     const isShape = Boolean(geometryType) && geometryType !== 'Point';
     const {canReshape, canDelete} = featureCapabilities(feature, this.#rule);
-    const canEditShape = (isNew || canReshape) && Boolean(geometryType);
+    const isReshapableHere = this.#behavior.isReshapable(this.#context.behaviorContext());
+    const canEditShape = (isNew || canReshape) && Boolean(geometryType) && isReshapableHere;
     elementById('tool-move').hidden = !canEditShape;
     elementById('tool-vertices').hidden = !canEditShape || !isShape;
     elementById('tool-vertices').textContent = geometryType === 'LineString' ? 'Edit points' : 'Edit corners';
@@ -222,6 +232,10 @@ export class InspectorEditing {
       isNew: this.#transaction.isNew,
       context: this.#context.behaviorContext(),
       setProperties: whileOpen(properties => this.#setProperties(properties)),
+      extras: this.#transaction.extras,
+      origins: this.#transaction.origins,
+      setExtras: whileOpen(extras => this.#setExtras(extras)),
+      setFeature: whileOpen(feature => this.#setFeature(feature)),
       setGeometry: whileOpen(geometry => this.#update(withGeometry(this.#transaction, geometry))),
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
@@ -242,6 +256,21 @@ export class InspectorEditing {
     this.#update(this.#transaction);
   }
 
+  #setExtras(extras) {
+    const {feature} = this.#transaction;
+    const changed = {...withTypedDetails(this.#transaction), extras: {...this.#transaction.extras, ...extras}};
+    this.#transaction = {...changed, feature: {...feature, properties: this.#currentFeature().properties}};
+    this.#renderForm();
+    this.#update(this.#transaction);
+  }
+
+  // Replaces the pending feature, its typed details included.
+  #setFeature(feature) {
+    this.#transaction = withReplacedFeature(this.#transaction, feature);
+    this.#renderForm();
+    this.#update(this.#transaction);
+  }
+
   // The kinds on offer follow the category. Rendering again must not drop a keyboard user out of the form.
   #renderDependentLists(field) {
     if (!this.#behavior.listsDependOn.includes(field.name)) return;
@@ -255,7 +284,7 @@ export class InspectorEditing {
     const editContext = this.#editContext();
     renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
       sections: this.#behavior.sections(feature, editContext),
-      controls: formControls(editContext),
+      controls: {...formControls(editContext), ...this.#behavior.controls(editContext)},
       usualValues: this.#behavior.usualValues(feature, editContext.context)
     });
     const extras = elementById('inspector-extras');
@@ -268,6 +297,7 @@ export class InspectorEditing {
     this.showProblem(null);
     elementById('editor').hidden = false;
     elementById('edit-actions').hidden = false;
+    elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
     elementById('apply-edit').textContent = this.#behavior.applyLabel(this.#editContext());
     this.#renderToolButtons();
     this.#renderFacts();
@@ -310,6 +340,7 @@ export class InspectorEditing {
     overlay.setSelection(null);
     overlay.setGhost(null);
     overlay.setTarget(null);
+    this.#context.showMarks([]);
     overlay.setDrawing([], null);
     this.#context.onEditStateChanged();
   }
@@ -330,7 +361,7 @@ export class InspectorEditing {
     const behaviorContext = this.#context.behaviorContext();
     const feature = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
     const ruleProblem = featureProblem(feature, this.#rule, this.#context.levels, this.#baseFeature);
-    const edit = {filename: this.#filename, key: this.#transaction.key, feature, before: this.#workingBefore()};
+    const edit = this.#change(feature);
     return {feature, problem: ruleProblem ?? this.#behavior.problem(edit, behaviorContext)};
   }
 
@@ -351,15 +382,38 @@ export class InspectorEditing {
     return this.#applyWith([]);
   }
 
+  // The open edit as the layer sees it.
+  #change(feature) {
+    const {key, extras, origins} = this.#transaction;
+    return {filename: this.#filename, key, feature, extras, origins, before: this.#workingBefore()};
+  }
+
+  // Why the importer would refuse an edit that goes along with this one, or null. Nobody sees those before the export.
+  #problemOf(edits) {
+    const {rules, levels, session} = this.#context;
+    for (const {filename, key, after} of edits) {
+      const before = session.baseFeature(filename, key);
+      const isUnchanged = !after || JSON.stringify(before) === JSON.stringify(after);
+      if (isUnchanged) continue;
+      const operation = {filename, operation: before ? 'modify' : 'add', reference: {localId: key}, before, after};
+      const problem = operationProblem(operation, rules, levels);
+      if (problem) return `${behaviorOf(filename).title(after, this.#context.behaviorContext())}: ${problem}.`;
+    }
+    return null;
+  }
+
   // Records the edit together with others of the same step.
   #applyWith(extraEdits) {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
     const {feature, problem} = this.#validatedFeature();
     if (problem) return this.#refuse(problem);
-    const edit = {filename: this.#filename, key: this.#transaction.key, feature, before: this.#workingBefore()};
+    const edit = this.#change(feature);
     const behaviorContext = this.#context.behaviorContext();
     const companions = this.#behavior.companionEdits(edit, behaviorContext);
-    const edits = [{filename: this.#filename, key: edit.key, after: feature}, ...companions, ...extraEdits];
+    const ownEdits = this.#behavior.isDerived ? [] : [{filename: this.#filename, key: edit.key, after: feature}];
+    const edits = [...ownEdits, ...companions, ...extraEdits];
+    const invalidEdit = this.#problemOf(edits);
+    if (invalidEdit) return this.#refuse(invalidEdit);
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
@@ -370,6 +424,11 @@ export class InspectorEditing {
 
   // Drops the open edit and records others in its place, such as marking the building as having no number.
   #replaceWith(edits, message) {
+    const invalidEdit = this.#problemOf(edits);
+    if (invalidEdit) {
+      this.#refuse(invalidEdit);
+      return;
+    }
     this.#context.commands.recordEdits(edits);
     this.#finishEdit(() => this.#context.onRecorded(message));
   }
@@ -409,9 +468,7 @@ export class InspectorEditing {
   }
 
   #removeSelectedVertex() {
-    const {selectedHandle, feature} = this.#transaction;
-    const geometry = removeVertex(feature.geometry, selectedHandle);
-    this.#update({...withGeometry(this.#transaction, geometry), selectedHandle: null});
+    this.#update(withoutVertex(this.#transaction, this.#transaction.selectedHandle));
   }
 
   #startTool(tool) {
@@ -443,6 +500,12 @@ export class InspectorEditing {
     this.#update(afterDrawnPoint(this.#transaction, coordinate));
   }
 
+  #addPointUnderCross() {
+    const {map} = this.#context;
+    const lngLat = map.getCenter();
+    this.#addDrawnPoint(this.#snappedPoint({lngLat, point: map.project(lngLat)}) ?? lngLat.toArray());
+  }
+
   #placeUnderCross() {
     const {map} = this.#context;
     const lngLat = map.getCenter();
@@ -471,7 +534,8 @@ export class InspectorEditing {
     if (!limit) return moved;
     const behaviorContext = this.#context.behaviorContext();
     const {feature, key} = transaction;
-    const edit = {filename: this.#filename, key, feature, previousGeometry: feature.geometry};
+    const draggedIndex = transaction.gesture.handle?.vertexIndex ?? null;
+    const edit = {filename: this.#filename, key, feature, previousGeometry: feature.geometry, origins: transaction.origins, draggedIndex};
     return withGeometry(moved, limit(moved.feature.geometry, edit, behaviorContext));
   }
 
@@ -496,7 +560,7 @@ export class InspectorEditing {
       this.#renderModeBar();
     };
     this.#context.map.on('mousemove', event => {
-      this.#pointer = this.#drawnCoordinate(event);
+      this.#pointer = this.#angledCoordinate(event);
       renderWhileDrawing();
     });
     this.#context.map.on('move', () => {
@@ -562,11 +626,18 @@ export class InspectorEditing {
 
   // Shift keeps right angles while drawing a building or any other shape. A layer can join a tap to what is there.
   #drawnCoordinate(event) {
+    return this.#isAngleKept(event) ? this.#angledCoordinate(event) : (this.#snappedPoint(event) ?? event.lngLat.toArray());
+  }
+
+  #isAngleKept(event) {
+    return Boolean(event.originalEvent?.shiftKey) && this.#transaction?.tool !== editTools.drawLine;
+  }
+
+  // Where the pointer is, kept at a right angle while Shift is held.
+  #angledCoordinate(event) {
     const coordinate = event.lngLat.toArray();
-    if (!isDrawing(this.#transaction)) return coordinate;
-    const {drawnPoints, tool} = this.#transaction;
-    if (event.originalEvent?.shiftKey && tool !== editTools.drawLine) return rightAngledCorner(drawnPoints, coordinate);
-    return this.#snappedPoint(event) ?? coordinate;
+    const isAngled = isDrawing(this.#transaction) && this.#isAngleKept(event);
+    return isAngled ? rightAngledCorner(this.#transaction.drawnPoints, coordinate) : coordinate;
   }
 
   tap(event) {

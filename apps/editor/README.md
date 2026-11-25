@@ -39,6 +39,12 @@ What the layers do beyond shape and fields:
 - **Buildings** show their entrances and the places inside. Moving one takes its address, entrances and places with it;
   after a corner edit entrances return to the outline. A new entrance goes to the nearest point of the outline and gets
   the next number. Deleting asks whether the places inside move to another building, picked on the map, or go too.
+- **Roads & paths** are a graph: two roads join where they share a point on the same level
+  ([road-graph.js](src/road-graph.js)). From zoom 16 a full dot is a join, a hollow one a dead end, and `!` marks roads
+  that touch, cross or nearly meet without joining. A dot opens its junction: the level of each road there, what stands
+  on it, the allowed turns, and joining, disconnecting or splitting roads. Letters A and B name the ends of the picked
+  road. A dragged point joins the road it is put on and takes joined roads along until it is disconnected. The level
+  picker shows one level at a time; below the ground rails are dashed, above it strong.
 
 ## Editing
 

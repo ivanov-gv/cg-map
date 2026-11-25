@@ -4,6 +4,7 @@ import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeLayers}
 // not a rebuild: tiles simplify geometry and leave out minor roads at low zoom, which this does not, so it shows
 // more detail than the release below street scale. At street scale the two match.
 const previewPrefix = 'edit-preview-';
+const fadedOpacity = 0.2;
 const placesFile = 'places.geojson';
 const labelsFile = 'building-labels.geojson';
 const placesSource = 'places';
@@ -44,6 +45,7 @@ export class WorkingMap {
   #addedLayerIds = [];
   #addedSourceIds = [];
   #replacedSources = new Map();
+  #shownLevel = null;
 
   // basemapLayers maps a source file to the published layers that draw it from the vector archive. publishedPlaces are
   // the places as released, to put back when the preview ends.
@@ -83,6 +85,22 @@ export class WorkingMap {
         this.#drawInsteadOfBasemap(filename, features, sharedFiles.has(filename));
       }
     }
+  }
+
+  // Fades what is under or over the shown level, so that its own lines stand out. null shows every level as published.
+  setShownLevel(level) {
+    const isAnythingFaded = this.#shownLevel !== null || level !== null;
+    this.#shownLevel = level;
+    if (!isAnythingFaded) return;
+    const layers = this.#map.getStyle().layers.filter(({id, type}) => type === 'line' && this.#addedLayerIds.includes(id));
+    for (const {id} of layers) this.#map.setPaintProperty(id, 'line-opacity', this.#opacityOf(id));
+  }
+
+  #opacityOf(layerId) {
+    const published = this.#map.getPaintProperty(layerId.slice(previewPrefix.length), 'line-opacity');
+    if (this.#shownLevel === null) return published;
+    const isOnLevel = ['any', ['!', ['has', 'levelKeys']], ['in', `,${this.#shownLevel},`, ['get', 'levelKeys']]];
+    return ['case', isOnLevel, published ?? 1, fadedOpacity];
   }
 
   // Puts the published map back exactly as it was.

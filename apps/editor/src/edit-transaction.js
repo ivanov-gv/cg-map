@@ -3,11 +3,13 @@ import {
   isSameHandle,
   moveVertex,
   polygonOfCorners,
+  removeVertex,
   roundedCoordinate,
   translateGeometry,
   vertexHandles,
   withHole
 } from './geometry-editing.js';
+import {originsAfter, startingOrigins} from './line-origins.js';
 
 // One pending edit of one feature. Nothing here touches the session: Apply records the result as a single
 // undoable step, and Cancel drops the transaction. Escape only interrupts the current gesture.
@@ -23,7 +25,11 @@ export const editTools = {
 const drawingTools = new Set([editTools.drawLine, editTools.drawPolygon, editTools.cutHole]);
 const minimumPointsByTool = {[editTools.drawLine]: 2, [editTools.drawPolygon]: 3, [editTools.cutHole]: 3};
 
-// drawnPoints are the points of the shape or hole being drawn, in order and open.
+const originsOf = ({geometry}) => (geometry?.type === 'LineString' ? startingOrigins(geometry) : null);
+
+// drawnPoints are the points of the shape or hole being drawn, in order and open. extras are choices a layer records
+// beside the feature, such as the turns at a junction. origins say which point of the line each of its points was when
+// the edit was opened.
 const newTransaction = (key, feature, tool, isNew) => ({
   key,
   feature,
@@ -32,6 +38,8 @@ const newTransaction = (key, feature, tool, isNew) => ({
   selectedHandle: null,
   gesture: null,
   drawnPoints: [],
+  extras: {},
+  origins: isNew ? null : originsOf(feature),
   hasTypedDetails: false,
   hasUnappliedEdit: isNew
 });
@@ -101,7 +109,39 @@ function afterHandleTap(transaction, tappedHandle) {
   delete handle.isMidpoint;
   const geometry = insertVertex(transaction.feature.geometry, handle);
   const selectedHandle = {...handle, vertexIndex: handle.vertexIndex + 1};
-  return {...withGeometry(transaction, geometry), selectedHandle};
+  const origins = transaction.origins?.toSpliced(selectedHandle.vertexIndex, 0, null) ?? null;
+  return {...withGeometry(transaction, geometry), origins, selectedHandle};
+}
+
+function isWhereLineCloses({type, coordinates}, {vertexIndex}) {
+  const last = coordinates.length - 1;
+  const isClosedLine = type === 'LineString' && last > 3 && coordinates[0].join() === coordinates[last].join();
+  return isClosedLine && (vertexIndex === 0 || vertexIndex === last);
+}
+
+// A closed line stays closed: it begins and ends at its next point.
+function withoutClosingPoint(transaction) {
+  const closedWithout = points => [...points.slice(1, -1), points[1]];
+  const {geometry} = transaction.feature;
+  const shorter = withGeometry(transaction, {...geometry, coordinates: closedWithout(geometry.coordinates)});
+  const origins = transaction.origins && closedWithout(transaction.origins);
+  return {...shorter, origins, selectedHandle: null};
+}
+
+// The line without one of its points, or the ring without a corner.
+export function withoutVertex(transaction, handle) {
+  if (isWhereLineCloses(transaction.feature.geometry, handle)) return withoutClosingPoint(transaction);
+  const geometry = removeVertex(transaction.feature.geometry, handle);
+  const origins = transaction.origins?.toSpliced(handle.vertexIndex, 1) ?? null;
+  return {...withGeometry(transaction, geometry), origins, selectedHandle: null};
+}
+
+// A feature that a tool of the layer made out of the open one.
+export function withReplacedFeature(transaction, feature) {
+  const {origins, feature: previous} = transaction;
+  const isLine = origins && feature.geometry?.type === 'LineString';
+  const next = isLine ? originsAfter(previous.geometry.coordinates, origins, feature.geometry.coordinates) : null;
+  return {...withTypedDetails(transaction), feature, origins: next};
 }
 
 // A tap places a new point, adds a drawn point, selects a handle or adds one on a side. Moving something is always a
@@ -130,6 +170,7 @@ export function beginGesture(transaction, coordinate, pressedHandle) {
   const gesture = {
     startCoordinate: coordinate,
     startGeometry: feature.geometry,
+    startOrigins: transaction.origins,
     hadUnappliedEdit: hasUnappliedEdit,
     handle
   };
@@ -155,6 +196,7 @@ export function cancelGesture(transaction) {
   return {
     ...transaction,
     feature: {...transaction.feature, geometry: startGeometry},
+    origins: transaction.gesture.startOrigins,
     gesture: null,
     hasUnappliedEdit: hadUnappliedEdit
   };

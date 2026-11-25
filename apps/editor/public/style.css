@@ -921,6 +921,72 @@ fieldset {
 #mode-bar .button-row {
   margin: 8px 0 0;
 }
+/* One level of the road graph at a time, as in a lift. */
+#level-picker {
+  position: absolute;
+  z-index: 1;
+  top: 76px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0002;
+}
+#level-picker button {
+  min-width: 44px;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+}
+#level-picker button + button {
+  border-top: 1px solid var(--line);
+}
+body:has(.utility-panel:not([hidden])) #level-picker {
+  left: calc(24px + min(320px, 35vw));
+}
+.end-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.end-row select {
+  grid-column: 2;
+  margin: 0;
+}
+.end-letter {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #c8372d;
+  border-radius: 50%;
+  color: #c8372d;
+  font-size: 12px;
+  font-weight: 700;
+}
+.junction-road {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.junction-road p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.junction-road .button-row {
+  margin: 0;
+  align-items: center;
+}
+.junction-road select {
+  width: auto;
+  margin: 0;
+}
 #map-cross {
   position: absolute;
   z-index: 1;
@@ -988,6 +1054,10 @@ fieldset {
   margin: 0;
 }
 @media (max-width: 720px) {
+  #level-picker {
+    top: 120px;
+    left: 8px;
+  }
   .workspace-toolbar {
     padding: 2px;
   }
@@ -1112,4 +1182,19 @@ fieldset {
   margin-bottom: 12px;
   font-family: ui-monospace, monospace;
   font-size: 13px;
+}
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin: 0;
+  color: var(--green);
+  font-size: 13px;
+}
+.choice-row input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
 }
