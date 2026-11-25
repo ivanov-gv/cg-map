@@ -13,7 +13,7 @@ test('a building is drawn, described, given an entrance and a place, and exporte
   for (const corner of [[1, -3], [3, -3], [3, -1], [1, -1]]) await tapAt(page, corner);
   await page.locator('#mode-done').click();
   await expect(page.locator('#inspector-extras')).toContainText('Not on the map until you apply it');
-  await page.locator('[name="building:levels"]').fill('3');
+  await page.locator('[data-list-for="building:levels"]').selectOption('3');
   await page.locator('[name="energy_class"]').selectOption('B');
   await page.getByRole('button', {name: 'Add address'}).click();
   await page.keyboard.type('16');

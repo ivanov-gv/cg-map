@@ -307,9 +307,14 @@ function furnitureAfter(known, choices) {
   const properties = known?.feature.properties ?? {};
   const kind = choices.furniture ?? properties.kind ?? '';
   if (!kind) return null;
-  const kept = Object.fromEntries(Object.entries(properties).filter(([name]) => !furnitureFacts.includes(name)));
-  const fact = furnitureFacts.includes(kind) ? (choices[kind] ?? properties[kind]) : undefined;
-  return {...kept, ...(fact ? {[kind]: fact} : {}), kind};
+  // A source can say both of a crossing with lights. Only another kind makes the facts of the one before wrong.
+  const isSameKind = kind === properties.kind;
+  const isKept = ([name]) => isSameKind || !furnitureFacts.includes(name);
+  const kept = Object.fromEntries(Object.entries(properties).filter(isKept));
+  const isChosen = furnitureFacts.includes(kind) && choices[kind] !== undefined;
+  const stated = {...kept, ...(isChosen ? {[kind]: choices[kind]} : {}), kind};
+  // Nothing recorded is no value.
+  return Object.fromEntries(Object.entries(stated).filter(([, value]) => value !== ''));
 }
 
 const isFurnitureChosen = choices => ['furniture', ...furnitureFacts].some(name => choices[name] !== undefined);

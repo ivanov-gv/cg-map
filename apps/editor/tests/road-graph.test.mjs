@@ -149,6 +149,10 @@ test('a light is put up, changed and taken down at a junction', () => {
   assert.equal(removed.after, null);
   const [named] = junctionEdits(joint, joint.coordinate, {traffic_signals: 'pedestrian_crossing'}, lit).edits;
   assert.equal(named.after.properties.traffic_signals, 'pedestrian_crossing');
+  const both = {...light, properties: {...light.properties, crossing: 'traffic_signals'}};
+  const bothLit = contextWith({roads, nodes: [both]});
+  const [kept] = junctionEdits(joint, joint.coordinate, {traffic_signals: ''}, bothLit).edits;
+  assert.deepEqual(kept.after.properties, {kind: 'traffic_signals', entityId: 'node/5', crossing: 'traffic_signals'});
   const [crossing] = junctionEdits(joint, joint.coordinate, {furniture: 'crossing', crossing: 'zebra'}, lit).edits;
   assert.deepEqual(crossing.after.properties, {kind: 'crossing', crossing: 'zebra', entityId: 'node/5'});
   assert.deepEqual(junctionEdits(joint, joint.coordinate, {traffic_signals: 'signal'}, lit).edits, []);
