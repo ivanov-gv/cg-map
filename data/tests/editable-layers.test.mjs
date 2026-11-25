@@ -305,11 +305,12 @@ test('a refused correction stops no other: a refreshed address and a way that is
   applyAs('numbered', builder => builder.add('building-labels.geojson', localId(2), label, {type: 'Point', coordinates: middle}));
   const [rule] = readSource(root, 'turn-restrictions.json').features;
   const {from, to, viaNodes} = rule.properties;
-  applyAs('turn', builder =>
-    builder.add('turn-restrictions.json', localId(8), {restriction: 'no_straight_on', from, to, viaNodes}, null)
-  );
   const [town] = readSource(root, 'settlements.geojson').features;
-  applyAs('renamed', builder => builder.change('settlements.geojson', town, feature => (feature.properties.name = 'Reviewed')));
+  // One session of unrelated work.
+  applyAs('session', builder => {
+    builder.add('turn-restrictions.json', localId(8), {restriction: 'no_straight_on', from, to, viaNodes}, null);
+    builder.change('settlements.geojson', town, feature => (feature.properties.name = 'Reviewed'));
+  });
   const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
   // The refresh gave the building an address of its own, and the way of the turn rule is gone.
   const refreshedLabel = readSource(root, 'building-labels.geojson').features.find(({id}) => id === localId(2));
@@ -319,16 +320,18 @@ test('a refused correction stops no other: a refreshed address and a way that is
   upstream.features.push({
     ...refreshedLabel,
     id: upstreamId,
-    properties: {...refreshedLabel.properties, entityId: upstreamId, osm_id: upstreamId, address_sources: [upstreamId]}
+    properties: {...refreshedLabel.properties, 'addr:housenumber': '5', entityId: upstreamId, osm_id: upstreamId, address_sources: [upstreamId]}
   });
   fs.writeFileSync(sourcePath(root, 'building-labels.geojson'), serializeSource('building-labels.geojson', upstream));
-  ledger.corrections.find(({changeset}) => changeset === 'turn').after.properties.from = 1;
+  ledger.corrections.find(({filename}) => filename === 'turn-restrictions.json').after.properties.from = 1;
   fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
 
   const {report} = reapplyCorrections(root, {now, contractsDirectory});
 
   assert.equal(readSource(root, 'settlements.geojson').features[0].properties.name, 'Reviewed');
-  assert.ok(report.some(line => line.includes('have an address of this building')), report.join('\n'));
+  assert.ok(report.some(line => line.includes("kept the editor's address")), report.join('\n'));
+  const replayedLabel = readSource(root, 'building-labels.geojson').features.find(({id}) => id === upstreamId);
+  assert.equal(replayedLabel.properties['addr:housenumber'], '7', 'no refresh overrides the editor');
   assert.ok(report.some(line => line.startsWith('turn-restrictions.json') && line.includes('not placed')), report.join('\n'));
 });
 
