@@ -84,11 +84,19 @@ const outlineToleranceMetres = 0.02;
 export const outlineCorners = geometry =>
   hasOutline(geometry) ? ringsOf(geometry).flatMap(ring => ring.slice(0, -1)) : [];
 
-// What a new corner must not repeat: the outline of a hole's object, and every drawn corner except the newest. The
-// newest is left out so a double click can repeat it exactly and be recognised as one point.
-export function usedDrawingPoints(drawnPoints, openGeometry = null) {
-  return [...outlineCorners(openGeometry), ...drawnPoints.slice(0, -1)];
-}
+// One value carries what a magnetised point must avoid: used corners, and an outline for a hole being cut.
+export const magnetAvoidance = (usedPoints = [], avoidGeometry = null) => ({usedPoints, avoidGeometry});
+export const noAvoidance = Object.freeze({usedPoints: [], avoidGeometry: null});
+
+// The points a drawing must not repeat: the outline it cuts, and every point it has put down, newest included.
+export const usedDrawingPoints = (drawnPoints = [], openGeometry = null) => [
+  ...outlineCorners(openGeometry),
+  ...drawnPoints
+];
+
+// A drawing avoids every point it has already put down or cut around, and the outline it is cutting.
+export const drawingAvoidance = (drawnPoints = [], openGeometry = null) =>
+  magnetAvoidance(usedDrawingPoints(drawnPoints, openGeometry), openGeometry);
 
 // A point already used must not be pulled together with the one being placed, or the shape collapses.
 const notUsed = (points, usedPoints) => points.filter(point => !usedPoints.some(used => isSameCoordinate(point, used)));
@@ -118,9 +126,15 @@ function cellsOf(corners, sizeDegrees) {
   return cells;
 }
 
-function sideIndex(entries) {
-  return entries.flatMap(({feature}) =>
-    outlineCorners(feature.geometry).map((start, index, corners) => {
+// Sides belong to one ring: the last corner closes that ring, not the first corner of the next part or hole.
+// Geometries are replaced rather than changed, so their segments can be kept between pointer moves.
+const sidesByGeometry = new WeakMap();
+
+function sideSegmentsOf(geometry) {
+  if (!hasOutline(geometry)) return [];
+  return ringsOf(geometry).flatMap(ring => {
+    const corners = ring.slice(0, -1);
+    return corners.map((start, index) => {
       const end = corners[(index + 1) % corners.length];
       return {
         start,
@@ -132,8 +146,15 @@ function sideIndex(entries) {
           Math.max(start[1], end[1])
         ]
       };
-    })
-  );
+    });
+  });
+}
+
+function sideIndex(entries) {
+  return entries.flatMap(({feature}) => {
+    if (!sidesByGeometry.has(feature.geometry)) sidesByGeometry.set(feature.geometry, sideSegmentsOf(feature.geometry));
+    return sidesByGeometry.get(feature.geometry);
+  });
 }
 
 function nearbySegments(segments, coordinate, sizeDegrees) {
@@ -157,7 +178,8 @@ function isOnOutline(target, geometry) {
   return nearestPointOnOutline(target, ringsOf(geometry)).distanceMetres <= outlineToleranceMetres;
 }
 
-function nearestSideIn(segments, coordinate, sizeDegrees, usedPoints, avoidGeometry) {
+function nearestSideIn(segments, coordinate, sizeDegrees, avoidance) {
+  const {usedPoints, avoidGeometry} = avoidance;
   const targets = nearbySegments(segments, coordinate, sizeDegrees)
     .map(({start, end}) => roundedCoordinate(nearestPointOnSegment(coordinate, start, end)))
     .filter(target => !usedPoints.some(used => isSameCoordinate(target, used)))
@@ -165,13 +187,17 @@ function nearestSideIn(segments, coordinate, sizeDegrees, usedPoints, avoidGeome
   return nearestOf(targets.map(target => ({target, distance: distanceMetres(coordinate, target)})));
 }
 
+// The probe passes a bare list of used points; that means there is no outline to avoid.
+const avoidanceOf = avoidance => (Array.isArray(avoidance) ? magnetAvoidance(avoidance) : avoidance ?? noAvoidance);
+
 // Where a point goes: to the nearest corner within reach, otherwise onto the nearest side, or null.
-export function magneticPoint(coordinate, entries, reach, usedPoints = [], avoidGeometry = null) {
+export function magneticPoint(coordinate, entries, reach, avoidance = noAvoidance) {
   if (!(reach > 0)) return null;
-  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), usedPoints));
+  const whatToAvoid = avoidanceOf(avoidance);
+  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), whatToAvoid.usedPoints));
   if (corner.distance <= reach) return corner.target;
   const sizeDegrees = reachInDegrees(coordinate, reach);
-  const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, usedPoints, avoidGeometry);
+  const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, whatToAvoid);
   return side.distance <= reach ? side.target : null;
 }
 
@@ -207,7 +233,7 @@ export function magneticallyMoved(geometry, entries, reach) {
   }
   const segments = sideIndex(entries);
   const toSide = nearestOf(
-    own.map(corner => ({corner, ...nearestSideIn(segments, corner, sizeDegrees, [], null)}))
+    own.map(corner => ({corner, ...nearestSideIn(segments, corner, sizeDegrees, noAvoidance)}))
   );
   if (toSide.distance > reach) return geometry;
   const {corner, target} = toSide;

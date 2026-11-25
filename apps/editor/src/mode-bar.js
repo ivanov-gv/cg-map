@@ -31,6 +31,14 @@ export function showModeBar({title, hint, notice = null, buttons}) {
   if (previousFocusId) buttonElements.find(({id}) => id === previousFocusId)?.focus();
 }
 
+// A refusal during drawing belongs in the visible bar, not in the hidden inspector.
+export function setModeNotice(message) {
+  const notice = elementById('mode-notice');
+  notice.textContent = message ?? '';
+  notice.hidden = !message;
+  shareHeight();
+}
+
 export function hideModeBar() {
   elementById('mode-bar').hidden = true;
 }

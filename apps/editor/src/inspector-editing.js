@@ -1,18 +1,21 @@
 import {createElementWithText, elementById} from './dom.js';
 import {
   areasAround,
+  drawingAvoidance,
   hasOutline,
   magneticallyMoved,
   magneticPoint,
+  magnetAvoidance,
   neighbouringAreas,
-  reachMetres,
-  usedDrawingPoints
+  noAvoidance,
+  reachMetres
 } from './area-magnet.js';
 import {doOverlap, overlapNotice} from './area-overlap.js';
 import {confirmDeletion} from './deletion-dialog.js';
 import {installDragGestures} from './drag-gestures.js';
 import {drawingHint, drawingMeasure} from './drawing-hints.js';
 import {
+  afterDoubleClick,
   afterDrawnPoint,
   afterGestureMove,
   afterMapTap,
@@ -44,7 +47,7 @@ import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
 import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
 import {hasMagnetEffect} from './magnet-tools.js';
-import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
+import {hideModeBar, setCrossVisible, setModeNotice, showModeBar} from './mode-bar.js';
 import {formValues, propertiesFromForm, renderPropertyForm} from './property-form.js';
 import {usualValuesOf} from './usual-values.js';
 
@@ -69,6 +72,9 @@ export class InspectorEditing {
   #transaction = null;
   #filename = null;
   #pointer = null;
+  // Screen taps that added drawn points, and the raw place under the phone's cross.
+  #drawnTaps = [];
+  #lastCrossCoordinate = null;
   // The shape of the object when its edit was opened.
   #openedGeometry = null;
   #followingBudget = new DragBudget();
@@ -120,9 +126,19 @@ export class InspectorEditing {
     return isPositioning ? this.#behavior.dragTarget(feature.geometry, this.#context.behaviorContext()) : null;
   }
 
-  // What a new drawn point must avoid: the object's outline for a hole, and every drawn corner but the newest.
-  #drawingUsedPoints() {
-    return usedDrawingPoints(this.#transaction.drawnPoints, this.#holeOutline);
+  // What every new point of this drawing must avoid.
+  #drawingAvoidance() {
+    return drawingAvoidance(this.#transaction.drawnPoints, this.#holeOutline);
+  }
+
+  // Screen taps and cross positions belong to one drawing session only.
+  #forgetDrawingPositions() {
+    this.#drawnTaps = [];
+    this.#lastCrossCoordinate = null;
+  }
+
+  #rememberDrawnTap(event) {
+    this.#drawnTaps = [...this.#drawnTaps.slice(-1), [event.point.x, event.point.y]];
   }
 
   // Where the next drawn point would go: under the fixed cross on a phone, under the pointer at the desk.
@@ -130,10 +146,7 @@ export class InspectorEditing {
     const {map} = this.#context;
     if (!this.#context.isPhone()) return this.#pointer;
     const lngLat = map.getCenter();
-    return (
-      this.#snappedPoint({lngLat, point: map.project(lngLat)}, this.#drawingUsedPoints(), this.#holeOutline) ??
-      lngLat.toArray()
-    );
+    return this.#snappedPoint({lngLat, point: map.project(lngLat)}, this.#drawingAvoidance()) ?? lngLat.toArray();
   }
 
   // The points of the open line that others share.
@@ -269,7 +282,10 @@ export class InspectorEditing {
         id: 'mode-undo',
         label: isPhone ? 'Undo' : `Undo ${pointWord}`,
         isDisabled: drawnPoints.length === 0,
-        run: () => this.#update(afterUndoneDrawnPoint(this.#transaction))
+        run: () => {
+          this.#forgetDrawingPositions();
+          this.#update(afterUndoneDrawnPoint(this.#transaction));
+        }
       },
       ...(isPhone ? [addButton] : []),
       ...(this.#hasMagnet ? [this.#magnetButton()] : []),
@@ -499,6 +515,7 @@ export class InspectorEditing {
   close() {
     this.#transaction = null;
     this.#filename = null;
+    this.#forgetDrawingPositions();
     this.showProblem(null);
     elementById('editor').hidden = true;
     elementById('edit-actions').hidden = true;
@@ -667,6 +684,7 @@ export class InspectorEditing {
   }
 
   #startTool(tool) {
+    this.#forgetDrawingPositions();
     this.#transaction = {...this.#transaction, feature: this.#currentFeature()};
     this.#update(withTool(this.#transaction, tool));
     this.#context.hideInspector();
@@ -675,6 +693,7 @@ export class InspectorEditing {
   // Back from a mode to the whole inspector, keeping what the mode changed.
   leaveMode() {
     if (!this.#transaction?.tool) return;
+    this.#forgetDrawingPositions();
     this.#update(withTool(this.#transaction, null));
     // What the inspector says about the object may depend on where it is now.
     this.#renderForm();
@@ -688,6 +707,7 @@ export class InspectorEditing {
   }
 
   #finishDrawing() {
+    this.#forgetDrawingPositions();
     this.#update(finishDrawing(this.#transaction));
     this.#renderForm();
     this.#context.showInspector();
@@ -700,20 +720,16 @@ export class InspectorEditing {
   #addPointUnderCross() {
     const {map} = this.#context;
     const lngLat = map.getCenter();
-    const {drawnPoints} = this.#transaction;
-    const snapped = this.#snappedPoint(
-      {lngLat, point: map.project(lngLat)},
-      this.#drawingUsedPoints(),
-      this.#holeOutline
-    );
-    const coordinate = snapped ?? lngLat.toArray();
-    // A second press at the same place is not a second corner. Saying so keeps a phone from adding one silently.
-    const lastPoint = drawnPoints.at(-1);
-    if (lastPoint && String(lastPoint) === String(roundedCoordinate(coordinate))) {
-      this.showProblem('That corner is already the last one.');
+    const rawCoordinate = lngLat.toArray();
+    // The cross has not moved, so this is no new corner even if the magnet would put it somewhere else.
+    const crossCoordinate = roundedCoordinate(rawCoordinate);
+    if (this.#lastCrossCoordinate && String(this.#lastCrossCoordinate) === String(crossCoordinate)) {
+      setModeNotice('That corner is already the last one.');
       return;
     }
-    this.#addDrawnPoint(coordinate);
+    const snapped = this.#snappedPoint({lngLat, point: map.project(lngLat)}, this.#drawingAvoidance());
+    this.#lastCrossCoordinate = crossCoordinate;
+    this.#addDrawnPoint(snapped ?? rawCoordinate);
   }
 
   #placeUnderCross() {
@@ -737,16 +753,15 @@ export class InspectorEditing {
     return true;
   }
 
-  // The place an area's corner goes to, or null. Used points and the outline of a hole are kept apart.
-  #magneticCorner(coordinate, usedPoints = [], avoidGeometry = null) {
+  // The place an area's corner goes to, or null. What it must avoid is one value.
+  #magneticCorner(coordinate, avoidance = noAvoidance) {
     const own = {filename: this.#filename, key: this.#transaction.key};
     const reach = reachMetres(coordinate, this.#context.map);
     return magneticPoint(
       coordinate,
       areasAround(coordinate, own, this.#context.behaviorContext(), reach),
       reach,
-      usedPoints,
-      avoidGeometry
+      avoidance
     );
   }
 
@@ -759,7 +774,7 @@ export class InspectorEditing {
     if (handle) {
       const {coordinate} = handles.find(other => isSameHandle(other, handle));
       const usedPoints = handles.filter(other => !isSameHandle(other, handle)).map(other => other.coordinate);
-      const target = this.#magneticCorner(coordinate, usedPoints);
+      const target = this.#magneticCorner(coordinate, magnetAvoidance(usedPoints));
       return target ? withGeometry(transaction, moveVertex(feature.geometry, handle, target)) : transaction;
     }
     const reach = reachMetres(handles[0].coordinate, this.#context.map);
@@ -865,19 +880,19 @@ export class InspectorEditing {
 
   // Where a layer says a point belongs, such as on the outline of a building, or null. While drawing an outline or a
   // hole, the magnet also joins what is near, except at points the shape already has.
-  #snappedPoint(event, usedPoints = [], avoidGeometry = null) {
+  #snappedPoint(event, avoidance = noAvoidance) {
     const snapped = this.#behavior.snappedPoint?.(event, this.#context.behaviorContext(), this.#transaction.feature);
     if (snapped) return snapped;
     const isOutline = [editTools.drawPolygon, editTools.cutHole].includes(this.#transaction.tool);
     if (!isOutline || !isMagnetOn()) return null;
-    return this.#magneticCorner(event.lngLat.toArray(), usedPoints, avoidGeometry);
+    return this.#magneticCorner(event.lngLat.toArray(), avoidance);
   }
 
   // Shift keeps right angles while drawing a building or any other shape. A layer can join a tap to what is there.
   #drawnCoordinate(event) {
     return this.#isAngleKept(event)
       ? this.#angledCoordinate(event)
-      : (this.#snappedPoint(event, this.#drawingUsedPoints(), this.#holeOutline) ?? event.lngLat.toArray());
+      : (this.#snappedPoint(event, this.#drawingAvoidance()) ?? event.lngLat.toArray());
   }
 
   #isAngleKept(event) {
@@ -903,8 +918,11 @@ export class InspectorEditing {
       return;
     }
     if (isDrawing(this.#transaction)) {
-      // With a fixed cross the finger only moves the map.
-      if (!this.#context.isPhone()) this.#addDrawnPoint(this.#drawnCoordinate(event));
+      // With a fixed cross the finger only moves the map. At the desk each tap has a screen place of its own.
+      if (!this.#context.isPhone()) {
+        this.#rememberDrawnTap(event);
+        this.#addDrawnPoint(this.#drawnCoordinate(event));
+      }
       return;
     }
     const handle = this.#isVertexTool ? this.#context.handles.handleAt(event.point) : null;
@@ -913,14 +931,13 @@ export class InspectorEditing {
     this.#update(afterMapTap(this.#transaction, event.lngLat.toArray(), handle));
   }
 
-  // A double click ends a line where it is. Both clicks resolve to the same point because the newest drawn corner is
-  // not treated as used, so the second one repeats the first and is dropped here.
+  // A double click is two taps close together on screen, whatever each one snapped to. Drop the point the second tap
+  // added; a line ending at an already long enough place still finishes as it did before.
   finishWithDoubleClick() {
     if (!isDrawing(this.#transaction)) return false;
-    const {drawnPoints} = this.#transaction;
-    const isRepeated = drawnPoints.length > 1 && String(drawnPoints.at(-1)) === String(drawnPoints.at(-2));
-    // A shape still being drawn needs the shorter outline shown now, not only once another point is added.
-    if (isRepeated) this.#update(afterUndoneDrawnPoint(this.#transaction));
+    const next = afterDoubleClick(this.#transaction, this.#drawnTaps);
+    if (next !== this.#transaction) this.#update(next);
+    this.#drawnTaps = [];
     if (canFinishDrawing(this.#transaction)) this.#finishDrawing();
     return true;
   }

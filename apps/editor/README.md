@@ -84,13 +84,14 @@ a double click ends a line. On a phone drawing uses a fixed cross: move the map 
 losing the window restores the position from before that gesture.
 
 The magnet takes a dragged or drawn corner of an area, including a hole corner, to a corner of another object of its
-file close by, otherwise onto its side, and a moved area with its closest corner. It keeps a new corner off corners the
-shape already has, so a later point cannot fold it together. The newest corner is left out of that rule so an exact
-repeat stays recognisable and is dropped; on a phone a second Add at the same place says so and adds nothing. A hole
-corner also stays off the outline the hole cuts. The points of roads and waterways join others the same way. The
-`Magnet` button in the modes where it applies shows its state with `aria-pressed` and is remembered in this browser.
-What an edit newly overlaps is outlined in blue and counted and named in the bar and in the inspector; it is not
-refused, because some sources do overlap ([area-magnet.js](src/area-magnet.js), [area-overlap.js](src/area-overlap.js)).
+file close by, otherwise onto its side, and a moved area with its closest corner. It keeps every new corner off corners
+the shape already has, so a later point cannot fold it together. A double click is two taps close together on screen,
+whatever each one snapped to, and the point the second tap added is dropped. On a phone a second Add without moving the
+cross says so in the bar and adds nothing. A hole corner also stays off the outline the hole cuts. The points of roads
+and waterways join others the same way. The `Magnet` button in the modes where it applies shows its state with
+`aria-pressed` and is remembered in this browser. What an edit newly overlaps is outlined in blue and counted and named
+in the bar and in the inspector; it is not refused, because some sources do overlap
+([area-magnet.js](src/area-magnet.js), [area-overlap.js](src/area-overlap.js)).
 
 Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
 confirms it. Marks wait in Changes under From the field and are never written to a source.

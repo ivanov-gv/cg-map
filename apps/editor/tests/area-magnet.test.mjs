@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {magneticallyMoved, magneticPoint, neighbouringAreas, usedDrawingPoints} from '../src/area-magnet.js';
+import {
+  drawingAvoidance,
+  magnetAvoidance,
+  magneticallyMoved,
+  magneticPoint,
+  neighbouringAreas,
+  usedDrawingPoints
+} from '../src/area-magnet.js';
 import {doOverlap, overlapNotice} from '../src/area-overlap.js';
 
 // About eight metres east and eleven north.
@@ -82,28 +89,43 @@ test('a corner is never magnetised onto a point the shape already has', () => {
   const firstCorner = at(2, 0);
   const nearby = at(2.1, 0.1);
   assert.deepEqual(magneticPoint(nearby, [house], reach), firstCorner);
-  assert.notDeepEqual(magneticPoint(nearby, [house], reach, [firstCorner]), firstCorner);
+  const used = usedDrawingPoints([firstCorner]);
+  assert.deepEqual(used, [firstCorner], 'the list the probe asks for includes the newest point');
+  assert.notDeepEqual(magneticPoint(nearby, [house], reach, used), firstCorner);
+  assert.notDeepEqual(magneticPoint(nearby, [house], reach, magnetAvoidance([firstCorner])), firstCorner);
 });
 
-test('the two clicks of a double click beside a neighbour keep the same corner', () => {
-  const beside = at(2.1, 1.9);
-  const drawn = [at(4, 0), at(4, 2)];
-  const first = magneticPoint(beside, [house], reach, usedDrawingPoints(drawn));
-  assert.deepEqual(first, at(2, 2));
-  const second = magneticPoint(beside, [house], reach, usedDrawingPoints([...drawn, first]));
-  assert.deepEqual(second, at(2, 2));
-  // Once another corner is drawn, the old one is used again and is no longer a target.
-  const later = magneticPoint(beside, [house], reach, usedDrawingPoints([...drawn, first, at(5, 5)]));
-  assert.notDeepEqual(later, at(2, 2));
+test('a side is never invented across separate parts or across a hole', () => {
+  const parts = entry('parts', {
+    type: 'MultiPolygon',
+    coordinates: [[square(0, 0).coordinates[0]], [square(10, 0).coordinates[0]]]
+  });
+  assert.equal(magneticPoint(at(6, 1), [parts], 5), null);
+  assert.equal(magneticPoint(at(6, 0), [parts], 5), null);
+  const cut = entry('cut', {
+    type: 'Polygon',
+    coordinates: [square(0, 0, 6).coordinates[0], square(2, 2, 2).coordinates[0]]
+  });
+  assert.equal(magneticPoint(at(1, 4), [cut], 5), null);
+});
+
+test('two taps near one corner keep different points', () => {
+  const drawn = [at(6, 0)];
+  const first = magneticPoint(at(2.1, 1.95), [house], 10, drawingAvoidance(drawn));
+  const second = magneticPoint(at(2.3, 1.6), [house], 10, drawingAvoidance([...drawn, first]));
+  assert.notDeepEqual(first, second);
 });
 
 test('a hole corner stays off the outline it cuts', () => {
   const open = square(0, 0);
   const neighbour = entry('neighbour', square(2, 0));
-  const used = usedDrawingPoints([], open);
-  assert.deepEqual(magneticPoint(at(1.9, 1), [neighbour], reach, used), at(2, 1));
-  assert.equal(magneticPoint(at(1.9, 1), [neighbour], reach, used, open), null);
-  assert.notDeepEqual(magneticPoint(at(2.1, 1.9), [neighbour], reach, used, open), at(2, 2));
+  const avoidance = drawingAvoidance([], open);
+  assert.deepEqual(
+    magneticPoint(at(1.9, 1), [neighbour], reach, magnetAvoidance(avoidance.usedPoints)),
+    at(2, 1)
+  );
+  assert.equal(magneticPoint(at(1.9, 1), [neighbour], reach, avoidance), null);
+  assert.notDeepEqual(magneticPoint(at(2.1, 1.9), [neighbour], reach, avoidance), at(2, 2));
 });
 
 test('an emptied area has no outline to pull or to overlap', () => {
@@ -123,12 +145,14 @@ test('one unfinished part makes a whole MultiPolygon unusable', () => {
     assert.equal(doOverlap(broken, house.feature.geometry, false), false);
     assert.equal(doOverlap(house.feature.geometry, broken, false), false);
     assert.equal(magneticallyMoved(broken, [house], reach), broken);
+    // An unfinished part makes the whole neighbour unusable as a source of sides too.
+    assert.equal(magneticPoint(at(2.1, 1), [entry('broken', broken)], reach), null);
   }
 });
 
 test('a side target rounded onto a used point is not used again', () => {
   const used = at(2, 1);
-  const target = magneticPoint([19.2502001, 42.44010004], [house], 0.02, [used]);
+  const target = magneticPoint([19.2502001, 42.44010004], [house], 0.02, magnetAvoidance([used]));
   assert.notDeepEqual(target, used);
 });
 

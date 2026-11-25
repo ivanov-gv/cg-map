@@ -116,7 +116,7 @@ const selectedCorners = async page => {
 test('a building is drawn and moved against its neighbour, and an overlap is said and shown', async ({page}, testInfo) => {
   await startDrawing(page, 'Draw building');
   await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
-  // A double click beside the house's corner leaves one corner, not two close together.
+  // Two taps close on screen are one double click, so only one corner stays even where they snap differently.
   await tapAt(page, [-0.95, 1.05], {clickCount: 2});
   await expect.poll(() => drawnCorners(page)).toEqual([[-1, 1]]);
   for (const corner of [[0.5, 1], [0.5, 2], [-0.96, 2]]) await tapAt(page, corner);

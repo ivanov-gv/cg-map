@@ -112,10 +112,13 @@ test('a phone draws with the fixed cross and only marks for deletion', {tag: '@p
   await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
   // The cross goes to the corner of the neighbouring house under it, even on a touch screen.
   await addUnderCross(page, [3.05, 1.05]);
-  // Pressing Add again at the same place says the corner is already there, instead of adding a second one.
+  // Pressing Add again without moving the cross says so in the visible bar, instead of adding a second corner.
   await addUnderCross(page, [3.05, 1.05]);
-  await expect(page.locator('#edit-problem')).toHaveText('That corner is already the last one.');
-  for (const corner of [[5, 1], [5, 3], [3.05, 2.95]]) await addUnderCross(page, corner);
+  await expect(page.locator('#mode-notice')).toHaveText('That corner is already the last one.');
+  await expect(page.locator('#mode-notice')).toBeVisible();
+  await addUnderCross(page, [5, 1]);
+  await expect(page.locator('#mode-notice')).toBeHidden();
+  for (const corner of [[5, 3], [3.05, 2.95]]) await addUnderCross(page, corner);
   await page.locator('#mode-done').click();
   await expect(page.locator('#map-cross')).toBeHidden();
   await applyEdit(page);
