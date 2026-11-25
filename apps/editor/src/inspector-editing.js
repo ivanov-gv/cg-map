@@ -8,6 +8,7 @@ import {
   magnetAvoidance,
   neighbouringAreas,
   noAvoidance,
+  outlineAvoidedByHandle,
   reachMetres
 } from './area-magnet.js';
 import {doOverlap, overlapNotice} from './area-overlap.js';
@@ -53,6 +54,9 @@ import {usualValuesOf} from './usual-values.js';
 
 // How close to the first corner, on screen, a tap closes a shape.
 const closingDistancePixels = 14;
+
+// The Add button says 'point' for a line and 'corner' for an outline, and so must its refusal.
+const drawnPointWord = tool => (tool === editTools.drawLine ? 'point' : 'corner');
 
 const beginNewByShape = {
   Point: beginNewPoint,
@@ -270,7 +274,7 @@ export class InspectorEditing {
   #drawingButtons() {
     const isPhone = this.#context.isPhone();
     const {drawnPoints} = this.#transaction;
-    const pointWord = this.#transaction.tool === editTools.drawLine ? 'point' : 'corner';
+    const pointWord = drawnPointWord(this.#transaction.tool);
     const addButton = {
       id: 'mode-add',
       label: `Add ${pointWord}`,
@@ -724,7 +728,7 @@ export class InspectorEditing {
     // The cross has not moved, so this is no new corner even if the magnet would put it somewhere else.
     const crossCoordinate = roundedCoordinate(rawCoordinate);
     if (this.#lastCrossCoordinate && String(this.#lastCrossCoordinate) === String(crossCoordinate)) {
-      setModeNotice('That corner is already the last one.');
+      setModeNotice(`That ${drawnPointWord(this.#transaction.tool)} is already the last one.`);
       return;
     }
     const snapped = this.#snappedPoint({lngLat, point: map.project(lngLat)}, this.#drawingAvoidance());
@@ -774,7 +778,8 @@ export class InspectorEditing {
     if (handle) {
       const {coordinate} = handles.find(other => isSameHandle(other, handle));
       const usedPoints = handles.filter(other => !isSameHandle(other, handle)).map(other => other.coordinate);
-      const target = this.#magneticCorner(coordinate, magnetAvoidance(usedPoints));
+      const avoidedOutline = outlineAvoidedByHandle(feature.geometry, handle);
+      const target = this.#magneticCorner(coordinate, magnetAvoidance(usedPoints, avoidedOutline));
       return target ? withGeometry(transaction, moveVertex(feature.geometry, handle, target)) : transaction;
     }
     const reach = reachMetres(handles[0].coordinate, this.#context.map);
@@ -932,7 +937,7 @@ export class InspectorEditing {
   }
 
   // A double click is two taps close together on screen, whatever each one snapped to. Drop the point the second tap
-  // added; a line ending at an already long enough place still finishes as it did before.
+  // added. The drawing then finishes if it has enough points.
   finishWithDoubleClick() {
     if (!isDrawing(this.#transaction)) return false;
     const next = afterDoubleClick(this.#transaction, this.#drawnTaps);

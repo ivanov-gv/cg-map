@@ -98,6 +98,14 @@ const usedDrawingPoints = (drawnPoints = [], openGeometry = null) => [
 export const drawingAvoidance = (drawnPoints = [], openGeometry = null) =>
   magnetAvoidance(usedDrawingPoints(drawnPoints, openGeometry), openGeometry);
 
+// The outer ring of the polygon a dragged hole corner belongs to, or null for an outer corner. A hole corner must stay
+// off the ring it cuts; MultiPolygon handles name their polygon with polygonIndex.
+export function outlineAvoidedByHandle(geometry, handle) {
+  if (!handle || !(handle.ringIndex > 0) || !isArea(geometry)) return null;
+  const polygon = polygonsOf(geometry)[handle.polygonIndex ?? 0];
+  return polygon?.[0] ? {type: 'Polygon', coordinates: [polygon[0]]} : null;
+}
+
 // A point already used must not be pulled together with the one being placed, or the shape collapses.
 const notUsed = (points, usedPoints) => points.filter(point => !usedPoints.some(used => isSameCoordinate(point, used)));
 
@@ -190,7 +198,10 @@ function nearestSideIn(segments, coordinate, sizeDegrees, avoidance) {
 // Where a point goes: to the nearest corner within reach, otherwise onto the nearest side, or null.
 export function magneticPoint(coordinate, entries, reach, avoidance = noAvoidance) {
   if (!(reach > 0)) return null;
-  const corner = nearestCorner(coordinate, notUsed(cornersOf(entries), avoidance.usedPoints));
+  const availableCorners = notUsed(cornersOf(entries), avoidance.usedPoints).filter(
+    corner => !isOnOutline(corner, avoidance.avoidGeometry)
+  );
+  const corner = nearestCorner(coordinate, availableCorners);
   if (corner.distance <= reach) return corner.target;
   const sizeDegrees = reachInDegrees(coordinate, reach);
   const side = nearestSideIn(sideIndex(entries), coordinate, sizeDegrees, avoidance);

@@ -5,7 +5,8 @@ import {
   magnetAvoidance,
   magneticallyMoved,
   magneticPoint,
-  neighbouringAreas
+  neighbouringAreas,
+  outlineAvoidedByHandle
 } from '../src/area-magnet.js';
 import {doOverlap, overlapNotice} from '../src/area-overlap.js';
 
@@ -123,6 +124,29 @@ test('a hole corner stays off the outline it cuts', () => {
   );
   assert.equal(magneticPoint(at(1.9, 1), [neighbour], reach, avoidance), null);
   assert.notDeepEqual(magneticPoint(at(2.1, 1.9), [neighbour], reach, avoidance), at(2, 2));
+  // The magnet itself makes a neighbour's corner lie on the middle of a wider open square's side.
+  const widerOpen = square(0, 0, 4);
+  const besideSide = entry('besideSide', square(4, 1, 2));
+  const tap = at(3.8, 1.05);
+  assert.deepEqual(magneticPoint(tap, [besideSide], reach), at(4, 1));
+  assert.equal(magneticPoint(tap, [besideSide], reach, drawingAvoidance([], widerOpen)), null);
+});
+
+test('a dragged hole corner avoids only the outer ring of its own polygon', () => {
+  const outer = square(0, 0, 4).coordinates[0];
+  const cut = {type: 'Polygon', coordinates: [outer, square(1, 1, 2).coordinates[0]]};
+  assert.equal(outlineAvoidedByHandle(cut, {ringIndex: 0, vertexIndex: 0}), null);
+  assert.deepEqual(outlineAvoidedByHandle(cut, {ringIndex: 1, vertexIndex: 0}), {
+    type: 'Polygon',
+    coordinates: [outer]
+  });
+  const secondOuter = square(10, 0, 4).coordinates[0];
+  const parts = {type: 'MultiPolygon', coordinates: [[outer], [secondOuter, square(11, 1, 2).coordinates[0]]]};
+  assert.equal(outlineAvoidedByHandle(parts, {polygonIndex: 1, ringIndex: 0, vertexIndex: 0}), null);
+  assert.deepEqual(outlineAvoidedByHandle(parts, {polygonIndex: 1, ringIndex: 1, vertexIndex: 0}), {
+    type: 'Polygon',
+    coordinates: [secondOuter]
+  });
 });
 
 test('an emptied area has no outline to pull or to overlap', () => {

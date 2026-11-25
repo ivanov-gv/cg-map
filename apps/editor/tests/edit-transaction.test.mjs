@@ -72,7 +72,8 @@ test('a polygon is drawn corner by corner, undone corner by corner, and closes o
 });
 
 test('a double click drops the point its second tap added, whatever each tap snapped to', () => {
-  // The first tap goes to the neighbour's corner, as it did in round 4; the second lands a little below it.
+  // Taps count as a double click even when the first snaps to a neighbour's corner and the second lands a little
+  // below it.
   const corner = [19.2502, 42.4402];
   const snappedPoints = [corner, [19.2502, 42.44016]];
   const starts = {
