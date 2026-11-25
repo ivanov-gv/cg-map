@@ -75,3 +75,11 @@ Earth outlines to Montenegro, derives the OSM-only Kosovo gap from the reviewed 
 both context files, and recomputes the ocean from that land. The importer checks the shape of an edited position and the
 containment of a mark; `make -C data check-topology` checks neighbour overlap, inland gaps and ocean on land before a
 release. This narrows "read-only neighbour" to "editable outline, fixed set of objects" and needs no new ADR.
+
+Review round 2 kept the same scope but hardened the derivation. Natural Earth input moved to immutable
+`context-countries-source.geojson`, so derived output is never treated as preserved input and a second run is
+byte-stable. Derived geometries are canonicalised on the six-decimal grid before identity is computed, ocean cut pieces
+smaller than 1,000 m² away from a coast are dropped, and the municipality label-point rule is shared between editor and
+importer. Partial extraction now owns `neighbours` only for the neighbour-dependent groups, not for unrelated layers.
+The final topology check measured 661 m² neighbour overlap, 2,428 m² inland gap, 124 m² ocean on land, and 124 m²
+largest inland-ocean part.

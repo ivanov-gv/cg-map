@@ -13,10 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
 sys.path.insert(0, str(TOOLS))
 
+from geo_area import SQUARE_DEGREES_TO_SQUARE_METRES  # noqa: E402
 from osm_extract import ExtractionState  # noqa: E402
 from osm_extract.borders import EDGE_FILE  # noqa: E402
-from osm_extract.geometry import rounded_valid_geometry  # noqa: E402
-from osm_extract.neighbours import derive_context_features  # noqa: E402
+from osm_extract.geometry import canonical_geometry, rounded_valid_geometry  # noqa: E402
+from osm_extract.neighbours import (  # noqa: E402
+    CONTEXT_FILE, NEIGHBOUR_SOURCE_FILE, derive_context_features,
+)
+from osm_extract.water import filter_non_coastal_ocean_parts  # noqa: E402
+from osm_extract.writing import serialize_collection  # noqa: E402
 
 
 def context_feature(name, geometry, entity_id):
@@ -63,10 +68,11 @@ class NeighbourDerivationTest(unittest.TestCase):
             context_feature('D', box(0, 0, 3, 1).difference(sea_hole), 'ne:D'),
             context_feature('E', box(0, 2.95, 3, 3), 'ne:E'),
         ]
-        (self.directory / 'context-countries.geojson').write_text(
-            json.dumps({'type': 'FeatureCollection', 'features': preserved}),
-            encoding='utf-8',
-        )
+        collection = {'type': 'FeatureCollection', 'features': preserved}
+        for name in (CONTEXT_FILE, NEIGHBOUR_SOURCE_FILE):
+            (self.directory / name).write_text(
+                json.dumps(collection), encoding='utf-8'
+            )
         self.state = ExtractionState()
         self.state.country_geometry = mapping(self.country)
         self.state.border_edges = [
@@ -117,17 +123,15 @@ class NeighbourDerivationTest(unittest.TestCase):
         self.assertEqual(areas['A'].intersection(areas['B']).area, 0)
 
     def test_hole_becomes_a_derived_land_authority(self):
-        features = derive_context_features(
-            self.options, self.state, (0, 0, 3, 3)
-        )
+        areas = self.derived()
         kosovo = next(
-            feature for feature in features
+            feature for feature in self.state.context_features
             if feature['properties']['name'] == 'Kosovo'
         )
         self.assertEqual(
             kosovo['properties']['entityId'], 'derived:context-kosovo'
         )
-        self.assertTrue(shape(kosovo['geometry']).covers(Point(1.35, 2.87)))
+        self.assertTrue(areas['Kosovo'].covers(Point(1.35, 2.87)))
 
     def test_sea_connected_gap_stays_outside_the_neighbours(self):
         areas = self.derived()
@@ -143,7 +147,7 @@ class NeighbourDerivationTest(unittest.TestCase):
         self.assertIn('Kosovo', names)
 
     def test_unlabelled_residue_is_not_neighbour_land(self):
-        path = self.directory / 'context-countries.geojson'
+        path = self.directory / NEIGHBOUR_SOURCE_FILE
         collection = json.loads(path.read_text(encoding='utf-8'))
         neighbour_d = next(
             feature for feature in collection['features']
@@ -158,6 +162,43 @@ class NeighbourDerivationTest(unittest.TestCase):
         for area in areas.values():
             self.assertFalse(area.covers(Point(2.7, 0.3)))
 
+    def test_reviewed_towns_keep_their_authority(self):
+        collection = json.loads(
+            (ROOT / 'data/sources' / CONTEXT_FILE).read_text(encoding='utf-8')
+        )
+        expected = {
+            'Kosovo': (
+                (21.17, 42.67), (21.42, 42.47), (20.74, 42.21),
+                (20.47, 42.78),
+            ),
+            'Republic of Serbia': (
+                (20.87, 42.89), (20.80, 43.10), (21.19, 42.91),
+                (20.51, 43.14),
+            ),
+        }
+        for name, towns in expected.items():
+            area = next(
+                shape(feature['geometry']) for feature in collection['features']
+                if feature['properties']['name'] == name
+            )
+            for town in towns:
+                with self.subTest(authority=name, town=town):
+                    self.assertTrue(area.covers(Point(*town)))
+
+    def test_reviewed_derivation_is_stable_over_its_own_output(self):
+        options = SimpleNamespace(
+            sources_directory=ROOT / 'data/sources', uses_fresh_country=False
+        )
+        published = (
+            ROOT / 'data/sources' / CONTEXT_FILE
+        ).read_text(encoding='utf-8')
+        self.assertEqual(
+            serialize_collection(
+                derive_context_features(options, ExtractionState())
+            ),
+            published,
+        )
+
     def test_reviewed_derivation_publishes_valid_polygons(self):
         options = SimpleNamespace(
             sources_directory=ROOT / 'data/sources', uses_fresh_country=False
@@ -169,6 +210,42 @@ class NeighbourDerivationTest(unittest.TestCase):
                 geometry.is_valid,
                 f"{feature['properties']['name']} has invalid geometry",
             )
+
+    def test_canonical_geometry_ignores_ring_start_and_winding(self):
+        original = {
+            'type': 'Polygon',
+            'coordinates': [[
+                [0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2], [0, 0],
+            ]],
+        }
+        rotated = {
+            'type': 'Polygon',
+            'coordinates': [[
+                [2, 1], [1, 1], [1, 2], [0, 2], [0, 0], [2, 0], [2, 1],
+            ]],
+        }
+        reversed_ring = {
+            'type': 'Polygon',
+            'coordinates': [list(reversed(original['coordinates'][0]))],
+        }
+        self.assertEqual(
+            canonical_geometry(original),
+            canonical_geometry(rotated),
+        )
+        self.assertEqual(
+            canonical_geometry(original),
+            canonical_geometry(reversed_ring),
+        )
+
+    def test_non_coastal_ocean_slivers_are_dropped(self):
+        coastal = box(0, 0, 1, 1)
+        inland = box(3, 3, 3.0001, 3.0001)
+        sea_line = LineString([(0, 0), (1, 0)])
+        kept = filter_non_coastal_ocean_parts(
+            coastal.union(inland), [sea_line]
+        )
+        self.assertEqual(kept.geom_type, 'Polygon')
+        self.assertTrue(kept.equals(coastal))
 
     def test_snapping_a_coastal_sliver_keeps_it_valid(self):
         # This outline comes from the reviewed ocean cut: rounding its last

@@ -3,18 +3,21 @@
 from shapely.geometry import LineString, box, mapping, shape
 from shapely.ops import unary_union
 
+from geo_area import SQUARE_DEGREES_TO_SQUARE_METRES
+
 from . import Layer
 from .geometry import (
     area_source,
     clipped_features,
     geometry_features,
     rounded_valid_geometry,
+    separated_geometries,
     usable_area_geometry,
     way_coordinates,
 )
 from .identity import content_version, make_feature, osm_identity
 from .names import copy_name_tags
-from .neighbours import CONTEXT_FILE, OCEAN_BOUNDS
+from .neighbours import CONTEXT_FILE, OCEAN_BOUNDS, touches_sea
 from .rings import orient_feature, rfc7946_geometry
 from .writing import read_collection
 
@@ -34,6 +37,9 @@ WATER_AREA_RULES = (
 WATER_LINE_TAGS = ('tunnel', 'intermittent')
 OCEAN_SIMPLIFY_DEGREES = 0.0001
 WATER_SIMPLIFY_DEGREES = 0.0001
+# The difference cut leaves tiny polygons away from any coast. The largest
+# measured one is about 523 m2; a coastal part is orders of magnitude larger.
+OCEAN_PART_MIN_AREA_SQM = 1_000
 
 
 def water_area_rule(tags):
@@ -46,6 +52,19 @@ def water_area_rule(tags):
             return f"water={tags['water']}", 'water'
         return 'natural=water', 'water'
     return None
+
+
+def filter_non_coastal_ocean_parts(ocean, sea_lines):
+    """Drop small ocean cut pieces that do not touch a mapped coast."""
+    parts = separated_geometries(ocean)
+    kept = [
+        part for part in parts
+        if part.area * SQUARE_DEGREES_TO_SQUARE_METRES >= OCEAN_PART_MIN_AREA_SQM
+        or touches_sea(part, sea_lines)
+    ]
+    if not kept:
+        return ocean
+    return kept[0] if len(kept) == 1 else unary_union(kept)
 
 
 class WaterLayer(Layer):
@@ -139,6 +158,9 @@ class WaterLayer(Layer):
         ocean = box(*OCEAN_BOUNDS).difference(land_geometry)
         simplified = ocean.simplify(
             OCEAN_SIMPLIFY_DEGREES, preserve_topology=True
+        )
+        simplified = filter_non_coastal_ocean_parts(
+            simplified, state.coastlines
         )
         # Simplification can move a coastal edge onto land. Cut it back to the
         # exact published land before snapping, so the ocean never claims land.

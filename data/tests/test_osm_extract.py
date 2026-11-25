@@ -55,6 +55,7 @@ DUPLICATE_WAY_FIXTURE = {
 SNAPSHOT_TIME = '2026-11-20T21:21:21Z'
 REQUIRED_SOURCES = (
     'border-edges.geojson',
+    'context-countries-source.geojson',
     'context-countries.geojson',
     'land.geojson',
     'municipalities.geojson',
@@ -88,15 +89,16 @@ GENERATED_GEOJSON = tuple(
 EXTRACTED_GEOJSON = tuple(
     name for name in GENERATED_GEOJSON
     if name not in (
-        'context-countries.geojson', 'transport-stops.geojson'
+        'context-countries.geojson', 'context-countries-source.geojson',
+        'transport-stops.geojson'
     )
 )
-NEIGHBOUR_FILES = ('context-countries.geojson', 'land.geojson')
-NEIGHBOUR_VERSION_SENTINEL = 'sentinel-neighbour-version'
+NEIGHBOUR_DEPENDENT_GROUPS = frozenset({'land', 'borders', 'water'})
 REVIEWED_GEOJSON = (
     'border-edges.geojson', 'building-entrances.geojson',
     'building-labels.geojson', 'buildings.geojson',
-    'context-countries.geojson', 'land.geojson', 'municipalities.geojson',
+    'context-countries-source.geojson', 'context-countries.geojson',
+    'land.geojson', 'municipalities.geojson',
     'places.geojson', 'road-nodes.geojson', 'roads.geojson',
     'settlement-areas.geojson', 'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
 )
@@ -107,6 +109,7 @@ LAYER_FILES = {
     'borders': ('border-edges.geojson', 'municipalities.geojson'),
     'settlements': ('settlements.geojson', 'settlement-areas.geojson'),
     'water': ('water.geojson',),
+    'neighbours': ('context-countries.geojson', 'land.geojson'),
     'places': ('places.geojson',),
     'protected-areas': ('protected-areas.geojson',),
 }
@@ -202,65 +205,6 @@ def file_contents(root):
         name: (root / 'data/sources' / name).read_bytes()
         for name in GENERATED_FILES
     }
-
-
-def seed_neighbour_versions(root, baseline):
-    """Mark reviewed neighbour versions that a partial run must recompute."""
-    for name in NEIGHBOUR_FILES:
-        collection = json.loads(baseline[name])
-        for feature in collection['features']:
-            if feature['properties'].get('kind') == 'context':
-                feature['properties']['entityVersion'] = (
-                    NEIGHBOUR_VERSION_SENTINEL
-                )
-        (root / 'data/sources' / name).write_text(
-            json.dumps(collection, ensure_ascii=False, indent=2) + '\n',
-            encoding='utf-8',
-        )
-
-
-def assert_regenerated_neighbours(test_case, root, baseline, group):
-    """Check neighbour files are derived while other land features survive."""
-    _, context_features = source_features(root, 'context-countries.geojson')
-    _, land_features = source_features(root, 'land.geojson')
-    expected_context = json.loads(
-        baseline['context-countries.geojson']
-    )['features']
-    expected_land = json.loads(baseline['land.geojson'])['features']
-    with test_case.subTest(group=group, name='context-countries.geojson'):
-        test_case.assertEqual(
-            [feature['properties']['entityId'] for feature in context_features],
-            [
-                feature['properties']['entityId']
-                for feature in expected_context
-            ],
-        )
-        for feature in context_features:
-            test_case.assertTrue(
-                feature['properties']['entityVersion'].startswith('sha256:')
-            )
-    with test_case.subTest(group=group, name='land.geojson'):
-        land_context = [
-            feature for feature in land_features
-            if feature['properties'].get('kind') == 'context'
-        ]
-        test_case.assertEqual(land_context, context_features)
-
-        def other_key(feature):
-            return (
-                feature['properties']['entityId'],
-                feature['properties'].get('entityPart'),
-            )
-        test_case.assertEqual(
-            {
-                other_key(feature): feature for feature in land_features
-                if feature['properties'].get('kind') != 'context'
-            },
-            {
-                other_key(feature): feature for feature in expected_land
-                if feature['properties'].get('kind') != 'context'
-            },
-        )
 
 
 def coordinate_values(value):
@@ -362,6 +306,12 @@ class OsmExtractTest(unittest.TestCase):
                     file_contents(self.first_root)[name],
                     file_contents(self.second_root)[name],
                 )
+
+    def test_extracting_over_its_own_output_is_byte_identical(self):
+        extract(self.first_root)
+        before = file_contents(self.first_root)
+        extract(self.first_root)
+        self.assertEqual(file_contents(self.first_root), before)
 
     def test_source_options_are_required(self):
         result = subprocess.run(
@@ -782,20 +732,19 @@ class OsmExtractTest(unittest.TestCase):
     def test_each_layer_group_replaces_only_its_source_file(self):
         extract(self.first_root)
         baseline = file_contents(self.first_root)
-        # Provenance is rewritten on every run. Neighbour files are also
-        # rewritten, but their ring order can change when an already-derived
-        # neighbour is unioned again, so they are checked as geometry below.
         always_regenerated = ('provenance.json',)
         for group, filenames in LAYER_FILES.items():
             with self.subTest(group=group):
                 root = prepared_root(self.temporary_path / group)
                 sources = root / 'data/sources'
-                # Neighbours is always selected and needs the reviewed edges
-                # and land outline even when borders and land are not.
-                preserved = (
-                    'context-countries.geojson', 'land.geojson',
-                    'border-edges.geojson',
-                )
+                preserved = ()
+                if group in NEIGHBOUR_DEPENDENT_GROUPS or group == 'neighbours':
+                    preserved += (
+                        'context-countries.geojson', 'land.geojson',
+                        'border-edges.geojson',
+                    )
+                if group in ('water', 'borders'):
+                    preserved += ('land.geojson',)
                 if group == 'settlements':
                     preserved += ('municipalities.geojson',)
                 marker = b'not regenerated by this run\n'
@@ -805,14 +754,9 @@ class OsmExtractTest(unittest.TestCase):
                             baseline[name] if name in preserved else marker
                         )
                         (sources / name).write_bytes(contents)
-                seed_neighbour_versions(root, baseline)
                 extract(root, layers=[group])
                 for name in GENERATED_FILES:
-                    if (
-                        name not in baseline
-                        or name in always_regenerated
-                        or name in NEIGHBOUR_FILES
-                    ):
+                    if name not in baseline or name in always_regenerated:
                         continue
                     with self.subTest(group=group, name=name):
                         if name in filenames or name in preserved:
@@ -822,7 +766,6 @@ class OsmExtractTest(unittest.TestCase):
                         self.assertEqual(
                             (sources / name).read_bytes(), expected
                         )
-                assert_regenerated_neighbours(self, root, baseline, group)
 
     def test_building_attributes_and_address_joins(self):
         extract(self.first_root)

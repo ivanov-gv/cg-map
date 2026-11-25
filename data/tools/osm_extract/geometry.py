@@ -5,6 +5,7 @@ import json
 import osmium
 import shapely
 from shapely.geometry import LineString, MultiLineString, box, mapping, shape
+from shapely.geometry.polygon import orient
 from shapely.ops import polygonize, unary_union
 
 from .identity import make_feature
@@ -28,6 +29,39 @@ def rounded_valid_geometry(geometry):
     """Snap coordinates to the published grid without breaking topology."""
     area = shape(geometry) if isinstance(geometry, dict) else geometry
     return mapping(shapely.set_precision(area, 1e-6))
+
+
+def canonical_ring(ring):
+    """Rotate a closed ring to its lowest coordinate, keeping it closed."""
+    corners = [tuple(coordinate) for coordinate in ring[:-1]]
+    first = min(range(len(corners)), key=lambda index: corners[index])
+    ordered = [list(corner) for corner in corners[first:] + corners[:first]]
+    return [*ordered, list(ordered[0])]
+
+
+def canonical_polygon(rings):
+    """Return an RFC 7946 polygon with a stable start and sorted holes."""
+    holes = sorted(
+        (canonical_ring(ring) for ring in rings[1:]),
+        key=lambda ring: ring[:-1]
+    )
+    return [canonical_ring(rings[0]), *holes]
+
+
+def canonical_geometry(geometry):
+    """Give a derived polygon one byte representation, whatever its input order."""
+    area = shape(geometry) if isinstance(geometry, dict) else geometry
+    normalized = json.loads(json.dumps(mapping(orient(area, sign=1.0))))
+    if normalized['type'] == 'Polygon':
+        normalized['coordinates'] = canonical_polygon(normalized['coordinates'])
+    elif normalized['type'] == 'MultiPolygon':
+        polygons = [
+            canonical_polygon(rings) for rings in normalized['coordinates']
+        ]
+        normalized['coordinates'] = sorted(
+            polygons, key=lambda polygon: polygon[0][:-1]
+        )
+    return normalized
 
 
 def way_coordinates(way):

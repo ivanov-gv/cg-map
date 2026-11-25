@@ -6,7 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {applyChangeset} from '../tools/apply-changeset.mjs';
-import {lineProblem, polygonProblem, ringProblem} from '../tools/changeset-geometry.mjs';
+import {
+  lineProblem, municipalityLabelPointProblem, polygonProblem, ringProblem
+} from '../tools/changeset-geometry.mjs';
 import {propertyProblem} from '../tools/changeset-rules.mjs';
 import {checkData} from '../tools/check-data.mjs';
 
@@ -190,6 +192,25 @@ for (const {name, filename, properties, previous, isValid} of propertyCases) {
     assert.equal(propertyProblem(properties, propertyRules, supportedLevels, previous) === null, isValid);
   });
 }
+test('the municipality label mark check is shared with geometry rules', () => {
+  const operation = {
+    filename: 'municipalities.geojson',
+    after: {
+      properties: {kind: 'municipality', labelPoint: [0.5, 0.5]},
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+      },
+    },
+  };
+  assert.equal(municipalityLabelPointProblem(operation), null);
+  const outside = {
+    ...operation,
+    after: {...operation.after, properties: {...operation.after.properties, labelPoint: [2, 2]}},
+  };
+  assert.match(municipalityLabelPointProblem(outside), /outside its area/);
+});
+
 test('a municipality label mark may move within its area but not outside it', testContext => {
   const root = temporaryRoot(testContext);
   const index = readSource(root, 'municipalities.geojson').features.findIndex(

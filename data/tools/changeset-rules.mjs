@@ -1,6 +1,8 @@
 // What an editor changeset may do, read from the shared editor-layers contract. The editor applies the same rules
 // before it records an edit (apps/editor/src/layer-rules.js); the shared fixtures keep the two in step.
-import {derivedGeometryProblem, geometryProblem} from './changeset-geometry.mjs';
+import {
+  derivedGeometryProblem, geometryProblem, municipalityLabelPointProblem
+} from './changeset-geometry.mjs';
 
 const placesFile = 'places.geojson';
 const stopsFile = 'transport-stops.geojson';
@@ -240,6 +242,8 @@ export function checkOperationRules(operation, rules, levels) {
   requireThat(!invalidGeometry, `${featureLabel}: ${invalidGeometry}`);
   const invalidProperty = propertyProblem(after.properties, rule.properties, levels, before?.properties);
   requireThat(!invalidProperty, `${featureLabel}: ${invalidProperty}`);
+  const labelPointProblem = municipalityLabelPointProblem(operation);
+  requireThat(!labelPointProblem, `${featureLabel}: ${labelPointProblem}`);
   const hasRequiredAny = !rule.requiredAny || rule.requiredAny.some(name => after.properties[name] !== undefined);
   requireThat(hasRequiredAny, `${featureLabel}: one of ${rule.requiredAny?.join(', ')} is required`);
   if (operationKind === 'modify') checkModification(operation, rule, limits, featureLabel);

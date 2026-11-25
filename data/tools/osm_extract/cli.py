@@ -63,6 +63,8 @@ FINISH_ORDER = (
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
 })
+# These groups read the context files or the same coast the neighbours derive.
+NEIGHBOUR_DEPENDENT_GROUPS = frozenset({'land', 'borders', 'water'})
 
 
 @dataclass(frozen=True)
@@ -210,12 +212,7 @@ def require_reviewed_input(root, input_hash):
 
 
 def adopt_static_files(sources_directory):
-    """Adopt preserved snapshots once and return their filenames."""
-    context_path = sources_directory / 'context-countries.geojson'
-    context = adopt_collection(
-        read_collection(context_path), lambda feature: f'ne:{feature["id"]}'
-    )
-    write_collection(context_path, context['features'])
+    """Adopt the preserved transit snapshot and return its filename."""
     stops_path = sources_directory / 'transport-stops.geojson'
     stops = adopt_collection(
         read_collection(stops_path),
@@ -231,7 +228,7 @@ def adopt_static_files(sources_directory):
         json.dumps(provenance, indent=2, sort_keys=True) + '\n',
         encoding='utf-8'
     )
-    return [context_path.name, stops_path.name]
+    return [stops_path.name]
 
 
 def count_features(source_bytes):
@@ -446,7 +443,11 @@ def run(args):
         )
     is_partial = args.layers is not None
     requested_groups = set(args.layers or LAYER_GROUPS)
-    selected_groups = requested_groups | {'neighbours'}
+    selected_groups = set(requested_groups)
+    if not is_partial or 'neighbours' in requested_groups or (
+        requested_groups & NEIGHBOUR_DEPENDENT_GROUPS
+    ):
+        selected_groups.add('neighbours')
     if is_partial:
         require_reviewed_input(root, input_hash)
     options = Options(
@@ -496,7 +497,7 @@ def run(args):
         handler = ExtractHandler(layers, staged_options, state)
         handler.apply_file(str(input_path), locations=True, idx='flex_mem')
         if not is_partial:
-            # Land appends the preserved context, so adopt it first.
+            # The transit snapshot has no OSM identity of its own.
             adopt_static_files(staged_sources)
         finish_layers(
             group_layers, selected_groups, staged_options, state

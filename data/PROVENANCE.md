@@ -9,11 +9,13 @@ now covers the whole city within `[19.15, 42.37, 19.34, 42.51]`, alongside count
 attractions and the country outline. There are 43,978 buildings, 21,229 road features, 613 land features and 1,795 water
 features. The land file has 605 extracted green areas, one country outline and seven context areas (six preserved
 Natural Earth neighbours and the OSM-derived Kosovo gap); the water file has 1,122 polygons (including one derived ocean
-polygon) and 673 waterway or coastline lines. A protected-area boundary or `place=locality` tag alone is not published
-as green cover. Minor stream, ditch and drain lines are clipped to the detail box; river and canal lines stay
-countrywide. Unmapped or blank OSM `name` and `name:en` tags are omitted rather than published as empty strings. The
-place snapshot has 1,977 entries, including named standalone OSM points outside building footprints. No source file
-exceeds 40 MB; the reviewed archive is 23,298,152 bytes.
+polygon) and 673 waterway or coastline lines. `sources/context-countries-source.geojson` keeps the immutable Natural
+Earth neighbour outlines that derivation reads; `sources/context-countries.geojson` is the derived published result. A
+protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
+lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
+tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,284,034
+bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
 eight without `building-entrances.geojson` or the later settlement and border files.
@@ -107,16 +109,27 @@ m² and 10,000 m² tolerances. The edge-construction rule is recorded in
 [decision 0029](../docs/decisions/0029-derived-unassigned-water-areas.md).
 
 Issue #429 derives the neighbour areas from the reviewed border edges and the country outline, then recomputes the ocean
-from the same country and context geometry. The hidden `neighbours` part of every extraction writes both context files
-before water finishes, so the ocean cannot claim an inland gap and a neighbour cannot overlap Montenegro. Simplified
-ocean edges are cut back to that land and all derived coordinates are snapped to six decimals without self-touches. The
-reviewed `context-countries.geojson` is 88,809 bytes with seven features; `land.geojson` is 575,441 bytes with 613
-features and `water.geojson` is 2,155,152 bytes with 1,795 features. Within land, 606 original features are unchanged;
-within water, 1,794 original features are unchanged. The other 26 source files are byte-identical. The topology check
-measures 44 m² of neighbour overlap, 1,966 m² of inland gap and 125 m² of ocean on land, all below its 20,000 m² limit.
-Municipality `labelPoint` values are now editable WGS84 positions, checked to stay inside their own area; context
-polygons are editable in both context files. Add and delete remain refused for these framing kinds. The scope is
-recorded in [decision 0037](../docs/decisions/0037-every-layer-editable.md#outcome-429-2026-11-25).
+from the same country and context geometry. Derivation reads immutable Natural Earth outlines from
+`sources/context-countries-source.geojson` and writes the published result to `context-countries.geojson` and the
+`kind=context` features of `land.geojson`, so a second run over its own output is byte-stable. The hidden `neighbours`
+part of every extraction writes both context files before water finishes; land, borders, and water extractions also pull
+it in, while unrelated partial runs do not. Simplified ocean edges are cut back to that land, non-coastal ocean parts
+smaller than 1,000 m² are dropped, and derived coordinates are canonicalised on the six-decimal grid (RFC 7946 ring
+order, lowest-start ring rotation, sorted holes and multipolygon parts) before identity is derived.
+
+Review round 2 regenerated `context-countries.geojson` to 97,271 bytes (SHA-256
+`94034058f9b07e729e778062d87bace231b86ddb98834538f052f91b68148f8d`), `land.geojson` to 583,903 bytes (SHA-256
+`0ac4bba9b2a6b06280255bc09ad15650d82e38530ce4ea2b603f963b0ad13975`), and `water.geojson` to 2,154,972 bytes (SHA-256
+`01700cb7dae5f2c1dddcd6fe2e429751d34ff750e9d5efd153b02909972ec659`), all with the same feature counts as before. The
+immutable NE source `context-countries-source.geojson` is 6,535 bytes with six features (SHA-256
+`be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f`). The reviewed archive is
+`montenegro-8379ebd9a6764df0.pmtiles`, 23,284,034 bytes, SHA-256
+`8379ebd9a6764df023251e528bdae615b302a1df2eb60870cd3cc432d7e2c236`. The topology check measures 661 m² of neighbour
+overlap, 2,428 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part. Municipality
+`labelPoint` values are editable WGS84 positions checked to stay inside their own area through the shared
+`municipalityLabelPointProblem` rule; context polygons are editable in both context files and marked `derivedGeometry`.
+Add and delete remain refused for these framing kinds. The scope is recorded in
+[decision 0037](../docs/decisions/0037-every-layer-editable.md#outcome-429-2026-11-25).
 
 ## Bus stops
 

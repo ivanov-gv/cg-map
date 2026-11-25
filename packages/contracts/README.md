@@ -142,8 +142,10 @@ against them, and tests/integration/editor-changeset.test.mjs runs one's output 
 `editor-corrections.schema.json` defines the ledger of what was applied, replayed over a fresh extract. For land and
 water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a published kind nor invent one.
 Municipalities require an editable `labelPoint` of type `position`; the importer refuses a mark outside the feature's
-own polygon. A `context` polygon may be modified in `context-countries.geojson` and in its matching `land.geojson`
-feature, but framing kinds still cannot be added or deleted.
+own polygon. Both municipality and context outlines set `derivedGeometry`, because the pipeline and editor rebuild them
+from shared borders: their structure is checked, while topology is checked by the data pipeline. A `context` polygon may
+be modified in `context-countries.geojson` and in its matching `land.geojson` feature, but framing kinds still cannot be
+added or deleted.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those

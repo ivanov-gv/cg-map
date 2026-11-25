@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23298152,
+    "bytes": 23284034,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -52,11 +52,11 @@
       },
       "land": {
         "byZoomBand": {
-          "0-8": 55355,
-          "13-16": 19527612,
-          "9-12": 315846
+          "0-8": 55256,
+          "13-16": 19526217,
+          "9-12": 315682
         },
-        "bytes": 19898813
+        "bytes": 19897155
       },
       "municipalities": {
         "byZoomBand": {
@@ -124,15 +124,15 @@
       },
       "water": {
         "byZoomBand": {
-          "0-8": 198431,
-          "13-16": 4418586,
-          "9-12": 683065
+          "0-8": 198416,
+          "13-16": 4417446,
+          "9-12": 682792
         },
-        "bytes": 5300082
+        "bytes": 5298654
       }
     },
-    "file": "montenegro-19c876d057191dd2.pmtiles",
-    "sha256": "19c876d057191dd2cfac98a7f6533650c1c888e3cccd9a949cfefc6e39077b65",
+    "file": "montenegro-8379ebd9a6764df0.pmtiles",
+    "sha256": "8379ebd9a6764df023251e528bdae615b302a1df2eb60870cd3cc432d7e2c236",
     "tiles": 229422
   },
   "building_details": {
@@ -170,7 +170,7 @@
     "roof:levels": 142,
     "start_date": 1
   },
-  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, country outline and water.",
+  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline and water.",
   "detail_bbox": [
     19.15,
     42.37,
@@ -216,10 +216,15 @@
       "features": 50,
       "sha256": "0511b42b9c5679a1e29e71256986e71f919e7ab78123c13a343e0c5acde66eb6"
     },
+    "context-countries-source.geojson": {
+      "bytes": 6535,
+      "features": 6,
+      "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
+    },
     "context-countries.geojson": {
-      "bytes": 88809,
+      "bytes": 97271,
       "features": 7,
-      "sha256": "69fa0b3ff4ad7c25696326ce1d08aa9cdadf2d1a6384014f3a84d9b1389e8afc"
+      "sha256": "94034058f9b07e729e778062d87bace231b86ddb98834538f052f91b68148f8d"
     },
     "contours.geojson": {
       "bytes": 950066,
@@ -227,9 +232,9 @@
       "sha256": "d2f5a28a507f2ba680bf3f848291758ae5d00eb0c4621bf34a3b5b58b2271c20"
     },
     "land.geojson": {
-      "bytes": 575441,
+      "bytes": 583903,
       "features": 613,
-      "sha256": "9966e4cc4ce7495bfba0fbb40476b36f0f1f0701803ff272ded23b51b8d06c7c"
+      "sha256": "0ac4bba9b2a6b06280255bc09ad15650d82e38530ce4ea2b603f963b0ad13975"
     },
     "municipalities.geojson": {
       "bytes": 878446,
@@ -282,9 +287,9 @@
       "sha256": "bb3e8f177457997566f5ccadfbae01762c647a3a554ed392c446af5902c996e1"
     },
     "water.geojson": {
-      "bytes": 2155152,
+      "bytes": 2154972,
       "features": 1795,
-      "sha256": "f863e3a02812e8db1c3bf4cfa5ffda22c89da199754ab9fe7de896e5a5150653"
+      "sha256": "01700cb7dae5f2c1dddcd6fe2e429751d34ff750e9d5efd153b02909972ec659"
     }
   },
   "notes": [

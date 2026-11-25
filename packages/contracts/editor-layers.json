@@ -328,6 +328,7 @@
     },
     "context-countries.geojson": {
       "operations": ["modify"],
+      "derivedGeometry": true,
       "geometries": ["Polygon", "MultiPolygon"],
       "properties": {
         "name": {"required": true, "maxLength": 120},

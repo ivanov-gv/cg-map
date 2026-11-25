@@ -32,9 +32,11 @@ SEA = 'sea'
 OVERLAP_AREA_TOLERANCE = 1e-10
 RECONSTRUCTION_AREA_TOLERANCE = 1e-10
 MAX_COMBINED_BYTES = 5 * 1024 * 1024
-NEIGHBOUR_OVERLAP_TOLERANCE_SQM = 20_000
-INLAND_GAP_TOLERANCE_SQM = 20_000
-INLAND_OCEAN_TOLERANCE_SQM = 20_000
+# Measured on 2026-11-25: neighbour overlap 661 m2, inland gap 2428 m2,
+# inland ocean 124 m2. Tolerances stay above current residue but below 1 km2.
+NEIGHBOUR_OVERLAP_TOLERANCE_SQM = 1_000
+INLAND_GAP_TOLERANCE_SQM = 3_000
+INLAND_OCEAN_TOLERANCE_SQM = 200
 
 
 def read_collection(path):
@@ -253,10 +255,14 @@ def check_neighbour_geometry(sources_dir, country, context, edges, water):
     ]
     if not ocean_polygons:
         raise ValueError('water.geojson has no ocean polygon')
-    inland_ocean_sqm = (
-        unary_union(ocean_polygons).intersection(covered).area
-        * SQUARE_DEGREES_TO_SQUARE_METRES
-    )
+    ocean = unary_union(ocean_polygons)
+    polygons = list(ocean.geoms) if hasattr(ocean, 'geoms') else [ocean]
+    inland_parts = [
+        polygon.intersection(covered).area * SQUARE_DEGREES_TO_SQUARE_METRES
+        for polygon in polygons
+    ]
+    largest_inland_ocean_part_sqm = max(inland_parts) if inland_parts else 0.0
+    inland_ocean_sqm = sum(inland_parts)
     if inland_ocean_sqm > INLAND_OCEAN_TOLERANCE_SQM:
         raise ValueError(
             f'ocean covers {inland_ocean_sqm:.1f} m2 of land'
@@ -265,6 +271,7 @@ def check_neighbour_geometry(sources_dir, country, context, edges, water):
         'neighbour_overlap_sqm': overlap_sqm,
         'inland_gap_sqm': inland_gap_sqm,
         'inland_ocean_sqm': inland_ocean_sqm,
+        'largest_inland_ocean_part_sqm': largest_inland_ocean_part_sqm,
     }
 
 

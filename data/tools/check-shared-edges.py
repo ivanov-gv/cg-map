@@ -23,7 +23,8 @@ def main():
         'polygons in total, with {settlements} settlements. Uncovered area '
         '{missing_area_sqm:.0f} m2, extra {extra_area_sqm:.0f} m2; neighbour '
         'overlap {neighbour_overlap_sqm:.0f} m2, inland gap '
-        '{inland_gap_sqm:.0f} m2, inland ocean {inland_ocean_sqm:.0f} m2; '
+        '{inland_gap_sqm:.0f} m2, inland ocean {inland_ocean_sqm:.0f} m2 '
+        '(largest part {largest_inland_ocean_part_sqm:.0f} m2); '
         'new sources {combined_bytes} bytes.'.format(**metrics)
     )
     return 0

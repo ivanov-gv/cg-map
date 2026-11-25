@@ -7,12 +7,13 @@ from shapely.ops import polygonize, unary_union, voronoi_diagram
 
 from . import Layer
 from .borders import EDGE_FILE, country_geometry
-from .geometry import rounded_valid_geometry
+from .geometry import canonical_geometry, rounded_valid_geometry
 from .identity import content_version, make_feature
 from .shared_edges import OSM_ONLY_AUTHORITIES, SEA, slug
 from .writing import read_collection
 
 CONTEXT_FILE = 'context-countries.geojson'
+NEIGHBOUR_SOURCE_FILE = 'context-countries-source.geojson'
 LAND_FILE = 'land.geojson'
 OCEAN_BOUNDS = (17.5, 41.0, 21.5, 44.2)
 CONTEXT_KIND = 'context'
@@ -56,17 +57,19 @@ def touches_sea(gap, sea_lines):
     )
 
 
-def split_between_authorities(gap, labels, authorities):
-    """Divide one gap by the Voronoi cells of the authorities beside it."""
-    lines_by_authority = {
-        label: unary_union(authorities[label]) for label in labels
-    }
+def voronoi_pieces(region, labels, lines_by_authority):
+    """Divide one region between the authorities whose borders run beside it."""
+    if not labels or region.is_empty or region.area <= 0:
+        return {}
+    if len(labels) == 1:
+        return {labels[0]: region}
     cells = voronoi_diagram(
-        unary_union(list(lines_by_authority.values())), envelope=gap
+        unary_union([lines_by_authority[label] for label in labels]),
+        envelope=region
     )
     pieces = defaultdict(list)
     for cell in cells.geoms:
-        clipped = cell.intersection(gap)
+        clipped = cell.intersection(region)
         if clipped.is_empty or clipped.area <= 0:
             continue
         label = min(
@@ -78,6 +81,14 @@ def split_between_authorities(gap, labels, authorities):
         label: unary_union(geometries)
         for label, geometries in pieces.items()
     }
+
+
+def split_between_authorities(gap, labels, authorities):
+    """Divide one gap by the Voronoi cells of the authorities beside it."""
+    lines_by_authority = {
+        label: unary_union(authorities[label]) for label in labels
+    }
+    return voronoi_pieces(gap, labels, lines_by_authority)
 
 
 def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
@@ -104,10 +115,8 @@ def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
         if uncovered.covers(polygon.representative_point())
     ]
     assigned = defaultdict(list)
-    skipped_sea = 0
     for gap in gaps:
         if touches_sea(gap, sea_lines):
-            skipped_sea += 1
             continue
         labels = touching_authorities(gap, authorities)
         if len(labels) > 1:
@@ -123,7 +132,7 @@ def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
     return {
         label: unary_union(geometries)
         for label, geometries in assigned.items()
-    }, skipped_sea
+    }
 
 
 def context_identity(feature, geometry_value):
@@ -149,8 +158,10 @@ def reviewed_border_edges(options, state):
 
 def derive_context_features(options, state, ocean_bounds=OCEAN_BOUNDS):
     """Return clipped NE neighbours plus derived areas for inland gaps."""
+    # The pinned NE source never contains derived gaps, so repeated runs see
+    # the same input even after context-countries.geojson is published.
     preserved = read_collection(
-        options.sources_directory / CONTEXT_FILE
+        options.sources_directory / NEIGHBOUR_SOURCE_FILE
     )['features']
     country = country_geometry(options, state)
     clipped = {
@@ -159,26 +170,27 @@ def derive_context_features(options, state, ocean_bounds=OCEAN_BOUNDS):
         )
         for feature in preserved
     }
-    assigned, _ = gap_areas(
+    assigned = gap_areas(
         country, preserved, reviewed_border_edges(options, state), ocean_bounds
     )
     preserved_names = set(clipped)
     for name, geometry in assigned.items():
-        clipped[name] = unary_union([
-            clipped.get(name), geometry
-        ]) if name in clipped else geometry
+        if name in clipped:
+            clipped[name] = unary_union([clipped[name], geometry])
+        else:
+            clipped[name] = geometry
 
     features = []
     for feature in preserved:
         name = feature['properties']['name']
-        geometry = rounded_valid_geometry(clipped[name])
+        geometry = canonical_geometry(rounded_valid_geometry(clipped[name]))
         derived = context_identity(feature, geometry)
         if 'id' in feature:
             derived['id'] = feature['id']
         features.append(derived)
     for name in sorted(set(assigned) - preserved_names):
         properties = {'kind': CONTEXT_KIND, 'name': name}
-        geometry = rounded_valid_geometry(clipped[name])
+        geometry = canonical_geometry(rounded_valid_geometry(clipped[name]))
         identity = {
             'entityId': f'{DERIVED_CONTEXT_PREFIX}{slug(name)}',
             'entityVersion': content_version({

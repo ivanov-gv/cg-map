@@ -962,7 +962,10 @@ test('the editor bundle holds the source of every object on the map, relief and 
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
   const filenames = manifest.layers.map(layer => layer.filename);
-  const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
+  // The immutable NE neighbour outline is derivation input, not an editable map object.
+  const sourceInputs = new Set(['context-countries-source.geojson']);
+  const everyGeoJSON = fs.readdirSync('data/sources')
+    .filter(name => name.endsWith('.geojson') && !sourceInputs.has(name));
   assert.deepEqual([...filenames].sort(), [...everyGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
   assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
   assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());

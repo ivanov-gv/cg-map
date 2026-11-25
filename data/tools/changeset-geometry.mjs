@@ -1,4 +1,5 @@
 // Geometry rules of an editor changeset. The editor applies the same rules to the same shared fixture.
+import {isInsideRing} from './ring-geometry.mjs';
 
 // Source coordinates have at most six or so decimals, so a smaller cross product can only mean collinear points.
 const collinearToleranceDegreesSquared = 1e-13;
@@ -159,4 +160,40 @@ export function derivedGeometryProblem(geometry, allowedTypes) {
   const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
   const rings = polygons.flat();
   return rings.length > 0 && rings.every(isClosedRing) ? null : 'derived shape has an open or invalid ring';
+}
+
+function pointOnRingEdge(point, ring) {
+  return ring.slice(0, -1).some(
+    (start, index) => pointTouchesSegment(start, ring[index + 1], point)
+  );
+}
+
+// A mark on an edge is still inside its area, including the edge of a hole.
+function isPointInsideRing(point, ring) {
+  return isInsideRing(point, ring) || pointOnRingEdge(point, ring);
+}
+
+function isPointInsidePolygon(point, rings) {
+  return isPointInsideRing(point, rings[0])
+    && !rings.slice(1).some(ring => isPointInsideRing(point, ring));
+}
+
+function isPointInsideGeometry(point, geometry) {
+  if (geometry?.type === 'Polygon') {
+    return isPointInsidePolygon(point, geometry.coordinates);
+  }
+  if (geometry?.type === 'MultiPolygon') {
+    return geometry.coordinates.some(rings => isPointInsidePolygon(point, rings));
+  }
+  return false;
+}
+
+// A municipality mark may move, but never into another municipality or outside its own polygon.
+export function municipalityLabelPointProblem(operation) {
+  if (operation.filename !== 'municipalities.geojson' || !operation.after) return null;
+  const {kind, labelPoint} = operation.after.properties;
+  if (!['municipality', 'unassigned-water'].includes(kind)) return null;
+  return isPointInsideGeometry(labelPoint, operation.after.geometry)
+    ? null
+    : 'labelPoint is outside its area';
 }

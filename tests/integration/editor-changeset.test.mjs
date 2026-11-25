@@ -264,6 +264,32 @@ test('objects of every other layer pass from the editor through the importer', a
   assert.equal(writtenRoutes.features[0].properties.colour, '#1b75bb');
 });
 
+test('neighbour and municipality outlines use the derived geometry contract', () => {
+  const selfTouchingGeometry = {
+    type: 'Polygon',
+    coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0], [0, 1], [0, 0]]],
+  };
+  for (const filename of ['context-countries.geojson', 'municipalities.geojson']) {
+    const rule = rules.layers[filename];
+    assert.equal(rule.derivedGeometry, true, filename);
+    const properties = filename === 'municipalities.geojson'
+      ? {name: 'Test', labelPoint: [0.5, 0.5]}
+      : {name: 'Test'};
+    const before = {
+      type: 'Feature',
+      properties,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+      },
+    };
+    const after = {...before, geometry: selfTouchingGeometry};
+    // Only a derived shape passes with a repeated corner: both sides of the
+    // contract must treat these borders as computed, not freely reshaped.
+    assert.equal(featureProblem(after, rule, levels, before), null, filename);
+  }
+});
+
 test('a municipality mark and a neighbour area move through the importer', testContext => {
   const root = temporaryRoot(testContext);
   const filenames = ['municipalities.geojson', 'context-countries.geojson', 'land.geojson'];
@@ -286,11 +312,8 @@ test('a municipality mark and a neighbour area move through the importer', testC
     feature => feature.properties.entityId === neighbourBefore.properties.entityId
   );
   const landAfter = {...landBefore, geometry: translateGeometry(landBefore.geometry, 0.000001, 0)};
-  // The importer publishes RFC 7946 ring order, reversing the reviewed neighbour's clockwise ring.
-  const writtenLandGeometry = {
-    ...landAfter.geometry,
-    coordinates: landAfter.geometry.coordinates.map(ring => ring.toReversed())
-  };
+  // Derived geometry is canonicalised to RFC 7946 ring order in the pipeline, so the importer keeps it.
+  const writtenLandGeometry = landAfter.geometry;
 
   const fingerprint = feature => crypto.createHash('sha256').update(JSON.stringify(feature)).digest('hex');
   const modify = (filename, prior, after) => ({
