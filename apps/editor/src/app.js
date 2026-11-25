@@ -10,6 +10,7 @@ import {
   whenMapReady
 } from '@ivanov-gv/map-core';
 import {createActiveLayerCommands} from './active-layer-commands.js';
+import {derivedFacts} from './derived-facts.js';
 import {DraftKeeper} from './draft-keeper.js';
 import {createElementWithText, elementById} from './dom.js';
 import {EditSession} from './edit-session.js';
@@ -154,6 +155,9 @@ function layerStatus() {
 const isPickable = ({filename, feature}) =>
   isLayerObject(filename, feature) && !activeLayer?.contextFiles.includes(filename);
 
+// The working objects of a file, or none when the bundle does not have it.
+const entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
+
 // What a layer's behavior may read, never a way around the commands.
 function behaviorContext() {
   return {
@@ -163,7 +167,7 @@ function behaviorContext() {
     map,
     layer: activeLayer,
     isPhone: () => phoneLayout.matches,
-    entriesOf: filename => (sources.has(filename) ? session.workingEntries(filename) : []),
+    entriesOf,
     findEntity: (filename, entityId) =>
       behaviorContext()
         .entriesOf(filename)
@@ -245,6 +249,11 @@ const shownFiles = () => {
   return [...(isLimited ? activeLayer.phoneFiles : activeLayer.files), ...activeLayer.contextFiles];
 };
 
+function withDerivedFacts(entry) {
+  const {feature} = entry;
+  return {...feature, properties: {...feature.properties, ...derivedFacts(entry, entriesOf)}};
+}
+
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context.
 function workingFeatures(displayFeatures) {
@@ -254,7 +263,7 @@ function workingFeatures(displayFeatures) {
   }
   for (const filename of session.changedFiles()) {
     if (featuresByFile.has(filename)) continue;
-    featuresByFile.set(filename, session.workingEntries(filename).map(({feature}) => feature));
+    featuresByFile.set(filename, session.workingEntries(filename).map(withDerivedFacts));
   }
   return featuresByFile;
 }
@@ -283,7 +292,8 @@ function refreshOverlay() {
     if (!isPickable(entry)) return 'context';
     return changedFeatures.has(entry.feature) ? 'applied' : 'editable';
   };
-  const collection = overlayCollection(activeEntries, stateOf, levelFacts);
+  const factsOf = entry => ({...levelFacts(entry), ...derivedFacts(entry, entriesOf)});
+  const collection = overlayCollection(activeEntries, stateOf, factsOf);
   overlay.setData(collection);
   overlay.setInteriorsPickable(Boolean(activeFilter));
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
