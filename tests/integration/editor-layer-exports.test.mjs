@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HeadlessEditor, newLocalId} from '../editor-exports.mjs';
 import {behaviorOf} from '../../apps/editor/src/layer-behaviors.js';
-import {splitRoad} from '../../apps/editor/src/road-shapes.js';
+import {disconnectEdits, junctionEdits, splitEdits} from '../../apps/editor/src/road-edits.js';
+import {jointAt} from '../../apps/editor/src/road-graph.js';
+import {turnKey, turnsAt} from '../../apps/editor/src/road-junctions.js';
 
 const roundDegrees = value => Number(value.toFixed(6));
 const filesOf = operations => [...new Set(operations.map(({filename}) => filename))].toSorted();
@@ -111,26 +113,73 @@ test('a place moved into a building belongs to it after the import', async testC
   assert.equal(written.properties.buildingEntityId, building.feature.properties.entityId);
 });
 
-test('a split road, a forbidden turn and a traffic light pass in one export', async testContext => {
+test('a split road, forbidden turns at two junctions and a traffic light pass in one export', async testContext => {
   const editor = new HeadlessEditor(testContext);
   const ruledWays = new Set(editor.features('turn-restrictions.json').flatMap(({properties}) => [properties.from, properties.to]));
   const isPlain = ({properties, geometry}) =>
-    properties.entityId?.startsWith('way/') &&
-    properties.endNode &&
+    properties.kind === 'residential' &&
+    properties.oneway === undefined &&
+    properties.junction === undefined &&
     geometry.coordinates.length > 3 &&
     !ruledWays.has(Number(properties.entityId.slice('way/'.length)));
-  const split = editor.find('roads.geojson', isPlain);
-  const [first, second] = splitRoad(split.feature, 1, editor.context.rules.layers['roads.geojson'].properties);
-  assert.equal(editor.apply('roads.geojson', split.key, first), null);
-  assert.equal(editor.apply('roads.geojson', newLocalId(), second), null);
-  const signed = editor.find('roads.geojson', (feature, key) => isPlain(feature) && key !== split.key);
-  const choices = {[`turn:${signed.key}`]: true, hasLight: true};
-  assert.equal(editor.apply('roads.geojson', signed.key, signed.feature, choices), null);
+  const roads = () => editor.context.entriesOf('roads.geojson');
+  // A street that another one passes or ends on: both are split there, and the new halves get a rule between them.
+  const passed = editor.session
+    .workingEntries('roads.geojson')
+    .filter(({feature}) => isPlain(feature))
+    .map(({feature}) => jointAt(feature.geometry.coordinates[0], roads()))
+    .find(joint => joint.members.length === 2 && joint.members.every(({entry}) => isPlain(entry.feature)) && joint.members.some(({end}) => !end));
+  editor.record(splitEdits(passed, editor.context).edits);
+  const splitJoint = jointAt(passed.coordinate, roads());
+  assert.ok(splitJoint.members.every(({end}) => end));
+  const isOntoNewHalf = ({to}) => to.member.entry.key.startsWith('local:');
+  const group = turnsAt(splitJoint).find(({turns}) => turns.some(turn => isOntoNewHalf(turn) && turn.kind !== 'uTurn'));
+  const turn = group.turns.find(candidate => isOntoNewHalf(candidate) && candidate.kind !== 'uTurn');
+  const choices = {[turnKey(group.from, turn.to)]: false, furniture: 'traffic_signals'};
+  editor.record(junctionEdits(splitJoint, splitJoint.coordinate, choices, editor.context));
   const operations = await editor.exportAndImport();
   assert.ok(filesOf(operations).includes('turn-restrictions.json'));
-  const way = Number(signed.feature.properties.entityId.slice('way/'.length));
-  const isUTurnRule = ({properties}) => properties.from === way && properties.restriction === 'no_u_turn';
-  assert.ok(editor.written('turn-restrictions.json').some(isUTurnRule));
+  const rule = editor.written('turn-restrictions.json').find(({properties}) => properties.to === turn.to.member.entry.key);
+  assert.ok(rule, 'the rule names the half that came from the editor');
+  const half = editor.written('roads.geojson').find(({properties}) => properties.entityId === rule.properties.to);
+  assert.ok([half.properties.startNode, half.properties.endNode].includes(rule.properties.viaNodes[0]));
+  assert.ok(editor.written('road-nodes.geojson').some(({geometry}) => String(geometry.coordinates) === String(passed.coordinate)));
+});
+
+test('a junction is moved, a road disconnected from it and joined to it again, and the importer agrees', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const roads = () => editor.context.entriesOf('roads.geojson');
+  const isJunction = joint => joint.members.length === 3 && joint.members.every(({end, entry}) => end && entry.feature.geometry.coordinates.length > 2);
+  const joint = editor.session
+    .workingEntries('roads.geojson')
+    .map(({feature}) => jointAt(feature.geometry.coordinates[0], roads()))
+    .find(isJunction);
+  const moved = [joint.coordinate[0] + 0.00001, joint.coordinate[1]].map(value => Math.round(value * 1e7) / 1e7);
+  editor.record(junctionEdits(joint, moved, {}, editor.context));
+  const movedJoint = jointAt(moved, roads());
+  assert.equal(movedJoint.members.length, 3, 'every road went along');
+  const [first] = movedJoint.members;
+  editor.record(disconnectEdits(movedJoint, first, editor.context).edits);
+  assert.equal(jointAt(moved, roads()).members.length, 2);
+  await editor.exportAndImport();
+  const written = editor.written('roads.geojson').find(({properties}) => properties.entityId === first.entry.feature.properties.entityId && properties.entityPart === first.entry.feature.properties.entityPart);
+  assert.match(String(written.properties[first.end === 'start' ? 'startNode' : 'endNode']), /^local:/);
+});
+
+test('a road whose end was dragged takes the roads joined to it along', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const roads = () => editor.context.entriesOf('roads.geojson');
+  const entry = editor.find('roads.geojson', feature => {
+    const joint = jointAt(feature.geometry.coordinates.at(-1), roads());
+    return joint.members.length === 2 && joint.status === 'joined' && feature.properties.kind === 'residential';
+  });
+  const {coordinates} = entry.feature.geometry;
+  const end = coordinates.at(-1);
+  const moved = [end[0] + 0.00001, end[1]].map(value => Math.round(value * 1e7) / 1e7);
+  const after = {...entry.feature, geometry: {...entry.feature.geometry, coordinates: [...coordinates.slice(0, -1), moved]}};
+  assert.equal(editor.apply('roads.geojson', entry.key, after), null);
+  const operations = await editor.exportAndImport();
+  assert.equal(operations.filter(({filename}) => filename === 'roads.geojson').length, 2);
 });
 
 test('a deleted road takes its turn rules out of the sources', async testContext => {
