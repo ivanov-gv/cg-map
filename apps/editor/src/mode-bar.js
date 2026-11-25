@@ -7,10 +7,12 @@ function shareHeight() {
 }
 
 // While someone moves, edits corners or draws, the inspector shrinks to this one control.
-// state: {title, hint, buttons: [{id, label, run(), isPrimary, isDisabled}]}
-export function showModeBar({title, hint, buttons}) {
+// state: {title, hint, notice, buttons: [{id, label, run(), isPrimary, isDisabled}]}
+export function showModeBar({title, hint, notice = null, buttons}) {
   elementById('mode-title').textContent = title;
   elementById('mode-hint').textContent = hint;
+  elementById('mode-notice').textContent = notice ?? '';
+  elementById('mode-notice').hidden = !notice;
   const previousFocusId = document.activeElement?.id;
   const buttonElements = buttons.map(({id, label, run, isPrimary, isDisabled}) => {
     const button = createElementWithText('button', label);

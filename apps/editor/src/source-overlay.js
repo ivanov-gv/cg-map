@@ -8,6 +8,7 @@ const ghostSource = 'editor-ghost';
 const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
+const followingSource = 'editor-following';
 const pathSource = 'editor-path';
 const sketchSource = 'editor-sketches';
 const placesFile = 'places.geojson';
@@ -211,6 +212,26 @@ function workLayers() {
       paint: {'line-color': stateColors.editable, 'line-width': 3}
     },
     {
+      id: 'editor-following-line',
+      type: 'line',
+      source: followingSource,
+      filter: ['!=', ['geometry-type'], 'Point'],
+      layout: {'line-join': 'round'},
+      paint: {'line-color': stateColors.highlighted, 'line-width': 2, 'line-opacity': 0.75}
+    },
+    {
+      id: 'editor-following-point',
+      type: 'circle',
+      source: followingSource,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 7,
+        'circle-opacity': 0,
+        'circle-stroke-color': stateColors.highlighted,
+        'circle-stroke-width': 2
+      }
+    },
+    {
       id: 'editor-sketch-fill',
       type: 'fill',
       source: sketchSource,
@@ -262,7 +283,16 @@ function drawingFeatures(points, nextPoint) {
 }
 
 function installStateLayers(map) {
-  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource, pathSource, sketchSource]) {
+  for (const source of [
+    appliedSource,
+    ghostSource,
+    drawingSource,
+    deletionSource,
+    targetSource,
+    followingSource,
+    pathSource,
+    sketchSource
+  ]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
   const layers = [...levelLayers(), ...objectStateLayers(), ...workLayers()];
@@ -308,7 +338,11 @@ export function createSourceOverlay(map) {
     setPath: (coordinates, colour = '#1b75bb') =>
       setData(pathSource, coordinates.length > 1 ? [lineFeature(coordinates, {colour})] : []),
     setSketches: features => setData(sketchSource, features),
-    setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
+    // What is as it was: the open object, and what goes along with it.
+    setGhosts: geometries =>
+      setData(ghostSource, geometries.map(geometry => ({type: 'Feature', properties: {}, geometry}))),
+    setFollowing: features =>
+      setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
     setShownLevel(level) {

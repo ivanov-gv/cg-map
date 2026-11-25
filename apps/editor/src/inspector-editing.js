@@ -25,6 +25,7 @@ import {
   withTool,
   withTypedDetails
 } from './edit-transaction.js';
+import {FollowingPreview, followingShapes} from './following-preview.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
@@ -54,6 +55,10 @@ export class InspectorEditing {
   #transaction = null;
   #filename = null;
   #pointer = null;
+  // The shape of the object when its edit was opened.
+  #openedGeometry = null;
+  #following = new FollowingPreview();
+  #followingProblem = null;
   // Counts the edits opened, to tell one from the next.
   #opening = 0;
 
@@ -112,14 +117,41 @@ export class InspectorEditing {
     const canDrawSelection = geometry && geometry.coordinates.length > 0;
     overlay.setSelection(canDrawSelection ? feature : null);
     overlay.setDrawing(drawnPoints, isDrawing(this.#transaction) ? this.#nextDrawnPoint() : null);
-    const original = this.#context.session.workingFeature(this.#filename, this.#transaction.key);
-    const isReshaped = original && JSON.stringify(original.geometry) !== JSON.stringify(geometry);
-    overlay.setGhost(isReshaped ? original.geometry : null);
+    this.#renderFollowing();
     overlay.setTarget(this.#dragTarget()?.feature ?? null);
     this.#context.showMarks(this.#isVertexTool || isDrawing(this.#transaction) ? [] : this.#behavior.marks(feature));
     if (isDrawing(this.#transaction)) handles.showPoints(drawnPoints);
     else if (this.#isVertexTool) handles.show(geometry, selectedHandle, this.#joinedPoints());
     else handles.clear();
+  }
+
+  get #isReshaped() {
+    const {feature, isNew} = this.#transaction;
+    return !isNew && JSON.stringify(feature.geometry) !== JSON.stringify(this.#openedGeometry);
+  }
+
+  // What the layer would record beside the open edit as it is now, and why it would refuse it.
+  #findFollowing() {
+    const behaviorContext = this.#context.behaviorContext();
+    const prepared = this.#behavior.prepared(this.#currentFeature(), behaviorContext, this.#editContext());
+    const change = this.#change(prepared);
+    const problem = this.#behavior.problem(change, behaviorContext);
+    if (problem) return {problem, shapes: [], ghosts: []};
+    const edits = this.#behavior.companionEdits(change, behaviorContext);
+    const {session} = this.#context;
+    return {problem, ...followingShapes(edits, (filename, key) => session.workingFeature(filename, key))};
+  }
+
+  // Everything that goes along is shown where it would be, with a thin ghost of where it is.
+  #renderFollowing() {
+    const {overlay} = this.#context;
+    const nothing = {problem: null, shapes: [], ghosts: []};
+    const isDragging = Boolean(this.#transaction.gesture);
+    const isReshaped = this.#isReshaped;
+    const following = isReshaped ? this.#following.of(() => this.#findFollowing(), isDragging) : nothing;
+    this.#followingProblem = following.problem;
+    overlay.setFollowing(following.shapes);
+    overlay.setGhosts([...(isReshaped ? [this.#openedGeometry] : []), ...following.ghosts.map(({geometry}) => geometry)]);
   }
 
   #drawingButtons() {
@@ -188,7 +220,12 @@ export class InspectorEditing {
     let buttons = this.#reshapingButtons();
     if (this.#isPlacing) buttons = this.#placingButtons();
     else if (isDrawing(transaction)) buttons = this.#drawingButtons();
-    showModeBar({title: transaction.isNew ? elementById('selection-title').textContent : title, hint, buttons});
+    showModeBar({
+      title: transaction.isNew ? elementById('selection-title').textContent : title,
+      hint,
+      notice: this.#followingProblem,
+      buttons
+    });
   }
 
   // The object of the open edit, as the rest of the editor names it.
@@ -332,6 +369,8 @@ export class InspectorEditing {
     this.#opening += 1;
     this.#filename = filename;
     this.#transaction = transaction;
+    this.#openedGeometry = transaction.feature.geometry;
+    this.#following.forget();
     this.#renderForm();
     this.#update(transaction);
     if (transaction.tool) this.#context.hideInspector();
@@ -360,7 +399,8 @@ export class InspectorEditing {
     const {handles, overlay} = this.#context;
     handles.clear();
     overlay.setSelection(null);
-    overlay.setGhost(null);
+    overlay.setGhosts([]);
+    overlay.setFollowing([]);
     overlay.setTarget(null);
     overlay.setPath([]);
     this.#context.showMarks([]);

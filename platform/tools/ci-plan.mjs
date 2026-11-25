@@ -108,6 +108,7 @@ const EDITING_ONLY_SOURCES = [
   'layer-settlements.js',
   'layer-sketches.js',
   'layer-stops.js',
+  'following-preview.js',
   'line-joining.js',
   'layer-water.js',
   'layer-junctions.js',
