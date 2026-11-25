@@ -25,8 +25,8 @@ valid `visibilityLevel` on every published place. A consumer may read a missing 
 reject a present invalid value rather than treat it as high priority. The web build copies this file into its offline
 shell. Neither side keeps its own copy of the thresholds.
 
-Version breaking changes deliberately. This package is a contract boundary, not a place for miscellaneous shared
-implementation helpers.
+Breaking changes follow [decision 0039](../../docs/decisions/0039-strong-foundation-before-v1.md). This package is a
+contract boundary, not a place for miscellaneous shared implementation helpers.
 
 `stops.schema.json` defines static stop snapshot features. Preserve upstream stopId as feature id; IDs must be unique
 within the collection. Names are nonblank, coordinates are WGS84 longitude/latitude within Montenegro. Each stop may
