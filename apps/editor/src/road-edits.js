@@ -196,7 +196,7 @@ function joinNearMiss({coordinate, members, missed}, context) {
   const meeting = known ?? roundedCoordinate(missed.coordinate);
   const roads = new RoadChanges(context);
   if (!known) roads.change(missed.entry, feature => withPointAt(feature, meeting, missed.segmentIndex));
-  const problem = moveMembers(roads, members, {from: coordinate, to: meeting}, context);
+  const {problem} = moveMembers(roads, members, {from: coordinate, to: meeting}, context);
   return problem ? refused(problem) : withRules(roads, context);
 }
 
@@ -233,18 +233,19 @@ function chosenMeeting(meetings, levels) {
 const levelProblem = 'A road passes here on another level, so these cannot be joined. Disconnect it first.';
 
 // Moves the roads of one level of a joint to a place, and joins them to what is there. keepsLevel when something else of
-// the joint cannot leave its level, so only what is on that level is joined. Returns why that cannot be, or null.
+// the joint cannot leave its level, so only what is on that level is joined. Returns
+// {problem} when that cannot be, otherwise {level}, the one they are on then.
 function moveMembers(roads, members, {from, to, facts = null, exceptKeys = new Set(), keepsLevel = false}, context) {
   for (const {entry} of members) roads.change(entry, feature => withPointMoved(feature, from, to));
   const [{level}] = members;
   const moving = new Set([...exceptKeys, ...members.map(({entry}) => entry.key)]);
   const joined = facts ?? joinedFacts(to, {level, node: nodeOf(members), keepsLevel}, context, moving);
-  if (!joined || !roads.canNameJunctions) return null;
+  if (!joined || !roads.canNameJunctions) return {level};
   const isPassingElsewhere = members.some(member => !member.end && member.level !== joined.level);
-  if (isPassingElsewhere) return levelProblem;
+  if (isPassingElsewhere) return {problem: levelProblem};
   shareJunction(roads, members, joined.level, joined.node);
   shareJunction(roads, (joined.members ?? []).filter(member => nodeOfMember(member) === undefined), joined.level, joined.node);
-  return null;
+  return {level: joined.level};
 }
 
 // The junction that roads coming to a place get there, or null where they meet nothing.
@@ -413,9 +414,9 @@ export function junctionEdits(joint, coordinate, choices, context) {
 
 function moveJoint(roads, joint, to, context) {
   const exceptKeys = new Set(joint.members.map(({entry}) => entry.key));
-  for (const {level, members} of joint.groups) {
+  for (const {members} of joint.groups) {
     const keepsLevel = joint.groups.length > 1;
-    const problem = moveMembers(roads, members, {from: joint.coordinate, to, exceptKeys, keepsLevel}, context);
+    const {problem, level} = moveMembers(roads, members, {from: joint.coordinate, to, exceptKeys, keepsLevel}, context);
     if (problem) return problem;
     touchRoads(roads, to, level, context, exceptKeys);
   }
@@ -522,7 +523,7 @@ export function companionsOfRoad(edit, context) {
     const {level, end} = nextMember(edit, move.nextIndex);
     // The edited road has its place in the junction already, and the others share it.
     const facts = end ? {level, node: feature.properties[nodeNameOf(end)]} : null;
-    const problem = moveMembers(roads, along, {...move, facts, exceptKeys: new Set([key]), keepsLevel: !end}, context);
+    const {problem} = moveMembers(roads, along, {...move, facts, exceptKeys: new Set([key]), keepsLevel: !end}, context);
     if (problem) return refused(problem);
   }
   const known = new Set((before?.geometry.coordinates ?? []).map(pointKey));
