@@ -194,6 +194,7 @@ export const SHARED_EDITOR_SOURCES = [
   'working-map.js',
   'workspace-panels.js',
   'feature-diff.js',
+  'derived-facts.js',
   'dom.js',
   'hashing.js',
   'source-bundle.js',
