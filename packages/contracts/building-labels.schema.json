@@ -72,12 +72,6 @@
             "pattern": "^((way|node)/[0-9]+|local:[0-9a-f-]{36})$"
           }
         },
-        "display_number": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "description": "Shown on the map instead of the house number."
-        },
         "building_number": {
           "type": "string",
           "minLength": 1,
