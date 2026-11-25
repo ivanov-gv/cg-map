@@ -452,6 +452,15 @@
   <relation id="9100" version="1">
     <member type="way" ref="2003" role="from"/>
     <member type="node" ref="2032" role="via"/>
+    <member type="way" ref="2003" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_u_turn"/>
+  </relation>
+
+  <!-- Way 2007 does not end at the junction, so this is no turn. -->
+  <relation id="9104" version="1">
+    <member type="way" ref="2003" role="from"/>
+    <member type="node" ref="2032" role="via"/>
     <member type="way" ref="2007" role="to"/>
     <tag k="type" v="restriction"/>
     <tag k="restriction" v="no_left_turn"/>

@@ -22,6 +22,8 @@ class ExtractionState:
     # What the published roads hold, for the road nodes and turn rules on them.
     road_way_ids: set = field(default_factory=set)
     road_node_ids: set = field(default_factory=set)
+    # The nodes where the published parts of a road end, by way ID.
+    road_end_node_ids: dict = field(default_factory=dict)
     # The ends and lights of published roads, which are published with their node IDs.
     identified_road_node_ids: set = field(default_factory=set)
     # Counts written beside the reviewed source provenance.
