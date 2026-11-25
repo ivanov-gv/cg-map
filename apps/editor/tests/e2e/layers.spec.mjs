@@ -148,26 +148,32 @@ const areApart = (first, second) =>
   first.y + first.height <= second.y ||
   second.y + second.height <= first.y;
 
-for (const viewport of [{width: 412, height: 915}, {width: 818, height: 1200}, {width: 1280, height: 800}]) {
-  test(`controls leave each other free at ${viewport.width} px`, async ({page}, testInfo) => {
-    test.skip(testInfo.project.name === 'pages-mobile', 'The sizes are set here.');
+test('controls leave each other free on a phone, a tablet and a desktop', async ({page}, testInfo) => {
+  test.skip(testInfo.project.name === 'pages-mobile', 'The sizes are set here.');
+  await page.evaluate(() => (document.getElementById('offline-notice').hidden = false));
+  await chooseLayer(page, 'roads');
+  const notice = page.locator('#offline-notice');
+  const chip = page.locator('#open-inspector');
+  const isFree = async (first, second) => areApart(await boxOf(first), await boxOf(second));
+  for (const viewport of [{width: 412, height: 915}, {width: 818, height: 1200}, {width: 1280, height: 800}]) {
     await page.setViewportSize(viewport);
-    await page.evaluate(() => (document.getElementById('offline-notice').hidden = false));
-    await chooseLayer(page, 'roads');
-    const notice = page.locator('#offline-notice');
+    await centreOn(page, [0, 0]);
     await tapAt(page, [-1, 0]);
     await page.locator('#close-inspector').click();
-    const chip = page.locator('#open-inspector');
-    expect(areApart(await boxOf(chip), await boxOf(notice))).toBe(true);
+    await expect.poll(() => isFree(chip, notice), `chip and notice at ${viewport.width} px`).toBe(true);
     await chip.click();
     await page.locator('#tool-vertices').click();
-    const modeBar = await boxOf(page.locator('#mode-bar'));
-    const others = [
-      page.locator('.workspace-toolbar'),
-      page.locator('#current-layer'),
-      page.locator('.maplibregl-ctrl-group').first(),
+    const modeBar = page.locator('#mode-bar');
+    const others = {
+      toolbar: page.locator('.workspace-toolbar'),
+      layer: page.locator('#current-layer'),
+      zoom: page.locator('.maplibregl-ctrl-group').first(),
       notice
-    ];
-    for (const other of others) expect(areApart(modeBar, await boxOf(other)), String(other)).toBe(true);
-  });
-}
+    };
+    for (const [name, other] of Object.entries(others)) {
+      await expect.poll(() => isFree(modeBar, other), `mode bar and ${name} at ${viewport.width} px`).toBe(true);
+    }
+    await page.locator('#mode-done').click();
+    await page.locator('#cancel-edit').click();
+  }
+});

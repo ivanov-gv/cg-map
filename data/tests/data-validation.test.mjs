@@ -720,12 +720,18 @@ test('a road can end at a junction of the editor, and a turn rule can name both'
   Object.assign(drawn.properties, {startNode: junction, startLevel: 0});
   roads.features.push(drawn);
   const from = Number(first.properties.entityId.split('/')[1]);
+  first.properties.endNode = junction;
   const rule = {entityId: 'relation/1', entityVersion: 1, restriction: 'no_left_turn', from, to: `local:${road}`, viaNodes: [junction]};
   assert.equal(validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [rule]}, roads, nodes).count, 1);
   const missing = {...rule, viaNodes: ['local:33333333-3333-4333-8333-333333333333']};
   assert.throws(
     () => validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [missing]}, roads, nodes),
     /via node local:3333/
+  );
+  first.properties.endNode = 1;
+  assert.throws(
+    () => validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [rule]}, roads, nodes),
+    /does not end at junction/
   );
   drawn.properties.startNode = 'node/5';
   assert.throws(() => validateRoads(roads, {contractsDirectory}), /startNode must be an OSM number or a local ID/);

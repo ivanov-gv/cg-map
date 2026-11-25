@@ -136,6 +136,15 @@ class RoadGraphTest(unittest.TestCase):
         )
         self.assertNotIn('endNode', clipped['properties'])
 
+    def test_a_way_that_meets_itself_stays_one_road(self):
+        loop = [point(0), point(2), point(2, 0.001), point(3), point(2)]
+        roads = published(road_way(9, [90, 91, 92, 93, 91], loop))
+        properties = roads['way/9']['properties']
+        self.assertNotIn('entityPart', properties)
+        self.assertEqual(
+            (properties['startNode'], properties['endNode']), (90, 91)
+        )
+
     def test_a_road_beyond_the_detail_box_has_its_junctions_too(self):
         far = [(19.6, 42.8), (19.60001, 42.80001), (19.7, 42.9)]
         roads = published(
