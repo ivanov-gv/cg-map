@@ -3,10 +3,10 @@
 import {createElementWithText} from './dom.js';
 import {valueLabel} from './field-catalog.js';
 import {formatLength, lineLengthMetres} from './geometry-measures.js';
-import {canNameJunctions, joinableRoads, junctionEntry, jointStatusText, levelOptions} from './layer-junctions.js';
+import {joinableRoads, junctionEntry, jointStatusText, levelOptions} from './layer-junctions.js';
 import {joiningPoint, withPoint} from './line-joining.js';
 import {companionsOfRoad, disconnectedRoad, disconnectProblem, roadWithEnds} from './road-edits.js';
-import {isRing, jointWith, levelAt, membersAt, nodeOf, pointKey, roadId, sharedPointsOf} from './road-graph.js';
+import {canNameJunctions, isRing, jointWith, levelAt, membersAt, nodeOf, pointKey, roadId, sharedPointsOf} from './road-graph.js';
 import {isOnWay, rulesAfterSplit} from './road-junctions.js';
 import {endsOf, joinedRoad, splitProblem, splitRoad} from './road-shapes.js';
 
@@ -102,6 +102,11 @@ function levelSelect(name, value, isDisabled) {
   return select;
 }
 
+const openedEndKey = (end, {key, feature, context}) => {
+  const opened = context.session.workingFeature(roadsFile, key) ?? feature;
+  return pointKey(opened.geometry.coordinates.at(end === 'start' ? 0 : -1));
+};
+
 // One end of the road: its letter on the map, what it joins, its level, and the way to its junction.
 function endRow(end, edit) {
   const {feature, context} = edit;
@@ -114,7 +119,12 @@ function endRow(end, edit) {
   const joint = jointWith(edit, isRing(feature) ? 0 : index, context.entriesOf(roadsFile));
   const text = createElementWithText('span', jointStatusText(joint, edit.key));
   const level = levelSelect(`Level at ${endLabels[end]}`, levelAt(feature, index), context.isPhone() || isRing(feature));
-  level.onchange = () => edit.setProperties({[`${end}Level`]: Number(level.value)});
+  level.onchange = () => {
+    // An end on another level leaves what it was joined to, also when it is dragged in the same edit.
+    const freePoints = [...(edit.extras.freePoints ?? []), openedEndKey(end, edit)];
+    edit.setExtras({freePoints});
+    edit.setProperties({[`${end}Level`]: Number(level.value)});
+  };
   const open = createElementWithText('button', 'Junction');
   open.type = 'button';
   open.setAttribute('aria-label', `Open the junction at ${endLabels[end]}`);
@@ -126,7 +136,7 @@ function endRow(end, edit) {
 // Both ends by the letters the map shows, so that nobody has to guess which end is meant.
 function renderEnds(container, edit) {
   const isDrawn = edit.feature.geometry?.coordinates.length > 1;
-  if (!isDrawn || edit.isNew || !canNameJunctions(edit.context)) return;
+  if (!isDrawn || edit.isNew || !canNameJunctions(edit.context.rules)) return;
   const heading = createElementWithText('h3', isRing(edit.feature) ? 'Where the ring begins' : 'Ends');
   heading.className = 'section-title';
   // A ring starts and ends at one junction, whose levels are set there.
@@ -190,7 +200,7 @@ function splitTool(feature, handle, edit) {
 
 // The junction where the halves of a road meet: that of the roads already ending there, or a new one.
 function splitJunction(feature, {vertexIndex}, {context, key}) {
-  if (!canNameJunctions(context)) return null;
+  if (!canNameJunctions(context.rules)) return null;
   const level = levelAt(feature, vertexIndex);
   const others = membersAt(feature.geometry.coordinates[vertexIndex], context.entriesOf(roadsFile), new Set([key]));
   const node = nodeOf(others.filter(member => member.level === level));
@@ -252,11 +262,11 @@ function roadDeletion(entry, context) {
 function roadVertexTools(feature, handle, edit) {
   if (edit.isNew || edit.context.isPhone()) return [];
   const split = splitTool(feature, handle, edit);
-  return canNameJunctions(edit.context) ? [disconnectTool(feature, handle, edit), split] : [split];
+  return canNameJunctions(edit.context.rules) ? [disconnectTool(feature, handle, edit), split] : [split];
 }
 
 function preparedRoad(feature, context, edit) {
-  if (!canNameJunctions(context) || !feature.geometry) return feature;
+  if (!canNameJunctions(context.rules) || !feature.geometry) return feature;
   const before = context.session.workingFeature(roadsFile, edit.key);
   return roadWithEnds(graphEdit({...edit, feature, before}), context);
 }

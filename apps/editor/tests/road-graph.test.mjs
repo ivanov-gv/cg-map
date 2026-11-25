@@ -37,11 +37,12 @@ function contextWith({roads, nodes = [], rules = []}) {
     'road-nodes.geojson': entriesFrom('road-nodes.geojson', nodes),
     'turn-restrictions.json': entriesFrom('turn-restrictions.json', rules)
   };
-  const properties = {kind: {}, name: {}, startNode: {}, endNode: {}, startLevel: {}, endLevel: {}};
+  const identifier = {type: 'identifier'};
+  const properties = {kind: {}, name: {}, startNode: identifier, endNode: identifier, startLevel: {}, endLevel: {}};
   return {
     entriesOf: filename => entries[filename] ?? [],
     isPhone: () => false,
-    rules: {layers: {'roads.geojson': {properties}}}
+    rules: {layers: {'roads.geojson': {properties}, 'road-nodes.geojson': {}}}
   };
 }
 
@@ -298,6 +299,79 @@ test('a joint with a passing road is not put on another level', () => {
   const ending = road([[0, 0], [1, 0]], {endNode: 5, endLevel: 0});
   const context = contextWith({roads: [ending, road([[1, -1], [1, 0], [1, 1]]), road([[2, -1], [2, 1]], {layer: '1'})]});
   assert.match(applied({key: '0', before: ending, coordinates: [[0, 0], [2, 0]], origins: [0, 1]}, context).problem, /another level/);
+});
+
+test('a passing road stays on its level, and what ends at it stays joined to it', () => {
+  const passing = road([[0, 0], [1, 0], [2, 0]], {entityId: 'way/1'});
+  const ending = road([[1, 1], [1, 0]], {entityId: 'way/2', endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [passing, ending, road([[0, -1], [2, -1]], {layer: '1'})]});
+  const change = {key: '0', before: passing, coordinates: [[0, 0], [1, -1], [2, 0]], origins: [0, 1, 2]};
+  const {edits, problem} = applied(change, context);
+  assert.equal(problem, null);
+  const follower = afterOf(edits, '1');
+  assert.deepEqual([follower.properties.endNode, follower.properties.endLevel], [5, 0]);
+  assert.deepEqual(stepsOf(follower.geometry.coordinates.at(-1)), [1, -1]);
+  assert.equal(afterOf(edits, '2'), undefined, 'the bridge above gets no point');
+});
+
+test('the levels of a joint that is moved are not mixed', () => {
+  const low = road([[0, 0], [1, 0]], {endNode: 5, endLevel: 0});
+  const high = road([[1, 0], [1, 1]], {startNode: 6, startLevel: 1});
+  const context = contextWith({roads: [low, high, road([[2, 0], [2, -1]], {startNode: 30, startLevel: 0})]});
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  const {edits} = junctionEdits(joint, at(2, 0), {}, context);
+  assert.deepEqual([afterOf(edits, '0').properties.endNode, afterOf(edits, '0').properties.endLevel], [30, 0]);
+  assert.deepEqual([afterOf(edits, '1').properties.startNode, afterOf(edits, '1').properties.startLevel], [6, 1]);
+});
+
+test('turns forbidden while a junction is moved onto another, or without an ID, name the junction it has then', () => {
+  const roads = [
+    road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0}),
+    road([[1, 0], [1, 1]], {entityId: 'way/2', startNode: 5, startLevel: 0}),
+    road([[2, 0], [3, 0]], {entityId: 'way/3', startNode: 30, startLevel: 0})
+  ];
+  const context = contextWith({roads});
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  const {from, turns} = turnsAt(joint).find(group => group.from.member.entry.key === '0');
+  const onto = turns.find(({to}) => to.member.entry.key === '1').to;
+  const {edits} = junctionEdits(joint, at(2, 0), {[turnKey(from, onto)]: false}, context);
+  const rulesOf = list => list.filter(({filename}) => filename === 'turn-restrictions.json').map(({after}) => after.properties.viaNodes);
+  assert.deepEqual(rulesOf(edits), [[30]]);
+
+  const unnamed = contextWith({roads: [road([[0, 0], [1, 0]]), road([[1, 0], [1, 1]]), road([[1, 0], [2, 0]])]});
+  const bareJoint = jointAt(at(1, 0), roadsOf(unnamed));
+  const group = turnsAt(bareJoint).find(({from: arm}) => arm.member.entry.key === '0');
+  const choices = Object.fromEntries(group.turns.filter(({kind}) => kind !== 'uTurn').map(({to}) => [turnKey(group.from, to), false]));
+  const bare = junctionEdits(bareJoint, bareJoint.coordinate, choices, unnamed).edits;
+  const [first, second] = rulesOf(bare);
+  assert.deepEqual(first, second);
+  const nodes = ['0', '1', '2'].map(key => afterOf(bare, key).properties).map(({startNode, endNode}) => startNode ?? endNode);
+  assert.deepEqual(new Set(nodes), new Set(first), 'every road ends at the junction of the rules');
+});
+
+test('without rules for junctions, joined roads only move along', () => {
+  const roads = [road([[0, 0], [1, 0]]), road([[1, 0], [1, 1]]), road([[2, -1], [2, 1]], {layer: '1'})];
+  const context = {...contextWith({roads}), rules: {layers: {'roads.geojson': {properties: {name: {}}}}}};
+  const change = {key: '0', before: roads[0], coordinates: [[0, 0], [2, 0]], origins: [0, 1]};
+  const {edits, problem} = applied(change, context);
+  assert.equal(problem, null);
+  for (const {after} of edits) {
+    const names = Object.keys(after.properties);
+    assert.deepEqual(names.filter(name => /Node|Level/.test(name)), []);
+  }
+  assert.deepEqual(stepsOf(afterOf(edits, '1').geometry.coordinates[0]), [2, 0]);
+});
+
+test('one rule of two roads that are split names the new halves of both', () => {
+  // A road comes in, another goes out, and both pass a point where they are split.
+  const incoming = road([[0, 0], [1, 0], [2, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const outgoing = road([[1, 1], [1, 0], [1, -1], [2, 0]], {entityId: 'way/2', endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [incoming, outgoing], rules: [ruleFor({from: 1, to: 2})]});
+  const {edits, problem} = splitEdits(jointAt(at(1, 0), roadsOf(context)), context);
+  assert.equal(problem, null);
+  const added = edits.filter(({filename, key}) => filename === 'roads.geojson' && key.startsWith('local:')).map(({key}) => key);
+  const [rule] = edits.filter(({filename}) => filename === 'turn-restrictions.json');
+  assert.deepEqual(new Set([rule.after.properties.from, rule.after.properties.to]), new Set(added));
 });
 
 test('a rule of a road that leaves its junction goes, whichever way it leaves', () => {

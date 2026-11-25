@@ -15,7 +15,8 @@ import {
   editTools,
   endGesture,
   finishDrawing,
-  withTool
+  withTool,
+  withoutVertex
 } from '../src/edit-transaction.js';
 import {propertiesFromForm} from '../src/property-form.js';
 
@@ -173,4 +174,16 @@ test('an unchanged form changes nothing, including a blank name from the source'
   const formValues = {name: '', kind: 'tertiary'};
   assert.deepEqual(propertiesFromForm(properties, formValues, propertyRules), properties);
   assert.deepEqual(propertiesFromForm({kind: 'tertiary'}, formValues, propertyRules), {kind: 'tertiary'});
+});
+
+test('a closed line stays closed when the point where it begins is removed', () => {
+  const [west, north, east, south] = [[0, 0], [1, 1], [2, 0], [1, -1]];
+  const ring = {type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: [west, north, east, south, west]}};
+  for (const vertexIndex of [0, 4]) {
+    const {feature, origins} = withoutVertex(beginExistingEdit('0', ring), {vertexIndex});
+    assert.deepEqual(feature.geometry.coordinates, [north, east, south, north]);
+    assert.deepEqual(origins, [1, 2, 3, 1]);
+  }
+  const open = withoutVertex(beginExistingEdit('0', ring), {vertexIndex: 2});
+  assert.deepEqual(open.feature.geometry.coordinates, [west, north, south, west]);
 });

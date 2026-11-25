@@ -182,9 +182,13 @@ class RoadGraphTest(unittest.TestCase):
             {**rule, 'from': 1, 'to': 2, 'viaNodes': [12]},
             {**rule, 'from': 1, 'to': 9, 'viaNodes': [12]},
             {**rule, 'from': 1, 'to': 2, 'viaNodes': [99]},
+            # Way 3 only passes the junction, so there is no turn from it.
+            {**rule, 'from': 3, 'to': 2, 'viaNodes': [12]},
         ]
         state = ExtractionState(
-            road_way_ids={1, 2}, identified_road_node_ids={12}
+            road_way_ids={1, 2, 3},
+            identified_road_node_ids={12},
+            road_end_node_ids={1: {12}, 2: {12, 13}, 3: {14}},
         )
         result = layer.finish(OPTIONS, state)
         self.assertEqual(len(result['restrictions']), 1)

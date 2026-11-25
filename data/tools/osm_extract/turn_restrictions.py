@@ -39,6 +39,8 @@ class TurnRestrictionsLayer(Layer):
         super().__init__()
         self._restrictions = []
         self._skipped_multiple_roles = 0
+        # Rules whose road only passes the junction, so it is no turn.
+        self._passing = []
 
     def relation(self, relation, options, state):
         """Remember a restriction until the published roads are known."""
@@ -99,10 +101,24 @@ class TurnRestrictionsLayer(Layer):
             *restriction.get('viaWays', ())
         }
         nodes = set(restriction.get('viaNodes', ()))
-        return (
+        is_published = (
             ways <= state.road_way_ids
             and nodes <= state.identified_road_node_ids
         )
+        return is_published and self._ends_at_junction(restriction, state)
+
+    def _ends_at_junction(self, restriction, state):
+        """A rule through one node is about turning where both roads end."""
+        via_nodes = restriction.get('viaNodes', ())
+        if 'viaWays' in restriction or len(via_nodes) != 1:
+            return True
+        ends_there = all(
+            via_nodes[0] in state.road_end_node_ids.get(way_id, ())
+            for way_id in (restriction['from'], restriction['to'])
+        )
+        if not ends_there:
+            self._passing.append(restriction['entityId'])
+        return ends_there
 
     def finish(self, options, state):
         """Return restrictions sorted by OSM relation ID."""
@@ -116,6 +132,11 @@ class TurnRestrictionsLayer(Layer):
             restriction for restriction in self._restrictions
             if self._is_resolved(restriction, state)
         ]
+        if self._passing:
+            print(
+                'turn-restrictions: skipped rules at a junction that their '
+                f'road does not end at {self._passing}'
+            )
         restrictions.sort(key=restriction_sort_key)
         return {
             'entitySchemaVersion': 1,
