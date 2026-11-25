@@ -43,14 +43,18 @@ What the layers do beyond shape and fields:
   and goes from one to the nearest next.
 - **Places & points** belong to the building they are put on, or stand on their own. Opening hours have an editor for
   the OpenStreetMap format; text it cannot show is kept.
-- **Roads & paths** join the road a point is drawn on. At the desk a road can be split, joined, and given its levels,
-  turns and traffic light. Turns need roads that already have OSM nodes.
-- **Parks & green** and **Water** have holes and islands. Waterways keep their joins when either side moves; moving the
-  coastline moves the sea, the country, its border and the municipalities.
+- **Roads & paths** are a graph: two roads join where they share a point on the same level
+  ([road-graph.js](src/road-graph.js)). From zoom 16 a full dot is a join, a hollow one a dead end, and `!` marks roads
+  that touch, cross or nearly meet without joining. A dot opens its junction: the level of each road there, what stands
+  on it, the allowed turns, and joining, disconnecting or splitting roads. Letters A and B name the ends of the picked
+  road. A dragged point joins the road it is put on and takes joined roads along until it is disconnected. The level
+  picker shows one level at a time; below the ground rails are dashed, above it strong.
+- **Parks & green** and **Water** have holes and islands. Waterways show their joins with the same dots and keep them
+  when either side moves; moving the coastline moves the sea, the country, its border and the municipalities.
 - **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it, a ridge
-  recolours the slopes beside it.
-- **Settlements & borders:** a border changes both sides at once. Its ends stay, because more than two municipalities
-  meet there. The coast is moved on Water.
+  recolours the slopes beside it and its ends slide along the outline of its hill.
+- **Settlements & borders:** a settlement says its type and opens its area, or draws one. A border changes both sides at
+  once. Its ends stay, because more than two municipalities meet there. The coast is moved on Water.
 - **Stops** go to the side of the road that is clicked and follow the road when moved.
 - **Routes** are stops in order; the way along the streets is drawn for the editor and not stored. Turn points force it.
   On a phone they can be read only.

@@ -99,18 +99,24 @@ consumer's own pipeline.
 `name:en`. Walking routes get a computed `pathClass`. `main`: footway unless its surface is explicitly unpaved, and
 paved pedestrian, cycleway, or path. `trail`: track, bridleway, any way with `sac_scale`, or path with an explicitly
 unpaved surface. A path without surface and without `sac_scale` is unclassified; unknown surface is not treated as
-unpaved. Detail-area roads record the OSM node ID and level at each real OSM end (`startNode`/`startLevel`,
-`endNode`/`endLevel`): the `layer` tag as an integer, default 0; bridges without explicit layer get +1, tunnels get −1.
-A part created by clipping keeps a node/level pair only when that end is the original OSM end node; a clip-boundary end
-omits that pair.
+unpaved. Roads are a graph: two roads join where they share a point on the same level. Each real OSM end records its
+junction and level (`startNode`/`startLevel`, `endNode`/`endLevel`); roads that end at one junction end at one place.
+The level of an end is that of its junction: the level of a road that passes through it, otherwise the one nearest to
+the ground of the roads that end there. Along a road its level is the `layer` tag as an integer, default 0; a bridge
+without it is +1 and a tunnel −1. A part created by clipping keeps the pair only at its original OSM ends. A junction
+that came from the editor has a `local:` ID.
 
-`road-nodes.geojson` contains OSM nodes in the detail area with `highway=traffic_signals`, `crossing`, `stop`,
-`give_way`, `mini_roundabout` or `turning_circle`. Nodes added in the editor have a `local:` identity.
+`road-nodes.geojson` contains OSM nodes with `highway=traffic_signals`, `crossing`, `stop`, `give_way`,
+`mini_roundabout` or `turning_circle`, in the detail area and on published roads beyond it. Nodes added in the editor
+have a `local:` identity.
 
-`turn-restrictions.json` records `type=restriction` relations whose `from` and `to` ways are detail-area roads in
-`roads.geojson`, with their OSM identity, `restriction` value, `from`/`to` way IDs and optional `via` nodes or ways.
-Every `from`/`to`/`via` reference resolves in `roads.geojson` or `road-nodes.geojson`/road end nodes. It is not GeoJSON
-because restrictions are topological relations, not geometries.
+`turn-restrictions.json` records `type=restriction` relations between published roads, with their OSM identity,
+`restriction` value, `from`/`to` roads and optional `via` junctions or roads. A road or junction is named by its OSM
+number, or by its `local:` ID when it came from the editor. Every reference resolves in `roads.geojson` or
+`road-nodes.geojson`. It is not GeoJSON because restrictions are topological relations, not geometries.
+
+`settlement-areas.geojson` holds the area of a settlement where one is mapped; `settlementEntityId` names the
+settlement, which has at most one area.
 
 `editor-bundle.schema.json` defines the editor's source bundle: one filename, byte size, feature count and SHA-256 per
 source file. Version 1 holds the original eight files, version 2 thirteen, version 3 every file of an object on the map,

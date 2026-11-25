@@ -27,19 +27,22 @@ export function splitProblem({geometry}, vertexIndex) {
   return isInner ? null : 'Pick a point between the ends of the road.';
 }
 
-// The road up to a point, which keeps its identity, and a new road from that point on. The new ends are no OSM nodes, so
-// neither half claims a node or a level there.
-export function splitRoad(road, vertexIndex, propertyRules) {
+// The road up to a point, which keeps its identity, and a new road from that point on. The new ends meet at a junction,
+// {node, level}, or claim none.
+export function splitRoad(road, vertexIndex, propertyRules, junction = null) {
   const {coordinates} = road.geometry;
+  const endingThere = junction ? {endNode: junction.node, endLevel: junction.level} : {};
+  const startingThere = junction ? {startNode: junction.node, startLevel: junction.level} : {};
   const first = {
     ...road,
-    properties: without(road.properties, endNames),
+    properties: {...without(road.properties, endNames), ...endingThere},
     geometry: {...road.geometry, coordinates: coordinates.slice(0, vertexIndex + 1)}
   };
   const secondProperties = statedProperties(without(road.properties, startNames), propertyRules);
+  const named = secondProperties.name?.trim() ? secondProperties : without(secondProperties, ['name']);
   const second = {
     type: 'Feature',
-    properties: secondProperties.name?.trim() ? secondProperties : without(secondProperties, ['name']),
+    properties: {...named, ...startingThere},
     geometry: {...road.geometry, coordinates: coordinates.slice(vertexIndex)}
   };
   return [first, second];

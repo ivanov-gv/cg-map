@@ -2,6 +2,8 @@
 import {createElementWithText} from './dom.js';
 import {crossesContours, highestContourAround, isClosedLine, keptClosed, surrounds} from './contour-rules.js';
 import {roundedCoordinate} from './geometry-editing.js';
+import {isSamePoint} from './road-shapes.js';
+import {hasMovedEnds, sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
 import {changedStretch, crossesItself, followingEdits} from './shared-shapes.js';
 
 const contoursFile = 'contours.geojson';
@@ -127,16 +129,27 @@ function renderSummitExtras(container, {feature, context}) {
   container.append(phoneNote);
 }
 
-// The ends of a ridge stay inside its hill, where the two sides meet the outline.
-function ridgeWithFixedEnds(geometry, {previousGeometry}) {
+// The ends of a ridge lie on the outline of its hill and slide along it. Where its sides cannot be told they stay.
+function ridgeWithEndsOnOutline(geometry, {key, previousGeometry}, context) {
+  const before = context.session.workingFeature(ridgesFile, key);
+  const sides = sidesOfRidge(before.geometry.coordinates, context.entriesOf(slopesFile), ridgeToleranceMetres);
+  const previous = previousGeometry.coordinates;
   const coordinates = [...geometry.coordinates];
-  coordinates[0] = previousGeometry.coordinates[0];
-  coordinates[coordinates.length - 1] = previousGeometry.coordinates.at(-1);
+  for (const [index, otherIndex] of [[0, -1], [coordinates.length - 1, 0]]) {
+    const isMoved = !isSamePoint(coordinates[index], previous.at(index === 0 ? 0 : -1));
+    if (!isMoved) continue;
+    const slid = sides ? slidEnd(coordinates[index], previous.at(otherIndex), sides) : null;
+    coordinates[index] = slid ?? previous.at(index === 0 ? 0 : -1);
+  }
   return {...geometry, coordinates};
 }
 
 // Light and shade change on both sides at once.
 function slopeEdits({feature, before}, context) {
+  if (hasMovedEnds(before.geometry.coordinates, feature.geometry.coordinates)) {
+    const sides = sidesOfRidge(before.geometry.coordinates, context.entriesOf(slopesFile), ridgeToleranceMetres);
+    return sides ? slopesWithSlidEnds(feature.geometry.coordinates, sides) : [];
+  }
   const stretch = changedStretch(before.geometry.coordinates, feature.geometry.coordinates);
   return stretch ? followingEdits(context.entriesOf(slopesFile), stretch, ridgeToleranceMetres) : [];
 }
@@ -159,7 +172,7 @@ function renderRidgeExtras(container, {feature, context}) {
   const entry = summit && context.findEntity(summitsFile, summit);
   const height = entry?.feature.properties.ele;
   if (summitName) container.append(createElementWithText('p', `Passes over ${summitName}${height ? ` · ${height} m` : ''}`));
-  const note = createElementWithText('p', 'The ridge splits light from shade. Moving it recolours both sides at once.');
+  const note = createElementWithText('p', 'The ridge splits light from shade. Moving it recolours both sides at once, and its ends slide along the outline of the hill.');
   note.className = 'hint';
   container.append(note);
 }
@@ -184,7 +197,7 @@ export const reliefBehaviors = {
     title: ({properties}) => properties.name || properties.summitName || 'Ridge',
     sections: () => [{title: 'Ridge', fields: ['name']}],
     isReshapable: isDesk,
-    limitedGeometry: ridgeWithFixedEnds,
+    limitedGeometry: ridgeWithEndsOnOutline,
     problem: ridgeProblem,
     companionEdits: slopeEdits,
     renderExtras: renderRidgeExtras

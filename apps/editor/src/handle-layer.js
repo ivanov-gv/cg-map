@@ -9,18 +9,20 @@ const handleRadiusPixels = 7;
 const handleStrokeWidthPixels = 2;
 const handleColor = '#ffffff';
 const selectedHandleColor = '#c8372d';
+// Other lines share this point.
+const joinedHandleColor = '#2e8b57';
 const midpointRadiusPixels = 5;
 // A side shorter than this on screen has no room for its own handle between the two corners.
 const shortestSidePixels = 36;
 
-function handleFeature({coordinate, isMidpoint = false, polygonIndex, ringIndex, vertexIndex}, selectedHandle) {
+function handleFeature({coordinate, isMidpoint = false, isJoined = false, polygonIndex, ringIndex, vertexIndex}, selectedHandle) {
   const handle = {vertexIndex};
   if (ringIndex !== undefined) handle.ringIndex = ringIndex;
   if (polygonIndex !== undefined) handle.polygonIndex = polygonIndex;
   const isSelected = !isMidpoint && isSameHandle(handle, selectedHandle);
   return {
     type: 'Feature',
-    properties: {...handle, isMidpoint, isSelected},
+    properties: {...handle, isMidpoint, isJoined, isSelected},
     geometry: {type: 'Point', coordinates: coordinate}
   };
 }
@@ -46,15 +48,17 @@ export function createHandleLayer(map) {
     paint: {
       'circle-radius': ['case', ['get', 'isMidpoint'], midpointRadiusPixels, handleRadiusPixels],
       'circle-opacity': ['case', ['get', 'isMidpoint'], 0.75, 1],
-      'circle-color': ['case', ['get', 'isSelected'], selectedHandleColor, handleColor],
+      'circle-color': ['case', ['get', 'isSelected'], selectedHandleColor, ['get', 'isJoined'], joinedHandleColor, handleColor],
       'circle-stroke-color': selectedHandleColor,
       'circle-stroke-width': handleStrokeWidthPixels
     }
   });
   const isSideLongEnough = ({sideEnds: [start, end]}) => map.project(start).dist(map.project(end)) >= shortestSidePixels;
   return {
-    show(geometry, selectedHandle) {
-      const corners = geometry ? vertexHandles(geometry) : [];
+    // joinedPoints are the coordinates that other lines share.
+    show(geometry, selectedHandle, joinedPoints = []) {
+      const joinedKeys = new Set(joinedPoints.map(String));
+      const corners = geometry ? vertexHandles(geometry).map(handle => ({...handle, isJoined: joinedKeys.has(String(handle.coordinate))})) : [];
       const midpoints = geometry ? midpointHandles(geometry).filter(isSideLongEnough) : [];
       const features = [...midpoints, ...corners].map(handle => handleFeature(handle, selectedHandle));
       map.getSource(sourceName).setData({type: 'FeatureCollection', features});

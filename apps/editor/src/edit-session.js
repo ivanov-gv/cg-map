@@ -11,6 +11,7 @@ export class EditSession {
   #changesByFile = new Map();
   #historyByName = new Map();
   #fieldItems = new Map();
+  #entriesByFile = new Map();
 
   constructor(sources) {
     this.#sources = sources;
@@ -48,6 +49,7 @@ export class EditSession {
   }
 
   #writeChange(filename, key, change) {
+    this.#entriesByFile.delete(filename);
     if (change) this.#changesOf(filename).set(key, change);
     else this.#changesOf(filename).delete(key);
   }
@@ -151,6 +153,11 @@ export class EditSession {
 
   // Features as they stand now. Deleted ones are gone and added ones come last, as in the importer's result.
   workingEntries(filename) {
+    if (!this.#entriesByFile.has(filename)) this.#entriesByFile.set(filename, this.#readEntries(filename));
+    return this.#entriesByFile.get(filename);
+  }
+
+  #readEntries(filename) {
     const changes = this.#changesOf(filename);
     const entries = [];
     this.#sources.get(filename).collection.features.forEach((feature, index) => {
@@ -203,6 +210,7 @@ export class EditSession {
 
   // Also reads drafts from before layers had histories of their own, which kept one per file.
   restoreDraft(draft) {
+    this.#entriesByFile.clear();
     for (const [filename, {changes, history}] of Object.entries(draft.files)) {
       this.#changesByFile.set(filename, new Map(changes));
       if (history) this.#historyByName.set(filename, history);
@@ -214,6 +222,7 @@ export class EditSession {
   }
 
   discardAll() {
+    this.#entriesByFile.clear();
     this.#changesByFile.clear();
     this.#historyByName.clear();
     this.#fieldItems.clear();

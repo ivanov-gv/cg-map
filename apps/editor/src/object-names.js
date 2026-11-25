@@ -16,6 +16,7 @@ const kindLabels = {
   'slopes.geojson': 'Slope',
   'canyon-rims.geojson': 'Canyon edge',
   'settlements.geojson': 'Settlement',
+  'settlement-areas.geojson': 'Settlement area',
   'border-edges.geojson': 'Border',
   'municipalities.geojson': 'Municipality',
   'context-countries.geojson': 'Neighbour country',

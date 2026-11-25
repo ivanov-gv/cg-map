@@ -1,5 +1,11 @@
 import {createElementWithText, elementById} from './dom.js';
 
+// The bar grows with its hint and buttons, and what stands beside it makes room.
+function shareHeight() {
+  const {offsetHeight} = elementById('mode-bar');
+  document.documentElement.style.setProperty('--mode-bar-height', `${offsetHeight}px`);
+}
+
 // While someone moves, edits corners or draws, the inspector shrinks to this one control.
 // state: {title, hint, buttons: [{id, label, run(), isPrimary, isDisabled}]}
 export function showModeBar({title, hint, buttons}) {
@@ -17,6 +23,7 @@ export function showModeBar({title, hint, buttons}) {
   });
   elementById('mode-buttons').replaceChildren(...buttonElements);
   elementById('mode-bar').hidden = false;
+  shareHeight();
   // Rendering again on every point must not drop a keyboard user out of the bar.
   if (previousFocusId) buttonElements.find(({id}) => id === previousFocusId)?.focus();
 }

@@ -4,11 +4,15 @@ import {kindLabel, objectName} from './object-names.js';
 //   kind(feature), title(feature, context)      the small label and the name in the inspector
 //   sections(feature, edit)                     form sections in order, [{title, fields, isCollapsed}]
 //   controls(edit)                              controls that replace single fields, {name: value => element}
-//   suggestions(feature, context)               usual values of free fields, {name: [value]}
+//   usualValues(feature, context)               what free fields usually say, offered as a list, {name: [value]}
+//   listsDependOn                               fields whose choice changes those lists
 //   measures(feature, before)                   lines of facts shown under the form
 //   renderExtras(container, edit)               anything else in the inspector
 //   tools(feature, edit)                        extra tool buttons, [{label, run(), isDesktopOnly}]
 //   vertexTools(feature, handle, edit)          what can be done at the picked point, [{id, label, run(), isDisabled}]
+//   joinedPoints(entry, context)                the points of a line that others share
+//   marks(feature)                              letters on the map for the picked object, [{coordinate, label}]
+//   isDerived                                   it only stands for others: Apply records its companion edits, not itself
 //   isViewOnly(context)                         the object can be read and not changed here
 //   isReshapable(context)                       whether its shape can be changed on this screen
 //   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
@@ -48,13 +52,17 @@ const defaultBehavior = filename => ({
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
-  suggestions: () => ({}),
   controls: () => ({}),
   vertexTools: () => [],
-  applyLabel: () => 'Apply',
-  afterApply: () => {},
+  joinedPoints: () => [],
+  marks: () => [],
+  isDerived: false,
   isReshapable: () => true,
   isViewOnly: () => false,
+  usualValues: () => ({}),
+  listsDependOn: [],
+  applyLabel: () => 'Apply',
+  afterApply: () => {},
   dragTarget: () => null
 });
 
@@ -118,7 +126,14 @@ const drawChoices = {
     }
   ],
   settlements: [
-    {label: 'Add town', filename: 'settlements.geojson', shape: 'Point', properties: {kind: 'settlement'}}
+    {label: 'Add town', filename: 'settlements.geojson', shape: 'Point', properties: {kind: 'settlement'}},
+    {
+      label: 'Draw settlement area',
+      filename: 'settlement-areas.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'settlement-area'},
+      isDesktopOnly: true
+    }
   ]
 };
 

@@ -62,36 +62,47 @@ function flagField(name, value) {
   return input;
 }
 
-const valueSuggestions = {
-  'building:material': ['brick', 'concrete', 'stone', 'plaster', 'wood', 'glass', 'metal']
-};
+const otherLabel = 'Other…';
+// Cannot be a value: no source has it, and it is never recorded.
+const otherChoice = '\u0000other';
 
-// Free text with the usual values offered.
-function suggestedField(name, value, propertyRule, suggestions) {
+// A list of the usual values, and free text for one that is not among them. The text field holds the value either way.
+function usualValuesField(name, value, propertyRule, usualValues) {
   const input = textField(name, value, propertyRule);
-  const list = document.createElement('datalist');
-  list.id = `suggestions-${name}`;
-  list.append(...suggestions.map(suggestion => optionElement(name, suggestion, '')));
-  input.setAttribute('list', list.id);
+  const select = selectField(name, value, usualValues, propertyRule.required);
+  select.removeAttribute('name');
+  select.dataset.listFor = name;
+  select.setAttribute('aria-label', fieldLabel(name));
+  const other = createElementWithText('option', otherLabel);
+  other.value = otherChoice;
+  select.append(other);
+  input.hidden = true;
+  input.setAttribute('aria-label', `Other ${fieldLabel(name).toLowerCase()}`);
+  select.onchange = () => {
+    const isOther = select.value === otherChoice;
+    input.hidden = !isOther;
+    input.value = isOther ? '' : select.value;
+    if (isOther) input.focus();
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+  };
   const wrapper = document.createElement('span');
-  wrapper.append(input, list);
+  wrapper.append(select, input);
   return wrapper;
 }
 
-function fieldControl(name, value, propertyRule, levels, {controls, suggestions}) {
+function fieldControl(name, value, propertyRule, levels, {controls, usualValues}) {
   if (controls[name]) return controls[name](value);
-  const offered = suggestions[name] ?? valueSuggestions[name];
-  if (offered) return suggestedField(name, value, propertyRule, offered);
   if (propertyRule.isLevel) return selectField(name, value, [...levels], propertyRule.required);
   if (isOnlyYes(propertyRule)) return flagField(name, value);
   if (propertyRule.enum) return selectField(name, value, propertyRule.enum, propertyRule.required);
+  if (usualValues[name]?.length > 0) return usualValuesField(name, value, propertyRule, usualValues[name]);
   if (propertyRule.type === 'boolean') return booleanField(name, value, propertyRule.required);
   if (['integer', 'number'].includes(propertyRule.type)) return numberField(name, value, propertyRule);
   return textField(name, value, propertyRule);
 }
 
 // Values a single field cannot state. Layers edit them with controls of their own.
-const structuredTypes = new Set(['list', 'integers', 'directions']);
+const structuredTypes = new Set(['list', 'identifier', 'identifiers', 'directions']);
 
 export function isFormField(propertyRule) {
   const isFixed = propertyRule.enum?.length === 1 && !isOnlyYes(propertyRule);
@@ -99,7 +110,7 @@ export function isFormField(propertyRule) {
 }
 
 // One labelled control for a property the rules list.
-export function propertyField(name, value, propertyRule, levels, customization = {controls: {}, suggestions: {}}) {
+export function propertyField(name, value, propertyRule, levels, customization = {controls: {}, usualValues: {}}) {
   const label = createElementWithText('label', fieldLabel(name) + (propertyRule.required ? ' (required)' : ''));
   label.append(fieldControl(name, value, propertyRule, levels, customization));
   return label;
@@ -119,13 +130,13 @@ function sectionElement({title, fields, isCollapsed}, properties, propertyRules,
 
 // The form of one object: its sections in order, each with the fields the rules allow. Everything else stays out of
 // reach.
-// controls replace single fields, {name: value => element}; suggestions offer usual values, {name: [value]}.
+// controls replace single fields, {name: value => element}; usualValues are offered as a list, {name: [value]}.
 export function renderPropertyForm(
   form,
   properties,
   propertyRules,
   levels,
-  {sections = null, controls = {}, suggestions = {}} = {}
+  {sections = null, controls = {}, usualValues = {}} = {}
 ) {
   const allowedNames = Object.keys(propertyRules).filter(name => isFormField(propertyRules[name]));
   const wantedSections = sections ?? [{title: '', fields: allowedNames}];
@@ -134,7 +145,7 @@ export function renderPropertyForm(
     .filter(({fields}) => fields.length > 0);
   form.replaceChildren(
     ...shownSections.map(section =>
-      sectionElement(section, properties, propertyRules, levels, {controls, suggestions})
+      sectionElement(section, properties, propertyRules, levels, {controls, usualValues})
     )
   );
 }

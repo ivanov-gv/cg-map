@@ -41,6 +41,13 @@ test('a stream keeps its join with the lake and is reversed, and the sea follows
   page
 }, testInfo) => {
   await chooseLayer(page, 'water', [-8, 5]);
+  // The stream ends on the lake and begins at a spring.
+  const joints = () =>
+    page.evaluate(async () => {
+      const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+      return features.map(({properties}) => properties.status).sort();
+    });
+  await expect.poll(joints).toEqual(['deadEnd', 'joined']);
   // The upper shore of the lake moves down; the stream that ended on it still does.
   await tapAt(page, [-7, 3.5]);
   await editCorners(page);

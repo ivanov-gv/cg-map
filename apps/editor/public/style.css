@@ -896,8 +896,99 @@ fieldset {
   margin: 0;
   font-size: 16px;
 }
+/* Messages make room for the controls that share their place. */
+@media (min-width: 721px) {
+  body:has(#mode-bar:not([hidden])) .map-status {
+    top: calc(24px + var(--mode-bar-height, 100px));
+  }
+  body:has(.inspector:not([hidden])) .map-status {
+    left: calc((100vw - min(340px, 35vw) - 12px) / 2);
+    width: min(320px, 50vw);
+  }
+}
+/* Here the toolbar and the current layer leave no room between them. */
+@media (min-width: 721px) and (max-width: 1099px) {
+  #mode-bar {
+    top: 64px;
+    width: min(440px, 60vw);
+  }
+  body:has(#mode-bar:not([hidden])) .map-status {
+    top: calc(76px + var(--mode-bar-height, 100px));
+  }
+}
+@media (max-width: 1099px) {
+  #open-inspector:not([hidden]) ~ main .map-status {
+    top: 116px;
+  }
+}
 #mode-bar .button-row {
   margin: 8px 0 0;
+}
+/* One level of the road graph at a time, as in a lift. */
+#level-picker {
+  position: absolute;
+  z-index: 1;
+  top: 76px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #0002;
+}
+#level-picker button {
+  min-width: 44px;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+}
+#level-picker button + button {
+  border-top: 1px solid var(--line);
+}
+body:has(.utility-panel:not([hidden])) #level-picker {
+  left: calc(24px + min(320px, 35vw));
+}
+.end-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.end-row select {
+  grid-column: 2;
+  margin: 0;
+}
+.end-letter {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #c8372d;
+  border-radius: 50%;
+  color: #c8372d;
+  font-size: 12px;
+  font-weight: 700;
+}
+.junction-road {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.junction-road p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.junction-road .button-row {
+  margin: 0;
+  align-items: center;
+}
+.junction-road select {
+  width: auto;
+  margin: 0;
 }
 #map-cross {
   position: absolute;
@@ -966,6 +1057,10 @@ fieldset {
   margin: 0;
 }
 @media (max-width: 720px) {
+  #level-picker {
+    top: 120px;
+    left: 8px;
+  }
   .workspace-toolbar {
     padding: 2px;
   }
@@ -979,6 +1074,9 @@ fieldset {
     right: 8px;
     width: auto;
     transform: none;
+  }
+  body:has(#mode-bar:not([hidden])) :is(.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right) {
+    bottom: calc(68px + var(--mode-bar-height, 100px) + env(safe-area-inset-bottom) + var(--viewport-bottom, 0px));
   }
   #toast {
     bottom: calc(76px + env(safe-area-inset-bottom));
@@ -1174,4 +1272,8 @@ textarea {
     max-width: calc(100vw - 16px);
     width: calc(100vw - 16px);
   }
+}
+#inspector-extras > button {
+  width: 100%;
+  margin-bottom: 10px;
 }

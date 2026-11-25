@@ -66,6 +66,7 @@ test('editor bundle versions freeze each version and add to the one before', () 
       'contours.geojson',
       'protected-areas.geojson',
       'ridges.geojson',
+      'settlement-areas.geojson',
       'slopes.geojson',
       'summits.geojson',
       'transit-routes.json',

@@ -55,7 +55,7 @@ test('a contour stops at its neighbour, a summit must be above them, and a ridge
 
 test('a town is renamed and added, and on the phone only towns can be picked', {tag: '@phone'}, async ({page}, testInfo) => {
   await chooseLayer(page, 'settlements', [0, 6], 18);
-  await expect(page.locator('#status')).toContainText(isPhone(testInfo) ? '1 objects' : '5 objects');
+  await expect(page.locator('#status')).toContainText(isPhone(testInfo) ? '1 objects' : '6 objects');
   await tapAt(page, [-3, 8]);
   await expect(page.locator('#selection-title')).toHaveText('Town');
   await page.locator('[name="rank"]').selectOption('city');
@@ -75,6 +75,62 @@ test('a town is renamed and added, and on the phone only towns can be picked', {
     place: 'village',
     municipality: 'ME-02'
   });
+});
+
+test('the area of a settlement is shown, opened from it, reshaped and drawn where there is none', async ({page}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Areas need a big screen.');
+  await chooseLayer(page, 'settlements', [0, 7], 18);
+  await tapAt(page, [-3, 8]);
+  await page.getByRole('button', {name: 'Open its area'}).click();
+  await expect(page.locator('#selection-kind')).toHaveText('Settlement area');
+  await expect(page.getByRole('button', {name: 'Open Town'})).toBeVisible();
+  await editCorners(page);
+  await dragFromTo(page, [-1, 10], [0, 10]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+
+  await startDrawing(page, 'Add town');
+  await tapAt(page, [4, 8]);
+  await page.locator('[name="name"]').fill('New quarter');
+  await page.locator('[name="place"]').selectOption('neighbourhood');
+  await page.locator('[name="rank"]').selectOption('village');
+  await applyEdit(page);
+  await tapAt(page, [4, 8]);
+  await expect(page.locator('#selection-kind')).toHaveText('Settlement · neighbourhood');
+  await page.getByRole('button', {name: 'Draw its area'}).click();
+  for (const corner of [[3, 7], [5, 7], [5, 9]]) await tapAt(page, corner);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+
+  const {changeset} = await exportChangeset(page, testInfo);
+  const areas = operationsOn(changeset, 'settlement-areas.geojson');
+  const town = operationsOn(changeset, 'settlements.geojson').find(({operation}) => operation === 'add');
+  expect(town.after.properties).toMatchObject({place: 'neighbourhood', rank: 'village'});
+  expect(includesStep(areas.find(({operation}) => operation === 'modify'), [0, 10])).toBe(true);
+  expect(areas.find(({operation}) => operation === 'add').after.properties).toEqual({
+    kind: 'settlement-area',
+    name: 'New quarter',
+    settlementEntityId: town.reference.localId
+  });
+});
+
+test('the end of a ridge slides along the outline of its hill', async ({page}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Ridges are desk work.');
+  await chooseLayer(page, 'relief', [15, 4], 18);
+  await tapAt(page, [17, 5]);
+  await editCorners(page);
+  // Away from the outline it stays on it.
+  await dragFromTo(page, [10, 5], [8.5, 7]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+  const {changeset} = await exportChangeset(page, testInfo);
+  const [ridge] = operationsOn(changeset, 'ridges.geojson');
+  expect(stepsOf(ridge.after.geometry.coordinates[0])).toEqual([10, 7]);
+  const slopes = operationsOn(changeset, 'slopes.geojson');
+  expect(slopes).toHaveLength(2);
+  const isSunlit = ({after}) => after.properties.aspect === 'sunlit';
+  expect(includesStep(slopes.find(isSunlit), [10, 5]) || includesStep(slopes.find(isSunlit), [10, 0])).toBe(true);
+  expect(includesStep(slopes.find(slope => !isSunlit(slope)), [10, 5])).toBe(false);
 });
 
 test('a municipality border moves both sides at once', async ({page}, testInfo) => {
