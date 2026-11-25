@@ -60,3 +60,18 @@ so relief corrections then appear in the replay report instead of being placed. 
 facts. Editor tests keep their contracts and data pins until the next releases of both packages. The road file grows by
 about a tenth, and the check refuses roads that end at one junction in different places. One OSM node has ways passing
 on two levels; the extractor names such nodes, and they stay unjoined.
+
+## Outcome: #429 (2026-11-25)
+
+The owner asked to move municipality marks and correct neighbour outlines without inventing new framing objects. The
+original rule kept both locked: a mark was computed once, and a neighbour was context that the editor could not touch.
+The exception follows the rule's intent rather than removing it. `labelPoint` is a required WGS84 `position` and can
+move only inside its own municipality polygon; `kind=context` polygons can be modified in both
+`context-countries.geojson` and the matching `land.geojson` feature. Add and delete stay refused for neighbours, the
+country and the sea.
+
+The pipeline still owns the derived boundary between land and sea. The hidden `neighbours` step clips the six Natural
+Earth outlines to Montenegro, derives the OSM-only Kosovo gap from the reviewed border edges, writes the same areas to
+both context files, and recomputes the ocean from that land. The importer checks the shape of an edited position and the
+containment of a mark; `make -C data check-topology` checks neighbour overlap, inland gaps and ocean on land before a
+release. This narrows "read-only neighbour" to "editable outline, fixed set of objects" and needs no new ADR.

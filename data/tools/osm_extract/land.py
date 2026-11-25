@@ -9,7 +9,6 @@ from .geometry import (
 from .identity import osm_identity
 from .names import copy_name_tags
 from .rings import orient_feature
-from .writing import read_collection
 
 SOURCE_FILE = 'land.geojson'
 DETAIL_SIMPLIFY_DEGREES = 0.0001
@@ -112,7 +111,4 @@ class LandLayer(Layer):
         return any(area.contains(marker) for marker in self.destination_markers)
 
     def finish(self, options, state):
-        context = read_collection(
-            options.sources_directory / 'context-countries.geojson'
-        )
-        return [*self.features, *context['features']]
+        return self.features

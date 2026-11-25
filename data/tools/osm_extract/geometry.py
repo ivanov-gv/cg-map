@@ -3,6 +3,7 @@
 import json
 
 import osmium
+import shapely
 from shapely.geometry import LineString, MultiLineString, box, mapping, shape
 from shapely.ops import polygonize, unary_union
 
@@ -21,6 +22,12 @@ def rounded_geometry(geometry):
     if isinstance(geometry, float):
         return round(geometry, 6)
     return geometry
+
+
+def rounded_valid_geometry(geometry):
+    """Snap coordinates to the published grid without breaking topology."""
+    area = shape(geometry) if isinstance(geometry, dict) else geometry
+    return mapping(shapely.set_precision(area, 1e-6))
 
 
 def way_coordinates(way):

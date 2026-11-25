@@ -8,12 +8,13 @@ from .geometry import (
     area_source,
     clipped_features,
     geometry_features,
-    rounded_geometry,
+    rounded_valid_geometry,
     usable_area_geometry,
     way_coordinates,
 )
 from .identity import content_version, make_feature, osm_identity
 from .names import copy_name_tags
+from .neighbours import CONTEXT_FILE, OCEAN_BOUNDS
 from .rings import orient_feature, rfc7946_geometry
 from .writing import read_collection
 
@@ -31,7 +32,6 @@ WATER_AREA_RULES = (
     (('water', 'basin'), 'basin'),
 )
 WATER_LINE_TAGS = ('tunnel', 'intermittent')
-OCEAN_BOUNDS = (17.5, 41.0, 21.5, 44.2)
 OCEAN_SIMPLIFY_DEGREES = 0.0001
 WATER_SIMPLIFY_DEGREES = 0.0001
 
@@ -124,19 +124,26 @@ class WaterLayer(Layer):
             state.country_geometry if has_fresh_country
             else self.country_from_sources(options)
         )
-        context = read_collection(
-            options.sources_directory / 'context-countries.geojson'
+        context_features = (
+            state.context_features
+            if state.context_features
+            else read_collection(
+                options.sources_directory / CONTEXT_FILE
+            )['features']
         )
         land = [
             shape(country),
-            *[shape(feature['geometry']) for feature in context['features']]
+            *[shape(feature['geometry']) for feature in context_features]
         ]
-        ocean = box(*OCEAN_BOUNDS).difference(unary_union(land))
+        land_geometry = unary_union(land)
+        ocean = box(*OCEAN_BOUNDS).difference(land_geometry)
         simplified = ocean.simplify(
             OCEAN_SIMPLIFY_DEGREES, preserve_topology=True
         )
-        geometry = rounded_geometry(
-            rfc7946_geometry(mapping(simplified))
+        # Simplification can move a coastal edge onto land. Cut it back to the
+        # exact published land before snapping, so the ocean never claims land.
+        geometry = rfc7946_geometry(
+            rounded_valid_geometry(mapping(simplified.difference(land_geometry)))
         )
         properties = {'kind': 'ocean'}
         return make_feature(geometry, properties, {

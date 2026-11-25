@@ -21,8 +21,10 @@ def main():
         'Validated {municipalities} municipalities, {unassigned_water} '
         'unassigned-water areas and {edges} shared edges; {areas} published '
         'polygons in total, with {settlements} settlements. Uncovered area '
-        '{missing_area_sqm:.0f} m2, extra {extra_area_sqm:.0f} m2; new sources '
-        '{combined_bytes} bytes.'.format(**metrics)
+        '{missing_area_sqm:.0f} m2, extra {extra_area_sqm:.0f} m2; neighbour '
+        'overlap {neighbour_overlap_sqm:.0f} m2, inland gap '
+        '{inland_gap_sqm:.0f} m2, inland ocean {inland_ocean_sqm:.0f} m2; '
+        'new sources {combined_bytes} bytes.'.format(**metrics)
     )
     return 0
 

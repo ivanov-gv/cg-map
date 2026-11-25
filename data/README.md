@@ -16,10 +16,11 @@ requirements in `tools/requirements.txt`; install them in a virtualenv as descri
 [data runbook](../docs/runbooks/data.md#geometry-edits-or-refreshes). CI installs the same requirements before data
 verification; tests are not skipped when `osmium` is missing.
 
-Full rebuild: `make -C data build-data`. The five relief sources are rebuilt separately with
-`make -C data build-relief PYTHON=~/.cache/cg-map/venv/bin/python` after installing the pinned GIS packages in that
-venv; their raster inputs and derivation report stay outside Git, and their vectors, counts and hashes are reviewed
-here.
+Full rebuild: `make -C data build-data`. A geometry refresh also derives the neighbour areas at the reviewed border and
+recomputes the ocean from the same land, so run `make -C data check-topology` before reviewing the release. The five
+relief sources are rebuilt separately with `make -C data build-relief PYTHON=~/.cache/cg-map/venv/bin/python` after
+installing the pinned GIS packages in that venv; their raster inputs and derivation report stay outside Git, and their
+vectors, counts and hashes are reviewed here.
 
 From this workspace: `npm run check`, `npm run build`, `npm test`. The full build is deliberately expensive.
 Viewing/building the web uses the committed reviewed archive instead. The reviewed data is also published as

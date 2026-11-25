@@ -334,6 +334,7 @@ class BorderEdgesLayer(Layer):
         state.municipality_features = municipality_features(
             areas, edges, self.collected_areas, water_neighbours
         )
+        state.border_edges = edges
         self.features = edges
         return self.features
 

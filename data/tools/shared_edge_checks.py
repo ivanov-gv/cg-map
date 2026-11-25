@@ -4,13 +4,14 @@ import json
 from itertools import combinations
 from pathlib import Path
 
-from shapely.geometry import LineString, shape
-from shapely.ops import unary_union
+from shapely.geometry import LineString, box, shape
+from shapely.ops import polygonize, unary_union
 
 from geo_area import (
     EXTRA_AREA_TOLERANCE_SQM, MISSING_AREA_TOLERANCE_SQM,
     SQUARE_DEGREES_TO_SQUARE_METRES,
 )
+from osm_extract.neighbours import OCEAN_BOUNDS, touches_sea
 from osm_extract.shared_edges import (
     OSM_ONLY_AUTHORITIES, edge_lines, ordered_edge_references,
     rebuild_municipality
@@ -19,6 +20,7 @@ from osm_extract.shared_edges import (
 EDGE_FILE = 'border-edges.geojson'
 MUNICIPALITY_FILE = 'municipalities.geojson'
 LAND_FILE = 'land.geojson'
+WATER_FILE = 'water.geojson'
 SETTLEMENT_FILE = 'settlements.geojson'
 CONTEXT_FILE = 'context-countries.geojson'
 MUNICIPALITY_PREFIX = 'ME-'
@@ -30,6 +32,9 @@ SEA = 'sea'
 OVERLAP_AREA_TOLERANCE = 1e-10
 RECONSTRUCTION_AREA_TOLERANCE = 1e-10
 MAX_COMBINED_BYTES = 5 * 1024 * 1024
+NEIGHBOUR_OVERLAP_TOLERANCE_SQM = 20_000
+INLAND_GAP_TOLERANCE_SQM = 20_000
+INLAND_OCEAN_TOLERANCE_SQM = 20_000
 
 
 def read_collection(path):
@@ -209,6 +214,60 @@ def country_geometry(land):
     raise ValueError('land.geojson has no country feature')
 
 
+def check_neighbour_geometry(sources_dir, country, context, edges, water):
+    """Keep neighbours at the border and land gaps out of the ocean."""
+    context_polygons = polygons_in(context, CONTEXT_FILE)
+    overlap_sqm = sum(
+        country.intersection(polygon).area
+        * SQUARE_DEGREES_TO_SQUARE_METRES
+        for polygon in context_polygons
+    )
+    if overlap_sqm > NEIGHBOUR_OVERLAP_TOLERANCE_SQM:
+        raise ValueError(
+            f'neighbour areas overlap Montenegro by {overlap_sqm:.1f} m2'
+        )
+
+    covered = unary_union([country, *context_polygons])
+    uncovered = box(*OCEAN_BOUNDS).difference(covered)
+    sea_lines = [
+        LineString(feature['geometry']['coordinates'])
+        for feature in edges['features']
+        if 'sea' in (
+            feature['properties']['left'], feature['properties']['right']
+        )
+    ]
+    inland_gap_sqm = sum(
+        polygon.area * SQUARE_DEGREES_TO_SQUARE_METRES
+        for polygon in polygonize(uncovered.boundary)
+        if uncovered.covers(polygon.representative_point())
+        and not touches_sea(polygon, sea_lines)
+    )
+    if inland_gap_sqm > INLAND_GAP_TOLERANCE_SQM:
+        raise ValueError(
+            f'inland gaps cover {inland_gap_sqm:.1f} m2 outside neighbours'
+        )
+
+    ocean_polygons = [
+        shape(feature['geometry']) for feature in water['features']
+        if feature['properties'].get('kind') == 'ocean'
+    ]
+    if not ocean_polygons:
+        raise ValueError('water.geojson has no ocean polygon')
+    inland_ocean_sqm = (
+        unary_union(ocean_polygons).intersection(covered).area
+        * SQUARE_DEGREES_TO_SQUARE_METRES
+    )
+    if inland_ocean_sqm > INLAND_OCEAN_TOLERANCE_SQM:
+        raise ValueError(
+            f'ocean covers {inland_ocean_sqm:.1f} m2 of land'
+        )
+    return {
+        'neighbour_overlap_sqm': overlap_sqm,
+        'inland_gap_sqm': inland_gap_sqm,
+        'inland_ocean_sqm': inland_ocean_sqm,
+    }
+
+
 def check_sources(sources_dir):
     """Run every shared-border topology check on one reviewed source tree."""
     sources = Path(sources_dir)
@@ -216,6 +275,7 @@ def check_sources(sources_dir):
     areas = read_collection(sources / MUNICIPALITY_FILE)
     settlements = read_collection(sources / SETTLEMENT_FILE)
     context = read_collection(sources / CONTEXT_FILE)
+    water = read_collection(sources / WATER_FILE)
     polygons = polygons_in(areas, MUNICIPALITY_FILE)
     metrics = check_coverage(
         polygons, country_geometry(read_collection(sources / LAND_FILE))
@@ -245,4 +305,9 @@ def check_sources(sources_dir):
         'settlements': len(settlements['features']),
         'combined_bytes': check_size(sources),
         **metrics,
+        **check_neighbour_geometry(
+            sources,
+            country_geometry(read_collection(sources / LAND_FILE)),
+            context, edges, water
+        ),
     }

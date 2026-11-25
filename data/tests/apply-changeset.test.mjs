@@ -190,6 +190,47 @@ for (const {name, filename, properties, previous, isValid} of propertyCases) {
     assert.equal(propertyProblem(properties, propertyRules, supportedLevels, previous) === null, isValid);
   });
 }
+test('a municipality label mark may move within its area but not outside it', testContext => {
+  const root = temporaryRoot(testContext);
+  const index = readSource(root, 'municipalities.geojson').features.findIndex(
+    feature => feature.properties.kind === 'municipality'
+  );
+  assert.ok(index >= 0, 'the sources contain a municipality');
+  const original = readSource(root, 'municipalities.geojson').features[index];
+  const moved = structuredClone(original);
+  const [longitude, latitude] = moved.properties.labelPoint;
+  moved.properties.labelPoint = [longitude + 0.000001, latitude];
+  applyChangeset(changeset(root, 'municipalities.geojson', [
+    modifyOperation(root, 'municipalities.geojson', index, feature => {
+      feature.properties.labelPoint = moved.properties.labelPoint;
+    })
+  ]), root, {now: reviewedAt, contractsDirectory});
+  assert.deepEqual(
+    readSource(root, 'municipalities.geojson').features[index].properties.labelPoint,
+    moved.properties.labelPoint
+  );
+  const outside = changeset(root, 'municipalities.geojson', [
+    modifyOperation(root, 'municipalities.geojson', index, feature => {
+      feature.properties.labelPoint = [0, 0];
+    })
+  ]);
+  assert.throws(
+    () => applyChangeset(outside, root, {now: reviewedAt, contractsDirectory}),
+    /labelPoint is outside its area/
+  );
+});
+
+test('a label mark must be a WGS84 position', () => {
+  assert.match(
+    propertyProblem(
+      {labelPoint: [181, 42]},
+      editingRules.layers['municipalities.geojson'].properties,
+      supportedLevels
+    ),
+    /WGS84/
+  );
+});
+
 for (const {name, rings, isValid} of cases.polygons) {
   test(`polygon validation: ${name}`, () => assert.equal(polygonProblem(rings) === null, isValid));
 }
@@ -568,20 +609,19 @@ test('a refused changeset leaves every reviewed file untouched', async testConte
       /delete is not allowed in border-edges/
     ],
     [
-      'moved neighbour country',
+      'added neighbour country',
       () => {
-        const contextIndex = readSource(root, 'land.geojson').features.findIndex(
-          feature => feature.properties.kind === 'context' && feature.geometry.type === 'Polygon'
-        );
-        return changeset(root, 'land.geojson', [
-          modifyOperation(root, 'land.geojson', contextIndex, feature => {
-            feature.geometry.coordinates = feature.geometry.coordinates.map(ring =>
-              ring.map(([longitude, latitude]) => [longitude + 0.1, latitude])
-            );
-          })
-        ]);
+        const before = readSource(root, 'context-countries.geojson').features[0];
+        return changeset(root, 'context-countries.geojson', [{
+          filename: 'context-countries.geojson',
+          operation: 'add',
+          reference: {localId: 'local:44444444-4444-4444-8444-444444444444'},
+          beforeFingerprint: null,
+          before: null,
+          after: {...before, properties: {...before.properties, entityId: undefined}}
+        }]);
       },
-      /geometry is not editable/
+      /add is not allowed in context-countries/
     ],
     [
       'crossed footprint',

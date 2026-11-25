@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23562423,
+    "bytes": 23298152,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -52,11 +52,11 @@
       },
       "land": {
         "byZoomBand": {
-          "0-8": 44790,
-          "13-16": 18993833,
-          "9-12": 273673
+          "0-8": 55355,
+          "13-16": 19527612,
+          "9-12": 315846
         },
-        "bytes": 19312296
+        "bytes": 19898813
       },
       "municipalities": {
         "byZoomBand": {
@@ -124,15 +124,15 @@
       },
       "water": {
         "byZoomBand": {
-          "0-8": 205317,
-          "13-16": 5117887,
-          "9-12": 697509
+          "0-8": 198431,
+          "13-16": 4418586,
+          "9-12": 683065
         },
-        "bytes": 6020713
+        "bytes": 5300082
       }
     },
-    "file": "montenegro-ec969666e13c3146.pmtiles",
-    "sha256": "ec969666e13c31468d73cb3adc350820e0ac91d191ce2f78e216943b328a6338",
+    "file": "montenegro-19c876d057191dd2.pmtiles",
+    "sha256": "19c876d057191dd2cfac98a7f6533650c1c888e3cccd9a949cfefc6e39077b65",
     "tiles": 229422
   },
   "building_details": {
@@ -217,9 +217,9 @@
       "sha256": "0511b42b9c5679a1e29e71256986e71f919e7ab78123c13a343e0c5acde66eb6"
     },
     "context-countries.geojson": {
-      "bytes": 6535,
-      "features": 6,
-      "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
+      "bytes": 88809,
+      "features": 7,
+      "sha256": "69fa0b3ff4ad7c25696326ce1d08aa9cdadf2d1a6384014f3a84d9b1389e8afc"
     },
     "contours.geojson": {
       "bytes": 950066,
@@ -227,9 +227,9 @@
       "sha256": "d2f5a28a507f2ba680bf3f848291758ae5d00eb0c4621bf34a3b5b58b2271c20"
     },
     "land.geojson": {
-      "bytes": 493167,
-      "features": 612,
-      "sha256": "530ad7b2f2fd05eb1a59bd9a8b688b591746f476d2b9ac7733c5da56f6799f36"
+      "bytes": 575441,
+      "features": 613,
+      "sha256": "9966e4cc4ce7495bfba0fbb40476b36f0f1f0701803ff272ded23b51b8d06c7c"
     },
     "municipalities.geojson": {
       "bytes": 878446,
@@ -282,9 +282,9 @@
       "sha256": "bb3e8f177457997566f5ccadfbae01762c647a3a554ed392c446af5902c996e1"
     },
     "water.geojson": {
-      "bytes": 2097403,
+      "bytes": 2155152,
       "features": 1795,
-      "sha256": "edb1d55efc5c79333cc2c9355cb2ac4bf8a169e473850c56d2f444c452b7f2be"
+      "sha256": "f863e3a02812e8db1c3bf4cfa5ffda22c89da199754ab9fe7de896e5a5150653"
     }
   },
   "notes": [

@@ -67,6 +67,49 @@ function referencedIndex({filename, reference}, source, indexByKey) {
   return index;
 }
 
+function pointOnSegment([x, y], [startX, startY], [endX, endY]) {
+  const cross = (endX - startX) * (y - startY) - (endY - startY) * (x - startX);
+  if (Math.abs(cross) > 1e-12) return false;
+  return x >= Math.min(startX, endX) - 1e-12 && x <= Math.max(startX, endX) + 1e-12
+    && y >= Math.min(startY, endY) - 1e-12 && y <= Math.max(startY, endY) + 1e-12;
+}
+
+function pointInRing(point, ring) {
+  const [x, y] = point;
+  let inside = false;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const start = ring[index];
+    const end = ring[index + 1];
+    if (pointOnSegment(point, start, end)) return true;
+    if ((start[1] > y) !== (end[1] > y)
+      && x < (end[0] - start[0]) * (y - start[1]) / (end[1] - start[1]) + start[0]) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function pointInPolygon(point, rings) {
+  return pointInRing(point, rings[0]) && !rings.slice(1).some(ring => pointInRing(point, ring));
+}
+
+function pointInGeometry(point, geometry) {
+  if (geometry?.type === 'Polygon') return pointInPolygon(point, geometry.coordinates);
+  if (geometry?.type === 'MultiPolygon') return geometry.coordinates.some(rings => pointInPolygon(point, rings));
+  return false;
+}
+
+// A municipality mark may move, but never into another municipality or outside its own polygon.
+function checkMunicipalityLabelPoint(operation) {
+  if (operation.filename !== 'municipalities.geojson' || !operation.after) return;
+  const {kind, labelPoint} = operation.after.properties;
+  if (!['municipality', 'unassigned-water'].includes(kind)) return;
+  requireThat(
+    pointInGeometry(labelPoint, operation.after.geometry),
+    `${operation.filename}: labelPoint is outside its area`
+  );
+}
+
 function checkExistingFeature(operation, index, source) {
   const {filename, reference} = operation;
   const current = source.features[index];
@@ -127,6 +170,7 @@ function resolvedOperations(changeset, sources, rules, levels) {
   const resolved = changeset.operations.map(operation => {
     requireThat(rules.layers[operation.filename], `unknown source file ${operation.filename}`);
     checkOperationRules(operation, rules, levels);
+    checkMunicipalityLabelPoint(operation);
     if (operation.operation === 'add') return operation;
     const source = sources.get(operation.filename);
     const index = referencedIndex(operation, source, indexByFile.get(operation.filename));

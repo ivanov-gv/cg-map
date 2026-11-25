@@ -176,18 +176,24 @@ override whose place disappeared stops that step with an error. `--source-url` a
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
 municipalities.geojson), `settlements`, `places`, and `protected-areas` (protected-areas.geojson); each group replaces
-only its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails
-and asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
+its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails and
+asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
 supplies footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups
 together when refreshing either side of that join; this Feature does not refresh places, so the published snapshot has
 no such joins. A `borders` run uses reviewed `land.geojson` as its country outline; a `settlements` run uses reviewed
-`municipalities.geojson` to assign each point. Run them together when refreshing either source.
-`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
-policy, then review the new facts as above.
+`municipalities.geojson` to assign each point. Run them together when refreshing either source. The Natural Earth
+snapshot in `context-countries.geojson` is the input to the neighbour derivation on every run; its identities are kept,
+but its geometry is republished after clipping and gap fill. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the
 place-only command above with `--update-provenance --accept-new-facts`. Never pass that flag just to turn a check green.
+
+`neighbours` is always selected and need not be named in `--layers`. It derives the shared context areas before water
+finishes, so a partial run writes one agreed set of neighbours in `context-countries.geojson` and `land.geojson` and one
+ocean in `water.geojson`. A run without `borders` uses the reviewed `border-edges.geojson`; a run without `land` reads
+the reviewed country from `land.geojson` and keeps its country and green-area features while replacing the context
+features. The six Natural Earth identities are kept; Kosovo comes from the reviewed OSM border.
 
 ## Building attributes and entrances
 
@@ -230,17 +236,19 @@ make verify PKG=data
 
 The topology command checks polygon validity, zero-area pairwise intersections, land coverage, polygon reconstruction
 from traversal-ordered edge references, edge use from both sides, settlement counts, the derived-water kind and the
-combined 5 MB budget. Exterior sides come from matched OSM coastline or `admin_level=2` way tags, with over 0.1% segment
-overlap so an endpoint touch cannot claim an edge; a boundary chain splits where supported coverage intervals of
-different authorities end and begin together. It compares the published area union with the country outline without
-subtracting water: internal gaps larger than 100 m² and exterior water larger than 1,000,000 m² remain
-`unassigned-water` areas, while smaller exterior residue joins the adjacent municipality with the longest shared
-boundary (nearest distance, then ISO code, on ties). Published gaps are recomputed after that fill, and Lake Skadar and
-its municipal neighbours share a cleaned six-decimal shoreline. Remaining slivers are measured in local square metres,
-and the check fails above 20,000 m² uncovered or 10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25
-municipalities, one unassigned-water area, 141 edges, 4,009 settlements, 14,815 m² uncovered and 3,048 m² extra. The new
-sources are not inputs to the tile builder, so their first release did not change the reviewed archive; a refresh of
-land, water, roads or buildings still follows the rebuild path below.
+combined 5 MB budget. It also checks that neighbours do not overlap Montenegro, that inland gaps beside a reviewed
+border are neighbour land, and that the ocean does not cover land. Each of those three areas has a 20,000 m² limit.
+Exterior sides come from matched OSM coastline or `admin_level=2` way tags, with over 0.1% segment overlap so an
+endpoint touch cannot claim an edge; a boundary chain splits where supported coverage intervals of different authorities
+end and begin together. It compares the published area union with the country outline without subtracting water:
+internal gaps larger than 100 m² and exterior water larger than 1,000,000 m² remain `unassigned-water` areas, while
+smaller exterior residue joins the adjacent municipality with the longest shared boundary (nearest distance, then ISO
+code, on ties). Published gaps are recomputed after that fill, and Lake Skadar and its municipal neighbours share a
+cleaned six-decimal shoreline. Remaining slivers are measured in local square metres, and the check fails above 20,000
+m² uncovered or 10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25 municipalities, one unassigned-water
+area, 141 edges, 4,009 settlements, 14,815 m² uncovered, 3,048 m² extra, 44 m² neighbour overlap, 1,966 m² inland gap
+and 125 m² ocean on land. The border and settlement sources are not inputs to the tile builder, so their first release
+did not change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path below.
 
 ## Editor changesets
 
@@ -263,9 +271,12 @@ contract's local source value. An edit or deletion that would replace or remove 
 name: review it in the policy first. Field items in a changeset (sketches, notes, deletion marks) are counted and left
 there.
 
-Label positions, street joins, slope areas, rim lengths, summit checks, contour direction, ring order and provenance
-follow from the edits and are computed by the importer. After border, coastline or country edits also run
-`make -C data check-topology`.
+Most label positions, street joins, slope areas, rim lengths, summit checks, contour direction, ring order and
+provenance follow from the edits and are computed by the importer. A municipality mark is the exception: its required
+`labelPoint` is an editable WGS84 `position`, refused if it falls outside that municipality's area. A neighbour area is
+editable in both `context-countries.geojson` and its matching `kind=context` feature in `land.geojson`; the editor sends
+both operations in one changeset. Neither framing kind can be added or deleted. After border, coastline, country or
+neighbour edits also run `make -C data check-topology`.
 
 After a fresh OSM extract, put the reviewed corrections back and read what it reports:
 
@@ -300,7 +311,8 @@ countrywide; stream, ditch and drain lines are clipped to the detail box and gai
 and coastline features retain upstream node order; `name` and `name:en` are copied only when mapped and nonblank, while
 `tunnel` and `intermittent` are copied when mapped. Coastline lines are features in `water.geojson`, not a separate
 source file, and consumers exclude them from the waterway stroke so the ocean fill shows the shore. The derived
-`derived:ocean` polygon is still computed from the reviewed land outline and the OSM coastline.
+`derived:ocean` polygon is computed from the country outline and the derived neighbour areas, cut back to that land
+after simplification and snapped to six decimals, so a coastal shortcut cannot fill an inland gap.
 
 Extracted green and water polygons are written with counterclockwise exteriors and clockwise holes. Preserved country
 and context outlines keep their source winding. `make -C data check` enforces the shared kind enums, requires `osmTag`

@@ -89,7 +89,8 @@
       "geometries": ["Polygon", "MultiPolygon"],
       "properties": {
         "name": {"maxLength": 120},
-        "name:en": {"maxLength": 120}
+        "name:en": {"maxLength": 120},
+        "labelPoint": {"type": "position", "required": true}
       }
     },
     "buildings.geojson": {
@@ -280,7 +281,7 @@
       },
       "limitedKinds": {
         "country": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en"]},
-        "context": {"operations": ["modify"], "geometry": false, "properties": ["name", "name:en"]}
+        "context": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en"]}
       }
     },
     "water.geojson": {
@@ -327,7 +328,7 @@
     },
     "context-countries.geojson": {
       "operations": ["modify"],
-      "geometries": [],
+      "geometries": ["Polygon", "MultiPolygon"],
       "properties": {
         "name": {"required": true, "maxLength": 120},
         "name:en": {"maxLength": 120}

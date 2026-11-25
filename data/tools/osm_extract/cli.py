@@ -20,6 +20,7 @@ from .buildings import (
 from .country import CountryLayer
 from .identity import adopt_collection
 from .land import LandLayer
+from .neighbours import NeighbourCountriesLayer, NeighbourLandLayer
 from .places import PlacesLayer
 from .protected_areas import ProtectedAreasLayer
 from .road_nodes import RoadNodesLayer
@@ -46,6 +47,9 @@ LAYER_GROUPS = {
     'borders': (BorderEdgesLayer, MunicipalitiesLayer),
     'settlements': (SettlementsLayer, SettlementAreasLayer),
     'water': (WaterLayer,),
+    # Always selected: the two context files and the ocean cut need one
+    # derivation, even when only another group is regenerated.
+    'neighbours': (NeighbourCountriesLayer, NeighbourLandLayer),
     'places': (BuildingGeometryLayer, PlacesLayer),
     'protected-areas': (ProtectedAreasLayer,),
 }
@@ -53,8 +57,8 @@ LAYER_GROUPS = {
 # settlements then use those areas to assign their municipality. Water and
 # places finish last with the reviewed outline and building footprints.
 FINISH_ORDER = (
-    'buildings', 'roads', 'land', 'borders', 'settlements', 'water', 'places',
-    'protected-areas'
+    'buildings', 'roads', 'land', 'borders', 'neighbours', 'settlements',
+    'water', 'places', 'protected-areas'
 )
 INDEPENDENT_PROVENANCE = frozenset({
     'places.geojson', 'transport-stops.geojson'
@@ -441,7 +445,8 @@ def run(args):
             'pass --source-timestamp to record one.'
         )
     is_partial = args.layers is not None
-    selected_groups = set(args.layers or LAYER_GROUPS)
+    requested_groups = set(args.layers or LAYER_GROUPS)
+    selected_groups = requested_groups | {'neighbours'}
     if is_partial:
         require_reviewed_input(root, input_hash)
     options = Options(
@@ -452,7 +457,7 @@ def run(args):
         source_url=args.source_url,
         source_date=args.source_date,
         source_timestamp=timestamp,
-        uses_fresh_country=not is_partial or 'land' in selected_groups,
+        uses_fresh_country=not is_partial or 'land' in requested_groups,
     )
     group_layers = {
         name: [layer_class() for layer_class in layer_classes]
@@ -496,7 +501,13 @@ def run(args):
         finish_layers(
             group_layers, selected_groups, staged_options, state
         )
-        write_layer_files(layers, staged_sources, layer_filenames)
+        # Neighbours also owns land.geojson, so writing every layer here would
+        # publish unselected country and green areas alongside the context.
+        selected_layers = [
+            layer for group in FINISH_ORDER if group in selected_groups
+            for layer in group_layers[group]
+        ]
+        write_layer_files(selected_layers, staged_sources, layer_filenames)
         if 'places.geojson' in layer_filenames:
             apply_visibility(
                 staging_root, args.accept_new_place_facts

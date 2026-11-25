@@ -62,6 +62,9 @@ function identifiersProblem(name, value) {
 
 const isCoordinatePair = value => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite);
 
+// A label mark is a WGS84 longitude/latitude pair, not a pixel point.
+const isPosition = value => isCoordinatePair(value) && Math.abs(value[0]) <= 180 && Math.abs(value[1]) <= 90;
+
 // A stop of a route is a stop ID, a positioned stop outside the stop file, or a turn point the route must pass.
 function isRouteStop(stop) {
   if (typeof stop === 'string') return stop.length > 0;
@@ -97,7 +100,8 @@ const problemByType = {
   identifier: (name, value) => (isIdentifier(value) ? null : `${name} must be an OSM number or a local ID`),
   identifiers: identifiersProblem,
   directions: directionsProblem,
-  entrances: entrancesProblem
+  entrances: entrancesProblem,
+  position: (name, value) => (isPosition(value) ? null : `${name} must be a WGS84 longitude/latitude pair`)
 };
 
 function levelProblem(name, properties, propertyRule, levels) {

@@ -263,3 +263,70 @@ test('objects of every other layer pass from the editor through the importer', a
   const writtenRoutes = collectionOf('transit-routes.json', readSource(root, 'transit-routes.json'));
   assert.equal(writtenRoutes.features[0].properties.colour, '#1b75bb');
 });
+
+test('a municipality mark and a neighbour area move through the importer', testContext => {
+  const root = temporaryRoot(testContext);
+  const filenames = ['municipalities.geojson', 'context-countries.geojson', 'land.geojson'];
+  const before = Object.fromEntries(filenames.map(filename => [
+    filename, readSource(root, filename)
+  ]));
+  const municipalityBefore = before['municipalities.geojson'].features.find(
+    feature => feature.properties.kind === 'municipality'
+  );
+  const municipalityAfter = structuredClone(municipalityBefore);
+  const [longitude, latitude] = municipalityAfter.properties.labelPoint;
+  municipalityAfter.properties.labelPoint = [longitude + 0.000001, latitude];
+
+  const neighbourBefore = before['context-countries.geojson'].features[0];
+  const neighbourAfter = {
+    ...neighbourBefore,
+    geometry: translateGeometry(neighbourBefore.geometry, 0.000001, 0)
+  };
+  const landBefore = before['land.geojson'].features.find(
+    feature => feature.properties.entityId === neighbourBefore.properties.entityId
+  );
+  const landAfter = {...landBefore, geometry: translateGeometry(landBefore.geometry, 0.000001, 0)};
+  // The importer publishes RFC 7946 ring order, reversing the reviewed neighbour's clockwise ring.
+  const writtenLandGeometry = {
+    ...landAfter.geometry,
+    coordinates: landAfter.geometry.coordinates.map(ring => ring.toReversed())
+  };
+
+  const fingerprint = feature => crypto.createHash('sha256').update(JSON.stringify(feature)).digest('hex');
+  const modify = (filename, prior, after) => ({
+    filename,
+    operation: 'modify',
+    reference: {entityId: prior.properties.entityId},
+    beforeFingerprint: fingerprint(prior),
+    before: prior,
+    after
+  });
+  const changeset = {
+    ...envelope,
+    version: 2,
+    bases: Object.fromEntries(filenames.map(filename => [
+      filename,
+      crypto.createHash('sha256').update(fs.readFileSync(stagedSourcePath(root, filename))).digest('hex')
+    ])),
+    operations: [
+      modify('municipalities.geojson', municipalityBefore, municipalityAfter),
+      modify('context-countries.geojson', neighbourBefore, neighbourAfter),
+      modify('land.geojson', landBefore, landAfter)
+    ]
+  };
+  const result = applyChangeset(changeset, root, {now: envelope.createdAt, contractsDirectory});
+
+  assert.deepEqual(result.files.toSorted(), filenames.toSorted());
+  const writtenMunicipality = readSource(root, 'municipalities.geojson').features.find(
+    feature => feature.properties.entityId === municipalityBefore.properties.entityId
+  );
+  assert.deepEqual(writtenMunicipality.properties.labelPoint, municipalityAfter.properties.labelPoint);
+  const writtenNeighbour = readSource(root, 'context-countries.geojson').features.find(
+    feature => feature.properties.entityId === neighbourBefore.properties.entityId
+  );
+  assert.deepEqual(writtenNeighbour.geometry, neighbourAfter.geometry);
+  const writtenLandNeighbour = readSource(root, 'land.geojson').features.find(
+    feature => feature.properties.entityId === neighbourBefore.properties.entityId
+  );
+  assert.deepEqual(writtenLandNeighbour.geometry, writtenLandGeometry);
+});

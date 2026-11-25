@@ -32,6 +32,10 @@ class ExtractionState:
     municipality_sources: list = field(default_factory=list)
     municipality_features: list = field(default_factory=list)
     settlement_features: list = field(default_factory=list)
+    # This run's border sides and derived neighbour areas, shared by the
+    # context files, land and the ocean cut so all three agree.
+    border_edges: list = field(default_factory=list)
+    context_features: list = field(default_factory=list)
 
 
 class Layer:
