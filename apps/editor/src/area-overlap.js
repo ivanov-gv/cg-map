@@ -5,13 +5,14 @@ import {metricOffset, nearestPointOnOutline} from './geometry-measures.js';
 import {pointInsidePolygon} from './geometry-validation.js';
 
 const toleranceMetres = 0.05;
+const touchingMarginDegrees = 1e-6;
 
 const edgesOf = rings => rings.flatMap(ring => ring.slice(1).map((end, index) => [ring[index], end]));
 
 const isDeepInside = (point, rings) =>
   pointInsidePolygon(point, rings) && nearestPointOnOutline(point, rings).distanceMetres > toleranceMetres;
 
-function mayMeet([start, end], [otherStart, otherEnd], margin = 1e-6) {
+function mayMeet([start, end], [otherStart, otherEnd], margin = touchingMarginDegrees) {
   const isApart = axis =>
     Math.max(start[axis], end[axis]) + margin < Math.min(otherStart[axis], otherEnd[axis]) ||
     Math.max(otherStart[axis], otherEnd[axis]) + margin < Math.min(start[axis], end[axis]);
@@ -44,7 +45,9 @@ function stretchMiddles(rings, otherEdges) {
   return edgesOf(rings).flatMap(edge => {
     const [start, end] = edge;
     const meeting = otherEdges.filter(otherEdge => mayMeet(edge, otherEdge));
-    const cuts = meeting.flatMap(otherEdge => [crossingFraction(edge, otherEdge), ...otherEdge.map(point => fractionOf(point, edge))]);
+    const crossings = meeting.map(otherEdge => crossingFraction(edge, otherEdge));
+    const pointsOnEdge = meeting.flatMap(otherEdge => otherEdge.map(point => fractionOf(point, edge)));
+    const cuts = [...crossings, ...pointsOnEdge];
     const inner = cuts.filter(fraction => fraction !== null && fraction > 0 && fraction < 1);
     const fractions = [0, ...inner.toSorted((first, second) => first - second), 1];
     return fractions.slice(1).map((fraction, index) => {

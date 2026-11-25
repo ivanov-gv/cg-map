@@ -11,6 +11,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   renderExtras(container, edit)               anything else in the inspector
 //   tools(feature, edit)                        extra tool buttons, [{label, run(), isDesktopOnly}]
 //   vertexTools(feature, handle, edit)          what can be done at the picked point, [{id, label, run(), isDisabled}]
+//   joinsLines                                  whether the points of this line join others
 //   joinedPoints(entry, context)                the points of a line that others share
 //   marks(feature)                              letters on the map for the picked object, [{coordinate, label}]
 //   isDerived                                   it only stands for others: Apply records its companion edits, not itself
@@ -59,6 +60,7 @@ const defaultBehavior = filename => ({
   measures: () => [],
   controls: () => ({}),
   vertexTools: () => [],
+  joinsLines: false,
   joinedPoints: () => [],
   marks: () => [],
   isDerived: false,

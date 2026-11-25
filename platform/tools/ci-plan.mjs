@@ -113,6 +113,7 @@ const EDITING_ONLY_SOURCES = [
   'drag-budget.js',
   'following-shapes.js',
   'magnet-switch.js',
+  'magnet-tools.js',
   'line-joining.js',
   'layer-water.js',
   'layer-junctions.js',

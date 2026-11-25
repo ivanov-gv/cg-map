@@ -297,7 +297,7 @@ function pointOnWall(coordinate, entrance, context) {
 
 export const buildingBehaviors = {
   [buildingsFile]: {
-    title: feature => addressText(feature.properties) || feature.properties.name || 'No address',
+    title: feature => addressText(feature.properties) || feature.properties.name || 'a building without an address',
     sections: buildingSections,
     mayContainOthers: false,
     prepared: preparedBuilding,

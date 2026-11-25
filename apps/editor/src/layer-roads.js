@@ -292,6 +292,7 @@ export const roadBehaviors = {
     vertexTools: roadVertexTools,
     snappedPoint: ({lngLat}, context) => joinedRoadPoint(lngLat.toArray(), context),
     limitedGeometry: snappedWhileDragged,
+    joinsLines: true,
     hasMagnet: () => true,
     measures: lengthFacts,
     renderExtras: renderEnds,

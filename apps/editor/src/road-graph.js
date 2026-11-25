@@ -142,23 +142,34 @@ function membersByPoint(entries) {
   return members;
 }
 
-// Around what is asked for, so that the next questions of a drag find it ready.
+// Around what is asked for, so that the next questions of a drag find it ready. The session replaces a file's entries
+// as a whole, so the array's identity says when the answer must be found again.
 const keptMarginDegrees = 0.002;
-let latestMembers = null;
+const keptBoxByEntries = new WeakMap();
 
 const contains = (outer, inner) =>
   outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
 
-// The members of every point within bounds. The session keeps one list of entries until something changes in it.
+// The result of findWithin over a wide box, reused while later questions stay inside it. Callers apply their own exact
+// bounds afterwards; roads and areas share this because both read the same lists of source entries.
+export function keptResultWithin(entries, bounds, findWithin) {
+  const kept = keptBoxByEntries.get(entries);
+  if (kept && contains(kept.bounds, bounds)) return kept.value;
+  const [west, south, east, north] = bounds;
+  const wideBounds = [
+    west - keptMarginDegrees,
+    south - keptMarginDegrees,
+    east + keptMarginDegrees,
+    north + keptMarginDegrees
+  ];
+  const value = findWithin(wideBounds);
+  keptBoxByEntries.set(entries, {bounds: wideBounds, value});
+  return value;
+}
+
+// The members of every point within bounds, from one wide read of the file.
 function membersWithin(entries, bounds) {
-  const isKnown = latestMembers?.entries === entries && contains(latestMembers.bounds, bounds);
-  if (!isKnown) {
-    const [west, south, east, north] = bounds;
-    const margin = keptMarginDegrees;
-    const wideBounds = [west - margin, south - margin, east + margin, north + margin];
-    latestMembers = {entries, bounds: wideBounds, members: membersByPoint(entriesWithin(entries, wideBounds))};
-  }
-  return latestMembers.members;
+  return keptResultWithin(entries, bounds, wideBounds => membersByPoint(entriesWithin(entries, wideBounds)));
 }
 
 // The roads of a point by level, as [{level, members}], the ground first.

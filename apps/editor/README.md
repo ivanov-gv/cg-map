@@ -87,7 +87,7 @@ The magnet takes a dragged or drawn corner of an area, including a hole corner, 
 file close by, otherwise onto its side, and a moved area with its closest corner. It never puts a corner onto one the
 shape already has, so the shape cannot be folded together; the points of roads and waterways join others the same way.
 The `Magnet` button in the modes where it applies shows its state with `aria-pressed` and is remembered in this browser.
-What an edit newly overlaps is outlined in amber and counted and named in the bar and in the inspector; it is not
+What an edit newly overlaps is outlined in blue and counted and named in the bar and in the inspector; it is not
 refused, because some sources do overlap ([area-magnet.js](src/area-magnet.js), [area-overlap.js](src/area-overlap.js)).
 
 Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
@@ -129,6 +129,11 @@ Current sources have 43,978 buildings and 21,247 roads; these figures were not r
 Opening a mode grows about linearly, and at 8 times takes long enough to notice but still works. The heap figures are
 one reading at an arbitrary moment of garbage collection, so only their overall growth means anything. This does not
 measure a phone, or edits and export at these sizes.
+
+`make -C apps/editor benchmark-magnet` times the magnet on the reviewed sources. A run on 2026-11-25 measured Skadarsko
+jezero `magneticallyMoved` at 10.890 ms first and 9.967 ms median; the shared wide-box cache served 200 nearby buildings
+queries at 0.018 ms median and 200 road queries at 0.004 ms median. Replacing the entry lists forced a fresh read at
+13.357 ms and 4.125 ms. The tool fails if the lake median exceeds 20 ms.
 
 ### Limits
 

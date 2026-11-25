@@ -353,7 +353,7 @@ export function createSourceOverlay(map) {
     setOverlaps: features =>
       setData(
         overlapSource,
-        features.map(({geometry}) => ({type: 'Feature', properties: {objectState: 'overlap'}, geometry}))
+        features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))
       ),
     setFollowing: features =>
       setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),

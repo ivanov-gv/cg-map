@@ -84,6 +84,22 @@ test('an emptied area has no outline to pull or to overlap', () => {
   }
 });
 
+test('one unfinished part makes a whole MultiPolygon unusable', () => {
+  const good = [house.feature.geometry.coordinates[0]];
+  for (const bad of [[], [[]], [[at(0, 0)]], [[at(0, 0), at(1, 0)]]]) {
+    const broken = {type: 'MultiPolygon', coordinates: [bad, good]};
+    assert.equal(doOverlap(broken, house.feature.geometry, false), false);
+    assert.equal(doOverlap(house.feature.geometry, broken, false), false);
+    assert.equal(magneticallyMoved(broken, [house], reach), broken);
+  }
+});
+
+test('a side target rounded onto a used point is not used again', () => {
+  const used = at(2, 1);
+  const target = magneticPoint([19.2502001, 42.44010004], [house], 0.02, [used]);
+  assert.notDeepEqual(target, used);
+});
+
 test('the overlap notice counts neighbours and names as many as fit', () => {
   const nameOf = ({name}) => name;
   const named = name => ({name});

@@ -41,7 +41,9 @@ import {isSameHandle, moveVertex, vertexHandles} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
+import {sketchFile} from './layer-sketches.js';
 import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
+import {hasMagnetEffect} from './magnet-tools.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
 import {formValues, propertiesFromForm, renderPropertyForm} from './property-form.js';
 import {usualValuesOf} from './usual-values.js';
@@ -55,9 +57,6 @@ const beginNewByShape = {
   Polygon: beginNewPolygon,
   None: beginNewRecord
 };
-
-// These are the modes in which a point or whole shape can go to what is close. Placing a record cannot.
-const magnetTools = new Set([editTools.drawPolygon, editTools.cutHole, editTools.drawLine, editTools.move, editTools.vertices]);
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
@@ -198,9 +197,10 @@ export class InspectorEditing {
     if (byGeometry.has(feature.geometry)) return byGeometry.get(feature.geometry);
     const {mayContainOthers} = this.#behavior;
     const own = {filename: this.#filename, key};
-    const lies = (geometry, other) => hasOutline(geometry) && doOverlap(geometry, other.feature.geometry, mayContainOthers);
+    const isOverlapping = (geometry, other) =>
+      hasOutline(geometry) && doOverlap(geometry, other.feature.geometry, mayContainOthers);
     const overlaps = neighbouringAreas(feature.geometry, own, context).filter(
-      other => lies(feature.geometry, other) && !lies(this.#openedGeometry, other)
+      other => isOverlapping(feature.geometry, other) && !isOverlapping(this.#openedGeometry, other)
     );
     byGeometry.set(feature.geometry, overlaps);
     this.#overlapCache.set(entries, byGeometry);
@@ -229,7 +229,15 @@ export class InspectorEditing {
 
   get #hasMagnet() {
     const {tool, feature} = this.#transaction;
-    if (!this.#rule || !magnetTools.has(tool)) return false;
+    if (!this.#rule) return false;
+    const canChangePoint = hasMagnetEffect({
+      tool,
+      geometry: feature.geometry,
+      joins: Boolean(this.#behavior.joinsLines),
+      isSketch: this.#filename === sketchFile
+    });
+    if (!canChangePoint) return false;
+    // An outline is not a geometry until its first corner, so the layer cannot judge it yet.
     return [editTools.drawPolygon, editTools.cutHole].includes(tool) || this.#behavior.hasMagnet(feature);
   }
 
@@ -443,7 +451,8 @@ export class InspectorEditing {
     elementById('apply-edit').textContent = this.#context.isResolving(this.#entry()) ? 'Apply and resolve' : applyLabel;
     elementById('leave-note').hidden = this.#transaction.isNew || this.#behavior.isDerived;
     this.#renderToolButtons();
-    const nextPoint = this.#nextDrawnPoint();
+    const nextPoint =
+      isDrawing(this.#transaction) || this.#isPlacing ? this.#nextDrawnPoint() : null;
     this.#renderGeometry(nextPoint);
     this.#renderFacts();
     this.#renderModeBar(nextPoint);

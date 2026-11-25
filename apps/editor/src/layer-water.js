@@ -249,6 +249,7 @@ export const waterBehaviors = {
     prepared: preparedWater,
     snappedPoint: drawnWaterPoint,
     limitedGeometry: snappedWhileDragged,
+    joinsLines: true,
     hasMagnet: feature => !isCoastline(feature),
     vertexTools: waterVertexTools,
     joinedPoints: (entry, context) => joinedWaterPoints(entry, context.entriesOf(waterFile)),

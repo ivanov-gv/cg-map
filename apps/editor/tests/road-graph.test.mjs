@@ -13,7 +13,7 @@ import {
   roadWithEnds,
   splitEdits
 } from '../src/road-edits.js';
-import {jointAt, jointNear, jointsIn, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
+import {jointAt, jointNear, jointsIn, keptResultWithin, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
 import {ruleOfTurn, turnKey, turnsAt} from '../src/road-junctions.js';
 
 const origin = [19.25, 42.44];
@@ -526,4 +526,21 @@ test('a junction records its roads and never itself', () => {
   const moved = {...entry, feature: {...entry.feature, geometry: {type: 'Point', coordinates: at(1, 1)}}, extras: {}};
   assert.deepEqual(behavior.companionEdits(moved, context).map(({filename, key}) => `${filename} ${key}`), ['roads.geojson 0', 'roads.geojson 1']);
   assert.equal(behavior.isDerived, true);
+});
+
+test('a wide box is kept for one list of entries, and another list reads again', () => {
+  const entries = [];
+  const otherEntries = [];
+  const reads = [];
+  const find = bounds => {
+    reads.push(bounds);
+    return bounds;
+  };
+  const wide = [-0.002, -0.002, 1.002, 1.002];
+  assert.deepEqual(keptResultWithin(entries, [0, 0, 1, 1], find), wide);
+  assert.equal(reads.length, 1);
+  keptResultWithin(entries, [0.1, 0.1, 0.9, 0.9], find);
+  assert.equal(reads.length, 1, 'a nearby question reuses the wide box');
+  keptResultWithin(otherEntries, [0.1, 0.1, 0.9, 0.9], find);
+  assert.equal(reads.length, 2, 'replaced entries read again');
 });

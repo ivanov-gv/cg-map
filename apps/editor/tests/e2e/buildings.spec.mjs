@@ -98,16 +98,20 @@ test('a moved building takes everything with it in one step, and its removal ask
 const overlapCount = page =>
   page.evaluate(async () => (await window.editorDebug.map.getSource('editor-overlaps').getData()).features.length);
 // Point handles show the drawn corners before a line has two points and appears in the drawing source.
-const drawnCorners = page =>
-  page.evaluate(async () => {
+const drawnCorners = async page => {
+  const coordinates = await page.evaluate(async () => {
     const {features} = await window.editorDebug.map.getSource('editor-handles').getData();
-    return features.map(({geometry}) => geometry.coordinates.map(stepsOf));
+    return features.map(({geometry}) => geometry.coordinates);
   });
-const selectedCorners = page =>
-  page.evaluate(async () => {
+  return coordinates.map(stepsOf);
+};
+const selectedCorners = async page => {
+  const coordinates = await page.evaluate(async () => {
     const {features} = await window.editorDebug.map.getSource('editor-source-selection').getData();
-    return features[0]?.geometry.coordinates[0].map(stepsOf) ?? [];
+    return features[0]?.geometry.coordinates[0] ?? [];
   });
+  return coordinates.map(stepsOf);
+};
 
 test('a building is drawn and moved against its neighbour, and an overlap is said and shown', async ({page}, testInfo) => {
   await startDrawing(page, 'Draw building');
@@ -122,20 +126,23 @@ test('a building is drawn and moved against its neighbour, and an overlap is sai
 
   await tapAt(page, [0, 1.5]);
   await editCorners(page);
+  // The source ring closes at the corner it starts from.
   await expect.poll(() => selectedCorners(page)).toEqual([
     [-1, 1],
-    [1, 1],
-    [1, 2],
-    [-1, 2]
+    [-1, 2],
+    [0.5, 2],
+    [0.5, 1],
+    [-1, 1]
   ]);
   // At a wider zoom the whole step is within reach, so the corner goes to the house's far corner and not beside it.
   await centreOn(page, [-1, 2], 17);
   await dragFromTo(page, [-1, 2], [-0.95, 3.05]);
   await expect.poll(() => selectedCorners(page)).toEqual([
     [-1, 1],
-    [1, 1],
-    [1, 2],
-    [-1, 3]
+    [-1, 3],
+    [0.5, 2],
+    [0.5, 1],
+    [-1, 1]
   ]);
   await page.locator('#mode-done').click();
   await page.locator('#cancel-edit').click();
@@ -168,11 +175,30 @@ test('a building is drawn and moved against its neighbour, and an overlap is sai
   await page.locator('#mode-done').click();
   await page.locator('#cancel-edit').click();
 
+  // With the magnet back on, a whole building goes to its neighbour's corner and keeps its shape.
+  await tapAt(page, [2, 2]);
+  await page.locator('#tool-move').click();
+  await page.getByRole('button', {name: 'Magnet'}).click();
+  await expect(page.getByRole('button', {name: 'Magnet'})).toHaveAttribute('aria-pressed', 'true');
+  await dragFromTo(page, [2, 2], [-0.1, 2]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+
   const {changeset} = await exportChangeset(page, testInfo);
-  const [building] = operationsOn(changeset, 'buildings.geojson');
+  const buildings = operationsOn(changeset, 'buildings.geojson');
+  const building = buildings.find(({after}) => after.properties.entityId === undefined);
   const corners = building.after.geometry.coordinates[0].map(stepsOf);
   expect(corners[0]).toEqual([-1, 1]);
   expect(corners[3]).toEqual([-1, 2]);
   // Close to the corner of the other house, and not on it.
   expect(building.after.geometry.coordinates[0][2]).not.toEqual(at(1, 3));
+
+  const moved = buildings.find(({reference}) => reference?.entityId === 'way/2');
+  expect(moved.after.geometry.coordinates[0].map(stepsOf)).toEqual([
+    [-1, 1],
+    [1, 1],
+    [1, 3],
+    [-1, 3],
+    [-1, 1]
+  ]);
 });
