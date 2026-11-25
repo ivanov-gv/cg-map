@@ -639,11 +639,6 @@ function finishPick(entry) {
 // Clicks wait for the layer to finish loading, and a hit from another file never selects anything.
 function selectFeatureAtClick(event) {
   if (!activeLayer || isLayerLoading) return;
-  const joint = !pendingPick && !editing.hasUnappliedEdit && jointLayer.jointAt(event.point);
-  if (joint && layerJoints[activeLayer.id]?.entry) {
-    selectObject(layerJoints[activeLayer.id].entry(joint));
-    return;
-  }
   if (pendingPick) {
     const picked = entryUnderPick(event);
     if (picked) finishPick(picked);
@@ -656,6 +651,12 @@ function selectFeatureAtClick(event) {
   // A stray tap must not silently throw away typed details.
   if (editing.hasUnappliedEdit) {
     setStatus(applyOrCancelMessage, true);
+    return;
+  }
+  const joint = jointLayer.jointAt(event.point);
+  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint);
+  if (jointEntry) {
+    selectObject(jointEntry);
     return;
   }
   const candidates = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
