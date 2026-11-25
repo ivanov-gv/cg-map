@@ -192,7 +192,7 @@ test.describe('offline-first install', () => {
     await page.mouse.click(center.x, center.y);
     await page.locator('[name="name"]').fill('Added offline');
     await page.locator('[name="category"]').selectOption('food');
-    await page.locator('[name="kind"]').fill('cafe');
+    await page.locator('[data-list-for="kind"]').selectOption('cafe');
     await page.locator('[name="visibilityLevel"]').selectOption('4');
     await page.locator('#apply-edit').click();
     await expect(page.locator('#editor')).toHaveAttribute('hidden', '');
@@ -461,7 +461,7 @@ test.describe('offline-first install', () => {
     await page.mouse.click(center.x, center.y);
     await page.locator('[name="name"]').fill('Only in memory');
     await page.locator('[name="category"]').selectOption('food');
-    await page.locator('[name="kind"]').fill('cafe');
+    await page.locator('[data-list-for="kind"]').selectOption('cafe');
     await page.locator('[name="visibilityLevel"]').selectOption('4');
     await page.locator('#apply-edit').click();
     await expect(page.locator('#error')).toContainText('Draft not saved');

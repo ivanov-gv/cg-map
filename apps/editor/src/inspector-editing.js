@@ -242,6 +242,13 @@ export class InspectorEditing {
     this.#update(this.#transaction);
   }
 
+  // The kinds on offer follow the category. Rendering again must not drop a keyboard user out of the form.
+  #renderDependentLists(field) {
+    if (!this.#behavior.listsDependOn.includes(field.name)) return;
+    this.#setProperties({});
+    elementById('property-form').elements[field.name].focus();
+  }
+
   #renderForm() {
     const {levels} = this.#context;
     const {feature} = this.#transaction;
@@ -249,7 +256,7 @@ export class InspectorEditing {
     renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
       sections: this.#behavior.sections(feature, editContext),
       controls: formControls(editContext),
-      suggestions: this.#behavior.suggestions(feature, editContext.context)
+      usualValues: this.#behavior.usualValues(feature, editContext.context)
     });
     const extras = elementById('inspector-extras');
     extras.replaceChildren();
@@ -506,6 +513,7 @@ export class InspectorEditing {
     onClick('cancel-edit', () => this.discardEdit());
     onClick('delete-feature', () => this.#deleteFeature());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
+    elementById('property-form').onchange = event => this.#renderDependentLists(event.target);
     elementById('property-form').onsubmit = event => {
       event.preventDefault();
       this.applyEdit();

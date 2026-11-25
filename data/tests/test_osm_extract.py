@@ -74,6 +74,7 @@ GENERATED_FILES = (
     'provenance.json',
     'road-nodes.geojson',
     'roads.geojson',
+    'settlement-areas.geojson',
     'settlements.geojson',
     'transport-stops.geojson',
     'transport-stops.provenance.json',
@@ -94,14 +95,14 @@ REVIEWED_GEOJSON = (
     'building-labels.geojson', 'buildings.geojson',
     'context-countries.geojson', 'land.geojson', 'municipalities.geojson',
     'places.geojson', 'road-nodes.geojson', 'roads.geojson',
-    'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
+    'settlement-areas.geojson', 'settlements.geojson', 'transport-stops.geojson', 'water.geojson',
 )
 LAYER_FILES = {
     'buildings': ('building-entrances.geojson', 'buildings.geojson'),
     'roads': ('roads.geojson', 'road-nodes.geojson', 'turn-restrictions.json'),
     'land': ('land.geojson',),
     'borders': ('border-edges.geojson', 'municipalities.geojson'),
-    'settlements': ('settlements.geojson',),
+    'settlements': ('settlements.geojson', 'settlement-areas.geojson'),
     'water': ('water.geojson',),
     'places': ('places.geojson',),
     'protected-areas': ('protected-areas.geojson',),
@@ -1227,6 +1228,18 @@ class EndNodePreservationTest(unittest.TestCase):
             properties = feature['properties']
             self.assertEqual(properties['kind'], 'settlement')
             self.assertEqual(properties['source'], 'OpenStreetMap')
+
+    def test_a_settlement_area_names_its_settlement(self):
+        extract(self.first_root)
+        _, [area] = source_features(
+            self.first_root, 'settlement-areas.geojson'
+        )
+        self.assertEqual(area['geometry']['type'], 'Polygon')
+        self.assertEqual(area['properties'], {
+            'entityId': 'way/3011', 'entityVersion': 3,
+            'kind': 'settlement-area', 'name': 'Test Village',
+            'settlementEntityId': 'node/9302',
+        })
 
     def test_settlement_features_sort_by_source_identity_not_name(self):
         options = cli.Options(

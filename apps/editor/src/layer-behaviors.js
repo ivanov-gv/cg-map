@@ -14,7 +14,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, edit, context) where a drag must stop
 //   measures(feature, before)     lines of facts shown under the form
-//   suggestions(feature, context) usual values of free fields, {name: [value]}
+//   usualValues(feature, context) usual values of free fields, {name: [value]}
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
@@ -42,7 +42,8 @@ const defaultBehavior = filename => ({
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
-  suggestions: () => ({}),
+  usualValues: () => ({}),
+  listsDependOn: [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
   dragTarget: () => null

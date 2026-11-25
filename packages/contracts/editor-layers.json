@@ -23,7 +23,7 @@
         "website": {"maxLength": 512},
         "email": {"maxLength": 128},
         "opening_hours": {"maxLength": 256},
-        "wheelchair": {"maxLength": 64},
+        "wheelchair": {"enum": ["yes", "limited", "no", "designated"]},
         "level": {"maxLength": 16},
         "cuisine": {"maxLength": 128},
         "wikidata": {"maxLength": 64},
@@ -41,7 +41,9 @@
         "ref": {"maxLength": 128},
         "level": {"maxLength": 64},
         "wheelchair": {"enum": ["yes", "limited", "no"]},
-        "door": {"maxLength": 128},
+        "door": {"enum": [
+          "yes", "no", "hinged", "sliding", "automatic", "revolving", "folding", "overhead", "swinging"
+        ]},
         "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]},
         "addr:street": {"maxLength": 120},
         "addr:housenumber": {
@@ -60,10 +62,20 @@
         "name": {"required": true, "maxLength": 120},
         "name:en": {"maxLength": 120},
         "rank": {"required": true, "enum": ["capital", "city", "town", "village"]},
-        "place": {"required": true, "maxLength": 32},
+        "place": {"required": true, "enum": ["city", "town", "village", "hamlet", "suburb", "quarter", "neighbourhood"]},
         "municipality": {"required": true, "pattern": "^ME-[0-9]+$"},
         "source": {"required": true, "maxLength": 64},
         "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
+      }
+    },
+    "settlement-areas.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon", "MultiPolygon"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["settlement-area"]},
+        "name": {"required": true, "maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "settlementEntityId": {"maxLength": 64, "reference": "settlements.geojson"}
       }
     },
     "border-edges.geojson": {
@@ -85,9 +97,20 @@
       "geometries": ["Polygon"],
       "properties": {
         "kind": {"requiredOnAdd": true, "enum": ["building"]},
-        "building": {"required": true, "maxLength": 64},
+        "building": {"required": true, "enum": [
+          "yes", "apartments", "barn", "bunker", "carport", "cathedral", "chapel", "church", "civic", "clinic",
+          "clock_tower", "college", "commercial", "construction", "detached", "dormitory", "fire_station", "garage",
+          "garages", "government", "greenhouse", "guardhouse", "hangar", "hospital", "hotel", "house", "hut",
+          "industrial", "kindergarten", "kiosk", "manufacture", "monastery", "mosque", "office", "parking", "public",
+          "residential", "retail", "roof", "ruins", "school", "semidetached_house", "service", "shed", "sport",
+          "sports_hall", "stable", "stadium", "supermarket", "synagogue", "temple", "terrace", "toilets",
+          "train_station", "transformer_tower", "transportation", "university", "warehouse"
+        ]},
         "building:levels": {"maxLength": 32},
-        "building:material": {"maxLength": 128},
+        "building:material": {"enum": [
+          "brick", "cement_block", "concrete", "glass", "limestone", "metal", "metal_plates", "mud", "plaster",
+          "plastic", "reinforced_concrete", "sandstone", "steel", "stone", "timber_framing", "wood"
+        ]},
         "start_date": {"maxLength": 32},
         "roof:levels": {"maxLength": 32},
         "energy_class": {"enum": ["A+", "A", "B", "C", "D", "E", "F", "G"]},
@@ -157,32 +180,64 @@
             "steps"
           ]
         },
-        "bridge": {"maxLength": 64},
-        "tunnel": {"maxLength": 64},
-        "layer": {"maxLength": 16},
-        "oneway": {"maxLength": 16},
-        "access": {"maxLength": 64},
-        "motor_vehicle": {"maxLength": 64},
-        "foot": {"maxLength": 64},
-        "bicycle": {"maxLength": 64},
-        "maxspeed": {"maxLength": 32},
-        "surface": {"maxLength": 64},
-        "lit": {"maxLength": 16},
-        "sac_scale": {"maxLength": 64},
-        "smoothness": {"maxLength": 64},
-        "parking:left": {"maxLength": 128},
-        "parking:right": {"maxLength": 128},
-        "parking:both": {"maxLength": 128},
-        "junction": {"maxLength": 64},
+        "bridge": {"enum": ["yes", "no", "viaduct", "boardwalk", "cantilever", "covered", "movable", "aqueduct"]},
+        "tunnel": {"enum": ["yes", "no", "building_passage", "avalanche_protector", "passage", "culvert", "covered"]},
+        "layer": {"enum": ["-5", "-4", "-3", "-2", "-1", "0", "1", "2", "3", "4", "5"]},
+        "oneway": {"enum": ["yes", "no", "-1", "alternating", "reversible"]},
+        "access": {"enum": [
+          "yes", "no", "designated", "permissive", "destination", "private", "customers", "delivery", "permit",
+          "agricultural", "forestry", "use_sidepath", "dismount", "discouraged"
+        ]},
+        "motor_vehicle": {"enum": [
+          "yes", "no", "designated", "permissive", "destination", "private", "customers", "delivery", "permit",
+          "agricultural", "forestry", "use_sidepath", "dismount", "discouraged"
+        ]},
+        "foot": {"enum": [
+          "yes", "no", "designated", "permissive", "destination", "private", "customers", "delivery", "permit",
+          "agricultural", "forestry", "use_sidepath", "dismount", "discouraged"
+        ]},
+        "bicycle": {"enum": [
+          "yes", "no", "designated", "permissive", "destination", "private", "customers", "delivery", "permit",
+          "agricultural", "forestry", "use_sidepath", "dismount", "discouraged"
+        ]},
+        "maxspeed": {"enum": [
+          "5", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100", "110", "120", "130", "walk", "none"
+        ]},
+        "surface": {"enum": [
+          "asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes", "paving_stones", "sett", "cobblestone",
+          "unhewn_cobblestone", "brick", "metal", "wood", "rubber", "unpaved", "compacted", "fine_gravel", "gravel",
+          "pebblestone", "ground", "dirt", "earth", "grass", "grass_paver", "sand", "mud", "rock"
+        ]},
+        "lit": {"enum": ["yes", "no", "24/7", "automatic", "limited"]},
+        "sac_scale": {"enum": [
+          "hiking", "mountain_hiking", "demanding_mountain_hiking", "alpine_hiking", "demanding_alpine_hiking",
+          "difficult_alpine_hiking"
+        ]},
+        "smoothness": {"enum": [
+          "excellent", "good", "intermediate", "bad", "very_bad", "horrible", "very_horrible", "impassable"
+        ]},
+        "parking:left": {"enum": ["no", "yes", "lane", "street_side", "on_kerb", "half_on_kerb", "shoulder", "separate"]},
+        "parking:right": {"enum": ["no", "yes", "lane", "street_side", "on_kerb", "half_on_kerb", "shoulder", "separate"]},
+        "parking:both": {"enum": ["no", "yes", "lane", "street_side", "on_kerb", "half_on_kerb", "shoulder", "separate"]},
+        "junction": {"enum": ["roundabout", "circular", "jughandle", "intersection"]},
         "ref": {"maxLength": 120},
         "pathClass": {"enum": ["main", "trail"]},
         "startLevel": {"type": "integer", "minimum": -5, "maximum": 5},
         "endLevel": {"type": "integer", "minimum": -5, "maximum": 5},
-        "startNode": {"type": "integer", "minimum": 1},
-        "endNode": {"type": "integer", "minimum": 1},
-        "parking:lane:left": {"maxLength": 128},
-        "parking:lane:right": {"maxLength": 128},
-        "parking:lane:both": {"maxLength": 128}
+        "startNode": {"type": "identifier"},
+        "endNode": {"type": "identifier"},
+        "parking:lane:left": {"enum": [
+          "parallel", "diagonal", "perpendicular", "marked", "no", "no_parking", "no_stopping", "fire_lane",
+          "separate"
+        ]},
+        "parking:lane:right": {"enum": [
+          "parallel", "diagonal", "perpendicular", "marked", "no", "no_parking", "no_stopping", "fire_lane",
+          "separate"
+        ]},
+        "parking:lane:both": {"enum": [
+          "parallel", "diagonal", "perpendicular", "marked", "no", "no_parking", "no_stopping", "fire_lane",
+          "separate"
+        ]}
       }
     },
     "road-nodes.geojson": {
@@ -193,8 +248,11 @@
           "required": true,
           "enum": ["traffic_signals", "crossing", "stop", "give_way", "mini_roundabout", "turning_circle"]
         },
-        "crossing": {"maxLength": 64},
-        "traffic_signals": {"maxLength": 64}
+        "crossing": {"enum": ["uncontrolled", "traffic_signals", "zebra", "marked", "unmarked", "island", "no"]},
+        "traffic_signals": {"enum": [
+          "signal", "traffic_lights", "pedestrian_crossing", "ramp_meter", "emergency", "blinker", "blink_mode",
+          "level_crossing"
+        ]}
       }
     },
     "land.geojson": {
@@ -260,8 +318,8 @@
         },
         "name": {"maxLength": 120},
         "name:en": {"maxLength": 120},
-        "intermittent": {"maxLength": 32},
-        "tunnel": {"maxLength": 32}
+        "intermittent": {"enum": ["yes", "no"]},
+        "tunnel": {"enum": ["yes", "no", "culvert", "flooded"]}
       },
       "limitedKinds": {
         "ocean": {"operations": ["modify"], "geometry": true, "properties": []}
@@ -355,10 +413,10 @@
             "no_exit"
           ]
         },
-        "from": {"type": "integer", "minimum": 1, "required": true},
-        "to": {"type": "integer", "minimum": 1, "required": true},
-        "viaNodes": {"type": "integers"},
-        "viaWays": {"type": "integers"}
+        "from": {"type": "identifier", "required": true},
+        "to": {"type": "identifier", "required": true},
+        "viaNodes": {"type": "identifiers"},
+        "viaWays": {"type": "identifiers"}
       }
     },
     "protected-areas.geojson": {

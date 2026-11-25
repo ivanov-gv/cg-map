@@ -178,6 +178,13 @@ function cityFeatures() {
         point(0, 8)
       )
     ],
+    'settlement-areas.geojson': [
+      feature(
+        'way/81',
+        {kind: 'settlement-area', name: 'Town', settlementEntityId: 'node/80'},
+        polygon(square(-5, 6, 4))
+      )
+    ],
     'border-edges.geojson': [
       feature(
         'derived:edge-1',

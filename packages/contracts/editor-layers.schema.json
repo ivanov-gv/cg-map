@@ -39,8 +39,8 @@
                 },
                 "forbiddenValues": {"type": "array", "items": {"type": "string"}},
                 "type": {
-                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; integers and list are arrays.",
-                  "enum": ["integer", "number", "boolean", "list", "integers", "directions", "entrances"]
+                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
+                  "enum": ["integer", "number", "boolean", "list", "identifier", "identifiers", "directions", "entrances"]
                 },
                 "minimum": {"type": "number"},
                 "maximum": {"type": "number"},
