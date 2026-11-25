@@ -15,6 +15,8 @@ import {buildingBehaviors} from '../apps/editor/src/layer-buildings.js';
 import {greenBehaviors} from '../apps/editor/src/layer-green.js';
 import {placeBehaviors} from '../apps/editor/src/layer-places.js';
 import {roadBehaviors} from '../apps/editor/src/layer-roads.js';
+import {reliefBehaviors} from '../apps/editor/src/layer-relief.js';
+import {settlementBehaviors} from '../apps/editor/src/layer-settlements.js';
 import {waterBehaviors} from '../apps/editor/src/layer-water.js';
 import {operationProblem} from '../apps/editor/src/layer-rules.js';
 import {collectionOf} from '../apps/editor/src/source-records.js';
@@ -31,7 +33,9 @@ const layerBehaviors = [
   placeBehaviors,
   roadBehaviors,
   greenBehaviors,
-  waterBehaviors
+  waterBehaviors,
+  reliefBehaviors,
+  settlementBehaviors
 ];
 layerBehaviors.forEach(behaviors => registerBehaviors(behaviors));
 

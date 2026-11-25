@@ -25,6 +25,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   isReshapable(context)         whether its shape can be changed on this screen
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
+//   closesLines                   a drawn line ends on its first point when that is tapped
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // companionEdits and problem get {filename, key, feature, before, extras, origins}; origins are those of line-origins.js.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
@@ -98,6 +99,31 @@ const drawChoices = {
   water: [
     {label: 'Draw water area', filename: 'water.geojson', shape: 'Polygon', properties: {}},
     {label: 'Draw river', filename: 'water.geojson', shape: 'LineString', properties: {}}
+  ],
+  relief: [
+    {
+      label: 'Draw contour',
+      filename: 'contours.geojson',
+      shape: 'LineString',
+      properties: {kind: 'contour', index: false},
+      isDesktopOnly: true
+    },
+    {
+      label: 'Add summit',
+      filename: 'summits.geojson',
+      shape: 'Point',
+      properties: {kind: 'summit', natural: 'peak'}
+    }
+  ],
+  settlements: [
+    {label: 'Add town', filename: 'settlements.geojson', shape: 'Point', properties: {kind: 'settlement'}},
+    {
+      label: 'Draw settlement area',
+      filename: 'settlement-areas.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'settlement-area'},
+      isDesktopOnly: true
+    }
   ]
 };
 
@@ -111,6 +137,7 @@ export function drawChoicesOf(layer, rules) {
 // A new object states its own identity where the contract asks for it: a place and a stop carry their local ID.
 export function newFeatureFields(filename, localId, rules) {
   if (filename === 'places.geojson') return {properties: {id: localId, source: rules.localPlaceSource}};
+  if (filename === 'settlements.geojson') return {properties: {source: rules.localPlaceSource}};
   if (filename === 'transport-stops.geojson') return {id: localId, properties: {stopId: localId}};
   return {properties: {}};
 }

@@ -27,8 +27,10 @@ import {buildingBehaviors} from './layer-buildings.js';
 import {junctionBehaviors, junctionFile, junctionRule} from './layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layer-places.js';
 import {greenBehaviors} from './layer-green.js';
+import {reliefBehaviors} from './layer-relief.js';
 import {layerJoints, levelFacts, levelsByFile} from './layer-joints.js';
 import {roadBehaviors} from './layer-roads.js';
+import {settlementBehaviors} from './layer-settlements.js';
 import {waterBehaviors} from './layer-water.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
@@ -56,6 +58,8 @@ registerBehaviors(placeBehaviors);
 registerBehaviors(roadBehaviors);
 registerBehaviors(greenBehaviors);
 registerBehaviors(waterBehaviors);
+registerBehaviors(reliefBehaviors);
+registerBehaviors(settlementBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
@@ -143,8 +147,9 @@ function layerStatus() {
   return `${activeLayer.name} · ${objectCount} objects · ${isEditable ? 'editable' : 'read-only'}`;
 }
 
-// Kinds that only follow from other objects are drawn and never picked.
-const isPickable = ({filename, feature}) => isLayerObject(filename, feature);
+// Kinds that only follow from other objects, and files another layer edits, are drawn and never picked.
+const isPickable = ({filename, feature}) =>
+  isLayerObject(filename, feature) && !activeLayer?.contextFiles.includes(filename);
 
 // The working objects of a file, or none when the bundle does not have it.
 const entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
@@ -231,7 +236,12 @@ function clearSelection() {
 }
 
 // A filter shows other objects over the map as it is, without drawing the files of its layer again.
-const shownFiles = () => (activeFilter ? [] : (activeLayer?.files ?? []));
+const shownFiles = () => {
+  if (activeFilter) return [];
+  if (!activeLayer) return [];
+  const isLimited = phoneLayout.matches && activeLayer.phoneFiles;
+  return [...(isLimited ? activeLayer.phoneFiles : activeLayer.files), ...activeLayer.contextFiles];
+};
 
 function withDerivedFacts(entry) {
   const {feature} = entry;
@@ -283,7 +293,7 @@ function refreshOverlay() {
   const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
   overlay.setDeletions(markedFeatures());
-  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom);
+  overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom, activeLayer?.pointGuideMinZoom);
   try {
     workingMap.show(workingFeatures(collection.features), new Set(shownFiles()));
   } catch (error) {
@@ -389,7 +399,8 @@ function renderCommandAvailability() {
 function renderTools() {
   elementById('edit-guides').hidden = !activeLayer;
   elementById('edit-guides-hint').hidden = !activeLayer;
-  const buttons = drawChoicesOf(activeLayer, rules).map(choice => {
+  const choices = drawChoicesOf(activeLayer, rules).filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
+  const buttons = choices.map(choice => {
     const button = createElementWithText('button', choice.label);
     button.type = 'button';
     button.onclick = () => startNewFeature(choice);

@@ -57,16 +57,22 @@ export const editorLayers = [
     summary: 'Contour lines and summits',
     files: ['contours.geojson', 'summits.geojson', 'ridges.geojson', 'canyon-rims.geojson'],
     linkedFiles: ['slopes.geojson'],
+    // Light and shade, so that moving a ridge shows at once. They follow from the ridges and are never picked.
+    contextFiles: ['slopes.geojson'],
     guideMinZoom: 13
   },
   {
     id: 'settlements',
     group: 'Map',
     name: 'Settlements & borders',
-    summary: 'City names, municipalities, country',
-    files: ['settlements.geojson', 'border-edges.geojson', 'context-countries.geojson'],
+    summary: 'Towns and their areas, municipalities, country',
+    files: ['settlements.geojson', 'settlement-areas.geojson', 'border-edges.geojson', 'context-countries.geojson'],
     linkedFiles: ['municipalities.geojson', 'land.geojson'],
-    guideMinZoom: 7
+    // Borders need a big screen.
+    phoneFiles: ['settlements.geojson'],
+    guideMinZoom: 7,
+    // The country's towns seen together would cover its borders with rings.
+    pointGuideMinZoom: 11
   },
   {
     id: 'stops',
@@ -99,11 +105,17 @@ export const isLayerObject = (filename, feature) => !derivedKinds[filename]?.inc
 export function availableLayers(filenames) {
   const isAvailable = filename => filenames.includes(filename);
   return editorLayers
-    .map(layer => ({
-      ...layer,
-      files: layer.files.filter(isAvailable),
-      linkedFiles: layer.linkedFiles.filter(isAvailable)
-    }))
+    .map(layer => {
+      const phoneFiles = (layer.phoneFiles ?? []).filter(isAvailable);
+      return {
+        ...layer,
+        files: layer.files.filter(isAvailable),
+        linkedFiles: layer.linkedFiles.filter(isAvailable),
+        contextFiles: (layer.contextFiles ?? []).filter(isAvailable),
+        // A bundle without what a phone shows is shown whole, so the layer is never empty.
+        phoneFiles: phoneFiles.length > 0 ? phoneFiles : null
+      };
+    })
     .filter(layer => layer.files.length > 0);
 }
 

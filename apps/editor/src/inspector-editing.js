@@ -213,7 +213,6 @@ export class InspectorEditing {
     elementById('edit-facts').replaceChildren(...facts.map(fact => createElementWithText('p', fact)));
   }
 
-  // What a layer's own controls need: the pending feature, and ways to change it inside this edit.
   // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
   // once its edit is closed it changes nothing, and never the edit opened since.
   #editContext() {
@@ -240,6 +239,8 @@ export class InspectorEditing {
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: whileOpen(message => this.#refuse(message)),
+      // For an answer that comes late and interrupts nothing.
+      showMessage: whileOpen(message => this.showProblem(message)),
       applyWith: whileOpen(edits => this.#applyWith(edits)),
       replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
       discard: whileOpen(() => this.discardEdit())
@@ -621,7 +622,8 @@ export class InspectorEditing {
   #isClosingTap(event) {
     const [firstPoint] = this.#transaction.drawnPoints;
     if (!firstPoint || !canFinishDrawing(this.#transaction)) return false;
-    if (this.#transaction.tool === editTools.drawLine) return false;
+    const isOpenLine = this.#transaction.tool === editTools.drawLine && !this.#behavior.closesLines;
+    if (isOpenLine) return false;
     return event.point.dist(this.#context.map.project(firstPoint)) <= closingDistancePixels;
   }
 
@@ -652,6 +654,8 @@ export class InspectorEditing {
       return;
     }
     if (this.#isClosingTap(event)) {
+      const {tool, drawnPoints} = this.#transaction;
+      if (tool === editTools.drawLine) this.#addDrawnPoint(drawnPoints[0]);
       this.#finishDrawing();
       return;
     }

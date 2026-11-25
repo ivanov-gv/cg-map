@@ -58,11 +58,14 @@ const guideColor = [
   stateColors.applied,
   stateColors.editable
 ];
+// Shapes that only frame the map, or that another layer edits, have no guide.
+const isNotContext = ['!=', ['get', 'objectState'], 'context'];
 // A line has two outside rails; a polygon has just its boundary, never an interior tint.
 const lineGap = widthPixels => ['case', ['==', ['geometry-type'], 'LineString'], widthPixels, 0];
 
 function styleGuides(map) {
   map.setLayoutProperty(`${sourceName}-fill`, 'visibility', 'none');
+  map.setFilter(`${sourceName}-point`, ['all', ['==', ['geometry-type'], 'Point'], isNotContext]);
   map.setPaintProperty(`${sourceName}-point`, 'circle-opacity', 0);
   map.setPaintProperty(`${sourceName}-point`, 'circle-radius', 13);
   map.setPaintProperty(`${sourceName}-point`, 'circle-stroke-color', guideColor);
@@ -92,6 +95,7 @@ const guideFilter = shownLevel => [
   ['!=', ['geometry-type'], 'Point'],
   ['!=', ['get', 'objectState'], 'missing'],
   ['>=', ownLevel, 0],
+  isNotContext,
   isOnLevel(shownLevel)
 ];
 const belowGroundFilter = shownLevel => ['all', ['<', ownLevel, 0], isOnLevel(shownLevel)];
@@ -247,8 +251,11 @@ export function createSourceOverlay(map) {
   // Points keep their own filters while one level is shown.
   const pointLayerIds = [`${sourceName}-point`, 'editor-road-nodes'];
   const pointFilters = pointLayerIds.map(layerId => [layerId, map.getFilter(layerId)]);
-  const setGuideMinZoom = minimumZoom => {
-    for (const layerId of guideLayerIds) map.setLayerZoomRange(layerId, minimumZoom, maximumZoom);
+  const setGuideMinZoom = (minimumZoom, pointMinimumZoom = minimumZoom) => {
+    for (const layerId of guideLayerIds) {
+      const isPointLayer = layerId === `${sourceName}-point`;
+      map.setLayerZoomRange(layerId, isPointLayer ? pointMinimumZoom : minimumZoom, maximumZoom);
+    }
   };
   setGuideMinZoom(guideMinZoom);
   return {
