@@ -92,7 +92,6 @@ jobs:
       apps-editor: ${{ steps.plan.outputs.apps-editor }}
       apps-core-demo: ${{ steps.plan.outputs.apps-core-demo }}
       browser_matrix: ${{ steps.plan.outputs.browser_matrix }}
-      editor_browser_matrix: ${{ steps.plan.outputs.editor_browser_matrix }}
       image_matrix: ${{ steps.plan.outputs.image_matrix }}
       ci_in_place_test_runs: ${{ steps.plan.outputs.ci_in_place_test_runs }}
       ci_test_runs: ${{ steps.plan.outputs.ci_test_runs }}
@@ -100,7 +99,6 @@ jobs:
       prove_cd_test_runs: ${{ steps.plan.outputs.prove_cd_test_runs }}
       manual_test_runs: ${{ steps.plan.outputs.manual_test_runs }}
       smoke_browser_matrix: ${{ steps.plan.outputs.smoke_browser_matrix }}
-      smoke_editor_browser_matrix: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
       RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
@@ -226,7 +224,8 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-editor.yml"') }}
-      browser_matrix: ${{ needs.plan.outputs.editor_browser_matrix || needs.plan-test-run.outputs.editor_browser_matrix }}
+      # A test run proves the workflow, not the whole suite; a changed editor workflow also runs in place in smoke mode.
+      smoke: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-editor.yml"') }}
       # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
       phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-core-demo:
@@ -255,7 +254,7 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: true
-      browser_matrix: ${{ needs.plan.outputs.smoke_editor_browser_matrix || needs.plan-test-run.outputs.smoke_editor_browser_matrix }}
+      smoke: true
   test-ci-apps-web:
     name: (test run) apps-web
     needs: [switch, plan, plan-test-run]

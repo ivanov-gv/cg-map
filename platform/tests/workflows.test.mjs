@@ -6,7 +6,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import os from 'node:os';
 import parseYaml from 'markdownlint-cli2/parsers/yaml';
-import {EDITOR_BROWSER_AREAS, FOLDERS, browserMatrix} from '../tools/ci-plan.mjs';
+import {FOLDERS} from '../tools/ci-plan.mjs';
 import {CALLABLE_CI_WORKFLOWS, CD_WORKFLOWS} from '../tools/workflow-test-runs.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -528,21 +528,17 @@ test('gate approval job name env matches the approval job name', () => {
   assert.equal(gateEnv.APPROVAL_JOB_NAME, approvalJobName, 'gate APPROVAL_JOB_NAME must match approval job name');
 });
 
-test('the editor browser jobs cover every spec in both projects', () => {
-  const matrix = browserMatrix(Object.keys(EDITOR_BROWSER_AREAS), EDITOR_BROWSER_AREAS);
-  const specFiles = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
-  const runs = (spec, project, entry) =>
-    entry.specs.includes(spec) && (entry.specs.includes(`--project=${project}`) || !entry.specs.includes('--project='));
-  for (const spec of specFiles) {
-    for (const project of ['root-desktop', 'pages-mobile']) {
-      const entries = matrix.include.filter(entry => runs(spec, project, entry));
-      assert.ok(entries.length > 0, `${spec} does not run on ${project}`);
-      const shards = entries.map(entry => entry.specs.match(/--shard=(\d+)\/(\d+)/));
-      if (shards.every(shard => !shard)) continue;
-      assert.ok(shards.every(Boolean), `${spec} on ${project} mixes a whole run with shards`);
-      const everyShard = Array.from({length: Number(shards[0][2])}, (_, index) => String(index + 1));
-      assert.deepEqual(shards.map(shard => shard[1]).toSorted(), everyShard, `${spec} on ${project} misses a shard`);
-    }
+test('the editor workflow builds its own browser shards', () => {
+  const raw = fs.readFileSync(path.join(workflowDir, 'ci-apps-editor.yml'), 'utf8');
+  assert.match(raw, /node apps\/editor\/tools\/browser-matrix\.mjs/);
+  assert.match(raw, /node apps\/editor\/tools\/browser-matrix\.mjs --smoke/);
+  assert.match(raw, /E2E_ARGS="--shard=\$SHARD\/\$JOBS"/);
+  // The app owns its specs; platform must not keep a second list to fall out of date.
+  assert.doesNotMatch(raw, /EDITOR_BROWSER_AREAS|SHARED_EDITOR_SOURCES|tests\/e2e\/.*\.spec\.mjs/);
+  const {jobs} = load('ci-apps-editor.yml');
+  for (const name of ['browser', 'browser-test-run']) {
+    assert.equal(jobs[name].if, undefined, `${name} must not skip the editor browser suite`);
+    assert.match(jobs[name].strategy.matrix, /needs\.verify.*browser_matrix/);
   }
 });
 
@@ -866,10 +862,7 @@ const plannerMatrixInput = output => `\${{ needs.plan.outputs.${output} || needs
 
 const staticTestCallInputs = {
   'test-ci-apps-core-demo': {test_run: true},
-  'test-ci-apps-editor': {
-    test_run: true,
-    browser_matrix: plannerMatrixInput('smoke_editor_browser_matrix')
-  },
+  'test-ci-apps-editor': {test_run: true, smoke: true},
   'test-ci-apps-web': {
     test_run: true,
     browser_matrix: plannerMatrixInput('smoke_browser_matrix')
@@ -900,16 +893,14 @@ test('every static test call passes inputs meant for its workflow', () => {
   }
 });
 
-test('the browser test calls run the smoke area with the default phone tests', () => {
+test('the browser test calls run one short proof with the default phone tests', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  const browserMatrixInputs = {
-    'test-ci-apps-web': 'smoke_browser_matrix',
-    'test-ci-apps-editor': 'smoke_editor_browser_matrix'
-  };
-  for (const [name, output] of Object.entries(browserMatrixInputs)) {
-    const call = jobs[name];
-    assert.equal(call.with.browser_matrix, plannerMatrixInput(output), `${name} passes another project's matrix`);
-  }
+  assert.equal(
+    jobs['test-ci-apps-web'].with.browser_matrix,
+    plannerMatrixInput('smoke_browser_matrix'),
+    'the web test call passes its own smoke matrix'
+  );
+  assert.equal(jobs['test-ci-apps-editor'].with.smoke, true, 'the editor test call runs one smoke shard');
   assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, undefined, 'the editor test call keeps the tagged default');
   assert.equal(jobs['test-ci-apps-web'].with.phone_tests, undefined, 'web no longer has a phone_tests input');
 });
@@ -1404,18 +1395,26 @@ test('only the new pipelines run on the repository', () => {
   );
 });
 
-test('browser jobs run only the planned areas, and none when there are none', () => {
+test('web passes planned areas, while the editor runs its own shards and smoke input', () => {
   const allJobs = load('ci-pr-checks.yml').jobs;
-  const plannedMatrixByApp = {'apps-web': 'browser_matrix', 'apps-editor': 'editor_browser_matrix'};
-  for (const [app, output] of Object.entries(plannedMatrixByApp)) {
-    assert.equal(
-      allJobs[app].with.browser_matrix,
-      `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`
-    );
-    const {jobs} = load(`ci-${app}.yml`);
-    assert.equal(jobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
-    assert.equal(jobs['browser-test-run'].if, `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`);
-  }
+  assert.equal(
+    allJobs['apps-web'].with.browser_matrix,
+    '${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}'
+  );
+  const {jobs: webJobs} = load('ci-apps-web.yml');
+  assert.equal(webJobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
+  assert.equal(
+    webJobs['browser-test-run'].if,
+    `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`
+  );
+
+  assert.equal(allJobs['apps-editor'].with.browser_matrix, undefined, 'the planner no longer builds editor areas');
+  assert.equal(
+    allJobs['apps-editor'].with.smoke,
+    "${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '\"ci-apps-editor.yml\"') }}"
+  );
+  const {jobs: editorJobs} = load('ci-apps-editor.yml');
+  for (const name of ['browser', 'browser-test-run']) assert.equal(editorJobs[name].if, undefined);
 });
 
 test('the plan action and both plan jobs expose the same test-run and smoke outputs', () => {
@@ -1424,14 +1423,14 @@ test('the plan action and both plan jobs expose the same test-run and smoke outp
     'ci_in_place_test_runs',
     'ci_test_runs',
     'prove_cd_test_runs',
-    'smoke_browser_matrix',
-    'smoke_editor_browser_matrix'
+    'smoke_browser_matrix'
   ];
   for (const name of outputNames) {
     assert.equal(action.outputs[name]?.value, `\${{ steps.plan.outputs.${name} }}`);
   }
   assert.equal(action.outputs.all_browser_matrix, undefined, 'the full matrix is no longer a test-call input');
-  assert.equal(action.outputs.all_editor_browser_matrix, undefined);
+  assert.equal(action.outputs.editor_browser_matrix, undefined, 'the editor owns its browser matrix');
+  assert.equal(action.outputs.smoke_editor_browser_matrix, undefined);
   const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
   assert.match(text, /outputs: &plan-outputs/);
   assert.match(text, /outputs: \*plan-outputs/);
@@ -1444,15 +1443,13 @@ test('the planner has an output on the plan job for every folder and every test-
     new Set([
       ...FOLDERS,
       'browser_matrix',
-      'editor_browser_matrix',
       'image_matrix',
       'ci_in_place_test_runs',
       'ci_test_runs',
       'cd_test_runs',
       'prove_cd_test_runs',
       'manual_test_runs',
-      'smoke_browser_matrix',
-      'smoke_editor_browser_matrix'
+      'smoke_browser_matrix'
     ])
   );
 });

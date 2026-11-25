@@ -4,14 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
+import * as planner from '../tools/ci-plan.mjs';
 import {
   BROWSER_AREAS,
-  EDITOR_BROWSER_AREAS,
   FOLDERS,
-  SHARED_EDITOR_SOURCES,
   SHARED_WEB_SOURCES,
   SMOKE_BROWSER_MATRIX,
-  SMOKE_EDITOR_BROWSER_MATRIX,
   browserMatrix,
   classify,
   formatOutputs,
@@ -66,8 +64,10 @@ const cases = [
     []
   ],
   ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
-  ['source viewer browser test', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['platform', 'tests', 'apps-editor'], []],
-  ['source viewer browser config', ['apps/editor/playwright.config.mjs'], ['platform', 'tests', 'apps-editor'], []],
+  ['source viewer browser test', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['tests', 'apps-editor'], []],
+  ['source viewer browser config', ['apps/editor/playwright.config.mjs'], ['tests', 'apps-editor'], []],
+  ['editor browser job count', ['apps/editor/browser-jobs.json'], ['tests', 'apps-editor'], []],
+  ['new editor source', ['apps/editor/src/brand-new.js'], ['tests', 'apps-editor'], []],
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
   ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
   ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],
@@ -120,7 +120,6 @@ test('a data-only change selects only data and cross-project tests', () => {
   const plan = planChanges(['data/sources/places.geojson', 'data/artifacts/release.json']);
   assert.deepEqual(new Set(plan.folders), new Set(['data', 'tests']));
   assert.deepEqual(plan.areas, []);
-  assert.deepEqual(plan.editorAreas, []);
 });
 
 test('every data path selects its own pipeline and no app or platform pipeline', () => {
@@ -138,7 +137,6 @@ test('every data path selects its own pipeline and no app or platform pipeline',
     const result = planChanges([path]);
     assert.deepEqual(new Set(result.folders), new Set(expectedFolders), path);
     assert.deepEqual(result.areas, [], path);
-    assert.deepEqual(result.editorAreas, [], path);
   }
 });
 
@@ -176,19 +174,16 @@ test('only the root Makefile narrows the plan; other root files still select eve
   const makefileResult = classify('Makefile');
   assert.deepEqual([...makefileResult.folders].sort(), rootMakeFolders);
   assert.deepEqual(makefileResult.areas, []);
-  assert.deepEqual(makefileResult.editorAreas, []);
 
   const makefilePlan = planChanges(['Makefile']);
   assert.equal(makefilePlan.everything, false);
   assert.deepEqual(makefilePlan.areas, []);
-  assert.deepEqual(makefilePlan.editorAreas, []);
 
   for (const file of ['package.json', 'brand-new.txt']) {
     const otherPlan = planChanges([file]);
     assert.equal(otherPlan.everything, true, file);
     assert.deepEqual(otherPlan.folders, FOLDERS, file);
     assert.deepEqual(otherPlan.areas, ALL_AREAS, file);
-    assert.deepEqual(otherPlan.editorAreas, Object.keys(EDITOR_BROWSER_AREAS), file);
   }
 });
 
@@ -209,7 +204,7 @@ test('the root Makefile folders match the workflows that call root make', () => 
 test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 10);
+  assert.equal(lines.length, FOLDERS.length + 8);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
@@ -217,7 +212,8 @@ test('outputs give every folder a value, a usable matrix, and the selected test 
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
   assert.ok(lines.includes(`smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`));
-  assert.ok(lines.includes(`smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`));
+  assert.ok(!lines.some(line => line.startsWith('editor_browser_matrix=')));
+  assert.ok(!lines.some(line => line.startsWith('smoke_editor_browser_matrix=')));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
     include: [
@@ -252,36 +248,19 @@ test('a changed folder workflow runs in place, while other changed workflows kee
   assert.ok(lines.includes('ci_test_runs=["ci-apps-editor.yml","ci-publish.yml"]'));
 });
 
-test('an in-place browser workflow with no selected areas still proves its browser job', () => {
-  const cases = [
-    {
-      name: 'web',
-      workflow: 'ci-apps-web.yml',
-      source: 'apps/web/tests/offline.test.mjs',
-      output: 'browser_matrix',
-      smoke: SMOKE_BROWSER_MATRIX
-    },
-    {
-      name: 'editor',
-      workflow: 'ci-apps-editor.yml',
-      source: 'apps/editor/tests/offline.test.mjs',
-      output: 'editor_browser_matrix',
-      smoke: SMOKE_EDITOR_BROWSER_MATRIX
-    }
-  ];
-  for (const {name, workflow, source, output, smoke} of cases) {
-    const changedFiles = [`.github/workflows/${workflow}`, source];
-    const plan = planChanges(changedFiles);
-    const areaList = name === 'web' ? plan.areas : plan.editorAreas;
-    assert.deepEqual(areaList, [], `${name} diff should select no browser area`);
-    const lines = formatOutputs(plan, changedFiles).split('\n');
-    assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), `${name} call is not in place`);
-    assert.ok(lines.includes(`${output}=${smoke}`), `${name} regular call does not use the smoke matrix`);
+test('an in-place web workflow with no selected areas still proves its browser job', () => {
+  const workflow = 'ci-apps-web.yml';
+  const source = 'apps/web/tests/offline.test.mjs';
+  const changedFiles = [`.github/workflows/${workflow}`, source];
+  const plan = planChanges(changedFiles);
+  assert.deepEqual(plan.areas, [], 'the web diff should select no browser area');
+  const lines = formatOutputs(plan, changedFiles).split('\n');
+  assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), 'the web call is not in place');
+  assert.ok(lines.includes(`browser_matrix=${SMOKE_BROWSER_MATRIX}`), 'the web call does not use the smoke matrix');
 
-    const regularFiles = [source];
-    const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
-    assert.ok(regularLines.includes(`${output}={"include":[]}`), `${name} call without a workflow change stays empty`);
-  }
+  const regularFiles = [source];
+  const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
+  assert.ok(regularLines.includes('browser_matrix={"include":[]}'), 'a web call without a workflow change stays empty');
 });
 
 test('an in-place workflows call with no CD changes still proves its dispatcher', () => {
@@ -305,7 +284,6 @@ test('summary splits CI test-run calls and shows the CD proof flag', () => {
       'Selected a subset of pipelines.',
       '- Folders: workflows, platform',
       '- Browser areas: none',
-      '- Editor browser areas: none',
       '- CI test-run calls (separate): ci-publish.yml',
       '- CI test runs in place: ci-workflows.yml',
       '- CD proof flag: true',
@@ -410,76 +388,30 @@ test('an area limited to one project has a partner covering the other', () => {
   }
 });
 
-const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
-
-for (const [name, files, expectedAreas] of [
-  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile', 'layers']],
-  ['the magnet rule', ['apps/editor/src/magnet-tools.js'], ['editing-desktop', 'editing-mobile', 'layers']],
-  ['a source the offline tests edit through', ['apps/editor/src/review-panel.js'], ALL_EDITOR_AREAS],
-  ['a source that opens an edit on selection', ['apps/editor/src/inspector-editing.js'], ALL_EDITOR_AREAS],
-  ['the source behind the rules', ['apps/editor/src/geometry-validation.js'], ALL_EDITOR_AREAS],
-  ['the overlay', ['apps/editor/src/source-overlay.js'], ALL_EDITOR_AREAS],
-  ['the editing rules', ['apps/editor/src/layer-rules.js'], ALL_EDITOR_AREAS],
-  ['a shared source', ['apps/editor/src/app.js'], ALL_EDITOR_AREAS],
-  ['an unmapped source', ['apps/editor/src/brand-new.js'], ALL_EDITOR_AREAS],
-  ['one spec', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['viewer']],
-  ['the object list', ['apps/editor/src/object-list.js'], ['selection']],
-  ['the selection spec', ['apps/editor/tests/e2e/selection.spec.mjs'], ['selection']],
-  ['a unit test', ['apps/editor/tests/offline.test.mjs'], []],
-  ['the stylesheet', ['apps/editor/public/style.css'], ALL_EDITOR_AREAS],
-  ['the browser config', ['apps/editor/playwright.config.mjs'], ALL_EDITOR_AREAS],
-  ['the source bundle producer, from outside the editor', ['data/tools/editor-bundle.mjs'], []],
-  ['a change that does not select the editor', ['services/backend/main.go'], []],
-  ['a unit test beside a source', ['apps/editor/tests/offline.test.mjs', 'apps/editor/src/sw.js'], ['offline-desktop', 'offline-mobile']]
-]) {
-  test(`editor areas: ${name}`, () => {
-    assert.deepEqual(planChanges(files).editorAreas, expectedAreas);
-  });
-}
-
-test('every editor source is mapped to an area or shared, never both, and exists', () => {
-  const sources = fs.readdirSync(path.join(repoRoot, 'apps/editor/src'));
-  const mapped = Object.values(EDITOR_BROWSER_AREAS).flatMap(area => area.sources);
-  for (const source of sources) {
-    const isMapped = mapped.includes(source);
-    const isShared = SHARED_EDITOR_SOURCES.includes(source);
-    assert.ok(isMapped || isShared, `apps/editor/src/${source} needs an area or a shared entry`);
-    assert.equal(isMapped && isShared, false, `${source} is both mapped and shared`);
+test('every editor change selects the app and its tests without naming files', () => {
+  const samples = [
+    'apps/editor/src/app.js',
+    'apps/editor/src/brand-new.js',
+    'apps/editor/tests/e2e/viewer.spec.mjs',
+    'apps/editor/browser-jobs.json',
+    'apps/editor/playwright.config.mjs',
+    'apps/editor/tools/browser-matrix.mjs'
+  ];
+  for (const file of samples) {
+    const plan = planChanges([file]);
+    assert.deepEqual(new Set(plan.folders), new Set(['apps-editor', 'tests']), file);
+    assert.deepEqual(plan.areas, [], file);
+    assert.equal('editorAreas' in plan, false, file);
   }
-  for (const source of [...mapped, ...SHARED_EDITOR_SOURCES])
-    assert.ok(sources.includes(source), `${source} no longer exists`);
 });
 
-test('every editor spec has an area, and the areas name real specs', () => {
-  const specs = fs.readdirSync(path.join(repoRoot, 'apps/editor/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
-  const mapped = Object.values(EDITOR_BROWSER_AREAS).flatMap(area => area.specFiles);
-  for (const spec of specs) assert.ok(mapped.includes(spec), `${spec} needs a browser area`);
-  for (const spec of mapped) assert.ok(specs.includes(spec), `${spec} no longer exists`);
-});
-
-test('the editing spec on the desktop layout runs in five jobs', () => {
-  const jobs = browserMatrix(['editing-desktop'], EDITOR_BROWSER_AREAS).include;
-  assert.deepEqual(
-    jobs.map(job => job.area),
-    ['editing-desktop-1', 'editing-desktop-2', 'editing-desktop-3', 'editing-desktop-4', 'editing-desktop-5']
-  );
-});
-
-test('the editing spec on the mobile layout runs in two jobs', () => {
-  const jobs = browserMatrix(['editing-mobile'], EDITOR_BROWSER_AREAS).include;
-  assert.deepEqual(
-    jobs.map(job => job.area),
-    ['editing-mobile-1', 'editing-mobile-2']
-  );
-});
-
-test('the layer specs run in three jobs', () => {
-  const jobs = browserMatrix(['layers'], EDITOR_BROWSER_AREAS).include;
-  assert.deepEqual(jobs, [
-    {area: 'layers-1', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=1/3`},
-    {area: 'layers-2', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=2/3`},
-    {area: 'layers-3', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=3/3`}
-  ]);
+test('the planner keeps no editor source, spec or matrix list', () => {
+  for (const name of ['EDITOR_BROWSER_AREAS', 'SHARED_EDITOR_SOURCES', 'SMOKE_EDITOR_BROWSER_MATRIX']) {
+    assert.equal(planner[name], undefined, `${name} must stay in apps/editor`);
+  }
+  const outputs = planner.formatOutputs(planChanges(['apps/editor/src/app.js']));
+  assert.equal(outputs.includes('editor_browser_matrix='), false);
+  assert.equal(outputs.includes('smoke_editor_browser_matrix='), false);
 });
 
 test('an area too slow for one job runs every share of its tests', () => {
@@ -528,12 +460,11 @@ test('Markdown never selects code checks, wherever it lives, while Go stays inde
     'data/PROVENANCE.md',
     'docs/plans/x.md'
   ]) {
-    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], editorAreas: [], everything: false}, file);
+    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], everything: false}, file);
   }
   assert.deepEqual(planChanges(['services/backend/cmd/server/main.go']), {
     folders: ['backend'],
     areas: [],
-    editorAreas: [],
     everything: false
   });
 });
@@ -545,14 +476,11 @@ test('the browser matrix contains exactly the requested areas', () => {
   assert.deepEqual(new Set(areaOfEachJob), new Set(ALL_AREAS));
 });
 
-test('smoke matrices run one short unsharded area for each separate browser test call', () => {
+test('the web smoke matrix runs one short unsharded area', () => {
   const web = JSON.parse(SMOKE_BROWSER_MATRIX).include;
-  const editor = JSON.parse(SMOKE_EDITOR_BROWSER_MATRIX).include;
   assert.equal(web.length, 1);
   assert.equal(web[0].area, 'discover');
-  assert.equal(editor.length, 1);
-  assert.equal(editor[0].area, 'selection');
-  for (const job of [...web, ...editor]) assert.doesNotMatch(job.specs, /--shard=/);
+  assert.doesNotMatch(web[0].specs, /--shard=/);
 });
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.

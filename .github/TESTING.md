@@ -72,8 +72,9 @@ workflows it calls, with the same inputs, instead.
 
 A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 or less, and `platform/tests/workflows`
 checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
-`ci-apps-editor` splits its browser tests; do not raise the limit. The exception is `cd-test-runs` in `ci-workflows`: it
-occupies a runner while it polls, but avoids repeating the browser-image build and waits up to 30 minutes for it.
+`ci-apps-editor` splits its browser tests into the shards counted in `apps/editor/browser-jobs.json`; do not raise the
+limit. The exception is `cd-test-runs` in `ci-workflows`: it occupies a runner while it polls, but avoids repeating the
+browser-image build and waits up to 30 minutes for it.
 
 The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
 `CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
@@ -216,8 +217,10 @@ not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 **Matrix in called workflows:** `act` evaluates `matrix: ${{ fromJSON(needs.*.outputs.*) }}` before `needs` outputs
 exist when the workflow is triggered by `workflow_call` (nektos/act#2313, #927), producing a literal string that fails
 JSON parsing and creates a phantom failing job. Browser workflows (`ci-apps-web`, `ci-apps-editor`) work around this
-with a fallback — `fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` — so act can always parse the
-matrix. The job's `if` guard still skips execution when the matrix is empty, so GitHub behavior is unchanged.
+with a fallback: web uses `fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` and skips the job when the
+planned matrix is empty; editor uses
+`fromJSON(needs.verify.outputs.browser_matrix || '{"include":[{"shard":1,"jobs":1}]}')`, so it always has one real shard
+and needs no empty-matrix guard.
 
 ## On GitHub
 
@@ -239,13 +242,14 @@ The gate's planner selects the workflows a change touches and the gate proves th
 - Every changed callable `ci-*` workflow is proved by a `uses:` call with `test_run: true`. When its folder is selected
   by the diff, the regular folder call passes `test_run` instead of a second call running: the planner's
   `ci_in_place_test_runs` output drives that and keeps the workflow out of `ci_test_runs`. Workflows without a folder
-  call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short area —
-  `smoke_browser_matrix` (web's `discover`, five tests) or `smoke_editor_browser_matrix` (editor's `selection`, eight
-  tests) — and the default tagged phone tests; it proves the workflow's jobs and steps, not every test. The regular
-  browser calls keep the full planned matrices, except that an in-place call with no selected area uses the matching
-  smoke matrix so its browser job still runs. An in-place `ci-workflows` call with no changed CD workflows still runs
-  `cd-test-runs` with the empty list, whose script reports that no CD workflows need a test run. A shared action is
-  proved by a workflow that really executes it.
+  call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short proof and
+  the default tagged phone tests: web passes `smoke_browser_matrix` (its `discover`, five tests), while editor passes
+  `smoke: true` and builds one shard from `apps/editor/browser-jobs.json`. These calls prove the workflow's jobs and
+  steps, not every test. A regular web call keeps its planned matrix, except that an in-place call with no selected area
+  uses the smoke matrix. Any editor folder selection runs the app's whole sharded suite; a test run or an in-place
+  editor workflow call uses `smoke: true` so it only proves the browser job. An in-place `ci-workflows` call with no
+  changed CD workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a
+  test run. A shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
   test-run mode. Only a test run of `ci-pr-checks` suppresses dispatch, so a dispatched test run cannot dispatch another
   test run.

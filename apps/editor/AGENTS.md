@@ -22,6 +22,10 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   the importer: the integration changeset test and the shared geometry fixture enforce it. It is an offline-first app
   installed on the owner's devices from `make -C apps/editor lan`: no hosting and no auth. Do not invent editorial/auth
   APIs. Build separately; editable sources must never enter dist/web.
+- The browser suite is split into the shards counted in `browser-jobs.json`; `tools/browser-matrix.mjs` builds the CI
+  matrix from that one number. Any editor change runs every shard, while a CI test run uses `--smoke` for the first one.
+  Keep specs and per-file area lists out of the platform planner; prove a changed job count with
+  `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` for every shard, matching CI's worker count.
 - This is an independent project: its Makefile, tests/e2e and ci-apps-editor pipeline are its own. Local
   `make verify PKG=apps/editor` and `make -C apps/editor e2e` are optional for iterating; the pre-push `make check` is
   required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect desktop and

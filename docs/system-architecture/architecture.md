@@ -52,6 +52,8 @@ Rules:
 - A project never runs another project's checks or tests. Applications never import each other.
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception.
+- The planner may narrow web browser tests by area. The editor owns its specs and shard count: any editor change selects
+  its pipeline, which runs the whole browser suite unless the call is a CI test run.
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev

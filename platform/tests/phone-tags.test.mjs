@@ -9,7 +9,7 @@ import {repoRoot} from '../agents/lib.mjs';
 const NEUTRAL_HELPERS = new Set(['closeCard']);
 
 test('a test that depends on the phone layout is tagged, or a PR would not run it there', () => {
-  for (const directory of ['apps/web/tests/e2e', 'apps/editor/tests/e2e']) {
+  for (const directory of ['apps/web/tests/e2e']) {
     const names = fs.readdirSync(path.join(repoRoot, directory));
     const read = name => fs.readFileSync(path.join(repoRoot, directory, name), 'utf8');
     const helpers = names.filter(name => name.endsWith('.mjs') && !name.endsWith('.spec.mjs')).map(read);
