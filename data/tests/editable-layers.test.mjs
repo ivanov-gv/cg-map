@@ -286,6 +286,52 @@ test('an object changed since the export is refused, and other changes of the fi
   assert.deepEqual(names, ['First', 'Other']);
 });
 
+test('a refused correction stops no other: a refreshed address and a way that is gone are reported', testContext => {
+  const root = temporaryRoot(testContext);
+  const ledgerPath = sourcePath(root, 'editor-corrections.json');
+  const applyAs = (id, fill) => {
+    const builder = new ChangesetBuilder(root);
+    fill(builder);
+    apply(root, {...builder.build(), id});
+  };
+  const labels = readSource(root, 'building-labels.geojson').features;
+  const buildings = readSource(root, 'buildings.geojson').features;
+  const addressed = new Set(labels.map(({properties}) => properties.footprintIndex));
+  const unnumbered = buildings.findIndex(({geometry}, index) => !addressed.has(index) && geometry.coordinates[0].length === 5);
+  const building = buildings[unnumbered];
+  const [first, , third] = building.geometry.coordinates[0];
+  const middle = [0, 1].map(axis => Number(((first[axis] + third[axis]) / 2).toFixed(6)));
+  const label = {kind: 'building', 'addr:housenumber': '7', buildingEntityId: building.properties.entityId};
+  applyAs('numbered', builder => builder.add('building-labels.geojson', localId(2), label, {type: 'Point', coordinates: middle}));
+  const [rule] = readSource(root, 'turn-restrictions.json').features;
+  const {from, to, viaNodes} = rule.properties;
+  applyAs('turn', builder =>
+    builder.add('turn-restrictions.json', localId(8), {restriction: 'no_straight_on', from, to, viaNodes}, null)
+  );
+  const [town] = readSource(root, 'settlements.geojson').features;
+  applyAs('renamed', builder => builder.change('settlements.geojson', town, feature => (feature.properties.name = 'Reviewed')));
+  const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+  // The refresh gave the building an address of its own, and the way of the turn rule is gone.
+  const refreshedLabel = readSource(root, 'building-labels.geojson').features.find(({id}) => id === localId(2));
+  fs.cpSync(path.join(repositoryRoot, 'data/sources'), path.join(root, 'data/sources'), {recursive: true});
+  const upstream = readSource(root, 'building-labels.geojson');
+  const upstreamId = building.properties.entityId;
+  upstream.features.push({
+    ...refreshedLabel,
+    id: upstreamId,
+    properties: {...refreshedLabel.properties, entityId: upstreamId, osm_id: upstreamId, address_sources: [upstreamId]}
+  });
+  fs.writeFileSync(sourcePath(root, 'building-labels.geojson'), serializeSource('building-labels.geojson', upstream));
+  ledger.corrections.find(({changeset}) => changeset === 'turn').after.properties.from = 1;
+  fs.writeFileSync(ledgerPath, JSON.stringify(ledger));
+
+  const {report} = reapplyCorrections(root, {now, contractsDirectory});
+
+  assert.equal(readSource(root, 'settlements.geojson').features[0].properties.name, 'Reviewed');
+  assert.ok(report.some(line => line.includes('have an address of this building')), report.join('\n'));
+  assert.ok(report.some(line => line.startsWith('turn-restrictions.json') && line.includes('not placed')), report.join('\n'));
+});
+
 test('a replay takes what a refresh put on a deleted building with it, and names what it leaves out', testContext => {
   const root = temporaryRoot(testContext);
   const builder = new ChangesetBuilder(root);

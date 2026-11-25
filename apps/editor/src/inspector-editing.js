@@ -225,7 +225,7 @@ export class InspectorEditing {
       setGeometry: whileOpen(geometry => this.#update(withGeometry(this.#transaction, geometry))),
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
-      showProblem: whileOpen(message => this.showProblem(message)),
+      showProblem: whileOpen(message => this.#refuse(message)),
       applyWith: whileOpen(edits => this.#applyWith(edits)),
       replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
       discard: whileOpen(() => this.discardEdit())
