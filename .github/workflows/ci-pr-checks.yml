@@ -224,8 +224,6 @@ jobs:
     uses: ./.github/workflows/ci-apps-editor.yml
     with:
       test_run: ${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '"ci-apps-editor.yml"') }}
-      # A test run proves the workflow with one shard; an in-place call for a selected editor folder tests every shard.
-      smoke: ${{ needs.switch.outputs.test_run == 'true' }}
       # Only ci-nightly passes 'all' via workflow_call; PR and dispatch runs have no phone_tests input.
       phone_tests: ${{ inputs.phone_tests || 'tagged' }}
   apps-core-demo:
@@ -238,8 +236,9 @@ jobs:
 
   # A changed CI workflow with no regular call that can run in test-run mode is proved here. These calls are static
   # because GitHub cannot build a reusable call from a matrix; the planner output only decides whether each call runs.
-  # Browser calls use a one-area smoke matrix: they prove the jobs and steps, not every test. None runs inside a test
-  # run, so a test run cannot dispatch itself. CD workflows cannot be called: ci-workflows dispatches them.
+  # Web passes a one-area smoke matrix and editor passes smoke: true, so these calls prove jobs and steps, not whole
+  # suites. None runs inside a test run, so a test run cannot dispatch itself. CD workflows cannot be called:
+  # ci-workflows dispatches them.
   test-ci-apps-core-demo:
     name: (test run) apps-core-demo
     needs: [switch, plan, plan-test-run]

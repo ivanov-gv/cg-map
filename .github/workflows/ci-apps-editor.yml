@@ -12,7 +12,7 @@ on:
         type: string
         default: tagged
       smoke:
-        description: On a test run, prove the browser job with only the first shard.
+        description: On a test call, prove the browser job with only the first shard.
         type: boolean
         required: false
         default: false
@@ -82,6 +82,7 @@ jobs:
   browser:
     name: Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify
+    if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -99,8 +100,8 @@ jobs:
       fail-fast: false
       # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
       # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
-      # The fallback keeps one shard parseable; the matrix tool never returns an empty list.
-      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix || '{"include":[{"shard":1,"jobs":1}]}') }}
+      # An empty fallback is safe: act skips a job whose condition is false, and GitHub always gets a real matrix.
+      matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}') }}
     env: &browser-env
       # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
@@ -123,12 +124,13 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: browser-failure-evidence-editor-shard-${{ matrix.shard }}
+          name: browser-failure-evidence-editor-shard-${{ env.SHARD }}
           path: apps/editor/test-results/
           retention-days: 7
   browser-test-run:
     name: (test-run) Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify-test-run
+    if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -144,7 +146,7 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      # The same act fallback as the regular job: see its comment above.
-      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || '{"include":[{"shard":1,"jobs":1}]}') }}
+      # The same act fallback and condition as the regular job: see its comment above.
+      matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || '{"include":[]}') }}
     env: *browser-env
     steps: *browser-steps

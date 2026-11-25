@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import * as planner from '../tools/ci-plan.mjs';
 import {
   BROWSER_AREAS,
   FOLDERS,
@@ -67,6 +66,7 @@ const cases = [
   ['source viewer browser test', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['tests', 'apps-editor'], []],
   ['source viewer browser config', ['apps/editor/playwright.config.mjs'], ['tests', 'apps-editor'], []],
   ['editor browser job count', ['apps/editor/browser-jobs.json'], ['tests', 'apps-editor'], []],
+  ['editor browser matrix tool', ['apps/editor/tools/browser-matrix.mjs'], ['tests', 'apps-editor'], []],
   ['new editor source', ['apps/editor/src/brand-new.js'], ['tests', 'apps-editor'], []],
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
   ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
@@ -75,6 +75,12 @@ const cases = [
   ['changeset importer', ['data/tools/apply-changeset.mjs'], ['data', 'tests'], []],
   ['changeset importer module', ['data/tools/changeset-rules.mjs'], ['data', 'tests'], []],
   ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor'], []],
+  [
+    'phone tag parser shared with the editor',
+    ['platform/tools/phone-tags.mjs'],
+    ['platform', 'apps-editor', 'apps-web'],
+    []
+  ],
   ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests'], []],
   ['level policy behind the importer', ['data/tools/apply-place-visibility.mjs'], ['data', 'tests'], []],
   ['web test fixture in data', ['data/tests/fixtures/podgorica-places.geojson'], ['data'], []],
@@ -212,8 +218,6 @@ test('outputs give every folder a value, a usable matrix, and the selected test 
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
   assert.ok(lines.includes(`smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`));
-  assert.ok(!lines.some(line => line.startsWith('editor_browser_matrix=')));
-  assert.ok(!lines.some(line => line.startsWith('smoke_editor_browser_matrix=')));
   const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
   assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
     include: [
@@ -386,32 +390,6 @@ test('an area limited to one project has a partner covering the other', () => {
       );
     }
   }
-});
-
-test('every editor change selects the app and its tests without naming files', () => {
-  const samples = [
-    'apps/editor/src/app.js',
-    'apps/editor/src/brand-new.js',
-    'apps/editor/tests/e2e/viewer.spec.mjs',
-    'apps/editor/browser-jobs.json',
-    'apps/editor/playwright.config.mjs',
-    'apps/editor/tools/browser-matrix.mjs'
-  ];
-  for (const file of samples) {
-    const plan = planChanges([file]);
-    assert.deepEqual(new Set(plan.folders), new Set(['apps-editor', 'tests']), file);
-    assert.deepEqual(plan.areas, [], file);
-    assert.equal('editorAreas' in plan, false, file);
-  }
-});
-
-test('the planner keeps no editor source, spec or matrix list', () => {
-  for (const name of ['EDITOR_BROWSER_AREAS', 'SHARED_EDITOR_SOURCES', 'SMOKE_EDITOR_BROWSER_MATRIX']) {
-    assert.equal(planner[name], undefined, `${name} must stay in apps/editor`);
-  }
-  const outputs = planner.formatOutputs(planChanges(['apps/editor/src/app.js']));
-  assert.equal(outputs.includes('editor_browser_matrix='), false);
-  assert.equal(outputs.includes('smoke_editor_browser_matrix='), false);
 });
 
 test('an area too slow for one job runs every share of its tests', () => {

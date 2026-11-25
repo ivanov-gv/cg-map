@@ -40,6 +40,7 @@ Projects depend on each other only through these concrete contracts:
 | Built web artifact, dist/web                  | apps/web           | the dev Pages site                                                                                     |
 | Go host `run` target                          | services/backend   | apps/web `dev`                                                                                         |
 | Static host and per-worktree ports            | platform           | apps/web, apps/editor, apps/core-demo                                                                  |
+| Phone tag parser                              | platform           | apps/editor unit test and platform's apps/web phone-tag check                                          |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it

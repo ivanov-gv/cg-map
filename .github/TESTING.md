@@ -216,11 +216,9 @@ not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
 **Matrix in called workflows:** `act` evaluates `matrix: ${{ fromJSON(needs.*.outputs.*) }}` before `needs` outputs
 exist when the workflow is triggered by `workflow_call` (nektos/act#2313, #927), producing a literal string that fails
-JSON parsing and creates a phantom failing job. Browser workflows (`ci-apps-web`, `ci-apps-editor`) work around this
-with a fallback: web uses `fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` and skips the job when the
-planned matrix is empty; editor uses
-`fromJSON(needs.verify.outputs.browser_matrix || '{"include":[{"shard":1,"jobs":1}]}')`, so it always has one real shard
-and needs no empty-matrix guard.
+JSON parsing and creates a phantom failing job. Both browser workflows (`ci-apps-web`, `ci-apps-editor`) use an
+empty-list fallback and skip the job when the planned matrix is empty. `act` ignores a job whose condition is false, so
+the fallback creates no phantom job; GitHub always receives a real matrix.
 
 ## On GitHub
 
@@ -244,14 +242,15 @@ The gate's planner selects the workflows a change touches and the gate proves th
   `ci_in_place_test_runs` output drives that and keeps the workflow out of `ci_test_runs`. Workflows without a folder
   call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short proof and
   the default tagged phone tests: web passes `smoke_browser_matrix` (its `discover`, five tests), while editor passes
-  `smoke: true` and builds one shard from `apps/editor/browser-jobs.json`. These calls prove the workflow's jobs and
-  steps, not every test. A regular web call keeps its planned matrix, except that an in-place call with no selected area
-  uses the smoke matrix. A regular editor call passes no `smoke`, so both an editor change and an in-place editor
-  workflow call run the app's whole sharded suite; only a test run of `ci-pr-checks` uses the one-shard smoke proof. The
-  editor owns the shard count in [apps/editor/AGENTS.md](../../apps/editor/AGENTS.md), and
-  [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md) records why. An in-place `ci-workflows` call with no
-  changed CD workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a
-  test run. A shared action is proved by a workflow that really executes it.
+  `smoke: true` and builds one shard from the editor's job count. These calls prove the workflow's jobs and steps, not
+  whole suites. A regular web call keeps its planned matrix, except that an in-place call with no selected area uses the
+  smoke matrix. The regular editor call passes no `smoke`, so a PR, the nightly run and a full dispatch run use the
+  app-owned count: every shard runs for an editor change. Only the separate editor test call uses the one-shard proof.
+  The count lives in [browser-jobs.json](../apps/editor/browser-jobs.json), with the proof rule in
+  [apps/editor/AGENTS.md](../apps/editor/AGENTS.md) and the reason in
+  [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). An in-place `ci-workflows` call with no changed CD
+  workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a test run. A
+  shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
   test-run mode. Only a test run of `ci-pr-checks` suppresses dispatch, so a dispatched test run cannot dispatch another
   test run.

@@ -533,26 +533,26 @@ test('the editor workflow builds its own browser shards', () => {
   assert.match(raw, /node apps\/editor\/tools\/browser-matrix\.mjs/);
   assert.match(raw, /node apps\/editor\/tools\/browser-matrix\.mjs --smoke/);
   assert.match(raw, /E2E_ARGS="--shard=\$SHARD\/\$JOBS"/);
-  // The app owns its specs; platform must not keep a second list to fall out of date.
-  assert.doesNotMatch(raw, /EDITOR_BROWSER_AREAS|SHARED_EDITOR_SOURCES|tests\/e2e\/.*\.spec\.mjs/);
   assert.match(raw, /if \[ "\$SMOKE" = true \]; then/);
   assert.doesNotMatch(raw, /\bAREA\b/, 'the shard is not an area');
-  assert.match(raw, /browser-failure-evidence-editor-shard-\$\{\{ matrix\.shard \}\}/);
-  const {jobs} = load('ci-apps-editor.yml');
-  for (const name of ['browser', 'browser-test-run']) {
-    assert.equal(jobs[name].if, undefined, `${name} must not skip the editor browser suite`);
-    assert.match(jobs[name].strategy.matrix, /needs\.verify.*browser_matrix/);
-  }
+  assert.match(raw, /browser-failure-evidence-editor-shard-\$\{\{ env\.SHARD \}\}/);
 });
 
-test('an in-place editor call tests every shard; only a test run is smoke', () => {
-  const {jobs} = load('ci-pr-checks.yml');
+test('each editor browser job names its exact matrix source and skips the act fallback', () => {
+  const {jobs} = load('ci-apps-editor.yml');
   assert.equal(
-    jobs['apps-editor'].with.smoke,
-    "${{ needs.switch.outputs.test_run == 'true' }}",
-    'an in-place editor workflow call must not run only one shard'
+    jobs.browser.strategy.matrix,
+    '${{ fromJSON(needs.verify.outputs.browser_matrix || \'{"include":[]}\') }}'
   );
-  assert.equal(jobs['test-ci-apps-editor'].with.smoke, true, 'the separate test call must still run one shard');
+  assert.equal(
+    jobs['browser-test-run'].strategy.matrix,
+    '${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || \'{"include":[]}\') }}'
+  );
+  assert.equal(jobs.browser.if, '${{ needs.verify.outputs.browser_matrix != \'{"include":[]}\' }}');
+  assert.equal(
+    jobs['browser-test-run'].if,
+    '${{ needs.verify-test-run.outputs.browser_matrix != \'{"include":[]}\' }}'
+  );
 });
 
 for (const file of ['cd-map-data.yml', 'cd-map-contracts.yml'])
@@ -875,7 +875,7 @@ const plannerMatrixInput = output => `\${{ needs.plan.outputs.${output} || needs
 
 const staticTestCallInputs = {
   'test-ci-apps-core-demo': {test_run: true},
-  'test-ci-apps-editor': {test_run: true, smoke: true},
+  'test-ci-apps-editor': {test_run: true},
   'test-ci-apps-web': {
     test_run: true,
     browser_matrix: plannerMatrixInput('smoke_browser_matrix')
@@ -902,18 +902,23 @@ test('every static test call passes inputs meant for its workflow', () => {
     'the input map must cover every static test call'
   );
   for (const [name, expected] of Object.entries(staticTestCallInputs)) {
-    assert.deepEqual(jobs[name].with, expected, `${name} passes the wrong inputs`);
+    const actual = {...jobs[name].with};
+    if (name === 'test-ci-apps-editor') {
+      assert.equal(actual.smoke, true, 'only the separate editor test call runs one smoke shard');
+      delete actual.smoke;
+    }
+    assert.deepEqual(actual, expected, `${name} passes the wrong inputs`);
   }
+  assert.equal('smoke' in jobs['apps-editor'].with, false, 'the regular editor call uses the app-owned shard count');
 });
 
-test('the browser test calls run one short proof with the default phone tests', () => {
+test('the browser test calls keep their own phone and matrix inputs', () => {
   const {jobs} = load('ci-pr-checks.yml');
   assert.equal(
     jobs['test-ci-apps-web'].with.browser_matrix,
     plannerMatrixInput('smoke_browser_matrix'),
     'the web test call passes its own smoke matrix'
   );
-  assert.equal(jobs['test-ci-apps-editor'].with.smoke, true, 'the editor test call runs one smoke shard');
   assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, undefined, 'the editor test call keeps the tagged default');
   assert.equal(jobs['test-ci-apps-web'].with.phone_tests, undefined, 'web no longer has a phone_tests input');
 });
@@ -1408,7 +1413,7 @@ test('only the new pipelines run on the repository', () => {
   );
 });
 
-test('web passes planned areas, while the editor runs its own shards and smoke input', () => {
+test('web passes planned areas and skips its browser job only for an empty matrix', () => {
   const allJobs = load('ci-pr-checks.yml').jobs;
   assert.equal(
     allJobs['apps-web'].with.browser_matrix,
@@ -1420,15 +1425,6 @@ test('web passes planned areas, while the editor runs its own shards and smoke i
     webJobs['browser-test-run'].if,
     `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`
   );
-
-  assert.equal(allJobs['apps-editor'].with.browser_matrix, undefined, 'the planner no longer builds editor areas');
-  assert.equal(
-    allJobs['apps-editor'].with.smoke,
-    "${{ needs.switch.outputs.test_run == 'true' }}",
-    'an in-place editor call must run every shard'
-  );
-  const {jobs: editorJobs} = load('ci-apps-editor.yml');
-  for (const name of ['browser', 'browser-test-run']) assert.equal(editorJobs[name].if, undefined);
 });
 
 test('the plan action and both plan jobs expose the same test-run and smoke outputs', () => {
@@ -1443,8 +1439,6 @@ test('the plan action and both plan jobs expose the same test-run and smoke outp
     assert.equal(action.outputs[name]?.value, `\${{ steps.plan.outputs.${name} }}`);
   }
   assert.equal(action.outputs.all_browser_matrix, undefined, 'the full matrix is no longer a test-call input');
-  assert.equal(action.outputs.editor_browser_matrix, undefined, 'the editor owns its browser matrix');
-  assert.equal(action.outputs.smoke_editor_browser_matrix, undefined);
   const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
   assert.match(text, /outputs: &plan-outputs/);
   assert.match(text, /outputs: \*plan-outputs/);
@@ -1498,19 +1492,13 @@ test('browser jobs and local runs pin one image, whose version matches the repos
   assert.match([...pins][0], expected);
 });
 
-test('web runs only tagged phone tests; the editor keeps the PR and nightly phone inputs', () => {
+test('web runs only tagged phone tests', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  const app = name => load(`ci-apps-${name}.yml`).jobs.browser;
-  const config = name =>
-    fs.readFileSync(path.join(repoRoot, 'apps', name, 'playwright.config.mjs'), 'utf8');
+  const config = fs.readFileSync(path.join(repoRoot, 'apps/web/playwright.config.mjs'), 'utf8');
 
   assert.equal(jobs['apps-web'].with.phone_tests, undefined);
-  assert.equal(app('web').env.E2E_PHONE, undefined);
-  assert.match(config('web'), /grep: \/@phone\/, grepInvert: \/@desktop\//);
-
-  assert.equal(jobs['apps-editor'].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
-  assert.equal(app('editor').env.E2E_PHONE, '${{ inputs.phone_tests }}');
-  assert.match(config('editor'), /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
+  assert.equal(load('ci-apps-web.yml').jobs.browser.env.E2E_PHONE, undefined);
+  assert.match(config, /grep: \/@phone\/, grepInvert: \/@desktop\//);
 });
 
 test('the browser image runs the Node version the repository pins', () => {

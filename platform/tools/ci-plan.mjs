@@ -112,24 +112,21 @@ const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
 const HEAD_DATA_CONSUMERS = ['tests'];
 
-// Returns the areas of one project that a changed file needs. Anything not known to be narrower runs every area.
-function areasForFile(file, {project, areaTable, sharedSources}) {
-  const allAreas = Object.keys(areaTable);
+// Returns the web browser areas a changed file needs. Anything not known to be narrower runs every area.
+function areasForWebFile(file) {
+  const allAreas = Object.keys(BROWSER_AREAS);
   const name = file.split('/').pop();
-  const isUnitTest = file.startsWith(`${project}/tests/`) && !file.includes('/e2e/') && file.endsWith('.test.mjs');
+  const isUnitTest = file.startsWith('apps/web/tests/') && !file.includes('/e2e/') && file.endsWith('.test.mjs');
   if (isUnitTest) return [];
-  const isSource = file.startsWith(`${project}/src/`);
-  if (isSource && sharedSources.includes(name)) return allAreas;
-  const isSpec = file.startsWith(`${project}/tests/e2e/`);
+  const isSource = file.startsWith('apps/web/src/');
+  if (isSource && SHARED_WEB_SOURCES.includes(name)) return allAreas;
+  const isSpec = file.startsWith('apps/web/tests/e2e/');
   const mapped = allAreas.filter(area => {
-    const {sources, specFiles} = areaTable[area];
+    const {sources, specFiles} = BROWSER_AREAS[area];
     return (isSource && sources.includes(name)) || (isSpec && specFiles.includes(name));
   });
   return mapped.length ? mapped : allAreas;
 }
-
-const areasForWebFile = file =>
-  areasForFile(file, {project: 'apps/web', areaTable: BROWSER_AREAS, sharedSources: SHARED_WEB_SOURCES});
 
 // Returns the folders and web browser areas one changed path needs. The editor owns its whole browser suite in its
 // workflow, so selecting its folder is enough to run it.
@@ -181,6 +178,8 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
+  // The shared parser is imported by the editor's unit test and by platform's web phone-tag check.
+  if (file === 'platform/tools/phone-tags.mjs') return {folders: ['platform', 'apps-editor', 'apps-web'], areas: []};
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform'], areas: []};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
@@ -197,8 +196,8 @@ export function planChanges(files) {
 }
 
 // An area too slow for one job runs as several, each with its own share of the tests.
-function browserJobs(area, areaTable) {
-  const {specs, jobs = 1} = areaTable[area];
+function browserJobs(area) {
+  const {specs, jobs = 1} = BROWSER_AREAS[area];
   if (jobs === 1) return [{area, specs}];
   return Array.from({length: jobs}, (_, index) => ({
     area: `${area}-${index + 1}`,
@@ -206,12 +205,12 @@ function browserJobs(area, areaTable) {
   }));
 }
 
-export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
-  return {include: areas.flatMap(area => browserJobs(area, areaTable))};
+export function browserMatrix(areas) {
+  return {include: areas.flatMap(area => browserJobs(area))};
 }
 
-// A separate test call proves the workflow's jobs and steps, not every test: discover runs 5 tests in one web job and
-// selection runs 8 in one editor job, with no sharding. The full matrices stay in the PR's regular browser calls.
+// A separate web test call proves one short area; a separate editor test call uses its own smoke input. The PR's
+// regular browser calls keep the coverage their diffs need.
 export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
 
 // A change to an app, or to what it is built from, publishes that app's image.
@@ -239,17 +238,15 @@ function testRunCallsFor(folders, changedFiles) {
   return {testRuns, inPlace, separate, proveCdTestRuns};
 }
 
-// An in-place call must prove every job of the changed workflow. An empty plan would skip its browser job, so the
-// regular call gets the same smoke area a separate test call would use. Other empty plans still run no browser area.
-function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, areaTable = BROWSER_AREAS) {
-  if (areas.length === 0 && inPlace.includes(workflow)) return smokeMatrix;
-  return JSON.stringify(browserMatrix(areas, areaTable));
-}
-
 export function formatOutputs({folders, areas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
-  const browserMatrixForCall = matrixForInPlaceBrowserCall(areas, 'ci-apps-web.yml', inPlace, SMOKE_BROWSER_MATRIX);
+  // A changed web workflow with no selected area still needs one browser job to prove its steps. The editor owns its
+  // own matrix, so this planner emits no editor output.
+  const browserMatrixForCall =
+    areas.length === 0 && inPlace.includes('ci-apps-web.yml')
+      ? SMOKE_BROWSER_MATRIX
+      : JSON.stringify(browserMatrix(areas));
   return [
     ...folderLines,
     `browser_matrix=${browserMatrixForCall}`,

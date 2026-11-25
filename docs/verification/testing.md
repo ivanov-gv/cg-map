@@ -138,8 +138,8 @@ CI builds once, then runs browser tests as separate jobs with their own time lim
 [ADR 0006](../decisions/0006-ci-time-limits-and-tests-before-merge.md) records that decision, and
 [ADR 0032](../decisions/0032-tests-pass-on-github-and-earn-their-cost.md) changes the merge rule to GitHub runs.
 
-The web app splits by area: a change runs only the areas its files map to, and a test run checks every area. The planner
-owns that mapping.
+The web app splits by area: a change runs only the areas its files map to, while the nightly run and a full test
+dispatch check all areas. The planner owns that mapping.
 
 | Area        | Specs in apps/web/tests/e2e                                                                 | Covers                                                                                          | Code it depends on most                                                                                  |
 | ----------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -153,9 +153,9 @@ owns that mapping.
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
 every web area, because every browser test boots them.
 
-The editor takes a different approach: it owns its browser suite and its shard count. The
-[editor instructions](../../apps/editor/AGENTS.md) hold the count and its proof rule;
-[workflow testing](../../.github/TESTING.md#on-github) says when CI runs the whole suite or a smoke proof; and
+The editor takes a different approach: it owns its browser suite and the count in
+[browser-jobs.json](../../apps/editor/browser-jobs.json). The [editor instructions](../../apps/editor/AGENTS.md) hold
+its proof rule; [workflow testing](../../.github/TESTING.md#on-github) says when CI uses the count or a smoke proof; and
 [ADR 0040](../decisions/0040-app-owned-browser-shards.md) records why the app owns the split.
 
 ## Monorepo verification — 2026-10-18

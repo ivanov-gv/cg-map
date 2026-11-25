@@ -7,18 +7,22 @@ import {browserMatrix, readJobCount} from '../tools/browser-matrix.mjs';
 
 const applicationRoot = fileURLToPath(new URL('..', import.meta.url));
 const matrixTool = fileURLToPath(new URL('../tools/browser-matrix.mjs', import.meta.url));
+const configurationFile = fileURLToPath(new URL('../browser-jobs.json', import.meta.url));
 
 test('the browser suite runs as one job per shard', () => {
-  assert.deepEqual(browserMatrix(10).include, Array.from({length: 10}, (_, index) => ({shard: index + 1, jobs: 10})));
+  assert.deepEqual(
+    browserMatrix({jobs: 10}).include,
+    Array.from({length: 10}, (_, index) => ({shard: index + 1, jobs: 10}))
+  );
 });
 
 test('a smoke run proves the browser job with only the first shard', () => {
-  assert.deepEqual(browserMatrix(10, {smoke: true}).include, [{shard: 1, jobs: 10}]);
+  assert.deepEqual(browserMatrix({jobs: 10}, {smoke: true}).include, [{shard: 1, jobs: 10}]);
 });
 
 test('an unusable job count fails instead of hiding a broken configuration', () => {
   for (const jobCount of [0, -1, 1.5, '10', undefined]) {
-    assert.throws(() => browserMatrix(jobCount), /positive integer/, String(jobCount));
+    assert.throws(() => browserMatrix({jobs: jobCount}), /positive integer/, String(jobCount));
   }
 });
 
@@ -34,6 +38,18 @@ test('the command reads the app file for a full run and a smoke run', () => {
     cwd: applicationRoot,
     encoding: 'utf8'
   }));
-  assert.deepEqual(read([]), browserMatrix(readJobCount()));
-  assert.deepEqual(read(['--smoke']), browserMatrix(readJobCount(), {smoke: true}));
+  assert.deepEqual(read([]), browserMatrix(configurationFile));
+  assert.deepEqual(read(['--smoke']), browserMatrix(configurationFile, {smoke: true}));
+});
+
+test('the matrix reads the app file from a path or a parsed object', () => {
+  const expected = browserMatrix(configurationFile);
+  assert.deepEqual(browserMatrix(configurationFile), expected);
+  assert.deepEqual(browserMatrix(JSON.parse(fs.readFileSync(configurationFile, 'utf8'))), expected);
+});
+
+test('the matrix rejects an extra, missing or empty job configuration', () => {
+  assert.throws(() => browserMatrix({jobs: 2, area: 'viewer'}), /only jobs/);
+  assert.throws(() => browserMatrix({}), /only jobs/);
+  assert.throws(() => browserMatrix(null), /only jobs/);
 });

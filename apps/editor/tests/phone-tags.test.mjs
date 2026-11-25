@@ -16,3 +16,15 @@ test('a phone-dependent editor test is tagged, or a PR would not run it there', 
     assert.deepEqual(untaggedPhoneTests(read(spec), helpers, NEUTRAL_HELPERS), [], spec);
   }
 });
+
+test('the shared phone tag parser is a declared cross-project contract', () => {
+  const architecture = fs.readFileSync(
+    new URL('../../../docs/system-architecture/architecture.md', import.meta.url),
+    'utf8'
+  );
+  const contractRow = architecture.split('\n').find(line => line.startsWith('| Phone tag parser'));
+  assert.ok(contractRow, 'architecture must name the shared parser');
+  assert.match(contractRow, /\| platform\s+\|/);
+  assert.match(contractRow, /apps\/editor/);
+  assert.match(contractRow, /apps\/web/);
+});

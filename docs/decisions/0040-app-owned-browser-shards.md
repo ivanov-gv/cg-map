@@ -11,28 +11,35 @@ change picked a subset of those areas, and each area named its own spec files an
 editor's own knowledge of its tests: adding a spec or moving a file between areas needed a planner change, and a mapping
 mistake could leave a spec unrun.
 
-The whole editor browser suite took 2,457 seconds across 17 jobs in one green run, 2,680 seconds across 17 in another,
-and 2,414 seconds across 16 in a third. Other measured runs took 2,344 and 2,311 seconds. Those jobs already split
-individual specs into uneven areas, so moving to a single Playwright shard count is simpler and spreads the work by test
-count. Ten shards give about 250 job-seconds before the saving from fewer setup jobs, within the seven-minute job limit
-even though some shards take longer than others.
+The timing comments removed with that table recorded job times at CI's two workers: editing desktop took 193, 189 and
+270 seconds with three shards, with a measured 166-second maximum at five; editing mobile took 327 seconds with all
+phone tests and was split into two 31-test shards; offline desktop took 209 seconds in one job; layers took 270, 230 and
+130 seconds in three 11-test tagged shards; viewer took 220 seconds in one job and about 90 seconds per shard when split
+three ways. Those comments preserved grouped times, not a per-test table.
+
+The estimated slowest shard below uses those grouped times, the current test counts, and 60 seconds of setup. It is an
+estimate, not a measurement. With 15 shards, Playwright's count-based split gives 10–11 tests per tagged shard and 16–17
+with `phone_tests=all`; `--list` proves the tagged split for each shard. The estimate is 230 seconds for the slowest
+tagged shard and 282 seconds for the slowest shard with all phone tests, both under the 300-second job limit. The team
+lead measures the actual job times for both modes on this branch, and `browser-jobs.json` changes when a shard comes
+near the limit.
 
 ## Decision
 
-Any editor change runs all of the editor's browser tests, including a regular in-place call of `ci-apps-editor.yml`. The
-editor, not the platform planner, owns `browser-jobs.json` and `tools/browser-matrix.mjs`; the planner exports no editor
-areas, source lists or smoke matrix. The current workflow mechanism is in
-[.github/TESTING.md](../../.github/TESTING.md), and the shard-count rule is in
+An editor change runs the app's browser suite, including a regular in-place call of `ci-apps-editor.yml`. The editor,
+not the platform planner, owns `browser-jobs.json` and `tools/browser-matrix.mjs`; the planner exports no editor areas,
+source lists or matrix output. The regular call passes no `smoke` input, so PR, nightly and full-dispatch runs use the
+app-owned shard count; only the separate workflow-proof call passes `smoke: true`. The current mechanism is in
+[.github/TESTING.md](../../.github/TESTING.md), and the shard-count proof rule is in
 [apps/editor/AGENTS.md](../../apps/editor/AGENTS.md).
 
 ## Consequences
 
-- Adding, removing or renaming an editor spec needs no platform change. Playwright discovers the tests in every shard.
-- Every editor change pays for the whole browser suite, rather than only the areas an old mapping considered relevant.
-  Ten jobs still fit the run's job budget and replace the former 16–17 jobs.
-- A shard can be slower than another because Playwright divides tests by count, not duration. The seven-minute job limit
-  makes that unevenness safe, and the app's unit test checks the matrix. Matching CI's workers matters: with one worker
-  Playwright keeps a whole slow file in one shard, but with two it divides individual tests. The count's proof stays
-  with the editor.
+- Adding, removing or renaming an editor spec needs no platform change. Playwright discovers the tests for each shard.
+- A PR pays for the whole editor browser suite rather than the areas an old mapping considered relevant. Fifteen jobs
+  replace the former 16–17 and stay inside the job limit by the estimate above.
+- Shards are split by test count, not duration, so one can be slower than another. Matching CI's workers matters: with
+  one worker Playwright keeps a whole slow file in one shard, but with two it divides individual tests. The app's unit
+  test checks the matrix, and its instructions hold the count's proof.
 - A smoke proof proves the workflow's jobs and steps, not the editor suite; its call sites are in
   [workflow testing](../../.github/TESTING.md#on-github).
