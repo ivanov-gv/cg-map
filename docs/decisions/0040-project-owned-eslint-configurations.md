@@ -19,15 +19,17 @@ so the config chooses that project's file patterns and globals. All rule sets co
 [JavaScript conventions](../../docs/engineering/javascript.md#lint-configuration). The root config is gone.
 
 The planner gives a project's own config that project's verify; it discovers the shared rules' consumers from the
-project configs present in the checkout. Neither selection includes a Web browser area: lint rules cannot change what a
-browser does. Each app owns a readability test that calls the shared probe helper against its own config. Editor and
-core-demo keep the folder rules they have today for their configs.
+project configs present in the checkout and the shared probe's consumers from the tests that import it. Neither
+selection includes a Web browser area: lint and readability tooling cannot change what a browser does. Each app owns a
+readability test that calls the shared probe helper against its own config. Editor and core-demo keep the folder rules
+they have today for their configs.
 
 ## Consequences
 
 - Adding a new kind of file in a project needs only that project's config; no project changes another's lint scope.
 - A shared rule change runs the verify of every project with a config, but no browser suite. A rule that applies to only
   one project's files still stays in that project's config, which selects only that project's verify.
+- A readability-probe change runs the verifies of the three apps whose tests import it, but no browser suite.
 - The new dev dependency is recorded in
   [architecture](../../docs/system-architecture/architecture.md#independent-projects); the planner discovers its
   consumers from the project configs.

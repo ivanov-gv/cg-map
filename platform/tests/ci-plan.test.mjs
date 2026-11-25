@@ -236,6 +236,14 @@ test('a new project config joins the shared-rule consumers without a code change
   assert.deepEqual(after.editorAreas, []);
 });
 
+test('the readability probe runs its consumers and no browser areas', () => {
+  const plan = planChanges(['platform/tools/eslint-readability-probe.mjs']);
+  assert.deepEqual(plan.folders, ['apps-web', 'apps-editor', 'apps-core-demo']);
+  assert.deepEqual(plan.areas, []);
+  assert.deepEqual(plan.editorAreas, []);
+  assert.equal(plan.everything, false);
+});
+
 test('Editor and core-demo lint configs keep their existing selection', () => {
   const editor = planChanges(['apps/editor/eslint.config.mjs']);
   assert.deepEqual(new Set(editor.folders), new Set(['apps-editor', 'tests']));

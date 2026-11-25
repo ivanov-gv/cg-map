@@ -23,19 +23,21 @@ export const FOLDERS = [
   'apps-core-demo'
 ];
 
-// The root Makefile's project directories and their CI folder pipelines. Lint config discovery uses this existing map,
-// so the planner never needs a second list of projects that lint.
-export const PROJECT_PIPELINES = {
-  'packages/map-core': 'map-core',
-  'apps/web': 'apps-web',
-  'apps/editor': 'apps-editor',
-  'apps/core-demo': 'apps-core-demo',
-  data: 'data',
-  'packages/contracts': 'contracts',
-  'services/transit-relay': 'transit-relay',
-  platform: 'platform',
-  tests: 'tests'
-};
+// CI folders mirror the root Makefile's PROJECTS: apps keep their group prefix, other projects use their last folder.
+// Lint config discovery uses this map, so the planner never needs a second list of projects that lint.
+const makeProjects = fs
+  .readFileSync(new URL('../../Makefile', import.meta.url), 'utf8')
+  .match(/^PROJECTS := (.+)$/m)[1]
+  .split(' ');
+const appsFolderPrefix = 'apps/';
+export const PROJECT_PIPELINES = Object.fromEntries(
+  makeProjects.map(project => [
+    project,
+    project.startsWith(appsFolderPrefix)
+      ? `apps-${project.slice(appsFolderPrefix.length)}`
+      : project.split('/').pop()
+  ])
+);
 
 // Each web source file is listed once, so a new file falls through to every area until someone maps it.
 export const BROWSER_AREAS = {
@@ -282,6 +284,8 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-core-demo'
 ];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
+const READABILITY_PROBE = 'platform/tools/eslint-readability-probe.mjs';
+const READABILITY_PROBE_IMPORT = /import\s+[^;]+?\sfrom\s+['"][^'"]*eslint-readability-probe\.mjs['"]/;
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
 // Consumers are discovered, not listed: each known project contributes its config when the file exists. The CLI runs
 // at the repository root; tests inject a config list to prove a new config joins without a planner code change.
@@ -294,6 +298,24 @@ function configPipeline(file, lintConfigs) {
   if (!file.endsWith(`/${ESLINT_CONFIG_NAME}`)) return '';
   const project = file.slice(0, -`/${ESLINT_CONFIG_NAME}`.length);
   return lintConfigs.includes(file) ? PROJECT_PIPELINES[project] ?? '' : '';
+}
+// Returns every file below a directory, or none when the project has no tests directory.
+function walkFiles(directory) {
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
+    const file = path.join(directory, entry.name);
+    return entry.isDirectory() ? walkFiles(file) : [file];
+  });
+}
+// The app readability tests import the probe. Find their projects from those imports, not from a hand-kept list.
+function discoveredProbeConsumers(root = process.cwd()) {
+  return Object.keys(PROJECT_PIPELINES)
+    .filter(project =>
+      walkFiles(path.join(root, project, 'tests')).some(
+        file => file.endsWith('.mjs') && READABILITY_PROBE_IMPORT.test(fs.readFileSync(file, 'utf8'))
+      )
+    )
+    .map(project => PROJECT_PIPELINES[project]);
 }
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
@@ -381,18 +403,22 @@ function classifyGeneric(file) {
   return EVERYTHING;
 }
 
-export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
-  if (file === SHARED_ESLINT_RULES) {
-    const consumers = new Set(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
-    return {folders: FOLDERS.filter(folder => consumers.has(folder)), areas: [], editorAreas: []};
-  }
+// Shared tooling changes select the projects that consume them, never a browser area.
+function toolingPlan(consumers) {
+  const selected = new Set(consumers);
+  return {folders: FOLDERS.filter(folder => selected.has(folder)), areas: [], editorAreas: []};
+}
+
+export function classify(file, lintConfigFiles = discoveredLintConfigs(), probeConsumers = discoveredProbeConsumers()) {
+  if (file === SHARED_ESLINT_RULES)
+    return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
+  if (file === READABILITY_PROBE) return toolingPlan(probeConsumers);
   const pipeline = configPipeline(file, lintConfigFiles);
   if (pipeline) {
-    const generic = classifyGeneric(file);
-    // A config whose generic plan is already narrow and carries editor areas keeps that plan: editor tests run through
-    // the editor's config. Anything else narrows to its own verify; a generic "everything" must not leak back in.
-    const keepsGeneric = generic.folders.length < FOLDERS.length && (generic.editorAreas ?? []).length > 0;
-    return keepsGeneric ? generic : {folders: [pipeline], areas: [], editorAreas: []};
+    // Until PR #465 changes the editor's selection, its config keeps the folder plan it has today. Every other config
+    // narrows to its own verify.
+    if (pipeline === 'apps-editor') return classifyGeneric(file);
+    return {folders: [pipeline], areas: [], editorAreas: []};
   }
   return classifyGeneric(file);
 }
@@ -401,7 +427,10 @@ export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
 export function planChanges(files, options = {}) {
   if (files.length === 0) return {...EVERYTHING, everything: true};
   const lintConfigFiles = options.lintConfigFiles ?? discoveredLintConfigs();
-  const results = files.map(file => classify(file, lintConfigFiles));
+  const probeConsumers = files.includes(READABILITY_PROBE)
+    ? options.probeConsumers ?? discoveredProbeConsumers()
+    : [];
+  const results = files.map(file => classify(file, lintConfigFiles, probeConsumers));
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
   const editorAreasOf = result => (result.folders.includes('apps-editor') ? (result.editorAreas ?? ALL_EDITOR_AREAS) : []);

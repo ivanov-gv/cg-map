@@ -24,23 +24,24 @@ changed.
 
 Projects depend on each other only through these concrete contracts:
 
-| Contract                                       | Producer           | Consumers                                                                                                                   |
-| ---------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                                  |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                              |
-| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                          |
-| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                          |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                    |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                         |
-| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                           |
-| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                   |
-| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                      |
-| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                          |
-| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                               |
-| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                          |
-| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                              |
-| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
-| Shared ESLint rules, platform/eslint-rules.mjs | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, platform, tests |
+| Contract                                                              | Producer           | Consumers                                                                                                                   |
+| --------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Published `@ivanov-gv/map-core` package                               | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                                  |
+| Local map-core, unreleased                                            | packages/map-core  | apps/core-demo                                                                                                              |
+| Published `@ivanov-gv/map-data` package                               | data               | map application and platform hosting tests, pinned                                                                          |
+| Map data for an artifact, data/tools/app-data                         | data               | dev and CI artifact builds on main                                                                                          |
+| Published `@ivanov-gv/map-contracts` package                          | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                    |
+| Shared formats and schemas at HEAD                                    | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                         |
+| Reviewed sources, release archive and imagery                         | data               | dev and CI artifact builds, cross-component tests                                                                           |
+| Relief sources; temporary report                                      | data               | data checks, tests; packages/map-core through the archive's relief layers                                                   |
+| Editor source bundle                                                  | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                      |
+| Place test fixture                                                    | data               | apps/web browser tests via the pin                                                                                          |
+| Built web artifact, dist/web                                          | apps/web           | platform hosting tests, tests                                                                                               |
+| Built web artifact, dist/web                                          | apps/web           | the dev Pages site                                                                                                          |
+| Go host `run` target                                                  | services/backend   | apps/web `dev`                                                                                                              |
+| Static host and per-worktree ports                                    | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
+| Shared ESLint rules, platform/eslint-rules.mjs                        | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, platform, tests |
+| Shared readability probe, platform/tools/eslint-readability-probe.mjs | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -52,9 +53,9 @@ Rules:
   runs. It may call a project's check targets; it never calls a project's build or run targets directly.
 - A project never runs another project's checks or tests. Applications never import each other.
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
-  when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules
-  ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)) are a development dependency of every project
-  that lints; the planner selects those verifies and no browser areas when the rules change.
+  when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules and readability probe
+  ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)) are development dependencies recorded above;
+  the planner selects the projects that consume each, and no browser areas, when either changes.
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev
