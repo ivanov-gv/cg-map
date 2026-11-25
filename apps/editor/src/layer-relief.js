@@ -98,10 +98,10 @@ function useOwnHeight(edit) {
   const onPosition = ({coords: {altitude}}) => {
     const isStillWanted = edit.isOpen() && hasNoHeight(edit.typedFeature());
     if (!isStillWanted) return;
-    if (altitude === null) edit.showProblem('This device does not know its height.');
+    if (altitude === null) edit.showMessage('This device does not know its height.');
     else edit.setProperties({ele: Math.round(altitude)});
   };
-  const onError = () => edit.showProblem('The height of this device is not available.');
+  const onError = () => edit.showMessage('The height of this device is not available.');
   navigator.geolocation.getCurrentPosition(onPosition, onError, {
     enableHighAccuracy: true,
     timeout: positionTimeoutMilliseconds

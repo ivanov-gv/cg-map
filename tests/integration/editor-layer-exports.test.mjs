@@ -254,7 +254,6 @@ test('a river moved at its joint and a reversed one pass', async testContext => 
 });
 
 const movedAtMiddle = entry => ({...entry.feature, geometry: movedMiddle(entry.feature)});
-const isLongLine = ({geometry}) => geometry.coordinates.length > 10;
 
 test('a ridge with its slopes, a contour and a new summit pass', async testContext => {
   const editor = new HeadlessEditor(testContext);
