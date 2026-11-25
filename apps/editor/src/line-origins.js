@@ -5,7 +5,7 @@ import {pointKey} from './road-graph.js';
 // The origins of a line that nothing has happened to: every point is itself. null is a point that was added.
 export const startingOrigins = ({coordinates}) => coordinates.map((_point, index) => index);
 
-const isReversed = (keys, nextKeys) => keys.length > 2 && keys.toReversed().every((key, index) => key === nextKeys[index]);
+const isReversed = (keys, nextKeys) => keys.length === nextKeys.length && keys.toReversed().every((key, index) => key === nextKeys[index]);
 
 // The points that both lines have, in order, as pairs of positions.
 function sharedPoints(keys, nextKeys) {
