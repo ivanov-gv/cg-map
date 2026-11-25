@@ -34,8 +34,16 @@ it.
 
 ## Tests
 
-- Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
-  tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
+- Use `node:test` with `node:assert/strict`. In an app or packages/map-core a test lies next to the code it tests, in
+  folders by feature, and its name says what it needs:
+  - `roads/roads.js`: the component;
+  - `roads/roads.test.js`: its unit tests, without a browser;
+  - `roads/roads.browser.test.js`: only what needs a real browser. It starts the component, not the whole app;
+  - `e2e/roads.spec.js`, beside `src`: a user's job from start to end (Playwright).
+- Builds and published packages leave tests out. apps/web, apps/editor, apps/core-demo and packages/map-core still have
+  tests in `tests/`: they move project by project, and until then new tests stay beside the ones that are there.
+- Pipeline, platform and service tests live in `<component>/tests/*.test.mjs`; cross-component tests in
+  tests/integration.
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - A browser test waits for a state: an event, or a poll on a condition. A fixed delay is not synchronization. A failure
   seen only with parallel workers is not a flake to dismiss: investigate both races and resource limits (frame rate,
