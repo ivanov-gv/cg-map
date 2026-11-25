@@ -106,9 +106,9 @@ test('joints are shown, and a junction is opened, given a turn rule, disconnecte
   const {changeset} = await exportChangeset(page, testInfo);
   const [rule] = operationsOn(changeset, 'turn-restrictions.json');
   expect(rule.after.properties).toMatchObject({restriction: 'no_left_turn', from: 30, to: 31});
-  // Both roads end at the junction that the rule names.
-  const nodes = operationsOn(changeset, 'roads.geojson').map(({after}) => after.properties.endNode ?? after.properties.startNode);
-  expect(nodes).toEqual([rule.after.properties.viaNodes[0], rule.after.properties.viaNodes[0]]);
+  // Both roads already end at the junction that the rule names.
+  expect(rule.after.properties.viaNodes).toEqual([301]);
+  expect(operationsOn(changeset, 'roads.geojson')).toEqual([]);
 
   await page.getByRole('button', {name: 'Close'}).last().click();
   await tapAt(page, [6, 0]);

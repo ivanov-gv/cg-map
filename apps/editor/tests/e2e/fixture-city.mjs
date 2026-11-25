@@ -39,6 +39,8 @@ const building = (number, corners, properties = {}) =>
   feature(`way/${number}`, {kind: 'building', building: 'yes', osm_id: `way/${number}`, ...properties}, polygon(corners));
 const road = (number, name, geometry, properties = {}) =>
   feature(`way/${number}`, {kind: 'residential', name, ...properties}, geometry);
+// Every end of an extracted road has its OpenStreetMap node.
+const endsAt = (startNode, endNode) => ({startNode, endNode, startLevel: 0, endLevel: 0});
 const contour = (number, elevation, corners) =>
   feature(
     `derived:contour-${number}`,
@@ -89,9 +91,9 @@ function cityFeatures() {
       )
     ],
     'roads.geojson': [
-      road(30, 'Main street', line([-6, 0], [0, 0], [6, 0])),
-      road(31, 'Side street', line([6, 0], [6, 5])),
-      road(32, 'Far street', line([-6, -6], [6, -6]))
+      road(30, 'Main street', line([-6, 0], [0, 0], [6, 0]), endsAt(300, 301)),
+      road(31, 'Side street', line([6, 0], [6, 5]), endsAt(301, 302)),
+      road(32, 'Far street', line([-6, -6], [6, -6]), endsAt(303, 304))
     ],
     'road-nodes.geojson': [feature('node/40', {kind: 'crossing'}, point(0, 0))],
     'land.geojson': [
