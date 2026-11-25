@@ -1,11 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {addressBehaviors, buildingsWithoutNumber, nearestGap} from '../src/layer-addresses.js';
-import {editorLayers} from '../src/editor-layers.js';
-import {behaviorOf, registerBehaviors} from '../src/layer-behaviors.js';
 import {buildingAt, placeBehaviors} from '../src/layer-places.js';
-import {propertiesFromForm, renderPropertyForm} from '../src/property-form.js';
 import {matchingStreets, streetsNear} from '../src/street-choices.js';
 
 const square = (west, size = 0.001) => [
@@ -49,18 +45,6 @@ function contextWith(featuresByFile) {
 }
 
 const behavior = addressBehaviors['building-labels.geojson'];
-const testRules = JSON.parse(readFileSync(new URL('fixtures/editor-layers.json', import.meta.url)));
-// Contracts HEAD lists display_number until #451; the Addresses form must ignore that rule.
-const removedNumberRule = {
-  maxLength: 128,
-  ignoredCharactersPattern: '[\\s./_-]',
-  forbiddenValues: ['', 'bb', 'бб', 'bezbroja', 'безброја', 'na', '?']
-};
-const addressPropertyRules = {
-  ...testRules.layers['building-labels.geojson'].properties,
-  display_number: removedNumberRule
-};
-
 // Presses a button of the address inspector, which renders into anything that takes children.
 async function pressExtra(label, edit) {
   const buttons = [];
@@ -76,54 +60,9 @@ async function pressExtra(label, edit) {
   delete globalThis.document;
 }
 
-// The local document stands in for the browser. Only field names, values and label text matter here.
-function addressFormElements(properties) {
-  const created = [];
-  globalThis.document = {
-    createElement: tagName => {
-      const element = {
-        tagName,
-        children: [],
-        append(...children) {
-          this.children.push(...children);
-        }
-      };
-      created.push(element);
-      return element;
-    }
-  };
-  const form = {
-    children: [],
-    replaceChildren(...children) {
-      this.children = children;
-    }
-  };
-  const layer = editorLayers.find(({id}) => id === 'addresses');
-  registerBehaviors(addressBehaviors, layer.id);
-  try {
-    renderPropertyForm(form, properties, addressPropertyRules, new Set(), {
-      sections: behaviorOf('building-labels.geojson', layer.id).sections(properties, {}),
-      controls: {},
-      usualValues: {}
-    });
-    const descendants = element => [element, ...element.children.flatMap(descendants)];
-    return descendants(form).slice(1);
-  } finally {
-    delete globalThis.document;
-  }
-}
-
-test('the Addresses form has no display number and Apply records none', () => {
-  const properties = {kind: 'building', 'addr:housenumber': '14'};
-  const elements = addressFormElements(properties);
-  const fields = elements.filter(({name}) => name !== undefined);
-  assert.ok(fields.some(({name}) => name === 'addr:housenumber'), 'the Addresses form rendered');
-  const formValues = Object.fromEntries(fields.map(({name, value}) => [name, String(value ?? '')]));
-  assert.equal(Object.hasOwn(formValues, 'display_number'), false, 'Apply has no display number to record');
-  assert.equal(fields.some(({name}) => name === 'display_number'), false);
-  assert.equal(elements.some(({textContent}) => textContent === 'Display number'), false);
-  const applied = propertiesFromForm(properties, formValues, addressPropertyRules);
-  assert.equal(applied.display_number, undefined);
+test('the Addresses form has exactly the house number and the street', () => {
+  const fields = behavior.sections({}, {}).flatMap(({fields}) => fields);
+  assert.deepEqual(fields, ['addr:housenumber', 'addr:street']);
 });
 
 test('an address moves with what is typed, and never to a building that has one', async () => {
@@ -142,7 +81,7 @@ test('an address moves with what is typed, and never to a building that has one'
     key: label.key,
     feature: label.feature,
     isOpen: () => true,
-    typedFeature: () => address({footprintIndex: 0, 'addr:housenumber': '16'}),
+    typedFeature: () => address({footprintIndex: 0, 'addr:housenumber': '16', name: 'Hall'}),
     showProblem: message => (recorded.problem = message),
     replaceWith: edits => (recorded.edits = edits)
   });
@@ -150,8 +89,11 @@ test('an address moves with what is typed, and never to a building that has one'
   assert.match(recorded.problem, /already has an address/);
   assert.equal(recorded.edits, undefined);
   await pressExtra('Change building', editOf(free));
-  assert.equal(recorded.edits[1].after.properties['addr:housenumber'], '16');
-  assert.equal(recorded.edits[1].after.properties.buildingEntityId, 'way/3');
+  assert.deepEqual(recorded.edits[1].after.properties, {
+    kind: 'building',
+    buildingEntityId: 'way/3',
+    'addr:housenumber': '16'
+  });
 });
 
 test('an address edit keeps its building in step, and nothing else of the building changes', () => {
