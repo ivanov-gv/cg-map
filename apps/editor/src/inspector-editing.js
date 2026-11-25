@@ -229,7 +229,7 @@ export class InspectorEditing {
       setGeometry: whileOpen(geometry => this.#setFeature({...this.#currentFeature(), geometry})),
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
-      showProblem: whileOpen(message => this.showProblem(message)),
+      showProblem: whileOpen(message => this.#refuse(message)),
       applyWith: whileOpen(edits => this.#applyWith(edits)),
       replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
       discard: whileOpen(() => this.discardEdit())
@@ -413,7 +413,11 @@ export class InspectorEditing {
       this.#finishEdit(() => this.#context.onMarkedForDeletion(entry, title));
       return;
     }
-    const {message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    const {problem, message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    if (problem) {
+      this.showProblem(problem);
+      return;
+    }
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
     confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);

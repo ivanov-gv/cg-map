@@ -77,13 +77,16 @@ export function riversKeepingShore(before, after, waterEntries) {
 export function riverEndingOnShores(before, after, waterEntries) {
   if (!before || movedPoints(before.coordinates, after.coordinates).length === 0) return after;
   const areas = waterEntries.filter(isArea);
-  const coordinates = [...after.coordinates];
-  for (const index of [0, coordinates.length - 1]) {
-    const isMoved = !isSamePoint(before.coordinates[index], coordinates[index]);
-    const shore = isMoved && areas.find(({feature}) => isOnOutline(before.coordinates[index], feature.geometry.coordinates));
-    if (shore) coordinates[index] = onOutline(coordinates[index], shore.feature.geometry.coordinates);
-  }
-  return {...after, coordinates};
+  // Ends are compared with ends: points can have been added or removed between them.
+  const endOnItsShore = (previousEnd, end) => {
+    if (isSamePoint(previousEnd, end)) return end;
+    const shore = areas.find(({feature}) => isOnOutline(previousEnd, feature.geometry.coordinates));
+    return shore ? onOutline(end, shore.feature.geometry.coordinates) : end;
+  };
+  const [previousStart, previousEnd] = endsOf({geometry: before});
+  const [start, end] = endsOf({geometry: after});
+  const inner = after.coordinates.slice(1, -1);
+  return {...after, coordinates: [endOnItsShore(previousStart, start), ...inner, endOnItsShore(previousEnd, end)]};
 }
 
 // What a river flows into at its last point: another line that has the point, or an area it ends on.

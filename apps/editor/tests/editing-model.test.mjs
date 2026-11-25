@@ -242,6 +242,36 @@ test('a changeset carries base hashes, fingerprints and both states, and imports
   assert.equal(resumed.hasChanges(), false, 'an import can be taken back on its layer');
 });
 
+test('an import over several layers is taken back and made again as a whole', async () => {
+  const sources = sourcesWith({
+    'buildings.geojson': [footprintFeature()],
+    'building-labels.geojson': [labelFeature()],
+    'places.geojson': [placeFeature(), placeFeature()]
+  });
+  const session = new EditSession(sources);
+  const move = feature => ({...feature, geometry: translateGeometry(feature.geometry, 0.0001, 0)});
+  session.recordEdit('buildings.geojson', '0', move(footprintFeature()));
+  session.recordEdit('building-labels.geojson', '0', move(labelFeature()));
+  session.recordEdit('places.geojson', '0', renamed(placeFeature(), 'Renamed'));
+  const changeset = await buildChangeset(session, sources, envelope);
+  const desk = new EditSession(sources);
+  await importChangeset(changeset, desk, sources, rules, levels);
+  // Later work on another object of one of the layers does not keep the import from being taken back on the others.
+  desk.recordEdits('places', [{filename: 'places.geojson', key: '1', after: renamed(placeFeature(), 'Later')}]);
+  const resumed = new EditSession(sources);
+  resumed.restoreDraft(JSON.parse(JSON.stringify(desk.exportDraft())));
+  for (const desks of [desk, resumed]) {
+    assert.ok(desks.undo('buildings'));
+    assert.deepEqual(desks.changedFiles(), ['places.geojson']);
+    assert.equal(desks.changeCount(), 1);
+    assert.equal(desks.canUndo('addresses'), false, 'the same step is gone from the other layers');
+    assert.ok(desks.undo('places'), 'the later work has its own step');
+    assert.equal(desks.hasChanges(), false);
+    assert.ok(desks.redo('addresses'));
+    assert.equal(desks.changeCount(), 3);
+  }
+});
+
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {
   const sources = sourcesWith({'places.geojson': [placeFeature()]});
   const session = new EditSession(sources);
