@@ -96,6 +96,15 @@ export function boundsAround(coordinate, map, pixels = 16) {
 export const canNameJunctions = rules =>
   rules.layers['roads.geojson']?.properties.startNode?.type === 'identifier' && Boolean(rules.layers['road-nodes.geojson']);
 
+const metresPerDegree = 111200;
+
+// The box that reaches this far from a place on every side.
+export function boundsAroundMetres([longitude, latitude], metres) {
+  const north = metres / metresPerDegree;
+  const east = north / Math.cos((latitude * Math.PI) / 180);
+  return [longitude - east, latitude - north, longitude + east, latitude + north];
+}
+
 export const boxAround = ([longitude, latitude], degrees = 0.00005) => [
   longitude - degrees,
   latitude - degrees,

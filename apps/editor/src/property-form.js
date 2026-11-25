@@ -1,14 +1,27 @@
 import {createElementWithText} from './dom.js';
-import {fieldLabel, valueLabel} from './field-catalog.js';
+import {fieldLabel, noValueLabel, valueLabel} from './field-catalog.js';
 
 const noChoiceLabel = 'Choose…';
-const notRecordedLabel = '— not recorded';
 
 function optionElement(name, value, emptyLabel) {
   const option = createElementWithText('option', value === '' ? emptyLabel : valueLabel(name, value));
   option.value = String(value);
   return option;
 }
+
+// A whole number with so few possible values is picked, not typed.
+const longestNumberList = 150;
+
+function numberChoices({type, minimum, maximum, multipleOf = 1}) {
+  const isBounded = type === 'integer' && minimum !== undefined && maximum !== undefined;
+  const count = (maximum - minimum) / multipleOf + 1;
+  if (!isBounded || count > longestNumberList) return null;
+  return Array.from({length: count}, (_unused, index) => minimum + index * multipleOf);
+}
+
+// Whether a property is picked from the list its rule states.
+export const hasClosedList = propertyRule =>
+  Boolean(propertyRule.enum || propertyRule.isLevel || propertyRule.type === 'boolean' || numberChoices(propertyRule));
 
 // A new feature starts with no choice, so a default can never be recorded by accident. A source value outside the
 // rules stays selectable, so that opening its form does not change it. An optional value can be taken back.
@@ -18,7 +31,7 @@ function selectField(name, value, allowedValues, isRequired) {
   const hasEmptyOption = value === undefined || !isRequired;
   const currentValues = value === undefined ? [] : [value];
   const optionValues = new Set([...(hasEmptyOption ? [''] : []), ...currentValues, ...allowedValues]);
-  const emptyLabel = isRequired ? noChoiceLabel : notRecordedLabel;
+  const emptyLabel = isRequired ? noChoiceLabel : noValueLabel(name);
   select.append(...[...optionValues].map(optionValue => optionElement(name, optionValue, emptyLabel)));
   select.value = String(value ?? '');
   return select;
@@ -97,6 +110,8 @@ function fieldControl(name, value, propertyRule, levels, {controls, usualValues}
   if (propertyRule.enum) return selectField(name, value, propertyRule.enum, propertyRule.required);
   if (usualValues[name]?.length > 0) return usualValuesField(name, value, propertyRule, usualValues[name]);
   if (propertyRule.type === 'boolean') return booleanField(name, value, propertyRule.required);
+  const numbers = numberChoices(propertyRule);
+  if (numbers) return selectField(name, value, numbers, propertyRule.required);
   if (['integer', 'number'].includes(propertyRule.type)) return numberField(name, value, propertyRule);
   return textField(name, value, propertyRule);
 }

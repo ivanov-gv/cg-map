@@ -70,6 +70,11 @@ validates the result with the same rules as the importer. One Apply is one step,
 layer and is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a toast offers
 Undo. Importing a reviewed changeset is the one exception to "only the active layer", because it names its own files.
 
+A property whose rule lists its values is picked from a list, and so is a small range of whole numbers. A free one that
+usually says the same things, such as floors, road numbers or the streets around, offers those with Other…
+([usual-values.js](src/usual-values.js)). Names, contacts, house numbers and heights are typed. A test keeps every
+property in one of these groups.
+
 Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
 thin dashed ghost until Apply. Moving is a relative drag or swipe that starts anywhere, so nothing jumps to the contact
 point. In corner mode a small handle in the middle of a side adds a point. While drawing, the bar shows the length of

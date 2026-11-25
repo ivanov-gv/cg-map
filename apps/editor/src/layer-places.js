@@ -3,6 +3,7 @@ import {createElementWithText} from './dom.js';
 import {geometryAreaSquareMetres} from './geometry-measures.js';
 import {isInside} from './interior-point.js';
 import {addressText, buildingId} from './object-names.js';
+import {byFrequency} from './usual-values.js';
 
 const buildingsFile = 'buildings.geojson';
 const placesFile = 'places.geojson';
@@ -92,14 +93,8 @@ function renderWhere(container, {feature, context}) {
 
 // The kinds other places of the category have, most common first.
 function usualPlaceValues({properties}, context) {
-  const counts = new Map();
-  for (const {feature} of context.entriesOf(placesFile)) {
-    const {category, kind} = feature.properties;
-    if (properties.category === undefined || category === properties.category) {
-      counts.set(kind, (counts.get(kind) ?? 0) + 1);
-    }
-  }
-  const kinds = [...counts].sort((first, second) => second[1] - first[1]).map(([kind]) => kind);
+  const isOfCategory = ({feature}) => properties.category === undefined || feature.properties.category === properties.category;
+  const kinds = byFrequency(context.entriesOf(placesFile).filter(isOfCategory).map(({feature}) => feature.properties.kind));
   return {kind: kinds, cuisine: usualCuisines};
 }
 
