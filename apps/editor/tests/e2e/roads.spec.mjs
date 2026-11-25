@@ -1,5 +1,15 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {
+  applyEdit,
+  centreOn,
+  chooseLayer,
+  dragFromTo,
+  editCorners,
+  exportChangeset,
+  operationsOn,
+  startDrawing,
+  tapAt
+} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
@@ -50,16 +60,92 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
   ]);
 });
 
-test('the junction at the end of a road gets a traffic light and the road its access', async ({page}, testInfo) => {
+test('a road gets its access, and its ends open the junctions they are at', async ({page}, testInfo) => {
   await tapAt(page, [-3, 0]);
-  await page.locator('[name="motor_vehicle"]').fill('no');
+  await expect(page.locator('.end-row')).toHaveText([/A.*Dead end/s, /B.*Joins Side street/s]);
+  await page.locator('[name="motor_vehicle"]').selectOption('no');
+  await page.getByText('More', {exact: true}).click();
+  await page.locator('[name="smoothness"]').selectOption('very_bad');
   await page.locator('[name="kind"]').selectOption('pedestrian');
-  await page.getByLabel('Traffic light').check();
+  // An open edit is not lost to a look at the junction.
+  await page.getByRole('button', {name: 'Open the junction at B'}).click();
+  await expect(page.locator('#edit-problem')).toContainText('Apply or Cancel');
+  await applyEdit(page);
+  await tapAt(page, [-3, 0]);
+  await page.getByRole('button', {name: 'Open the junction at B'}).click();
+  await expect(page.locator('#selection-kind')).toHaveText('Junction');
+  await page.getByLabel('What stands here').selectOption('traffic_signals');
   await applyEdit(page);
   const {changeset} = await exportChangeset(page, testInfo);
   const [road] = operationsOn(changeset, 'roads.geojson');
   const [light] = operationsOn(changeset, 'road-nodes.geojson');
-  expect(road.after.properties).toMatchObject({kind: 'pedestrian', motor_vehicle: 'no'});
+  expect(road.after.properties).toMatchObject({kind: 'pedestrian', motor_vehicle: 'no', smoothness: 'very_bad'});
   expect(light.after.properties).toEqual({kind: 'traffic_signals'});
   expect(stepsOf(light.after.geometry.coordinates)).toEqual([6, 0]);
+});
+
+const statusesOnMap = page =>
+  page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+    return features.map(({properties}) => properties.status).sort();
+  });
+
+test('joints are shown, and a junction is opened, given a turn rule, disconnected and joined again', async ({page}, testInfo) => {
+  // Main and Side street meet at one end; their other ends and both of Far street are dead ends.
+  await centreOn(page, [0, 0], 17.5);
+  await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'deadEnd', 'deadEnd', 'deadEnd', 'joined']);
+  await centreOn(page, [5, 2]);
+  await tapAt(page, [6, 0]);
+  await expect(page.locator('#selection-title')).toHaveText('Main street × Side street');
+  await page.getByText('From Main street, west').click();
+  await page.getByLabel(/Left onto Side street/).uncheck();
+  await applyEdit(page);
+  await tapAt(page, [6, 0]);
+  await page.getByText('From Main street, west').click();
+  await expect(page.getByLabel(/Left onto Side street/)).not.toBeChecked();
+  const {changeset} = await exportChangeset(page, testInfo);
+  const [rule] = operationsOn(changeset, 'turn-restrictions.json');
+  expect(rule.after.properties).toMatchObject({restriction: 'no_left_turn', from: 30, to: 31});
+  // Both roads end at the junction that the rule names.
+  const nodes = operationsOn(changeset, 'roads.geojson').map(({after}) => after.properties.endNode ?? after.properties.startNode);
+  expect(nodes).toEqual([rule.after.properties.viaNodes[0], rule.after.properties.viaNodes[0]]);
+
+  await page.getByRole('button', {name: 'Close'}).last().click();
+  await tapAt(page, [6, 0]);
+  await page.getByRole('button', {name: 'Disconnect'}).last().click();
+  await expect.poll(() => statusesOnMap(page)).not.toContain('joined');
+  await page.locator('#toast-action').click();
+  await expect.poll(() => statusesOnMap(page)).toContain('joined');
+});
+
+test('a dragged point joins the road it is put on and takes joined roads along', async ({page}, testInfo) => {
+  await centreOn(page, [3, 2]);
+  await tapAt(page, [6, 3]);
+  await editCorners(page);
+  await dragFromTo(page, [6, 5], [2, 0.06]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+  await tapAt(page, [-1, 0]);
+  await editCorners(page);
+  await dragFromTo(page, [2, 0], [2, 1]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+  const {changeset} = await exportChangeset(page, testInfo);
+  const [side, main] = operationsOn(changeset, 'roads.geojson');
+  expect(main.after.geometry.coordinates.map(stepsOf)).toContainEqual([2, 1]);
+  expect(stepsOf(side.after.geometry.coordinates.at(-1))).toEqual([2, 1]);
+});
+
+test('one level is shown at a time, and roads under it are neither picked nor joined', async ({page}) => {
+  await tapAt(page, [-3, 0]);
+  await page.locator('[name="layer"]').evaluate(select => select.closest('details').setAttribute('open', ''));
+  await page.locator('[name="layer"]').selectOption('-1');
+  await applyEdit(page);
+  const picker = page.locator('#level-picker');
+  await expect(picker.getByRole('button')).toHaveText(['All', '0', '-1']);
+  await picker.getByRole('button', {name: 'Level 0'}).click();
+  await expect(picker.getByRole('button', {name: 'Level 0'})).toHaveAttribute('aria-pressed', 'true');
+  await picker.getByRole('button', {name: 'All levels'}).click();
+  await tapAt(page, [-3, 0]);
+  await expect(page.locator('#selection-title')).toHaveText('Main street');
 });

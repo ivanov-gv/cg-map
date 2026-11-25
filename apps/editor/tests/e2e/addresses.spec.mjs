@@ -54,6 +54,7 @@ test('a place is added with its hours and belongs to the building it is moved on
   await expect(page.locator('#inspector-extras')).toContainText('Stands on its own');
   await page.locator('[name="name"]').fill('New bakery');
   await page.locator('[name="category"]').selectOption('food');
+  await page.locator('[data-list-for="kind"]').selectOption({label: 'Other…'});
   await page.locator('[name="kind"]').fill('bakery');
   await page.locator('[name="visibilityLevel"]').selectOption('4');
   await page.getByRole('button', {name: 'Edit', exact: true}).click();

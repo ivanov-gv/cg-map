@@ -213,11 +213,12 @@ archive rebuild.
 
 ## Settlements and shared municipality edges
 
-The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
-from the reviewed PBF. Refresh them with a full extract or the named `--layers` groups. The editor corrects them with
-changesets, and a refresh keeps those corrections with `make -C data reapply-corrections`. The shared-edge construction
-and simplification rule are recorded in [decision 0028](../decisions/0028-shared-border-edges.md); the current gap
-partition rule is in [decision 0029](../decisions/0029-derived-unassigned-water-areas.md).
+The `settlements` and `borders` groups write `settlements.geojson`, `settlement-areas.geojson`, `border-edges.geojson`
+and `municipalities.geojson` from the reviewed PBF. Refresh them with a full extract or the named `--layers` groups. The
+editor corrects them with changesets, and a refresh keeps those corrections with `make -C data reapply-corrections`. The
+shared-edge construction and simplification rule are recorded in
+[decision 0028](../decisions/0028-shared-border-edges.md); the current gap partition rule is in
+[decision 0029](../decisions/0029-derived-unassigned-water-areas.md).
 
 ```sh
 python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers borders settlements \

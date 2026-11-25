@@ -86,11 +86,16 @@ export class HeadlessEditor {
     return entry;
   }
 
+  // What a command of the editor records as one step.
+  record(edits) {
+    this.session.recordEdits('layer', edits);
+  }
+
   // What Apply records. Returns why the editor refuses it, or null.
   apply(filename, key, feature, extras = {}) {
     const behavior = behaviorOf(filename);
     const before = this.session.workingFeature(filename, key);
-    const prepared = behavior.prepared(feature, this.context, {isNew: !before, key, filename});
+    const prepared = behavior.prepared(feature, this.context, {isNew: !before, key, filename, extras});
     const edit = {filename, key, feature: prepared, before, extras};
     const problem = behavior.problem(edit, this.context);
     if (problem) return problem;

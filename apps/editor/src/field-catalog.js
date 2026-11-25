@@ -57,7 +57,8 @@ const fieldLabels = {
   elevation: 'Height',
   ele: 'Elevation',
   natural: 'Type',
-  rank: 'Rank',
+  place: 'Type',
+  rank: 'Rank on the map',
   minzoom: 'Shown from zoom',
   side: 'Side of the road',
   stopId: 'Stop ID',
@@ -65,6 +66,8 @@ const fieldLabels = {
   network: 'Network',
   colour: 'Colour'
 };
+
+const accessLabels = {yes: 'Allowed', no: 'Not allowed', designated: 'Meant for it', use_sidepath: 'Only beside the road'};
 
 const valueLabels = {
   wheelchair: {yes: 'No steps or a ramp', limited: 'Partly', no: 'Steps'},
@@ -79,7 +82,18 @@ const valueLabels = {
     3: 'Neighbourhood view',
     4: 'Street level',
     5: 'Close up'
-  }
+  },
+  oneway: {yes: 'One way, as drawn', '-1': 'One way, against the drawing', no: 'Both ways', reversible: 'Changes by time'},
+  crossing: {uncontrolled: 'Marked, without lights', traffic_signals: 'With lights'},
+  maxspeed: {walk: 'Walking speed', none: 'No limit'},
+  layer: {0: '0 · on the ground'},
+  junction: {circular: 'Circular, without priority', roundabout: 'Roundabout'},
+  access: accessLabels,
+  motor_vehicle: accessLabels,
+  foot: accessLabels,
+  bicycle: accessLabels,
+  bridge: {yes: 'Bridge', no: 'No bridge'},
+  tunnel: {yes: 'Tunnel', no: 'No tunnel'}
 };
 
 const capitalized = text => text.charAt(0).toUpperCase() + text.slice(1);

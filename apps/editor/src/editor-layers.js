@@ -65,8 +65,8 @@ export const editorLayers = [
     id: 'settlements',
     group: 'Map',
     name: 'Settlements & borders',
-    summary: 'City names, municipalities, country',
-    files: ['settlements.geojson', 'border-edges.geojson', 'context-countries.geojson'],
+    summary: 'Towns and their areas, municipalities, country',
+    files: ['settlements.geojson', 'settlement-areas.geojson', 'border-edges.geojson', 'context-countries.geojson'],
     linkedFiles: ['municipalities.geojson', 'land.geojson'],
     // Borders need a big screen.
     phoneFiles: ['settlements.geojson'],

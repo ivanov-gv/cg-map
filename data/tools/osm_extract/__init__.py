@@ -19,11 +19,17 @@ class ExtractionState:
     buildings: dict = field(default_factory=dict)
     # Normalised street name to published roads as (entity ID, first node, last node).
     road_names: dict = field(default_factory=dict)
+    # What the published roads hold, for the road nodes and turn rules on them.
+    road_way_ids: set = field(default_factory=set)
+    road_node_ids: set = field(default_factory=set)
+    # The ends and lights of published roads, which are published with their node IDs.
+    identified_road_node_ids: set = field(default_factory=set)
     # Counts written beside the reviewed source provenance.
     building_counts: dict = field(default_factory=dict)
     municipality_areas: list = field(default_factory=list)
     municipality_sources: list = field(default_factory=list)
     municipality_features: list = field(default_factory=list)
+    settlement_features: list = field(default_factory=list)
 
 
 class Layer:

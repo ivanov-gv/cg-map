@@ -49,6 +49,7 @@ function inspectionLayers() {
   return [
     slopeLayer,
     lineLayer('editor-country-outlines', 'context-countries.geojson', '#aeac98', 1),
+    lineLayer('editor-settlement-areas', 'settlement-areas.geojson', '#a08a5f', 1.5, [6, 3]),
     lineLayer('editor-borders', 'border-edges.geojson', '#7d6a8f', 1.5, [4, 2]),
     lineLayer('editor-contours', 'contours.geojson', '#b59a72', 1),
     {

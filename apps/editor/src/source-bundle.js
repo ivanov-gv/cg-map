@@ -44,6 +44,7 @@ export const bundleFilesByVersion = {
     'ridges.geojson',
     'road-nodes.geojson',
     'roads.geojson',
+    'settlement-areas.geojson',
     'settlements.geojson',
     'slopes.geojson',
     'summits.geojson',

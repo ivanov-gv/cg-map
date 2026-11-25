@@ -1,10 +1,12 @@
 // Towns, and borders that are shared: both sides of a border change at once.
 import {createElementWithText} from './dom.js';
 import {formatArea, geometryAreaSquareMetres} from './geometry-measures.js';
+import {areaFacts} from './layer-green.js';
 import {isInside} from './interior-point.js';
 import {changedStretch, crossesItself, followingEdits} from './shared-shapes.js';
 
 const settlementsFile = 'settlements.geojson';
+const areasFile = 'settlement-areas.geojson';
 const bordersFile = 'border-edges.geojson';
 const municipalitiesFile = 'municipalities.geojson';
 const neighboursFile = 'context-countries.geojson';
@@ -24,11 +26,81 @@ function municipalityAt(coordinate, context) {
     .find(({feature}) => polygonsOf(feature.geometry).some(rings => isInside(coordinate, rings)))?.feature;
 }
 
+// The rank of every type of settlement, as the data pipeline derives it. Only its capital is above that.
+const rankOfPlace = place => (['city', 'town'].includes(place) ? place : 'village');
+
+function withTypeAndRank(properties) {
+  const placeOfRank = properties.rank === 'capital' ? 'city' : properties.rank;
+  const place = properties.place ?? placeOfRank;
+  return {...properties, place, rank: properties.rank ?? rankOfPlace(place)};
+}
+
+const settlementId = ({key, feature}) => feature.properties.entityId ?? key;
+
+function areaOf(entry, context) {
+  const id = settlementId(entry);
+  return context.entriesOf(areasFile).find(({feature}) => feature.properties.settlementEntityId === id);
+}
+
+function button(label, run) {
+  const element = createElementWithText('button', label);
+  element.type = 'button';
+  element.onclick = run;
+  return element;
+}
+
+// From a settlement to its area and back, with no edit lost on the way.
+function goTo(edit, run) {
+  if (edit.hasUnappliedEdit()) edit.showProblem('Apply or Cancel this edit first.');
+  else run();
+}
+
+function drawArea(edit) {
+  const {name, 'name:en': englishName} = edit.feature.properties;
+  const names = englishName === undefined ? {name} : {name, 'name:en': englishName};
+  edit.context.startNew({
+    label: `Area of ${name}`,
+    filename: areasFile,
+    shape: 'Polygon',
+    properties: {kind: 'settlement-area', ...names, settlementEntityId: settlementId(edit)}
+  });
+}
+
+function renderSettlementExtras(container, edit) {
+  const {context, isNew} = edit;
+  // An older bundle has no areas.
+  if (isNew || context.isPhone() || !context.rules.layers[areasFile]) return;
+  const area = areaOf(edit, context);
+  const run = area ? () => context.select(area) : () => drawArea(edit);
+  container.append(button(area ? 'Open its area' : 'Draw its area', () => goTo(edit, run)));
+}
+
+function renderAreaExtras(container, edit) {
+  const {feature, context} = edit;
+  const {settlementEntityId} = feature.properties;
+  const settlement = settlementEntityId && context.findEntity(settlementsFile, settlementEntityId);
+  if (settlement) {
+    const name = settlement.feature.properties.name;
+    container.append(button(`Open ${name}`, () => goTo(edit, () => context.select(settlement))));
+    return;
+  }
+  const note = createElementWithText('p', 'No settlement on the map belongs to this area.');
+  note.className = 'hint';
+  container.append(note);
+}
+
+// The area of a settlement goes with it.
+function settlementDeletion(entry, context) {
+  const area = areaOf(entry, context);
+  if (!area) return {message: '', edits: []};
+  return {message: 'Its area goes with it.', edits: [{filename: areasFile, key: area.key, after: null}]};
+}
+
 // A town says which municipality it is in, wherever it is put.
 function placedSettlement(feature, context, {key}) {
   const before = context.session.workingFeature(settlementsFile, key);
   const isMoved = JSON.stringify(before?.geometry) !== JSON.stringify(feature.geometry);
-  const properties = {...feature.properties, place: feature.properties.place ?? feature.properties.rank};
+  const properties = withTypeAndRank(feature.properties);
   const municipality = municipalityAt(feature.geometry.coordinates, context)?.properties['ISO3166-2'];
   if (municipality) properties.municipality = municipality;
   // Outside of every municipality, a moved town no longer belongs to the one it came from.
@@ -124,10 +196,17 @@ function neighbourEdits({feature}, context) {
 
 export const settlementBehaviors = {
   [settlementsFile]: {
-    kind: ({properties}) => `Settlement · ${properties.rank ?? 'new'}`,
-    sections: () => [{title: 'Town', fields: ['name', 'name:en', 'rank', 'minzoom']}],
+    kind: ({properties}) => `Settlement · ${properties.place ?? 'new'}`,
+    sections: () => [{title: 'Settlement', fields: ['name', 'name:en', 'place', 'rank', 'minzoom']}],
     prepared: placedSettlement,
-    problem: settlementProblem
+    problem: settlementProblem,
+    renderExtras: renderSettlementExtras,
+    deletion: settlementDeletion
+  },
+  [areasFile]: {
+    sections: () => [{title: 'Area', fields: ['name', 'name:en']}],
+    measures: areaFacts,
+    renderExtras: renderAreaExtras
   },
   [bordersFile]: {
     kind: feature => (isCountryBorder(feature) ? 'Border · country' : 'Border · municipality'),

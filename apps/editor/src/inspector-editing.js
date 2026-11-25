@@ -96,6 +96,12 @@ export class InspectorEditing {
     return this.#pointer;
   }
 
+  // The points of the open line that others share.
+  #joinedPoints() {
+    const {key, feature} = this.#transaction;
+    return this.#behavior.joinedPoints({key, feature}, this.#context.behaviorContext());
+  }
+
   #renderGeometry() {
     const {overlay, handles} = this.#context;
     const {feature, drawnPoints, selectedHandle} = this.#transaction;
@@ -107,8 +113,9 @@ export class InspectorEditing {
     const isReshaped = original && JSON.stringify(original.geometry) !== JSON.stringify(geometry);
     overlay.setGhost(isReshaped ? original.geometry : null);
     overlay.setTarget(this.#dragTarget()?.feature ?? null);
+    this.#context.showMarks(this.#isVertexTool || isDrawing(this.#transaction) ? [] : this.#behavior.marks(feature));
     if (isDrawing(this.#transaction)) handles.showPoints(drawnPoints);
-    else if (this.#isVertexTool) handles.show(geometry, selectedHandle);
+    else if (this.#isVertexTool) handles.show(geometry, selectedHandle, this.#joinedPoints());
     else handles.clear();
   }
 
@@ -271,6 +278,13 @@ export class InspectorEditing {
     this.#update(this.#transaction);
   }
 
+  // The kinds on offer follow the category. Rendering again must not drop a keyboard user out of the form.
+  #renderDependentLists(field) {
+    if (!this.#behavior.listsDependOn.includes(field.name)) return;
+    this.#setProperties({});
+    elementById('property-form').elements[field.name].focus();
+  }
+
   #renderForm() {
     const {levels} = this.#context;
     const {feature} = this.#transaction;
@@ -278,7 +292,7 @@ export class InspectorEditing {
     renderPropertyForm(elementById('property-form'), feature.properties, this.#rule.properties, levels, {
       sections: this.#behavior.sections(feature, editContext),
       controls: {...formControls(editContext), ...this.#behavior.controls(editContext)},
-      suggestions: this.#behavior.suggestions(feature, editContext.context)
+      usualValues: this.#behavior.usualValues(feature, editContext.context)
     });
     const extras = elementById('inspector-extras');
     extras.replaceChildren();
@@ -334,6 +348,7 @@ export class InspectorEditing {
     overlay.setGhost(null);
     overlay.setTarget(null);
     overlay.setPath([]);
+    this.#context.showMarks([]);
     overlay.setDrawing([], null);
     this.#context.onEditStateChanged();
   }
@@ -384,7 +399,8 @@ export class InspectorEditing {
     const edit = {filename: this.#filename, key, feature, extras, before: this.#workingBefore()};
     const behaviorContext = this.#context.behaviorContext();
     const companions = this.#behavior.companionEdits(edit, behaviorContext);
-    const edits = [{filename: this.#filename, key: edit.key, after: feature}, ...companions, ...extraEdits];
+    const ownEdits = this.#behavior.isDerived ? [] : [{filename: this.#filename, key: edit.key, after: feature}];
+    const edits = [...ownEdits, ...companions, ...extraEdits];
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
@@ -550,6 +566,7 @@ export class InspectorEditing {
     onClick('cancel-edit', () => this.discardEdit());
     onClick('delete-feature', () => this.#deleteFeature());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
+    elementById('property-form').onchange = event => this.#renderDependentLists(event.target);
     elementById('property-form').onsubmit = event => {
       event.preventDefault();
       this.applyEdit();
