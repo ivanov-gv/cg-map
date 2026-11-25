@@ -37,6 +37,7 @@ import {stopBehaviors} from './layer-stops.js';
 import {waterBehaviors} from './layer-water.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
+import {isMagnetOn} from './magnet-switch.js';
 import {hideModeBar, showModeBar} from './mode-bar.js';
 import {writeNote} from './note-dialog.js';
 import {ObjectList} from './object-list.js';
@@ -171,6 +172,7 @@ function behaviorContext() {
     map,
     layer: activeLayer,
     isPhone: () => phoneLayout.matches,
+    isMagnetOn,
     entriesOf,
     findEntity: (filename, entityId) =>
       behaviorContext()

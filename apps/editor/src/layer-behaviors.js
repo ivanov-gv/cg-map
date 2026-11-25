@@ -1,3 +1,4 @@
+import {isArea} from './area-magnet.js';
 import {kindLabel, objectName} from './object-names.js';
 
 // What a layer does differently with the objects of one file. Every hook is optional:
@@ -18,6 +19,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry,
 //                                             origins, draggedIndex}, the point of a line that is dragged or null
+//   hasMagnet(feature)                          whether its points go to what is close; areas do, unless a layer says more
+//   mayContainOthers                            whether an area inside another one is no overlap
 //   closesLines                                 a drawn line ends on its first point when that is tapped
 //   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
 //   prepared(feature, context, edit)            the feature as Apply will record it
@@ -60,6 +63,8 @@ const defaultBehavior = filename => ({
   marks: () => [],
   isDerived: false,
   isReshapable: () => true,
+  hasMagnet: feature => isArea(feature.geometry),
+  mayContainOthers: true,
   isViewOnly: () => false,
   usualValues: () => ({}),
   listsDependOn: [],

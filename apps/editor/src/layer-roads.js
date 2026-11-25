@@ -25,7 +25,7 @@ const endLabels = {start: 'A', end: 'B'};
 const roadName = ({properties}) => properties.name?.trim() || valueLabel('kind', properties.kind ?? 'road');
 
 const joinedRoadPoint = (coordinate, context, ignoredKeys) =>
-  joiningPoint(coordinate, joinableRoads(coordinate, context, ignoredKeys), context.map);
+  joiningPoint(coordinate, joinableRoads(coordinate, context, ignoredKeys), context);
 
 // Where the dragged point was when the edit was opened, or null when it was added since.
 function originOfPoint(index, {key, feature, origins}, context) {
@@ -292,6 +292,7 @@ export const roadBehaviors = {
     vertexTools: roadVertexTools,
     snappedPoint: ({lngLat}, context) => joinedRoadPoint(lngLat.toArray(), context),
     limitedGeometry: snappedWhileDragged,
+    hasMagnet: () => true,
     measures: lengthFacts,
     renderExtras: renderEnds,
     marks: endMarks,

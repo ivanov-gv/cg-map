@@ -9,6 +9,7 @@ const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
 const followingSource = 'editor-following';
+const overlapSource = 'editor-overlaps';
 const pathSource = 'editor-path';
 const sketchSource = 'editor-sketches';
 const placesFile = 'places.geojson';
@@ -220,6 +221,12 @@ function workLayers() {
       paint: {'line-color': stateColors.highlighted, 'line-width': 2, 'line-opacity': 0.75}
     },
     {
+      id: 'editor-overlap',
+      type: 'line',
+      source: overlapSource,
+      paint: {'line-color': stateColors.applied, 'line-width': 4}
+    },
+    {
       id: 'editor-following-point',
       type: 'circle',
       source: followingSource,
@@ -290,6 +297,7 @@ function installStateLayers(map) {
     deletionSource,
     targetSource,
     followingSource,
+    overlapSource,
     pathSource,
     sketchSource
   ]) {
@@ -341,6 +349,9 @@ export function createSourceOverlay(map) {
     // What is as it was: the open object, and what goes along with it.
     setGhosts: geometries =>
       setData(ghostSource, geometries.map(geometry => ({type: 'Feature', properties: {}, geometry}))),
+    // The neighbours that the open area lies over.
+    setOverlaps: features =>
+      setData(overlapSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
     setFollowing: features =>
       setData(followingSource, features.map(({geometry}) => ({type: 'Feature', properties: {}, geometry}))),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),

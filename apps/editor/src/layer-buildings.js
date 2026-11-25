@@ -299,6 +299,7 @@ export const buildingBehaviors = {
   [buildingsFile]: {
     title: feature => addressText(feature.properties) || feature.properties.name || 'No address',
     sections: buildingSections,
+    mayContainOthers: false,
     prepared: preparedBuilding,
     renderExtras: renderBelongings,
     companionEdits: (edit, context) => [...labelEdit(edit, context), ...belongingEdits(edit, context)],

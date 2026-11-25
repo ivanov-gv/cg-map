@@ -265,7 +265,7 @@ function junctionChanges({key, feature, extras}, context) {
 function joinedWhileDragged(geometry, {key}, context) {
   const ownKeys = new Set((jointOfEntry({key}, context)?.members ?? []).map(({entry}) => entry.key));
   const coordinate = geometry.coordinates;
-  const joined = joiningPoint(coordinate, joinableRoads(coordinate, context, ownKeys), context.map);
+  const joined = joiningPoint(coordinate, joinableRoads(coordinate, context, ownKeys), context);
   return joined ? {...geometry, coordinates: joined} : geometry;
 }
 
@@ -278,6 +278,7 @@ export const junctionBehaviors = {
     sections: () => [],
     renderExtras: renderJunction,
     limitedGeometry: joinedWhileDragged,
+    hasMagnet: () => true,
     problem: (edit, context) => junctionChanges(edit, context).problem,
     companionEdits: (edit, context) => junctionChanges(edit, context).edits,
     // A crossing is no point of any road yet, so there is nothing to move.

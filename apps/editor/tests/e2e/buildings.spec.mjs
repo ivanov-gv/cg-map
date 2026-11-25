@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
-import {openFixtureCity, stepsOf} from './fixture-city.mjs';
+import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {at, openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
   test.skip(testInfo.project.name === 'pages-mobile', 'The phone differences are in layers.spec.');
@@ -83,4 +83,48 @@ test('a moved building takes everything with it in one step, and its removal ask
   ]);
   const [place] = operationsOn(changeset, 'places.geojson');
   expect(place.after.properties.buildingEntityId).toBe('way/2');
+});
+
+const overlapCount = page =>
+  page.evaluate(async () => (await window.editorDebug.map.getSource('editor-overlaps').getData()).features.length);
+
+test('a building is drawn and moved against its neighbour, and an overlap is said and shown', async ({page}, testInfo) => {
+  await startDrawing(page, 'Draw building');
+  // Beside the house: the first corners go to its corner and its side.
+  for (const corner of [[-0.95, 1.05], [0.5, 1], [0.5, 2], [-0.96, 2]]) await tapAt(page, corner);
+  await page.locator('#mode-done').click();
+  await expect(page.locator('#edit-facts')).not.toContainText('Overlaps');
+  await applyEdit(page);
+
+  await tapAt(page, [0, 1.5]);
+  await editCorners(page);
+  await dragFromTo(page, [-1, 2], [-2, 2]);
+  await expect(page.locator('#mode-notice')).toHaveText('Overlaps Main street 14');
+  await expect.poll(() => overlapCount(page)).toBe(1);
+  await page.locator('#mode-done').click();
+  await expect(page.locator('#edit-facts')).toContainText('Overlaps Main street 14');
+  await page.locator('#cancel-edit').click();
+  await expect.poll(() => overlapCount(page)).toBe(0);
+
+  // With the magnet off a corner stays where it is put, and the switch is remembered.
+  await tapAt(page, [0, 1.5]);
+  await editCorners(page);
+  await page.getByRole('button', {name: 'Magnet on'}).click();
+  await expect(page.getByRole('button', {name: 'Magnet off'})).toHaveAttribute('aria-pressed', 'false');
+  await dragFromTo(page, [0.5, 2], [0.95, 2.95]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+  await tapAt(page, [2, 2]);
+  await page.locator('#tool-move').click();
+  await expect(page.getByRole('button', {name: 'Magnet off'})).toBeVisible();
+  await page.locator('#mode-done').click();
+  await page.locator('#cancel-edit').click();
+
+  const {changeset} = await exportChangeset(page, testInfo);
+  const [building] = operationsOn(changeset, 'buildings.geojson');
+  const corners = building.after.geometry.coordinates[0].map(stepsOf);
+  expect(corners[0]).toEqual([-1, 1]);
+  expect(corners[3]).toEqual([-1, 2]);
+  // Close to the corner of the other house, and not on it.
+  expect(building.after.geometry.coordinates[0][2]).not.toEqual(at(1, 3));
 });

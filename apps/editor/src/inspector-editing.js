@@ -1,4 +1,13 @@
 import {createElementWithText, elementById} from './dom.js';
+import {
+  areasAround,
+  isArea,
+  magneticallyMoved,
+  magneticPoint,
+  neighbouringAreas,
+  reachMetres
+} from './area-magnet.js';
+import {doOverlap} from './area-overlap.js';
 import {confirmDeletion} from './deletion-dialog.js';
 import {installDragGestures} from './drag-gestures.js';
 import {drawingHint, drawingMeasure} from './drawing-hints.js';
@@ -25,7 +34,10 @@ import {
   withTool,
   withTypedDetails
 } from './edit-transaction.js';
-import {FollowingPreview, followingShapes} from './following-preview.js';
+import {DragBudget} from './drag-budget.js';
+import {followingShapes} from './following-shapes.js';
+import {isMagnetOn, setMagnetOn} from './magnet-switch.js';
+import {isSameHandle, moveVertex, vertexHandles} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
@@ -57,8 +69,10 @@ export class InspectorEditing {
   #pointer = null;
   // The shape of the object when its edit was opened.
   #openedGeometry = null;
-  #following = new FollowingPreview();
+  #followingBudget = new DragBudget();
   #followingProblem = null;
+  #overlapBudget = new DragBudget();
+  #overlaps = [];
   // Counts the edits opened, to tell one from the next.
   #opening = 0;
 
@@ -100,8 +114,10 @@ export class InspectorEditing {
 
   // Where the next drawn point would go: under the fixed cross on a phone, under the pointer at the desk.
   #nextDrawnPoint() {
-    if (this.#context.isPhone()) return this.#context.map.getCenter().toArray();
-    return this.#pointer;
+    const {map} = this.#context;
+    if (!this.#context.isPhone()) return this.#pointer;
+    const lngLat = map.getCenter();
+    return this.#snappedPoint({lngLat, point: map.project(lngLat)}) ?? lngLat.toArray();
   }
 
   // The points of the open line that others share.
@@ -118,6 +134,7 @@ export class InspectorEditing {
     overlay.setSelection(canDrawSelection ? feature : null);
     overlay.setDrawing(drawnPoints, isDrawing(this.#transaction) ? this.#nextDrawnPoint() : null);
     this.#renderFollowing();
+    this.#renderOverlaps();
     overlay.setTarget(this.#dragTarget()?.feature ?? null);
     this.#context.showMarks(this.#isVertexTool || isDrawing(this.#transaction) ? [] : this.#behavior.marks(feature));
     if (isDrawing(this.#transaction)) handles.showPoints(drawnPoints);
@@ -160,10 +177,49 @@ export class InspectorEditing {
     const nothing = {problem: null, shapes: [], ghosts: []};
     const isDragging = Boolean(this.#transaction.gesture);
     const isReshaped = this.#isReshaped;
-    const following = isReshaped ? this.#following.of(() => this.#findFollowing(), isDragging) : nothing;
+    const find = () => this.#findFollowing();
+    const following = isReshaped ? this.#followingBudget.of(find, isDragging, nothing) : nothing;
     this.#followingProblem = following.problem;
     overlay.setFollowing(following.shapes);
     overlay.setGhosts([...(isReshaped ? [this.#openedGeometry] : []), ...following.ghosts.map(({geometry}) => geometry)]);
+  }
+
+  // The neighbours that the open area lies over and did not when it was opened.
+  #findOverlaps() {
+    const {key, feature} = this.#transaction;
+    const {mayContainOthers} = this.#behavior;
+    const own = {filename: this.#filename, key};
+    const lies = (geometry, other) => isArea(geometry) && doOverlap(geometry, other.feature.geometry, mayContainOthers);
+    return neighbouringAreas(feature.geometry, own, this.#context.behaviorContext()).filter(
+      other => lies(feature.geometry, other) && !lies(this.#openedGeometry, other)
+    );
+  }
+
+  #renderOverlaps() {
+    const {feature, isNew, gesture} = this.#transaction;
+    const canOverlap = isArea(feature.geometry) && this.#rule && (isNew || this.#isReshaped);
+    this.#overlaps = canOverlap ? this.#overlapBudget.of(() => this.#findOverlaps(), Boolean(gesture), []) : [];
+    this.#context.overlay.setOverlaps(this.#overlaps.map(({feature: neighbour}) => neighbour));
+  }
+
+  get #overlapText() {
+    if (this.#overlaps.length === 0) return null;
+    const titles = this.#overlaps.map(({feature}) => this.#behavior.title(feature, this.#context.behaviorContext()));
+    return `Overlaps ${[...new Set(titles)].slice(0, 3).join(', ')}`;
+  }
+
+  #magnetButton() {
+    const isOn = isMagnetOn();
+    const run = () => {
+      setMagnetOn(!isOn);
+      this.#update(this.#transaction);
+    };
+    return {id: 'mode-magnet', label: isOn ? 'Magnet on' : 'Magnet off', isPressed: isOn, run};
+  }
+
+  get #hasMagnet() {
+    const {tool, feature} = this.#transaction;
+    return Boolean(this.#rule) && (tool === editTools.drawPolygon || this.#behavior.hasMagnet(feature));
   }
 
   #drawingButtons() {
@@ -184,6 +240,7 @@ export class InspectorEditing {
         run: () => this.#update(afterUndoneDrawnPoint(this.#transaction))
       },
       ...(isPhone ? [addButton] : []),
+      ...(this.#hasMagnet ? [this.#magnetButton()] : []),
       {
         id: 'mode-done',
         label: 'Finish',
@@ -207,7 +264,8 @@ export class InspectorEditing {
 
   #reshapingButtons() {
     const done = {id: 'mode-done', label: 'Done', isPrimary: true, run: () => this.leaveMode()};
-    if (!this.#isVertexTool) return [done];
+    const magnet = this.#hasMagnet ? [this.#magnetButton()] : [];
+    if (!this.#isVertexTool) return [...magnet, done];
     const remove = {
       id: 'vertex-remove',
       label: 'Remove point',
@@ -215,7 +273,7 @@ export class InspectorEditing {
       run: () => this.#removeSelectedVertex()
     };
     const {feature, selectedHandle} = this.#transaction;
-    return [remove, ...this.#behavior.vertexTools(feature, selectedHandle, this.#editContext()), done];
+    return [remove, ...this.#behavior.vertexTools(feature, selectedHandle, this.#editContext()), ...magnet, done];
   }
 
   #renderModeBar() {
@@ -235,7 +293,7 @@ export class InspectorEditing {
     showModeBar({
       title: transaction.isNew ? elementById('selection-title').textContent : title,
       hint,
-      notice: this.#followingProblem,
+      notice: this.#followingProblem ?? this.#overlapText,
       buttons
     });
   }
@@ -273,7 +331,10 @@ export class InspectorEditing {
 
   #renderFacts() {
     const facts = this.#behavior.measures(this.#transaction.feature, this.#baseFeature);
-    elementById('edit-facts').replaceChildren(...facts.map(fact => createElementWithText('p', fact)));
+    const notice = createElementWithText('p', this.#overlapText ?? '');
+    notice.className = 'notice';
+    const notices = this.#overlapText ? [notice] : [];
+    elementById('edit-facts').replaceChildren(...facts.map(fact => createElementWithText('p', fact)), ...notices);
   }
 
   // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
@@ -371,8 +432,8 @@ export class InspectorEditing {
     elementById('apply-edit').textContent = this.#context.isResolving(this.#entry()) ? 'Apply and resolve' : applyLabel;
     elementById('leave-note').hidden = this.#transaction.isNew || this.#behavior.isDerived;
     this.#renderToolButtons();
-    this.#renderFacts();
     this.#renderGeometry();
+    this.#renderFacts();
     this.#renderModeBar();
     this.#context.onEditStateChanged();
   }
@@ -382,7 +443,8 @@ export class InspectorEditing {
     this.#filename = filename;
     this.#transaction = transaction;
     this.#openedGeometry = transaction.feature.geometry;
-    this.#following.forget();
+    this.#followingBudget.forget();
+    this.#overlapBudget.forget();
     this.#renderForm();
     this.#update(transaction);
     if (transaction.tool) this.#context.hideInspector();
@@ -413,6 +475,7 @@ export class InspectorEditing {
     overlay.setSelection(null);
     overlay.setGhosts([]);
     overlay.setFollowing([]);
+    overlay.setOverlaps([]);
     overlay.setTarget(null);
     overlay.setPath([]);
     this.#context.showMarks([]);
@@ -627,9 +690,32 @@ export class InspectorEditing {
     return true;
   }
 
+  // The place an area's corner goes to, or null.
+  #magneticCorner(coordinate) {
+    const own = {filename: this.#filename, key: this.#transaction.key};
+    const reach = reachMetres(coordinate, this.#context.map);
+    return magneticPoint(coordinate, areasAround(coordinate, own, this.#context.behaviorContext(), reach), reach);
+  }
+
+  // A dragged corner, or the whole area, put beside its neighbours.
+  #magnetised(transaction) {
+    const {feature, gesture, key} = transaction;
+    if (!isMagnetOn() || !isArea(feature.geometry)) return transaction;
+    const {handle} = gesture;
+    if (handle) {
+      const {coordinate} = vertexHandles(feature.geometry).find(other => isSameHandle(other, handle));
+      const target = this.#magneticCorner(coordinate);
+      return target ? withGeometry(transaction, moveVertex(feature.geometry, handle, target)) : transaction;
+    }
+    const reach = reachMetres(vertexHandles(feature.geometry)[0].coordinate, this.#context.map);
+    const own = {filename: this.#filename, key};
+    const neighbours = neighbouringAreas(feature.geometry, own, this.#context.behaviorContext(), reach);
+    return withGeometry(transaction, magneticallyMoved(feature.geometry, neighbours, reach));
+  }
+
   // A dragged point stops where the layer's rules say it must, such as at the next contour line.
   #draggedTransaction(transaction, coordinate) {
-    const moved = afterGestureMove(transaction, coordinate);
+    const moved = this.#magnetised(afterGestureMove(transaction, coordinate));
     const limit = this.#behavior.limitedGeometry;
     if (!limit) return moved;
     const behaviorContext = this.#context.behaviorContext();
@@ -660,7 +746,7 @@ export class InspectorEditing {
       this.#renderModeBar();
     };
     this.#context.map.on('mousemove', event => {
-      this.#pointer = this.#angledCoordinate(event);
+      this.#pointer = isDrawing(this.#transaction) ? this.#drawnCoordinate(event) : event.lngLat.toArray();
       renderWhileDrawing();
     });
     this.#context.map.on('move', () => {
@@ -723,7 +809,9 @@ export class InspectorEditing {
 
   // Where a layer says a point belongs, such as on the outline of a building, or null.
   #snappedPoint(event) {
-    return this.#behavior.snappedPoint?.(event, this.#context.behaviorContext(), this.#transaction.feature);
+    const snapped = this.#behavior.snappedPoint?.(event, this.#context.behaviorContext(), this.#transaction.feature);
+    if (snapped || this.#transaction.tool !== editTools.drawPolygon || !isMagnetOn()) return snapped;
+    return this.#magneticCorner(event.lngLat.toArray());
   }
 
   // Shift keeps right angles while drawing a building or any other shape. A layer can join a tap to what is there.

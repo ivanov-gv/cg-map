@@ -83,6 +83,12 @@ the bar shows the length of the side and the area; Shift keeps right angles, a c
 a double click ends a line. On a phone drawing uses a fixed cross: move the map under it, then Add. A second finger or
 losing the window restores the position from before that gesture.
 
+The magnet takes a dragged or drawn corner of an area to a corner of another object of its file close by, otherwise onto
+its side, and a moved area with its closest corner; the points of roads and waterways join others the same way. A switch
+in the bar turns it off and is remembered in this browser. What an edit newly overlaps is outlined in amber and named in
+the bar and in the inspector; it is not refused, because some sources do overlap ([area-magnet.js](src/area-magnet.js),
+[area-overlap.js](src/area-overlap.js)).
+
 Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
 confirms it. Marks wait in Changes under From the field and are never written to a source.
 
