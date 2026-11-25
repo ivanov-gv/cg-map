@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {browseStatus, deleteObject, layerButton, openObjects} from './workspace.mjs';
 
 const coordinate = [19.259, 42.441];
+const isPhone = testInfo => testInfo.project.name === 'pages-mobile';
 
 // A synthetic, hash-pinned bundle gives the real renderer exactly co-located POIs without changing reviewed data.
 async function openOverlappingPlaces(page, count = 2) {
@@ -126,21 +127,41 @@ test('large view lists keep every co-located object reachable on keyboard pages'
   await expect(page.locator('#selection-title')).toHaveText('Overlap 41');
 });
 
-test('list selection keeps original references after deletion and refreshes applied names', async ({page}) => {
+test('list selection keeps original references after deletion and refreshes applied names', {tag: '@phone'}, async ({
+  page
+}, testInfo) => {
   await openOverlappingPlaces(page);
   await chooseWithKeyboard(page, 1);
   await deleteObject(page);
-  await expect(page.locator('#status')).toContainText('objects');
-  await openObjects(page);
-  const remaining = page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true});
-  await expect(page.locator('#objects-list button')).toHaveCount(1);
-  await remaining.press('Enter');
-  await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  if (isPhone(testInfo)) {
+    // The phone only marks the first object, so both entries stay and the second one is still selectable.
+    await openObjects(page);
+    await expect(page.locator('#objects-list button')).toHaveText([
+      'Overlap 1 · Point · feature 0',
+      'Overlap 2 · Point · feature 1'
+    ]);
+    await page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true}).press('Enter');
+    await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  } else {
+    await expect(page.locator('#status')).toContainText('objects');
+    await openObjects(page);
+    const remaining = page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true});
+    await expect(page.locator('#objects-list button')).toHaveCount(1);
+    await remaining.press('Enter');
+    await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  }
   await page.locator('[name="name"]').fill('Renamed overlap');
   await page.locator('#apply-edit').click();
   await expect(page.locator('#status')).toContainText('objects');
   await openObjects(page);
-  await expect(page.locator('#objects-list button')).toHaveText(['Renamed overlap · Point · feature 1']);
+  if (isPhone(testInfo)) {
+    await expect(page.locator('#objects-list button')).toHaveText([
+      'Overlap 1 · Point · feature 0',
+      'Renamed overlap · Point · feature 1'
+    ]);
+  } else {
+    await expect(page.locator('#objects-list button')).toHaveText(['Renamed overlap · Point · feature 1']);
+  }
 });
 
 test('single-hit map selection preserves a utility panel on a wide window', {tag: '@phone'}, async ({page}) => {
