@@ -7,97 +7,69 @@ Run `make -C apps/editor dev` and open the printed local URL. The standalone art
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest
 place to install it from. It has no access control, and its data is already public.
 
-The build assembles the thirteen reviewed source GeoJSON files of bundle version 2 through data-owned tooling. The
-editor also accepts version 1, the original eight files, from older reviewed bundles, and version 3, every source file.
-It exports changesets of the version that the editing rules name. It verifies the manifest version, filenames, byte
-sizes, SHA-256 and feature counts before enabling source modes. Hashes bind revision-local indices; they are not
-invented upstream IDs. Selecting a feature reads full source geometry/properties, never simplified tiles. Unknown
-properties, provenance and any source feature ID are displayed unchanged. Source files are never written. Hashing needs
-a secure context, so anything but `localhost` must use HTTPS.
+The build assembles every reviewed source file of bundle version 3 through data-owned tooling. The editor also accepts
+versions 1 and 2 from older reviewed bundles. It verifies the manifest version, filenames, byte sizes, SHA-256 and
+feature counts before enabling source modes. Hashes bind revision-local indices; they are not invented upstream IDs.
+Selecting a feature reads full source geometry/properties, never simplified tiles. Unknown properties, provenance and
+any source feature ID are displayed unchanged. Source files are never written. Hashing needs a secure context, so
+anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
-The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an
-object to open a right-side inspector on wide windows or a half-height bottom sheet on narrow ones. Its heading and
-Apply / Cancel edge stay visible while the fields and collapsed source details scroll. Collapse (including the sheet
-handle) preserves the selection, typed values and geometry preview; a compact button names the selected object and
-reopens it with Enter or Space. Opening or replacing a utility panel also preserves the edit. The phone inspector
-follows the visual viewport so the active field and actions remain above the onscreen keyboard.
+The current-layer button also opens Layers. Select an object to open the inspector, on the right or as a bottom sheet.
+Its heading and Cancel / Apply stay visible while the fields scroll. Collapse keeps the selection, typed values and
+geometry preview; a compact button reopens it. Opening another panel keeps the edit too. The phone inspector follows the
+visual viewport so the active field and actions stay above the onscreen keyboard.
 
-Layers has exactly one switch per source file. Footprints and labels are independent; roads and paths share
-roads.geojson. Only one source file is selectable at once. The active file keeps normal map styles, names and category
-icons using its working features. Browse restores the reviewed release. Hollow green guides identify unchanged objects;
-amber guides identify applied changes. A blue outer outline marks selection independently. Tools can hide guides without
-closing the inspector or discarding an edit. Guides appear from zoom 15 and can reveal POIs below their public
-threshold; with guides off, only normally rendered objects can be selected, using public thresholds and label collision
-rules. Country outlines and bus stops remain read-only. In version 2 bundles, OSM entrance points are also read-only,
-inspectable in the source list and inspector.
+## Layers
 
-When a click or tap hits several objects, a named chooser lets you select each one. Objects in the toolbar lists visible
-objects in the current map view, including co-located POIs; use Tab and Enter or Space to select one. Names include
-geometry and a revision-bound feature key to distinguish duplicates. Large lists have Previous / Next pages. Moving the
-map refreshes the list, and Browse clears it. Selecting from either list preserves any unapplied edit until Apply or
-Cancel. Switching modes shows a loading status until the new source has rendered, and clicks wait for it. Opening
-Objects during loading keeps keyboard focus on its status until the first object is ready. Satellite is a separate
-viewing control.
+The ten layers are the wiki's ([UI 4.Editor](https://github.com/ivanov-gv/cg-map/wiki/UI---4.Editor)); their files are
+in [editor-layers.js](src/editor-layers.js). Exactly one is active. Its objects have a green outline, applied changes of
+every layer are amber, the picked object is red, an object marked in the field is dashed red with a cross. The others
+stay as context. Guides appear from zoom 15, or earlier on layers edited zoomed out, and can reveal POIs below their
+public threshold; with guides off in Tools, only normally rendered objects can be picked. Country, neighbour and sea
+shapes are drawn and never picked, because they follow from other objects.
 
-Paging bounds the list's DOM work, but collecting rendered hits and comparing their labels still covers the whole view.
-A wide view of buildings or roads can involve tens of thousands of hits; zoom in to reduce that work.
+When a tap hits several objects, a named chooser lets you pick one. Objects in view, in Tools, lists what is on screen,
+including co-located places and records without a place on the map; use Tab and Enter or Space. Selecting from a list
+keeps an unapplied edit until Apply or Cancel. Collecting rendered hits covers the whole view, so zoom in on dense
+layers.
 
 ## Editing
 
-`packages/contracts/editor-layers.json` says what each file allows:
+`packages/contracts/editor-layers.json` says what each file allows; what a layer adds to that is its behavior in
+[layer-behaviors.js](src/layer-behaviors.js) and the modules that register one. Nothing is recorded until Apply, which
+validates the result with the same rules as the importer. One Apply is one step, which can change several files of the
+layer and is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a toast offers
+Undo. Importing a reviewed changeset is the one exception to "only the active layer", because it names its own files.
 
-| Mode                                      | Edits                                                                |
-| ----------------------------------------- | -------------------------------------------------------------------- |
-| POIs                                      | Details, level, move, add, delete                                    |
-| Roads & paths                             | Name, kind, points, whole-line move, draw, delete                    |
-| Buildings                                 | Corners and whole-footprint move                                     |
-| Building labels                           | Existing addresses and position                                      |
-| Land, Water                               | Parks, water and rivers only: name and shape                         |
-| Settlements, Border edges, Municipalities | Read-only: rebuilt from OSM by the data pipeline                     |
-| Country outlines, Bus stops               | Read-only, with the reason shown; they have their own data workflows |
+Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
+thin dashed ghost until Apply. Moving is a relative drag or swipe that starts anywhere, so nothing jumps to the contact
+point. In corner mode a small handle in the middle of a side adds a point. While drawing, the bar shows the length of
+the side and the area; Shift keeps right angles, a click on the first corner closes a shape, a double click ends a line.
+On a phone drawing uses a fixed cross: move the map under it, then Add. A second finger or losing the window restores
+the position from before that gesture.
 
-Selecting a feature opens its form and tools. Nothing is recorded until Apply, which validates the result with the same
-rules as the importer. Every edit passes through one command path that can reach only the active file; importing a
-reviewed changeset is the one exception, because a changeset names its own files.
+Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
+confirms it. Marks wait in Changes under From the field and are never written to a source.
 
-Moving is a relative drag or one-finger swipe that starts anywhere on the map, so a feature never jumps to the contact
-point, and several drags adjust one preview. A corner or line point is tapped to select it, then moved the same way. A
-second finger or losing the window restores the position from before that gesture. A tap places a new point or adds a
-line point. Dragging a whole shape or a vertex pans nothing; with nothing to move, the map pans as usual.
-
-Cancel discards the open edit. Escape interrupts an active drag, restoring its start while keeping earlier adjustments;
-otherwise it dismisses the foremost surface — the layer switch dialog, then the inspector, then a utility panel — and
-returns focus to its opener. Apply is a keyboard-accessible button; Enter in a property field also applies the form.
-Apply, Cancel and Delete return keyboard focus to the status message.
-
-Switching modes, entering Browse, or toggling Preview with an unapplied edit (typed details or geometry) opens a dialog
-with three choices: **Apply** commits the edit and proceeds; if validation fails, the dialog closes and the inspector
-shows the problem. **Discard edit** clears the transaction and proceeds. **Keep editing** (or pressing Escape) closes
-the dialog and keeps the current mode and edit intact.
-
-Keyboard shortcuts work in the workspace: `Ctrl+Z` (undo) and `Ctrl+Shift+Z` or `Ctrl+Y` (redo). On macOS these use the
-`⌘` key. Shortcuts are ignored inside text inputs, textareas, and selects, and when undo/redo is disabled (Browse mode
-or an open edit). The Tools panel shows the current shortcuts. Any unapplied edit blocks undo, redo, adding a feature,
+Cancel discards the open edit. Escape interrupts a drag, then ends a move or corner mode, then closes the foremost
+surface and returns focus to its opener. Apply, Cancel and Delete return keyboard focus to the status message. Switching
+layers with an unapplied edit asks whether to apply it, discard it or keep editing. Keyboard shortcuts: `Ctrl+Z` undoes,
+`Ctrl+Shift+Z` or `Ctrl+Y` redoes (`⌘` on macOS), outside text fields. Any unapplied edit blocks undo, redo, adding,
 export, import and discarding.
 
-A footprint and its label never rewrite each other. If an edit leaves a label outside its footprint, the review panel
-names it and export stays disabled until it is corrected in its own mode.
+If an edit leaves an address outside its footprint, the review panel names it and export stays disabled until it is
+corrected.
 
 Pending changes are saved in this browser's localStorage after every change, and a failed save is shown as an error. A
 draft that cannot be resumed, because it was made on another version of a source or cannot be read, moves to its own
 storage slot, where autosave cannot overwrite it, until you download or discard it. If it cannot even be moved there, it
 stays in place and autosave stays off, with a visible error, until you do. Discarding asks first, then saves at once.
-Outside a mode the map shows the reviewed release, so a pending edit appears only in its own mode. Review and export
-stay available there. The Changes panel compares changed fields beside the change list on wide screens, and opens one
-change at a time on narrow screens. Export opens a dialog for the author and reason; import and discard are under
-Secondary actions.
+The Changes panel compares changed fields beside the change list on wide screens, and opens one change at a time on
+narrow screens. Export opens a dialog for the author and reason; import and discard are under Secondary actions.
 
-Preview all edits shows the map as a rebuild would publish it: every changed file's working features, drawn by the
-public map's own layers in place of the released ones. It starts from Browse and ends when you choose a mode or Browse.
-It is not an actual rebuild. Below street scale the tiles simplify geometry and drop minor roads, which the preview does
-not do, so it shows more detail there than the release will. Shared POI markers and their zoom bands are rebuilt from
-the working places, including new combinations of levels at one location.
+Changed files are drawn with the public map's own layers from their working features. This is not a rebuild: below
+street scale the tiles simplify geometry and drop minor roads, which the editor does not do.
 
 ### Larger datasets
 
@@ -119,11 +91,8 @@ measure a phone, or edits and export at these sizes.
 
 ### Limits
 
-- Not editable: building metadata other than addresses, adding an address to an unnumbered footprint, and adding or
-  deleting footprints or labels. These need a building identity contract that does not exist yet.
-- Parks and water can be reshaped and renamed, but not added or deleted: the contract allows only modifications there.
-- The preview is not a rebuild: see Preview all edits above. The importer says when tiles need one.
-- Corrections cannot follow a re-extract. References are bound to one snapshot, so an old changeset is refused.
+- Changed files are not a rebuild: see above. The importer says when tiles need one.
+- Routes have no identity of their own in the data, so a changeset that edits one needs the exact snapshot.
 
 ## Install on your devices
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {parseVisibilityConfig} from '@ivanov-gv/map-core';
-import {EditPreview, previewLayers} from '../src/edit-preview.js';
+import {WorkingMap, previewLayers} from '../src/working-map.js';
 
 const visibilityConfig = parseVisibilityConfig(
   JSON.parse(fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))))
@@ -65,13 +65,12 @@ test('a preview layer draws like the published one, from its own source', () => 
 
 test('a changed file is drawn from its working features below its hidden published layers, and comes back on hide', () => {
   const map = fakeMap();
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});
   const renamed = road('Renamed street', [
     [19.26, 42.44],
     [19.27, 42.44]
   ]);
   preview.show(new Map([['roads.geojson', [renamed]]]));
-  assert.equal(preview.isShown, true);
   assert.deepEqual(map.sources['edit-preview-roads.geojson'].data.features, [renamed]);
   assert.deepEqual(
     map.layers.map(({id}) => id),
@@ -81,7 +80,6 @@ test('a changed file is drawn from its working features below its hidden publish
   assert.equal(map.filters.get('buildings'), undefined, 'an unchanged file keeps its published layers');
 
   preview.hide();
-  assert.equal(preview.isShown, false);
   assert.deepEqual(
     map.layers.map(({id}) => id),
     ['minor-roads', 'road-labels', 'buildings']
@@ -93,7 +91,7 @@ test('a changed file is drawn from its working features below its hidden publish
 test('places and building labels are previewed through their own sources, and restored to the published data', () => {
   const map = fakeMap();
   const published = [place('node/1', 'Published cafe')];
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: published});
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: published});
   const label = {
     type: 'Feature',
     properties: {kind: 'building', 'addr:housenumber': '7'},
@@ -117,7 +115,7 @@ test('places and building labels are previewed through their own sources, and re
 
 test('a place the public map would refuse leaves the map untouched and the preview hidden', () => {
   const map = fakeMap();
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});
   const layersBefore = map.layers.map(({id}) => id);
   const unpublishable = place('node/2', 'Unpublishable');
   unpublishable.properties.visibilityLevel = 0;
@@ -126,7 +124,6 @@ test('a place the public map would refuse leaves the map untouched and the previ
     ['places.geojson', [unpublishable]]
   ]);
   assert.throws(() => preview.show(edits));
-  assert.equal(preview.isShown, false);
   assert.deepEqual(map.layers.map(({id}) => id), layersBefore);
   assert.deepEqual(map.filters.get('minor-roads'), minorRoads.filter);
   assert.equal(map.sources['edit-preview-roads.geojson'], undefined);
@@ -134,7 +131,7 @@ test('a place the public map would refuse leaves the map untouched and the previ
 
 test('showing again replaces the previous preview instead of drawing it twice', () => {
   const map = fakeMap();
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});
   const edited = new Map([['roads.geojson', [road('Once', [[19.26, 42.44], [19.27, 42.44]])]]]);
   preview.show(edited);
   preview.show(edited);
@@ -149,7 +146,7 @@ test('a new shared-place visibility band is rendered in public order and removed
   const first = place('node/1', 'Neighbourhood cafe');
   const second = place('node/2', 'Street cafe');
   second.properties.visibilityLevel = 4;
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});
   preview.show(new Map([['places.geojson', [first, second]]]));
   const names = map.getLayer('place-names-3-4');
   const icons = map.getLayer('place-icons-3-4');
@@ -167,12 +164,19 @@ test('a new shared-place visibility band is rendered in public order and removed
   assert.deepEqual(map.layers.map(layer => layer.id), ['minor-roads', 'road-labels', 'buildings']);
 });
 
-test('active cartography reuses the guide source and leaves it installed on hide', () => {
+test('files of the active layer share the guide source, each drawing only its own features, and others have their own', () => {
   const map = fakeMap();
   map.sources['editor-source'] = {data: {type: 'FeatureCollection', features: []}};
-  const preview = new EditPreview({map, basemapLayers, visibilityConfig, publishedPlaces: [], sharedSource: 'editor-source'});
-  preview.show(new Map([['buildings.geojson', []]]));
-  assert.equal(map.getLayer('edit-preview-buildings').source, 'editor-source');
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: [], sharedSource: 'editor-source'});
+  const edits = new Map([
+    ['buildings.geojson', []],
+    ['roads.geojson', []]
+  ]);
+  preview.show(edits, new Set(['buildings.geojson']));
+  const buildings = map.getLayer('edit-preview-buildings');
+  assert.equal(buildings.source, 'editor-source');
+  assert.deepEqual(buildings.filter, ['==', ['get', 'sourceFile'], 'buildings.geojson']);
+  assert.equal(map.getLayer('edit-preview-minor-roads').source, 'edit-preview-roads.geojson');
   assert.equal(map.sources['edit-preview-buildings.geojson'], undefined);
   preview.hide();
   assert.ok(map.sources['editor-source']);
