@@ -60,3 +60,12 @@ so relief corrections then appear in the replay report instead of being placed. 
 facts. Editor tests keep their contracts and data pins until the next releases of both packages. The road file grows by
 about a tenth, and the check refuses roads that end at one junction in different places. One OSM node has ways passing
 on two levels; the extractor names such nodes, and they stay unjoined.
+
+## Outcome (2026-11-25)
+
+The owner withdrew the no-add/delete limit above for canyon rims after trying UI 4.Editor, whose rule is that any object
+can be added or deleted. [#446](https://github.com/ivanov-gv/cg-map/issues/446) therefore allows a canyon rim to be
+added, changed or deleted; `entityVersion`, `lengthMetres` and identity stay importer-computed. The original limit still
+stands for border lines ([#429](https://github.com/ivanov-gv/cg-map/issues/429)) and ridges
+([#453](https://github.com/ivanov-gv/cg-map/issues/453)) until those issues decide otherwise. The height fact added with
+the rim is explained in [ADR 0038](0038-one-measured-canyon-rim-height.md).

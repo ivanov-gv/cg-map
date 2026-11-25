@@ -871,6 +871,11 @@ test('every relief collection satisfies its read-only domain contract', () => {
   assert.ok(rims.features.length > 0);
   assert.ok(rims.features.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
     .includes(`${feature.properties.river}:${feature.properties.bank}`)));
+  assert.ok(rims.features.some(feature => Number.isInteger(feature.properties.height)),
+    'derived rims carry a measured height');
+  assert.ok(rims.features.every(feature =>
+    feature.properties.height === undefined || Number.isInteger(feature.properties.height)
+  ), 'a rim height is one whole number of metres');
 });
 
 test('relief features carry facts only and build parameters live in provenance', () => {
@@ -884,6 +889,8 @@ test('relief features carry facts only and build parameters live in provenance',
   assert.equal(parameters.summitLinkDistanceMetres, 50);
   assert.equal(parameters.canyonRimJoinGapMetres, 60);
   assert.equal(parameters.canyonRimMinimumLengthMetres, 100);
+  assert.equal(parameters.canyonRimHeightStatistic, 'median of sampled bank rise');
+  assert.equal(parameters.canyonRimHeightRounding, 'nearest metre, halves upward');
   assert.equal(provenance.relief.retiredBuildParameters.radiusMetres, 400);
   for (const filename of reliefFiles) {
     for (const feature of readRelief(filename).features) {
@@ -922,7 +929,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
     'summits.geojson': [data => {data.features[0].properties.heightCheck = 'unknown';}, data => {data.features[0].properties.mismatch = !data.features[0].properties.mismatch;}, data => {data.features[0].properties.demElevation = 'high';}],
     'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}, data => {data.features[0].properties.greenKinds = ['park'];}],
     'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}, data => {data.features[0].properties.radiusMetres = 400;}],
-    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}]
+    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}, data => {data.features[0].properties.height = 12.5;}, data => {data.features[0].properties.height = -1;}, data => {data.features[0].properties.height = 2601;}]
   };
   for (const [filename, changes] of Object.entries(mutations)) {
     for (const change of changes) {
@@ -931,6 +938,18 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
       assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
   }
+});
+
+test('relief validation accepts a locally drawn rim with one measured height', () => {
+  const drawn = structuredClone(readRelief('canyon-rims.geojson').features[0]);
+  drawn.properties.entityId = 'local:00000000-0000-4000-8000-000000000001';
+  drawn.properties.entityVersion = `sha256:${'a'.repeat(64)}`;
+  drawn.properties.method = 'editor-drawn';
+  drawn.properties.height = 123;
+  delete drawn.properties.river;
+  delete drawn.properties.bank;
+  const collection = {type: 'FeatureCollection', entitySchemaVersion: 1, features: [drawn]};
+  assert.equal(validateRelief(collection, {label: 'canyon-rims.geojson', contractsDirectory}), 1);
 });
 
 // A protected area is only worth publishing with its name; the label layer relies on this check to skip none.

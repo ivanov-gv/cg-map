@@ -35,6 +35,8 @@ CANYON_SEARCH_DISTANCE_METRES = 60
 CANYON_SEARCH_STEP_METRES = 10
 CANYON_RIM_JOIN_GAP_METRES = 60
 CANYON_RIM_MINIMUM_LENGTH_METRES = 100
+# The published relief contract limits a rim wall to the height range of the covered terrain.
+CANYON_RIM_HEIGHT_MAX_METRES = 2600
 
 
 def contour_levels(minimum_height, maximum_height, interval=CONTOUR_INTERVAL_METRES):

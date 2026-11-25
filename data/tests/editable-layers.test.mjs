@@ -463,3 +463,38 @@ test('corrections are replayed over refreshed sources and conflicts are reported
   assert.equal(buildings[label.properties.footprintIndex].properties.entityId, newBuildingId);
   assert.equal(fs.readFileSync(ledgerPath, 'utf8'), ledger);
 });
+
+test('canyon rim corrections survive a refresh with their measured heights', testContext => {
+  const root = temporaryRoot(testContext);
+  const [changed, deleted] = readSource(root, 'canyon-rims.geojson').features;
+  const changedHeight = changed.properties.height === 200 ? 201 : 200;
+  const addedId = localId(9);
+  const builder = new ChangesetBuilder(root);
+  builder.change('canyon-rims.geojson', changed, feature => {
+    feature.properties.height = changedHeight;
+  });
+  builder.change('canyon-rims.geojson', deleted);
+  builder.add(
+    'canyon-rims.geojson',
+    addedId,
+    {method: 'editor-drawn', river: 'Ribnica', bank: 'right', height: 77},
+    {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
+  );
+  apply(root, builder.build());
+  const ledgerPath = sourcePath(root, 'editor-corrections.json');
+  const ledger = fs.readFileSync(ledgerPath, 'utf8');
+
+  fs.cpSync(path.join(repositoryRoot, 'data/sources'), path.join(root, 'data/sources'), {recursive: true});
+  fs.writeFileSync(ledgerPath, ledger);
+  reapplyCorrections(root, {now, contractsDirectory});
+
+  const written = readSource(root, 'canyon-rims.geojson').features;
+  const isSameEntity = (feature, original) => entityKey(feature.properties) === entityKey(original.properties);
+  assert.equal(written.find(feature => isSameEntity(feature, changed)).properties.height, changedHeight);
+  assert.ok(!written.some(feature => isSameEntity(feature, deleted)), 'a deleted rim stays deleted');
+  const added = written.find(({properties}) => properties.entityId === addedId);
+  assert.equal(added.properties.method, 'editor-drawn');
+  assert.equal(added.properties.height, 77);
+  assert.equal(added.properties.kind, 'canyon-rim');
+  assert.equal(typeof added.properties.lengthMetres, 'number');
+});

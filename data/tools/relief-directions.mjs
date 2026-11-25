@@ -72,6 +72,8 @@ export function reversedCanyonRims(canyonRims, water) {
     riverLines.set(feature.properties.name, lines);
   }
   return canyonRims.features.filter(rim => {
+    // A person-drawn edge has no guaranteed downstream direction; only derived rims promise the river on their right.
+    if (rim.properties.method === 'editor-drawn') return false;
     const lines = riverLines.get(rim.properties.river);
     if (!lines) return true;
     return !hasRiverOnRight(rim, lines);

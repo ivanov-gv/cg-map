@@ -12,7 +12,7 @@ water file has 1,122 polygons (including one derived ocean polygon) and 673 wate
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,562,423
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,565,406
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -155,12 +155,13 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 
 ## Relief
 
-`contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived,
-read-only vectors. See [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md).
-`make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the
-reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and are
-not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are recorded
-in `sources/provenance.json`.
+`contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived vectors
+rebuilt from pinned inputs; [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md) describes the build,
+and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. Canyon rims can now be
+added, changed or deleted, with importer-computed identity and length. `make -C data build-relief` rebuilds them from
+the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The
+raster tiles, PBF and full report are external build artifacts and are not committed; their checksums, the DEM
+EULA/attribution, and all output counts, bytes and SHA-256 values are recorded in `sources/provenance.json`.
 
 The current build has 5,411 Montenegro summits (4,541 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
 levels, 152 slope polygons, 28 ridge lines, and 46 canyon-rim segments across the four river banks. The full report is
@@ -175,14 +176,18 @@ green areas; pieces under 100 m are dropped. `summit` and `summitName` appear on
 that summit, and the retired 400 m search radius stays in the relief provenance block as build lineage. Canyon rims keep
 only banks rising at least 8 m above the river surface within 60 m of the channel, join one bank across gaps under 60 m,
 then drop segments under 100 m; each remaining segment is a separate `LineString` with numbered `entityPart` values on
-one derived river-bank identity. River banks are named relative to the DEM-oriented downstream centreline. The slope
-builder reads the single `GREEN_KINDS` constant in `data/tools/relief/derivations.py`, aligned with the land-kind enum.
-The nine configured kinds are `park`, `garden`, `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and
-`playground`; eight occur in the current `land.geojson` (`garden` is absent). Green kinds, discovered kinds, minimum
-slope area, layer sources and the ridge/rim thresholds are recorded under `relief` in `sources/provenance.json`; relief
-features carry object facts only. Derived contour, slope, ridge and rim IDs are deterministic for the pinned inputs but
-are not stable across a DEM or green-area change. See [relief sources](../docs/runbooks/data.md#relief-sources) and
-[data licensing](../docs/map-data/data-license.md).
+one derived river-bank identity. Each finished rim publishes one `height`: the median of its bank-rise samples rounded
+to the nearest whole metre with halves upward. An OSM cliff takes that height only from DEM samples measured beside that
+cliff part, not from a distant rise elsewhere on a joined bank; an unmeasured rim is drawn as its line only. The
+statistic, rounding and river-bank thresholds are in `relief` in `sources/provenance.json`; allowed values belong to
+`relief.schema.json` ([ADR 0038](../docs/decisions/0038-one-measured-canyon-rim-height.md)). River banks are named
+relative to the DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
+`data/tools/relief/derivations.py`, aligned with the land-kind enum. The nine configured kinds are `park`, `garden`,
+`woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground`; eight occur in the current `land.geojson`
+(`garden` is absent). Green kinds, discovered kinds, minimum slope area, layer sources and the ridge/rim thresholds are
+recorded under `relief` in `sources/provenance.json`; relief features carry object facts only. Derived contour, slope,
+ridge and rim IDs are deterministic for the pinned inputs but are not stable across a DEM or green-area change. See
+[relief sources](../docs/runbooks/data.md#relief-sources) and [data licensing](../docs/map-data/data-license.md).
 
 ## Final Epic #322 source counts
 
@@ -209,14 +214,14 @@ snapshot hashes remain in their own provenance files.
 | `summits.geojson`            | 5,411 peaks                                  | 2,030,185  |
 | `slopes.geojson`             | 186 polygons                                 | 456,808    |
 | `ridges.geojson`             | 31 lines                                     | 19,666     |
-| `canyon-rims.geojson`        | 50 segments                                  | 44,838     |
+| `canyon-rims.geojson`        | 50 segments                                  | 45,434     |
 | `protected-areas.geojson`    | 4 named protected areas                      | 39,710     |
 | `transport-stops.geojson`    | 719 stops                                    | 219,913    |
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-ec969666e13c3146.pmtiles`, 23,562,423 bytes with SHA-256
-`ec969666e13c31468d73cb3adc350820e0ac91d191ce2f78e216943b328a6338`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-db7cb4f4d652ec30.pmtiles`, 23,565,406 bytes with SHA-256
+`db7cb4f4d652ec303b06fd888d7cbbd459496f233ead1846cbcb047fad921eb3`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,

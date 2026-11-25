@@ -252,18 +252,21 @@ function lineLengthMetres(line) {
     .reduce((length, end, index) => length + Math.hypot(end[0] - points[index][0], end[1] - points[index][1]), 0);
 }
 
-const measureByFile = {
+const derivedFactsByFile = {
   'slopes.geojson': ({coordinates}) => ({areaSquareMetres: Math.round(polygonAreaSquareMetres(coordinates))}),
-  'canyon-rims.geojson': ({coordinates}) => ({lengthMetres: Math.round(lineLengthMetres(coordinates))})
+  'canyon-rims.geojson': ({coordinates}) => ({
+    kind: 'canyon-rim',
+    lengthMetres: Math.round(lineLengthMetres(coordinates))
+  })
 };
 
-// A changed slope or rim states its new measure.
-export function featuresWithMeasures(filename, collection, changedKeys) {
-  const measure = measureByFile[filename];
-  if (!measure) return collection;
+// A changed slope or rim states its new measure; a new rim takes its kind from the file it was drawn in.
+export function featuresWithDerivedFacts(filename, collection, changedKeys) {
+  const derive = derivedFactsByFile[filename];
+  if (!derive) return collection;
   const features = collection.features.map(feature => {
     if (!changedKeys.has(entityKey(feature.properties))) return feature;
-    return {...feature, properties: {...feature.properties, ...measure(feature.geometry)}};
+    return {...feature, properties: {...feature.properties, ...derive(feature.geometry)}};
   });
   return {...collection, features};
 }
@@ -299,7 +302,7 @@ export function withDerivedFacts(next, previous, changedKeysByFile, read) {
   for (const [filename, collection] of next) {
     const changedKeys = changedKeysByFile.get(filename);
     const ordered = featuresWithRingOrder(filename, collection, changedKeys);
-    derived.set(filename, featuresWithMeasures(filename, ordered, changedKeys));
+    derived.set(filename, featuresWithDerivedFacts(filename, ordered, changedKeys));
   }
   const current = filename => derived.get(filename) ?? read(filename);
   const reviewed = filename => previous.get(filename) ?? read(filename);

@@ -100,11 +100,17 @@
     "canyonRim": {
       "if": {"properties": {"kind": {"const": "canyon-rim"}}, "required": ["kind"]},
       "then": {
-        "required": ["river", "bank", "method", "lengthMetres"],
+        "required": ["method", "lengthMetres"],
         "properties": {
           "river": {"enum": ["Morača", "Ribnica"]},
           "bank": {"enum": ["left", "right"]},
-          "method": {"enum": ["osm-cliff", "dem-canyon-bank"]},
+          "method": {"enum": ["osm-cliff", "dem-canyon-bank", "editor-drawn"]},
+          "height": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2600,
+            "description": "One measured bank rise in whole metres for this rim. Omit it when no sample measures a bank; the archive then publishes only the rim line."
+          },
           "lengthMetres": {"type": "number", "minimum": 0},
           "bankDefinition": false,
           "cliffWays": false,
@@ -115,7 +121,14 @@
           "minimumBankRiseMetres": false,
           "searchDistanceMetres": false,
           "searchStepMetres": false
-        }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"method": {"const": "editor-drawn"}}, "required": ["method"]},
+            "then": {"required": []},
+            "else": {"required": ["river", "bank"]}
+          }
+        ]
       }
     }
   }

@@ -182,6 +182,8 @@ def _updated_provenance(provenance, outputs, report_bytes):
             'canyonRimSearchStepMetres': report['canyonRims']['searchStepMetres'],
             'canyonRimJoinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
             'canyonRimMinimumLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
+            'canyonRimHeightStatistic': report['canyonRims']['heightStatistic'],
+            'canyonRimHeightRounding': report['canyonRims']['heightRounding'],
         },
         'retiredBuildParameters': {
             'radiusMetres': RETIRED_RIDGE_RADIUS_METRES,

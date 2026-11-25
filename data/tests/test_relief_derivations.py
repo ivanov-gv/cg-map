@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from shapely.geometry import box, mapping
+from shapely.geometry import Point, box, mapping
 
 TOOLS_PATH = Path(os.environ.get(
     'RELIEF_TOOLS_PATH', Path(__file__).resolve().parents[1] / 'tools'
@@ -90,6 +90,53 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertIsNone(derivations._parse_elevation('1,23'))
         self.assertIsNone(derivations._parse_elevation('12m34'))
         self.assertIsNone(derivations._parse_elevation(''))
+
+    def test_a_rim_height_is_the_median_sample_rounded_to_whole_metres(self):
+        rises = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+        latitude_metres = 111_320
+        samples = [
+            (index * 40, Point(0.0, 5.0 + index * 0.00036), rise)
+            for index, rise in enumerate(rises)
+        ]
+        bank_samples = [(point, rise) for _, point, rise in samples]
+        segments = derivations._segments_from_samples(samples, 60)
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0][1], bank_samples)
+
+        cleaned = derivations._clean_rim_segments(segments, latitude_metres, 80_000)
+        self.assertEqual(len(cleaned), 1)
+        self.assertEqual(cleaned[0][1], bank_samples)
+        self.assertEqual(
+            derivations._rim_height([rise for _, rise in cleaned[0][1]]), 35
+        )
+
+        self.assertEqual(derivations._rim_height([10.0, 20.0]), 15)
+        self.assertIsNone(derivations._rim_height([]))
+        self.assertIsNone(derivations._rim_height([2601.0]))
+
+    def test_an_osm_cliff_takes_height_only_from_nearby_bank_samples(self):
+        part = derivations.LineString([(0.0, 5.0001), (0.002, 5.0001)])
+        cliff = {'entityId': 'way/7', 'entityVersion': 3, 'coordinates': list(part.coords)}
+        latitude_metres = 111_320
+        bank = derivations.LineString([(0.0, 5.0002), (0.02, 5.0002)])
+        nearby = [
+            (Point(0.00005, 5.0002), 10.0),
+            (Point(0.00015, 5.0002), 10.0),
+        ]
+        distant = [
+            (Point(0.01, 5.0002), 100.0),
+            (Point(0.012, 5.0002), 100.0),
+            (Point(0.014, 5.0002), 100.0),
+        ]
+        def properties_for(segments):
+            features = derivations._cliff_rim_features(
+                [(part, cliff)], 'Ribnica', 'left', latitude_metres, 80_000, segments
+            )
+            return features[0]['properties']
+
+        self.assertNotIn('height', properties_for(()))
+        self.assertNotIn('height', properties_for([(bank, distant)]))
+        self.assertEqual(properties_for([(bank, nearby + distant)])['height'], 10)
 
     def test_contours_run_with_uphill_on_their_left(self):
         longitudes = np.linspace(19.0, 19.01, 41)

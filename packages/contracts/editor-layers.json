@@ -379,9 +379,14 @@
       }
     },
     "canyon-rims.geojson": {
-      "operations": ["modify", "delete"],
+      "operations": ["add", "modify", "delete"],
       "geometries": ["LineString"],
-      "properties": {}
+      "properties": {
+        "method": {"requiredOnAdd": true, "addOnly": true, "enum": ["editor-drawn"]},
+        "river": {"addOnly": true, "enum": ["Morača", "Ribnica"]},
+        "bank": {"addOnly": true, "enum": ["left", "right"]},
+        "height": {"type": "integer", "minimum": 0, "maximum": 2600}
+      }
     },
     "transit-routes.json": {
       "operations": ["add", "modify", "delete"],

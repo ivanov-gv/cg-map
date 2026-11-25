@@ -51,25 +51,32 @@ Slopes are one `Polygon` per connected light class inside the reviewed green are
 between adjacent sunlit and shaded slope polygons: one simplified, connected `LineString` per boundary, dropping pieces
 under 100 m. A summit is linked through `summit`/`summitName` only when the final ridge passes within 50 m of it; an
 unlinked ridge has no summit fields. Canyon rims are one `LineString` per segment with numbered `entityPart` values on
-one derived identity; gaps under 60 m on one bank are joined before parts under 100 m are dropped. Every rim runs with
-the river on its right, OSM cliffs included: the nearest river line decides, because a style offsets the canyon wall
-from the rim toward the water. Derived IDs are deterministic for the pinned inputs but are not stable across a DEM or
-green-area change.
+one derived identity; gaps under 60 m on one bank are joined before parts under 100 m are dropped. Every derived rim
+runs with the river on its right, OSM cliffs included: the nearest river line decides, because a style offsets the
+canyon wall from the rim toward the water. A rim drawn in the editor states `method: editor-drawn` and is not judged for
+direction; it may name its river and bank, or leave them unknown. Derived IDs are deterministic for the pinned inputs
+but are not stable across a DEM or green-area change.
 
 Canyon rims keep only samples where the bank rises at least 8 m above the river surface within 60 m of the channel
 (`CANYON_BANK_RISE_METRES` and `CANYON_SEARCH_DISTANCE_METRES` in `data/tools/relief/terrain.py`). The thresholds
 exclude ordinary shallow banks; a 30 m DEM cannot reliably separate smaller rises from bank roughness. The join and
 minimum-length constants in the same module exist because a 60 m gap is usually one bad pixel or small bend, while a
-sub-100 m line after joining reads as speckle. Slope aspect and flat-ground rules live in that module too, with unit
-tests run by plain `python3`. Green kinds come from the single `GREEN_KINDS` constant in
-`data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
+sub-100 m line after joining reads as speckle. Each finished rim publishes the median of its samples as one whole-metre
+`height`, rounded with halves upward; an OSM cliff takes that value only from DEM samples measured beside that cliff
+part, not from a distant rise elsewhere on a joined bank, and otherwise carries no height. A new rim states
+`method: editor-drawn`; the build's upstream methods are identity and cannot be added. The statistic and rounding, slope
+aspect and flat-ground rules live in the relief tools and are described by
+[ADR 0038](../decisions/0038-one-measured-canyon-rim-height.md). Green kinds come from the single `GREEN_KINDS` constant
+in `data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
 nine configured kinds occur in the current `land.geojson` (`garden` is absent). Green kinds, minimum slope area, the
-retired ridge radius, layer sources and the ridge/rim thresholds are recorded in the `relief` block of
-`data/sources/provenance.json`; features carry object facts only.
+retired ridge radius, layer sources, the ridge/rim thresholds and the height statistic are recorded in the `relief`
+block of `data/sources/provenance.json`; features carry object facts only. The contract owns the allowed height range.
 
-Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the bundle to the versioned exact file set in
-`editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must not change browser editing
-tests. See [data licensing](../map-data/data-license.md) for the required Copernicus attribution.
+Relief files are edited under their own modes; canyon rims now allow add, change and delete
+([ADR 0037](../decisions/0037-every-layer-editable.md) outcome). `data/tools/editor-bundle.mjs` filters the bundle to
+the versioned exact file set in `editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must
+not change browser editing tests. See [data licensing](../map-data/data-license.md) for the required Copernicus
+attribution.
 
 ## Archive layers
 
@@ -92,7 +99,7 @@ already shows.
 | contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
 | slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
 | ridges            | `ridges.geojson`                                    | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
-| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`                                                                                                               |
+| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`, `height`                                                                                                     |
 | summits           | `summits.geojson`                                   | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
 | protected_areas   | `protected-areas.geojson`                           | 10–17                                         | `kind`, `name`, `name:en`                                                                                                     |
 | green_area_labels | `land.geojson`, `protected-areas.geojson` (derived) | 13–17                                         | `name`, `name:en`                                                                                                             |
@@ -112,6 +119,11 @@ Change a source in this table, or a field or zoom rule, and rebuild the archive 
 reports encoded bytes per layer and zoom band; if the release exceeds 45 MB, raise the relevant minimum zoom or simplify
 that layer rather than dropping its metadata. Archive acceptance checks the zooms and fields against the same definition
 in `tests/integration/archive-layers.test.mjs`.
+
+A rebuild writes a new content-hash archive and `data/artifacts/release.json`. Review `.build/tiles/layer-stats.json`
+and that release file, copy their generated bytes, tile count, file name and SHA-256 into the `archive` block of
+`data/sources/provenance.json`, and remove the superseded `.pmtiles` from `data/artifacts` in the same change. Never
+hand-edit generated byte counts or hashes. `make -C data check` compares the reviewed archive with those facts.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
 an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
