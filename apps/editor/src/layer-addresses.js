@@ -3,15 +3,13 @@
 import {createElementWithText} from './dom.js';
 import {distanceMetres} from './geometry-measures.js';
 import {interiorPoint, isInside} from './interior-point.js';
-import {addressText} from './object-names.js';
+import {addressText, buildingId} from './object-names.js';
 
 const buildingsFile = 'buildings.geojson';
 const labelsFile = 'building-labels.geojson';
 const addressNames = ['addr:housenumber', 'addr:street'];
 // Facts of a label that come from the map of entrances, so it cannot simply be given to another building.
 const locatedFactNames = ['entrances', 'building_number', 'lamela'];
-
-const buildingId = ({key, feature}) => feature.properties.entityId ?? key;
 
 export function buildingOfLabel({properties}, context) {
   if (properties.buildingEntityId !== undefined) return context.findEntity(buildingsFile, properties.buildingEntityId);

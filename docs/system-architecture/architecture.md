@@ -200,7 +200,8 @@ hosted endpoint and deployment identity are recorded with the service. Live data
 
 apps/core-demo and apps/editor build their own artifacts, dist/core-demo and dist/editor. Pages publishes all three
 apps, each under its own path. [source editor](../../apps/editor/README.md) verifies a data-owned hash-pinned source
-bundle and exposes one editing mode per source GeoJSON. It never writes sources: it exports changesets, which the
+bundle and edits it by layers, each with the source files that belong together
+([ADR 0038](../decisions/0038-editor-layers-span-files.md)). It never writes sources: it exports changesets, which the
 data-owned importer applies. It installs on the owner's devices from a local HTTPS server and then runs offline, keeping
 its map archive whole in a cache of its own and answering range reads from that copy. Both consume the
 [map-core contract](../../packages/map-core/README.md), with local assets and relative URLs.

@@ -83,7 +83,6 @@ export async function importChangeset(changeset, session, sources, rules, levels
   const fieldItems = changeset.fieldItems ?? [];
   const hasContent = Array.isArray(operations) && operations.length + fieldItems.length > 0;
   requireImportable(hasContent, 'no operations');
-  requireImportable(!session.hasChanges(), 'export or discard the current changes first');
   const boundFiles = new Set(
     operations
       .filter(({reference}) => changeset.version === 1 || reference?.featureIndex !== undefined)
@@ -102,6 +101,12 @@ export async function importChangeset(changeset, session, sources, rules, levels
   const keys = operations.map(operation => sessionKey(operation, entityIndexByFile.get(operation.filename)));
   const targets = operations.map(({filename}, index) => `${filename}:${keys[index]}`);
   requireImportable(new Set(targets).size === targets.length, 'two operations target the same feature');
+  // Work of several devices can come together as long as no object was changed on two of them.
+  const touched = operations.find(({filename}, index) => session.isChanged(filename, keys[index]));
+  requireImportable(
+    !touched,
+    `an object of ${touched?.filename} was changed here too; export or discard the current changes first`
+  );
   for (const [index, operation] of operations.entries()) {
     await checkOperation(operation, keys[index], sources, rules, levels);
   }

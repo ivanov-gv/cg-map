@@ -123,7 +123,8 @@ function renderSummitExtras(container, {feature, context}) {
   note.className = 'hint';
   container.append(note);
   if (!context.isPhone()) return;
-  const phoneNote = createElementWithText('p', 'Phone height is ±10 m at best, and some phones count about 40 m higher here. Use it only where the map has none.');
+  const warning = 'Phone height is ±10 m at best, and some phones count about 40 m higher here.';
+  const phoneNote = createElementWithText('p', `${warning} Use it only where the map has none.`);
   phoneNote.className = 'hint';
   container.append(phoneNote);
 }

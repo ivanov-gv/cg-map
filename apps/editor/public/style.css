@@ -173,6 +173,7 @@ select {
 #update-app,
 #export-changeset,
 #discard-changes,
+#leave-note,
 #delete-feature {
   margin-bottom: 10px;
   width: 100%;
@@ -448,6 +449,7 @@ select {
 #layer-switch-dialog,
 #delete-dialog,
 #street-dialog,
+#note-dialog,
 #hours-dialog {
   position: fixed;
   top: 50%;
@@ -465,6 +467,7 @@ select {
 #layer-switch-dialog::backdrop,
 #delete-dialog::backdrop,
 #street-dialog::backdrop,
+#note-dialog::backdrop,
 #hours-dialog::backdrop {
   background: #0006;
 }
@@ -1226,6 +1229,49 @@ body:has(.utility-panel:not([hidden])) #level-picker {
 }
 .route-turn span {
   color: var(--muted);
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  color: var(--green);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.field-item-sketch strong,
+.field-item-note strong {
+  color: #7a4fd0;
+}
+#resolve-bar {
+  position: absolute;
+  z-index: 2;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(720px, 60vw);
+  padding: 10px 14px;
+  transform: translateX(-50%);
+  background: white;
+  border-left: 4px solid #7a4fd0;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px #0003;
+}
+#resolve-bar p,
+#resolve-bar .button-row {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  #resolve-bar {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
+  }
 }
 #inspector-extras > button {
   width: 100%;

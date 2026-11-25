@@ -35,7 +35,8 @@ export function labelJoinProblems(session) {
     const otherLabelKey = labelKeyByFootprint.get(footprintKey);
     if (footprintKey !== null) labelKeyByFootprint.set(footprintKey, key);
     if (otherLabelKey !== undefined && (isAffected || changedLabels.has(otherLabelKey))) {
-      problems.push({filename: labelsFile, message: `Building ${footprintKey} has two addresses (features ${otherLabelKey} and ${key}).`});
+      const message = `Building ${footprintKey} has two addresses (features ${otherLabelKey} and ${key}).`;
+      problems.push({filename: labelsFile, message});
     }
     if (!isAffected) continue;
     const footprint = footprintKey === null ? null : session.workingFeature(footprintsFile, footprintKey);

@@ -2,7 +2,7 @@
 import {createElementWithText} from './dom.js';
 import {geometryAreaSquareMetres} from './geometry-measures.js';
 import {isInside} from './interior-point.js';
-import {addressText} from './object-names.js';
+import {addressText, buildingId} from './object-names.js';
 
 const buildingsFile = 'buildings.geojson';
 const placesFile = 'places.geojson';
@@ -25,8 +25,6 @@ const usualCuisines = [
   'seafood',
   'turkish'
 ];
-
-const buildingId = ({key, feature}) => feature.properties.entityId ?? key;
 
 function mayContain([longitude, latitude], ring) {
   let isEast = false;

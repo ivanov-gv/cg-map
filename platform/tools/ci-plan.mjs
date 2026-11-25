@@ -96,6 +96,7 @@ const EDITING_ONLY_SOURCES = [
   'geometry-measures.js',
   'handle-layer.js',
   'mode-bar.js',
+  'note-dialog.js',
   'contour-rules.js',
   'deletion-dialog.js',
   'interior-point.js',
@@ -105,6 +106,7 @@ const EDITING_ONLY_SOURCES = [
   'layer-roads.js',
   'layer-routes.js',
   'layer-settlements.js',
+  'layer-sketches.js',
   'layer-stops.js',
   'line-joining.js',
   'layer-water.js',
@@ -133,7 +135,8 @@ const LAYER_SPECS = [
   'roads.spec.mjs',
   'nature.spec.mjs',
   'relief.spec.mjs',
-  'transport.spec.mjs'
+  'transport.spec.mjs',
+  'sketches.spec.mjs'
 ];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
@@ -167,8 +170,7 @@ export const EDITOR_BROWSER_AREAS = {
   },
   layers: {
     specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
-    // 2 shards: layers took 355 s in one job on #419 (264 s at #409); the gate ran 451 s against a 420 s budget.
-    // Splitting the area keeps each shard under ~180 s.
+    // 2 shards: layers took 330 s with 7 specs in one (#421); 2 took 201 and 139 s with 8 (#422).
     jobs: 2,
     specFiles: LAYER_SPECS,
     sources: EDITING_ONLY_SOURCES

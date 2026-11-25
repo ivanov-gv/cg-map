@@ -135,6 +135,10 @@ export class EditSession {
     return this.#canTravel(historyName, 'redo', 'previous');
   }
 
+  isChanged(filename, key) {
+    return this.#changesOf(filename).has(key);
+  }
+
   changes(filename) {
     return [...this.#changesOf(filename).values()];
   }

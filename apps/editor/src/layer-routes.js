@@ -103,7 +103,8 @@ function stopRow(stop, index, stops, edit) {
 // Stops are added one after another until someone is done.
 async function addStops(edit, editNow) {
   while (edit.isOpen()) {
-    const count = directionsOf(editNow().feature)[shownDirectionIndex(editNow())].stops.filter(stop => !isTurnPoint(stop)).length;
+    const {stops: currentStops} = directionsOf(editNow().feature)[shownDirectionIndex(editNow())];
+    const count = currentStops.filter(stop => !isTurnPoint(stop)).length;
     const picked = await edit.context.pick(stopsFile, `Click stops in the order the line serves them · ${count}`, 'Done');
     if (!picked || !edit.isOpen()) return;
     changeStops(editNow(), stops => [...stops, picked.feature.properties.stopId]);

@@ -294,6 +294,20 @@ test('an import is refused whole when the snapshot, fingerprint or rules disagre
   await assert.rejects(importChangeset(changeset, session, sources, rules, levels), /export or discard/);
 });
 
+test('the work of two devices comes together unless both changed one object', async () => {
+  const sources = sourcesWith({'places.geojson': [placeFeature(), {...placeFeature(), properties: {...placeFeature().properties, id: 'second'}}]});
+  const exportOf = async key => {
+    const device = new EditSession(sources);
+    device.recordEdit('places.geojson', key, renamed(device.baseFeature('places.geojson', key), `From ${key}`));
+    return buildChangeset(device, sources, envelope);
+  };
+  const desk = new EditSession(sources);
+  await importChangeset(await exportOf('0'), desk, sources, rules, levels);
+  await importChangeset(await exportOf('1'), desk, sources, rules, levels);
+  assert.equal(desk.changeCount(), 2);
+  await assert.rejects(importChangeset(await exportOf('1'), desk, sources, rules, levels), /changed here too/);
+});
+
 test('an object with source identity is named by it, and is found after others of its file were removed', async () => {
   const identified = number => ({
     ...placeFeature(),
@@ -459,6 +473,8 @@ test('field items travel in the changeset and in the draft, and never as operati
   const resumed = new EditSession(sources);
   resumed.restoreDraft(session.exportDraft());
   assert.deepEqual(resumed.fieldItems(), [mark]);
+  const shapeless = {...changeset, fieldItems: [{...mark, type: 'sketch', what: 'Park', geometry: null}]};
+  await assert.rejects(importChangeset(shapeless, new EditSession(sources), sources, rules, levels), /needs what it is and a shape/);
   const tampered = {...changeset, fieldItems: [{...mark, type: 'shopping'}]};
   await assert.rejects(importChangeset(tampered, new EditSession(sources), sources, rules, levels), /unsupported field item/);
 });

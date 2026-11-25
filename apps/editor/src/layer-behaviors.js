@@ -1,35 +1,37 @@
 import {kindLabel, objectName} from './object-names.js';
 
 // What a layer does differently with the objects of one file. Every hook is optional:
-//   kind(feature)                 the small label above the name
-//   title(feature, context)       the name in the inspector
-//   sections(feature, edit)       form sections in order, [{title, fields, isCollapsed}]
-//   tools(feature, context)       extra tool buttons, [{label, run(), isDesktopOnly}]
-//   renderExtras(container, edit) anything else in the inspector, with edit = {feature, isNew, context}
-//   prepared(feature, context)    the feature as Apply will record it
-//   problem(edit, context)        why Apply must refuse it, or null
-//   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
-//   deletion(entry, context)      {problem} when it must not be removed, else {message, edits, options}. Options are
-//                                 [{label, edits or async resolve()}], and resolve() may ask for more on the map; it gives the edits, or null to keep the object
-//   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
-//   limitedGeometry(geometry, edit, context) where a drag must stop, with edit = {key, feature, previousGeometry, origins,
-//                                 draggedIndex}, the point of a line that is dragged or null
-//   measures(feature, before)     lines of facts shown under the form
-//   controls(edit)                controls that replace single fields, {name: value => element}
-//   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
-//   usualValues(feature, context) usual values of free fields, {name: [value]}
-//   joinedPoints(entry, context)  the points of a line that others share
-//   marks(feature)                letters on the map for the picked object, [{coordinate, label}]
-//   isDerived                     the object only stands for others: Apply records its companion edits and not itself
-//   isViewOnly(context)           the object can be read and not changed here
-//   isReshapable(context)         whether its shape can be changed on this screen
-//   applyLabel(edit)              what Apply is called
-//   afterApply(entry, context)    what happens once the edit is recorded
-//   closesLines                   a drawn line ends on its first point when that is tapped
-//   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
-// companionEdits and problem get {filename, key, feature, before, extras, origins}; origins are those of line-origins.js.
-// The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
-// select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
+//   kind(feature), title(feature, context)      the small label and the name in the inspector
+//   sections(feature, edit)                     form sections in order, [{title, fields, isCollapsed}]
+//   controls(edit)                              controls that replace single fields, {name: value => element}
+//   usualValues(feature, context)               what free fields usually say, offered as a list, {name: [value]}
+//   listsDependOn                               fields whose choice changes those lists
+//   measures(feature, before)                   lines of facts shown under the form
+//   renderExtras(container, edit)               anything else in the inspector
+//   tools(feature, edit)                        extra tool buttons, [{label, run(), isDesktopOnly}]
+//   vertexTools(feature, handle, edit)          what can be done at the picked point, [{id, label, run(), isDisabled}]
+//   joinedPoints(entry, context)                the points of a line that others share
+//   marks(feature)                              letters on the map for the picked object, [{coordinate, label}]
+//   isDerived                                   it only stands for others: Apply records its companion edits, not itself
+//   isViewOnly(context)                         the object can be read and not changed here
+//   isReshapable(context)                       whether its shape can be changed on this screen
+//   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
+//   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry,
+//                                             origins, draggedIndex}, the point of a line that is dragged or null
+//   closesLines                                 a drawn line ends on its first point when that is tapped
+//   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
+//   prepared(feature, context, edit)            the feature as Apply will record it
+//   problem(change, context)                    why Apply must refuse it, or null
+//   companionEdits(change, context)             edits of linked files that belong to it, [{filename, key, after}]
+//   record({key, feature}, context)             keeps the object somewhere else than in a source file
+//   applyLabel(edit)                            what Apply is called
+//   afterApply(entry, context)                  what happens once the edit is recorded
+//   deletion(entry, context)                    {problem} when it must stay, else {message, edits, options}. Options are
+//                                               [{label, edits or async resolve()}]; resolve() may ask for more on the
+//                                               map and gives the edits, or null to keep the object
+// problem and companionEdits get change = {filename, key, feature, before, extras, origins}; origins are those of
+// line-origins.js. An edit is the open one, as InspectorEditing describes it in #editContext. The context is what app.js
+// gives in behaviorContext().
 const behaviors = new Map();
 
 const behaviorKey = (filename, layerId) => (layerId ? `${layerId}/${filename}` : filename);

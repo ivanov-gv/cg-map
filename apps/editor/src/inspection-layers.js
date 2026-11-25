@@ -44,6 +44,8 @@ const slopeLayer = {
   paint: {'fill-color': ['match', ['get', 'aspect'], 'sunlit', '#c9ddb2', '#8fb06f'], 'fill-opacity': 0.4}
 };
 
+const summitText = ['concat', ['coalesce', ['get', 'name'], ''], ' ', ['to-string', ['get', 'ele']], ' m'];
+
 function inspectionLayers() {
   const below = {'text-anchor': 'top', 'text-offset': [0, 1.4]};
   return [
@@ -87,7 +89,7 @@ function inspectionLayers() {
     {...circleLayer('editor-stops', 'transport-stops.geojson', '#2c6fb0', 4), minzoom: 12},
     {...nameLayer('editor-stop-names', 'transport-stops.geojson', ['get', 'name'], below), minzoom: 14},
     nameLayer('editor-settlement-names', 'settlements.geojson', ['get', 'name'], below),
-    nameLayer('editor-summit-names', 'summits.geojson', ['concat', ['coalesce', ['get', 'name'], ''], ' ', ['to-string', ['get', 'ele']], ' m'], below),
+    nameLayer('editor-summit-names', 'summits.geojson', summitText, below),
     {
       ...nameLayer('editor-contour-heights', 'contours.geojson', ['to-string', ['get', 'elevation']], {
         'symbol-placement': 'line',

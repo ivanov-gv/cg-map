@@ -44,7 +44,8 @@ const beginNewByShape = {
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
-// onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), showInspector(), hideInspector(),
+// onRecorded(message, entry), onClosed(), onMarkedForDeletion(entry, name), onNoteWanted(entry, name),
+// isResolving(entry), showInspector(), hideInspector(),
 // releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
 // and returns whether the inspector held focus, so the status is focused only when it was needed.
 export class InspectorEditing {
@@ -189,6 +190,12 @@ export class InspectorEditing {
     showModeBar({title: transaction.isNew ? elementById('selection-title').textContent : title, hint, buttons});
   }
 
+  // The object of the open edit, as the rest of the editor names it.
+  #entry() {
+    const {key, feature, isNew} = this.#transaction;
+    return {filename: this.#filename, key, feature, isNew};
+  }
+
   #renderToolButtons() {
     const {isNew, feature} = this.#transaction;
     const geometryType = feature.geometry?.type;
@@ -307,7 +314,9 @@ export class InspectorEditing {
     elementById('editor').hidden = false;
     elementById('edit-actions').hidden = false;
     elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
-    elementById('apply-edit').textContent = this.#behavior.applyLabel(this.#editContext());
+    const applyLabel = this.#behavior.applyLabel(this.#editContext());
+    elementById('apply-edit').textContent = this.#context.isResolving(this.#entry()) ? 'Apply and resolve' : applyLabel;
+    elementById('leave-note').hidden = this.#transaction.isNew || this.#behavior.isDerived;
     this.#renderToolButtons();
     this.#renderFacts();
     this.#renderGeometry();
@@ -417,6 +426,7 @@ export class InspectorEditing {
     if (isDrawing(this.#transaction)) return this.#refuse('Finish drawing first.');
     const {feature, problem} = this.#validatedFeature();
     if (problem) return this.#refuse(problem);
+    if (this.#behavior.record) return this.#recordElsewhere(feature);
     const edit = this.#change(feature);
     const behaviorContext = this.#context.behaviorContext();
     const companions = this.#behavior.companionEdits(edit, behaviorContext);
@@ -427,8 +437,18 @@ export class InspectorEditing {
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
-    this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null, entry));
     afterApply({feature, filename: edit.filename, key: edit.key}, behaviorContext);
+    return {success: true};
+  }
+
+  // A sketch is no edit of a source, so no command records it.
+  #recordElsewhere(feature) {
+    const {record} = this.#behavior;
+    const {key} = this.#transaction;
+    const behaviorContext = this.#context.behaviorContext();
+    this.#finishEdit(() => record({key, feature}, behaviorContext));
     return {success: true};
   }
 
@@ -440,7 +460,8 @@ export class InspectorEditing {
       return;
     }
     this.#context.commands.recordEdits(edits);
-    this.#finishEdit(() => this.#context.onRecorded(message));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(message, entry));
   }
 
   #refuse(problem) {
@@ -456,7 +477,8 @@ export class InspectorEditing {
 
   #recordDeletion(edits, title) {
     this.#context.commands.recordEdits(edits);
-    this.#finishEdit(() => this.#context.onRecorded(`Deleted · ${title}`));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(`Deleted · ${title}`, entry));
   }
 
   // On a phone an object is only marked; the desk confirms it. An object added here can be dropped at once.
@@ -479,6 +501,12 @@ export class InspectorEditing {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
       if (optionEdits) this.#recordDeletion([ownEdit, ...edits, ...optionEdits], title);
     });
+  }
+
+  #leaveNote() {
+    const entry = {filename: this.#filename, key: this.#transaction.key, feature: this.#workingBefore()};
+    const title = this.#behavior.title(entry.feature, this.#context.behaviorContext());
+    this.#context.onNoteWanted(entry, title);
   }
 
   #removeSelectedVertex() {
@@ -592,6 +620,7 @@ export class InspectorEditing {
     onClick('tool-vertices', () => this.#startTool(editTools.vertices));
     onClick('cancel-edit', () => this.discardEdit());
     onClick('delete-feature', () => this.#deleteFeature());
+    onClick('leave-note', () => this.#leaveNote());
     elementById('property-form').oninput = () => this.#update(withTypedDetails(this.#transaction));
     elementById('property-form').onchange = event => this.#renderDependentLists(event.target);
     elementById('property-form').onsubmit = event => {
