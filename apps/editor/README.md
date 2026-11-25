@@ -34,6 +34,12 @@ including co-located places and records without a place on the map; use Tab and 
 keeps an unapplied edit until Apply or Cancel. Collecting rendered hits covers the whole view, so zoom in on dense
 layers.
 
+What the layers do beyond shape and fields:
+
+- **Buildings** show their entrances and the places inside. Moving one takes its address, entrances and places with it;
+  after a corner edit entrances return to the outline. A new entrance goes to the nearest point of the outline and gets
+  the next number. Deleting asks whether the places inside move to another building, picked on the map, or go too.
+
 ## Editing
 
 `packages/contracts/editor-layers.json` says what each file allows; what a layer adds to that is its behavior in

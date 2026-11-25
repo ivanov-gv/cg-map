@@ -1403,31 +1403,18 @@ test.describe('source editing', () => {
     await expect(page.locator('#status')).toContainText('objects');
     await tapMapAt(page, label.geometry.coordinates);
     await expect(page.locator('#selection-source')).toHaveText(`${buildingsFile} · feature ${footprintIndex}`);
-    return {label, labelIndex, footprint: footprints[footprintIndex], footprintIndex};
+    return {label, footprint: footprints[footprintIndex]};
   };
 
-  test('moving a footprint blocks the export until its label is corrected in its own mode', async ({
+  test('moving a footprint takes its label with it in one step, and the ring stays closed', async ({
     page
   }, testInfo) => {
     await openEditor(page);
-    const {label, labelIndex, footprint, footprintIndex} = await selectNumberedBuilding(page);
-    const dragPixels = 150;
+    const {label, footprint} = await selectNumberedBuilding(page);
     await openInspector(page);
     await startMode(page, 'tool-move');
     await expect(page.locator('.inspector')).toBeHidden();
-    await dragMap(page, label.geometry.coordinates, dragPixels, 0);
-    await applyAndWait(page);
-    await expect(page.locator('#review-problems')).toContainText(`outside footprint ${footprintIndex}`);
-    await expect(page.locator('#export-changeset')).toBeDisabled();
-    await expect(page.locator(`[data-changed-file="${labelsFile}"]`)).toHaveCount(0);
-
-    await chooseMode(page, labelsFile);
-    await expect(page.locator('#status')).toContainText('objects');
-    await tapMapAt(page, label.geometry.coordinates);
-    await expect(page.locator('#selection-source')).toHaveText(`${labelsFile} · feature ${labelIndex}`);
-    await openInspector(page);
-    await startMode(page, 'tool-move');
-    await dragMap(page, label.geometry.coordinates, dragPixels, 0);
+    await dragMap(page, label.geometry.coordinates, 150, 0);
     await applyAndWait(page);
     await expect(page.locator('#review-problems')).toBeEmpty();
 
@@ -1439,6 +1426,8 @@ test.describe('source editing', () => {
     const ring = footprintOperation.after.geometry.coordinates[0];
     expect(ring[0]).toEqual(ring.at(-1));
     expect(ring).toHaveLength(footprint.geometry.coordinates[0].length);
+    const labelOperation = changeset.operations.find(({filename}) => filename === labelsFile);
+    expect(labelOperation.after.geometry.coordinates[0]).toBeGreaterThan(label.geometry.coordinates[0]);
   });
 
   test('footprint corners are edited through handles and stay a closed ring', async ({page}, testInfo) => {

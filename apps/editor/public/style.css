@@ -1040,3 +1040,22 @@ fieldset {
 .field-item-deletion strong {
   color: #c8372d;
 }
+
+.related-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: 6px;
+  background: #f6f7f1;
+  border: 0;
+}
+.related-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.related-action {
+  width: 100%;
+  border: 0;
+  text-align: center;
+  font-weight: 600;
+}

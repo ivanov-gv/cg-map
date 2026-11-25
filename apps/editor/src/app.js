@@ -19,9 +19,11 @@ import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
 import {installInspectorViewport} from './inspector-viewport.js';
 import {installKeyboardShortcuts, updateShortcutHints} from './keyboard-shortcuts.js';
-import {behaviorOf, drawChoicesOf, newFeatureFields} from './layer-behaviors.js';
+import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layer-behaviors.js';
+import {buildingBehaviors} from './layer-buildings.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
+import {hideModeBar, showModeBar} from './mode-bar.js';
 import {ObjectList} from './object-list.js';
 import {startOfflineCopy} from './offline-install.js';
 import {ReviewPanel} from './review-panel.js';
@@ -37,6 +39,8 @@ import {
   showInspector,
   showPanel
 } from './workspace-panels.js';
+
+registerBehaviors(buildingBehaviors);
 
 const basemapLayers = {
   'buildings.geojson': ['buildings'],
@@ -80,6 +84,7 @@ let wasEditOpen = false;
 let pendingLayer = null;
 let objectList;
 let clickCandidates = null;
+let pendingPick = null;
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -132,7 +137,9 @@ function behaviorContext() {
       behaviorContext()
         .entriesOf(filename)
         .find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
-    select: entry => selectObject(entry, true)
+    select: entry => selectObject(entry, true),
+    startNew: startNewFeature,
+    pick: pickObject
   };
 }
 
@@ -176,6 +183,7 @@ function showFeature(entry) {
 
 // Returns the inspector to its empty state for the active layer.
 function clearSelection() {
+  cancelPick();
   editing.close();
   hideInspector();
   elementById('selection-details').open = false;
@@ -370,14 +378,15 @@ function openFieldItem(item) {
 }
 
 // New objects get a local identity and no upstream claims, which is what the importer requires of them.
-function startNewFeature({label, filename, shape, properties}) {
+function startNewFeature({label, filename, shape, properties, geometry}) {
   clearSelection();
   showPanel(null);
   const localId = `local:${crypto.randomUUID()}`;
   const fields = newFeatureFields(filename, localId, rules);
   setHeading('New', label);
   elementById('selection-source').textContent = `${filename} · new feature`;
-  editing.openNew(filename, localId, shape, {...fields, properties: {...fields.properties, ...properties}});
+  if (geometry) showInspector();
+  editing.openNew(filename, localId, shape, {...fields, geometry, properties: {...fields.properties, ...properties}});
 }
 
 // Exactly one layer is active, or none. The map keeps its position and zoom.
@@ -387,6 +396,7 @@ function setLayer(layer) {
     elementById('layer-switch-dialog').showModal();
     return false;
   }
+  cancelPick();
   editing.close();
   hideToast();
   activeLayer = activeLayer?.id === layer?.id ? null : layer;
@@ -447,9 +457,41 @@ function selectObject(entry, shouldFocus = false) {
   return true;
 }
 
+// Asks for one object of a file on the map. Gives its entry, or null when someone cancels or leaves the layer.
+function pickObject(filename, prompt) {
+  hideInspector();
+  return new Promise(resolve => {
+    pendingPick = {filename, resolve};
+    const cancel = {id: 'mode-cancel', label: 'Cancel', run: () => finishPick(null)};
+    showModeBar({title: prompt, hint: 'Tap it on the map', buttons: [cancel]});
+  });
+}
+
+// Whoever asked gets no object, so the question does not outlive the edit that asked it. Returns whether one was open.
+function cancelPick() {
+  if (!pendingPick) return false;
+  finishPick(null);
+  return true;
+}
+
+function finishPick(entry) {
+  const {resolve} = pendingPick;
+  pendingPick = null;
+  hideModeBar();
+  // Whatever the edit does with the answer, its refusals and its buttons are in the inspector.
+  showInspector();
+  resolve(entry);
+}
+
 // Clicks wait for the layer to finish loading, and a hit from another file never selects anything.
 function selectFeatureAtClick(event) {
   if (!activeLayer || isLayerLoading) return;
+  if (pendingPick) {
+    const hits = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
+    const picked = hits.find(({filename}) => filename === pendingPick.filename);
+    if (picked) finishPick(picked);
+    return;
+  }
   if (editing.hasGeometryTool) {
     editing.tap(event);
     return;
@@ -592,7 +634,7 @@ function installWorkspaceControls() {
     cancelActiveGesture: () => Boolean(editing?.cancelActiveGesture()),
     isSwitchDialogOpen: () => elementById('layer-switch-dialog').open,
     closeSwitchDialog: closeLayerSwitchDialog,
-    leaveMode: () => Boolean(editing?.leaveModeOnEscape())
+    leaveMode: () => cancelPick() || Boolean(editing?.leaveModeOnEscape())
   });
   installLayerSwitchDialog();
   installInspectorViewport();

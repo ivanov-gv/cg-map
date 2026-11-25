@@ -9,13 +9,18 @@ import {kindLabel, objectName} from './object-names.js';
 //   prepared(feature, context)    the feature as Apply will record it
 //   problem(edit, context)        why Apply must refuse it, or null
 //   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
-//   deletion(entry, context)      {message, edits, options: [{label, edits}]}
+//   deletion(entry, context)      {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
+//                                 more on the map; it gives the edits, or null to keep the object
+//   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
+//   limitedGeometry(geometry, edit, context) where a drag must stop
 //   measures(feature, before)     lines of facts shown under the form
-// The context is {session, rules, levels, map, layer, entriesOf(filename), findEntity(filename, entityId)}.
+// The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
+// select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
 const behaviors = new Map();
 
-export function registerBehavior(filename, behavior) {
-  behaviors.set(filename, behavior);
+// Adds what a layer does differently, by file name.
+export function registerBehaviors(behaviorByFile) {
+  for (const [filename, behavior] of Object.entries(behaviorByFile)) behaviors.set(filename, behavior);
 }
 
 const defaultBehavior = filename => ({
