@@ -1,4 +1,4 @@
-# 0039: One measured height for a canyon rim
+# 0040: One measured height for a canyon rim
 
 ## Status
 

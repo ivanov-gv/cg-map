@@ -160,7 +160,7 @@ OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-
 and `method: "dem-canyon-bank"`; a rim added in the editor has `method: "editor-drawn"` and no `river` or `bank`. A rim
 publishes one optional integer `height` in whole metres: the median bank-rise sample, rounded to the nearest metre; an
 OSM cliff has it only where the build sampled the nearby DEM bank. A rim without a height is drawn as its rim line only
-([ADR 0039](../../docs/decisions/0039-one-measured-canyon-rim-height.md)). Every canyon rim runs with its river, the low
+([ADR 0040](../../docs/decisions/0040-one-measured-canyon-rim-height.md)). Every canyon rim runs with its river, the low
 side, on its right; an edge without a river is not compared with a centreline. Every contour runs with higher ground on
 its left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height
 checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.

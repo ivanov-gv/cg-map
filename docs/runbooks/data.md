@@ -67,7 +67,7 @@ that cliff part, not from a distant rise elsewhere on a joined bank, and otherwi
 rim states only that optional `height`: the importer assigns its identity, kind, `editor-drawn` method and length, and
 refuses a changeset that states `river`, `bank` or `method`. A measured height outside the contract's range fails
 validation rather than becoming absent. The statistic and rounding, slope aspect and flat-ground rules live in the
-relief tools and are described by [ADR 0039](../decisions/0039-one-measured-canyon-rim-height.md). Green kinds come from
+relief tools and are described by [ADR 0040](../decisions/0040-one-measured-canyon-rim-height.md). Green kinds come from
 the single `GREEN_KINDS` constant in `data/tools/relief/derivations.py`, aligned with the land-kind enum in
 `source-land-water.schema.json`; eight of the nine configured kinds occur in the current `land.geojson` (`garden` is
 absent). Green kinds, minimum slope area, the retired ridge radius, layer sources, the ridge/rim thresholds and the

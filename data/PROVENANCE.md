@@ -182,7 +182,7 @@ to the nearest whole metre with halves upward. An OSM cliff takes that height on
 cliff part, not from a distant rise elsewhere on a joined bank; an unmeasured rim is drawn as its line only. A sampled
 height outside the contract range fails validation rather than disappearing. The statistic, rounding and river-bank
 thresholds are in `relief` in `sources/provenance.json`; allowed values belong to `relief.schema.json`
-([ADR 0039](../docs/decisions/0039-one-measured-canyon-rim-height.md)). River banks are named relative to the
+([ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md)). River banks are named relative to the
 DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum. The nine configured kinds are `park`, `garden`,
 `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground`; eight occur in the current `land.geojson`
