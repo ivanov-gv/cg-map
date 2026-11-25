@@ -323,6 +323,30 @@ export function validateMunicipalities(data, {requireAdopted = false, contractsD
   return count;
 }
 
+// Validate the areas of settlements. Which settlement an area belongs to is checked against the settlements.
+export function validateSettlementAreas(data, {label = 'settlement-areas.geojson', requireAdopted = false, contractsDirectory} = {}) {
+  const count = validateCollection(data, {
+    label, geometryTypes: ['Polygon', 'MultiPolygon'], requireKind: true, requireAdopted, contractsDirectory
+  });
+  for (const {properties} of data.features) {
+    requireValue(properties.kind === 'settlement-area', `${label}: wrong kind ${properties.kind}`);
+    requireValue(typeof properties.name === 'string' && properties.name.trim().length > 0, `${label}: an area needs its name`);
+  }
+  return count;
+}
+
+// A settlement has at most one area.
+export function validateSettlementsOfAreas(areas, settlements) {
+  const settlementIds = new Set(settlements.features.map(({properties}) => properties.entityId));
+  const claimedIds = new Set();
+  for (const {properties: {entityId, settlementEntityId}} of areas.features) {
+    if (settlementEntityId === undefined) continue;
+    requireValue(settlementIds.has(settlementEntityId), `settlement area ${entityId}: settlement ${settlementEntityId} not found`);
+    requireValue(!claimedIds.has(settlementEntityId), `settlement ${settlementEntityId} has more than one area`);
+    claimedIds.add(settlementEntityId);
+  }
+}
+
 // Validate point settlements with a supported rank, municipality code and source.
 export function validateSettlements(data, {requireAdopted = false, contractsDirectory} = {}) {
   const count = validateCollection(data, {
@@ -854,13 +878,17 @@ export function validateRoadNodes(data, {contractsDirectory} = {}) {
   return count;
 }
 
-function roadWayIds(roads) {
-  const wayIds = new Set();
-  for (const feature of roads.features) {
-    const match = feature.properties.entityId?.match(/^way\/(\d+)$/);
-    if (match) wayIds.add(Number(match[1]));
+// A road or junction that came from the editor keeps its local ID wherever it is named.
+const isIdentifier = value => (Number.isSafeInteger(value) && value >= 1) || isLocalId(value);
+
+function roadIdentifiers(roads) {
+  const identifiers = new Set();
+  for (const {properties: {entityId}} of roads.features) {
+    const match = entityId?.match(/^way\/(\d+)$/);
+    if (match) identifiers.add(Number(match[1]));
+    else if (isLocalId(entityId)) identifiers.add(entityId);
   }
-  return wayIds;
+  return identifiers;
 }
 
 function roadEndNodeIds(roads) {
@@ -886,7 +914,7 @@ function roadNodePointIds(roadNodes) {
 export function validateTurnRestrictions(data, roads, roadNodes) {
   requireValue(data?.entitySchemaVersion === 1, 'turn-restrictions.json: missing entitySchemaVersion');
   requireValue(Array.isArray(data.restrictions), 'turn-restrictions.json: missing restrictions array');
-  const wayIds = roadWayIds(roads);
+  const roadIds = roadIdentifiers(roads);
   const endNodeIds = roadEndNodeIds(roads);
   const nodeIds = roadNodePointIds(roadNodes);
   const allowedViaNodes = new Set([...nodeIds, ...endNodeIds]);
@@ -903,14 +931,14 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
       RESTRICTION_VALUES.has(restriction.restriction),
       `${label}: unknown restriction value: ${restriction.restriction}`
     );
-    requireValue(Number.isSafeInteger(restriction.from), `${label}: invalid from way ID`);
-    requireValue(Number.isSafeInteger(restriction.to), `${label}: invalid to way ID`);
+    requireValue(isIdentifier(restriction.from), `${label}: invalid from road`);
+    requireValue(isIdentifier(restriction.to), `${label}: invalid to road`);
     requireValue(
-      wayIds.has(restriction.from),
+      roadIds.has(restriction.from),
       `${label}: from way ${restriction.from} not found in roads.geojson`
     );
     requireValue(
-      wayIds.has(restriction.to),
+      roadIds.has(restriction.to),
       `${label}: to way ${restriction.to} not found in roads.geojson`
     );
     if (Array.isArray(restriction.viaNodes)) {
@@ -924,7 +952,7 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
     if (Array.isArray(restriction.viaWays)) {
       for (const viaWayId of restriction.viaWays) {
         requireValue(
-          wayIds.has(viaWayId),
+          roadIds.has(viaWayId),
           `${label}: via way ${viaWayId} not found in roads.geojson`
         );
       }
@@ -934,6 +962,21 @@ export function validateTurnRestrictions(data, roads, roadNodes) {
 }
 
 // Validate road features: pathClass, end nodes and levels.
+// Roads that end at one junction end at one place, or the junction would not be one.
+function requireSingleJunctionPositions(roads) {
+  const positionByNode = new Map();
+  for (const {geometry, properties} of roads.features) {
+    const ends = [[properties.startNode, geometry.coordinates[0]], [properties.endNode, geometry.coordinates.at(-1)]];
+    for (const [node, coordinate] of ends) {
+      if (node === undefined) continue;
+      const known = positionByNode.get(node) ?? coordinate;
+      const isSamePlace = known[0] === coordinate[0] && known[1] === coordinate[1];
+      requireValue(isSamePlace, `roads.geojson: roads end at junction ${node} in different places`);
+      positionByNode.set(node, known);
+    }
+  }
+}
+
 export function validateRoads(data, {contractsDirectory} = {}) {
   const count = validateCollection(data, {label: 'roads.geojson', geometryTypes: ['LineString', 'MultiLineString'], contractsDirectory});
   for (const [index, feature] of data.features.entries()) {
@@ -950,7 +993,7 @@ export function validateRoads(data, {contractsDirectory} = {}) {
       const nodeValue = properties[nodeField];
       const levelValue = properties[levelField];
       if (nodeValue !== undefined) {
-        requireValue(Number.isSafeInteger(nodeValue), `${name}: ${nodeField} must be an integer`);
+        requireValue(isIdentifier(nodeValue), `${name}: ${nodeField} must be an OSM number or a local ID`);
       }
       if (levelValue !== undefined) {
         requireValue(Number.isInteger(levelValue), `${name}: ${levelField} must be an integer`);
@@ -962,6 +1005,7 @@ export function validateRoads(data, {contractsDirectory} = {}) {
       requireValue(isDrawnEnd || hasNode === hasLevel, `${name}: ${nodeField} and ${levelField} must appear together`);
     }
   }
+  requireSingleJunctionPositions(data);
   requireValue(count > 0, 'Empty roads snapshot');
   return count;
 }
@@ -1043,6 +1087,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   const specificValidators = {
     'border-edges.geojson': validateBorderEdges,
     'municipalities.geojson': validateMunicipalities,
+    'settlement-areas.geojson': validateSettlementAreas,
     'settlements.geojson': validateSettlements,
     'contours.geojson': validateReliefSource,
     'summits.geojson': validateReliefSource,
@@ -1082,6 +1127,8 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
         `${name}: provenance mismatch. Review the dataset and update data/sources/provenance.json.`);
     }
   }
+  const readSource = name => JSON.parse(fs.readFileSync(path.join(root, 'data/sources', name)));
+  validateSettlementsOfAreas(readSource('settlement-areas.geojson'), readSource('settlements.geojson'));
   // Validate roads specifically (pathClass, graph nodes, levels)
   const roadsPath = path.join(root, 'data/sources/roads.geojson');
   if (fs.existsSync(roadsPath)) {

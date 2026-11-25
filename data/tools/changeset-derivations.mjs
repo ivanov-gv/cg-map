@@ -1,6 +1,7 @@
 // Facts the pipeline computes from the sources, brought back in step after an editor changeset: joins between files,
 // measures of a changed shape and the direction of a contour. Everything here follows from reviewed objects; nothing
 // is an editorial choice, so a changeset never carries it.
+import crypto from 'node:crypto';
 import {entranceBearing} from './building-entrances.mjs';
 import {reversedClosedContours} from './relief-directions.mjs';
 import {requireThat} from './changeset-rules.mjs';
@@ -148,6 +149,41 @@ export function buildingsFollowingStreets(buildings, previousBuildings, roads, p
   return {...buildings, features};
 }
 
+// Where a road ends and the junction it names there.
+const roadEnds = ({geometry, properties}) => [
+  {nodeName: 'startNode', node: properties.startNode, place: String(geometry.coordinates[0])},
+  {nodeName: 'endNode', node: properties.endNode, place: String(geometry.coordinates.at(-1))}
+];
+
+// Roads that moved to one place together get one junction there. Derived from what it was, so a replay gives it again.
+function movedJunctionId(node, place) {
+  const digest = crypto.createHash('sha256').update(`${node} ${place}`).digest('hex');
+  const groups = [digest.slice(0, 8), digest.slice(8, 12), `4${digest.slice(13, 16)}`, `8${digest.slice(17, 20)}`];
+  return `local:${groups.join('-')}-${digest.slice(20, 32)}`;
+}
+
+// Roads that end at one junction end at one place. An edit that takes the end of a road away from the others leaves the
+// junction to them, or a refresh of the junction would be refused together with every other correction of the road.
+export function roadsLeavingJunctions(roads, changedKeys) {
+  const placeByNode = new Map();
+  for (const road of roads.features) {
+    if (changedKeys.has(entityKey(road.properties))) continue;
+    for (const {node, place} of roadEnds(road)) placeByNode.set(node, place);
+  }
+  const features = roads.features.map(road => {
+    if (!changedKeys.has(entityKey(road.properties))) return road;
+    const properties = {...road.properties};
+    for (const {nodeName, node, place} of roadEnds(road)) {
+      if (node === undefined) continue;
+      if (!placeByNode.has(node)) placeByNode.set(node, place);
+      if (placeByNode.get(node) !== place) properties[nodeName] = movedJunctionId(node, place);
+    }
+    const isLeaving = roadEnds(road).some(({nodeName, node}) => properties[nodeName] !== node);
+    return isLeaving ? {...road, properties} : road;
+  });
+  return {...roads, features};
+}
+
 function checkedSummit(summit) {
   const {ele, demElevation, ...properties} = summit.properties;
   if (!Number.isFinite(demElevation)) return summit;
@@ -267,6 +303,9 @@ export function withDerivedFacts(next, previous, changedKeysByFile, read) {
   }
   const current = filename => derived.get(filename) ?? read(filename);
   const reviewed = filename => previous.get(filename) ?? read(filename);
+  if (derived.has(roadsFile)) {
+    derived.set(roadsFile, roadsLeavingJunctions(derived.get(roadsFile), changedKeysByFile.get(roadsFile)));
+  }
   if (derived.has(roadsFile) || derived.has(buildingsFile)) {
     const buildings = buildingsFollowingStreets(
       current(buildingsFile),

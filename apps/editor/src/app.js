@@ -51,6 +51,7 @@ const layerNames = {
   'slopes.geojson': 'Slopes',
   'canyon-rims.geojson': 'Canyon rims',
   'protected-areas.geojson': 'Protected areas',
+  'settlement-areas.geojson': 'Settlement areas',
   'transit-routes.json': 'Routes',
   'turn-restrictions.json': 'Turn restrictions'
 };

@@ -3,7 +3,7 @@
 import json
 
 import osmium
-from shapely.geometry import box, mapping, shape
+from shapely.geometry import LineString, MultiLineString, box, mapping, shape
 from shapely.ops import polygonize, unary_union
 
 from .identity import make_feature
@@ -83,13 +83,42 @@ def is_usable(geometry):
     return False
 
 
+def simplified_line(line, tolerance, kept_points):
+    """Simplify a line between the points that must stay on it.
+
+    Simplifying a line on its own drops the points it shares with others, and
+    with them the only trace that the lines meet there.
+    """
+    coordinates = list(line.coords)
+    kept_indexes = [
+        index for index, point in enumerate(coordinates)
+        if index in (0, len(coordinates) - 1)
+        or tuple(rounded_geometry(point)) in kept_points
+    ]
+    simplified = coordinates[:1]
+    for start, end in zip(kept_indexes, kept_indexes[1:]):
+        stretch = coordinates[start:end + 1]
+        if len(stretch) > 2:
+            stretch = LineString(stretch).simplify(
+                tolerance, preserve_topology=True
+            ).coords
+        simplified.extend(stretch[1:])
+    return LineString(simplified)
+
+
 def geometry_features(
     geometry_value, identity, properties, part_numbers=None,
-    simplify_tolerance=0.0
+    simplify_tolerance=0.0, kept_points=frozenset()
 ):
     """Return one feature per usable geometry, applying simplification."""
     geometry = shape(geometry_value)
-    if simplify_tolerance:
+    if simplify_tolerance and kept_points:
+        geometry = MultiLineString([
+            simplified_line(line, simplify_tolerance, kept_points)
+            for line in separated_geometries(geometry)
+            if line.geom_type == 'LineString'
+        ])
+    elif simplify_tolerance:
         geometry = geometry.simplify(
             simplify_tolerance, preserve_topology=True
         )
@@ -111,7 +140,7 @@ def geometry_features(
 
 def clipped_features(
     geometry_value, detail_bbox, identity, properties,
-    simplify_tolerance=0.0
+    simplify_tolerance=0.0, kept_points=frozenset()
 ):
     """Clip to the detail box, numbering each part of one source object."""
     boundary = box(*detail_bbox)
@@ -125,7 +154,8 @@ def clipped_features(
         list(range(len(parts))) if is_trimmed or len(parts) > 1 else None
     )
     return geometry_features(
-        clipped, identity, properties, part_numbers, simplify_tolerance
+        clipped, identity, properties, part_numbers, simplify_tolerance,
+        kept_points
     )
 
 
