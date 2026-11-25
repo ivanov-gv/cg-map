@@ -17,14 +17,8 @@ test('a phone-dependent editor test is tagged, or a PR would not run it there', 
   }
 });
 
-test('the shared phone tag parser is a declared cross-project contract', () => {
-  const architecture = fs.readFileSync(
-    new URL('../../../docs/system-architecture/architecture.md', import.meta.url),
-    'utf8'
-  );
-  const contractRow = architecture.split('\n').find(line => line.startsWith('| Phone tag parser'));
-  assert.ok(contractRow, 'architecture must name the shared parser');
-  assert.match(contractRow, /\| platform\s+\|/);
-  assert.match(contractRow, /apps\/editor/);
-  assert.match(contractRow, /apps\/web/);
+// Platform tests the workflow inputs; the editor tests that its own config reads the mode those inputs supply.
+test('the browser config applies the phone mode from CI', () => {
+  const config = fs.readFileSync(new URL('../playwright.config.mjs', import.meta.url), 'utf8');
+  assert.match(config, /process\.env\.E2E_PHONE === 'tagged' \? \{grep: \/@phone\/\}/);
 });

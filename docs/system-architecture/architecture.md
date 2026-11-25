@@ -40,7 +40,6 @@ Projects depend on each other only through these concrete contracts:
 | Built web artifact, dist/web                  | apps/web           | the dev Pages site                                                                                     |
 | Go host `run` target                          | services/backend   | apps/web `dev`                                                                                         |
 | Static host and per-worktree ports            | platform           | apps/web, apps/editor, apps/core-demo                                                                  |
-| Phone tag parser                              | platform           | apps/editor unit test and platform's apps/web phone-tag check                                          |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -60,7 +59,9 @@ Rules:
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev
   builds are the separate HEAD mode described below. The scoped exception is `tests/`, the cross-project integration
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
-  it publishes by setting the data and contracts versions.
+  it publishes by setting the data and contracts versions. The other narrow exception is
+  `platform/tools/phone-tags.mjs`: platform's web phone-tag check and the editor's own unit test read that platform tool
+  at HEAD, and `apps/web` imports nothing from it.
 
 ### Map data modes
 

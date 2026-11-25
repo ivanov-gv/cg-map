@@ -25,8 +25,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - The browser suite is split into the shards counted in `browser-jobs.json`; `tools/browser-matrix.mjs` builds the CI
   matrix from that one number. Keep the number in the editor, never in platform tooling. Any editor change runs all
   shards; [workflow testing](../../.github/TESTING.md#on-github) owns the smoke and full-run rule. Keep specs and
-  per-file area lists out of the platform planner; prove a changed job count with
-  `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` for every shard, matching CI's worker count.
+  per-file area lists out of the platform planner; prove a changed job count for both phone modes with
+  `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` and
+  `E2E_WORKERS=2 E2E_PHONE=all npx playwright test --list --shard=i/N` for every shard, matching CI's worker count.
 - This is an independent project: its Makefile, tests/e2e and ci-apps-editor pipeline are its own. Local
   `make verify PKG=apps/editor` and `make -C apps/editor e2e` are optional for iterating; the pre-push `make check` is
   required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect desktop and

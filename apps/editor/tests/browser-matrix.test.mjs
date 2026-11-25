@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {browserMatrix, readJobCount} from '../tools/browser-matrix.mjs';
@@ -9,20 +10,33 @@ const applicationRoot = fileURLToPath(new URL('..', import.meta.url));
 const matrixTool = fileURLToPath(new URL('../tools/browser-matrix.mjs', import.meta.url));
 const configurationFile = fileURLToPath(new URL('../browser-jobs.json', import.meta.url));
 
-test('the browser suite runs as one job per shard', () => {
+// The tool reads files only, so each case writes its configuration in the worktree and removes it afterwards.
+function temporaryConfiguration(testContext, name, contents) {
+  const directory = fs.mkdtempSync(path.join(applicationRoot, '.browser-matrix-'));
+  const configuration = path.join(directory, `${name}.json`);
+  fs.writeFileSync(configuration, JSON.stringify(contents));
+  testContext.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  return configuration;
+}
+
+test('the browser suite runs as one job per shard', testContext => {
+  const configuration = temporaryConfiguration(testContext, 'ten-jobs', {jobs: 10});
   assert.deepEqual(
-    browserMatrix({jobs: 10}).include,
+    browserMatrix(configuration).include,
     Array.from({length: 10}, (_, index) => ({shard: index + 1, jobs: 10}))
   );
 });
 
-test('a smoke run proves the browser job with only the first shard', () => {
-  assert.deepEqual(browserMatrix({jobs: 10}, {smoke: true}).include, [{shard: 1, jobs: 10}]);
+test('a smoke run proves the browser job with only the first shard', testContext => {
+  const configuration = temporaryConfiguration(testContext, 'ten-jobs', {jobs: 10});
+  assert.deepEqual(browserMatrix(configuration, {smoke: true}).include, [{shard: 1, jobs: 10}]);
 });
 
-test('an unusable job count fails instead of hiding a broken configuration', () => {
-  for (const jobCount of [0, -1, 1.5, '10', undefined]) {
-    assert.throws(() => browserMatrix({jobs: jobCount}), /positive integer/, String(jobCount));
+test('an unusable job count fails instead of hiding a broken configuration', testContext => {
+  const configuration = temporaryConfiguration(testContext, 'jobs', {jobs: 1});
+  for (const jobCount of [0, -1, 1.5, '10', null]) {
+    fs.writeFileSync(configuration, JSON.stringify({jobs: jobCount}));
+    assert.throws(() => browserMatrix(configuration), /positive integer/, String(jobCount));
   }
 });
 
@@ -42,14 +56,9 @@ test('the command reads the app file for a full run and a smoke run', () => {
   assert.deepEqual(read(['--smoke']), browserMatrix(configurationFile, {smoke: true}));
 });
 
-test('the matrix reads the app file from a path or a parsed object', () => {
-  const expected = browserMatrix(configurationFile);
-  assert.deepEqual(browserMatrix(configurationFile), expected);
-  assert.deepEqual(browserMatrix(JSON.parse(fs.readFileSync(configurationFile, 'utf8'))), expected);
-});
-
-test('the matrix rejects an extra, missing or empty job configuration', () => {
-  assert.throws(() => browserMatrix({jobs: 2, area: 'viewer'}), /only jobs/);
-  assert.throws(() => browserMatrix({}), /only jobs/);
-  assert.throws(() => browserMatrix(null), /only jobs/);
+test('the matrix rejects an extra, missing or empty job configuration', testContext => {
+  for (const [name, contents] of [['extra', {jobs: 2, area: 'viewer'}], ['missing', {}], ['empty', null]]) {
+    const configuration = temporaryConfiguration(testContext, name, contents);
+    assert.throws(() => browserMatrix(configuration), /only jobs/, name);
+  }
 });

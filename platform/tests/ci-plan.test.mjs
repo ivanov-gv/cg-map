@@ -62,12 +62,8 @@ const cases = [
     ['platform', 'map-core', 'apps-core-demo'],
     []
   ],
-  ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
-  ['source viewer browser test', ['apps/editor/tests/e2e/viewer.spec.mjs'], ['tests', 'apps-editor'], []],
-  ['source viewer browser config', ['apps/editor/playwright.config.mjs'], ['tests', 'apps-editor'], []],
+  ['editor source', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
   ['editor browser job count', ['apps/editor/browser-jobs.json'], ['tests', 'apps-editor'], []],
-  ['editor browser matrix tool', ['apps/editor/tools/browser-matrix.mjs'], ['tests', 'apps-editor'], []],
-  ['new editor source', ['apps/editor/src/brand-new.js'], ['tests', 'apps-editor'], []],
   ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
   ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
   ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],
@@ -76,9 +72,9 @@ const cases = [
   ['changeset importer module', ['data/tools/changeset-rules.mjs'], ['data', 'tests'], []],
   ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor'], []],
   [
-    'phone tag parser shared with the editor',
+    'phone tag parser used by the editor',
     ['platform/tools/phone-tags.mjs'],
-    ['platform', 'apps-editor', 'apps-web'],
+    ['platform', 'apps-editor'],
     []
   ],
   ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests'], []],

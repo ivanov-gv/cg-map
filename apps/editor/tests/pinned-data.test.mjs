@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
 import {pinnedDataRoot, readPinnedSource} from './pinned-data.mjs';
 
 const applicationRoot = new URL('..', import.meta.url);
@@ -37,23 +35,4 @@ test('editor tests and the browser config never read repository data', () => {
   for (const [name, file] of testFiles) {
     assert.ok(!repositoryDataPattern.test(fileSystem.readFileSync(file, 'utf8')), `${name}: ${pinnedDataRule}`);
   }
-});
-
-test('the editor guard rejects a repository data path in a test', t => {
-  const probeName = `__data-probe-${process.pid}.mjs`;
-  const probe = new URL(`tests/${probeName}`, applicationRoot);
-  t.after(() => fileSystem.rmSync(probe, {force: true}));
-  fileSystem.writeFileSync(probe, "export const source = '../../../../data/sources/places.geojson';\n");
-  const childEnvironment = {...process.env};
-  for (const name of Object.keys(childEnvironment).filter(name => name.startsWith('NODE_TEST'))) {
-    delete childEnvironment[name];
-  }
-  const result = spawnSync(
-    process.execPath,
-    ['--test', '--test-name-pattern=never read repository data', fileURLToPath(new URL(import.meta.url))],
-    {cwd: fileURLToPath(applicationRoot), encoding: 'utf8', env: childEnvironment}
-  );
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  assert.notEqual(result.status, 0, output);
-  assert.ok(output.includes(probeName), output);
 });

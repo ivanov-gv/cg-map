@@ -83,6 +83,7 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | `platform/tools/serve.py`, `dev-port.mjs`                      | `platform`, every map application, every browser area                                                                                                                                         |
 | `platform/browser-image`                                       | `browser-image`, `platform`                                                                                                                                                                   |
 | `platform/tools/lan_certificate.py`                            | `platform`, `apps-editor`                                                                                                                                                                     |
+| `platform/tools/phone-tags.mjs`                                | `platform`, `apps-editor`                                                                                                                                                                     |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform`    | That folder, except as listed below                                                                                                                                                           |
 | `apps/web`                                                     | `apps-web`, `tests`, `platform`, and the browser areas below                                                                                                                                  |
 | `apps/editor`                                                  | `apps-editor`, `tests`, and the whole editor browser suite                                                                                                                                    |
@@ -125,8 +126,8 @@ Tag a test `@phone` when it:
 
 - only runs on the phone layout, or behaves differently there, branching on `isMobile`, `hasTouch`, touch input or the
   viewport width, in its own body, a helper it calls, or the skips and hooks of its describe: a check in each app's
-  tests fails if such a test has no tag. Both use [phone-tags](../../platform/tools/phone-tags.mjs); the app test owns
-  its neutral helpers, such as `closeCard`;
+  tests fails if such a test has no tag. Both checks use [phone-tags](../../platform/tools/phone-tags.mjs); apps/web
+  imports nothing from it, and the app test owns its neutral helpers, such as `closeCard`;
 - needs the `/cg-map/` prefix, which only the phone project uses;
 - is the one whole journey for its app, or its one check of layout overflow.
 

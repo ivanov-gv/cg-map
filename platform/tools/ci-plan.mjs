@@ -178,8 +178,8 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
-  // The shared parser is imported by the editor's unit test and by platform's web phone-tag check.
-  if (file === 'platform/tools/phone-tags.mjs') return {folders: ['platform', 'apps-editor', 'apps-web'], areas: []};
+  // The platform web phone-tag check and the editor's own unit test read this tool; apps/web imports nothing from it.
+  if (file === 'platform/tools/phone-tags.mjs') return {folders: ['platform', 'apps-editor'], areas: []};
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform'], areas: []};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
@@ -209,8 +209,7 @@ export function browserMatrix(areas) {
   return {include: areas.flatMap(area => browserJobs(area))};
 }
 
-// A separate web test call proves one short area; a separate editor test call uses its own smoke input. The PR's
-// regular browser calls keep the coverage their diffs need.
+// A separate web test call proves one short area with this matrix.
 export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
 
 // A change to an app, or to what it is built from, publishes that app's image.

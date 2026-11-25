@@ -19,10 +19,9 @@ three ways. Those comments preserved grouped times, not a per-test table.
 
 The estimated slowest shard below uses those grouped times, the current test counts, and 60 seconds of setup. It is an
 estimate, not a measurement. With 15 shards, Playwright's count-based split gives 10–11 tests per tagged shard and 16–17
-with `phone_tests=all`; `--list` proves the tagged split for each shard. The estimate is 230 seconds for the slowest
-tagged shard and 282 seconds for the slowest shard with all phone tests, both under the 300-second job limit. The team
-lead measures the actual job times for both modes on this branch, and `browser-jobs.json` changes when a shard comes
-near the limit.
+with `phone_tests=all`; `--list` proves the split for both modes. The estimate is 230 seconds for the slowest tagged
+shard and 282 seconds for the slowest shard with all phone tests: 300 seconds is the aim and 420 seconds the limit.
+`browser-jobs.json` changes when a measured shard comes near the limit.
 
 ## Decision
 
@@ -43,3 +42,8 @@ app-owned shard count; only the separate workflow-proof call passes `smoke: true
   test checks the matrix, and its instructions hold the count's proof.
 - A smoke proof proves the workflow's jobs and steps, not the editor suite; its call sites are in
   [workflow testing](../../.github/TESTING.md#on-github).
+
+## Outcome note: phone tag parser (issue #458, 26 November 2026)
+
+Pending owner approval in the PR: `platform/tools/phone-tags.mjs` is the single narrow exception to the HEAD-read rule,
+read only by platform's web phone-tag check and the editor's own unit test; `apps/web` imports nothing from it.

@@ -216,9 +216,9 @@ not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
 **Matrix in called workflows:** `act` evaluates `matrix: ${{ fromJSON(needs.*.outputs.*) }}` before `needs` outputs
 exist when the workflow is triggered by `workflow_call` (nektos/act#2313, #927), producing a literal string that fails
-JSON parsing and creates a phantom failing job. Both browser workflows (`ci-apps-web`, `ci-apps-editor`) use an
-empty-list fallback and skip the job when the planned matrix is empty. `act` ignores a job whose condition is false, so
-the fallback creates no phantom job; GitHub always receives a real matrix.
+JSON parsing and creates a phantom failing job. `ci-apps-editor.yml` uses
+`fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` so `act` can always parse the matrix. The editor
+always supplies a matrix, so its browser jobs need no condition to skip an empty one.
 
 ## On GitHub
 

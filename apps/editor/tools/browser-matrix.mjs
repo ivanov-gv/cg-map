@@ -6,10 +6,9 @@ import {pathToFileURL} from 'node:url';
 
 const configuration = new URL('../browser-jobs.json', import.meta.url);
 
-// Reads the one number this app owns and rejects a source that grew into an area list. A source is a file path or the
-// parsed object itself, so tests can pass a broken configuration without writing a temporary file.
-export function readJobCount(source = configuration) {
-  const parsed = typeof source === 'string' || source instanceof URL ? JSON.parse(fs.readFileSync(source, 'utf8')) : source;
+// Reads the one number this app owns from a configuration path and rejects a file that grew into an area list.
+export function readJobCount(configurationPath = configuration) {
+  const parsed = JSON.parse(fs.readFileSync(configurationPath, 'utf8'));
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object' || Object.keys(parsed).join() !== 'jobs') {
     throw new Error('browser-jobs.json must hold only jobs');
   }
@@ -17,8 +16,8 @@ export function readJobCount(source = configuration) {
 }
 
 // Returns one job per requested shard, or only the first when smoke is true.
-export function browserMatrix(source, {smoke = false} = {}) {
-  const jobCount = readJobCount(source);
+export function browserMatrix(configurationPath, {smoke = false} = {}) {
+  const jobCount = readJobCount(configurationPath);
   if (!Number.isInteger(jobCount) || jobCount < 1) throw new Error('browser jobs must be a positive integer');
   const shards = smoke ? [1] : Array.from({length: jobCount}, (_, index) => index + 1);
   return {include: shards.map(shard => ({shard, jobs: jobCount}))};
