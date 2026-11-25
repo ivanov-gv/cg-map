@@ -36,10 +36,6 @@ export const junctionEntry = coordinate => ({
 
 const coordinateOfKey = key => key.slice('local:'.length).split(' ').map(Number);
 
-// Rules from before roads had junctions of the editor cannot say where an end is.
-export const canNameJunctions = ({rules}) =>
-  rules.layers[roadsFile]?.properties.startNode?.type === 'identifier' && Boolean(rules.layers[nodesFile]);
-
 // The levels a road can be on, the highest first, as the choices of a select.
 export function levelOptions() {
   return Array.from({length: 2 * highestLevel + 1}, (_unused, index) => {
@@ -204,7 +200,7 @@ function turnRow(from, turn, members, joint, edit) {
 
 // The allowed turns, by the road someone comes from.
 function turnSection(joint, edit) {
-  const groups = turnsAt(jointWithChoices(joint, edit.extras));
+  const groups = turnsAt(jointWithChoices(joint, edit.extras, edit.context));
   if (groups.length === 0) return [];
   const isPassed = groups.some(({turns}) => turns.some(({canRecord}) => !canRecord));
   const rows = groups.map(({from, members, turns}) => {

@@ -84,6 +84,10 @@ export function boundsAround(coordinate, map, pixels = 16) {
   return [Math.min(...longitudes), Math.min(...latitudes), Math.max(...longitudes), Math.max(...latitudes)];
 }
 
+// Rules from before roads had junctions of the editor cannot say where an end is.
+export const canNameJunctions = rules =>
+  rules.layers['roads.geojson']?.properties.startNode?.type === 'identifier' && Boolean(rules.layers['road-nodes.geojson']);
+
 export const boxAround = ([longitude, latitude], degrees = 0.00005) => [
   longitude - degrees,
   latitude - degrees,
