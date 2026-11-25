@@ -108,6 +108,7 @@ const openedEndKey = (end, {key, feature, context}) => {
 };
 
 // An end on another level than it was opened on leaves what it was joined to, also when it is dragged in the same edit.
+// These points are kept apart from a Disconnect: taking a level back must not undo it.
 export function freePointsWithLevel(end, level, edit) {
   const key = openedEndKey(end, edit);
   const others = (edit.extras.freePoints ?? []).filter(point => point !== key);
@@ -161,7 +162,8 @@ const endMarks = feature => {
 const joinedPoints = (entry, context) => sharedPointsOf(entry, context.entriesOf(roadsFile));
 
 // The open edit with the points that were disconnected in it.
-const graphEdit = edit => ({...edit, freePoints: new Set(edit.extras?.freePoints ?? [])});
+const graphEdit = edit =>
+  ({...edit, freePoints: new Set([...(edit.extras?.freePoints ?? []), ...(edit.extras?.disconnectedPoints ?? [])])});
 
 // Takes the picked point out of its joint, so that it moves alone from then on.
 function disconnectTool(feature, handle, edit) {
@@ -174,8 +176,8 @@ function disconnectTool(feature, handle, edit) {
     run: () => {
       const problem = disconnectProblem(feature, handle.vertexIndex);
       if (problem) return edit.showProblem(problem);
-      const freePoints = [...(edit.extras.freePoints ?? []), pointKey(coordinate)];
-      edit.setExtras({freePoints});
+      const disconnectedPoints = [...(edit.extras.disconnectedPoints ?? []), pointKey(coordinate)];
+      edit.setExtras({disconnectedPoints});
       return edit.setFeature(disconnectedRoad(feature, handle.vertexIndex));
     }
   };
