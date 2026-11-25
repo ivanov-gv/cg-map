@@ -314,7 +314,7 @@ export class InspectorEditing {
     elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
     const applyLabel = this.#behavior.applyLabel(this.#editContext());
     elementById('apply-edit').textContent = this.#context.isResolving(this.#entry()) ? 'Apply and resolve' : applyLabel;
-    elementById('leave-note').hidden = this.#transaction.isNew;
+    elementById('leave-note').hidden = this.#transaction.isNew || this.#behavior.isDerived;
     this.#renderToolButtons();
     this.#renderFacts();
     this.#renderGeometry();
