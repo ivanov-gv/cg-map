@@ -306,8 +306,10 @@ function renderJoints() {
     jointLayer.show([]);
     return;
   }
-  const hasShownLevel = ({groups, level}) =>
-    shownLevel === null || (groups ? groups.some(group => group.level === shownLevel) : level === shownLevel);
+  // Where a road of the level goes on to another level is one of its connections.
+  const isOfShownLevel = ({entry}) => levelsByFile[entry.filename](entry.feature).includes(shownLevel);
+  const hasShownLevel = ({members, level}) =>
+    shownLevel === null || (members ? members.some(isOfShownLevel) : level === shownLevel);
   jointLayer.show(jointsOfLayer.joints(viewBounds(), behaviorContext()).filter(hasShownLevel));
 }
 
@@ -673,7 +675,7 @@ function selectFeatureAtClick(event) {
     return;
   }
   const joint = jointLayer.jointAt(event.point);
-  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint);
+  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint, behaviorContext());
   if (jointEntry) {
     selectObject(jointEntry);
     return;

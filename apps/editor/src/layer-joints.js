@@ -1,5 +1,5 @@
 // The layers whose lines join each other, and how their joints are found, shown and opened.
-import {junctionEntry} from './layer-junctions.js';
+import {canNameJunctions, junctionEntry} from './layer-junctions.js';
 import {waterJointsIn} from './water-joins.js';
 import {entriesWithin, jointsIn, levelsOf, roadLevel} from './road-graph.js';
 
@@ -12,7 +12,8 @@ const waterFile = 'water.geojson';
 export const layerJoints = {
   roads: {
     joints: (view, {entriesOf}) => jointsIn(view, entriesOf(roadsFile)),
-    entry: ({coordinate}) => junctionEntry(coordinate),
+    // Older rules cannot name junctions, so there is nothing to open.
+    entry: ({coordinate}, context) => (canNameJunctions(context) ? junctionEntry(coordinate) : null),
     levels: (view, {entriesOf}) => [...new Set(entriesWithin(entriesOf(roadsFile), view).flatMap(({feature}) => levelsOf(feature)))]
   },
   water: {joints: (view, {entriesOf}) => waterJointsIn(view, entriesOf(waterFile))}

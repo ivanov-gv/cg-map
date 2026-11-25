@@ -1,7 +1,9 @@
 // Where rivers meet rivers and water areas. A join is kept when either side moves.
 import {roundedCoordinate} from './geometry-editing.js';
 import {distanceMetres, nearestPointOnLine, nearestPointOnOutline} from './geometry-measures.js';
-import {entriesWithin, isWithin, pointKey, unjoinedCrossings} from './road-graph.js';
+import {isInside} from './interior-point.js';
+import {movedPoints, originsAfter, startingOrigins} from './line-origins.js';
+import {boundsOf, entriesNear, entriesWithin, isWithin, pointKey, unjoinedCrossings} from './road-graph.js';
 import {endsOf, isSamePoint, withJunctionAt} from './road-shapes.js';
 
 // Source lines end on an outline up to rounding and simplification.
@@ -12,96 +14,108 @@ const nearMissMetres = 5;
 const touchMetres = 0.2;
 
 const isLine = ({feature}) => feature.geometry.type === 'LineString';
-const isArea = ({feature}) => feature.geometry.type === 'Polygon';
+const isCoastline = entry => isLine(entry) && entry.feature.properties.kind === 'coastline';
 
-// The same line the other way around moves no point, only the order in which they are passed.
-const isReversal = (before, after) => JSON.stringify(before) === JSON.stringify(after.toReversed());
+// Lines that water flows along. The coastline is the edge of the sea.
+export const isWaterway = entry => isLine(entry) && !isCoastline(entry);
 
-const hasPoint = (line, coordinate) => line.some(point => isSamePoint(point, coordinate));
+// What a waterway ends on: the outline of a water area, or the coastline. The shape of the sea is simpler than that.
+const isShore = entry => entry.feature.geometry.type === 'Polygon' || isCoastline(entry);
 
-function nearestPoint(points, coordinate) {
+const outlinesOf = ({type, coordinates}) => (type === 'LineString' ? [coordinates] : coordinates);
+const polygonsOf = ({type, coordinates}) => (type === 'MultiPolygon' ? coordinates : [coordinates]);
+
+const isOnOutline = (point, outlines) => nearestPointOnOutline(point, outlines).distanceMetres <= joinToleranceMetres;
+const onOutline = (point, outlines) => roundedCoordinate(nearestPointOnOutline(point, outlines).coordinate);
+
+const isOnShore = (point, entry) => isShore(entry) && isOnOutline(point, outlinesOf(entry.feature.geometry));
+
+// Whether a point is on a shore or in the water of an area. Rivers drawn as areas have their lines inside.
+function isInWater(point, entry) {
+  if (isOnShore(point, entry)) return true;
+  const isArea = !isLine(entry);
+  return isArea && polygonsOf(entry.feature.geometry).some(rings => isInside(point, rings));
+}
+
+const withCoordinates = (feature, coordinates) => ({...feature, geometry: {...feature.geometry, coordinates}});
+
+// The edit of an entry with other coordinates, or none when they are the same.
+function editsOf({filename, key, feature}, coordinates) {
+  const isChanged = coordinates.some((point, index) => point !== feature.geometry.coordinates[index]);
+  return isChanged ? [{filename, key, after: withCoordinates(feature, coordinates)}] : [];
+}
+
+function nearestOf(points, coordinate) {
   return points.reduce((nearest, point) =>
     distanceMetres(point, coordinate) < distanceMetres(nearest, coordinate) ? point : nearest
   );
 }
 
-// Where a point that a line no longer has went. With as many points as before that is the one in its place. Where points
-// were added or removed too it is the nearest new one, or the nearest one left.
-function successorOf(point, index, before, after) {
-  if (index === 0) return after[0];
-  if (index === before.length - 1) return after.at(-1);
-  const inItsPlace = after[index];
-  if (before.length === after.length && !hasPoint(before, inItsPlace)) return inItsPlace;
-  const newPoints = after.filter(candidate => !hasPoint(before, candidate));
-  return nearestPoint(newPoints.length > 0 ? newPoints : after, point);
-}
-
-// The points that an edit moved or took away, each with the one that stands for it now.
-export function movedPoints(before, after) {
-  if (isReversal(before, after)) return [];
-  return before.flatMap((point, index) =>
-    hasPoint(after, point) ? [] : [{from: point, to: successorOf(point, index, before, after)}]
+// Where every point that a line no longer has went: one that was moved to its new place, one that was taken out to the
+// nearest point left, because water that flowed there still flows into this line.
+function joinMoves(before, after, origins = originsAfter(before.coordinates, startingOrigins(before), after.coordinates)) {
+  const moved = movedPoints(before, after, origins).map(({from, to}) => ({from, to}));
+  const taken = before.coordinates.filter(
+    (point, index) => !origins.includes(index) && !after.coordinates.some(other => isSamePoint(other, point))
   );
-}
-
-function withPointsMoved(line, moves) {
-  return line.map(point => moves.find(({from}) => isSamePoint(from, point))?.to ?? point);
+  return [...moved, ...taken.map(from => ({from, to: nearestOf(after.coordinates, from)}))];
 }
 
 // Other lines that share a moved point go with it.
-export function linesKeepingJoins(key, before, after, waterEntries, freePoints = new Set()) {
-  const moves = movedPoints(before.coordinates, after.coordinates).filter(({from}) => !freePoints.has(pointKey(from)));
+export function linesKeepingJoins(key, before, after, waterEntries, {origins, freePoints = new Set()} = {}) {
+  const moves = joinMoves(before, after, origins).filter(({from}) => !freePoints.has(pointKey(from)));
   if (moves.length === 0) return [];
-  return waterEntries.filter(entry => isLine(entry) && entry.key !== key).flatMap(({filename, key: otherKey, feature}) => {
-    const coordinates = withPointsMoved(feature.geometry.coordinates, moves);
-    const isMoved = coordinates.some((point, index) => point !== feature.geometry.coordinates[index]);
-    return isMoved ? [{filename, key: otherKey, after: {...feature, geometry: {...feature.geometry, coordinates}}}] : [];
+  const otherLines = waterEntries.filter(entry => isLine(entry) && entry.key !== key);
+  return otherLines.flatMap(entry => {
+    const {coordinates} = entry.feature.geometry;
+    return editsOf(entry, coordinates.map(point => moves.find(({from}) => isSamePoint(from, point))?.to ?? point));
   });
 }
 
-const isOnOutline = (point, rings) => nearestPointOnOutline(point, rings).distanceMetres <= joinToleranceMetres;
-const onOutline = (point, rings) => roundedCoordinate(nearestPointOnOutline(point, rings).coordinate);
-
-// Rivers that ended on a water area's shore still end on it after the shore moved.
+// Waterways that ended on a shore still end on it after it moved.
 export function riversKeepingShore(before, after, waterEntries) {
-  return waterEntries.filter(isLine).flatMap(({filename, key, feature}) => {
-    const {coordinates} = feature.geometry;
-    const next = [...coordinates];
-    for (const index of [0, coordinates.length - 1]) {
-      const wasOnShore = isOnOutline(coordinates[index], before.coordinates);
-      if (wasOnShore && !isOnOutline(coordinates[index], after.coordinates)) {
-        next[index] = onOutline(coordinates[index], after.coordinates);
-      }
-    }
-    const isMoved = next.some((point, index) => point !== coordinates[index]);
-    return isMoved ? [{filename, key, after: {...feature, geometry: {...feature.geometry, coordinates: next}}}] : [];
+  const waterways = waterEntries.filter(isWaterway);
+  return waterways.flatMap(entry => {
+    const {coordinates} = entry.feature.geometry;
+    const kept = end => {
+      const isLeft = isOnOutline(end, outlinesOf(before)) && !isOnOutline(end, outlinesOf(after));
+      return isLeft ? onOutline(end, outlinesOf(after)) : end;
+    };
+    return editsOf(entry, [kept(coordinates[0]), ...coordinates.slice(1, -1), kept(coordinates.at(-1))]);
   });
 }
 
-// A river whose end was on a shore ends on that shore wherever it is dragged.
-export function riverEndingOnShores(before, after, waterEntries) {
-  if (!before || movedPoints(before.coordinates, after.coordinates).length === 0) return after;
-  const areas = waterEntries.filter(isArea);
-  // Ends are compared with ends: points can have been added or removed between them.
-  const endOnItsShore = (previousEnd, end) => {
-    if (isSamePoint(previousEnd, end)) return end;
-    const shore = areas.find(({feature}) => isOnOutline(previousEnd, feature.geometry.coordinates));
-    return shore ? onOutline(end, shore.feature.geometry.coordinates) : end;
-  };
-  const [previousStart, previousEnd] = endsOf({geometry: before});
-  const [start, end] = endsOf({geometry: after});
-  const inner = after.coordinates.slice(1, -1);
-  return {...after, coordinates: [endOnItsShore(previousStart, start), ...inner, endOnItsShore(previousEnd, end)]};
+// Where an end of a line was before: the end it comes from, or null for a point that became an end since. Without known
+// origins an end that cannot be told is compared with the end on its side.
+function previousEnd(index, before, after, origins) {
+  const origin = (origins ?? originsAfter(before.coordinates, startingOrigins(before), after.coordinates)).at(index);
+  if (!origins && origin === null) return before.coordinates.at(index);
+  const isEnd = origin === 0 || origin === before.coordinates.length - 1;
+  return isEnd ? before.coordinates[origin] : null;
 }
 
-// What a river flows into at its last point: another line that has the point, or an area it ends on.
+// A waterway whose end was on a shore ends on that shore wherever it is dragged, unless it was disconnected.
+export function riverEndingOnShores(before, after, waterEntries, {origins, freePoints = new Set()} = {}) {
+  if (!before) return after;
+  const shores = waterEntries.filter(isShore);
+  const endOnItsShore = index => {
+    const end = after.coordinates.at(index);
+    const previous = previousEnd(index, before, after, origins);
+    const isMoved = previous && !isSamePoint(previous, end) && !freePoints.has(pointKey(previous));
+    const shore = isMoved && entriesNear(previous, shores).find(entry => isOnShore(previous, entry));
+    return shore ? onOutline(end, outlinesOf(shore.feature.geometry)) : end;
+  };
+  return {...after, coordinates: [endOnItsShore(0), ...after.coordinates.slice(1, -1), endOnItsShore(-1)]};
+}
+
+// What a river flows into at its last point: another line that has the point, or water it ends in.
 export function flowsInto({key, feature}, waterEntries) {
   const [, mouth] = endsOf(feature);
-  return waterEntries.find(entry => {
-    if (entry.key === key) return false;
-    if (isLine(entry)) return entry.feature.geometry.coordinates.some(point => isSamePoint(point, mouth));
-    return isArea(entry) && isOnOutline(mouth, entry.feature.geometry.coordinates);
-  });
+  const others = entriesNear(mouth, waterEntries).filter(entry => entry.key !== key);
+  const line = others.find(
+    entry => isWaterway(entry) && entry.feature.geometry.coordinates.some(point => isSamePoint(point, mouth))
+  );
+  return line ?? others.find(entry => isInWater(mouth, entry));
 }
 
 // Other lines get a point where a drawn or reshaped one now touches them.
@@ -114,28 +128,21 @@ export function linesTouched(key, before, after, waterEntries) {
   });
 }
 
-// Lines that water flows along. The coastline is the edge of the sea.
-export const isWaterway = entry => isLine(entry) && entry.feature.properties.kind !== 'coastline';
+const isNear = (point, {feature}) => nearestPointOnOutline(point, outlinesOf(feature.geometry)).distanceMetres <= nearMissMetres;
 
-const isNear = (point, {feature}) => {
-  const rings = feature.geometry.type === 'LineString' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
-  return nearestPointOnOutline(point, rings).distanceMetres <= nearMissMetres;
-};
-
-// What the end of a line alone at its point is: on a shore it joins that water, beside other water it nearly does.
+// What the end of a line alone at its point is: in other water it joins that, beside other water it nearly does.
 function statusOfLooseEnd(coordinate, key, entries) {
-  const areas = entries.filter(isArea);
-  if (areas.some(({feature}) => isOnOutline(coordinate, feature.geometry.coordinates))) return 'joined';
-  const others = entries.filter(entry => entry.key !== key && (isWaterway(entry) || isArea(entry)));
-  return others.some(entry => isNear(coordinate, entry)) ? 'near' : 'deadEnd';
+  const others = entriesNear(coordinate, entries).filter(entry => entry.key !== key);
+  if (others.some(entry => isInWater(coordinate, entry))) return 'joined';
+  return others.some(entry => (isWaterway(entry) || isShore(entry)) && isNear(coordinate, entry)) ? 'near' : 'deadEnd';
 }
 
 // Every joint of the waterways in a view, as the road graph has them: [{coordinate, status}].
 export function waterJointsIn(bounds, allEntries) {
-  const entries = entriesWithin(allEntries.filter(entry => isLine(entry)), bounds).filter(isWaterway);
-  const areas = allEntries.filter(isArea);
+  const entries = entriesWithin(allEntries, bounds);
+  const waterways = entries.filter(isWaterway);
   const linesByPoint = new Map();
-  for (const entry of entries) {
+  for (const entry of waterways) {
     const {coordinates} = entry.feature.geometry;
     coordinates.forEach((coordinate, index) => {
       const isEnd = index === 0 || index === coordinates.length - 1;
@@ -148,34 +155,30 @@ export function waterJointsIn(bounds, allEntries) {
     const [{coordinate, entry, isEnd}] = members;
     if (!isWithin(coordinate, bounds)) return [];
     if (members.length > 1) return [{coordinate, status: 'joined'}];
-    return isEnd ? [{coordinate, status: statusOfLooseEnd(coordinate, entry.key, [...entries, ...areas])}] : [];
+    return isEnd ? [{coordinate, status: statusOfLooseEnd(coordinate, entry.key, allEntries)}] : [];
   });
-  return [...joints, ...unjoinedCrossings(entries).filter(({coordinate}) => isWithin(coordinate, bounds))];
+  return [...joints, ...unjoinedCrossings(waterways).filter(({coordinate}) => isWithin(coordinate, bounds))];
 }
 
 // The points of a waterway that others share, and the ends of it that lie on a shore.
 export function joinedWaterPoints({key, feature}, waterEntries) {
   if (feature.geometry.type !== 'LineString') return [];
-  const otherPoints = new Set(
-    waterEntries
-      .filter(entry => isWaterway(entry) && entry.key !== key)
-      .flatMap(entry => entry.feature.geometry.coordinates.map(pointKey))
-  );
-  const areas = waterEntries.filter(isArea);
+  const others = entriesWithin(waterEntries, boundsOf(feature)).filter(entry => entry.key !== key);
+  const otherPoints = new Set(others.filter(isWaterway).flatMap(entry => entry.feature.geometry.coordinates.map(pointKey)));
   const {coordinates} = feature.geometry;
   return coordinates.filter((point, index) => {
+    if (otherPoints.has(pointKey(point))) return true;
     const isEnd = index === 0 || index === coordinates.length - 1;
-    const isOnShore = isEnd && areas.some(area => isOnOutline(point, area.feature.geometry.coordinates));
-    return isOnShore || otherPoints.has(pointKey(point));
+    return isEnd && others.some(entry => isOnShore(point, entry));
   });
 }
 
 // The nearest place of every other waterway, and of every shore for an end.
 export function joinableWater(coordinate, waterEntries, ignoredKeys, isEnd) {
   const lines = waterEntries.filter(entry => isWaterway(entry) && !ignoredKeys.has(entry.key));
-  const shores = isEnd ? waterEntries.filter(isArea) : [];
+  const shores = isEnd ? waterEntries.filter(isShore) : [];
   return [
     ...lines.map(({feature}) => ({...nearestPointOnLine(coordinate, feature.geometry.coordinates), points: feature.geometry.coordinates})),
-    ...shores.map(({feature}) => ({...nearestPointOnOutline(coordinate, feature.geometry.coordinates), points: []}))
+    ...shores.map(({feature}) => ({...nearestPointOnOutline(coordinate, outlinesOf(feature.geometry)), points: []}))
   ];
 }

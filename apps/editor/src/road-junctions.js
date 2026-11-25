@@ -40,14 +40,13 @@ function armsOfMember(member) {
   const {feature} = member.entry;
   const {coordinates} = feature.geometry;
   const {along, against} = drivingDirections(feature.properties);
-  const arms = [];
-  if (member.index > 0) {
-    arms.push({member, next: coordinates[member.index - 1], canArrive: along, canLeave: against});
-  }
-  if (member.index < coordinates.length - 1) {
-    arms.push({member, next: coordinates[member.index + 1], canArrive: against, canLeave: along});
-  }
-  return arms;
+  // A ring goes on from its last point to its first.
+  const previous = member.isRing ? coordinates.at(-2) : coordinates[member.index - 1];
+  const next = coordinates[member.index + 1];
+  return [
+    ...(previous ? [{member, next: previous, canArrive: along, canLeave: against}] : []),
+    ...(next ? [{member, next, canArrive: against, canLeave: along}] : [])
+  ];
 }
 
 // The compass direction in which an arm leaves the joint, to tell two parts of one street apart.
@@ -84,8 +83,9 @@ export function turnsAt({coordinate, groups}) {
   });
 }
 
+// A ring has two arms at one point, so an arm is told by where it goes.
+const armKey = ({member, next}) => `${member.entry.key}/${member.index}/${next}`;
 export const turnKey = (from, to) => `turn:${armKey(from)}>${armKey(to)}`;
-const armKey = ({member}) => `${member.entry.key}/${member.index}`;
 
 const isAtJunction = ({feature}, fromId, node) =>
   feature.properties.from === fromId && Boolean(feature.properties.viaNodes?.includes(node));
@@ -112,22 +112,22 @@ export const isOnWay = ({feature}, way) => {
   return from === way || to === way || viaWays.includes(way);
 };
 
+const lostBySplit = 'This road has turn rules that a split would lose. Remove them first.';
+
 // Turn rules of a road that is split: those at the end of its second half name that half from then on, those through it
-// would be lost. Returns {edits, problem}.
+// would be lost. Returns {edits: [{entry, renamed(properties)}], problem}; a rule can belong to two roads that are split.
 export function rulesAfterSplit(restrictions, entry, secondKey) {
   const way = roadId(entry);
   const {startNode, endNode} = entry.feature.properties;
-  const own = restrictions.filter(restriction => isOnWay(restriction, way));
   const edits = [];
-  for (const {filename, key, feature} of own) {
-    const {from, to, viaNodes = [], viaWays = []} = feature.properties;
+  for (const rule of restrictions.filter(restriction => isOnWay(restriction, way))) {
+    const {viaNodes = [], viaWays = []} = rule.feature.properties;
     const isThrough = viaWays.includes(way) || viaNodes.length === 0;
     const isAtBothEnds = startNode !== undefined && startNode === endNode;
-    if (isThrough || isAtBothEnds) return {edits: [], problem: 'This road has turn rules that a split would lose. Remove them first.'};
+    if (isThrough || isAtBothEnds) return {edits: [], problem: lostBySplit};
     if (!viaNodes.includes(endNode)) continue;
-    const renamed = value => (value === way ? secondKey : value);
-    const properties = {...feature.properties, from: renamed(from), to: renamed(to)};
-    edits.push({filename, key, after: {...feature, properties}});
+    const renamedId = value => (value === way ? secondKey : value);
+    edits.push({entry: rule, renamed: ({from, to}) => ({from: renamedId(from), to: renamedId(to)})});
   }
   return {edits, problem: null};
 }
