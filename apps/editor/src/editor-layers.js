@@ -89,7 +89,10 @@ export const editorLayers = [
     name: 'Routes',
     summary: 'Lines as stop sequences, both ways',
     files: ['transit-routes.json'],
-    linkedFiles: ['transport-stops.geojson']
+    linkedFiles: ['transport-stops.geojson'],
+    // Shown to pick stops from, and edited on their own layer.
+    contextFiles: ['transport-stops.geojson'],
+    guideMinZoom: 13
   }
 ];
 

@@ -9,8 +9,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   prepared(feature, context)    the feature as Apply will record it
 //   problem(edit, context)        why Apply must refuse it, or null
 //   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
-//   deletion(entry, context)      {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
-//                                 more on the map; it gives the edits, or null to keep the object
+//   deletion(entry, context)      {problem} when it must not be removed, else {message, edits, options}. Options are
+//                                 [{label, edits or async resolve()}], and resolve() may ask for more on the map; it gives the edits, or null to keep the object
 //   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, edit, context) where a drag must stop, with edit = {key, feature, previousGeometry, origins,
 //                                 draggedIndex}, the point of a line that is dragged or null
@@ -113,6 +113,16 @@ const drawChoices = {
       filename: 'summits.geojson',
       shape: 'Point',
       properties: {kind: 'summit', natural: 'peak'}
+    }
+  ],
+  stops: [{label: 'Add stop', filename: 'transport-stops.geojson', shape: 'Point', properties: {}}],
+  routes: [
+    {
+      label: 'New line',
+      filename: 'transit-routes.json',
+      shape: 'None',
+      properties: {network: 'bus', directions: [{headsign: '', stops: []}]},
+      isDesktopOnly: true
     }
   ],
   settlements: [

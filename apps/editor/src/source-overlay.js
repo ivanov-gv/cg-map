@@ -8,6 +8,7 @@ const ghostSource = 'editor-ghost';
 const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
 const targetSource = 'editor-target';
+const pathSource = 'editor-path';
 const placesFile = 'places.geojson';
 // Guides become useful at neighbourhood scale. Below this, select the normal rendered cartography instead.
 export const guideMinZoom = 15;
@@ -189,6 +190,13 @@ function stateLayers() {
       paint: {'text-color': stateColors.highlighted, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5}
     },
     {
+      id: 'editor-path',
+      type: 'line',
+      source: pathSource,
+      layout: {'line-join': 'round'},
+      paint: {'line-color': ['get', 'colour'], 'line-width': 5, 'line-opacity': 0.85}
+    },
+    {
       id: 'editor-target',
       type: 'line',
       source: targetSource,
@@ -223,7 +231,7 @@ function drawingFeatures(points, nextPoint) {
 }
 
 function installStateLayers(map) {
-  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource]) {
+  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource, pathSource]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
   const layers = [...levelLayers(), ...stateLayers()];
@@ -266,6 +274,8 @@ export function createSourceOverlay(map) {
     setApplied: features => setData(appliedSource, features),
     setDeletions: features => setData(deletionSource, features),
     setTarget: feature => setData(targetSource, feature ? [feature] : []),
+    setPath: (coordinates, colour = '#1b75bb') =>
+      setData(pathSource, coordinates.length > 1 ? [lineFeature(coordinates, {colour})] : []),
     setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,

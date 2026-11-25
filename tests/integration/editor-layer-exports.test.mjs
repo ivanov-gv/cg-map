@@ -382,3 +382,45 @@ test('a border with both its municipalities, a country border, a town and a neig
   const written = editor.written('settlements.geojson').find(({properties}) => properties.name === 'New town');
   assert.match(written.properties.municipality, /^ME-/);
 });
+
+const lineNumbersOf = ({properties}) => properties.lines ?? [];
+
+test('a new stop on a road, a line with one stop less and a new line pass with the lines of their stops', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const road = editor.find('roads.geojson', ({properties, geometry}) => properties.kind === 'residential' && isLongLine({geometry}));
+  const stopId = newLocalId();
+  const stop = {
+    type: 'Feature',
+    id: stopId,
+    properties: {stopId, name: 'New stop'},
+    geometry: {type: 'Point', coordinates: road.feature.geometry.coordinates[3]}
+  };
+  assert.equal(editor.apply('transport-stops.geojson', stopId, stop), null);
+  const isLong = ({properties}) => properties.number && properties.directions[0].stops.length > 4;
+  const line = editor.find('transit-routes.json', isLong);
+  const shortened = structuredClone(line.feature);
+  shortened.properties.directions[0].stops.splice(1, 1);
+  assert.equal(editor.apply(line.filename, line.key, shortened), null);
+  const [firstStop] = line.feature.properties.directions[0].stops;
+  const newLine = {
+    type: 'Feature',
+    properties: {network: 'bus', number: '77', directions: [{headsign: '', stops: [stopId, firstStop]}]},
+    geometry: null
+  };
+  assert.equal(editor.apply('transit-routes.json', newLocalId(), newLine), null);
+  await editor.exportAndImport();
+  const written = editor.written('transport-stops.geojson');
+  for (const id of [stopId, firstStop]) {
+    assert.ok(lineNumbersOf(written.find(({properties}) => properties.stopId === id)).includes('77'));
+  }
+});
+
+test('a deleted stop leaves its lines', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const stops = editor.session.workingEntries('transport-stops.geojson').filter(({feature}) => lineNumbersOf(feature).length > 0);
+  const removed = stops.find(({filename, key}) => editor.remove(filename, key) === null);
+  assert.ok(removed, 'a served stop can be removed');
+  await editor.exportAndImport();
+  const routes = JSON.stringify(editor.written('transit-routes.json').map(({properties}) => properties.directions));
+  assert.ok(!routes.includes(`"${removed.feature.properties.stopId}"`));
+});

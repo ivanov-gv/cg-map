@@ -12,6 +12,7 @@ import {
   beginNewLine,
   beginNewPoint,
   beginNewPolygon,
+  beginNewRecord,
   canFinishDrawing,
   cancelGesture,
   editTools,
@@ -34,7 +35,12 @@ import {formValues, propertiesFromForm, renderPropertyForm} from './property-for
 // How close to the first corner, on screen, a tap closes a shape.
 const closingDistancePixels = 14;
 
-const beginNewByShape = {Point: beginNewPoint, LineString: beginNewLine, Polygon: beginNewPolygon};
+const beginNewByShape = {
+  Point: beginNewPoint,
+  LineString: beginNewLine,
+  Polygon: beginNewPolygon,
+  None: beginNewRecord
+};
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
 // context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
@@ -232,6 +238,8 @@ export class InspectorEditing {
       context: this.#context.behaviorContext(),
       setProperties: whileOpen(properties => this.#setProperties(properties)),
       extras: this.#transaction.extras,
+      // A control that outlives one rendering reads the edit as it is then.
+      latest: () => this.#editContext(),
       origins: this.#transaction.origins,
       setExtras: whileOpen(extras => this.#setExtras(extras)),
       setFeature: whileOpen(feature => this.#setFeature(feature)),
@@ -341,6 +349,7 @@ export class InspectorEditing {
     overlay.setSelection(null);
     overlay.setGhost(null);
     overlay.setTarget(null);
+    overlay.setPath([]);
     this.#context.showMarks([]);
     overlay.setDrawing([], null);
     this.#context.onEditStateChanged();

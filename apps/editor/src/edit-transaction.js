@@ -60,6 +60,10 @@ export const beginNewLine = (key, properties) =>
 export const beginNewPolygon = (key, properties) =>
   newTransaction(key, {type: 'Feature', properties, geometry: null}, editTools.drawPolygon, true);
 
+// A record without a place on the map, such as a line.
+export const beginNewRecord = (key, properties) =>
+  newTransaction(key, {type: 'Feature', properties, geometry: null}, null, true);
+
 export const withTool = (transaction, tool) => ({
   ...transaction,
   tool,
