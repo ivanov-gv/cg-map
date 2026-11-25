@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
@@ -43,7 +43,7 @@ test('a stream keeps its join with the lake and is reversed, and the sea follows
   await chooseLayer(page, 'water', [-8, 5]);
   // The upper shore of the lake moves down; the stream that ended on it still does.
   await tapAt(page, [-7, 3.5]);
-  await page.locator('#tool-vertices').click();
+  await editCorners(page);
   await tapAt(page, [-6, 5]);
   await dragFromTo(page, [-6, 5], [-6, 3.5]);
   await page.locator('#mode-done').click();
@@ -61,7 +61,7 @@ test('a stream keeps its join with the lake and is reversed, and the sea follows
   await chooseLayer(page, 'water', [-600, 0]);
   await tapAt(page, [-600, 1]);
   await expect(page.locator('#selection-kind')).toHaveText('Coastline');
-  await page.locator('#tool-vertices').click();
+  await editCorners(page);
   await dragFromTo(page, [-600, 0], [-597, 0]);
   await page.locator('#mode-done').click();
   await applyEdit(page);

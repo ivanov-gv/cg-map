@@ -29,21 +29,31 @@ const coastFollowers = context => [
   {name: 'municipality', entries: context.entriesOf(municipalitiesFile)}
 ];
 
-function coastEdits(before, after, context) {
+let latestFollowing = null;
+
+// What follows a coastline change, by group: [{name, edits, isLeftBehind}]. Apply asks for it twice, and finding it takes
+// a moment, so the latest answer is kept.
+function coastFollowing(before, after, context) {
+  const isKnown = latestFollowing?.before === before.geometry && latestFollowing.after === after.geometry;
+  if (isKnown) return latestFollowing.groups;
   const stretch = changedStretch(before.geometry.coordinates, after.geometry.coordinates);
-  if (!stretch) return [];
-  return coastFollowers(context).flatMap(({entries}) => followingEdits(entries, stretch, coastToleranceMetres));
+  const groups = !stretch
+    ? []
+    : coastFollowers(context).map(({name, entries}) => {
+        const edits = followingEdits(entries, stretch, coastToleranceMetres);
+        const mustFollow = () => name === 'sea' || hasOutlineAlong(entries, stretch, coastToleranceMetres);
+        return {name, edits, isLeftBehind: edits.length === 0 && mustFollow()};
+      });
+  latestFollowing = {before: before.geometry, after: after.geometry, groups};
+  return groups;
 }
+
+const coastEdits = (before, after, context) => coastFollowing(before, after, context).flatMap(({edits}) => edits);
 
 // A shape that runs along the coast and cannot follow it would leave a gap between land and sea, so Apply refuses that.
 function coastProblem({feature, before}, context) {
   if (!before || !isCoastline(feature)) return null;
-  const stretch = changedStretch(before.geometry.coordinates, feature.geometry.coordinates);
-  if (!stretch) return null;
-  const behind = coastFollowers(context).find(({name, entries}) => {
-    const mustFollow = name === 'sea' || hasOutlineAlong(entries, stretch, coastToleranceMetres);
-    return mustFollow && followingEdits(entries, stretch, coastToleranceMetres).length === 0;
-  });
+  const behind = coastFollowing(before, feature, context).find(({isLeftBehind}) => isLeftBehind);
   if (behind) return `The ${behind.name} cannot follow this change. Move fewer points, or points farther from the ends.`;
   const isCrossing =
     crossesItself(before.geometry, feature.geometry) ||
@@ -130,6 +140,10 @@ export const waterBehaviors = {
     renderExtras: renderWaterExtras,
     prepared: preparedWater,
     problem: coastProblem,
+    deletion: ({feature}) =>
+      isCoastline(feature)
+        ? {problem: 'The sea, the country and its borders end at the coastline, so it cannot be deleted.'}
+        : {message: '', edits: []},
     companionEdits: waterEdits,
     measures: waterFacts
   }
