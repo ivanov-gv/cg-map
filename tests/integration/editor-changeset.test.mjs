@@ -11,6 +11,7 @@ import {labelJoinProblems} from '../../apps/editor/src/cross-file-checks.js';
 import {EditSession} from '../../apps/editor/src/edit-session.js';
 import {translateGeometry} from '../../apps/editor/src/geometry-editing.js';
 import {featureProblem} from '../../apps/editor/src/layer-rules.js';
+import {collectionOf} from '../../apps/editor/src/source-records.js';
 
 const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 
@@ -41,7 +42,7 @@ function loadSources(root, filenames) {
   const entries = filenames.map(filename => {
     const bytes = fs.readFileSync(stagedSourcePath(root, filename));
     const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-    return [filename, {metadata: {filename, sha256}, collection: JSON.parse(bytes)}];
+    return [filename, {metadata: {filename, sha256}, collection: collectionOf(filename, JSON.parse(bytes))}];
   });
   return new Map(entries);
 }
@@ -54,11 +55,9 @@ function recordValidEdit(session, filename, key, feature) {
 }
 
 // Exports through a JSON round trip, because that is the only way a changeset leaves the browser.
-async function exportAndApply(session, sources, root, newEntityId) {
+async function exportAndApply(session, sources, root) {
   const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope, rules)));
-  const options = {now: envelope.createdAt, contractsDirectory};
-  if (newEntityId) options.newEntityId = newEntityId;
-  return {changeset, result: applyChangeset(changeset, root, options)};
+  return {changeset, result: applyChangeset(changeset, root, {now: envelope.createdAt, contractsDirectory})};
 }
 
 const indexOfFirst = (features, isWanted) => features.findIndex(isWanted);
@@ -111,17 +110,16 @@ test('POI details, level, position, creation and deletion survive the importer u
     geometry: {type: 'Point', coordinates: [19.2602, 42.4403]}
   });
   const expected = materializedLayer(session, 'places.geojson');
-  const importedEntityId = 'local:22222222-2222-4222-8222-222222222222';
-  const {changeset, result} = await exportAndApply(session, sources, root, () => importedEntityId);
+  const {changeset, result} = await exportAndApply(session, sources, root);
   assert.deepEqual(result.files, ['places.geojson']);
   assert.equal(result.needsTileRebuild, false);
   const written = readSource(root, 'places.geojson');
   assert.equal(written.features.length, features.length);
   assert.equal(written.features.find(({properties}) => properties.name === 'Renamed by the editor').properties.id, features[0].properties.id);
   const added = written.features.find(({properties}) => properties.id === localId);
-  assert.equal(added.properties.entityId, importedEntityId);
+  assert.equal(added.properties.entityId, localId, 'an object keeps the ID it had in the editor');
   const addOperation = changeset.operations.find(operation => operation.operation === 'add');
-  const addedVersion = expectImportedLayer(written, expected, addOperation, importedEntityId);
+  const addedVersion = expectImportedLayer(written, expected, addOperation, localId);
   assert.equal(added.properties.entityVersion, addedVersion);
   const policy = JSON.parse(fs.readFileSync(stagedSourcePath(root, 'place-visibility-policy.json')));
   assert.ok(
@@ -134,7 +132,8 @@ test('a road drawn in the editor is accepted, and asks for a tile rebuild', asyn
   const root = temporaryRoot(testContext);
   const sources = loadSources(root, ['roads.geojson']);
   const session = new EditSession(sources);
-  recordValidEdit(session, 'roads.geojson', 'local:road', {
+  const localId = 'local:33333333-3333-4333-8333-333333333333';
+  recordValidEdit(session, 'roads.geojson', localId, {
     type: 'Feature',
     properties: {kind: 'footway', name: 'New path'},
     geometry: {
@@ -146,11 +145,10 @@ test('a road drawn in the editor is accepted, and asks for a tile rebuild', asyn
     }
   });
   const expected = materializedLayer(session, 'roads.geojson');
-  const importedEntityId = 'local:33333333-3333-4333-8333-333333333333';
-  const {changeset, result} = await exportAndApply(session, sources, root, () => importedEntityId);
+  const {changeset, result} = await exportAndApply(session, sources, root);
   assert.equal(result.needsTileRebuild, true);
   const addOperation = changeset.operations.find(operation => operation.operation === 'add');
-  expectImportedLayer(readSource(root, 'roads.geojson'), expected, addOperation, importedEntityId);
+  expectImportedLayer(readSource(root, 'roads.geojson'), expected, addOperation, localId);
 });
 
 test('moving an unnamed road keeps its blank source name, and the importer accepts it', async testContext => {
@@ -237,4 +235,31 @@ test('the importer refuses a footprint move that strands its label, as the edito
   const originalBytes = fs.readFileSync(stagedSourcePath(root, 'buildings.geojson'));
   await assert.rejects(exportAndApply(session, sources, root), /Building label outside its polygon/);
   assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'buildings.geojson')), originalBytes);
+});
+
+// One edit per file the earlier bundles kept read-only, so the editor's rules and the importer's agree on each of them.
+test('objects of every other layer pass from the editor through the importer', async testContext => {
+  const root = temporaryRoot(testContext);
+  const renamedFiles = ['settlements.geojson', 'municipalities.geojson', 'context-countries.geojson', 'summits.geojson'];
+  const filenames = [...renamedFiles, 'contours.geojson', 'building-entrances.geojson', 'transit-routes.json'];
+  const sources = loadSources(root, filenames);
+  const session = new EditSession(sources);
+  for (const filename of renamedFiles) {
+    const renamed = structuredClone(sources.get(filename).collection.features[0]);
+    renamed.properties.name = 'Renamed by the editor';
+    recordValidEdit(session, filename, '0', renamed);
+  }
+  const contour = structuredClone(sources.get('contours.geojson').collection.features[0]);
+  contour.geometry.coordinates.splice(1, 1);
+  recordValidEdit(session, 'contours.geojson', '0', contour);
+  const entrance = structuredClone(sources.get('building-entrances.geojson').collection.features[0]);
+  entrance.properties.opens_onto = 'courtyard';
+  recordValidEdit(session, 'building-entrances.geojson', '0', entrance);
+  const route = structuredClone(sources.get('transit-routes.json').collection.features[0]);
+  route.properties.colour = '#1b75bb';
+  recordValidEdit(session, 'transit-routes.json', '0', route);
+  const {result} = await exportAndApply(session, sources, root);
+  assert.deepEqual(result.files.toSorted(), filenames.toSorted());
+  const writtenRoutes = collectionOf('transit-routes.json', readSource(root, 'transit-routes.json'));
+  assert.equal(writtenRoutes.features[0].properties.colour, '#1b75bb');
 });

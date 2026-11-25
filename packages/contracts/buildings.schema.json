@@ -41,13 +41,14 @@
                   "name": {"type": "string", "minLength": 1, "maxLength": 120},
                   "addr:street": {"type": "string", "minLength": 1, "maxLength": 120},
                   "addr:housenumber": {"type": "string", "minLength": 1, "maxLength": 128},
+                    "energy_class": {"enum": ["A+", "A", "B", "C", "D", "E", "F", "G"]},
                   "nohousenumber": {"const": "yes"},
-                  "addr:streetEntityId": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"},
+                  "addr:streetEntityId": {"type": "string", "pattern": "^((way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"},
                   "addr:streetEntityIds": {
                     "type": "array",
                     "minItems": 1,
                     "uniqueItems": true,
-                    "items": {"type": "string", "pattern": "^(way|relation)/[1-9][0-9]*$"}
+                    "items": {"type": "string", "pattern": "^((way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$"}
                   }
                 }
               }

@@ -73,6 +73,7 @@ const cases = [
   ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],
   ['source bundle producer', ['data/tools/editor-bundle.mjs'], ['data', 'tests'], []],
   ['changeset importer', ['data/tools/apply-changeset.mjs'], ['data', 'tests'], []],
+  ['changeset importer module', ['data/tools/changeset-rules.mjs'], ['data', 'tests'], []],
   ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor'], []],
   ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests'], []],
   ['level policy behind the importer', ['data/tools/apply-place-visibility.mjs'], ['data', 'tests'], []],

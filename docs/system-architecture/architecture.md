@@ -33,7 +33,7 @@ Projects depend on each other only through these concrete contracts:
 | Published `@ivanov-gv/map-contracts` package  | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                               |
 | Shared formats and schemas at HEAD            | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                    |
 | Reviewed sources, release archive and imagery | data               | dev and CI artifact builds, cross-component tests                                                      |
-| Read-only relief sources; temporary report    | data               | data checks, tests; packages/map-core through the archive's relief layers                              |
+| Relief sources; temporary report              | data               | data checks, tests; packages/map-core through the archive's relief layers                              |
 | Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion |
 | Place test fixture                            | data               | apps/web browser tests via the pin                                                                     |
 | Built web artifact, dist/web                  | apps/web           | platform hosting tests, tests                                                                          |

@@ -16,7 +16,7 @@ shared-edge and settlement checks; make verify PKG=data and make -C data verify 
 
 ## Relief sources
 
-Five read-only vectors are derived from local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed
+Five vectors are derived from local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed
 `land.geojson`/`water.geojson`. Install the pinned GIS dependencies in a dedicated cache venv, then build with that
 interpreter:
 
@@ -194,14 +194,15 @@ place-only command above with `--update-provenance --accept-new-facts`. Never pa
 The reviewed extract copies OSM building tags into `buildings.geojson`, folds only case and whitespace when joining
 `addr:street` to one connected group of same-named road ways, names the group's lowest way ID in `addr:streetEntityId`,
 lists all its members in `addr:streetEntityIds`, and records no-number placeholders as `nohousenumber: "yes"`. It also
-writes `building-entrances.geojson`, a read-only source of OSM entrance nodes near published footprints. It can add
-`buildingEntityId` to places inside those footprints when the `places` group is refreshed with `buildings`; this Feature
-keeps the reviewed places snapshot from the branch below, so no published place carries that join. The version-2 editor
-bundle lists the new entrance, settlement, municipality and shared-border files; the editor can inspect them but cannot
-change them, and still accepts a version-1 bundle with the original eight files. The separate `entrances` array in
-`building-labels.geojson` remains the runtime arrow/label format and is not generated from this source file. See
-[building addresses](../map-data/building-numbers.md), [decision 0023](../decisions/0023-osm-building-source-details.md)
-and [decision 0024](../decisions/0024-editor-bundle-versions.md).
+writes `building-entrances.geojson`, the OSM entrance nodes near published footprints. It can add `buildingEntityId` to
+places inside those footprints when the `places` group is refreshed with `buildings`; this Feature keeps the reviewed
+places snapshot from the branch below, so no published place carries that join. The version-2 editor bundle lists the
+new entrance, settlement, municipality and shared-border files; the editor corrects them
+([decision 0037](../decisions/0037-every-layer-editable.md)) and still accepts a version-1 bundle with the original
+eight files. The separate `entrances` array in `building-labels.geojson` remains the runtime arrow/label format and is
+not generated from this source file. See [building addresses](../map-data/building-numbers.md),
+[decision 0023](../decisions/0023-osm-building-source-details.md) and
+[decision 0024](../decisions/0024-editor-bundle-versions.md).
 
 Review the counts in `provenance.json` under `building_details` and the footprint SHA-256 in
 `building-labels.provenance.json` after any building or place extraction. `make verify PKG=data` compares the reviewed
@@ -212,9 +213,10 @@ archive rebuild.
 
 ## Settlements and shared municipality edges
 
-The `settlements` and `borders` groups write `settlements.geojson`, `border-edges.geojson` and `municipalities.geojson`
-from the reviewed PBF. They are read-only in the editor: refresh them with a full extract or the named `--layers`
-groups, never with a changeset. The shared-edge construction and simplification rule are recorded in
+The `settlements` and `borders` groups write `settlements.geojson`, `settlement-areas.geojson`, `border-edges.geojson`
+and `municipalities.geojson` from the reviewed PBF. Refresh them with a full extract or the named `--layers` groups. The
+editor corrects them with changesets, and a refresh keeps those corrections with `make -C data reapply-corrections`. The
+shared-edge construction and simplification rule are recorded in
 [decision 0028](../decisions/0028-shared-border-edges.md); the current gap partition rule is in
 [decision 0029](../decisions/0029-derived-unassigned-water-areas.md).
 
@@ -250,15 +252,29 @@ git diff data/sources
 make -C data check
 ```
 
-The importer checks everything before the first write: version, base hashes, fingerprints, allowed operations and
-properties, geometry and label joins. It then stages its writes, and restores the reviewed files if the final data check
-fails. It never commits. A level edit becomes a policy override, so regenerating levels keeps it, and each change is
-recorded with its author, reason and both values in data/sources/editor-corrections.json; see
-[provenance](../../data/PROVENANCE.md). New features use a `local:` reference and claim nothing the rules do not list; a
-new place also takes the contract's local source value, never a fabricated upstream ID. In an adopted collection the
-importer assigns the addition a fresh `local:<uuid v4>` source identity and a `sha256:` base version; a changeset must
-not claim those fields. An edit or deletion that would replace or remove a commercial override is refused by name:
-review it in the policy first.
+The importer checks everything before the first write: version, fingerprints, allowed operations and values, geometry
+and joins. It then stages its writes, and restores the reviewed files if the final data check fails. It never commits. A
+version 2 changeset names objects by entity ID, so it applies after other objects of the file changed; an object that
+changed itself is refused by name. A feature index (routes, version 1) needs the exact base file. A level edit becomes a
+policy override, so regenerating levels keeps it. Each change is recorded with its author, reason and both values in
+data/sources/editor-corrections.json; see [provenance](../../data/PROVENANCE.md). New objects keep their
+`local:<uuid v4>` ID, get a `sha256:` base version and claim nothing the rules do not list; a new place also takes the
+contract's local source value. An edit or deletion that would replace or remove a commercial override is refused by
+name: review it in the policy first. Field items in a changeset (sketches, notes, deletion marks) are counted and left
+there.
+
+Label positions, street joins, slope areas, rim lengths, summit checks, contour direction, ring order and provenance
+follow from the edits and are computed by the importer. After border, coastline or country edits also run
+`make -C data check-topology`.
+
+After a fresh OSM extract, put the reviewed corrections back and read what it reports:
+
+```sh
+make -C data reapply-corrections
+```
+
+An edit wins over upstream for exactly what it changed. The report names objects that are gone and facts that upstream
+changed too.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the
@@ -274,8 +290,8 @@ changing it. Browser tests also exercise the actual reviewed archive and imagery
 The `land` layer publishes named kinds and the OSM tag that selected each one. When an object carries several candidate
 tags, the first rule in `data/tools/osm_extract/land.py` wins. Only a land-cover tag creates a feature: a protected-area
 boundary or `place=locality` alone is not green cover. Named protected areas (`leisure=nature_reserve`,
-`boundary=protected_area`, `boundary=national_park`) go to their own read-only `protected-areas.geojson` instead, from
-the `protected-areas` extract group: a park forest such as Park šuma Gorica is named only there, over unnamed woods. A
+`boundary=protected_area`, `boundary=national_park`) go to their own `protected-areas.geojson` instead, from the
+`protected-areas` extract group: a park forest such as Park šuma Gorica is named only there, over unnamed woods. A
 meadow or grass area gets `destination: true` when it is named, is mapped as a common (`leisure=common`), or contains a
 named place, POI or peak node in the detail box. Green multipolygons keep their holes.
 

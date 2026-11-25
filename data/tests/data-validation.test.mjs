@@ -15,7 +15,7 @@ import {
   validateProtectedAreas,
   protectedAreaTags,
   validateRoadNodes,
-  validateRoads,
+  validateRoads, validateSettlementsOfAreas,
   validateStops,
   validateStopsAndRoutes,
   validateTransitNetwork,
@@ -697,6 +697,59 @@ test('roads require startNode/endNode and startLevel/endLevel together', () => {
   assert.throws(() => validateRoads(bad, {contractsDirectory}), /must appear together/);
 });
 
+test('roads that end at one junction end at one place', () => {
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const roadsByNode = Map.groupBy(
+    roads.features.filter(({properties}) => properties.startNode !== undefined),
+    ({properties}) => properties.startNode
+  );
+  const [road, other] = [...roadsByNode.values()].find(sharing => sharing.length > 1) ?? [];
+  assert.ok(other, 'the sources need two roads at one junction');
+  road.geometry.coordinates[0] = [road.geometry.coordinates[0][0] + 0.001, road.geometry.coordinates[0][1]];
+  assert.throws(() => validateRoads(roads, {contractsDirectory}), /in different places/);
+});
+
+test('a road can end at a junction of the editor, and a turn rule can name both', () => {
+  const road = '11111111-1111-4111-8111-111111111111';
+  const junction = 'local:22222222-2222-4222-8222-222222222222';
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
+  const [first] = roads.features.filter(({properties}) => /^way\/\d+$/.test(properties.entityId));
+  const drawn = structuredClone(first);
+  Object.assign(drawn.properties, {entityId: `local:${road}`, entityVersion: `sha256:${'a'.repeat(64)}`});
+  Object.assign(drawn.properties, {startNode: junction, startLevel: 0});
+  roads.features.push(drawn);
+  const from = Number(first.properties.entityId.split('/')[1]);
+  first.properties.endNode = junction;
+  const rule = {entityId: 'relation/1', entityVersion: 1, restriction: 'no_left_turn', from, to: `local:${road}`, viaNodes: [junction]};
+  assert.equal(validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [rule]}, roads, nodes).count, 1);
+  const missing = {...rule, viaNodes: ['local:33333333-3333-4333-8333-333333333333']};
+  assert.throws(
+    () => validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [missing]}, roads, nodes),
+    /via node local:3333/
+  );
+  first.properties.endNode = 1;
+  assert.throws(
+    () => validateTurnRestrictions({entitySchemaVersion: 1, restrictions: [rule]}, roads, nodes),
+    /does not end at junction/
+  );
+  drawn.properties.startNode = 'node/5';
+  assert.throws(() => validateRoads(roads, {contractsDirectory}), /startNode must be an OSM number or a local ID/);
+});
+
+test('a settlement has at most one area, and an area names a settlement that exists', () => {
+  const read = name => JSON.parse(fs.readFileSync(`data/sources/${name}`));
+  const areas = read('settlement-areas.geojson');
+  const settlements = read('settlements.geojson');
+  validateSettlementsOfAreas(areas, settlements);
+  const owned = areas.features.filter(({properties}) => properties.settlementEntityId !== undefined);
+  const claimedTwice = structuredClone(areas);
+  claimedTwice.features.push(structuredClone(owned[0]));
+  assert.throws(() => validateSettlementsOfAreas(claimedTwice, settlements), /more than one area/);
+  owned[0].properties.settlementEntityId = 'node/1';
+  assert.throws(() => validateSettlementsOfAreas(areas, settlements), /settlement node\/1 not found/);
+});
+
 test('road-nodes validate kind and OSM identity', () => {
   const nodes = JSON.parse(fs.readFileSync('data/sources/road-nodes.geojson'));
   assert.ok(validateRoadNodes(nodes, {contractsDirectory}) > 0);
@@ -904,14 +957,15 @@ test('the extractor and check-data accept the same protected-area tags', () => {
   assert.deepEqual(extractorTags.sort(), [...protectedAreaTags].sort());
 });
 
-test('the editor bundle keeps its thirteen editable sources and excludes relief files', async t => {
+test('the editor bundle holds the source of every object on the map, relief and transit records included', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
-  assert.equal(manifest.layers.length, 13);
-  assert.ok(manifest.layers.every(layer => !reliefFiles.includes(layer.filename)));
-  assert.deepEqual(fs.readdirSync(directory).filter(name => name.endsWith('.geojson')).sort(),
-    manifest.layers.map(layer => layer.filename).sort());
+  const filenames = manifest.layers.map(layer => layer.filename);
+  const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
+  assert.deepEqual([...filenames].sort(), [...everyGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
+  assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
+  assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());
 });
 
 // --- Transit route validation tests ---

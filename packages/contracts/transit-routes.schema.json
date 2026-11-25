@@ -60,7 +60,7 @@
               "properties": {
                 "entityId": {
                   "type": "string",
-                  "pattern": "^relation/\\d+$",
+                  "pattern": "^(relation/\\d+|local:[0-9a-f-]{36})$",
                   "description": "OSM relation identity for this direction"
                 },
                 "entityVersion": {
@@ -93,11 +93,25 @@
                       },
                       {
                         "type": "object",
+                        "required": ["turn"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "turn": {
+                            "type": "array",
+                            "prefixItems": [{"type": "number"}, {"type": "number"}],
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "description": "A point the route must pass, not a stop; WGS84 [longitude, latitude]"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
                         "required": ["id", "coordinates"],
                         "properties": {
                           "id": {
                             "type": "string",
-                            "pattern": "^node/\\d+$",
+                            "pattern": "^(node/\\d+|local:[0-9a-f-]{36})$",
                             "description": "OSM node ID"
                           },
                           "name": {

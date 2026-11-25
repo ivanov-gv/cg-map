@@ -208,6 +208,255 @@
         "visibilityLevel": 1
       },
       "isValid": false
+    },
+    {
+      "name": "contour on the 20 m step",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 60,
+        "index": false
+      },
+      "isValid": true
+    },
+    {
+      "name": "contour between two steps",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 70,
+        "index": false
+      },
+      "isValid": false
+    },
+    {
+      "name": "contour height as text",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": "60",
+        "index": false
+      },
+      "isValid": false
+    },
+    {
+      "name": "contour index as text",
+      "filename": "contours.geojson",
+      "properties": {
+        "kind": "contour",
+        "elevation": 60,
+        "index": "no"
+      },
+      "isValid": false
+    },
+    {
+      "name": "summit without a known height",
+      "filename": "summits.geojson",
+      "properties": {
+        "kind": "summit",
+        "natural": "peak",
+        "ele": null
+      },
+      "isValid": true
+    },
+    {
+      "name": "summit above the highest allowed",
+      "filename": "summits.geojson",
+      "properties": {
+        "kind": "summit",
+        "natural": "peak",
+        "ele": 9000
+      },
+      "isValid": false
+    },
+    {
+      "name": "settlement with a municipality code",
+      "filename": "settlements.geojson",
+      "properties": {
+        "kind": "settlement",
+        "name": "Town",
+        "rank": "town",
+        "place": "town",
+        "municipality": "ME-06",
+        "source": "Local correction"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement with a malformed municipality code",
+      "filename": "settlements.geojson",
+      "properties": {
+        "kind": "settlement",
+        "name": "Town",
+        "rank": "town",
+        "place": "town",
+        "municipality": "Cetinje",
+        "source": "Local correction"
+      },
+      "isValid": false
+    },
+    {
+      "name": "stop with a blank line",
+      "filename": "transport-stops.geojson",
+      "properties": {
+        "name": "Stop",
+        "stopId": "1",
+        "lines": [
+          "6",
+          " "
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "route with a turn point between two stops",
+      "filename": "transit-routes.json",
+      "properties": {
+        "network": "bus",
+        "directions": [
+          {
+            "headsign": "A",
+            "stops": [
+              "1",
+              {
+                "turn": [
+                  19.2,
+                  42.4
+                ]
+              },
+              "2"
+            ]
+          }
+        ]
+      },
+      "isValid": true
+    },
+    {
+      "name": "route whose second stop is only a turn point",
+      "filename": "transit-routes.json",
+      "properties": {
+        "network": "bus",
+        "directions": [
+          {
+            "headsign": "A",
+            "stops": [
+              "1",
+              {
+                "turn": [
+                  19.2,
+                  42.4
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "turn restriction between a road of the editor and an OSM road",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": "local:11111111-1111-4111-8111-111111111111",
+        "to": 5,
+        "viaNodes": [
+          "local:22222222-2222-4222-8222-222222222222",
+          7
+        ]
+      },
+      "isValid": true
+    },
+    {
+      "name": "turn restriction with a road that is neither OSM nor local",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": "way/5",
+        "to": 5,
+        "viaNodes": [
+          7
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "turn restriction through a junction that is neither OSM nor local",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": 4,
+        "to": 5,
+        "viaNodes": [
+          "7"
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "road that ends at a junction of the editor",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "startNode": "local:22222222-2222-4222-8222-222222222222",
+        "startLevel": 0
+      },
+      "isValid": true
+    },
+    {
+      "name": "road that ends at no real junction",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "startNode": 0,
+        "startLevel": 0
+      },
+      "isValid": false
+    },
+    {
+      "name": "road with a smoothness that does not exist",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "smoothness": "Nkjhvvdffg"
+      },
+      "isValid": false
+    },
+    {
+      "name": "road with a listed smoothness",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "smoothness": "very_bad"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement area",
+      "filename": "settlement-areas.geojson",
+      "properties": {
+        "kind": "settlement-area",
+        "name": "Zabjelo",
+        "settlementEntityId": "node/2878357619"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement area without a name",
+      "filename": "settlement-areas.geojson",
+      "properties": {
+        "kind": "settlement-area"
+      },
+      "isValid": false
+    },
+    {
+      "name": "turn restriction with a missing way",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_u_turn",
+        "from": 1
+      },
+      "isValid": false
     }
   ]
 }

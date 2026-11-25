@@ -36,6 +36,9 @@ export function validatePolicy(policy, config, places) {
   const byId = new Map(places.map(feature => [feature.properties.id, feature])), seen = new Set();
   for (const override of policy.overrides) {
     const label = `Override ${override?.id}`;
+    // A place added in the editor is absent between a fresh extract and the replay of its correction.
+    const isAwaitingReplay = override?.id?.startsWith?.('local:') && !byId.has(override.id);
+    if (isAwaitingReplay) continue;
     if (!byId.has(override?.id)) throw new Error(`${label}: unknown place id`);
     if (seen.has(override.id)) throw new Error(`${label}: duplicate place id`);
     seen.add(override.id);

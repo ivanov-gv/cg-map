@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Applied editor corrections",
-  "description": "What local reviewers changed, separately from imported upstream facts. References are revision-bound: they name a feature only within the snapshot identified by beforeFingerprint.",
+  "description": "What local reviewers changed, separately from imported upstream facts. An entityId reference survives a data refresh, so the correction can be replayed; a featureIndex names a feature only within the snapshot identified by beforeFingerprint.",
   "type": "object",
   "required": ["version", "corrections"],
   "additionalProperties": false,
@@ -46,7 +46,7 @@
           },
           "filename": {
             "type": "string",
-            "pattern": "^[a-z][a-z-]*\\.geojson$"
+            "pattern": "^[a-z][a-z-]*\\.(geojson|json)$"
           },
           "operation": {
             "enum": ["add", "modify", "delete"]

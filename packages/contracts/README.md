@@ -77,7 +77,7 @@ property: no open OSM source supports one.
 node on or within one metre of a published footprint in the detail box. Its `entrance`, `ref`, `level`, `wheelchair`,
 `door` and `addr:*` values are copied from the node; `buildingEntityId` points at the containing building's source
 identity. The existing `entrances` array inside `building-labels.geojson` remains the runtime arrow/label format; this
-file is the OSM-derived source and is read-only in the editor.
+file is the OSM-derived source; an entrance added in the editor has a `local:` identity.
 
 A place whose point lies inside a published building footprint also carries `buildingEntityId`, the footprint's source
 identity. Overlaps resolve to the smallest containing footprint, then the lowest entity ID; a point outside every
@@ -93,51 +93,54 @@ explicit UI migration. See [backend generation and API usage](../../services/bac
 `make verify PKG=packages/contracts` checks these files only. When a contract changes, CI also runs each producer's and
 consumer's own pipeline.
 
-`editor-bundle.schema.json` defines the source viewer bundle: one filename, byte size, feature count and SHA-256 per
-source GeoJSON file. Version 1 is frozen at the original eight files; version 2 adds `building-entrances.geojson` and
-stays open until the Feature stack merges. Data-owned assembly writes version 2 and preserves bytes; the editor accepts
-both versions and verifies the entire bundle before enabling modes. Feature indices are tied to that hash and are not
-stable upstream identities. This contract does not define editing or changesets; the formats below do. The bundle is
-built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md).
-
 `roads.geojson` carries OSM road attributes copied from the source: `bridge`, `tunnel`, `layer`, `oneway`, `access`,
 `motor_vehicle`, `foot`, `bicycle`, `maxspeed`, `surface`, `lit`, `sac_scale`, `smoothness`, `parking:left`,
 `parking:right`, `parking:both`, `parking:lane:left`, `parking:lane:right`, `parking:lane:both`, `junction`, `ref`, and
 `name:en`. Walking routes get a computed `pathClass`. `main`: footway unless its surface is explicitly unpaved, and
 paved pedestrian, cycleway, or path. `trail`: track, bridleway, any way with `sac_scale`, or path with an explicitly
 unpaved surface. A path without surface and without `sac_scale` is unclassified; unknown surface is not treated as
-unpaved. Detail-area roads record the OSM node ID and level at each real OSM end (`startNode`/`startLevel`,
-`endNode`/`endLevel`): the `layer` tag as an integer, default 0; bridges without explicit layer get +1, tunnels get −1.
-A part created by clipping keeps a node/level pair only when that end is the original OSM end node; a clip-boundary end
-omits that pair.
+unpaved. Roads are a graph: two roads join where they share a point on the same level. Each real OSM end records its
+junction and level (`startNode`/`startLevel`, `endNode`/`endLevel`); roads that end at one junction end at one place.
+The level of an end is that of its junction: the level of a road that passes through it, otherwise the one nearest to
+the ground of the roads that end there. Along a road its level is the `layer` tag as an integer, default 0; a bridge
+without it is +1 and a tunnel −1. A part created by clipping keeps the pair only at its original OSM ends. A junction
+that came from the editor has a `local:` ID.
 
-`road-nodes.geojson` contains OSM nodes in the detail area with `highway=traffic_signals`, `crossing`, `stop`,
-`give_way`, `mini_roundabout` or `turning_circle`. The editor cannot edit this file yet (`operations: []`).
+`road-nodes.geojson` contains OSM nodes with `highway=traffic_signals`, `crossing`, `stop`, `give_way`,
+`mini_roundabout` or `turning_circle`, in the detail area and on published roads beyond it. Nodes added in the editor
+have a `local:` identity.
 
-`turn-restrictions.json` records `type=restriction` relations whose `from` and `to` ways are detail-area roads in
-`roads.geojson`, with their OSM identity, `restriction` value, `from`/`to` way IDs and optional `via` nodes or ways.
-Every `from`/`to`/`via` reference resolves in `roads.geojson` or `road-nodes.geojson`/road end nodes. It is not GeoJSON
-because restrictions are topological relations, not geometries.
+`turn-restrictions.json` records `type=restriction` relations between published roads, with their OSM identity,
+`restriction` value, `from`/`to` roads and optional `via` junctions or roads. A road or junction is named by its OSM
+number, or by its `local:` ID when it came from the editor. Every reference resolves in `roads.geojson` or
+`road-nodes.geojson`. It is not GeoJSON because restrictions are topological relations, not geometries.
 
-`editor-bundle.schema.json` defines the pinned source viewer bundle: one filename, byte size, feature count and SHA-256
-per source GeoJSON file. Version 1 keeps its original eight files; version 2 adds `border-edges.geojson`,
-`municipalities.geojson` and `settlements.geojson`. The producer emits version 2, while the editor accepts both so an
-older pinned snapshot remains readable. Feature indices are tied to a file's hash and are not stable upstream
-identities. Data-owned assembly preserves bytes; the editor verifies the entire bundle before enabling modes. This
-contract does not define editing or changesets; the formats below do. The bundle is built into dist/editor only.
+`settlement-areas.geojson` holds the area of a settlement where one is mapped; `settlementEntityId` names the
+settlement, which has at most one area.
 
-`editor-layers.json` (shape in `editor-layers.schema.json`) lists what each source file allows: operations, geometry
-types, editable properties and kinds, the level reserved for landmarks, placeholder values a property must not take, and
-the source value of a new place. Anything unlisted is locked, which is what preserves unknown fields, attribution and
-identity. `editor-changeset.schema.json` defines the export: base hash per changed file, and per operation a
-revision-bound reference, a fingerprint and full before/after features. `fixtures/editor-geometry-cases.json` and
-`fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
-against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger the importer keeps of what it applied. For land and water,
-`properties.kind` repeats `editableKinds` as a required enum, so an edit can neither remove a published kind nor invent
-one outside the reviewed source contract. The five relief collections are also read-only editor layers: their reasons
-are recorded in `editor-layers.json`, but they stay out of the versioned, exact-file-set `editor-bundle.schema.json` and
-its editing modes.
+`editor-bundle.schema.json` defines the editor's source bundle: one filename, byte size, feature count and SHA-256 per
+source file. Version 1 holds the original eight files, version 2 thirteen, version 3 every file of an object on the map,
+including `transit-routes.json` and `turn-restrictions.json`, whose records count as features without geometry. Released
+versions are frozen; the producer writes the last one and the editor reads all. Data-owned assembly preserves bytes, and
+the editor verifies the whole bundle. It is built into dist/editor only. See
+[decision 0024](../../docs/decisions/0024-editor-bundle-versions.md) and
+[decision 0037](../../docs/decisions/0037-every-layer-editable.md).
+
+`editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
+types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
+source value of a new place. Anything unlisted is locked, which preserves unknown fields, attribution and identity.
+`limitedKinds` narrows kinds that are derived or only frame the map; `derivedGeometry` marks shapes the editor computes
+from another edit; `addOnly` values become identity once written; a label's located `entrances` may only move with their
+building. `editor-changeset.schema.json` defines the export. Version 2 names an existing object by `entityId` (and
+`entityPart`) with a fingerprint and full before/after features; a new object keeps its `local:` ID as its entity ID.
+`featureIndex`, bound to one snapshot, remains for routes and for version 1. `fieldItems` carry rough work from the
+field, which the importer never writes. The importer computes label positions, street joins, measures, summit checks,
+contour direction and provenance, so a changeset never carries them; an added label states `buildingEntityId` instead of
+`footprintIndex`. `fixtures/editor-geometry-cases.json` and `fixtures/editor-property-cases.json` define the geometry
+and property rules; the editor and the importer both test against them, and tests/integration/editor-changeset.test.mjs
+runs one's output through the other. `editor-corrections.schema.json` defines the ledger of what was applied, replayed
+over a fresh extract. For land and water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a
+published kind nor invent one.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those

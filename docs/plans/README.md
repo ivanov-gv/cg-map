@@ -9,6 +9,7 @@ deletes it. Git history keeps deleted plans.
   1 to 6 and the offline install are merged, with listed gaps.
 - [Entity IDs and data releases](entity-ids-and-data-releases.md): issue #30. OSM IDs on every object, parallel fixes as
   ordinary PRs, tagged data releases.
+- [Editable layers](editable-layers.md): Epic #404. Every layer of the map editable, as nine stacked Features.
 - [Faster browser tests](faster-browser-tests.md): CI jobs are split to fit their limit; the remaining steps towards a
   5-minute full suite locally.
 - [Automatic workflow test runs](auto-workflow-test-runs.md): issue #334; planned move from manual test-run evidence to

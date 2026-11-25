@@ -5,7 +5,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {applyChangeset, lineProblem, polygonProblem, propertyProblem, ringProblem} from '../tools/apply-changeset.mjs';
+import {applyChangeset} from '../tools/apply-changeset.mjs';
+import {lineProblem, polygonProblem, ringProblem} from '../tools/changeset-geometry.mjs';
+import {propertyProblem} from '../tools/changeset-rules.mjs';
 import {checkData} from '../tools/check-data.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -550,24 +552,36 @@ test('a refused changeset leaves every reviewed file untouched', async testConte
       /invented is not editable/
     ],
     [
-      'read-only file',
-      () =>
-        changeset(root, 'transport-stops.geojson', [
-          modifyOperation(root, 'transport-stops.geojson', 0, feature => (feature.properties.name = 'X'))
-        ]),
-      /not allowed in transport-stops/
+      'operation the file does not allow',
+      () => {
+        const before = readSource(root, 'border-edges.geojson').features[0];
+        const operation = {
+          filename: 'border-edges.geojson',
+          operation: 'delete',
+          reference: {featureIndex: 0},
+          beforeFingerprint: fingerprint(before),
+          before,
+          after: null
+        };
+        return changeset(root, 'border-edges.geojson', [operation]);
+      },
+      /delete is not allowed in border-edges/
     ],
     [
-      'inspect-only kind',
+      'moved neighbour country',
       () => {
         const contextIndex = readSource(root, 'land.geojson').features.findIndex(
           feature => feature.properties.kind === 'context' && feature.geometry.type === 'Polygon'
         );
         return changeset(root, 'land.geojson', [
-          modifyOperation(root, 'land.geojson', contextIndex, feature => (feature.properties.name = 'X'))
+          modifyOperation(root, 'land.geojson', contextIndex, feature => {
+            feature.geometry.coordinates = feature.geometry.coordinates.map(ring =>
+              ring.map(([longitude, latitude]) => [longitude + 0.1, latitude])
+            );
+          })
         ]);
       },
-      /inspect-only/
+      /geometry is not editable/
     ],
     [
       'crossed footprint',
