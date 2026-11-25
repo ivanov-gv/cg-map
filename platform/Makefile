@@ -16,10 +16,11 @@ repo:
 agents-check:
 	cd $(ROOT) && npm run -s check:agents
 
-# The hosting tests run against a web artifact built from platform's own pinned data and contracts, listed contracts.
+# The hosting tests run against a web artifact built from platform's own pinned core, data and contracts, listed contracts.
 build-web:
 	MAP_DATA_ROOT="$$(node tools/pinned-data-root.mjs)" \
 	MAP_CONTRACTS_ROOT="$$(node tools/pinned-contracts-root.mjs)" \
+	MAP_CORE_ROOT="$$(node tools/pinned-core-root.mjs)" \
 	$(MAKE) --no-print-directory -C $(ROOT)/apps/web build
 
 test:

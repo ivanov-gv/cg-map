@@ -6,14 +6,15 @@ PORT ?= 8080
 export GOLANGCI_LINT_CACHE ?= $(abspath $(ROOT)/.build/golangci-lint-cache)
 # Pinned here, not in go.mod, so the linter's dependencies stay out of the server module.
 GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-# The shared formats and proto arrive through the root's pinned @ivanov-gv/map-contracts package, not repository sources.
-CONTRACTS_ROOT := $(abspath $(ROOT)/node_modules/@ivanov-gv/map-contracts)
+# The bindings of this commit come from its own proto. A release generates them from the contracts release it pins:
+# make generate CONTRACTS_ROOT=$(abspath ../../node_modules/@ivanov-gv/map-contracts)
+CONTRACTS_ROOT ?= $(abspath $(ROOT)/packages/contracts)
 
 .PHONY: verify check format-check vet lint test build run generate generate-check
 
 verify: check
 
-check: format-check vet lint test build
+check: format-check vet lint test build generate-check
 
 format-check:
 	@unformatted=$$(gofmt -l .) && if [ -n "$$unformatted" ]; then echo "gofmt needed (run gofmt -w):" >&2; echo "$$unformatted" >&2; exit 1; fi
@@ -35,14 +36,16 @@ build:
 run: build
 	$(ROOT)/.build/kompas -dir $(ARTIFACT) -listen 127.0.0.1:$(PORT) -shutdown-delay 0 $(DEV_FLAGS)
 
-# Buf 1.75.0 compiles the shared schema; generator versions come from go.mod.
+# Buf compiles the shared schema; generator versions come from go.mod. Pinned here like the linter.
+BUF := go run github.com/bufbuild/buf/cmd/buf@v1.75.0
+
 generate:
-	buf lint $(CONTRACTS_ROOT)/proto
-	buf generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml
+	$(BUF) lint $(CONTRACTS_ROOT)/proto
+	$(BUF) generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml
 
 # Regenerate outside the source tree to catch stale committed bindings.
 generate-check:
 	@set -eu; generated=$$(mktemp -d); trap 'rm -rf "$$generated"' EXIT; \
-	buf lint $(CONTRACTS_ROOT)/proto; \
-	buf generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml --output "$$generated"; \
+	$(BUF) lint $(CONTRACTS_ROOT)/proto; \
+	$(BUF) generate $(CONTRACTS_ROOT)/proto --template buf.gen.yaml --output "$$generated"; \
 	diff -ru gen "$$generated/gen"

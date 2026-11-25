@@ -8,12 +8,12 @@ environment, and only a release creates a version.
 GitHub Pages is the dev environment, and there are no pre or prod environments yet:
 <https://ivanov-gv.github.io/cg-map/>
 
-| Path          | Shows                                               |
-| ------------- | --------------------------------------------------- |
-| `/`           | A page to choose from                               |
-| `/web/`       | The public map                                      |
-| `/editor/`    | The layer editor, installable from here             |
-| `/core-demo/` | Unreleased map-core: this is core's dev environment |
+| Path          | Shows                                             |
+| ------------- | ------------------------------------------------- |
+| `/`           | A page to choose from                             |
+| `/web/`       | The public map                                    |
+| `/editor/`    | The layer editor, installable from here           |
+| `/core-demo/` | Unreleased map-core alone: core's dev environment |
 
 Every merge to main updates it, with no tags or releases:
 
@@ -40,8 +40,11 @@ Contracts follow the same dependency modes as data:
 - **Tests:** unit, built, browser and offline-check targets read the app's exact `@ivanov-gv/map-contracts` pin. The
   app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT`.
   Platform's `build-web` does the same from platform's pin. A contract-only change therefore selects no app pipeline.
-- **Future app production release:** every dependency, contracts included, will be pinned. No app production release
-  exists yet, so this is a rule for future CD rather than a current command.
+- **Release builds:** `make -C apps/<name> build-release` takes the exact core, data and contracts that the app's
+  package.json pins. No app production release exists yet, so no CD calls it.
+
+Core follows the same modes through tools/core-root.mjs and `MAP_CORE_ROOT`
+([ADR 0037](../decisions/0037-builds-take-their-own-commits-packages.md)).
 
 Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
 installs that package and points the shared integration helper at it. See
@@ -195,15 +198,15 @@ browser jobs in one PR.
 
 ## Upgrading an app to a new core
 
-web and editor each pin an exact version, and upgrade in their own change. That changes package-lock.json, so its PR
-runs every pipeline:
+web and editor each pin an exact version for their releases and tests, and upgrade in their own change. Dev builds take
+the core of their commit without it. The change touches package-lock.json, so its PR runs every pipeline:
 
 ```sh
 npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
 ```
 
-To try a release candidate, do the same with its version in a branch. A bad core merge cannot reach these apps: going
-back means pinning the older version.
+To try a release candidate, do the same with its version in a branch. A bad core merge reaches the dev site and never a
+release: going back means pinning the older version.
 
 ## Offline app updates
 

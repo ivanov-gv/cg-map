@@ -268,7 +268,8 @@ test('project Makefiles reach other projects only through listed contracts', () 
     'apps/core-demo': ['platform/tools/dev-port.mjs', 'platform/tools/serve.py'],
     data: ['packages/contracts'],
     platform: ['apps/web'],
-    tests: ['apps/web']
+    'services/backend': ['packages/contracts'],
+    tests: ['apps/web', 'apps/editor']
   };
   for (const component of components) {
     const makefile = fs.readFileSync(path.join(repoRoot, component, 'Makefile'), 'utf8');

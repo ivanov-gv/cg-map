@@ -6,12 +6,13 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
 - tests/ owns component tests and tests/e2e browser acceptance; playwright.config.mjs owns browser projects and ports.
-- Data inputs belong to data/, not this component. Dev builds on main read repository data and contracts at HEAD through
-  tools/data-root.mjs and tools/contracts-root.mjs; no other file here may name a repository contracts path.
+- Data inputs belong to data/, not this component. Builds that are not releases take core, data and contracts from their
+  own commit through tools/core-root.mjs, tools/data-root.mjs and tools/contracts-root.mjs; no other file here may name
+  a repository core or contracts path. `build-release` takes the versions package.json pins.
 - tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
   `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins. Bump a pin only in its own change after a release; never
-  point tests at repository data/ or packages/contracts/. Test targets set both roots. A future app production release
-  pins every dependency (no production release exists yet).
+  point tests at repository data/ or packages/contracts/. Test targets set all three roots, core through
+  tests/pinned-core.mjs.
 - Keep core.js free of DOM/browser state. Preserve one map instance and local runtime assets.
 - Keep archive/range responses outside shell caching and preserve verified downloads on failed replacements.
 - Use relative paths so the built app works at / and /cg-map/.

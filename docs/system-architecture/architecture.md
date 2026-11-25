@@ -26,12 +26,12 @@ Projects depend on each other only through these concrete contracts:
 
 | Contract                                      | Producer           | Consumers                                                                                              |
 | --------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
-| Published `@ivanov-gv/map-core` package       | packages/map-core  | apps/web, apps/editor, at a pinned version                                                             |
-| Local map-core, unreleased                    | packages/map-core  | apps/core-demo                                                                                         |
+| Published `@ivanov-gv/map-core` package       | packages/map-core  | release builds and tests of apps/web and apps/editor, platform hosting tests, pinned                   |
+| Local map-core, unreleased                    | packages/map-core  | every other build of apps/web and apps/editor, apps/core-demo, tests/ through those builds             |
 | Published `@ivanov-gv/map-data` package       | data               | map application and platform hosting tests, pinned                                                     |
 | Map data for an artifact, data/tools/app-data | data               | dev and CI artifact builds on main                                                                     |
-| Published `@ivanov-gv/map-contracts` package  | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                               |
-| Shared formats and schemas at HEAD            | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                    |
+| Published `@ivanov-gv/map-contracts` package  | packages/contracts | app tests, platform hosting tests and map-core, pinned                                                 |
+| Shared formats and schemas at HEAD            | packages/contracts | app dev and CI artifact builds, data validation, backend bindings, tests/ integration                  |
 | Reviewed sources, release archive and imagery | data               | dev and CI artifact builds, cross-component tests                                                      |
 | Read-only relief sources; temporary report    | data               | data checks, tests; packages/map-core through the archive's relief layers                              |
 | Editor source bundle                          | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion |
@@ -59,6 +59,13 @@ Rules:
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
   it publishes by setting the data and contracts versions.
 
+### Core modes
+
+Builds that are not releases bundle the core of their own commit, and releases and tests the one their app pins.
+apps/web and apps/editor have one resolver each, tools/core-root.mjs, which defaults to packages/map-core and honours
+`MAP_CORE_ROOT`; the repository guard allows that path only there. See
+[ADR 0037](../decisions/0037-builds-take-their-own-commits-packages.md).
+
 ### Map data modes
 
 Map data reaches an application or its integration tests in four distinct ways:
@@ -68,8 +75,8 @@ Map data reaches an application or its integration tests in four distinct ways:
    pipeline.
 2. Dev and CI artifact builds on main read the repository `data/` and its tools at the checked-out commit (HEAD), so
    developers and the dev site see unreleased data without publishing it.
-3. A future app production release pins every dependency, data included. No app production release exists yet, so this
-   is a rule for future CD; the map-data release CD promotes data packages and is not an app release mode.
+3. A release build of an app (`build-release`) takes every package its manifest pins, data included. No app production
+   release exists yet; the map-data release CD promotes data packages and is not an app release mode.
 4. Cross-project integration tests read repository data and tools at HEAD through one helper, which honours
    `MAP_DATA_ROOT`. Before promoting a release, the same suite installs the exact data package and points that helper at
    it, so the release is tested as published.
@@ -88,14 +95,14 @@ Shared formats reach consumers in three operative modes:
    each app's own pinned-contracts helper; platform uses its own helper. A contract-only change selects no app pipeline.
 2. Dev and CI artifact builds on main, including ci-publish's `pages` job and the content cd-dev-pages deploys, read
    repository `packages/contracts` at HEAD. Each of the three apps has one build resolver that defaults to that
-   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. A future app
-   production release pins every dependency, contracts included. No app production release exists yet.
+   directory and honours `MAP_CONTRACTS_ROOT`; the repository guard allows the repository path only there. A release
+   build (`build-release`) pins every package, contracts included. No app production release exists yet.
 3. Cross-project integration tests read repository contracts at HEAD through one helper, which honours
    `MAP_CONTRACTS_ROOT`. Before promoting a release, `tests/` installs the exact package and sets
    `MAP_CONTRACTS_VERSION` so the whole suite tests the candidate.
 
-`map-core` and `services/backend` read contracts only from tests or generation, so they stay pinned. Data validation
-reads HEAD contracts through its own producer path. See
+`map-core` reads contracts only from tests, so it stays pinned; `services/backend` generates its bindings from the
+commit. Data validation reads HEAD contracts through its own producer path. See
 [releasing map contracts](../runbooks/release.md#releasing-map-contracts).
 
 To add a project, create its folder, Makefile, tests, README.md and AGENTS.md and its `ci-<name>.yml` pipeline, then

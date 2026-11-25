@@ -11,6 +11,34 @@ const labelsSource = 'building-addresses';
 // Hides a published layer while keeping it in the style, so its own filter can be put back.
 export const hiddenLayerFilter = ['==', ['literal', 1], 0];
 
+// The source file behind every layer of the vector archive that a style can draw. What is derived from several files, such
+// as the names of green areas, is not drawn from one working file.
+const fileOfArchiveLayer = {
+  borders: 'border-edges.geojson',
+  buildings: 'buildings.geojson',
+  canyon_rims: 'canyon-rims.geojson',
+  contours: 'contours.geojson',
+  land: 'land.geojson',
+  protected_areas: 'protected-areas.geojson',
+  ridges: 'ridges.geojson',
+  road_nodes: 'road-nodes.geojson',
+  roads: 'roads.geojson',
+  settlements: 'settlements.geojson',
+  slopes: 'slopes.geojson',
+  summits: 'summits.geojson',
+  water: 'water.geojson'
+};
+
+// The published layers that draw each source file, as this version of the core has them.
+export function basemapLayersOf(styleLayers) {
+  const layers = {};
+  for (const layer of styleLayers) {
+    const filename = fileOfArchiveLayer[layer['source-layer']];
+    if (filename) (layers[filename] ??= []).push(layer.id);
+  }
+  return layers;
+}
+
 const featureCollection = features => ({type: 'FeatureCollection', features});
 
 // Copies of the published layers that draw one file, reading a GeoJSON source instead of the vector archive. Paint,

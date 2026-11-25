@@ -115,6 +115,39 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
   });
 }
 
+for (const application of ['apps/web', 'apps/editor']) {
+  test(`${application} builds the core of its own commit, and releases and tests the core it pins`, () => {
+    const makefile = fileSystem.readFileSync(path.join(repositoryRoot, application, 'Makefile'), 'utf8');
+    const coreTargets = makefile.match(/^(.+): export MAP_CORE_ROOT/m)?.[1];
+    assert.equal(coreTargets, makefile.match(/^(.+): export MAP_DATA_ROOT/m)[1], 'core is pinned wherever data is');
+    assert.ok(coreTargets.split(' ').includes('build-release'), 'a release build pins every package');
+    const devTargets = ['build', 'dev', 'lan'];
+    assert.ok(!coreTargets.split(' ').some(target => devTargets.includes(target)), 'a dev build pins none');
+    const appPackage = readJSON(`${application}/package.json`);
+    for (const [name, script] of Object.entries(appPackage.scripts)) {
+      if (!script.includes('MAP_DATA_ROOT=')) continue;
+      assert.ok(script.includes('MAP_CORE_ROOT="$(node tests/pinned-core.mjs)"'), `${application} ${name} pins core with data`);
+    }
+    const run = (script, environment) =>
+      execFileSync('node', [script], {
+        cwd: path.join(repositoryRoot, application),
+        encoding: 'utf8',
+        env: {...process.env, MAP_CORE_ROOT: undefined, ...environment}
+      }).trim();
+    assert.equal(run('tools/core-root.mjs'), path.join(repositoryRoot, 'packages/map-core'));
+    const pinned = run('tests/pinned-core.mjs');
+    assert.equal(pinned, path.join(repositoryRoot, application, 'node_modules/@ivanov-gv/map-core'));
+    assert.equal(run('tools/core-root.mjs', {MAP_CORE_ROOT: pinned}), pinned);
+    assert.throws(() => run('tools/core-root.mjs', {MAP_CORE_ROOT: ''}), /set but empty/);
+  });
+}
+
+test('platform pins map-core for its hosting tests, from the registry', () => {
+  assertRegistryPin('platform/package.json', `platform/node_modules/${corePackageName}`, corePackageName, 'devDependencies');
+  const resolved = execFileSync('node', ['platform/tools/pinned-core-root.mjs'], {cwd: repositoryRoot, encoding: 'utf8'}).trim();
+  assert.equal(resolved, path.join(repositoryRoot, 'platform/node_modules/@ivanov-gv/map-core'));
+});
+
 test('platform resolves contracts from the pinned package, not repository sources', () => {
   const resolved = execFileSync('node', ['platform/tools/pinned-contracts-root.mjs'], {
     cwd: repositoryRoot,

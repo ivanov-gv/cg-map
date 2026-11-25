@@ -5,6 +5,7 @@
   "type": "module",
   "devDependencies": {
     "@ivanov-gv/map-contracts": "0.1.0",
+    "@ivanov-gv/map-core": "0.2.0",
     "@ivanov-gv/map-data": "0.1.0"
   }
 }

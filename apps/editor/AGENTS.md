@@ -8,11 +8,13 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   road/path kinds share roads.geojson. Every command and undo/redo may change only the active file.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
-- Dev builds on main use the repository data root and the one tools/contracts-root.mjs default for contracts. A future
-  app production release pins every dependency (no production release exists yet).
+- Builds that are not releases take core, data and contracts from their own commit, core through the one default in
+  tools/core-root.mjs and contracts through tools/contracts-root.mjs. `build-release` takes the versions package.json
+  pins. What draws each source file is read from the core's style, because the two cores differ.
 - tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
   `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins. Bump a pin only in its own change after a release; never
-  point tests at repository data/ or packages/contracts/. Test targets set both roots.
+  point tests at repository data/ or packages/contracts/. Test targets set all three roots, core through
+  tests/pinned-core.mjs.
 - Edits stay in the browser until exported as a changeset; only data/tools/apply-changeset.mjs writes reviewed sources.
   What each file allows comes from the contracts selected for the run: repository HEAD in a dev build, the app pin in
   tests. Never use a copy here or another relative path into `packages/contracts`. Keep editor validation in step with

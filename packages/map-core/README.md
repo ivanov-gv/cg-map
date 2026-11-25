@@ -1,8 +1,9 @@
 # Map core
 
-ES-module runtime published as `@ivanov-gv/map-core` to GitHub Packages. The public map and source editor pin a release;
-the concept demo uses this folder, so it always shows unreleased work. Import the package's public
-[src/index.js](src/index.js) entry; inject MapLibre, archive transport, a container and the artifact's asset base URL.
+ES-module runtime published as `@ivanov-gv/map-core` to GitHub Packages. Releases and tests of the public map and source
+editor pin a version of it; their other builds and the concept demo use this folder, so dev shows unreleased work.
+Import the package's public [src/index.js](src/index.js) entry; inject MapLibre, archive transport, a container and the
+artifact's asset base URL.
 
 It owns common cartography, category symbols and visibility policy, satellite imagery, map lifecycle, projection and
 hit-testing helpers, and replaceable GeoJSON/selection overlays. It has no application screens, search, routes, storage,

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {parseVisibilityConfig} from '@ivanov-gv/map-core';
-import {EditPreview, previewLayers} from '../src/edit-preview.js';
+import {EditPreview, basemapLayersOf, previewLayers} from '../src/edit-preview.js';
 
 const visibilityConfig = parseVisibilityConfig(
   JSON.parse(fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))))
@@ -54,6 +54,17 @@ function fakeMap() {
 }
 
 const basemapLayers = {'roads.geojson': ['minor-roads', 'road-labels'], 'buildings.geojson': ['buildings']};
+
+test('every published layer of a file is previewed, whatever the core draws it with', () => {
+  const layers = basemapLayersOf([
+    {id: 'background'},
+    {id: 'minor-roads', 'source-layer': 'roads'},
+    {id: 'bridge-major-deck', 'source-layer': 'roads'},
+    {id: 'canyon-walls', 'source-layer': 'canyon_rims'},
+    {id: 'green-names', 'source-layer': 'green_area_labels'}
+  ]);
+  assert.deepEqual(layers, {'roads.geojson': ['minor-roads', 'bridge-major-deck'], 'canyon-rims.geojson': ['canyon-walls']});
+});
 
 test('a preview layer draws like the published one, from its own source', () => {
   const [copy] = previewLayers([minorRoads], 'edit-preview-roads.geojson');

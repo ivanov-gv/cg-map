@@ -46,6 +46,12 @@ const cases = [
   ['released artifact', ['data/artifacts/release.json'], ['data', 'tests'], []],
   ['shared data tool', ['data/tools/app-data.mjs'], ['data', 'tests'], []],
   [
+    'proto of the backend bindings',
+    ['packages/contracts/proto/cgmap/transport/v1/transport.proto'],
+    ['platform', 'contracts', 'data', 'tests', 'backend'],
+    []
+  ],
+  [
     'contracts',
     ['packages/contracts/places.schema.json'],
     ['platform', 'contracts', 'data', 'tests'],
@@ -56,13 +62,13 @@ const cases = [
   [
     'shared map runtime',
     ['packages/map-core/src/poi-icons.js'],
-    ['platform', 'map-core', 'apps-core-demo'],
+    ['platform', 'tests', 'map-core', 'apps-core-demo'],
     []
   ],
   [
     'shared map build helpers',
     ['packages/map-core/tools/assemble.mjs'],
-    ['platform', 'map-core', 'apps-core-demo'],
+    ['platform', 'tests', 'map-core', 'apps-core-demo'],
     []
   ],
   ['source viewer alone', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
@@ -497,12 +503,17 @@ test('the browser image has its own pipeline, and a change to it selects no appl
   assert.deepEqual(classify('platform/browser-image/Dockerfile'), {folders: ['browser-image', 'platform'], areas: []});
 });
 
-test('a merge publishes the image of each app it selected, and no other', () => {
-  const appsFor = file => imageMatrix(planChanges([file]).folders).include.map(({app}) => app);
+test('a merge publishes the image of each app it selected or whose inputs it changed, and no other', () => {
+  const appsFor = file => imageMatrix(planChanges([file]).folders, [file]).include.map(({app}) => app);
+  const everyApp = ['web', 'editor', 'core-demo'];
   assert.deepEqual(appsFor('apps/web/src/interface.js'), ['web']);
   assert.deepEqual(appsFor('apps/editor/src/sw.js'), ['editor']);
-  assert.deepEqual(appsFor('packages/map-core/src/map.js'), ['core-demo'], 'only core-demo runs unreleased core');
-  assert.deepEqual(appsFor('packages/contracts/place-visibility.json'), [], 'consumers pin a published release');
+  for (const file of ['packages/map-core/src/map.js', 'packages/contracts/place-visibility.json', 'data/sources/roads.geojson']) {
+    assert.deepEqual(appsFor(file), everyApp, `${file} is bundled by every dev build`);
+  }
+  for (const file of ['packages/map-core/tests/runtime.test.mjs', 'packages/map-core/README.md', 'data/tests/entity-identity.test.mjs']) {
+    assert.deepEqual(appsFor(file).filter(app => app !== 'core-demo'), [], `${file} reaches no artifact`);
+  }
   assert.deepEqual(appsFor('docs/README.md'), []);
 });
 
@@ -567,7 +578,7 @@ test('make check runs every project, and every project has a pipeline that verif
     'packages/contracts': ['lint', 'test'],
     'services/transit-relay': ['lint', 'test'],
     platform: ['lint', 'markdown-check', 'repo', 'agents-check', 'build-web', 'test', 'python-test', 'python-check'],
-    tests: ['lint', 'build-web', 'integration-test']
+    tests: ['lint', 'build-web', 'build-editor', 'integration-test']
   };
   const rootMakefile = fs.readFileSync(path.join(repoRoot, 'Makefile'), 'utf8');
   const projects = rootMakefile.match(/^PROJECTS := (.+)$/m)[1].split(' ');

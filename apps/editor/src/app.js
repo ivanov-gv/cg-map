@@ -19,7 +19,7 @@ import {
   saveDraft
 } from './draft-store.js';
 import {downloadJSON, elementById} from './dom.js';
-import {EditPreview} from './edit-preview.js';
+import {EditPreview, basemapLayersOf} from './edit-preview.js';
 import {EditSession} from './edit-session.js';
 import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
@@ -44,24 +44,6 @@ const layerNames = {
   'water.geojson': 'Water',
   'context-countries.geojson': 'Country outlines',
   'transport-stops.geojson': 'Bus stops'
-};
-const basemapLayers = {
-  'buildings.geojson': ['buildings'],
-  'building-labels.geojson': ['building-numbers'],
-  'land.geojson': ['land'],
-  'water.geojson': ['water', 'rivers'],
-  'roads.geojson': [
-    'road-casing',
-    'minor-casing',
-    'minor-roads',
-    'pedestrian-streets',
-    'footways',
-    'paths',
-    'cycleways',
-    'steps',
-    'major-roads',
-    'road-labels'
-  ]
 };
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 const addFeatureLabels = {'places.geojson': 'Add POI', 'roads.geojson': 'Draw road'};
@@ -837,6 +819,7 @@ async function start() {
   const placeVisibility = parseVisibilityConfig(visibilityConfig);
   const publishedPlaces = sources.get('places.geojson').collection.features;
   installPlaces(map, publishedPlaces, placeVisibility);
+  const basemapLayers = basemapLayersOf(map.getStyle().layers);
   preview = new EditPreview({map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces});
   activeRendering = new EditPreview({
     map, basemapLayers, visibilityConfig: placeVisibility, publishedPlaces, sharedSource: 'editor-source'

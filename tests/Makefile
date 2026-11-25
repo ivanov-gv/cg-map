@@ -11,19 +11,24 @@ CONTRACTS_ROOT = $$(node $(CONTRACTS_HELPER)$(CONTRACTS_ROOT_ARG))
 RELEASE_PACKAGES = $(if $(strip $(MAP_DATA_VERSION)$(MAP_CONTRACTS_VERSION)),release-packages,)
 
 ifneq ($(strip $(RELEASE_PACKAGES)),)
-lint build-web integration-test: $(RELEASE_PACKAGES)
+lint build-web build-editor integration-test: $(RELEASE_PACKAGES)
 endif
 
-.PHONY: verify lint build-web integration-test release-packages
+.PHONY: verify lint build-web build-editor integration-test release-packages
 
-verify: lint build-web integration-test
+verify: lint build-web build-editor integration-test
 
 lint:
 	cd $(ROOT) && MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" npx --no-install eslint tests
 
-# Integration tests read the built web artifact, a listed contract. That build uses the same data and contracts roots.
+# Integration tests read the built web artifact, a listed contract. That build uses the same data and contracts roots, and
+# the core of this commit as every build that is not a release does.
 build-web:
 	MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" $(MAKE) --no-print-directory -C $(ROOT)/apps/web build
+
+# A core, data or contracts change that breaks the editor's dev build fails here, because no app pipeline runs for it.
+build-editor:
+	MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" $(MAKE) --no-print-directory -C $(ROOT)/apps/editor build
 
 integration-test:
 	cd $(ROOT) && MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" node --test tests/integration/*.test.mjs

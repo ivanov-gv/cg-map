@@ -241,10 +241,14 @@ export function classify(file) {
   if (/^data\/(sources|artifacts|imagery)\//.test(file))
     return {folders: ['data', ...HEAD_DATA_CONSUMERS], areas: []};
 
+  // The backend's bindings are generated from the proto of their own commit.
+  if (file.startsWith('packages/contracts/proto/')) {
+    return {folders: ['contracts', 'data', 'tests', 'platform', 'backend'], areas: []};
+  }
   // A contract change at HEAD is seen by data validation and tests/; published consumers pin a release instead.
   if (file.startsWith('packages/contracts/')) return {folders: ['contracts', 'data', 'tests', 'platform'], areas: []};
-  // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
-  if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
+  // web and editor tests pin a core release, so they need no run. Their dev builds take this core, which tests/ builds.
+  if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'tests', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
   // platform checks that a phone-only browser test is tagged.
   if (file.startsWith('apps/editor/tests/e2e/') || file === 'apps/editor/playwright.config.mjs')
@@ -294,9 +298,15 @@ export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
 export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
 export const SMOKE_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(['selection'], EDITOR_BROWSER_AREAS));
 
-// A change to an app, or to what it is built from, publishes that app's image.
-export function imageMatrix(folders) {
-  const apps = MAP_APPLICATIONS.filter(folder => folders.includes(folder));
+// Builds that are not releases bundle these from their own commit.
+const bundledInputPattern = /^(?:packages\/map-core\/(?:src|assets|tools)|packages\/contracts|data\/(?:sources|artifacts|imagery|tools))\//;
+const isBundledInput = file => bundledInputPattern.test(file) && !file.endsWith('.md');
+
+// A change to an app, or to what it is built from, publishes that app's image. The folders alone do not tell: app tests
+// pin released packages, so a change to core, data or contracts selects no app pipeline, and still changes every dev image.
+export function imageMatrix(folders, changedFiles = []) {
+  const isEveryAppChanged = changedFiles.some(isBundledInput);
+  const apps = MAP_APPLICATIONS.filter(folder => isEveryAppChanged || folders.includes(folder));
   return {include: apps.map(folder => ({app: folder.replace('apps-', '')}))};
 }
 
@@ -341,7 +351,7 @@ export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) 
     ...folderLines,
     `browser_matrix=${browserMatrixForCall}`,
     `editor_browser_matrix=${editorBrowserMatrixForCall}`,
-    `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
+    `image_matrix=${JSON.stringify(imageMatrix(folders, changedFiles))}`,
     `ci_in_place_test_runs=${JSON.stringify(inPlace)}`,
     `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,

@@ -74,11 +74,10 @@ process manager, so that switchover belongs to the hosting setup.
 
 ## Protobuf transport API
 
-`cgmap.transport.v1.TransportService/ListVehicles` is the read-only ConnectRPC API. Its definition comes from the exact
-`@ivanov-gv/map-contracts` pin at the repository root
-([source](../../packages/contracts/proto/cgmap/transport/v1/transport.proto)); generated Go types, handler registration
-and clients live in `gen/`. ConnectRPC replaces hand-written RPC routing and serialization. It uses Go's HTTP server
-alongside the map's existing tile, asset and health handlers.
+`cgmap.transport.v1.TransportService/ListVehicles` is the read-only ConnectRPC API. Its definition comes from the
+contracts of the same commit ([source](../../packages/contracts/proto/cgmap/transport/v1/transport.proto)); generated Go
+types, handler registration and clients live in `gen/`. ConnectRPC replaces hand-written RPC routing and serialization.
+It uses Go's HTTP server alongside the map's existing tile, asset and health handlers.
 
 Requests use the Connect, gRPC or gRPC-Web protocol at `/cgmap.transport.v1.TransportService/ListVehicles`. Connect
 supports binary protobuf and protobuf JSON. The listener accepts HTTP/1.1 and cleartext HTTP/2; behind a proxy,
@@ -94,21 +93,18 @@ within the stale window they receive the existing snapshot with `stale: true`. R
 
 ### Regenerate bindings
 
-Install Buf CLI 1.75.0 and use the backend module's pinned generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11).
-`generate` and `generate-check` read the proto from the root's pinned `@ivanov-gv/map-contracts` package, so install
-that dependency once from the repository root first:
+The Makefile pins Buf, and go.mod its generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11). Both targets read the proto
+of the same commit and need no npm:
 
 ```sh
-make setup
 make -C services/backend generate
 make -C services/backend generate-check
 ```
 
-Run these from the repository root. `generate` lints the pinned proto package and writes `gen/`; `generate-check`
-generates into a temporary directory and compares it with the committed bindings. Do not edit generated files. Regular
-Go builds and tests consume those bindings and need neither Buf nor raw geography; they still need no npm. The explicit
-ConnectRPC dependency follows the requirement for a protobuf-defined server API; its Go 1.26 minimum is also the
-module's minimum.
+Run these from the repository root. `generate` lints the proto and writes `gen/`; `generate-check` generates into a
+temporary directory and compares it with the committed bindings, and is part of `check`. Do not edit generated files.
+Regular Go builds and tests consume those bindings and need neither Buf nor raw geography. The explicit ConnectRPC
+dependency follows the requirement for a protobuf-defined server API; its Go 1.26 minimum is also the module's minimum.
 
 ## Layout
 

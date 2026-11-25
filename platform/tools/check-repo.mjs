@@ -150,6 +150,20 @@ for (const file of integrationTestFiles) {
   if (file === integrationDataHelper) continue;
   assert.ok(!repositoryDataPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${integrationDataRule}`);
 }
+// Each app that bundles map-core has one resolver that defaults to the repository's. Everything else of the app reads it
+// through that resolver, or through the app's pin.
+const DEV_CORE_ROOTS = new Set(['apps/web/tools/core-root.mjs', 'apps/editor/tools/core-root.mjs']);
+const repositoryCorePattern = /(?:\.\.\/)+packages\/map-core\b|['"]packages['"]\s*,\s*['"]map-core['"]|['"]packages\/map-core/;
+for (const application of ['apps/web', 'apps/editor']) {
+  const files = walk(application).filter(file => /\.(?:mjs|js)$/.test(file) && !file.includes('/node_modules/'));
+  for (const file of files) {
+    if (DEV_CORE_ROOTS.has(file)) continue;
+    assert.ok(
+      !repositoryCorePattern.test(fs.readFileSync(file, 'utf8')),
+      `${file}: the repository core is read only through tools/core-root.mjs`
+    );
+  }
+}
 // Consumers resolve contracts from their pinned package in tests. Each app build has one HEAD-root resolver; data and
 // tests/ own their own HEAD exceptions.
 const CONTRACT_PATH_HELPER = 'tests/contracts-root.mjs';
@@ -190,12 +204,15 @@ for (const [form, probe] of contractPathProbes) {
   assert.match(probe, repositoryContractsPattern, `${form} must be rejected by ${pinnedContractsRule}`);
 }
 const contractConsumers = ['apps/web', 'apps/editor', 'apps/core-demo', 'packages/map-core', 'platform', 'services/backend', 'services/transit-relay', 'tests'];
+// The backend generates its bindings from the proto of its own commit.
+const COMMIT_CONTRACT_READERS = new Set(['services/backend/Makefile']);
 for (const component of contractConsumers) {
   const files = walk(component).filter(
     file => (/\.(?:mjs|js|json|go|py)$/.test(file) || file.endsWith('/Makefile')) && !file.includes('/node_modules/')
   );
   for (const file of files) {
     if (file === CONTRACT_PATH_HELPER || contractPathMetadata.has(file) || DEV_CONTRACT_ROOTS.has(file)) continue;
+    if (COMMIT_CONTRACT_READERS.has(file)) continue;
     assert.ok(!repositoryContractsPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${pinnedContractsRule}`);
   }
 }
