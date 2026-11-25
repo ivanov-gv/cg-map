@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/turn-restrictions/v1",
   "title": "Turn restrictions v1",
-  "description": "OSM turn restriction relations touching the detail area. Not GeoJSON — restrictions are topological relations, not geometries. Each record carries the OSM relation identity, restriction type, from/to way IDs, and optional via nodes or ways.",
+  "description": "Turn restrictions between published roads. Not GeoJSON: restrictions are topological relations, not geometries. Each record carries its identity, restriction type, from/to roads, and optional via nodes or ways.",
   "type": "object",
   "required": [
     "entitySchemaVersion",
@@ -20,6 +20,10 @@
     }
   },
   "$defs": {
+    "identifier": {
+      "description": "The OSM number of a way or node, or the local ID of a road or junction that came from the editor.",
+      "oneOf": [{"type": "integer", "minimum": 1}, {"type": "string", "pattern": "^local:[0-9a-f-]{36}$"}]
+    },
     "restriction": {
       "type": "object",
       "required": [
@@ -33,7 +37,7 @@
         "entityId": {
           "type": "string",
           "pattern": "^(relation/\\d+|local:[0-9a-f-]{36})$",
-          "description": "OSM relation identity"
+          "description": "OSM relation identity, or the local ID of a restriction added in the editor"
         },
         "entityVersion": {
           "oneOf": [{"type": "integer", "minimum": 1}, {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}],
@@ -56,30 +60,26 @@
           "description": "OSM restriction tag value (base values; transport-specific restriction:* tags are not extracted)"
         },
         "from": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "OSM way ID of the from-way"
+          "$ref": "#/$defs/identifier",
+          "description": "The road the turn starts on"
         },
         "to": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "OSM way ID of the to-way"
+          "$ref": "#/$defs/identifier",
+          "description": "The road the turn leads onto"
         },
         "viaNodes": {
           "type": "array",
           "items": {
-            "type": "integer",
-            "minimum": 1
+            "$ref": "#/$defs/identifier"
           },
-          "description": "OSM node IDs in the via role"
+          "description": "The junctions the turn passes, by the node of the road ends there"
         },
         "viaWays": {
           "type": "array",
           "items": {
-            "type": "integer",
-            "minimum": 1
+            "$ref": "#/$defs/identifier"
           },
-          "description": "OSM way IDs in the via role"
+          "description": "The roads the turn passes"
         }
       },
       "additionalProperties": false

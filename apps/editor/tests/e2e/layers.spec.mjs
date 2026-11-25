@@ -137,3 +137,37 @@ test('a phone draws with the fixed cross and only marks for deletion', {tag: '@p
     ['deletion', {entityId: 'way/3'}]
   ]);
 });
+
+const boxOf = async locator => {
+  await expect(locator).toBeVisible();
+  return locator.boundingBox();
+};
+const areApart = (first, second) =>
+  first.x + first.width <= second.x ||
+  second.x + second.width <= first.x ||
+  first.y + first.height <= second.y ||
+  second.y + second.height <= first.y;
+
+for (const viewport of [{width: 412, height: 915}, {width: 818, height: 1200}, {width: 1280, height: 800}]) {
+  test(`controls leave each other free at ${viewport.width} px`, async ({page}, testInfo) => {
+    test.skip(testInfo.project.name === 'pages-mobile', 'The sizes are set here.');
+    await page.setViewportSize(viewport);
+    await page.evaluate(() => (document.getElementById('offline-notice').hidden = false));
+    await chooseLayer(page, 'roads');
+    const notice = page.locator('#offline-notice');
+    await tapAt(page, [-1, 0]);
+    await page.locator('#close-inspector').click();
+    const chip = page.locator('#open-inspector');
+    expect(areApart(await boxOf(chip), await boxOf(notice))).toBe(true);
+    await chip.click();
+    await page.locator('#tool-vertices').click();
+    const modeBar = await boxOf(page.locator('#mode-bar'));
+    const others = [
+      page.locator('.workspace-toolbar'),
+      page.locator('#current-layer'),
+      page.locator('.maplibregl-ctrl-group').first(),
+      notice
+    ];
+    for (const other of others) expect(areApart(modeBar, await boxOf(other)), String(other)).toBe(true);
+  });
+}

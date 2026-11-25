@@ -72,7 +72,7 @@ function fieldControl(name, value, propertyRule, levels) {
 }
 
 // Values a single field cannot state. Layers edit them with controls of their own.
-const structuredTypes = new Set(['list', 'integers', 'directions']);
+const structuredTypes = new Set(['list', 'identifier', 'identifiers', 'directions']);
 
 export function isFormField(propertyRule) {
   const isFixed = propertyRule.enum?.length === 1 && !isOnlyYes(propertyRule);

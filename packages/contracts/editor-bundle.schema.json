@@ -82,8 +82,8 @@
       "properties": {
         "version": {"const": 3},
         "layers": {
-          "minItems": 21,
-          "maxItems": 21,
+          "minItems": 22,
+          "maxItems": 22,
           "items": {
             "properties": {
               "filename": {
@@ -102,6 +102,7 @@
                   "ridges.geojson",
                   "road-nodes.geojson",
                   "roads.geojson",
+                  "settlement-areas.geojson",
                   "settlements.geojson",
                   "slopes.geojson",
                   "summits.geojson",
