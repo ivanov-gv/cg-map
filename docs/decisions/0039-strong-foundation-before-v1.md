@@ -26,9 +26,8 @@ removes the field.
 
 ## Decision
 
-Until the project's first v1 release, or until it gets users if that is earlier, a wrong structure is replaced by the
-right one, even when that breaks a data format, a contract, saved drafts or an API. The versions of packages or
-protocols do not end this rule.
+While the project is v0.\*, until its first v1 release, a wrong structure is replaced by the right one, even when that
+breaks a data format, a contract, saved drafts or an API.
 
 - A fact is stored once. Objects are connected by ID, and everything else is derived.
 - A state that must not exist is made impossible by the structure. A check that copies agree, a tolerance and a match by
@@ -52,4 +51,4 @@ protocols do not end this rule.
   HEAD, so they must work after each merge; pins keep the tests of the apps on their release meanwhile.
 - Drafts and changesets of the editor made before such a change can become unusable; the PR tells their owner.
 - Later changes have less to keep in step, and no rule or tolerance to please.
-- After that, compatibility needs a new decision.
+- From v1 on, compatibility needs a new decision.
