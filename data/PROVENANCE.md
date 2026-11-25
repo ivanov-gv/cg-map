@@ -158,13 +158,14 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 `contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived vectors
 rebuilt from pinned inputs; [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md) describes the build,
 and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. Canyon rims can now be
-added, changed or deleted, with importer-computed identity and length. `make -C data build-relief` rebuilds them from
-the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The
-raster tiles, PBF and full report are external build artifacts and are not committed; their checksums, the DEM
-EULA/attribution, and all output counts, bytes and SHA-256 values are recorded in `sources/provenance.json`.
+added, changed or deleted with only an optional height in the changeset; the importer computes identity, kind, method
+and length. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF,
+and the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts
+and are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are
+recorded in `sources/provenance.json`.
 
-The current build has 5,411 Montenegro summits (4,541 `ok`, 417 `mismatch`, 453 `missing`), 445 contour lines across 32
-levels, 152 slope polygons, 28 ridge lines, and 46 canyon-rim segments across the four river banks. The full report is
+The current build has 5,411 Montenegro summits (4,542 `ok`, 418 `mismatch`, 451 `missing`), 445 contour lines across 32
+levels, 186 slope polygons, 31 ridge lines, and 50 canyon-rim segments across the four river banks. The full report is
 written to `.build/relief-report.json`; each summit already carries its `heightCheck`, enclosing contour, DEM facts and
 reasons. OSM names and elevations are never overwritten by DEM values. A summit is checked only when both its OSM point
 and its published six-decimal coordinate lie inside or on the `kind=country` boundary in `land.geojson`; the report
@@ -178,10 +179,11 @@ only banks rising at least 8 m above the river surface within 60 m of the channe
 then drop segments under 100 m; each remaining segment is a separate `LineString` with numbered `entityPart` values on
 one derived river-bank identity. Each finished rim publishes one `height`: the median of its bank-rise samples rounded
 to the nearest whole metre with halves upward. An OSM cliff takes that height only from DEM samples measured beside that
-cliff part, not from a distant rise elsewhere on a joined bank; an unmeasured rim is drawn as its line only. The
-statistic, rounding and river-bank thresholds are in `relief` in `sources/provenance.json`; allowed values belong to
-`relief.schema.json` ([ADR 0038](../docs/decisions/0038-one-measured-canyon-rim-height.md)). River banks are named
-relative to the DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
+cliff part, not from a distant rise elsewhere on a joined bank; an unmeasured rim is drawn as its line only. A sampled
+height outside the contract range fails validation rather than disappearing. The statistic, rounding and river-bank
+thresholds are in `relief` in `sources/provenance.json`; allowed values belong to `relief.schema.json`
+([ADR 0039](../docs/decisions/0039-one-measured-canyon-rim-height.md)). River banks are named relative to the
+DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum. The nine configured kinds are `park`, `garden`,
 `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground`; eight occur in the current `land.geojson`
 (`garden` is absent). Green kinds, discovered kinds, minimum slope area, layer sources and the ridge/rim thresholds are

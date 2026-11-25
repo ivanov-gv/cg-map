@@ -477,7 +477,7 @@ test('canyon rim corrections survive a refresh with their measured heights', tes
   builder.add(
     'canyon-rims.geojson',
     addedId,
-    {method: 'editor-drawn', river: 'Ribnica', bank: 'right', height: 77},
+    {height: 77},
     {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
   );
   apply(root, builder.build());
@@ -494,7 +494,13 @@ test('canyon rim corrections survive a refresh with their measured heights', tes
   assert.ok(!written.some(feature => isSameEntity(feature, deleted)), 'a deleted rim stays deleted');
   const added = written.find(({properties}) => properties.entityId === addedId);
   assert.equal(added.properties.method, 'editor-drawn');
-  assert.equal(added.properties.height, 77);
   assert.equal(added.properties.kind, 'canyon-rim');
+  assert.equal(added.properties.height, 77);
+  assert.equal('river' in added.properties, false);
+  assert.equal('bank' in added.properties, false);
   assert.equal(typeof added.properties.lengthMetres, 'number');
+  const changedWritten = written.find(feature => isSameEntity(feature, changed));
+  assert.equal(changedWritten.properties.method, changed.properties.method);
+  assert.equal(changedWritten.properties.river, changed.properties.river);
+  assert.equal(changedWritten.properties.bank, changed.properties.bank);
 });

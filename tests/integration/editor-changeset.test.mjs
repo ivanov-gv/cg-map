@@ -280,7 +280,7 @@ test('canyon rims can be added, changed and deleted with one measured height eac
   const localId = 'local:55555555-5555-4555-8555-555555555555';
   const drawn = {
     type: 'Feature',
-    properties: {method: 'editor-drawn', river: 'Ribnica', bank: 'right', height: 77},
+    properties: {height: 77},
     geometry: {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
   };
   recordValidEdit(session, 'canyon-rims.geojson', localId, drawn);
@@ -301,7 +301,16 @@ test('canyon rims can be added, changed and deleted with one measured height eac
 
   const added = written.features.find(({properties}) => properties.entityId === localId);
   assert.equal(added.properties.method, 'editor-drawn');
+  assert.equal(added.properties.kind, 'canyon-rim');
   assert.equal(added.properties.height, 77);
+  assert.equal('river' in added.properties, false);
+  assert.equal('bank' in added.properties, false);
+  const changedWritten = written.features.find(
+    ({properties}) => identityOf(properties) === identityOf(changed.properties)
+  );
+  assert.equal(changedWritten.properties.method, changed.properties.method);
+  assert.equal(changedWritten.properties.river, changed.properties.river);
+  assert.equal(changedWritten.properties.bank, changed.properties.bank);
   assert.equal(typeof added.properties.lengthMetres, 'number');
   assert.ok(added.properties.lengthMetres > 100 && added.properties.lengthMetres < 200);
   const addOperation = changeset.operations.find(
@@ -312,6 +321,32 @@ test('canyon rims can be added, changed and deleted with one measured height eac
     added.properties.entityVersion,
     `sha256:${crypto.createHash('sha256').update(JSON.stringify(addOperation.after)).digest('hex')}`
   );
+});
+
+test('the importer refuses a canyon rim that states a derived fact', async testContext => {
+  const claimed = {
+    method: 'editor-drawn',
+    river: 'Ribnica',
+    bank: 'right'
+  };
+  for (const [field, value] of Object.entries(claimed)) {
+    const root = temporaryRoot(testContext);
+    const sources = loadSources(root, ['canyon-rims.geojson']);
+    const session = new EditSession(sources);
+    const localId = 'local:66666666-6666-4666-8666-666666666666';
+    const drawn = {
+      type: 'Feature',
+      properties: {[field]: value, height: 77},
+      geometry: {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
+    };
+    session.recordEdit('canyon-rims.geojson', localId, drawn);
+    const originalBytes = fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson'));
+    await assert.rejects(
+      exportAndApply(session, sources, root),
+      new RegExp(`canyon-rims\\.geojson.*a new feature must not claim ${field}`)
+    );
+    assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson')), originalBytes);
+  }
 });
 
 test('the importer refuses a canyon rim with a fractional height', async testContext => {

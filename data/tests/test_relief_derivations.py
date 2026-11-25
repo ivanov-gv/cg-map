@@ -112,7 +112,7 @@ class ReliefDerivationTests(unittest.TestCase):
 
         self.assertEqual(derivations._rim_height([10.0, 20.0]), 15)
         self.assertIsNone(derivations._rim_height([]))
-        self.assertIsNone(derivations._rim_height([2601.0]))
+        self.assertEqual(derivations._rim_height([2601.0]), 2601)
 
     def test_an_osm_cliff_takes_height_only_from_nearby_bank_samples(self):
         part = derivations.LineString([(0.0, 5.0001), (0.002, 5.0001)])

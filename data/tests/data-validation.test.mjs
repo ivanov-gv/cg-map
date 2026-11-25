@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import Ajv2020 from 'ajv/dist/2020.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -938,6 +939,71 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
       assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
   }
+});
+
+test('the relief contract keeps river and bank off drawn canyon rims', () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')));
+  const rimProperties = schema.$defs.canyonRim.then.properties;
+  const river = rimProperties.river.enum[0];
+  const bank = rimProperties.bank.enum[0];
+  const validate = new Ajv2020({strict: false}).compile(schema);
+  const isValid = properties => validate({
+    type: 'FeatureCollection',
+    entitySchemaVersion: 1,
+    features: [{
+      type: 'Feature',
+      geometry: {type: 'LineString', coordinates: [[19.4, 42.5], [19.41, 42.51]]},
+      properties
+    }]
+  });
+  const drawn = {
+    entityId: 'local:00000000-0000-4000-8000-000000000001',
+    entityVersion: `sha256:${'a'.repeat(64)}`,
+    kind: 'canyon-rim',
+    method: 'editor-drawn',
+    lengthMetres: 120,
+    height: 77
+  };
+  assert.equal(isValid(drawn), true);
+  assert.equal(isValid({...drawn, river}), false);
+  assert.equal(isValid({...drawn, bank}), false);
+  const derived = {...drawn, entityId: 'way/1', method: 'osm-cliff', river, bank};
+  assert.equal(isValid(derived), true);
+  const missingRiver = {...derived};
+  delete missingRiver.river;
+  assert.equal(isValid(missingRiver), false);
+});
+
+test('relief validation refuses a drawn rim that names a river or bank', () => {
+  const drawn = structuredClone(readRelief('canyon-rims.geojson').features[0]);
+  drawn.properties.entityId = 'local:00000000-0000-4000-8000-000000000001';
+  drawn.properties.entityVersion = `sha256:${'a'.repeat(64)}`;
+  drawn.properties.method = 'editor-drawn';
+  drawn.properties.height = 123;
+  delete drawn.properties.river;
+  delete drawn.properties.bank;
+  for (const [field, value] of [['river', 'an unlisted river'], ['bank', 'an unlisted bank']]) {
+    const bad = structuredClone(drawn);
+    bad.properties[field] = value;
+    assert.throws(
+      () => validateRelief({type: 'FeatureCollection', entitySchemaVersion: 1, features: [bad]}, {
+        label: 'canyon-rims.geojson',
+        contractsDirectory
+      }),
+      error => error.message === `canyon-rims.geojson: a drawn rim cannot name a ${field}`
+    );
+  }
+});
+
+test('relief validation reports an out-of-range rim height with the file and reason', () => {
+  const bad = readRelief('canyon-rims.geojson');
+  const maximum = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')))
+    .$defs.canyonRim.then.properties.height.maximum;
+  bad.features[0].properties.height = maximum + 1;
+  assert.throws(
+    () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
+    error => error.message === 'canyon-rims.geojson: invalid rim height'
+  );
 });
 
 test('relief validation accepts a locally drawn rim with one measured height', () => {

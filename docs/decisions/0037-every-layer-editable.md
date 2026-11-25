@@ -61,11 +61,10 @@ facts. Editor tests keep their contracts and data pins until the next releases o
 about a tenth, and the check refuses roads that end at one junction in different places. One OSM node has ways passing
 on two levels; the extractor names such nodes, and they stay unjoined.
 
-## Outcome (2026-11-25)
+## Outcome (owner, 2026-11-25)
 
-The owner withdrew the no-add/delete limit above for canyon rims after trying UI 4.Editor, whose rule is that any object
-can be added or deleted. [#446](https://github.com/ivanov-gv/cg-map/issues/446) therefore allows a canyon rim to be
-added, changed or deleted; `entityVersion`, `lengthMetres` and identity stay importer-computed. The original limit still
-stands for border lines ([#429](https://github.com/ivanov-gv/cg-map/issues/429)) and ridges
-([#453](https://github.com/ivanov-gv/cg-map/issues/453)) until those issues decide otherwise. The height fact added with
-the rim is explained in [ADR 0038](0038-one-measured-canyon-rim-height.md).
+The owner withdrew the no-add/delete limit for canyon rims only: [#446](https://github.com/ivanov-gv/cg-map/issues/446)
+lets a rim be added, changed or deleted while identity, `entityVersion` and `lengthMetres` stay importer-computed. The
+limit still stands for border lines ([#429](https://github.com/ivanov-gv/cg-map/issues/429)) and ridges
+([#453](https://github.com/ivanov-gv/cg-map/issues/453)). [ADR 0039](0039-one-measured-canyon-rim-height.md) records the
+height and direction facts.

@@ -1,6 +1,5 @@
-// Checks the directions the relief contract promises: every canyon rim runs with its river on the right, and every
-// contour with higher ground on the left. A style offsets canyon walls and turns contour heights by these directions,
-// so a hand edit or a rebuild that reverses a line must fail validation, not draw a wall on the dry side.
+// Judges named relief directions against their source geometry: a canyon rim against its river centreline and a
+// contour against the ground inside it. A hand edit or a rebuild that reverses a line must fail validation.
 
 import {isInsideRing} from './ring-geometry.mjs';
 
@@ -61,7 +60,8 @@ function signedRingArea(ring) {
   return doubledArea / 2;
 }
 
-// Returns the rims whose river lies on their left, judged against the named river's centrelines in water.geojson.
+// Returns the rims whose river lies on their left, judged against the named river's centrelines in water.geojson; a rim
+// without a river cannot be judged by name.
 export function reversedCanyonRims(canyonRims, water) {
   const riverLines = new Map();
   for (const feature of water.features) {
@@ -72,8 +72,7 @@ export function reversedCanyonRims(canyonRims, water) {
     riverLines.set(feature.properties.name, lines);
   }
   return canyonRims.features.filter(rim => {
-    // A person-drawn edge has no guaranteed downstream direction; only derived rims promise the river on their right.
-    if (rim.properties.method === 'editor-drawn') return false;
+    if (!rim.properties.river) return false;
     const lines = riverLines.get(rim.properties.river);
     if (!lines) return true;
     return !hasRiverOnRight(rim, lines);

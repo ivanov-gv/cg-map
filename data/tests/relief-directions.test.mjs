@@ -14,11 +14,15 @@ test('a canyon rim with its river on the left is reported', () => {
   assert.deepEqual(reversedCanyonRims(collection([eastward, westward]), water), [westward]);
 });
 
-// A person may draw a rim before its river is known; there is no direction to check until the river is named.
-test('a locally drawn rim without a known river is not judged for direction', () => {
-  const water = collection([]);
-  const drawn = line([[19.002, 42.0003], [19.008, 42.0003]], {method: 'editor-drawn'});
-  assert.deepEqual(reversedCanyonRims(collection([drawn]), water), []);
+// Every edge keeps the low side on its right; without a named river there is no centreline to judge it against.
+test('a drawn rim with a named river is judged like any other rim', () => {
+  const water = collection([line([[19.0, 42.0], [19.01, 42.0]], {kind: 'river', name: 'Ribnica'})]);
+  const drawn = coordinates => line(coordinates, {method: 'editor-drawn', river: 'Ribnica'});
+  const eastward = drawn([[19.002, 42.0003], [19.008, 42.0003]]);
+  const westward = drawn([[19.008, 42.0003], [19.002, 42.0003]]);
+  assert.deepEqual(reversedCanyonRims(collection([eastward, westward]), water), [westward]);
+  const unnamed = line([[19.008, 42.0003], [19.002, 42.0003]], {method: 'editor-drawn'});
+  assert.deepEqual(reversedCanyonRims(collection([unnamed]), water), []);
 });
 
 // Around a hill, rings run counter-clockwise; around a hollow, clockwise. The innermost ring is judged by its summit.

@@ -382,9 +382,6 @@
       "operations": ["add", "modify", "delete"],
       "geometries": ["LineString"],
       "properties": {
-        "method": {"requiredOnAdd": true, "addOnly": true, "enum": ["editor-drawn"]},
-        "river": {"addOnly": true, "enum": ["Morača", "Ribnica"]},
-        "bank": {"addOnly": true, "enum": ["left", "right"]},
         "height": {"type": "integer", "minimum": 0, "maximum": 2600}
       }
     },

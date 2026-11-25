@@ -17,7 +17,7 @@ from shapely.prepared import prep
 
 from .terrain import (
     CANYON_BANK_RISE_METRES,
-    CANYON_RIM_HEIGHT_MAX_METRES,
+    CANYON_BANK_SAMPLE_NEARBY_METRES,
     CANYON_RIM_JOIN_GAP_METRES,
     CANYON_RIM_MINIMUM_LENGTH_METRES,
     CANYON_SEARCH_DISTANCE_METRES,
@@ -885,7 +885,7 @@ def _cliff_parts(cliffs, line, bank, detail_bounds, latitude_metres, longitude_m
 
 
 def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
-                            longitude_metres, rim_geometry, near_metres):
+                            longitude_metres, rim_geometry, near_bank_metres):
     candidates = []
     for line in lines:
         candidates.extend(_cliff_parts(
@@ -896,7 +896,7 @@ def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
     kept = []
     seen = set()
     for part, cliff in candidates:
-        if part.distance(rim_geometry) > near_metres / latitude_metres:
+        if part.distance(rim_geometry) > near_bank_metres / latitude_metres:
             continue
         rounded = rounded_coordinates(list(part.coords))
         key = (cliff['entityId'], tuple(tuple(point) for point in rounded))
@@ -935,16 +935,15 @@ def _metric_length(geometry, latitude_metres, longitude_metres):
 
 
 def _rim_height(rises):
-    """Return the median sampled bank rise in whole metres, or None when it cannot be published."""
+    """Return the median sampled bank rise in whole metres, or None without samples."""
     if not rises:
         return None
-    height = math.floor(statistics.median(rises) + 0.5)
-    return height if 0 <= height <= CANYON_RIM_HEIGHT_MAX_METRES else None
+    return math.floor(statistics.median(rises) + 0.5)
 
 
 def _nearby_rim_samples(part, dem_segments, latitude_metres):
     """Return the bank samples measured close enough to lend this cliff part a height."""
-    nearby_degrees = CANYON_SEARCH_DISTANCE_METRES / 2 / latitude_metres
+    nearby_degrees = CANYON_BANK_SAMPLE_NEARBY_METRES / latitude_metres
     return [
         (point, rise)
         for _, samples in dem_segments
@@ -1082,7 +1081,7 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
             rim_geometry = unary_union([line for line, _ in dem_segments]) if dem_segments else LineString()
             cliff_parts = _qualifying_cliff_parts(
                 cliffs, lines, bank, detail_bounds, latitude_metres, longitude_metres,
-                rim_geometry, CANYON_SEARCH_DISTANCE_METRES / 2,
+                rim_geometry, CANYON_BANK_SAMPLE_NEARBY_METRES,
             )
             cliff_parts = [
                 (_with_water_on_right(part, lines, bank), cliff) for part, cliff in cliff_parts

@@ -35,8 +35,9 @@ CANYON_SEARCH_DISTANCE_METRES = 60
 CANYON_SEARCH_STEP_METRES = 10
 CANYON_RIM_JOIN_GAP_METRES = 60
 CANYON_RIM_MINIMUM_LENGTH_METRES = 100
-# The published relief contract limits a rim wall to the height range of the covered terrain.
-CANYON_RIM_HEIGHT_MAX_METRES = 2600
+# The sampler places rim points on the bank 10-60 m from the river. Half that reach is the band where
+# the pipeline samples the bank beside an OSM cliff; selection and height association share that band.
+CANYON_BANK_SAMPLE_NEARBY_METRES = CANYON_SEARCH_DISTANCE_METRES / 2
 
 
 def contour_levels(minimum_height, maximum_height, interval=CONTOUR_INTERVAL_METRES):

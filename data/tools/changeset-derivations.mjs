@@ -254,19 +254,21 @@ function lineLengthMetres(line) {
 
 const derivedFactsByFile = {
   'slopes.geojson': ({coordinates}) => ({areaSquareMetres: Math.round(polygonAreaSquareMetres(coordinates))}),
-  'canyon-rims.geojson': ({coordinates}) => ({
-    kind: 'canyon-rim',
+  'canyon-rims.geojson': ({coordinates}, isAdded) => ({
+    ...(isAdded ? {kind: 'canyon-rim', method: 'editor-drawn'} : {}),
     lengthMetres: Math.round(lineLengthMetres(coordinates))
   })
 };
 
-// A changed slope or rim states its new measure; a new rim takes its kind from the file it was drawn in.
-export function featuresWithDerivedFacts(filename, collection, changedKeys) {
+// A changed slope or rim states its new measure; the importer names a new rim's kind and method.
+export function featuresWithDerivedFacts(filename, collection, changedKeys, previousKeys) {
   const derive = derivedFactsByFile[filename];
   if (!derive) return collection;
   const features = collection.features.map(feature => {
-    if (!changedKeys.has(entityKey(feature.properties))) return feature;
-    return {...feature, properties: {...feature.properties, ...derive(feature.geometry)}};
+    const key = entityKey(feature.properties);
+    if (!changedKeys.has(key)) return feature;
+    const isAdded = !previousKeys.has(key);
+    return {...feature, properties: {...feature.properties, ...derive(feature.geometry, isAdded)}};
   });
   return {...collection, features};
 }
@@ -299,13 +301,15 @@ export function featuresWithRingOrder(filename, collection, changedKeys) {
 // ones; `read` returns the collection of a file the changeset did not change. Returns the files to write.
 export function withDerivedFacts(next, previous, changedKeysByFile, read) {
   const derived = new Map();
+  const reviewed = filename => previous.get(filename) ?? read(filename);
   for (const [filename, collection] of next) {
     const changedKeys = changedKeysByFile.get(filename);
+    const previousFeatures = reviewed(filename).features;
+    const previousKeys = new Set(previousFeatures.map(feature => entityKey(feature.properties)));
     const ordered = featuresWithRingOrder(filename, collection, changedKeys);
-    derived.set(filename, featuresWithDerivedFacts(filename, ordered, changedKeys));
+    derived.set(filename, featuresWithDerivedFacts(filename, ordered, changedKeys, previousKeys));
   }
   const current = filename => derived.get(filename) ?? read(filename);
-  const reviewed = filename => previous.get(filename) ?? read(filename);
   if (derived.has(roadsFile)) {
     derived.set(roadsFile, roadsLeavingJunctions(derived.get(roadsFile), changedKeysByFile.get(roadsFile)));
   }
