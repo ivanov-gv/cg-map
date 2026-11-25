@@ -413,7 +413,8 @@ test('an area limited to one project has a partner covering the other', () => {
 const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
 
 for (const [name, files, expectedAreas] of [
-  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile']],
+  ['a geometry source', ['apps/editor/src/geometry-editing.js'], ['editing-desktop', 'editing-mobile', 'layers']],
+  ['the magnet rule', ['apps/editor/src/magnet-tools.js'], ['editing-desktop', 'editing-mobile', 'layers']],
   ['a source the offline tests edit through', ['apps/editor/src/review-panel.js'], ALL_EDITOR_AREAS],
   ['a source that opens an edit on selection', ['apps/editor/src/inspector-editing.js'], ALL_EDITOR_AREAS],
   ['the source behind the rules', ['apps/editor/src/geometry-validation.js'], ALL_EDITOR_AREAS],
@@ -470,6 +471,15 @@ test('the editing spec on the mobile layout runs in two jobs', () => {
     jobs.map(job => job.area),
     ['editing-mobile-1', 'editing-mobile-2']
   );
+});
+
+test('the layer specs run in three jobs', () => {
+  const jobs = browserMatrix(['layers'], EDITOR_BROWSER_AREAS).include;
+  assert.deepEqual(jobs, [
+    {area: 'layers-1', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=1/3`},
+    {area: 'layers-2', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=2/3`},
+    {area: 'layers-3', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=3/3`}
+  ]);
 });
 
 test('an area too slow for one job runs every share of its tests', () => {

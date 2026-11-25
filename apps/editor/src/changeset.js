@@ -1,3 +1,5 @@
+import {layerIdOfFile} from './editor-layers.js';
+import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
 
@@ -16,7 +18,9 @@ function exportedReference(reference, before) {
 // Builds the reviewable export described by the editor-changeset schema, in the version that the importer of these rules
 // reads.
 export async function buildChangeset(session, sources, {id, createdAt, author, reason}, rules = {version: latestVersion}) {
-  const version = Math.min(rules.version, latestVersion);
+  const fieldItems = session.fieldItems();
+  // Earlier changesets have no field items.
+  const version = fieldItems.length > 0 ? latestVersion : Math.min(rules.version, latestVersion);
   const bases = {};
   const operations = [];
   for (const filename of session.changedFiles()) {
@@ -27,7 +31,8 @@ export async function buildChangeset(session, sources, {id, createdAt, author, r
       operations.push({filename, operation, reference: exported, beforeFingerprint, before, after});
     }
   }
-  return {version, id, createdAt, author, reason, bases, operations};
+  const changeset = {version, id, createdAt, author, reason, bases, operations};
+  return fieldItems.length > 0 ? {...changeset, fieldItems} : changeset;
 }
 
 // A plain GeoJSON view of one changed file for GIS inspection. It never replaces a source file.
@@ -71,12 +76,13 @@ async function checkOperation(operation, key, sources, rules, levels) {
 }
 
 // Resumes a reviewed changeset on this snapshot, with the same checks as the importer. Everything is checked before the
-// first edit is recorded, so a refused file leaves the session untouched.
+// first edit is recorded, so a refused file leaves the session untouched. What arrives is one step.
 export async function importChangeset(changeset, session, sources, rules, levels) {
   requireImportable(readableVersions.includes(changeset?.version), 'unsupported changeset version');
   const {operations, bases} = changeset;
-  requireImportable(Array.isArray(operations) && operations.length > 0, 'no operations');
-  requireImportable(session.changedFiles().length === 0, 'export or discard the current changes first');
+  const fieldItems = changeset.fieldItems ?? [];
+  const hasContent = Array.isArray(operations) && operations.length + fieldItems.length > 0;
+  requireImportable(hasContent, 'no operations');
   const boundFiles = new Set(
     operations
       .filter(({reference}) => changeset.version === 1 || reference?.featureIndex !== undefined)
@@ -95,8 +101,21 @@ export async function importChangeset(changeset, session, sources, rules, levels
   const keys = operations.map(operation => sessionKey(operation, entityIndexByFile.get(operation.filename)));
   const targets = operations.map(({filename}, index) => `${filename}:${keys[index]}`);
   requireImportable(new Set(targets).size === targets.length, 'two operations target the same feature');
+  // Work of several devices can come together as long as no object was changed on two of them.
+  const touched = operations.find(({filename}, index) => session.isChanged(filename, keys[index]));
+  requireImportable(
+    !touched,
+    `an object of ${touched?.filename} was changed here too; export or discard the current changes first`
+  );
   for (const [index, operation] of operations.entries()) {
     await checkOperation(operation, keys[index], sources, rules, levels);
   }
-  operations.forEach(({filename, after}, index) => session.recordEdit(filename, keys[index], after));
+  for (const item of fieldItems) {
+    const problem = fieldItemProblem(item, [...sources.keys()]);
+    requireImportable(!problem, problem);
+  }
+  const edits = operations.map(({filename, after}, index) => ({filename, key: keys[index], after}));
+  const layerIds = [...new Set(operations.map(({filename}) => layerIdOfFile(filename)))];
+  if (edits.length > 0) session.recordEdits(layerIds[0], edits, layerIds);
+  fieldItems.forEach(item => session.saveFieldItem(item));
 }

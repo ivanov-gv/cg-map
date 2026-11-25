@@ -1,16 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  afterDoubleClick,
+  afterDrawnPoint,
   afterGestureMove,
   afterMapTap,
+  afterUndoneDrawnPoint,
   beginExistingEdit,
   beginGesture,
   beginNewLine,
   beginNewPoint,
+  beginNewPolygon,
+  canFinishDrawing,
   cancelGesture,
   editTools,
   endGesture,
-  withTool
+  finishDrawing,
+  withTool,
+  withoutVertex
 } from '../src/edit-transaction.js';
 import {propertiesFromForm} from '../src/property-form.js';
 
@@ -38,14 +45,70 @@ test('an open edit never changes the feature it started from', () => {
   assert.equal(transaction.hasUnappliedEdit, false);
 });
 
-test('a new point is placed by a tap, and then only moves relatively', () => {
+test('a new point is placed by a tap, which ends the mode, and then only moves relatively', () => {
   const placed = afterMapTap(beginNewPoint('local:1', {}), [19.1, 42.1]);
   assert.deepEqual(placed.feature.geometry, {type: 'Point', coordinates: [19.1, 42.1]});
-  assert.equal(placed.tool, editTools.move);
+  assert.equal(placed.tool, null);
   assert.equal(afterMapTap(placed, [19.9, 42.9]), placed, 'a later tap does not make it jump');
-  const moved = dragged(placed, [19.5, 42.5], [19.6, 42.5]);
+  const moved = dragged(withTool(placed, editTools.move), [19.5, 42.5], [19.6, 42.5]);
   assert.deepEqual(moved.feature.geometry.coordinates, [19.2, 42.1]);
   assert.equal(moved.isNew, true);
+});
+
+test('a polygon is drawn corner by corner, undone corner by corner, and closes only with three', () => {
+  const corners = [
+    [19.1, 42.1],
+    [19.2, 42.1],
+    [19.2, 42.2]
+  ];
+  const two = corners.slice(0, 2).reduce(afterDrawnPoint, beginNewPolygon('local:1', {}));
+  assert.equal(canFinishDrawing(two), false);
+  const three = afterDrawnPoint(two, corners[2]);
+  assert.equal(canFinishDrawing(three), true);
+  assert.deepEqual(afterUndoneDrawnPoint(three).drawnPoints, two.drawnPoints);
+  const finished = finishDrawing(three);
+  assert.deepEqual(finished.feature.geometry, {type: 'Polygon', coordinates: [[...corners, corners[0]]]});
+  assert.equal(finished.tool, null);
+});
+
+test('a double click drops the point its second tap added, whatever each tap snapped to', () => {
+  // Taps count as a double click even when the first snaps to a neighbour's corner and the second lands a little
+  // below it.
+  const corner = [19.2502, 42.4402];
+  const snappedPoints = [corner, [19.2502, 42.44016]];
+  const starts = {
+    outline: beginNewPolygon('local:1', {}),
+    hole: withTool(beginExistingEdit('0', building), editTools.cutHole),
+    line: beginNewLine('local:1', {})
+  };
+  for (const [name, start] of Object.entries(starts)) {
+    const drawn = snappedPoints.reduce(afterDrawnPoint, start);
+    assert.deepEqual(afterDoubleClick(drawn, [[100, 100], [102, 100]]).drawnPoints, [corner], name);
+    assert.equal(afterDoubleClick(drawn, [[100, 100], [130, 100]]), drawn, name);
+  }
+});
+
+test('a hole is drawn inside a shape without changing its outline, and leaving the mode drops it', () => {
+  const hole = [
+    [19.2502, 42.4401],
+    [19.2505, 42.4401],
+    [19.2505, 42.4402]
+  ];
+  const cutting = hole.reduce(afterDrawnPoint, withTool(beginExistingEdit('0', building), editTools.cutHole));
+  assert.deepEqual(cutting.feature.geometry, polygon, 'the outline stands until the hole is finished');
+  assert.deepEqual(finishDrawing(cutting).feature.geometry.coordinates, [polygon.coordinates[0], [...hole, hole[0]]]);
+  assert.deepEqual(withTool(cutting, null).feature.geometry, polygon);
+});
+
+test('a tap on the middle of a side adds a point there, and a press on it drags the new point', () => {
+  const editing = withTool(beginExistingEdit('0', building), editTools.vertices);
+  const middle = {ringIndex: 0, vertexIndex: 0, isMidpoint: true};
+  const added = afterMapTap(editing, [19.2505, 42.44], middle);
+  assert.deepEqual(added.feature.geometry.coordinates[0][1], [19.2505, 42.44]);
+  assert.deepEqual(added.selectedHandle, {ringIndex: 0, vertexIndex: 1});
+  const pressed = beginGesture(editing, [19.2505, 42.44], middle);
+  const movedPoint = afterGestureMove(pressed, [19.2505, 42.4395]).feature.geometry.coordinates[0][1];
+  assert.deepEqual(movedPoint, [19.2505, 42.4395]);
 });
 
 test('drawing appends each tapped point', () => {
@@ -129,4 +192,16 @@ test('an unchanged form changes nothing, including a blank name from the source'
   const formValues = {name: '', kind: 'tertiary'};
   assert.deepEqual(propertiesFromForm(properties, formValues, propertyRules), properties);
   assert.deepEqual(propertiesFromForm({kind: 'tertiary'}, formValues, propertyRules), {kind: 'tertiary'});
+});
+
+test('a closed line stays closed when the point where it begins is removed', () => {
+  const [west, north, east, south] = [[0, 0], [1, 1], [2, 0], [1, -1]];
+  const ring = {type: 'Feature', properties: {}, geometry: {type: 'LineString', coordinates: [west, north, east, south, west]}};
+  for (const vertexIndex of [0, 4]) {
+    const {feature, origins} = withoutVertex(beginExistingEdit('0', ring), {vertexIndex});
+    assert.deepEqual(feature.geometry.coordinates, [north, east, south, north]);
+    assert.deepEqual(origins, [1, 2, 3, 1]);
+  }
+  const open = withoutVertex(beginExistingEdit('0', ring), {vertexIndex: 2});
+  assert.deepEqual(open.feature.geometry.coordinates, [west, north, south, west]);
 });

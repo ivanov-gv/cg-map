@@ -14,49 +14,28 @@
   </head>
   <body>
     <nav class="workspace-toolbar" aria-label="Workspace">
-      <button
-        type="button"
-        data-panel="layers-panel"
-        disabled
-        aria-controls="layers-panel"
-        aria-expanded="false"
-      >
-        Layers
+      <button type="button" data-panel="layers-panel" disabled aria-controls="layers-panel" aria-expanded="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg><span>Layers</span>
       </button>
-      <button
-        type="button"
-        data-panel="tools-panel"
-        disabled
-        aria-controls="tools-panel"
-        aria-expanded="false"
-      >
-        Tools
+      <button type="button" data-panel="tools-panel" disabled aria-controls="tools-panel" aria-expanded="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L3 18l3 3 6.2-6.2a4 4 0 0 0 5.3-5.3L15 12l-3-3 2.5-2.5Z"/></svg><span>Tools</span>
       </button>
-      <button
-        type="button"
-        data-panel="changes-panel"
-        disabled
-        aria-controls="changes-panel"
-        aria-expanded="false"
-      >
-        Changes
+      <button type="button" data-panel="changes-panel" disabled aria-controls="changes-panel" aria-expanded="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/></svg><span>Changes</span><span id="change-count" class="badge" aria-hidden="true" hidden></span>
       </button>
-      <button id="open-objects" type="button" data-panel="objects-panel" disabled
-        aria-controls="objects-panel" aria-expanded="false">Objects</button>
-      <button id="open-inspector" type="button" aria-controls="inspector" aria-expanded="false" hidden>Selection</button>
     </nav>
-    <button
-      id="current-layer"
-      type="button"
-      disabled
-      aria-controls="layers-panel"
-      aria-expanded="false"
-    >
-      Browse
+    <button id="open-inspector" type="button" aria-controls="inspector" aria-expanded="false" hidden>Selection</button>
+    <button id="current-layer" type="button" disabled aria-controls="layers-panel" aria-expanded="false">
+      <span class="layer-mark" aria-hidden="true"></span>
+      <span id="current-layer-name">Browse</span>
     </button>
     <aside class="dock" aria-label="Workspace panels">
       <section id="layers-panel" class="utility-panel" hidden>
-        <h2>Layers</h2>
+        <header class="panel-heading"><h2>Layers</h2><button type="button" class="close-panel" data-close-panel aria-label="Close">×</button></header>
+        <div id="layer-choices"></div>
+        <button id="browse" disabled>Browse · no layer</button>
+        <h3>View</h3>
+        <button id="satellite" aria-pressed="false" disabled>Satellite</button>
         <p id="offline-status" class="hint" role="status"></p>
         <button id="update-app" hidden>Update and reload</button>
         <p id="update-hint" class="hint" hidden>
@@ -76,15 +55,11 @@
               <tbody id="layers"></tbody>
             </table>
           </div>
+          <p class="hint">
+            Edits stay in this browser until you export them. One layer is
+            active at a time, and an edit changes only the files of its layer.
+          </p>
         </details>
-        <h2>Choose what to edit</h2>
-        <div id="modes" class="tiles"></div>
-        <button id="browse" disabled>Browse · all files locked</button>
-        <p class="hint">
-          One GeoJSON file per mode. Every edit and undo changes only the active
-          file. Importing a reviewed changeset is the one exception, because it
-          names its own files.
-        </p>
         <footer class="hint">
           ©
           <a href="https://www.openstreetmap.org/copyright"
@@ -95,7 +70,7 @@
         </footer>
       </section>
       <section id="objects-panel" class="utility-panel" aria-labelledby="objects-heading" hidden>
-        <h2 id="objects-heading">Objects in view</h2>
+        <header class="panel-heading"><h2 id="objects-heading">Objects in view</h2><button type="button" class="close-panel" data-close-panel aria-label="Close">×</button></header>
         <p id="objects-status" class="hint" role="status" tabindex="-1"></p>
         <ul id="objects-list" aria-labelledby="objects-heading"></ul>
         <div id="objects-pages" class="button-row" hidden>
@@ -104,10 +79,13 @@
         </div>
       </section>
       <section id="tools-panel" class="utility-panel" hidden>
-        <h2>Tools</h2>
+        <header class="panel-heading"><h2>Tools</h2><button type="button" class="close-panel" data-close-panel aria-label="Close">×</button></header>
+        <div id="draw-choices" class="stack"></div>
+        <h3 class="section-title">In the field</h3>
+        <div id="sketch-choices" class="stack"></div>
+        <button id="open-objects" type="button" disabled>Objects in view</button>
         <button id="edit-guides" type="button" aria-pressed="true" hidden>Edit guides</button>
-        <p id="edit-guides-hint" class="hint" hidden>Green guides mark unchanged objects; amber marks applied changes. Guides appear at zoom 15+.</p>
-        <button id="add-feature" hidden></button>
+        <p id="edit-guides-hint" class="hint" hidden>Green marks what you can edit, amber what you applied. Guides appear when you zoom in.</p>
         <div class="button-row">
           <button id="undo" disabled>Undo</button>
           <button id="redo" disabled>Redo</button>
@@ -116,27 +94,20 @@
           <span data-shortcut-undo>Ctrl+Z</span> to undo,
           <span data-shortcut-redo>Ctrl+Shift+Z</span> to redo.
         </p>
-        <button id="satellite" aria-pressed="false" disabled>
-          Satellite sample
-        </button>
-        <button id="preview" aria-pressed="false" disabled>
-          Preview all edits
-        </button>
-        <p class="hint">
-          Shows the map with every pending edit applied, as a rebuild would.
-          Below street scale a release simplifies more.
-        </p>
       </section>
       <section id="changes-panel" class="utility-panel" hidden>
-        <h2>Review changes</h2>
+        <header class="panel-heading"><h2>Changes</h2><button type="button" class="close-panel" data-close-panel aria-label="Close">×</button></header>
         <p id="draft-conflict" class="notice" role="alert" hidden></p>
         <div id="draft-conflict-actions" class="button-row" hidden>
           <button id="draft-download">Download old draft</button>
           <button id="draft-discard">Discard old draft</button>
         </div>
         <p id="review-empty" class="hint">
-          No pending changes. The map outside a mode shows the reviewed release.
+          No pending changes. The map shows the reviewed release.
         </p>
+        <h3 id="field-items-heading" class="section-title" hidden>From the field</h3>
+        <ul id="field-items" class="field-items"></ul>
+        <h3 id="applied-heading" class="section-title" hidden>Applied here</h3>
         <div id="review-files"></div>
         <ul id="review-problems" role="alert"></ul>
         <div id="review-actions">
@@ -173,6 +144,7 @@
     </aside>
     <main>
       <div id="map" aria-label="Source layer map"></div>
+      <div id="map-cross" aria-hidden="true" hidden></div>
       <div class="map-status">
         <button id="offline-notice" type="button" hidden>
           Offline status needs attention
@@ -186,9 +158,31 @@
         <p id="error" role="alert" hidden></p>
       </div>
     </main>
+    <section id="resolve-bar" aria-label="From the field" hidden>
+      <div>
+        <strong id="resolve-title"></strong>
+        <p id="resolve-detail" class="hint"></p>
+      </div>
+      <div id="resolve-choices" class="button-row"></div>
+      <button id="resolve-close" type="button">Put back</button>
+    </section>
+    <nav id="level-picker" aria-label="Level" hidden></nav>
+    <section id="mode-bar" aria-label="Mode" hidden>
+      <h2 id="mode-title"></h2>
+      <p id="mode-hint" class="hint" role="status"></p>
+      <p id="mode-notice" class="notice" role="status" hidden></p>
+      <div id="mode-buttons" class="button-row"></div>
+    </section>
+    <div id="toast" role="status" hidden>
+      <span id="toast-message"></span>
+      <button id="toast-action" type="button">Undo</button>
+    </div>
     <aside id="inspector" class="inspector" aria-labelledby="selection-title" hidden>
       <header class="inspector-heading">
-        <h2 id="selection-title">Select an object</h2>
+        <div class="inspector-name">
+          <p id="selection-kind" class="kind"></p>
+          <h2 id="selection-title">Select an object</h2>
+        </div>
         <button id="close-inspector" type="button" aria-label="Collapse inspector">
           <span class="sheet-handle" aria-hidden="true"></span>
           Collapse
@@ -197,19 +191,20 @@
       <div class="inspector-content">
         <p id="lock-reason" class="notice" hidden></p>
         <div id="editor" hidden>
-          <form id="property-form"></form>
-          <div class="button-row">
-            <button id="tool-move" hidden>Move point</button>
-            <button id="tool-vertices" hidden>Edit points</button>
-            <button id="vertex-insert" hidden>Insert point</button>
-            <button id="vertex-remove" hidden>Remove point</button>
+          <div class="button-row tool-row">
+            <button id="tool-move" hidden>Move</button>
+            <button id="tool-vertices" hidden>Edit corners</button>
+            <span id="extra-tools" class="tool-group"></span>
           </div>
-          <p id="tool-hint" class="hint"></p>
-          <button id="delete-feature" hidden>Delete feature</button>
+          <form id="property-form"></form>
+          <div id="inspector-extras"></div>
+          <div id="edit-facts" class="hint"></div>
+          <button id="leave-note" type="button" hidden>Leave a note for the desk</button>
+          <button id="delete-feature" class="danger" hidden>Delete</button>
         </div>
         <details id="selection-details">
-          <summary>Source details</summary>
-          <p id="selection-source">Choose a file mode, then select its geometry on the map.</p>
+          <summary>Source and notes</summary>
+          <p id="selection-source"></p>
           <p id="source-id"></p>
           <dl id="properties"></dl>
           <p id="identity" class="hint"></p>
@@ -218,11 +213,52 @@
       <footer id="edit-actions" hidden>
         <p id="edit-problem" role="alert" tabindex="-1" hidden></p>
         <div class="button-row">
-          <button id="apply-edit" type="submit" form="property-form">Apply</button>
           <button id="cancel-edit">Cancel</button>
+          <button id="apply-edit" class="primary" type="submit" form="property-form">Apply</button>
         </div>
       </footer>
     </aside>
+    <dialog id="street-dialog" aria-labelledby="street-title">
+      <h3 id="street-title">Street</h3>
+      <label>Search <input id="street-search" type="search" /></label>
+      <p class="hint">Nearest first. Only streets on the Roads layer can be picked.</p>
+      <div id="street-list" class="dialog-list"></div>
+      <div class="button-row">
+        <button id="street-none" type="button">No street</button>
+        <button id="street-cancel" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="hours-dialog" aria-labelledby="hours-title">
+      <h3 id="hours-title">Opening hours</h3>
+      <p id="hours-note" class="hint"></p>
+      <div id="hours-presets" class="button-row"></div>
+      <div id="hours-groups" class="dialog-list"></div>
+      <button id="hours-add-group" type="button">Add days</button>
+      <p class="section-title">Stored as</p>
+      <output id="hours-stored"></output>
+      <div class="button-row">
+        <button id="hours-back" type="button">Back</button>
+        <button id="hours-clear" type="button">Not recorded</button>
+        <button id="hours-done" class="primary" type="button">Done</button>
+      </div>
+    </dialog>
+    <dialog id="note-dialog" aria-labelledby="note-title">
+      <h3 id="note-title"></h3>
+      <label>What should change <textarea id="note-text" rows="4" maxlength="2000"></textarea></label>
+      <div class="button-row">
+        <button id="note-cancel" type="button">Cancel</button>
+        <button id="note-save" class="primary" type="button">Save note</button>
+      </div>
+    </dialog>
+    <dialog id="delete-dialog" aria-labelledby="delete-title">
+      <h3 id="delete-title"></h3>
+      <p id="delete-message"></p>
+      <div id="delete-options"></div>
+      <div class="button-row">
+        <button id="delete-cancel" type="button">Cancel</button>
+        <button id="delete-confirm" class="danger" type="button">Delete</button>
+      </div>
+    </dialog>
     <dialog id="layer-switch-dialog" aria-labelledby="layer-switch-title">
       <h3 id="layer-switch-title">Unsaved edit</h3>
       <p>You have an unapplied edit. What would you like to do?</p>

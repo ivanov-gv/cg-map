@@ -88,9 +88,62 @@ export const SHARED_WEB_SOURCES = [
   'attribution.js'
 ];
 
-// Only moving geometry or previewing all edits reaches these, which the offline and viewer tests never do.
-const EDITING_ONLY_SOURCES = ['drag-gestures.js', 'geometry-editing.js', 'handle-layer.js', 'edit-preview.js'];
+// Only moving, drawing or deleting reaches these, which the offline and viewer tests never do.
+const EDITING_ONLY_SOURCES = [
+  'drag-gestures.js',
+  'drawing-hints.js',
+  'geometry-editing.js',
+  'geometry-measures.js',
+  'handle-layer.js',
+  'mode-bar.js',
+  'note-dialog.js',
+  'contour-rules.js',
+  'deletion-dialog.js',
+  'interior-point.js',
+  'layer-buildings.js',
+  'layer-green.js',
+  'layer-relief.js',
+  'layer-roads.js',
+  'layer-routes.js',
+  'layer-settlements.js',
+  'layer-sketches.js',
+  'layer-stops.js',
+  'area-magnet.js',
+  'area-overlap.js',
+  'drag-budget.js',
+  'following-shapes.js',
+  'magnet-switch.js',
+  'magnet-tools.js',
+  'line-joining.js',
+  'layer-water.js',
+  'layer-junctions.js',
+  'line-origins.js',
+  'opening-hours-dialog.js',
+  'opening-hours.js',
+  'shared-shapes.js',
+  'street-choices.js',
+  'road-edits.js',
+  'road-junctions.js',
+  'road-paths.js',
+  'road-shapes.js',
+  'route-stops.js',
+  'street-dialog.js',
+  'water-joins.js',
+  'ridge-ends.js'
+];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
+
+// One spec per layer on the fixture city, small enough to share jobs.
+const LAYER_SPECS = [
+  'layers.spec.mjs',
+  'buildings.spec.mjs',
+  'addresses.spec.mjs',
+  'roads.spec.mjs',
+  'nature.spec.mjs',
+  'relief.spec.mjs',
+  'transport.spec.mjs',
+  'sketches.spec.mjs'
+];
 
 // The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
 // one project has a partner for the other, and both run the same sources.
@@ -121,6 +174,17 @@ export const EDITOR_BROWSER_AREAS = {
     specFiles: ['offline.spec.mjs'],
     sources: OFFLINE_SOURCES
   },
+  layers: {
+    specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
+    // 3 shards: #441 took 367 and 222 s with 2 jobs against the 420 s gate. At CI's 2 workers, Playwright divides the
+    // 33 listed tests (both projects, tagged phone tests) into 11 each; the order of LAYER_SPECS does not move them.
+    // Shard 1 holds addresses, buildings, layers, nature and one relief test (~270 s per job); shard 2 holds four relief
+    // and seven roads tests (~230 s); shard 3 holds desktop sketches and transport plus five phone tests (~130 s).
+    // The estimates use #441's per-test times; all eight specs stay in the list.
+    jobs: 3,
+    specFiles: LAYER_SPECS,
+    sources: EDITING_ONLY_SOURCES
+  },
   selection: {
     specs: 'tests/e2e/selection.spec.mjs',
     specFiles: ['selection.spec.mjs'],
@@ -140,7 +204,24 @@ export const EDITOR_BROWSER_AREAS = {
 // and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
 export const SHARED_EDITOR_SOURCES = [
   'app.js',
+  'draft-keeper.js',
+  'editor-layers.js',
+  'field-catalog.js',
+  'field-items.js',
+  'inspection-layers.js',
+  'keyboard-shortcuts.js',
+  'layer-behaviors.js',
+  'form-controls.js',
+  'layer-addresses.js',
+  'layer-places.js',
+  'layers-panel.js',
+  'object-names.js',
+  'object-states.js',
+  'toast.js',
+  'working-map.js',
+  'workspace-panels.js',
   'feature-diff.js',
+  'derived-facts.js',
   'dom.js',
   'hashing.js',
   'source-bundle.js',
@@ -149,7 +230,7 @@ export const SHARED_EDITOR_SOURCES = [
   'layer-rules.js',
   'source-overlay.js',
   'geometry-validation.js',
-  'active-file-commands.js',
+  'active-layer-commands.js',
   'changeset.js',
   'cross-file-checks.js',
   'edit-session.js',
@@ -157,7 +238,12 @@ export const SHARED_EDITOR_SOURCES = [
   'inspector-editing.js',
   'inspector-viewport.js',
   'property-form.js',
-  'review-panel.js'
+  'usual-values.js',
+  'review-panel.js',
+  'joint-layer.js',
+  'layer-joints.js',
+  'level-picker.js',
+  'road-graph.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);

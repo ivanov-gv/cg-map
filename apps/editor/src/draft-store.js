@@ -5,7 +5,7 @@ const draftStorageKey = 'kompas-editor-draft-v1';
 const setAsideStorageKey = 'kompas-editor-set-aside-drafts-v1';
 
 export function saveDraft(storage, draft) {
-  const hasContent = Object.keys(draft.files).length > 0;
+  const hasContent = Object.keys(draft.files).length > 0 || Boolean(draft.fieldItems?.length);
   if (hasContent) storage.setItem(draftStorageKey, JSON.stringify(draft));
   else storage.removeItem(draftStorageKey);
 }

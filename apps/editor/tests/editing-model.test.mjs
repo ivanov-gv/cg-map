@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
 import {buildChangeset, importChangeset, materializedLayer} from '../src/changeset.js';
 import {labelJoinProblems} from '../src/cross-file-checks.js';
-import {createActiveFileCommands} from '../src/active-file-commands.js';
+import {createActiveLayerCommands} from '../src/active-layer-commands.js';
 import {
   clearSetAsideDrafts,
   openSavedDraft,
@@ -13,8 +13,9 @@ import {
   saveDraft
 } from '../src/draft-store.js';
 import {EditSession} from '../src/edit-session.js';
+import {editorLayers} from '../src/editor-layers.js';
+import {newDeletionMark} from '../src/field-items.js';
 import {
-  appendLinePoint,
   insertVertex,
   moveVertex,
   removeVertex,
@@ -145,9 +146,9 @@ test('undo and redo are per file, so one mode cannot change another file', () =>
   session.recordEdit('places.geojson', '0', renamed(placeFeature(), 'Renamed'));
   assert.equal(session.undo('roads.geojson'), null);
   assert.equal(session.changes('places.geojson').length, 1);
-  assert.equal(session.undo('places.geojson'), '0');
+  assert.equal(session.undo('places.geojson')[0].key, '0');
   assert.equal(session.changes('places.geojson').length, 0);
-  assert.equal(session.redo('places.geojson'), '0');
+  assert.equal(session.redo('places.geojson')[0].key, '0');
   assert.equal(session.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
 });
 
@@ -206,7 +207,7 @@ test('a ring stays closed through every vertex edit', () => {
   assert.deepEqual(polygon.coordinates[0], square, 'edits return new geometry');
 });
 
-test('line vertices insert before the end and points append', () => {
+test('line vertices insert before the end', () => {
   const line = {
     type: 'LineString',
     coordinates: [
@@ -216,7 +217,6 @@ test('line vertices insert before the end and points append', () => {
   };
   assert.deepEqual(insertVertex(line, {vertexIndex: 0}).coordinates[1], [19.1, 42.1]);
   assert.deepEqual(insertVertex(line, {vertexIndex: 1}).coordinates[1], [19.1, 42.1]);
-  assert.equal(appendLinePoint(line, [19.3, 42.3]).coordinates.length, 3);
   assert.match(lineProblem(removeVertex(line, {vertexIndex: 0}).coordinates), /at least two/);
 });
 
@@ -238,6 +238,38 @@ test('a changeset carries base hashes, fingerprints and both states, and imports
   await importChangeset(changeset, resumed, sources, rules, levels);
   assert.equal(resumed.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
   assert.deepEqual(materializedLayer(resumed, 'places.geojson').features[0].properties.name, 'Renamed');
+  resumed.undo('places');
+  assert.equal(resumed.hasChanges(), false, 'an import can be taken back on its layer');
+});
+
+test('an import over several layers is taken back and made again as a whole', async () => {
+  const sources = sourcesWith({
+    'buildings.geojson': [footprintFeature()],
+    'building-labels.geojson': [labelFeature()],
+    'places.geojson': [placeFeature(), placeFeature()]
+  });
+  const session = new EditSession(sources);
+  const move = feature => ({...feature, geometry: translateGeometry(feature.geometry, 0.0001, 0)});
+  session.recordEdit('buildings.geojson', '0', move(footprintFeature()));
+  session.recordEdit('building-labels.geojson', '0', move(labelFeature()));
+  session.recordEdit('places.geojson', '0', renamed(placeFeature(), 'Renamed'));
+  const changeset = await buildChangeset(session, sources, envelope);
+  const desk = new EditSession(sources);
+  await importChangeset(changeset, desk, sources, rules, levels);
+  // Later work on another object of one of the layers does not keep the import from being taken back on the others.
+  desk.recordEdits('places', [{filename: 'places.geojson', key: '1', after: renamed(placeFeature(), 'Later')}]);
+  const resumed = new EditSession(sources);
+  resumed.restoreDraft(JSON.parse(JSON.stringify(desk.exportDraft())));
+  for (const desks of [desk, resumed]) {
+    assert.ok(desks.undo('buildings'));
+    assert.deepEqual(desks.changedFiles(), ['places.geojson']);
+    assert.equal(desks.changeCount(), 1);
+    assert.equal(desks.canUndo('addresses'), false, 'the same step is gone from the other layers');
+    assert.ok(desks.undo('places'), 'the later work has its own step');
+    assert.equal(desks.hasChanges(), false);
+    assert.ok(desks.redo('addresses'));
+    assert.equal(desks.changeCount(), 3);
+  }
 });
 
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {
@@ -260,6 +292,20 @@ test('an import is refused whole when the snapshot, fingerprint or rules disagre
   invalid.operations[0].after.properties.name = ' ';
   await refuses(invalid, /nonempty/);
   await assert.rejects(importChangeset(changeset, session, sources, rules, levels), /export or discard/);
+});
+
+test('the work of two devices comes together unless both changed one object', async () => {
+  const sources = sourcesWith({'places.geojson': [placeFeature(), {...placeFeature(), properties: {...placeFeature().properties, id: 'second'}}]});
+  const exportOf = async key => {
+    const device = new EditSession(sources);
+    device.recordEdit('places.geojson', key, renamed(device.baseFeature('places.geojson', key), `From ${key}`));
+    return buildChangeset(device, sources, envelope);
+  };
+  const desk = new EditSession(sources);
+  await importChangeset(await exportOf('0'), desk, sources, rules, levels);
+  await importChangeset(await exportOf('1'), desk, sources, rules, levels);
+  assert.equal(desk.changeCount(), 2);
+  await assert.rejects(importChangeset(await exportOf('1'), desk, sources, rules, levels), /changed here too/);
 });
 
 test('an object with source identity is named by it, and is found after others of its file were removed', async () => {
@@ -300,7 +346,7 @@ test('a draft survives a reload with its history', () => {
   const resumed = new EditSession(sources);
   resumed.restoreDraft(openSavedDraft(storage, sources));
   assert.equal(resumed.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
-  assert.equal(resumed.undo('places.geojson'), '0');
+  assert.equal(resumed.undo('places.geojson')[0].key, '0');
   saveDraft(storage, resumed.exportDraft());
   assert.equal(new EditSession(sources).canRedo('places.geojson'), false);
   const again = new EditSession(sources);
@@ -363,17 +409,74 @@ test('a draft that cannot be set aside stays in place, and set-aside drafts stay
   assert.equal(readSavedDraftText(storage), null);
 });
 
-test('commands reach only the active file, and nothing at all without one', () => {
+test('commands reach only the files of the active layer, and nothing at all without one', () => {
   const session = new EditSession(sourcesWith({'places.geojson': [placeFeature()], 'roads.geojson': []}));
-  let activeFile = null;
-  const commands = createActiveFileCommands(session, () => activeFile);
-  assert.throws(() => commands.recordEdit('0', placeFeature('New')), /No source file is active/);
-  assert.throws(() => commands.undo(), /No source file is active/);
-  activeFile = 'places.geojson';
-  commands.recordEdit('0', renamed(placeFeature(), 'Renamed'));
-  activeFile = 'roads.geojson';
-  assert.equal(commands.undo(), null);
+  let activeLayer = null;
+  const commands = createActiveLayerCommands(session, () => activeLayer);
+  const rename = {filename: 'places.geojson', key: '0', after: renamed(placeFeature(), 'Renamed')};
+  assert.throws(() => commands.recordEdits([rename]), /No layer is active/);
+  assert.throws(() => commands.undo(), /No layer is active/);
+  const [places, roads] = ['places', 'roads'].map(id => editorLayers.find(layer => layer.id === id));
+  activeLayer = places;
+  commands.recordEdits([rename]);
+  activeLayer = roads;
+  assert.throws(() => commands.recordEdits([rename]), /Roads & paths cannot change places.geojson/);
+  assert.equal(commands.undo(), null, 'another layer has its own history');
   assert.deepEqual(session.changedFiles(), ['places.geojson']);
+});
+
+test('one step changes several files and is undone as a whole, unless one of them was edited since', () => {
+  const sources = sourcesWith({'buildings.geojson': [footprintFeature()], 'building-labels.geojson': [labelFeature()]});
+  const session = new EditSession(sources);
+  const step = [
+    {filename: 'buildings.geojson', key: '0', after: null},
+    {filename: 'building-labels.geojson', key: '0', after: null}
+  ];
+  session.recordEdits('buildings', step);
+  assert.equal(session.changeCount(), 2);
+  session.undo('buildings');
+  assert.equal(session.changeCount(), 0);
+  session.redo('buildings');
+  session.recordEdits('addresses', [{filename: 'building-labels.geojson', key: '0', after: labelFeature()}]);
+  assert.equal(session.canUndo('buildings'), false, 'undoing would drop the edit made on the other layer');
+  session.undo('addresses');
+  assert.equal(session.canUndo('buildings'), true);
+});
+
+test('a draft from before layers had histories keeps its edits and its history', () => {
+  const sources = sourcesWith({'places.geojson': [placeFeature()]});
+  const change = {
+    operation: 'modify',
+    reference: {featureIndex: 0},
+    before: placeFeature(),
+    after: renamed(placeFeature(), 'Renamed')
+  };
+  const history = {undo: [{key: '0', previous: null, next: change}], redo: []};
+  const files = {'places.geojson': {base: 'a'.repeat(64), changes: [['0', change]], history}};
+  const session = new EditSession(sources);
+  session.restoreDraft({version: 1, files});
+  assert.equal(session.workingFeature('places.geojson', '0').properties.name, 'Renamed');
+  assert.equal(session.undo('places.geojson')[0].key, '0');
+  assert.equal(session.changeCount(), 0);
+});
+
+test('field items travel in the changeset and in the draft, and never as operations', async () => {
+  const sources = sourcesWith({'places.geojson': [placeFeature()]});
+  const session = new EditSession(sources);
+  const mark = newDeletionMark({filename: 'places.geojson', key: '0', feature: placeFeature()}, 'Cafe', 'places');
+  session.saveFieldItem(mark);
+  const changeset = await buildChangeset(session, sources, envelope);
+  assert.deepEqual([changeset.operations, changeset.fieldItems], [[], [mark]]);
+  const desk = new EditSession(sources);
+  await importChangeset(changeset, desk, sources, rules, levels);
+  assert.deepEqual(desk.fieldItems(), [mark]);
+  const resumed = new EditSession(sources);
+  resumed.restoreDraft(session.exportDraft());
+  assert.deepEqual(resumed.fieldItems(), [mark]);
+  const shapeless = {...changeset, fieldItems: [{...mark, type: 'sketch', what: 'Park', geometry: null}]};
+  await assert.rejects(importChangeset(shapeless, new EditSession(sources), sources, rules, levels), /needs what it is and a shape/);
+  const tampered = {...changeset, fieldItems: [{...mark, type: 'shopping'}]};
+  await assert.rejects(importChangeset(tampered, new EditSession(sources), sources, rules, levels), /unsupported field item/);
 });
 
 const propertyCases = readContract('fixtures/editor-property-cases.json').cases;
@@ -461,11 +564,27 @@ test('a footprint or label edit that breaks their join is reported, without rewr
   session.recordEdit('buildings.geojson', '0', moved);
   const [problem] = labelJoinProblems(session);
   assert.equal(problem.filename, 'building-labels.geojson');
-  assert.match(problem.message, /outside footprint 0/);
+  assert.match(problem.message, /outside its building 0/);
   assert.deepEqual(session.changedFiles(), ['buildings.geojson']);
   const followingLabel = {...labelFeature(), geometry: translateGeometry(labelFeature().geometry, 0.01, 0)};
   session.recordEdit('building-labels.geojson', '0', followingLabel);
   assert.deepEqual(labelJoinProblems(session), []);
+  session.recordEdit('building-labels.geojson', 'local:second', followingLabel);
+  assert.match(labelJoinProblems(session)[0].message, /has two addresses/);
+});
+
+test('a label keeps its building when another building is deleted, and is reported when its own is', () => {
+  const other = {...footprintFeature(), properties: {kind: 'building', entityId: 'way/2'}};
+  const label = {...labelFeature(), properties: {...labelFeature().properties, footprintIndex: 1}};
+  const sources = sourcesWith({
+    'buildings.geojson': [other, footprintFeature()],
+    'building-labels.geojson': [label]
+  });
+  const session = new EditSession(sources);
+  session.recordEdits('buildings', [{filename: 'buildings.geojson', key: '0', after: null}]);
+  assert.deepEqual(labelJoinProblems(session), []);
+  session.recordEdits('buildings', [{filename: 'buildings.geojson', key: '1', after: null}]);
+  assert.match(labelJoinProblems(session)[0].message, /has no building/);
 });
 
 test('a label inside a hole is outside its footprint', () => {
