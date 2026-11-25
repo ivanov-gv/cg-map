@@ -80,3 +80,31 @@ test('a drawn building with an address, an entrance and a place passes whole', a
   const written = editor.written('buildings.geojson')[label.properties.footprintIndex];
   assert.equal(written.properties.entityId, buildingId);
 });
+
+test('an address with another number and street passes with its building, and a deleted one too', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const isPlain = ({properties}) => properties['addr:housenumber'] && !properties.entrances && !properties.building_number;
+  const changed = editor.find('building-labels.geojson', isPlain);
+  const after = structuredClone(changed.feature);
+  after.properties['addr:housenumber'] = '123';
+  assert.equal(editor.apply(changed.filename, changed.key, after), null);
+  const deleted = editor.find('building-labels.geojson', (feature, key) => isPlain(feature) && key !== changed.key);
+  assert.equal(editor.remove(deleted.filename, deleted.key), null);
+  const operations = await editor.exportAndImport();
+  assert.deepEqual(filesOf(operations), ['building-labels.geojson', 'buildings.geojson']);
+  const {footprintIndex} = changed.feature.properties;
+  assert.equal(editor.written('buildings.geojson')[footprintIndex].properties['addr:housenumber'], '123');
+});
+
+test('a place moved into a building belongs to it after the import', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const building = editor.find('buildings.geojson', ({geometry}) => geometry.coordinates[0].length === 5);
+  const [ring] = building.feature.geometry.coordinates;
+  const middle = [0, 1].map(axis => roundDegrees((ring[0][axis] + ring[2][axis]) / 2));
+  const place = editor.find('places.geojson', ({properties}) => properties.buildingEntityId === undefined);
+  const moved = {...place.feature, geometry: {type: 'Point', coordinates: middle}};
+  assert.equal(editor.apply(place.filename, place.key, moved), null);
+  await editor.exportAndImport();
+  const written = editor.written('places.geojson').find(({properties}) => properties.id === place.feature.properties.id);
+  assert.equal(written.properties.buildingEntityId, building.feature.properties.entityId);
+});

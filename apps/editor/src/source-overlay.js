@@ -7,6 +7,7 @@ const appliedSource = 'editor-applied';
 const ghostSource = 'editor-ghost';
 const drawingSource = 'editor-drawing';
 const deletionSource = 'editor-deletions';
+const targetSource = 'editor-target';
 const placesFile = 'places.geojson';
 // Guides become useful at neighbourhood scale. Below this, select the normal rendered cartography instead.
 export const guideMinZoom = 15;
@@ -134,6 +135,12 @@ function stateLayers() {
       },
       paint: {'text-color': stateColors.highlighted, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5}
     },
+    {
+      id: 'editor-target',
+      type: 'line',
+      source: targetSource,
+      paint: {'line-color': stateColors.editable, 'line-width': 3}
+    },
     dashedLine('editor-ghost', ghostSource, stateColors.ghost, 1, [3, 3]),
     {
       id: 'editor-drawing',
@@ -163,7 +170,7 @@ function drawingFeatures(points, nextPoint) {
 }
 
 function installStateLayers(map) {
-  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource]) {
+  for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
   const layers = stateLayers();
@@ -198,9 +205,16 @@ export function createSourceOverlay(map) {
     setSelection: feature => overlay.setSelection(feature),
     setApplied: features => setData(appliedSource, features),
     setDeletions: features => setData(deletionSource, features),
+    setTarget: feature => setData(targetSource, feature ? [feature] : []),
     setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
+    // A filter draws no cartography of its own, so the inside of its shapes takes the taps.
+    setInteriorsPickable(isPickable) {
+      map.setPaintProperty(`${sourceName}-fill`, 'fill-opacity', 0);
+      map.setLayoutProperty(`${sourceName}-fill`, 'visibility', isPickable ? 'visible' : 'none');
+    },
+    interiorLayerId: `${sourceName}-fill`,
     setGuidesVisible(isVisible) {
       for (const layerId of guideLayerIds) {
         map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');

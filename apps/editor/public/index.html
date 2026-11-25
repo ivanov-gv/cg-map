@@ -204,6 +204,30 @@
         </div>
       </footer>
     </aside>
+    <dialog id="street-dialog" aria-labelledby="street-title">
+      <h3 id="street-title">Street</h3>
+      <label>Search <input id="street-search" type="search" /></label>
+      <p class="hint">Nearest first. Only streets on the Roads layer can be picked.</p>
+      <div id="street-list" class="dialog-list"></div>
+      <div class="button-row">
+        <button id="street-none" type="button">No street</button>
+        <button id="street-cancel" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="hours-dialog" aria-labelledby="hours-title">
+      <h3 id="hours-title">Opening hours</h3>
+      <p id="hours-note" class="hint"></p>
+      <div id="hours-presets" class="button-row"></div>
+      <div id="hours-groups" class="dialog-list"></div>
+      <button id="hours-add-group" type="button">Add days</button>
+      <p class="section-title">Stored as</p>
+      <output id="hours-stored"></output>
+      <div class="button-row">
+        <button id="hours-back" type="button">Back</button>
+        <button id="hours-clear" type="button">Not recorded</button>
+        <button id="hours-done" class="primary" type="button">Done</button>
+      </div>
+    </dialog>
     <dialog id="delete-dialog" aria-labelledby="delete-title">
       <h3 id="delete-title"></h3>
       <p id="delete-message"></p>

@@ -62,10 +62,40 @@ function flagField(name, value) {
   return input;
 }
 
-function fieldControl(name, value, propertyRule, levels) {
+const otherLabel = 'Other…';
+// Cannot be a value: no source has it, and it is never recorded.
+const otherChoice = '\u0000other';
+
+// A list of the usual values, and free text for one that is not among them. The text field holds the value either way.
+function usualValuesField(name, value, propertyRule, usualValues) {
+  const input = textField(name, value, propertyRule);
+  const select = selectField(name, value, usualValues, propertyRule.required);
+  select.removeAttribute('name');
+  select.dataset.listFor = name;
+  select.setAttribute('aria-label', fieldLabel(name));
+  const other = createElementWithText('option', otherLabel);
+  other.value = otherChoice;
+  select.append(other);
+  input.hidden = true;
+  input.setAttribute('aria-label', `Other ${fieldLabel(name).toLowerCase()}`);
+  select.onchange = () => {
+    const isOther = select.value === otherChoice;
+    input.hidden = !isOther;
+    input.value = isOther ? '' : select.value;
+    if (isOther) input.focus();
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+  };
+  const wrapper = document.createElement('span');
+  wrapper.append(select, input);
+  return wrapper;
+}
+
+function fieldControl(name, value, propertyRule, levels, {controls, usualValues}) {
+  if (controls[name]) return controls[name](value);
   if (propertyRule.isLevel) return selectField(name, value, [...levels], propertyRule.required);
   if (isOnlyYes(propertyRule)) return flagField(name, value);
   if (propertyRule.enum) return selectField(name, value, propertyRule.enum, propertyRule.required);
+  if (usualValues[name]?.length > 0) return usualValuesField(name, value, propertyRule, usualValues[name]);
   if (propertyRule.type === 'boolean') return booleanField(name, value, propertyRule.required);
   if (['integer', 'number'].includes(propertyRule.type)) return numberField(name, value, propertyRule);
   return textField(name, value, propertyRule);
@@ -80,32 +110,43 @@ export function isFormField(propertyRule) {
 }
 
 // One labelled control for a property the rules list.
-export function propertyField(name, value, propertyRule, levels) {
+export function propertyField(name, value, propertyRule, levels, customization = {controls: {}, usualValues: {}}) {
   const label = createElementWithText('label', fieldLabel(name) + (propertyRule.required ? ' (required)' : ''));
-  label.append(fieldControl(name, value, propertyRule, levels));
+  label.append(fieldControl(name, value, propertyRule, levels, customization));
   return label;
 }
 
-function sectionElement({title, fields, isCollapsed}, properties, propertyRules, levels) {
+function sectionElement({title, fields, isCollapsed}, properties, propertyRules, levels, customization) {
   const section = document.createElement(isCollapsed ? 'details' : 'fieldset');
   if (title) section.append(createElementWithText(isCollapsed ? 'summary' : 'legend', title));
   const grid = document.createElement('div');
   grid.className = 'field-grid';
-  grid.append(...fields.map(name => propertyField(name, properties[name], propertyRules[name], levels)));
+  grid.append(
+    ...fields.map(name => propertyField(name, properties[name], propertyRules[name], levels, customization))
+  );
   section.append(grid);
   return section;
 }
 
 // The form of one object: its sections in order, each with the fields the rules allow. Everything else stays out of
 // reach.
-export function renderPropertyForm(form, properties, propertyRules, levels, sections = null) {
+// controls replace single fields, {name: value => element}; usualValues are offered as a list, {name: [value]}.
+export function renderPropertyForm(
+  form,
+  properties,
+  propertyRules,
+  levels,
+  {sections = null, controls = {}, usualValues = {}} = {}
+) {
   const allowedNames = Object.keys(propertyRules).filter(name => isFormField(propertyRules[name]));
   const wantedSections = sections ?? [{title: '', fields: allowedNames}];
   const shownSections = wantedSections
     .map(section => ({...section, fields: section.fields.filter(name => allowedNames.includes(name))}))
     .filter(({fields}) => fields.length > 0);
   form.replaceChildren(
-    ...shownSections.map(section => sectionElement(section, properties, propertyRules, levels))
+    ...shownSections.map(section =>
+      sectionElement(section, properties, propertyRules, levels, {controls, usualValues})
+    )
   );
 }
 

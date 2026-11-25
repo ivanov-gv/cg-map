@@ -6,7 +6,6 @@ const fieldLabels = {
   'name:sr-Latn': 'Name in Latin script',
   'addr:street': 'Street',
   'addr:housenumber': 'House number',
-  display_number: 'Display number',
   building_number: 'Building number',
   nohousenumber: 'Building has no number',
   building: 'Building type',
@@ -75,6 +74,13 @@ const valueLabels = {
   natural: {peak: 'Peak', hill: 'Hill'},
   opens_onto: {street: 'Street', courtyard: 'Courtyard', passage: 'Passage', parking: 'Parking'},
   kind: {traffic_signals: 'Traffic light'},
+  visibilityLevel: {
+    1: 'Landmark · city view',
+    2: 'District view',
+    3: 'Neighbourhood view',
+    4: 'Street level',
+    5: 'Close up'
+  },
   oneway: {yes: 'One way, as drawn', '-1': 'One way, against the drawing', no: 'Both ways', reversible: 'Changes by time'},
   crossing: {uncontrolled: 'Marked, without lights', traffic_signals: 'With lights'},
   maxspeed: {walk: 'Walking speed', none: 'No limit'},

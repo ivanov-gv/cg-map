@@ -19,8 +19,10 @@ import {createHandleLayer} from './handle-layer.js';
 import {InspectorEditing} from './inspector-editing.js';
 import {installInspectorViewport} from './inspector-viewport.js';
 import {installKeyboardShortcuts, updateShortcutHints} from './keyboard-shortcuts.js';
+import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layer-addresses.js';
 import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layer-behaviors.js';
 import {buildingBehaviors} from './layer-buildings.js';
+import {buildingAt, placeBehaviors} from './layer-places.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
 import {hideModeBar, showModeBar} from './mode-bar.js';
@@ -41,6 +43,9 @@ import {
 } from './workspace-panels.js';
 
 registerBehaviors(buildingBehaviors);
+registerBehaviors(addressBehaviors);
+registerBehaviors(placeBehaviors);
+registerBehaviors(gapBehaviors, 'addresses');
 
 const basemapLayers = {
   'buildings.geojson': ['buildings'],
@@ -85,6 +90,9 @@ let pendingLayer = null;
 let objectList;
 let clickCandidates = null;
 let pendingPick = null;
+let activeFilter = null;
+let pendingSelection = null;
+const skippedGapKeys = new Set();
 
 // Status messages declare whether they need to be visible over the map.
 function setStatus(message, needsAttention = false) {
@@ -116,6 +124,7 @@ async function loadJSON(url) {
 function layerStatus() {
   if (!activeLayer) return 'Browse · choose a layer to edit';
   const objectCount = activeEntries.filter(isPickable).length;
+  if (activeFilter) return `${activeFilter.heading} · ${objectCount} objects`;
   const isEditable = activeLayer.files.some(filename => !layerLockReason(rules.layers[filename]));
   return `${activeLayer.name} · ${objectCount} objects · ${isEditable ? 'editable' : 'read-only'}`;
 }
@@ -139,7 +148,8 @@ function behaviorContext() {
         .find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
     select: entry => selectObject(entry, true),
     startNew: startNewFeature,
-    pick: pickObject
+    pick: pickObject,
+    showNextGap
   };
 }
 
@@ -165,7 +175,7 @@ function showFeature(entry) {
   const {filename, key, feature} = entry;
   editing.close();
   showInspector();
-  const behavior = behaviorOf(filename);
+  const behavior = behaviorOf(filename, activeLayer.id);
   setHeading(behavior.kind(feature), behavior.title(feature, behaviorContext()));
   const hash = sources.get(filename).metadata.sha256;
   elementById('selection-source').textContent = `${filename} · feature ${key}`;
@@ -196,11 +206,14 @@ function clearSelection() {
   setStatus(layerStatus());
 }
 
+// A filter shows other objects over the map as it is, without drawing the files of its layer again.
+const shownFiles = () => (activeFilter ? [] : (activeLayer?.files ?? []));
+
 // The active layer's files and every changed file use the public cartography with their working features. The others
 // stay as released, for context.
 function workingFeatures(displayFeatures) {
   const featuresByFile = new Map();
-  for (const filename of activeLayer?.files ?? []) {
+  for (const filename of shownFiles()) {
     featuresByFile.set(filename, displayFeatures.filter(({properties}) => properties.sourceFile === filename));
   }
   for (const filename of session.changedFiles()) {
@@ -225,20 +238,24 @@ function markedFeatures() {
 function refreshOverlay() {
   clickCandidates = null;
   workingMap.hide();
-  activeEntries = (activeLayer?.files ?? []).flatMap(filename => session.workingEntries(filename));
+  activeEntries = activeFilter
+    ? activeFilter.entries(behaviorContext())
+    : shownFiles().flatMap(filename => session.workingEntries(filename));
   const changedFeatures = new Set(session.changedFiles().flatMap(changedFeaturesOf));
   const stateOf = entry => {
+    if (activeFilter) return activeFilter.state;
     if (!isPickable(entry)) return 'context';
     return changedFeatures.has(entry.feature) ? 'applied' : 'editable';
   };
   const collection = overlayCollection(activeEntries, stateOf);
   overlay.setData(collection);
-  const otherChangedFiles = session.changedFiles().filter(filename => !activeLayer?.files.includes(filename));
+  overlay.setInteriorsPickable(Boolean(activeFilter));
+  const otherChangedFiles = session.changedFiles().filter(filename => !shownFiles().includes(filename));
   overlay.setApplied(otherChangedFiles.flatMap(changedFeaturesOf));
   overlay.setDeletions(markedFeatures());
   overlay.setGuideMinZoom(activeLayer?.guideMinZoom ?? guideMinZoom);
   try {
-    workingMap.show(workingFeatures(collection.features), new Set(activeLayer?.files ?? []));
+    workingMap.show(workingFeatures(collection.features), new Set(shownFiles()));
   } catch (error) {
     showError(new Error(`Drawing the changes failed: ${error.message}`));
   }
@@ -264,6 +281,11 @@ function finishLayerLoading() {
   if (isLayerLoading) {
     isLayerLoading = false;
     setStatus(layerStatus());
+  }
+  if (pendingSelection) {
+    const entry = pendingSelection;
+    pendingSelection = null;
+    selectObject(entry, true);
   }
   renderObjectList();
 }
@@ -296,7 +318,43 @@ function renderTools() {
     button.onclick = () => startNewFeature(choice);
     return button;
   });
-  elementById('draw-choices').replaceChildren(...buttons);
+  const filterButtons = (layerFilters[activeLayer?.id] ?? []).map(filter => {
+    const button = createElementWithText('button', filter.label);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(activeFilter?.id === filter.id));
+    button.onclick = () => toggleFilter(filter);
+    return button;
+  });
+  elementById('draw-choices').replaceChildren(...buttons, ...filterButtons);
+}
+
+// Shows other objects of the layer's work, such as the buildings without a number, or its own again.
+function toggleFilter(filter) {
+  clearSelection();
+  skippedGapKeys.clear();
+  activeFilter = activeFilter?.id === filter.id ? null : filter;
+  refreshOverlay();
+  showLoadingStatus();
+  renderTools();
+  renderCommandAvailability();
+  if (activeFilter) showPanel(null);
+}
+
+// Selects once the layer has drawn, bringing the object into view.
+function selectWhenReady(entry) {
+  const {geometry} = entry.feature;
+  if (geometry && !map.getBounds().contains(centreOf(geometry))) map.jumpTo({center: centreOf(geometry)});
+  if (isLayerLoading || map.isMoving()) pendingSelection = entry;
+  else selectObject(entry, true);
+}
+
+// The nearest building without a number, after one was saved or skipped.
+function showNextGap(feature, skippedKey = null) {
+  if (!activeFilter) return;
+  if (skippedKey) skippedGapKeys.add(skippedKey);
+  const next = nearestGap(activeEntries, feature.geometry.coordinates[0][0], skippedGapKeys);
+  if (next) selectWhenReady(next);
+  else showToast('No more buildings without a number');
 }
 
 // Everything that depends on the session, after any recorded change.
@@ -374,7 +432,7 @@ function openFieldItem(item) {
   const entry = item.target && activeEntries.find(candidate =>
     candidate.filename === item.target.filename && isReferencedObject(candidate, item.target.reference)
   );
-  if (entry) map.once('idle', () => selectObject(entry));
+  if (entry) selectWhenReady(entry);
 }
 
 // New objects get a local identity and no upstream claims, which is what the importer requires of them.
@@ -399,6 +457,8 @@ function setLayer(layer) {
   cancelPick();
   editing.close();
   hideToast();
+  activeFilter = null;
+  pendingSelection = null;
   activeLayer = activeLayer?.id === layer?.id ? null : layer;
   elementById('current-layer-name').textContent = activeLayer ? activeLayer.name : 'Browse';
   elementById('current-layer').classList.toggle('has-layer', Boolean(activeLayer));
@@ -423,6 +483,7 @@ function afterLayerSwitch() {
 
 // Only visible guides or normal cartography supply candidates, both for clicks and the keyboard list.
 function selectableLayerIds() {
+  if (activeFilter) return [overlay.interiorLayerId, ...overlay.layerIds];
   return [...workingMap.layerIds, ...overlay.inspectionLayerIds, ...(areGuidesVisible ? overlay.layerIds : [])];
 }
 
@@ -467,6 +528,15 @@ function pickObject(filename, prompt) {
   });
 }
 
+// What the layer shows there, or a shape of another file that contains the tap.
+function entryUnderPick(event) {
+  const {filename} = pendingPick;
+  const hits = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
+  const shown = hits.find(entry => entry.filename === filename);
+  if (shown || filename !== 'buildings.geojson') return shown;
+  return buildingAt(event.lngLat.toArray(), behaviorContext());
+}
+
 // Whoever asked gets no object, so the question does not outlive the edit that asked it. Returns whether one was open.
 function cancelPick() {
   if (!pendingPick) return false;
@@ -487,8 +557,7 @@ function finishPick(entry) {
 function selectFeatureAtClick(event) {
   if (!activeLayer || isLayerLoading) return;
   if (pendingPick) {
-    const hits = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
-    const picked = hits.find(({filename}) => filename === pendingPick.filename);
+    const picked = entryUnderPick(event);
     if (picked) finishPick(picked);
     return;
   }

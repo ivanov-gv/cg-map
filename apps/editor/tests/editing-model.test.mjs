@@ -553,6 +553,8 @@ test('a footprint or label edit that breaks their join is reported, without rewr
   const followingLabel = {...labelFeature(), geometry: translateGeometry(labelFeature().geometry, 0.01, 0)};
   session.recordEdit('building-labels.geojson', '0', followingLabel);
   assert.deepEqual(labelJoinProblems(session), []);
+  session.recordEdit('building-labels.geojson', 'local:second', followingLabel);
+  assert.match(labelJoinProblems(session)[0].message, /has two addresses/);
 });
 
 test('a label keeps its building when another building is deleted, and is reported when its own is', () => {

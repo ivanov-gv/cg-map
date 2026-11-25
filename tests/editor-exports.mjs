@@ -10,7 +10,9 @@ import {contractsDirectory, readContractJSON, stageContractsInto} from './contra
 import {buildChangeset} from '../apps/editor/src/changeset.js';
 import {EditSession} from '../apps/editor/src/edit-session.js';
 import {behaviorOf, registerBehaviors} from '../apps/editor/src/layer-behaviors.js';
+import {addressBehaviors} from '../apps/editor/src/layer-addresses.js';
 import {buildingBehaviors} from '../apps/editor/src/layer-buildings.js';
+import {placeBehaviors} from '../apps/editor/src/layer-places.js';
 import {operationProblem} from '../apps/editor/src/layer-rules.js';
 import {collectionOf} from '../apps/editor/src/source-records.js';
 
@@ -20,7 +22,7 @@ const envelope = {id: 'layer-export', createdAt: now, author: 'Integration Test'
 const rules = readContractJSON('editor-layers.json');
 const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
 
-registerBehaviors(buildingBehaviors);
+for (const behaviors of [buildingBehaviors, addressBehaviors, placeBehaviors]) registerBehaviors(behaviors);
 
 export const newLocalId = () => `local:${crypto.randomUUID()}`;
 
