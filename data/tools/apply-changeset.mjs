@@ -326,6 +326,11 @@ function restoreOriginals(originals) {
   return unrestoredFiles.length > 0 ? ` Could not restore: ${unrestoredFiles.join(', ')}.` : '';
 }
 
+// Says whether the reviewed files are as they were, which a caller that goes on must know.
+function refusedWith(message, cause, restoreNote) {
+  return Object.assign(new Error(message, {cause}), {hasUnrestoredFiles: restoreNote !== ''});
+}
+
 // Every target's bytes are written beside it first, so a failed write touches no reviewed file, which matters most on a
 // full disk. A failed rename restores only the files already replaced. Returns a function that restores them all and
 // reports what it could not.
@@ -344,7 +349,7 @@ function writeStaged(root, writes) {
     }
   } catch (error) {
     const restoreNote = restoreOriginals(originals.slice(0, replacedCount));
-    throw new Error(`Changeset not applied: ${error.message}.${restoreNote}`, {cause: error});
+    throw refusedWith(`Changeset not applied: ${error.message}.${restoreNote}`, error, restoreNote);
   } finally {
     for (const [relative] of writes) fs.rmSync(stagedPath(relative), {force: true});
   }
@@ -423,7 +428,7 @@ function writeChecked(root, writes, checkFinalData, contractsDirectory) {
   } catch (error) {
     const restoreNote = restore();
     const outcome = restoreNote ? 'reviewed files not fully restored' : 'reviewed files restored';
-    throw new Error(`Changeset refused, ${outcome}: ${error.message}.${restoreNote}`, {cause: error});
+    throw refusedWith(`Changeset refused, ${outcome}: ${error.message}.${restoreNote}`, error, restoreNote);
   }
 }
 
