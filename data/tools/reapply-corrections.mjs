@@ -135,6 +135,25 @@ function restatedLabel(filename, feature, buildings) {
 
 const nameOf = ({filename, reference}) => `${filename} ${reference.entityId ?? reference.localId}`;
 
+// Corrections that came together, or that touch one object, are placed or refused together. Returns a function that
+// names the group of a correction.
+function correctionGroups(corrections) {
+  const parents = new Map();
+  const rootOf = name => {
+    let root = name;
+    while (parents.has(root)) root = parents.get(root);
+    return root;
+  };
+  for (const objectCorrections of corrections.values()) {
+    const [firstRoot, ...otherRoots] = objectCorrections.map(({changeset}) => rootOf(changeset));
+    for (const otherRoot of otherRoots) {
+      const isJoined = rootOf(otherRoot) === rootOf(firstRoot);
+      if (!isJoined) parents.set(rootOf(otherRoot), rootOf(firstRoot));
+    }
+  }
+  return correction => rootOf(correction.changeset);
+}
+
 // Leaves out what the rules of today refuse, by name, so one such correction does not stop the others.
 function allowedOperations(operations, {rules, levels}) {
   const report = [];
@@ -165,6 +184,15 @@ function withoutBuilding(filename, key, feature) {
   return operationReaching(filename, key, feature, {...feature, properties});
 }
 
+// Buildings that have an address in the refreshed sources which no correction deletes.
+function addressedBuildingIds(operations, readSource, sourceBuildings) {
+  const deletedNames = new Set(operations.filter(({operation}) => operation === 'delete').map(nameOf));
+  const labels = [...readSource(labelsFile).values()].filter(
+    ({properties}) => !deletedNames.has(`${labelsFile} ${properties.entityId}`)
+  );
+  return new Set(labels.map(label => buildingIdOf(labelsFile, label, sourceBuildings)));
+}
+
 // A building and the objects on it come from different files, so a refresh can leave one without the other.
 function operationsKeepingBuildings(operations, readSource) {
   const sourceBuildings = [...readSource(buildingsFile).values()];
@@ -177,14 +205,20 @@ function operationsKeepingBuildings(operations, readSource) {
     ...buildingOperations.map(({reference}) => reference.localId ?? reference.entityId)
   ]);
   const report = [];
+  // Which building operation each added operation follows from.
+  const causes = new Map();
+  const addressedIds = addressedBuildingIds(operations, readSource, sourceBuildings);
   const isBuildingKnown = ({filename, after}) => {
     if (!after || !buildingPartFiles.includes(filename)) return true;
     const buildingId = buildingIdOf(filename, after, sourceBuildings);
     return buildingId === undefined || (knownIds.has(buildingId) && !deletedIds.has(buildingId));
   };
   const kept = operations.filter(operation => {
-    if (isBuildingKnown(operation)) return true;
-    report.push(`${nameOf(operation)}: left out, its building is gone`);
+    const {filename, operation: kind, after} = operation;
+    const isSecondAddress = filename === labelsFile && kind === 'add' && addressedIds.has(after.properties.buildingEntityId);
+    if (isBuildingKnown(operation) && !isSecondAddress) return true;
+    const reason = isSecondAddress ? 'the refreshed sources have an address of this building' : 'its building is gone';
+    report.push(`${nameOf(operation)}: left out, ${reason}`);
     return false;
   });
   const handledKeys = new Set(
@@ -196,11 +230,12 @@ function operationsKeepingBuildings(operations, readSource) {
       if (!isStranded || handledKeys.has(`${filename}:${key}`)) continue;
       const operation = withoutBuilding(filename, key, feature);
       kept.push(operation);
+      causes.set(nameOf(operation), `${buildingsFile} ${buildingIdOf(filename, feature, sourceBuildings)}`);
       const outcome = filename === placesFile ? 'stands on its own' : 'goes too';
       report.push(`${nameOf(operation)}: its building was deleted in the editor, so it ${outcome}`);
     }
   }
-  return {operations: kept, report};
+  return {operations: kept, report, causes};
 }
 
 // Returns the changeset that brings the current sources to what the ledger says, and a report for the reviewer.
@@ -221,7 +256,9 @@ export function replayChangeset(root, now, contractsDirectory) {
     return sources.get(filename);
   };
   const buildings = JSON.parse(fs.readFileSync(path.join(root, sourcesPath, buildingsFile)));
+  const groupOf = correctionGroups(groups);
   const replayedOperations = [];
+  const groupByOperation = new Map();
   for (const [groupKey, corrections] of groups) {
     const {filename} = corrections[0];
     const key = groupKey.slice(filename.length + 1);
@@ -230,33 +267,70 @@ export function replayChangeset(root, now, contractsDirectory) {
     report.push(...replayed.report);
     const feature = restatedLabel(filename, replayed.feature, buildings);
     const operation = operationReaching(filename, key, sourceFeature, sourceFeature ? replayed.feature : feature);
-    if (operation) replayedOperations.push(operation);
+    if (!operation) continue;
+    replayedOperations.push(operation);
+    groupByOperation.set(nameOf(operation), groupOf(corrections[0]));
   }
   const rules = readContract(contractsDirectory, 'editor-layers.json');
   const levels = new Set(readContract(contractsDirectory, 'place-visibility.json').levels.map(({level}) => level));
   const allowed = allowedOperations(replayedOperations, {rules, levels});
-  const {operations, report: buildingReport} = operationsKeepingBuildings(allowed.operations, readSource);
+  const {operations, report: buildingReport, causes} = operationsKeepingBuildings(allowed.operations, readSource);
+  for (const [name, causeName] of causes) groupByOperation.set(name, groupByOperation.get(causeName));
   report.push(...allowed.report, ...buildingReport);
-  const usedFiles = new Set(operations.map(({filename}) => filename));
-  const usedBases = Object.fromEntries(Object.entries(bases).filter(([filename]) => usedFiles.has(filename)));
   const changeset = {
     version: 2,
     id: 'replayed-corrections',
     createdAt: now,
     author: 'Corrections ledger',
     reason: 'Reviewed corrections kept over a data refresh',
-    bases: usedBases,
+    bases,
     operations
   };
-  return {changeset, report};
+  return {changeset, report, groupByOperation};
+}
+
+// The part of a changeset made of these operations, with the base hashes it needs.
+function partOf(changeset, operations) {
+  const filenames = new Set(operations.map(({filename}) => filename));
+  const bases = Object.fromEntries(Object.entries(changeset.bases).filter(([filename]) => filenames.has(filename)));
+  return {...changeset, bases, operations};
+}
+
+// Places the corrections of one group after another, so that one the final check refuses stops no other. Everything is
+// replayed again for each group, because placing one can move the positions others are checked against.
+function applyByGroups(root, now, options) {
+  const {groupByOperation} = replayChangeset(root, now, options.contractsDirectory);
+  const report = [];
+  let placedCount = 0;
+  for (const group of new Set(groupByOperation.values())) {
+    const replayed = replayChangeset(root, now, options.contractsDirectory);
+    const operations = replayed.changeset.operations.filter(
+      operation => replayed.groupByOperation.get(nameOf(operation)) === group
+    );
+    if (operations.length === 0) continue;
+    try {
+      applyChangeset(partOf(replayed.changeset, operations), root, options);
+      placedCount += operations.length;
+    } catch (error) {
+      report.push(...operations.map(operation => `${nameOf(operation)}: not placed, ${error.message}`));
+    }
+  }
+  return {operations: placedCount, report};
 }
 
 // Applies the ledger and returns what changed and what needs a reviewer. The ledger itself is not changed.
 export function reapplyCorrections(root, {now = new Date().toISOString(), contractsDirectory, ...options} = {}) {
   const {changeset, report} = replayChangeset(root, now, contractsDirectory);
   if (changeset.operations.length === 0) return {operations: 0, report};
-  applyChangeset(changeset, root, {now, contractsDirectory, ...options, recordsCorrections: false});
-  return {operations: changeset.operations.length, report};
+  const applyOptions = {now, contractsDirectory, ...options, recordsCorrections: false};
+  try {
+    applyChangeset(partOf(changeset, changeset.operations), root, applyOptions);
+    return {operations: changeset.operations.length, report};
+  } catch {
+    // Nothing was written. Each group tells its own reason.
+    const placed = applyByGroups(root, now, applyOptions);
+    return {operations: placed.operations, report: [...report, ...placed.report]};
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

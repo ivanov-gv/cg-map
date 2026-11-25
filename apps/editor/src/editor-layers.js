@@ -108,13 +108,17 @@ export const isLayerObject = (filename, feature) => !derivedKinds[filename]?.inc
 export function availableLayers(filenames) {
   const isAvailable = filename => filenames.includes(filename);
   return editorLayers
-    .map(layer => ({
-      ...layer,
-      files: layer.files.filter(isAvailable),
-      linkedFiles: layer.linkedFiles.filter(isAvailable),
-      contextFiles: (layer.contextFiles ?? []).filter(isAvailable),
-      ...(layer.phoneFiles ? {phoneFiles: layer.phoneFiles.filter(isAvailable)} : {})
-    }))
+    .map(layer => {
+      const phoneFiles = (layer.phoneFiles ?? []).filter(isAvailable);
+      return {
+        ...layer,
+        files: layer.files.filter(isAvailable),
+        linkedFiles: layer.linkedFiles.filter(isAvailable),
+        contextFiles: (layer.contextFiles ?? []).filter(isAvailable),
+        // A bundle without what a phone shows is shown whole, so the layer is never empty.
+        phoneFiles: phoneFiles.length > 0 ? phoneFiles : null
+      };
+    })
     .filter(layer => layer.files.length > 0);
 }
 

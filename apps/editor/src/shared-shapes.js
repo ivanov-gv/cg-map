@@ -22,13 +22,50 @@ export function changedStretch(before, after) {
   return {before: stretchOf(before), after: stretchOf(after)};
 }
 
-// How far a run of points strays from a line, at most.
-function farthestFrom(points, line) {
-  return Math.max(0, ...points.map(point => nearestPointOnLine(point, line).distanceMetres));
+// More than the length of a degree is worth anywhere near, so that nothing within the tolerance is left out.
+const metresPerDegree = 60000;
+
+function boundsOf(points, marginDegrees = 0) {
+  const bounds = {west: Infinity, south: Infinity, east: -Infinity, north: -Infinity};
+  for (const [longitude, latitude] of points) {
+    bounds.west = Math.min(bounds.west, longitude - marginDegrees);
+    bounds.south = Math.min(bounds.south, latitude - marginDegrees);
+    bounds.east = Math.max(bounds.east, longitude + marginDegrees);
+    bounds.north = Math.max(bounds.north, latitude + marginDegrees);
+  }
+  return bounds;
+}
+
+const areBoundsApart = (first, second) =>
+  first.east < second.west || second.east < first.west || first.north < second.south || second.north < first.south;
+
+// How far a point is from a line. Infinity when that is more than the limit, which most segments show by their bounds.
+function distanceToLine(point, line, limitMetres) {
+  const margin = limitMetres / metresPerDegree;
+  let shortest = Infinity;
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const [start, end] = [line[index], line[index + 1]];
+    const isFar = [0, 1].some(
+      axis => point[axis] < Math.min(start[axis], end[axis]) - margin || point[axis] > Math.max(start[axis], end[axis]) + margin
+    );
+    if (!isFar) shortest = Math.min(shortest, nearestPointOnLine(point, [start, end]).distanceMetres);
+  }
+  return shortest <= limitMetres ? shortest : Infinity;
+}
+
+// How far a run of points strays from a line, at most. Infinity as soon as one strays more than the limit.
+function farthestFrom(points, line, limitMetres) {
+  let farthest = 0;
+  for (const point of points) {
+    farthest = Math.max(farthest, distanceToLine(point, line, limitMetres));
+    if (farthest === Infinity) return Infinity;
+  }
+  return farthest;
 }
 
 // How far two lines are apart, seen from both: a line that cuts a corner of the other strays from it too.
-const distanceBetween = (first, second) => Math.max(farthestFrom(first, second), farthestFrom(second, first));
+const distanceBetween = (first, second, limitMetres) =>
+  Math.max(farthestFrom(first, second, limitMetres), farthestFrom(second, first, limitMetres));
 
 const joinedWithoutRepeats = points =>
   points.filter((point, index) => index === 0 || !isSamePoint(point, points[index - 1]));
@@ -63,8 +100,8 @@ function withCornerAt(line, {coordinate, segmentIndex}) {
 function closestRun(runs, before, toleranceMetres) {
   let closest = null;
   for (const run of runs) {
-    const distance = distanceBetween(run.points, before);
-    if (distance <= toleranceMetres && (!closest || distance < closest.distance)) closest = {...run, distance};
+    const distance = distanceBetween(run.points, before, toleranceMetres);
+    if (distance < Infinity && (!closest || distance < closest.distance)) closest = {...run, distance};
   }
   return closest;
 }
@@ -103,11 +140,24 @@ function withoutCrossing(line, variants) {
   return variants.find(variant => !hasNewCrossing([line], [variant])) ?? variants[0];
 }
 
+// Where the stretch itself ends elsewhere now, the corner at that end goes; otherwise it stands.
+function withoutMovedEnds(points, {first, last}) {
+  return points.slice(first ? 1 : 0, last ? -1 : undefined);
+}
+
+function movedEnds({before, after}, isForward) {
+  const isStartMoved = !isSamePoint(before[0], after[0]);
+  const isEndMoved = !isSamePoint(before.at(-1), after.at(-1));
+  return isForward ? {atFrom: isStartMoved, atTo: isEndMoved} : {atFrom: isEndMoved, atTo: isStartMoved};
+}
+
 // An open line with the stretch replaced, or null when it does not run along it.
 export function splicedLine(line, {before, after}, toleranceMetres) {
   const run = closestRun(runsOfLine(line, before, toleranceMetres), before, toleranceMetres);
   if (!run) return null;
-  const [head, tail] = run.kept;
+  const {atFrom, atTo} = movedEnds({before, after}, run.isForward);
+  const head = withoutMovedEnds(run.kept[0], {first: false, last: atFrom});
+  const tail = withoutMovedEnds(run.kept[1], {first: atTo, last: false});
   const replacement = inDirection(after, run.isForward);
   const ownCorners = cornersOf(line);
   return withoutCrossing(line, [
@@ -142,20 +192,25 @@ function runsOfRing(ring, before, toleranceMetres) {
 // A ring with the stretch replaced, or null when it does not run along it. Of the two ways around between the ends of the
 // stretch, the one that follows it is replaced.
 export function splicedRing(ring, {before, after}, toleranceMetres) {
-  if (isClosed(before)) return distanceBetween(ring, before) <= toleranceMetres ? after : null;
+  if (isClosed(before)) return distanceBetween(ring, before, toleranceMetres) < Infinity ? after : null;
   const run = closestRun(runsOfRing(ring, before, toleranceMetres), before, toleranceMetres);
   if (!run) return null;
   // The kept part goes on from where the replaced part ends, and back to where it starts.
   const replacement = inDirection(after, run.isForward);
-  const ringWith = kept => {
-    const corners = joinedWithoutRepeats([...replacement, ...kept]);
+  const {atFrom, atTo} = movedEnds({before, after}, run.isForward);
+  const kept = withoutMovedEnds(run.kept, {first: atTo, last: atFrom});
+  const ringWith = keptCorners => {
+    const corners = joinedWithoutRepeats([...replacement, ...keptCorners]);
     return closedRing(isSamePoint(corners[0], corners.at(-1)) ? corners.slice(0, -1) : corners);
   };
-  return withoutCrossing(ring, [ringWith(run.kept), ringWith(cornersOf(ring)(run.kept))]);
+  return withoutCrossing(ring, [ringWith(kept), ringWith(cornersOf(ring)(kept))]);
 }
 
 function splicedRings(rings, stretch, toleranceMetres) {
-  return rings.map(ring => splicedRing(ring, stretch, toleranceMetres) ?? ring);
+  return rings.map(ring => {
+    const isNear = isRingNear(ring, stretch, toleranceMetres);
+    return (isNear ? splicedRing(ring, stretch, toleranceMetres) : null) ?? ring;
+  });
 }
 
 // A geometry with every outline along the stretch following it, or the same geometry when none does.
@@ -171,11 +226,19 @@ export function followingGeometry(geometry, stretch, toleranceMetres) {
   return isChanged ? {...geometry, coordinates} : geometry;
 }
 
+const isRingNear = (ring, {before}, toleranceMetres) =>
+  !areBoundsApart(boundsOf(ring), boundsOf(before, toleranceMetres / metresPerDegree));
+
+// Most outlines are far away, which their bounds tell at once.
+const entriesNear = (entries, stretch, toleranceMetres) =>
+  entries.filter(({feature}) => linesOf(feature.geometry).some(ring => isRingNear(ring, stretch, toleranceMetres)));
+
 // A short stretch lies near more outlines than its own, so the tightest of these that any outline follows within counts.
 const tolerancesUpTo = toleranceMetres => [0.5, 5, 20].filter(value => value < toleranceMetres).concat(toleranceMetres);
 
 // Edits of every object whose outline runs along the stretch.
-export function followingEdits(entries, stretch, toleranceMetres) {
+export function followingEdits(allEntries, stretch, toleranceMetres) {
+  const entries = entriesNear(allEntries, stretch, toleranceMetres);
   for (const tolerance of tolerancesUpTo(toleranceMetres)) {
     const edits = editsWithin(entries, stretch, tolerance);
     if (edits.length > 0) return edits;
@@ -201,6 +264,8 @@ export const crossesItself = (before, after) => hasNewCrossing(linesOf(before), 
 // Whether an outline of one of these objects runs along a stretch, so that it must follow it.
 export function hasOutlineAlong(entries, {before}, toleranceMetres) {
   return entries.some(({feature}) =>
-    linesOf(feature.geometry).some(ring => farthestFrom(before, ring) <= toleranceMetres)
+    linesOf(feature.geometry).some(
+      ring => isRingNear(ring, {before}, toleranceMetres) && farthestFrom(before, ring, toleranceMetres) < Infinity
+    )
   );
 }

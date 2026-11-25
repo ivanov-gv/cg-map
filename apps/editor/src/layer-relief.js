@@ -12,6 +12,7 @@ const indexStepMetres = 100;
 // Ridges were simplified apart from the 30 m terrain grid that the slopes follow.
 const ridgeToleranceMetres = 60;
 const positionTimeoutMilliseconds = 15000;
+const slopesOfRidge = 2;
 const smallestDragFraction = 1 / 256;
 const crossingMessage = 'Contour lines never cross.';
 
@@ -144,7 +145,8 @@ function ridgeProblem(edit, context) {
   const {feature, before} = edit;
   if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
   const slopes = slopeEdits(edit, context);
-  if (slopes.length === 0) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';
+  // One is sunlit and one is shaded.
+  if (slopes.length < slopesOfRidge) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';
   const isCrossing = slopes.some(({filename, key, after}) =>
     crossesItself(context.session.workingFeature(filename, key).geometry, after.geometry)
   );
