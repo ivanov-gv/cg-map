@@ -34,6 +34,8 @@ including co-located places and records without a place on the map; use Tab and 
 keeps an unapplied edit until Apply or Cancel. Collecting rendered hits covers the whole view, so zoom in on dense
 layers.
 
+An address has one number, the one written in the address, and a street.
+
 What the layers do beyond shape and fields:
 
 - **Buildings** show their entrances and the places inside. Moving one takes its address, entrances and places with it;
