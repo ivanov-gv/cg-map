@@ -118,7 +118,11 @@ measure a phone, or edits and export at these sizes.
 - Changed files are not a rebuild: see above. The importer says when tiles need one.
 - Routes have no identity of their own in the data, so a changeset that edits one needs the exact snapshot.
 - Zoom levels of towns and summits, energy classes and stop turn points are recorded but not yet drawn by map-core.
-- A border or coastline edit needs `make -C data check-topology` after it is applied.
+- A border or coastline edit needs `make -C data check-topology` after it is applied. A coastline that the sea, the
+  country, its border or a municipality cannot follow is refused; a few detailed stretches are.
+- A rule that allows only one turn is shown on its junction and not edited there.
+- A phone's own height may count from the ellipsoid, about 40 m above sea level here.
+- Buildings without a number are dashed amber while Fill the gaps is on, not on the Buildings layer.
 
 ## Install on your devices
 

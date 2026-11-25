@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote, referenceTo} from '../src/field-items.js';
+import {fieldItemLabel, fieldItemProblem, isReferencedObject, newDeletionMark, newNote, referenceTo} from '../src/field-items.js';
 import {layerForSketch, sketchBehaviors, sketchFile, sketchRule} from '../src/layer-sketches.js';
 import {featureProblem} from '../src/layer-rules.js';
 
@@ -52,4 +52,46 @@ test('a sketch is finished on the layer of what it is, and is saved without touc
   assert.equal(saved[0].id, 'local:1');
   assert.equal(saved[0].what, 'Playground');
   assert.deepEqual(saved[0].geometry, feature.geometry);
+});
+
+const sketchItem = {
+  id: 'local:1',
+  type: 'sketch',
+  createdAt: '2026-11-25T14:20:00Z',
+  layer: 'green',
+  what: 'Parking',
+  geometry: {type: 'Polygon', coordinates: [[[19, 42], [19.1, 42], [19.1, 42.1], [19, 42]]]}
+};
+const noteItem = {
+  ...sketchItem,
+  type: 'note',
+  note: 'One more floor',
+  geometry: {type: 'Point', coordinates: [19, 42]},
+  target: {filename: 'buildings.geojson', reference: {entityId: 'way/9'}, name: 'Main street 9'}
+};
+
+for (const [name, item] of [
+  ['no shape', {...sketchItem, geometry: null}],
+  ['a shape without coordinates', {...sketchItem, geometry: {type: 'Polygon'}}],
+  ['a shape of text', {...sketchItem, geometry: {type: 'Point', coordinates: ['19', '42']}}],
+  ['a shape of no known type', {...sketchItem, geometry: {type: 'GeometryCollection', geometries: []}}],
+  ['no layer', {...sketchItem, layer: undefined}],
+  ['another layer', {...sketchItem, layer: 'shopping'}],
+  ['no kind', {...sketchItem, what: 7}],
+  ['a long note', {...sketchItem, note: 'x'.repeat(2001)}],
+  ['a note without text', {...noteItem, note: ' '}],
+  ['a note on nothing', {...noteItem, target: undefined}],
+  ['a note on an unnamed object', {...noteItem, target: {...noteItem.target, name: null}}],
+  ['a note in an unknown file', {...noteItem, target: {...noteItem.target, filename: 'secrets.json'}}],
+  ['no local ID', {...sketchItem, id: 'way/9'}]
+]) {
+  test(`an imported field item with ${name} is refused before it can be drawn`, () => {
+    assert.equal(typeof fieldItemProblem(item, ['buildings.geojson']), 'string');
+  });
+}
+
+test('field items that can be drawn are accepted', () => {
+  for (const item of [sketchItem, noteItem, {...noteItem, type: 'deletion', note: undefined}]) {
+    assert.equal(fieldItemProblem(item, ['buildings.geojson']), null);
+  }
 });

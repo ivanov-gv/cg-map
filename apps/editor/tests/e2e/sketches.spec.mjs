@@ -14,7 +14,7 @@ async function drawOutline(page, testInfo) {
   await page.locator('#mode-done').click();
 }
 
-test('a sketch, a note and a mark travel to the desk and are resolved there', {tag: '@phone'}, async ({page}, testInfo) => {
+test('a sketch and a note travel to the desk, and the sketch is resolved there', {tag: '@phone'}, async ({page}, testInfo) => {
   await openFixtureCity(page);
   await chooseLayer(page, 'green', [2, -3]);
   const tools = page.getByRole('button', {name: 'Tools', exact: true});
@@ -81,4 +81,52 @@ test('taking a resolved change back brings its sketch back', async ({page}, test
   await page.locator('#toast-action').click();
   await expect(page.locator('#change-count')).toHaveText('1');
   await expect(page.locator('#field-items li')).toHaveCount(1);
+});
+
+// What a phone exports after someone marked the main building for deletion and left a note on the park.
+const phoneFile = {
+  version: 2,
+  id: 'phone',
+  createdAt: '2026-11-25T14:20:00.000Z',
+  author: 'Field',
+  reason: 'Walk',
+  bases: {},
+  operations: [],
+  fieldItems: [
+    {
+      id: 'local:00000000-0000-4000-8000-000000000001',
+      type: 'deletion',
+      createdAt: '2026-11-25T14:20:00.000Z',
+      layer: 'places',
+      geometry: null,
+      target: {filename: 'places.geojson', reference: {entityId: 'node/20'}, name: 'Corner cafe'}
+    }
+  ]
+};
+
+test('a mark from the phone is confirmed at the desk, and unrelated work leaves it waiting', async ({page}, testInfo) => {
+  test.skip(isPhone(testInfo), 'The desk confirms what the phone marked.');
+  await openFixtureCity(page);
+  await page.getByRole('button', {name: /^Changes/}).click();
+  await page.locator('#review-secondary summary').click();
+  const buffer = Buffer.from(JSON.stringify(phoneFile));
+  await page.locator('#import-changeset').setInputFiles({name: 'phone.json', mimeType: 'application/json', buffer});
+  await page.locator('#field-items').getByRole('button', {name: /Marked for deletion/}).click();
+  await expect(page.locator('#resolve-bar')).toBeVisible();
+  // Opening it selects the object. Another object of the layer is no answer to the mark.
+  await expect(page.locator('#selection-title')).toHaveText('Corner cafe');
+  await page.locator('#cancel-edit').click();
+  await startDrawing(page, 'Add place');
+  await tapAt(page, [3, -3]);
+  await expect(page.locator('#apply-edit')).toHaveText('Apply');
+  await page.locator('#cancel-edit').click();
+  await page.getByRole('button', {name: /^Changes/}).click();
+  await page.locator('#field-items').getByRole('button', {name: /Marked for deletion/}).click();
+  await expect(page.locator('#apply-edit')).toHaveText('Apply and resolve');
+  await page.locator('#delete-feature').click();
+  await page.locator('#delete-dialog').getByRole('button', {name: 'Delete'}).click();
+  await expect(page.locator('#resolve-bar')).toBeHidden();
+  const {changeset} = await exportChangeset(page, testInfo);
+  expect(changeset.fieldItems ?? []).toEqual([]);
+  expect(operationsOn(changeset, 'places.geojson').map(({operation}) => operation)).toEqual(['delete']);
 });

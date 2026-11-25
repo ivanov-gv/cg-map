@@ -46,6 +46,49 @@ function contextWith(featuresByFile) {
 
 const behavior = addressBehaviors['building-labels.geojson'];
 
+// Presses a button of the address inspector, which renders into anything that takes children.
+async function pressExtra(label, edit) {
+  const buttons = [];
+  globalThis.document = {
+    createElement: () => {
+      const element = {append() {}};
+      buttons.push(element);
+      return element;
+    }
+  };
+  behavior.renderExtras({append() {}}, edit);
+  await buttons.find(({textContent}) => textContent === label).onclick();
+  delete globalThis.document;
+}
+
+test('an address moves with what is typed, and never to a building that has one', async () => {
+  const context = contextWith({
+    'buildings.geojson': [building('way/1', 19.25), building('way/2', 19.26), building('way/3', 19.27)],
+    'building-labels.geojson': [
+      address({footprintIndex: 0, 'addr:housenumber': '14'}),
+      address({footprintIndex: 1, 'addr:housenumber': '20'})
+    ]
+  });
+  const [label] = context.entriesOf('building-labels.geojson');
+  const [, taken, free] = context.entriesOf('buildings.geojson');
+  const recorded = {};
+  const editOf = target => ({
+    context: {...context, pick: async () => target},
+    key: label.key,
+    feature: label.feature,
+    isOpen: () => true,
+    typedFeature: () => address({footprintIndex: 0, 'addr:housenumber': '16'}),
+    showProblem: message => (recorded.problem = message),
+    replaceWith: edits => (recorded.edits = edits)
+  });
+  await pressExtra('Change building', editOf(taken));
+  assert.match(recorded.problem, /already has an address/);
+  assert.equal(recorded.edits, undefined);
+  await pressExtra('Change building', editOf(free));
+  assert.equal(recorded.edits[1].after.properties['addr:housenumber'], '16');
+  assert.equal(recorded.edits[1].after.properties.buildingEntityId, 'way/3');
+});
+
 test('an address edit keeps its building in step, and nothing else of the building changes', () => {
   const context = contextWith({'buildings.geojson': [building('way/1', 19.25, {nohousenumber: 'yes', name: 'Hall'})]});
   const before = address({footprintIndex: 0, 'addr:housenumber': '14'});

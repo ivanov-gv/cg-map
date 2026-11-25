@@ -238,6 +238,8 @@ test('a changeset carries base hashes, fingerprints and both states, and imports
   await importChangeset(changeset, resumed, sources, rules, levels);
   assert.equal(resumed.workingEntries('places.geojson')[0].feature.properties.name, 'Renamed');
   assert.deepEqual(materializedLayer(resumed, 'places.geojson').features[0].properties.name, 'Renamed');
+  resumed.undo('places');
+  assert.equal(resumed.hasChanges(), false, 'an import can be taken back on its layer');
 });
 
 test('an import is refused whole when the snapshot, fingerprint or rules disagree', async () => {
@@ -260,6 +262,20 @@ test('an import is refused whole when the snapshot, fingerprint or rules disagre
   invalid.operations[0].after.properties.name = ' ';
   await refuses(invalid, /nonempty/);
   await assert.rejects(importChangeset(changeset, session, sources, rules, levels), /export or discard/);
+});
+
+test('the work of two devices comes together unless both changed one object', async () => {
+  const sources = sourcesWith({'places.geojson': [placeFeature(), {...placeFeature(), properties: {...placeFeature().properties, id: 'second'}}]});
+  const exportOf = async key => {
+    const device = new EditSession(sources);
+    device.recordEdit('places.geojson', key, renamed(device.baseFeature('places.geojson', key), `From ${key}`));
+    return buildChangeset(device, sources, envelope);
+  };
+  const desk = new EditSession(sources);
+  await importChangeset(await exportOf('0'), desk, sources, rules, levels);
+  await importChangeset(await exportOf('1'), desk, sources, rules, levels);
+  assert.equal(desk.changeCount(), 2);
+  await assert.rejects(importChangeset(await exportOf('1'), desk, sources, rules, levels), /changed here too/);
 });
 
 test('an object with source identity is named by it, and is found after others of its file were removed', async () => {
@@ -521,6 +537,8 @@ test('a footprint or label edit that breaks their join is reported, without rewr
   const followingLabel = {...labelFeature(), geometry: translateGeometry(labelFeature().geometry, 0.01, 0)};
   session.recordEdit('building-labels.geojson', '0', followingLabel);
   assert.deepEqual(labelJoinProblems(session), []);
+  session.recordEdit('building-labels.geojson', 'local:second', followingLabel);
+  assert.match(labelJoinProblems(session)[0].message, /has two addresses/);
 });
 
 test('a label keeps its building when another building is deleted, and is reported when its own is', () => {

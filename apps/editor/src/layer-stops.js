@@ -37,6 +37,13 @@ export function roadsidePosition(coordinate, context) {
   return {coordinate: roundedCoordinate(position), side: isLeft ? 'left' : 'right', roadName: road.feature.properties.name};
 }
 
+// A stop that nobody can place on a road has no side, and no bus passes there.
+function stopProblem({feature, before}, context) {
+  const isMoved = !before || JSON.stringify(before.geometry) !== JSON.stringify(feature.geometry);
+  const isOnRoad = !isMoved || roadsidePosition(feature.geometry.coordinates, context) !== null;
+  return isOnRoad ? null : 'A stop must be on a road that can be driven.';
+}
+
 // A new or moved stop knows its side of the road; one left where it was keeps what it says.
 function stopOnItsSide(feature, context, {isNew, key}) {
   const before = context.session.workingFeature(stopsFile, key);
@@ -47,8 +54,8 @@ function stopOnItsSide(feature, context, {isNew, key}) {
 
 function renderStopExtras(container, {feature, context}) {
   const {stopId, lines = []} = feature.properties;
-  const isFromImport = !stopId.startsWith('local:');
-  container.append(createElementWithText('p', isFromImport ? `Stop ID · ePG ${stopId}` : 'Stop ID · from the import'));
+  const isAddedHere = stopId.startsWith('local:');
+  container.append(createElementWithText('p', isAddedHere ? 'Stop ID · none yet, added in the editor' : `Stop ID · ePG ${stopId}`));
   const heading = createElementWithText('h3', `Lines that stop here · ${lines.length}`);
   heading.className = 'section-title';
   container.append(heading);
@@ -85,6 +92,7 @@ export const stopBehaviors = {
       return roadside ? {...geometry, coordinates: roadside.coordinate} : geometry;
     },
     prepared: stopOnItsSide,
+    problem: stopProblem,
     renderExtras: renderStopExtras,
     deletion: stopDeletion
   }

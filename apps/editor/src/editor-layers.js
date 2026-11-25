@@ -57,6 +57,8 @@ export const editorLayers = [
     summary: 'Contour lines and summits',
     files: ['contours.geojson', 'summits.geojson', 'ridges.geojson', 'canyon-rims.geojson'],
     linkedFiles: ['slopes.geojson'],
+    // Light and shade, so that moving a ridge shows at once. They follow from the ridges and are never picked.
+    contextFiles: ['slopes.geojson'],
     guideMinZoom: 13
   },
   {
@@ -114,6 +116,15 @@ export function availableLayers(filenames) {
       ...(layer.phoneFiles ? {phoneFiles: layer.phoneFiles.filter(isAvailable)} : {})
     }))
     .filter(layer => layer.files.length > 0);
+}
+
+// Which layer's history holds an edit of this file that came from elsewhere: the layer that edits the file itself, or
+// else one that changes it along.
+export function layerIdOfFile(filename) {
+  const owner =
+    editorLayers.find(({files}) => files.includes(filename)) ??
+    editorLayers.find(({linkedFiles}) => linkedFiles.includes(filename));
+  return owner?.id ?? filename;
 }
 
 export const layerFiles = layer => [...layer.files, ...layer.linkedFiles];

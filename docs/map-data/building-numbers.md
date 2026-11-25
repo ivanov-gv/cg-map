@@ -40,10 +40,9 @@ road ways; it uses that group's lowest way ID and `addr:streetEntityIds` lists a
 `building-entrances.geojson` from OSM `entrance=*` nodes on or within one metre of a published footprint, with the
 node's own identity, copied tags and `buildingEntityId`. When the `places` group is refreshed with `buildings`, a place
 whose point lies inside a footprint also gains that footprint's `buildingEntityId`; this Feature keeps the reviewed
-places snapshot from the branch below, so no published place carries that join yet. The source file is read-only in the
-editor; see the data runbook for the refresh groups and
-[decision 0023](../decisions/0023-osm-building-source-details.md) for why source entrances and display entrances remain
-separate.
+places snapshot from the branch below, so no published place carries that join yet. The editor corrects the source file;
+see the data runbook for the refresh groups and [decision 0023](../decisions/0023-osm-building-source-details.md) for
+why source entrances and display entrances remain separate.
 
 The `entrances` array described below is still produced and reviewed through `building-labels.geojson`. It carries
 derived inward bearings and display fields for arrows and labels; it is not generated from the OSM entrance source in
@@ -74,19 +73,20 @@ through the existing footprint selection.
 
 ## Marking entrances in the source
 
-This PoC remains read-only: marking means adding reviewed entrance records to the source GeoJSON, not drawing or saving
-edits in the browser. For an existing label, add `entrances` to its properties, retain the recovered way identity and
-revision-bound footprint index, and include each entrance node ID in `address_sources`. For a building without a label,
-recover its real source way identity and add an interior label anchor before recording its entrances; do not fabricate
-identities from legacy geometry. Record real entrance coordinates on the footprint boundary, including courtyard
-boundaries. The required `bearing` is clockwise degrees from north in `[0, 360)`, perpendicular to the nearest wall and
-pointing into the building. The producer computes it in the map's Mercator plane; validation checks its direction within
-0.1 degrees, including reversed rings and courtyard walls. The arrow rotates and pitches with the map, retaining its
-wall alignment. The validator allows the existing six-decimal coordinate precision at edges. Update the label
-provenance's hash, bytes, counts and method after reviewing the source facts. GitHub's data and browser pipelines gate
-the merge; `make verify PKG=data` and `make test-e2e` are optional for iterating, while the pre-push `make check` is
-required (builds and non-browser checks, no browser suites). Changes to footprint geometry still require the geography
-rebuild described in the data runbook.
+The public map remains read-only. The editor draws and corrects the entrances of `building-entrances.geojson`; the
+located `entrances` of a label are still added to the source GeoJSON by a reviewer, and the editor only moves them. For
+an existing label, add `entrances` to its properties, retain the recovered way identity and revision-bound footprint
+index, and include each entrance node ID in `address_sources`. For a building without a label, recover its real source
+way identity and add an interior label anchor before recording its entrances; do not fabricate identities from legacy
+geometry. Record real entrance coordinates on the footprint boundary, including courtyard boundaries. The required
+`bearing` is clockwise degrees from north in `[0, 360)`, perpendicular to the nearest wall and pointing into the
+building. The producer computes it in the map's Mercator plane; validation checks its direction within 0.1 degrees,
+including reversed rings and courtyard walls. The arrow rotates and pitches with the map, retaining its wall alignment.
+The validator allows the existing six-decimal coordinate precision at edges. Update the label provenance's hash, bytes,
+counts and method after reviewing the source facts. GitHub's data and browser pipelines gate the merge;
+`make verify PKG=data` and `make test-e2e` are optional for iterating, while the pre-push `make check` is required
+(builds and non-browser checks, no browser suites). Changes to footprint geometry still require the geography rebuild
+described in the data runbook.
 
 A deliberate run of `build-building-labels.py` still preserves explicitly tagged OSM entrance nodes, their house numbers
 and `ref` separately from a way's building number. It retains only unambiguous footprint associations. Address nodes

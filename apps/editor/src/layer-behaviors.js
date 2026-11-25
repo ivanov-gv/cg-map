@@ -1,31 +1,31 @@
 import {kindLabel, objectName} from './object-names.js';
 
 // What a layer does differently with the objects of one file. Every hook is optional:
-//   kind(feature)                 the small label above the name
-//   title(feature, context)       the name in the inspector
-//   sections(feature)             form sections in order, [{title, fields, isCollapsed}]
-//   tools(feature, context)       extra tool buttons, [{label, run(), isDesktopOnly}]
-//   renderExtras(container, edit) anything else in the inspector, with edit = {feature, isNew, context, changed(...)}
-//   prepared(feature, context)    the feature as Apply will record it
-//   problem(feature, context)     why Apply must refuse it, or null
-//   companionEdits(edit, context) edits of linked files that belong to this one, [{filename, key, after}]
-//   deletion(entry, context)      {problem} when it must not be removed, else {message, edits, options: [{label, edits or async resolve()}]}. resolve() may ask for
-//                                 more on the map; it gives the edits, or null to keep the object
-//   snappedPoint(event, context, feature)   where a placed or drawn point belongs, or null for where it was put
-//   limitedGeometry(geometry, edit, context) where a drag must stop
-//   measures(feature, before)     lines of facts shown under the form
-//   controls(edit)                controls that replace single fields, {name: value => element}
-//   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
-//   suggestions(feature, context) usual values of free fields, {name: [value]}
-//   applyLabel(edit)              what Apply is called
-//   afterApply(entry, context)    what happens once the edit is recorded
-//   closesLines                   a drawn line ends on its first point when that is tapped
-//   record({key, feature}, context)  keeps the object somewhere else than in a source file
-//   isViewOnly(context)           the object can be read and not changed here
-//   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
-// companionEdits and problem get {filename, key, feature, before, extras}.
-// The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
-// select(entry), startNew(choice), pick(filename, prompt)}. pick asks for an object on the map and gives its entry or null.
+//   kind(feature), title(feature, context)      the small label and the name in the inspector
+//   sections(feature, edit)                     form sections in order, [{title, fields, isCollapsed}]
+//   controls(edit)                              controls that replace single fields, {name: value => element}
+//   suggestions(feature, context)               usual values of free fields, {name: [value]}
+//   measures(feature, before)                   lines of facts shown under the form
+//   renderExtras(container, edit)               anything else in the inspector
+//   tools(feature, edit)                        extra tool buttons, [{label, run(), isDesktopOnly}]
+//   vertexTools(feature, handle, edit)          what can be done at the picked point, [{id, label, run(), isDisabled}]
+//   isViewOnly(context)                         the object can be read and not changed here
+//   isReshapable(context)                       whether its shape can be changed on this screen
+//   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
+//   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry}
+//   closesLines                                 a drawn line ends on its first point when that is tapped
+//   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
+//   prepared(feature, context, edit)            the feature as Apply will record it
+//   problem(change, context)                    why Apply must refuse it, or null
+//   companionEdits(change, context)             edits of linked files that belong to it, [{filename, key, after}]
+//   record({key, feature}, context)             keeps the object somewhere else than in a source file
+//   applyLabel(edit)                            what Apply is called
+//   afterApply(entry, context)                  what happens once the edit is recorded
+//   deletion(entry, context)                    {problem} when it must stay, else {message, edits, options}. Options are
+//                                               [{label, edits or async resolve()}]; resolve() may ask for more on the
+//                                               map and gives the edits, or null to keep the object
+// problem and companionEdits get change = {filename, key, feature, before, extras}. An edit is the open one, as
+// InspectorEditing describes it in #editContext. The context is what app.js gives in behaviorContext().
 const behaviors = new Map();
 
 const behaviorKey = (filename, layerId) => (layerId ? `${layerId}/${filename}` : filename);
@@ -53,8 +53,9 @@ const defaultBehavior = filename => ({
   vertexTools: () => [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
-  dragTarget: () => null,
-  isViewOnly: () => false
+  isReshapable: () => true,
+  isViewOnly: () => false,
+  dragTarget: () => null
 });
 
 export const behaviorOf = (filename, layerId = null) => ({
@@ -78,7 +79,15 @@ const drawChoices = {
     {label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}},
     {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}}
   ],
-  green: [{label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}}],
+  green: [
+    {label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}},
+    {
+      label: 'Draw protected area',
+      filename: 'protected-areas.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'protected-area', osmTag: 'boundary=protected_area'}
+    }
+  ],
   water: [
     {label: 'Draw water area', filename: 'water.geojson', shape: 'Polygon', properties: {}},
     {label: 'Draw river', filename: 'water.geojson', shape: 'LineString', properties: {}}
@@ -88,7 +97,8 @@ const drawChoices = {
       label: 'Draw contour',
       filename: 'contours.geojson',
       shape: 'LineString',
-      properties: {kind: 'contour', index: false}
+      properties: {kind: 'contour', index: false},
+      isDesktopOnly: true
     },
     {
       label: 'Add summit',

@@ -42,6 +42,11 @@ test('a stop is put on the side of the road someone clicks, seen along the road'
   assert.equal(roadsidePosition(at(2, 5), context), null, 'no road is near');
   const prepared = stopBehaviors['transport-stops.geojson'].prepared(stop('1', null, [2, -0.05]), context, {isNew: true, key: 'local:1'});
   assert.equal(prepared.properties.side, 'right');
+  const {problem} = stopBehaviors['transport-stops.geojson'];
+  assert.equal(problem({feature: stop('1', null, [2, 0.05]), before: null}, context), null);
+  assert.match(problem({feature: stop('1', null, [2, 5]), before: null}, context), /on a road/);
+  const untouched = stop('1', null, [2, 5]);
+  assert.equal(problem({feature: untouched, before: untouched}, context), null, 'a source stop stands as it is');
 });
 
 test('a removed stop leaves its lines, and a line that needs it keeps it', () => {

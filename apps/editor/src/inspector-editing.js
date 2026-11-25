@@ -42,8 +42,9 @@ const beginNewByShape = {
 };
 
 // Owns the pending edit in the inspector: its form, geometry tools and the Apply or Cancel decision.
-// context: {commands, session, rules, levels, handles, overlay, map, activeLayer(), isPhone(), behaviorContext(),
-// onRecorded(message), onClosed(), onMarkedForDeletion(entry, name), onNoteWanted(entry, name), isResolving(), showInspector(), hideInspector(),
+// context: {commands, session, rules, levels, handles, overlay, map, isPhone(), behaviorContext(),
+// onRecorded(message, entry), onClosed(), onMarkedForDeletion(entry, name), onNoteWanted(entry, name),
+// isResolving(entry), showInspector(), hideInspector(),
 // releaseInspectorFocus(), focusStatus(), onEditStateChanged()}. releaseInspectorFocus parks focus outside the inspector
 // and returns whether the inspector held focus, so the status is focused only when it was needed.
 export class InspectorEditing {
@@ -51,6 +52,8 @@ export class InspectorEditing {
   #transaction = null;
   #filename = null;
   #pointer = null;
+  // Counts the edits opened, to tell one from the next.
+  #opening = 0;
 
   constructor(context) {
     this.#context = context;
@@ -179,12 +182,19 @@ export class InspectorEditing {
     showModeBar({title: transaction.isNew ? elementById('selection-title').textContent : title, hint, buttons});
   }
 
+  // The object of the open edit, as the rest of the editor names it.
+  #entry() {
+    const {key, feature, isNew} = this.#transaction;
+    return {filename: this.#filename, key, feature, isNew};
+  }
+
   #renderToolButtons() {
     const {isNew, feature} = this.#transaction;
     const geometryType = feature.geometry?.type;
     const isShape = Boolean(geometryType) && geometryType !== 'Point';
     const {canReshape, canDelete} = featureCapabilities(feature, this.#rule);
-    const canEditShape = (isNew || canReshape) && Boolean(geometryType);
+    const isReshapableHere = this.#behavior.isReshapable(this.#context.behaviorContext());
+    const canEditShape = (isNew || canReshape) && Boolean(geometryType) && isReshapableHere;
     elementById('tool-move').hidden = !canEditShape;
     elementById('tool-vertices').hidden = !canEditShape || !isShape;
     elementById('tool-vertices').textContent = geometryType === 'LineString' ? 'Edit points' : 'Edit corners';
@@ -208,27 +218,36 @@ export class InspectorEditing {
     elementById('edit-facts').replaceChildren(...facts.map(fact => createElementWithText('p', fact)));
   }
 
-  // What a layer's own controls need: the pending feature, and ways to change it inside this edit.
+  // What a layer may do with the open edit. A control can act late, after a pick on the map or an answer of the device:
+  // once its edit is closed it changes nothing, and never the edit opened since.
   #editContext() {
+    const opening = this.#opening;
+    const isOpen = () => this.#transaction !== null && this.#opening === opening;
+    const whileOpen = run => (...values) => {
+      if (isOpen()) run(...values);
+    };
     return {
+      isOpen,
+      // The feature with what is typed in the form.
+      typedFeature: () => this.#currentFeature(),
       feature: this.#transaction.feature,
       key: this.#transaction.key,
       filename: this.#filename,
       isNew: this.#transaction.isNew,
       context: this.#context.behaviorContext(),
-      setProperties: properties => this.#setProperties(properties),
+      setProperties: whileOpen(properties => this.#setProperties(properties)),
       extras: this.#transaction.extras,
       // A control that outlives one rendering reads the edit as it is then.
       latest: () => this.#editContext(),
-      setExtras: extras => this.#setExtras(extras),
-      setFeature: feature => this.#setFeature(feature),
-      setGeometry: geometry => this.#setFeature({...this.#currentFeature(), geometry}),
-      startTool: tool => this.#startTool(tool),
+      setExtras: whileOpen(extras => this.#setExtras(extras)),
+      setFeature: whileOpen(feature => this.#setFeature(feature)),
+      setGeometry: whileOpen(geometry => this.#setFeature({...this.#currentFeature(), geometry})),
+      startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
-      showProblem: message => this.showProblem(message),
-      applyWith: edits => this.#applyWith(edits),
-      replaceWith: (edits, message) => this.#replaceWith(edits, message),
-      discard: () => this.discardEdit()
+      showProblem: whileOpen(message => this.showProblem(message)),
+      applyWith: whileOpen(edits => this.#applyWith(edits)),
+      replaceWith: whileOpen((edits, message) => this.#replaceWith(edits, message)),
+      discard: whileOpen(() => this.discardEdit())
     };
   }
 
@@ -278,7 +297,7 @@ export class InspectorEditing {
     elementById('edit-actions').hidden = false;
     elementById('apply-edit').hidden = this.#behavior.isViewOnly(this.#context.behaviorContext());
     const applyLabel = this.#behavior.applyLabel(this.#editContext());
-    elementById('apply-edit').textContent = this.#context.isResolving() ? 'Apply and resolve' : applyLabel;
+    elementById('apply-edit').textContent = this.#context.isResolving(this.#entry()) ? 'Apply and resolve' : applyLabel;
     elementById('leave-note').hidden = this.#transaction.isNew;
     this.#renderToolButtons();
     this.#renderFacts();
@@ -288,6 +307,7 @@ export class InspectorEditing {
   }
 
   #open(filename, transaction) {
+    this.#opening += 1;
     this.#filename = filename;
     this.#transaction = transaction;
     this.#renderForm();
@@ -376,7 +396,8 @@ export class InspectorEditing {
     const title = this.#behavior.title(feature, behaviorContext);
     const isRecorded = this.#context.commands.recordEdits(edits);
     const {afterApply} = this.#behavior;
-    this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(isRecorded ? `Applied · ${title}` : null, entry));
     afterApply({feature, filename: edit.filename, key: edit.key}, behaviorContext);
     return {success: true};
   }
@@ -393,7 +414,8 @@ export class InspectorEditing {
   // Drops the open edit and records others in its place, such as marking the building as having no number.
   #replaceWith(edits, message) {
     this.#context.commands.recordEdits(edits);
-    this.#finishEdit(() => this.#context.onRecorded(message));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(message, entry));
   }
 
   #refuse(problem) {
@@ -409,7 +431,8 @@ export class InspectorEditing {
 
   #recordDeletion(edits, title) {
     this.#context.commands.recordEdits(edits);
-    this.#finishEdit(() => this.#context.onRecorded(`Deleted · ${title}`));
+    const entry = this.#entry();
+    this.#finishEdit(() => this.#context.onRecorded(`Deleted · ${title}`, entry));
   }
 
   // On a phone an object is only marked; the desk confirms it. An object added here can be dropped at once.

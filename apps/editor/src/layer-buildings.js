@@ -1,9 +1,9 @@
 // Buildings with what belongs to them: their address, their entrances on the outline and the places inside.
-import {createElementWithText} from './dom.js';
+import {createElementWithText, elementById} from './dom.js';
 import {roundedCoordinate, translateGeometry} from './geometry-editing.js';
 import {nearestPointOnOutline} from './geometry-measures.js';
 import {interiorPoint, isInside} from './interior-point.js';
-import {addressText} from './object-names.js';
+import {addressText, buildingId} from './object-names.js';
 
 const buildingsFile = 'buildings.geojson';
 const labelsFile = 'building-labels.geojson';
@@ -12,8 +12,6 @@ const placesFile = 'places.geojson';
 const addressNames = ['addr:street', 'addr:housenumber'];
 // A corner that moved less than this, in degrees, only differs by rounding.
 const roundingToleranceDegrees = 1e-6;
-
-const buildingId = ({key, feature}) => feature.properties.entityId ?? key;
 
 // A source label names its building by position; one added here names it by ID.
 function isLabelOf(label, building) {
@@ -166,7 +164,8 @@ const entranceDetail = ({properties}) =>
     .filter(Boolean)
     .join(' · ');
 
-const placeDetail = ({properties}) => [properties.kind, properties.level && `floor ${properties.level}`].filter(Boolean).join(' · ');
+const placeDetail = ({properties}) =>
+  [properties.kind, properties.level && `floor ${properties.level}`].filter(Boolean).join(' · ');
 
 function nextEntranceNumber(entrances) {
   const numbers = entrances.map(({feature}) => Number(feature.properties.ref)).filter(Number.isInteger);
@@ -202,11 +201,17 @@ function startPlace(building, context) {
   });
 }
 
+// The form is already open, so this leads to where the address is typed.
+function focusHouseNumber() {
+  elementById('property-form').querySelector('[name="addr:housenumber"]').focus();
+}
+
 // Entrances and places belong to a building that exists, so a new one is applied first.
 function renderBelongings(container, edit) {
   const {context, key, feature, isNew} = edit;
   if (isNew) {
     container.append(createElementWithText('p', 'Not on the map until you apply it. Entrances and places come after.'));
+    if (!addressText(feature.properties)) container.append(actionButton('Add address', focusHouseNumber));
     return;
   }
   const building = {key, feature};
@@ -217,7 +222,11 @@ function renderBelongings(container, edit) {
   const entrances = entrancesOf(building, context);
   const places = placesInside(building, context);
   const entranceRows = entrances.map(entry =>
-    rowButton(`Entrance ${entry.feature.properties.ref ?? ''}`.trim(), entranceDetail(entry.feature), whenIdle(() => context.select(entry)))
+    rowButton(
+      `Entrance ${entry.feature.properties.ref ?? ''}`.trim(),
+      entranceDetail(entry.feature),
+      whenIdle(() => context.select(entry))
+    )
   );
   const placeRows = places.map(entry =>
     rowButton(entry.feature.properties.name, placeDetail(entry.feature), whenIdle(() => context.select(entry)))

@@ -215,6 +215,7 @@ function showFeature(entry) {
 
 // Returns the inspector to its empty state for the active layer.
 function clearSelection() {
+  cancelPick();
   editing.close();
   hideInspector();
   elementById('selection-details').open = false;
@@ -347,16 +348,18 @@ function renderCommandAvailability() {
   review.render();
 }
 
+function drawButton(choice) {
+  const button = createElementWithText('button', choice.label);
+  button.type = 'button';
+  button.onclick = () => startNewFeature(choice);
+  return button;
+}
+
 function renderTools() {
   elementById('edit-guides').hidden = !activeLayer;
   elementById('edit-guides-hint').hidden = !activeLayer;
   const choices = drawChoicesOf(activeLayer, rules).filter(({isDesktopOnly}) => !isDesktopOnly || !phoneLayout.matches);
-  const buttons = choices.map(choice => {
-    const button = createElementWithText('button', choice.label);
-    button.type = 'button';
-    button.onclick = () => startNewFeature(choice);
-    return button;
-  });
+  const buttons = choices.map(drawButton);
   const filterButtons = (layerFilters[activeLayer?.id] ?? []).map(filter => {
     const button = createElementWithText('button', filter.label);
     button.type = 'button';
@@ -365,12 +368,7 @@ function renderTools() {
     return button;
   });
   elementById('draw-choices').replaceChildren(...buttons, ...filterButtons);
-  const sketchButtons = sketchChoices.map(choice => {
-    const button = createElementWithText('button', choice.label);
-    button.type = 'button';
-    button.onclick = () => startNewFeature(choice);
-    return button;
-  });
+  const sketchButtons = sketchChoices.map(drawButton);
   elementById('sketch-choices').replaceChildren(...sketchButtons);
   showResolving();
 }
@@ -415,35 +413,65 @@ function showSessionChange() {
 }
 
 // After Apply the map shows the result at once, and one tap takes it back.
-function showApplied(message) {
-  const resolvedItem = message ? resolvingItem : null;
+function showApplied(message, entry = null) {
+  const resolvedItem = itemResolvedBy(entry, message);
   if (resolvedItem) {
     session.removeFieldItem(resolvedItem.id);
     stopResolving();
   }
   showSessionChange();
-  if (!message) return;
-  const undo = () => {
+  const restoreItem = () => {
     if (resolvedItem) session.saveFieldItem(resolvedItem);
-    travelHistory(commands.undo);
   };
-  showToast(resolvedItem ? `${message} · resolved` : message, {action: undo});
+  if (message) {
+    const undo = () => travelHistory(commands.undo, restoreItem);
+    showToast(resolvedItem ? `${message} · resolved` : message, {action: undo});
+  } else if (resolvedItem) {
+    showToast('Note resolved', {action: () => whenNoEditIsOpen(restoreItem)});
+  }
 }
 
-function travelHistory(travel) {
-  if (!activeLayer || editing.hasUnappliedEdit) return;
-  if (travel() !== null) showSessionChange();
+// Whether the open edit finishes the chosen field item: it changes the object the item names, or on the layer of a sketch
+// it is the new object drawn over it.
+function isResolving({filename, key, feature, isNew}) {
+  if (!resolvingItem || filename === sketchFile || activeLayer?.id !== resolvingItem.layer) return false;
+  const {target} = resolvingItem;
+  if (!target) return isNew;
+  return filename === target.filename && isReferencedObject({key, feature}, target.reference);
+}
+
+// A note can be settled by finding nothing to change. A sketch or a mark needs what it asks for.
+function itemResolvedBy(entry, message) {
+  const isDone = message !== null || resolvingItem?.type === 'note';
+  return isDone && entry && isResolving(entry) ? resolvingItem : null;
+}
+
+// Redrawing closes the inspector, so a typed edit waits for its own decision first.
+function whenNoEditIsOpen(change) {
+  if (editing.hasUnappliedEdit) {
+    setStatus(applyOrCancelMessage, true);
+    return;
+  }
+  change();
+  showSessionChange();
+}
+
+function travelHistory(travel, afterTravel = () => {}) {
+  if (!activeLayer) return;
+  if (editing.hasUnappliedEdit) {
+    setStatus(applyOrCancelMessage, true);
+    return;
+  }
+  if (travel() === null) return;
+  afterTravel();
+  showSessionChange();
 }
 
 // Field items have no history of their own, so each change of them carries its way back.
 function changeFieldItems(change, message, undoChange) {
   change();
   showSessionChange();
-  const undo = () => {
-    undoChange();
-    showSessionChange();
-  };
-  showToast(message, {action: undo});
+  showToast(message, {action: () => whenNoEditIsOpen(undoChange)});
 }
 
 function markForDeletion(entry, name) {
@@ -468,16 +496,15 @@ function saveSketch(sketch) {
 function leaveNote(entry, name) {
   writeNote(name, note => {
     const item = newNote(entry, name, activeLayer.id, note);
-    session.saveFieldItem(item);
-    drafts.persist();
-    overlay.setSketches(sketchFeatures());
-    renderCommandAvailability();
-    showToast('Note saved', {
-      action: () => {
-        session.removeFieldItem(item.id);
-        showSessionChange();
-      }
-    });
+    // The object stays open, with whatever is typed in its form.
+    const changeNote = change => {
+      change();
+      drafts.persist();
+      overlay.setSketches(sketchFeatures());
+      renderCommandAvailability();
+    };
+    changeNote(() => session.saveFieldItem(item));
+    showToast('Note saved', {action: () => changeNote(() => session.removeFieldItem(item.id))});
   });
 }
 
@@ -507,12 +534,7 @@ function showResolving() {
   elementById('resolve-title').textContent = `From the field: ${title}`;
   elementById('resolve-detail').textContent = detail;
   const choices = resolvingItem.type === 'sketch' ? drawChoicesOf(activeLayer, rules) : [];
-  const buttons = choices.map(choice => {
-    const button = createElementWithText('button', choice.label);
-    button.type = 'button';
-    button.onclick = () => startNewFeature(choice);
-    return button;
-  });
+  const buttons = choices.map(drawButton);
   elementById('resolve-choices').replaceChildren(...buttons);
 }
 
@@ -524,16 +546,21 @@ function stopResolving() {
 // The desk goes to the object on its own layer, over satellite imagery, where it decides.
 function openFieldItem(item) {
   const layer = layers.find(({id}) => id === item.layer);
-  if (layer && layer.id !== activeLayer?.id && !setLayer(layer)) return;
+  if (!layer) {
+    showToast('This snapshot has no such layer.');
+    return;
+  }
+  if (layer.id !== activeLayer?.id && !setLayer(layer)) return;
   resolvingItem = item;
   showResolving();
   showPanel(null);
-  if (item.type === 'sketch') showSatellite(true);
+  showSatellite(true);
   if (item.geometry) map.jumpTo({center: centreOf(item.geometry), zoom: Math.max(map.getZoom(), guideMinZoom + 1)});
   const entry = item.target && activeEntries.find(candidate =>
     candidate.filename === item.target.filename && isReferencedObject(candidate, item.target.reference)
   );
   if (entry) selectWhenReady(entry);
+  else if (item.target) showToast(`${item.target.name} is no longer on this layer.`);
 }
 
 // New objects get a local identity and no upstream claims, which is what the importer requires of them.
@@ -555,11 +582,12 @@ function setLayer(layer) {
     elementById('layer-switch-dialog').showModal();
     return false;
   }
-  if (pendingPick) finishPick(null);
+  cancelPick();
   editing.close();
   hideToast();
   activeFilter = null;
   pendingSelection = null;
+  stopResolving();
   activeLayer = activeLayer?.id === layer?.id ? null : layer;
   elementById('current-layer-name').textContent = activeLayer ? activeLayer.name : 'Browse';
   elementById('current-layer').classList.toggle('has-layer', Boolean(activeLayer));
@@ -580,10 +608,12 @@ function chooseLayer(layer) {
 function afterLayerSwitch() {
   showPanel(null);
   elementById('current-layer').focus();
-  const hasOnlyRecords = activeLayer && activeEntries.length > 0 && activeEntries.filter(isPickable).every(({feature}) => !feature.geometry);
+  const pickable = activeEntries.filter(isPickable);
+  const hasOnlyRecords = pickable.length > 0 && pickable.every(({feature}) => !feature.geometry);
+  if (!hasOnlyRecords) return;
   // Lines have no place of their own on the map, so they are picked from their list.
-  if (hasOnlyRecords) showPanel('objects-panel', elementById('open-objects'));
-  if (hasOnlyRecords) renderObjectList();
+  showPanel('objects-panel', elementById('open-objects'));
+  renderObjectList();
 }
 
 // Only visible guides or normal cartography supply candidates, both for clicks and the keyboard list.
@@ -649,6 +679,13 @@ function entryUnderPick(event) {
 async function pickPoint(prompt) {
   const picked = await pickObject(null, prompt);
   return picked?.feature.geometry.coordinates ?? null;
+}
+
+// Whoever asked gets no object, so the question does not outlive the edit that asked it. Returns whether one was open.
+function cancelPick() {
+  if (!pendingPick) return false;
+  finishPick(null);
+  return true;
 }
 
 function finishPick(entry) {
@@ -719,7 +756,7 @@ function createInspectorEditing() {
     onClosed: clearSelection,
     onMarkedForDeletion: markForDeletion,
     onNoteWanted: leaveNote,
-    isResolving: () => Boolean(resolvingItem),
+    isResolving,
     showInspector,
     hideInspector,
     releaseInspectorFocus: () => {
@@ -816,7 +853,7 @@ function installWorkspaceControls() {
     cancelActiveGesture: () => Boolean(editing?.cancelActiveGesture()),
     isSwitchDialogOpen: () => elementById('layer-switch-dialog').open,
     closeSwitchDialog: closeLayerSwitchDialog,
-    leaveMode: () => Boolean(editing?.leaveModeOnEscape())
+    leaveMode: () => cancelPick() || Boolean(editing?.leaveModeOnEscape())
   });
   installLayerSwitchDialog();
   installInspectorViewport();

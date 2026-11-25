@@ -1045,7 +1045,7 @@ fieldset {
   min-width: 0;
 }
 .chosen-field button {
-  min-height: 38px;
+  min-height: 40px;
   padding: 8px;
 }
 #hours-dialog {

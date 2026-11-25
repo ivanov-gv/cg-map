@@ -6,9 +6,10 @@ import {roundedCoordinate} from './geometry-editing.js';
 import {formatLength, lineLengthMetres, nearestPointOnLine} from './geometry-measures.js';
 import {
   isOnWay,
-  recordedRestriction,
   restrictionFor,
+  rulesLostBySplit,
   trafficLightAt,
+  turnRule,
   turnsAtEnd,
   wayNumber
 } from './road-junctions.js';
@@ -82,8 +83,8 @@ function restrictionEdit(road, turn, isForbidden, context) {
   const fromWay = wayNumber(road.feature.properties.entityId);
   const toWay = wayNumber(turn.road.feature.properties.entityId);
   const junctionNode = road.feature.properties.endNode;
-  const recorded = recordedRestriction(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
-  if (Boolean(recorded) === isForbidden) return [];
+  const {recorded, onlyRule} = turnRule(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
+  if (onlyRule || Boolean(recorded) === isForbidden) return [];
   if (recorded) return [{filename: restrictionsFile, key: recorded.key, after: null}];
   const properties = {restriction: restrictionFor(turn.kind), from: fromWay, to: toWay, viaNodes: [junctionNode]};
   const key = `local:${crypto.randomUUID()}`;
@@ -164,13 +165,19 @@ function turnRow(road, turn, edit) {
   const toWay = wayNumber(turn.road.feature.properties.entityId);
   const junctionNode = road.feature.properties.endNode;
   if (!fromWay || !toWay || !junctionNode) return null;
-  const recorded = recordedRestriction(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
+  const rule = turnRule(context.entriesOf(restrictionsFile), fromWay, toWay, junctionNode);
   const choiceName = `turn:${turn.road.key}`;
-  const isForbidden = edit.extras[choiceName] ?? Boolean(recorded);
+  const isForbidden = edit.extras[choiceName] ?? rule.isForbidden;
   const target = turn.kind === 'uTurn' ? '' : ` onto ${roadName(turn.road.feature)}`;
-  return checkbox(`${turnLabels[turn.kind]}${target} allowed`, !isForbidden, isAllowed =>
+  const row = checkbox(`${turnLabels[turn.kind]}${target} allowed`, !isForbidden, isAllowed =>
     edit.setExtras({[choiceName]: !isAllowed})
   );
+  if (rule.onlyRule) {
+    const {restriction} = rule.onlyRule.feature.properties;
+    row.querySelector('input').disabled = true;
+    row.append(` · rule of the junction: ${restriction.replaceAll('_', ' ')}`);
+  }
+  return row;
 }
 
 // The junction at the end of the road, at the desk only. Arrows on the map follow start to end.
@@ -203,6 +210,10 @@ function splitTool(feature, handle, edit) {
     isDisabled: !handle || Boolean(splitProblem(feature, handle.vertexIndex)),
     run: () => {
       const {context} = edit;
+      if (rulesLostBySplit(context.entriesOf(restrictionsFile), feature).length > 0) {
+        edit.showProblem('This road has turn rules at its end, which a split would lose. Remove them first.');
+        return;
+      }
       const [first, second] = splitRoad(feature, handle.vertexIndex, context.rules.layers[roadsFile].properties);
       edit.setFeature(first);
       edit.applyWith([{filename: roadsFile, key: `local:${crypto.randomUUID()}`, after: second}]);
@@ -210,18 +221,32 @@ function splitTool(feature, handle, edit) {
   };
 }
 
+// Turn rules of either road that a join would break: the other road's way is gone, and so is the junction between them.
+function hasRulesLostByJoin(feature, other, context) {
+  const restrictions = context.entriesOf(restrictionsFile);
+  const otherWay = wayNumber(other.properties.entityId);
+  const way = wayNumber(feature.properties.entityId);
+  const [, end] = endsOf(feature);
+  const isJoinedAtEnd = endsOf(other).some(point => isSamePoint(point, end));
+  const joinedNode = isJoinedAtEnd ? feature.properties.endNode : feature.properties.startNode;
+  return restrictions.some(restriction => {
+    const isAtJoin = isOnWay(restriction, way) && restriction.feature.properties.viaNodes?.includes(joinedNode);
+    return isOnWay(restriction, otherWay) || isAtJoin;
+  });
+}
+
 async function joinWithPicked(edit) {
-  const {context, key, feature} = edit;
+  const {context, key} = edit;
   const other = await context.pick(roadsFile, 'Pick the road that continues this one');
-  if (!other || other.key === key) return;
+  if (!other || other.key === key || !edit.isOpen()) return;
+  const feature = edit.typedFeature();
   const joined = joinedRoad(feature, other.feature);
   if (!joined) {
     edit.showProblem('These roads do not meet end to end.');
     return;
   }
-  const otherWay = wayNumber(other.feature.properties.entityId);
-  if (context.entriesOf(restrictionsFile).some(restriction => isOnWay(restriction, otherWay))) {
-    edit.showProblem('The other road has turn rules. Remove them first.');
+  if (hasRulesLostByJoin(feature, other.feature, context)) {
+    edit.showProblem('These roads have turn rules that a join would lose. Remove them first.');
     return;
   }
   edit.setFeature(joined);

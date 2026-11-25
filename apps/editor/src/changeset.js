@@ -1,3 +1,4 @@
+import {layerIdOfFile} from './editor-layers.js';
 import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
@@ -72,14 +73,13 @@ async function checkOperation(operation, key, sources, rules, levels) {
 }
 
 // Resumes a reviewed changeset on this snapshot, with the same checks as the importer. Everything is checked before the
-// first edit is recorded, so a refused file leaves the session untouched.
+// first edit is recorded, so a refused file leaves the session untouched. What arrives is one step of each layer.
 export async function importChangeset(changeset, session, sources, rules, levels) {
   requireImportable(readableVersions.includes(changeset?.version), 'unsupported changeset version');
   const {operations, bases} = changeset;
   const fieldItems = changeset.fieldItems ?? [];
   const hasContent = Array.isArray(operations) && operations.length + fieldItems.length > 0;
   requireImportable(hasContent, 'no operations');
-  requireImportable(!session.hasChanges(), 'export or discard the current changes first');
   const boundFiles = new Set(
     operations
       .filter(({reference}) => changeset.version === 1 || reference?.featureIndex !== undefined)
@@ -98,6 +98,12 @@ export async function importChangeset(changeset, session, sources, rules, levels
   const keys = operations.map(operation => sessionKey(operation, entityIndexByFile.get(operation.filename)));
   const targets = operations.map(({filename}, index) => `${filename}:${keys[index]}`);
   requireImportable(new Set(targets).size === targets.length, 'two operations target the same feature');
+  // Work of several devices can come together as long as no object was changed on two of them.
+  const touched = operations.find(({filename}, index) => session.isChanged(filename, keys[index]));
+  requireImportable(
+    !touched,
+    `an object of ${touched?.filename} was changed here too; export or discard the current changes first`
+  );
   for (const [index, operation] of operations.entries()) {
     await checkOperation(operation, keys[index], sources, rules, levels);
   }
@@ -105,6 +111,10 @@ export async function importChangeset(changeset, session, sources, rules, levels
     const problem = fieldItemProblem(item, [...sources.keys()]);
     requireImportable(!problem, problem);
   }
-  operations.forEach(({filename, after}, index) => session.recordEdit(filename, keys[index], after));
+  const editsByLayer = Map.groupBy(
+    operations.map(({filename, after}, index) => ({filename, key: keys[index], after})),
+    ({filename}) => layerIdOfFile(filename)
+  );
+  for (const [layerId, edits] of editsByLayer) session.recordEdits(layerId, edits);
   fieldItems.forEach(item => session.saveFieldItem(item));
 }
