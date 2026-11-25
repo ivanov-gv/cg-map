@@ -484,7 +484,9 @@ function markForDeletion(entry, name) {
 }
 
 function saveSketch(sketch) {
-  const layerId = layerForSketch(sketch.what, activeLayer?.id ?? layers[0].id);
+  // Something of another kind is finished where it was drawn, if anything can be drawn there.
+  const canDrawHere = drawChoicesOf(activeLayer, rules).length > 0;
+  const layerId = layerForSketch(sketch.what, canDrawHere ? activeLayer.id : 'places');
   const item = {...sketch, layer: layerId};
   changeFieldItems(
     () => session.saveFieldItem(item),
@@ -551,6 +553,8 @@ function openFieldItem(item) {
     return;
   }
   if (layer.id !== activeLayer?.id && !setLayer(layer)) return;
+  // A filter hides the objects of the layer, and the item names one of them.
+  if (activeFilter) toggleFilter(activeFilter);
   resolvingItem = item;
   showResolving();
   showPanel(null);

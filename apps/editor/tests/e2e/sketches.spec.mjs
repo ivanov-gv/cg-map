@@ -83,7 +83,7 @@ test('taking a resolved change back brings its sketch back', async ({page}, test
   await expect(page.locator('#field-items li')).toHaveCount(1);
 });
 
-// What a phone exports after someone marked the main building for deletion and left a note on the park.
+// What a phone exports after someone marked a cafe for deletion.
 const phoneFile = {
   version: 2,
   id: 'phone',

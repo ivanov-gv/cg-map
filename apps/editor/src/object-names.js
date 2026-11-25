@@ -26,10 +26,10 @@ const kindLabels = {
 
 export const kindLabel = filename => kindLabels[filename] ?? filename;
 
-// "Njegoševa 14" where an object has an address.
 // How other objects name a building: one added here by its local ID.
 export const buildingId = ({key, feature}) => feature.properties.entityId ?? key;
 
+// "Njegoševa 14" where an object has an address.
 export function addressText(properties) {
   return [properties['addr:street'], properties['addr:housenumber']].filter(Boolean).join(' ');
 }
