@@ -158,8 +158,14 @@ NE source remains 6,535 bytes with six features (SHA-256
 `montenegro-1aba5df7c03ae3fa.pmtiles`, 23,284,558 bytes, SHA-256
 `1aba5df7c03ae3fa494b9bc55448bb3806d600ce5ac5a83eff44e8c2c120b73f`. The final topology check measured 95 m² of neighbour
 overlap, 1,848 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part. A derived gap may
-reach into the reviewed sea without a coastline edge bounding it; the OSM-only area keeps clear of that ocean outline so
-a neighbour does not claim sea and the ocean file stays unchanged.
+reach into the reviewed sea without a coastline edge bounding it; the OSM-only area keeps clear of the sea frame rebuilt
+from the reviewed inputs so a neighbour does not claim sea and the ocean file stays unchanged.
+
+Review round 4 removed neighbour derivation's dependency on the published `water.geojson`. It rebuilds the round-2 sea
+frame from the immutable Natural Earth outlines, the reviewed country outline and the reviewed border edges, using the
+water layer's simplification and area threshold, then keeps OSM-only gaps clear of that frame before snapping. A hostile
+written `water.geojson` and a source directory with no `water.geojson` now produce the same published context bytes.
+`context-countries.geojson`, `land.geojson`, `water.geojson` and the reviewed archive stayed byte-identical.
 
 ## Bus stops
 

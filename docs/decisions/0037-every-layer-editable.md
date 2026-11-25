@@ -91,5 +91,7 @@ a straight seam at the distance line. Mitrovica, Leposavic and Podujevo therefor
 Istog in Kosovo, while Novi Pazar stays in Serbia. Regeneration measured Kosovo at 10,642.82 km² under the repository's
 local area factor; the review's 10,880 km² estimate could not be reproduced, and no area was adjusted to force it. The
 final topology check measured 95 m² neighbour overlap, 1,848 m² inland gap, 124 m² ocean on land, and 124 m² largest
-inland-ocean part. An OSM-only area also keeps clear of the reviewed ocean outline where a gap reaches into the sea
-without a coastline edge, which keeps the ocean source byte-stable.
+inland-ocean part. An OSM-only area also keeps clear of a sea frame rebuilt from the reviewed inputs where a gap reaches
+into the sea without a coastline edge, which keeps the ocean source byte-stable without making it an input to neighbour
+derivation. Review round 4 made that independence explicit: derivation no longer reads `water.geojson`, so a partial
+extraction with marker bytes in unselected generated files cannot change the context. The scope above is unchanged.

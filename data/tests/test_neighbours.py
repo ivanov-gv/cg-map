@@ -1,6 +1,7 @@
 """Inland neighbour derivation for the reviewed context sources."""
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -18,8 +19,8 @@ from osm_extract import ExtractionState  # noqa: E402
 from osm_extract.borders import EDGE_FILE  # noqa: E402
 from osm_extract.geometry import canonical_geometry, rounded_valid_geometry  # noqa: E402
 from osm_extract.neighbours import (  # noqa: E402
-    CONTEXT_FILE, NEIGHBOUR_SOURCE_FILE, assign_gap, assign_gap_pieces,
-    derive_context_features,
+    CONTEXT_FILE, LAND_FILE, NEIGHBOUR_SOURCE_FILE, assign_gap,
+    assign_gap_pieces, derive_context_features,
 )
 from osm_extract.water import filter_non_coastal_ocean_parts  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
@@ -99,6 +100,23 @@ class NeighbourDerivationTest(unittest.TestCase):
         self.options = SimpleNamespace(
             sources_directory=self.directory, uses_fresh_country=True
         )
+
+    def reviewed_source_copy(self):
+        """Copy the reviewed derivation inputs into a temporary directory."""
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        directory = Path(temporary.name)
+        for name in (NEIGHBOUR_SOURCE_FILE, LAND_FILE, EDGE_FILE):
+            shutil.copyfile(ROOT / 'data/sources' / name, directory / name)
+        return directory
+
+    def reviewed_derivation_text(self, sources_directory):
+        """Serialize derivation from a copied set of reviewed inputs."""
+        options = SimpleNamespace(
+            sources_directory=sources_directory, uses_fresh_country=False
+        )
+        features = derive_context_features(options, ExtractionState())
+        return serialize_collection(features)
 
     def derived(self):
         """Return the derived features by their authority name."""
@@ -219,6 +237,32 @@ class NeighbourDerivationTest(unittest.TestCase):
             ),
             published,
         )
+
+    def test_hostile_published_ocean_cannot_change_the_reviewed_areas(self):
+        sources = self.reviewed_source_copy()
+        hostile_ocean = {
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'geometry': mapping(box(19.5, 41.5, 21.6, 43.5)),
+                'properties': {'kind': 'ocean'},
+            }],
+        }
+        (sources / 'water.geojson').write_text(
+            json.dumps(hostile_ocean), encoding='utf-8'
+        )
+        published = (
+            ROOT / 'data/sources' / CONTEXT_FILE
+        ).read_text(encoding='utf-8')
+        self.assertEqual(self.reviewed_derivation_text(sources), published)
+
+    def test_reviewed_derivation_needs_no_published_ocean(self):
+        sources = self.reviewed_source_copy()
+        self.assertFalse((sources / 'water.geojson').exists())
+        published = (
+            ROOT / 'data/sources' / CONTEXT_FILE
+        ).read_text(encoding='utf-8')
+        self.assertEqual(self.reviewed_derivation_text(sources), published)
 
     def test_reviewed_derivation_publishes_valid_polygons(self):
         options = SimpleNamespace(
