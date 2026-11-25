@@ -50,6 +50,9 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Hard rules
 
+- **Before v1, break compatibility for the right structure**
+  ([why](docs/decisions/0039-strong-foundation-before-v1.md)): store each fact once, link by ID, derive the rest. A
+  country links to its border lines; no check stands in for that, no override or view-only field hides a wrong value.
 - **Merge only when [tests pass on GitHub](.github/TESTING.md)**; locally the pre-push `make check` is required.
 - **No CI/CD change reaches main unproved:** [prove it on the branch](.github/TESTING.md#prove-cicd-before-main).
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
@@ -65,9 +68,6 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 ## Ownership and generated output
 
-- apps/web owns public browser code, assets, and web build/tests. packages/map-core owns shared map runtime; apps/editor
-  and apps/core-demo own their internal viewers. services/backend owns the Go module and future backend/editorial
-  implementation.
 - data owns editable sources, imagery, validated releases, and pipeline tools/tests. data/artifacts holds the reviewed
   snapshot so a clean checkout builds without a geography import.
 - platform owns development/release infrastructure and the agent harness; GitHub-specific config lives in .github.
