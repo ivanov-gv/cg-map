@@ -127,11 +127,12 @@ const repositoryDataPattern = new RegExp(
 );
 for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
-  const testFiles = [
+  const testFiles = [...new Set([
+    ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
     ...walk(application).filter(file => testFilePattern.test(file) && !file.includes('/node_modules/')),
     ...(fs.existsSync(configFile) ? [configFile] : []),
     ...TEST_ONLY_APP_TOOLS.filter(file => file.startsWith(`${application}/`))
-  ];
+  ])];
   for (const file of testFiles) {
     assert.ok(
       !repositoryDataPattern.test(fs.readFileSync(file, 'utf8')),

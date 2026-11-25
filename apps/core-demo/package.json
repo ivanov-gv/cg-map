@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint src tools tests e2e playwright.config.mjs",
-    "test": "node --test '**/!(*.browser).test.js'",
+    "test": "node --test 'src/!(*.browser).test.js' 'tools/!(*.browser).test.js' 'tests/!(*.browser).test.js'",
     "build": "node tools/build.mjs",
     "pretest:e2e": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" MAP_CONTRACTS_ROOT=\"$(node tests/pinned-contracts.mjs)\" npm run build",
     "test:e2e": "playwright test",
