@@ -135,15 +135,15 @@ building. `editor-changeset.schema.json` defines the export. Version 2 names an 
 `entityPart`) with a fingerprint and full before/after features; a new object keeps its `local:` ID as its entity ID.
 `featureIndex`, bound to one snapshot, remains for routes and for version 1. `fieldItems` carry rough work from the
 field, which the importer never writes. Canyon rims accept add, change and delete: a new rim states only an optional
-measured `height`; `river`, `bank` and `method` are not editable. The importer assigns its `local:` ID, `canyon-rim`
-kind, `editor-drawn` method and `lengthMetres`, and refuses a changeset that states those derived facts. The importer
-computes label positions, street joins, measures, summit checks, contour direction and provenance, so a changeset never
-carries them; an added label states `buildingEntityId` instead of `footprintIndex`.
-`fixtures/editor-geometry-cases.json` and `fixtures/editor-property-cases.json` define the geometry and property rules;
-the editor and the importer both test against them, and tests/integration/editor-changeset.test.mjs runs one's output
-through the other. `editor-corrections.schema.json` defines the ledger of what was applied, replayed over a fresh
-extract. For land and water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a published kind
-nor invent one.
+integer `height`. Its range is a contract limit because a sampled value outside it is a bad build, not a missing
+measurement. `river`, `bank` and `method` are not editable. The importer assigns its `local:` ID, `canyon-rim` kind,
+`editor-drawn` method and `lengthMetres`, and refuses a changeset that states those derived facts. The importer computes
+label positions, street joins, measures, summit checks, contour direction and provenance, so a changeset never carries
+them; an added label states `buildingEntityId` instead of `footprintIndex`. `fixtures/editor-geometry-cases.json` and
+`fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
+against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
+`editor-corrections.schema.json` defines the ledger of what was applied, replayed over a fresh extract. For land and
+water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a published kind nor invent one.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those
@@ -158,12 +158,11 @@ contour above OSM height around the summit or an OSM/DEM difference over 25 m, a
 fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
 OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
 and `method: "dem-canyon-bank"`; a rim added in the editor has `method: "editor-drawn"` and no `river` or `bank`. A rim
-publishes one optional integer `height` in whole metres: the median bank-rise sample, rounded to the nearest metre; an
-OSM cliff has it only where the build sampled the nearby DEM bank. A rim without a height is drawn as its rim line only
-([ADR 0040](../../docs/decisions/0040-one-measured-canyon-rim-height.md)). Every canyon rim runs with its river, the low
-side, on its right; an edge without a river is not compared with a centreline. Every contour runs with higher ground on
-its left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height
-checks and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
+may publish one optional integer `height`; how the build measures it belongs to the data runbook. Every canyon rim keeps
+the low side on its right; an edge without a river is not compared with a centreline
+([ADR 0040](../../docs/decisions/0040-one-measured-canyon-rim-height.md)). Every contour runs with higher ground on its
+left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height checks
+and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
 
 Building labels may also include separate `building_number`, building `lamela`, and `entrances` records. Each entrance
 retains its OSM node ID, WGS84 coordinates, required inward `bearing`, optional `number`, Ulaz `ref`, `lamela`, and

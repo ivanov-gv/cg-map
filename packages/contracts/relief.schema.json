@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ivanov-gv/cg-map/contracts/relief/v1",
   "title": "Relief source features v1",
-  "description": "Relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; every canyon rim runs with its river, the low side, on its right and every contour with higher ground on its left; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
+  "description": "Relief vectors derived from Copernicus DEM GLO-30 and reviewed OSM/source geometry. Features carry object facts only; build parameters, source descriptions and full report results live in data/sources/provenance.json and the temporary relief report. Identity follows entity-identity.schema.json. Contours, ridges and canyon rim parts are one LineString feature each; every canyon rim keeps the low side on its right and every contour with higher ground on its left; slopes are one Polygon feature each. Derived IDs are deterministic for pinned inputs but are not stable across DEM or green-area changes.",
   "type": "object",
   "required": ["type", "entitySchemaVersion", "features"],
   "properties": {
@@ -105,12 +105,7 @@
           "river": {"enum": ["Morača", "Ribnica"]},
           "bank": {"enum": ["left", "right"]},
           "method": {"enum": ["osm-cliff", "dem-canyon-bank", "editor-drawn"]},
-          "height": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2600,
-            "description": "One measured bank rise in whole metres for this rim. Omit it when no sample measures a bank; the archive then publishes only the rim line."
-          },
+          "height": {"type": "integer"},
           "lengthMetres": {"type": "number", "minimum": 0},
           "bankDefinition": false,
           "cliffWays": false,
@@ -125,7 +120,7 @@
         "allOf": [
           {
             "if": {"properties": {"method": {"const": "editor-drawn"}}, "required": ["method"]},
-            "then": {"required": [], "properties": {"river": false, "bank": false}},
+            "then": {"properties": {"river": false, "bank": false}},
             "else": {"required": ["river", "bank"]}
           }
         ]

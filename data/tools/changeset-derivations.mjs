@@ -252,23 +252,37 @@ function lineLengthMetres(line) {
     .reduce((length, end, index) => length + Math.hypot(end[0] - points[index][0], end[1] - points[index][1]), 0);
 }
 
+const hasSameGeometry = (first, second) => JSON.stringify(first) === JSON.stringify(second);
+
 const derivedFactsByFile = {
   'slopes.geojson': ({coordinates}) => ({areaSquareMetres: Math.round(polygonAreaSquareMetres(coordinates))}),
-  'canyon-rims.geojson': ({coordinates}, isAdded) => ({
+  'canyon-rims.geojson': ({coordinates}, {isAdded, hasNewGeometry}) => ({
     ...(isAdded ? {kind: 'canyon-rim', method: 'editor-drawn'} : {}),
-    lengthMetres: Math.round(lineLengthMetres(coordinates))
+    ...(hasNewGeometry ? {lengthMetres: Math.round(lineLengthMetres(coordinates))} : {})
   })
 };
 
-// A changed slope or rim states its new measure; the importer names a new rim's kind and method.
-export function featuresWithDerivedFacts(filename, collection, changedKeys, previousKeys) {
+// A changed slope states its new area. A rim's length follows only a new or reshaped edge: a height edit keeps the
+// reviewed measure, because the build and this tool measure the same line slightly differently.
+export function featuresWithDerivedFacts(filename, collection, changedKeys, previousFeatures) {
   const derive = derivedFactsByFile[filename];
   if (!derive) return collection;
+  const previousByKey = new Map(previousFeatures.map(feature => [entityKey(feature.properties), feature]));
   const features = collection.features.map(feature => {
     const key = entityKey(feature.properties);
     if (!changedKeys.has(key)) return feature;
-    const isAdded = !previousKeys.has(key);
-    return {...feature, properties: {...feature.properties, ...derive(feature.geometry, isAdded)}};
+    const previousFeature = previousByKey.get(key);
+    const isAdded = !previousFeature;
+    return {
+      ...feature,
+      properties: {
+        ...feature.properties,
+        ...derive(feature.geometry, {
+          isAdded,
+          hasNewGeometry: isAdded || !hasSameGeometry(previousFeature.geometry, feature.geometry)
+        })
+      }
+    };
   });
   return {...collection, features};
 }
@@ -305,9 +319,8 @@ export function withDerivedFacts(next, previous, changedKeysByFile, read) {
   for (const [filename, collection] of next) {
     const changedKeys = changedKeysByFile.get(filename);
     const previousFeatures = reviewed(filename).features;
-    const previousKeys = new Set(previousFeatures.map(feature => entityKey(feature.properties)));
     const ordered = featuresWithRingOrder(filename, collection, changedKeys);
-    derived.set(filename, featuresWithDerivedFacts(filename, ordered, changedKeys, previousKeys));
+    derived.set(filename, featuresWithDerivedFacts(filename, ordered, changedKeys, previousFeatures));
   }
   const current = filename => derived.get(filename) ?? read(filename);
   if (derived.has(roadsFile)) {

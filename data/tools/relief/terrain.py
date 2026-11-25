@@ -35,8 +35,7 @@ CANYON_SEARCH_DISTANCE_METRES = 60
 CANYON_SEARCH_STEP_METRES = 10
 CANYON_RIM_JOIN_GAP_METRES = 60
 CANYON_RIM_MINIMUM_LENGTH_METRES = 100
-# The sampler places rim points on the bank 10-60 m from the river. Half that reach is the band where
-# the pipeline samples the bank beside an OSM cliff; selection and height association share that band.
+# Cliff parts are selected within half of the bank search reach of a derived rim.
 CANYON_BANK_SAMPLE_NEARBY_METRES = CANYON_SEARCH_DISTANCE_METRES / 2
 
 
@@ -124,23 +123,34 @@ def path_length_metres(path, longitude_metres_per_degree, latitude_metres_per_de
     return float(np.hypot(eastwards, northwards).sum())
 
 
-def join_short_gaps(paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree):
-    """Join ordered paths when the gap between one end and the next start is under a limit."""
-    joined = []
-    for path in paths:
+def join_short_gap_groups(paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree):
+    """Return groups of input path indexes joined across short gaps."""
+    groups = []
+    for index, path in enumerate(paths):
         coordinates = [list(point) for point in path]
         if not coordinates:
             continue
-        if joined:
-            previous_end = joined[-1][-1]
+        if groups:
+            previous_end = paths[groups[-1][-1]][-1]
             next_start = coordinates[0]
             east = (next_start[0] - previous_end[0]) * longitude_metres_per_degree
             north = (next_start[1] - previous_end[1]) * latitude_metres_per_degree
             if math.hypot(east, north) < gap_metres:
-                joined[-1].extend(coordinates)
+                groups[-1].append(index)
                 continue
-        joined.append(coordinates)
-    return joined
+        groups.append([index])
+    return groups
+
+
+def join_short_gaps(paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree):
+    """Join ordered paths when the gap between one end and the next start is under a limit."""
+    groups = join_short_gap_groups(
+        paths, gap_metres, longitude_metres_per_degree, latitude_metres_per_degree
+    )
+    return [
+        [list(point) for index in group for point in paths[index]]
+        for group in groups
+    ]
 
 
 def drop_short_paths(paths, minimum_length_metres, longitude_metres_per_degree,

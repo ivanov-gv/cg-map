@@ -11,6 +11,7 @@ import unicodedata
 
 import numpy as np
 from contourpy import contour_generator
+from shapely.affinity import affine_transform
 from shapely.geometry import LineString, MultiLineString, Point, Polygon, box, mapping, shape
 from shapely.ops import linemerge, transform, unary_union
 from shapely.prepared import prep
@@ -37,7 +38,7 @@ from .terrain import (
     drop_short_paths,
     is_canyon_bank,
     is_index_level,
-    join_short_gaps,
+    join_short_gap_groups,
     path_length_metres,
     rounded_coordinates,
     separate_line_paths,
@@ -838,26 +839,26 @@ def _segments_from_samples(samples, maximum_gap):
 
 
 def _clean_rim_segments(segments, latitude_metres, longitude_metres):
-    """Join gap speckle into bank lines and remove the short lines left behind."""
+    """Join gap speckle into bank lines, carrying the samples of each joined run."""
     if not segments:
         return []
     paths = [list(segment.coords) for segment, _ in segments]
-    joined_paths = join_short_gaps(
+    groups = join_short_gap_groups(
         paths, CANYON_RIM_JOIN_GAP_METRES, longitude_metres, latitude_metres
     )
-    kept_paths = drop_short_paths(
-        joined_paths, CANYON_RIM_MINIMUM_LENGTH_METRES,
-        longitude_metres, latitude_metres,
-    )
     cleaned = []
-    for path in kept_paths:
-        joined_line = LineString(path)
+    for group in groups:
+        path = [list(point) for index in group for point in paths[index]]
+        if path_length_metres(
+            path, longitude_metres, latitude_metres
+        ) < CANYON_RIM_MINIMUM_LENGTH_METRES:
+            continue
         bank_samples = [
             sample
-            for segment, samples in segments if joined_line.intersects(segment)
-            for sample in samples
+            for index in group
+            for sample in segments[index][1]
         ]
-        cleaned.append((joined_line, bank_samples))
+        cleaned.append((LineString(path), bank_samples))
     return cleaned
 
 
@@ -885,7 +886,7 @@ def _cliff_parts(cliffs, line, bank, detail_bounds, latitude_metres, longitude_m
 
 
 def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
-                            longitude_metres, rim_geometry, near_bank_metres):
+                            longitude_metres, rim_geometry, near_metres):
     candidates = []
     for line in lines:
         candidates.extend(_cliff_parts(
@@ -896,7 +897,7 @@ def _qualifying_cliff_parts(cliffs, lines, bank, detail_bounds, latitude_metres,
     kept = []
     seen = set()
     for part, cliff in candidates:
-        if part.distance(rim_geometry) > near_bank_metres / latitude_metres:
+        if part.distance(rim_geometry) > near_metres / latitude_metres:
             continue
         rounded = rounded_coordinates(list(part.coords))
         key = (cliff['entityId'], tuple(tuple(point) for point in rounded))
@@ -941,14 +942,15 @@ def _rim_height(rises):
     return math.floor(statistics.median(rises) + 0.5)
 
 
-def _nearby_rim_samples(part, dem_segments, latitude_metres):
-    """Return the bank samples measured close enough to lend this cliff part a height."""
-    nearby_degrees = CANYON_BANK_SAMPLE_NEARBY_METRES / latitude_metres
+def _nearby_rim_samples(part, dem_segments, latitude_metres, longitude_metres, nearby_metres):
+    """Return the bank samples within a metre reach of this cliff part."""
+    scale = [longitude_metres, 0, 0, latitude_metres, 0, 0]
+    metric_part = affine_transform(part, scale)
     return [
         (point, rise)
         for _, samples in dem_segments
         for point, rise in samples
-        if part.distance(point) <= nearby_degrees
+        if metric_part.distance(affine_transform(point, scale)) <= nearby_metres
     ]
 
 
@@ -980,7 +982,10 @@ def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitud
             }
             if len(ordered_parts) > 1:
                 properties['entityPart'] = index
-            nearby_samples = _nearby_rim_samples(part, dem_segments, latitude_metres)
+            nearby_samples = _nearby_rim_samples(
+                part, dem_segments, latitude_metres, longitude_metres,
+                CANYON_SEARCH_DISTANCE_METRES / 2,
+            )
             height = _rim_height([rise for _, rise in nearby_samples])
             if height is not None:
                 properties['height'] = height
@@ -1018,7 +1023,7 @@ def _dem_rim_features(segments, river_name, bank, latitude_metres, longitude_met
     return derived_parts(f'canyon-rim-{entity_slug(river_name)}-{bank}', parts)
 
 
-def _bank_report(river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres):
+def _bank_report(river_name, bank, dem_features, cliff_features):
     dem_length = sum(
         feature['properties']['lengthMetres'] for feature in dem_features
     )
@@ -1099,9 +1104,7 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
             )
             features.extend(cliff_features)
             features.extend(dem_features)
-            river_banks.append(_bank_report(
-                river_name, bank, dem_features, cliff_features, latitude_metres, longitude_metres
-            ))
+            river_banks.append(_bank_report(river_name, bank, dem_features, cliff_features))
 
     report = {
         'riverBanks': river_banks,

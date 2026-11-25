@@ -63,8 +63,6 @@ on two levels; the extractor names such nodes, and they stay unjoined.
 
 ## Outcome (owner, 2026-11-25)
 
-The owner withdrew the no-add/delete limit for canyon rims only: [#446](https://github.com/ivanov-gv/cg-map/issues/446)
-lets a rim be added, changed or deleted while identity, `entityVersion` and `lengthMetres` stay importer-computed. The
-limit still stands for border lines ([#429](https://github.com/ivanov-gv/cg-map/issues/429)) and ridges
-([#453](https://github.com/ivanov-gv/cg-map/issues/453)). [ADR 0040](0040-one-measured-canyon-rim-height.md) records the
-height and direction facts.
+[#446](https://github.com/ivanov-gv/cg-map/issues/446) opened canyon rims; border lines and ridges keep their limits
+([#429](https://github.com/ivanov-gv/cg-map/issues/429), [#453](https://github.com/ivanov-gv/cg-map/issues/453)).
+[ADR 0040](0040-one-measured-canyon-rim-height.md) records height and direction.

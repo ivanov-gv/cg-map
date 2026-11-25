@@ -7,40 +7,23 @@ canyon-rim guidance in [ADR 0037](0037-every-layer-editable.md).
 
 ## Context
 
-The core map draws a wall from a canyon rim down to the water, so the rim needs one height. The relief build already
-samples bank rise while deciding where a rim runs, but it published only the decision, not the measurement. A drawn rim
-also had to name its `method`, `river` and `bank` in the editor form, even though those facts belong to the build. The
-height filter turned a value outside the contract's range into no height, which hid a pipeline fault. The bank-sample
-reach was written twice, so selection and height association could drift apart
-([UI 4.Editor](https://github.com/ivanov-gv/cg-map/wiki/UI---4.Editor),
-[#447](https://github.com/ivanov-gv/cg-map/issues/447)).
+On main, a canyon rim could be modified or deleted but not added. Its properties were locked, no rim carried a bank-rise
+measurement, and the wall style selected a canyon by river name. The build measured bank rise to decide where a rim runs
+but published only that decision, so a rim drawn by hand had no height it could state.
 
 ## Decision
 
-- A finished DEM rim publishes one `height`, the median of the bank-rise samples that produced it, rounded to the
-  nearest whole metre with halves upward. An OSM cliff takes that height only from bank samples measured beside that
-  part. The statistic is recorded in relief provenance, not repeated as a per-feature build parameter. No height is
-  guessed from a cliff tag or a river name. The contract's integer range is the only authority for a publishable height:
-  `_rim_height` returns `None` only when there are no samples, and `check-data` fails with the file and reason for a
-  measured height outside that range.
-- A canyon rim added in the editor states only an optional integer `height`. `river`, `bank` and `method` are not
-  editable properties; a changeset that states any of them is refused. The importer assigns the `local:` identity,
-  `kind: canyon-rim`, `method: editor-drawn` and `lengthMetres`; an existing rim keeps its derived facts when its height
-  changes.
-- Every canyon rim runs with its river, the low side, on its right, including a rim drawn in the editor.
-  `relief.schema.json` and [the contracts README](../../packages/contracts/README.md) state that direction once each.
-  The direction check judges every edge that names a river; an edge without a river is not compared with a centreline,
-  not exempt from the rule.
-- `CANYON_BANK_SAMPLE_NEARBY_METRES` names half of `CANYON_SEARCH_DISTANCE_METRES` once, because the sampler places bank
-  points within that half-reach and both cliff-part selection and height association need the same band.
+- The relief build publishes one `height` per finished rim: the median of the bank-rise samples, rounded to whole metres
+  with halves upward. An OSM cliff uses only samples measured beside that part; without samples it has no height.
+- An added rim states only an optional integer `height`. The importer assigns identity, `kind`, `method: editor-drawn`
+  and `lengthMetres`; a height-only edit of a measured rim keeps its reviewed length.
+- Every rim keeps the low side on its right. An edge with no river has no centreline to compare, but is not exempt.
+- `editor-layers.json` owns the height range and `check-data` reads it from there. An out-of-range measurement fails
+  validation. Cliff-part selection keeps its existing half-search-reach constant; height association measures the same
+  reach in metres, so east and north offsets mean the same distance.
 
 ## Consequences
 
-- One whole-metre number per edge makes a missing measurement honest rather than zero; the owner's UI issue owns what a
-  rim without a height draws.
-- The contract's limits now fail a bad build instead of silently dropping a height. The pinned rebuild republishes the
-  same 50 heights, identities and geometries.
-- An editor-added rim cannot acquire upstream provenance by stating an identity or method. Data validation reads the
-  river, bank and method enums from the schema rather than keeping a second list.
-- One direction sign covers every named rim. A rebuild with new DEM tiles can change a height, identity and the archive
-  hash; the reviewed sources and provenance move together.
+- A sampled height is present or honestly absent. Drawing a wall by height belongs to
+  [#447](https://github.com/ivanov-gv/cg-map/issues/447), not this decision.
+- A changeset cannot claim an importer-derived fact or upstream provenance for an edge drawn by hand.

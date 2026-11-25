@@ -870,8 +870,12 @@ test('every relief collection satisfies its read-only domain contract', () => {
     'ridge boundaries must stay in the tens, not thousands');
   const rims = readRelief('canyon-rims.geojson');
   assert.ok(rims.features.length > 0);
-  assert.ok(rims.features.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
+  const measured = rims.features.filter(feature => feature.properties.method !== 'editor-drawn');
+  assert.ok(measured.length > 0);
+  assert.ok(measured.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
     .includes(`${feature.properties.river}:${feature.properties.bank}`)));
+  assert.ok(rims.features.filter(feature => feature.properties.method === 'editor-drawn').every(feature =>
+    !('river' in feature.properties) && !('bank' in feature.properties)));
   assert.ok(rims.features.some(feature => Number.isInteger(feature.properties.height)),
     'derived rims carry a measured height');
   assert.ok(rims.features.every(feature =>
@@ -941,13 +945,13 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
   }
 });
 
-test('the relief contract keeps river and bank off drawn canyon rims', () => {
+test('canyon rim validation keeps derived facts with the build and off drawn edges', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')));
   const rimProperties = schema.$defs.canyonRim.then.properties;
   const river = rimProperties.river.enum[0];
   const bank = rimProperties.bank.enum[0];
   const validate = new Ajv2020({strict: false}).compile(schema);
-  const isValid = properties => validate({
+  const collection = properties => ({
     type: 'FeatureCollection',
     entitySchemaVersion: 1,
     features: [{
@@ -955,6 +959,11 @@ test('the relief contract keeps river and bank off drawn canyon rims', () => {
       geometry: {type: 'LineString', coordinates: [[19.4, 42.5], [19.41, 42.51]]},
       properties
     }]
+  });
+  const isValid = properties => validate(collection(properties));
+  const check = properties => validateRelief(collection(properties), {
+    label: 'canyon-rims.geojson',
+    contractsDirectory
   });
   const drawn = {
     entityId: 'local:00000000-0000-4000-8000-000000000001',
@@ -964,58 +973,38 @@ test('the relief contract keeps river and bank off drawn canyon rims', () => {
     lengthMetres: 120,
     height: 77
   };
+
+  assert.equal(check(drawn), 1);
   assert.equal(isValid(drawn), true);
+  assert.throws(() => check({...drawn, river}), /a drawn rim cannot name a river/);
+  assert.throws(() => check({...drawn, bank}), /a drawn rim cannot name a bank/);
   assert.equal(isValid({...drawn, river}), false);
   assert.equal(isValid({...drawn, bank}), false);
-  const derived = {...drawn, entityId: 'way/1', method: 'osm-cliff', river, bank};
+
+  const derived = {...drawn, entityId: 'way/1', entityVersion: 3, method: 'osm-cliff', river, bank};
+  assert.equal(check(derived), 1);
   assert.equal(isValid(derived), true);
   const missingRiver = {...derived};
   delete missingRiver.river;
+  assert.throws(() => check(missingRiver), /invalid river bank/);
   assert.equal(isValid(missingRiver), false);
+
+  assert.throws(() => check({...drawn, entityId: 'way/2'}), /a drawn rim must use local identity/);
+  assert.throws(
+    () => check({...drawn, method: 'osm-cliff', river, bank}),
+    /a local rim must be editor-drawn/
+  );
 });
 
-test('relief validation refuses a drawn rim that names a river or bank', () => {
-  const drawn = structuredClone(readRelief('canyon-rims.geojson').features[0]);
-  drawn.properties.entityId = 'local:00000000-0000-4000-8000-000000000001';
-  drawn.properties.entityVersion = `sha256:${'a'.repeat(64)}`;
-  drawn.properties.method = 'editor-drawn';
-  drawn.properties.height = 123;
-  delete drawn.properties.river;
-  delete drawn.properties.bank;
-  for (const [field, value] of [['river', 'an unlisted river'], ['bank', 'an unlisted bank']]) {
-    const bad = structuredClone(drawn);
-    bad.properties[field] = value;
-    assert.throws(
-      () => validateRelief({type: 'FeatureCollection', entitySchemaVersion: 1, features: [bad]}, {
-        label: 'canyon-rims.geojson',
-        contractsDirectory
-      }),
-      error => error.message === `canyon-rims.geojson: a drawn rim cannot name a ${field}`
-    );
-  }
-});
-
-test('relief validation reports an out-of-range rim height with the file and reason', () => {
+test('relief validation reads the rim height range from the editor rule', () => {
   const bad = readRelief('canyon-rims.geojson');
-  const maximum = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')))
-    .$defs.canyonRim.then.properties.height.maximum;
+  const maximum = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'editor-layers.json')))
+    .layers['canyon-rims.geojson'].properties.height.maximum;
   bad.features[0].properties.height = maximum + 1;
   assert.throws(
     () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
     error => error.message === 'canyon-rims.geojson: invalid rim height'
   );
-});
-
-test('relief validation accepts a locally drawn rim with one measured height', () => {
-  const drawn = structuredClone(readRelief('canyon-rims.geojson').features[0]);
-  drawn.properties.entityId = 'local:00000000-0000-4000-8000-000000000001';
-  drawn.properties.entityVersion = `sha256:${'a'.repeat(64)}`;
-  drawn.properties.method = 'editor-drawn';
-  drawn.properties.height = 123;
-  delete drawn.properties.river;
-  delete drawn.properties.bank;
-  const collection = {type: 'FeatureCollection', entitySchemaVersion: 1, features: [drawn]};
-  assert.equal(validateRelief(collection, {label: 'canyon-rims.geojson', contractsDirectory}), 1);
 });
 
 // A protected area is only worth publishing with its name; the label layer relies on this check to skip none.

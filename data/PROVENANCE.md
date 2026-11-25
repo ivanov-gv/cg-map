@@ -157,11 +157,11 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 
 `contours.geojson`, `summits.geojson`, `slopes.geojson`, `ridges.geojson`, and `canyon-rims.geojson` are derived vectors
 rebuilt from pinned inputs; [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md) describes the build,
-and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. Canyon rims can now be
-added, changed or deleted with only an optional height in the changeset; the importer computes identity, kind, method
-and length. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF,
-and the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts
-and are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are
+and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. Canyon rims allow add,
+change and delete with only an optional height in the changeset; the importer computes identity, kind, method and
+length. `make -C data build-relief` rebuilds them from the local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and
+the reviewed `land.geojson` and `water.geojson`. The raster tiles, PBF and full report are external build artifacts and
+are not committed; their checksums, the DEM EULA/attribution, and all output counts, bytes and SHA-256 values are
 recorded in `sources/provenance.json`.
 
 The current build has 5,411 Montenegro summits (4,542 `ok`, 418 `mismatch`, 451 `missing`), 445 contour lines across 32
@@ -174,15 +174,12 @@ or an OSM/DEM difference over 25 m. A missing OSM elevation keeps its DEM facts 
 
 A ridge is one simplified, connected `LineString` on the shared boundary between sunlit and shaded slope polygons inside
 green areas; pieces under 100 m are dropped. `summit` and `summitName` appear only on a ridge that passes within 50 m of
-that summit, and the retired 400 m search radius stays in the relief provenance block as build lineage. Canyon rims keep
-only banks rising at least 8 m above the river surface within 60 m of the channel, join one bank across gaps under 60 m,
-then drop segments under 100 m; each remaining segment is a separate `LineString` with numbered `entityPart` values on
-one derived river-bank identity. Each finished rim publishes one `height`: the median of its bank-rise samples rounded
-to the nearest whole metre with halves upward. An OSM cliff takes that height only from DEM samples measured beside that
-cliff part, not from a distant rise elsewhere on a joined bank; an unmeasured rim is drawn as its line only. A sampled
-height outside the contract range fails validation rather than disappearing. The statistic, rounding and river-bank
-thresholds are in `relief` in `sources/provenance.json`; allowed values belong to `relief.schema.json`
-([ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md)). River banks are named relative to the
+that summit, and the retired 400 m search radius stays in the relief provenance block as build lineage. Canyon rims are
+one `LineString` per retained bank segment with numbered `entityPart` values on one derived river-bank identity. An
+unmeasured rim has no height; `relief` in `sources/provenance.json` records the statistic name
+`median of sampled bank rise`, pinned inputs, tool hashes, output counts, bytes and SHA-256 values. Measurement rules
+live in the [data runbook](../docs/runbooks/data.md#relief-sources), allowed values in `editor-layers.json`, and the
+decision in [ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md). River banks are named relative to the
 DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum. The nine configured kinds are `park`, `garden`,
 `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground`; eight occur in the current `land.geojson`

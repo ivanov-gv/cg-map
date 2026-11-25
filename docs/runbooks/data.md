@@ -60,19 +60,19 @@ Canyon rims keep only samples where the bank rises at least 8 m above the river 
 (`CANYON_BANK_RISE_METRES` and `CANYON_SEARCH_DISTANCE_METRES` in `data/tools/relief/terrain.py`). The thresholds
 exclude ordinary shallow banks; a 30 m DEM cannot reliably separate smaller rises from bank roughness. The join and
 minimum-length constants in the same module exist because a 60 m gap is usually one bad pixel or small bend, while a
-sub-100 m line after joining reads as speckle. `CANYON_BANK_SAMPLE_NEARBY_METRES` names half that search distance once
-for cliff-part selection and height association. Each finished rim publishes the median of its samples as one
-whole-metre `height`, rounded with halves upward; an OSM cliff takes that value only from DEM samples measured beside
-that cliff part, not from a distant rise elsewhere on a joined bank, and otherwise carries no height. An editor-added
-rim states only that optional `height`: the importer assigns its identity, kind, `editor-drawn` method and length, and
-refuses a changeset that states `river`, `bank` or `method`. A measured height outside the contract's range fails
-validation rather than becoming absent. The statistic and rounding, slope aspect and flat-ground rules live in the
-relief tools and are described by [ADR 0040](../decisions/0040-one-measured-canyon-rim-height.md). Green kinds come from
-the single `GREEN_KINDS` constant in `data/tools/relief/derivations.py`, aligned with the land-kind enum in
-`source-land-water.schema.json`; eight of the nine configured kinds occur in the current `land.geojson` (`garden` is
-absent). Green kinds, minimum slope area, the retired ridge radius, layer sources, the ridge/rim thresholds and the
-height statistic are recorded in the `relief` block of `data/sources/provenance.json`; features carry object facts only.
-The contract owns the allowed height range.
+sub-100 m line after joining reads as speckle. Cliff-part selection keeps its half-search-reach constant. Height
+association measures that reach in metres in both directions, so an east offset and a north offset of the same length
+are judged alike. Each finished rim publishes the median of its samples as one whole-metre `height`, rounded with halves
+upward; an OSM cliff takes that value only from DEM samples measured beside that cliff part, not from a distant rise
+elsewhere on a joined bank, and otherwise carries no height. An editor-added rim states only that optional `height`: the
+importer assigns its identity, kind, `editor-drawn` method and length, and refuses a changeset that states `river`,
+`bank` or `method`. A measured height outside the contract's range fails validation rather than becoming absent. The
+statistic and rounding, slope aspect and flat-ground rules live in the relief tools and are described by
+[ADR 0040](../decisions/0040-one-measured-canyon-rim-height.md). Green kinds come from the single `GREEN_KINDS` constant
+in `data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
+nine configured kinds occur in the current `land.geojson` (`garden` is absent). Green kinds, minimum slope area, the
+retired ridge radius, layer sources, the ridge/rim thresholds and the height statistic are recorded in the `relief`
+block of `data/sources/provenance.json`; features carry object facts only. The contract owns the allowed height range.
 
 Relief files are edited under their own modes; canyon rims now allow add, change and delete
 ([ADR 0037](../decisions/0037-every-layer-editable.md) outcome). `data/tools/editor-bundle.mjs` filters the bundle to

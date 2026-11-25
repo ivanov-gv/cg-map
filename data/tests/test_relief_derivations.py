@@ -94,6 +94,7 @@ class ReliefDerivationTests(unittest.TestCase):
     def test_a_rim_height_is_the_median_sample_rounded_to_whole_metres(self):
         rises = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
         latitude_metres = 111_320
+        # Forty metres is about 0.00036 degrees at this latitude.
         samples = [
             (index * 40, Point(0.0, 5.0 + index * 0.00036), rise)
             for index, rise in enumerate(rises)
@@ -114,6 +115,48 @@ class ReliefDerivationTests(unittest.TestCase):
         self.assertIsNone(derivations._rim_height([]))
         self.assertEqual(derivations._rim_height([2601.0]), 2601)
 
+        segment = derivations.LineString([(0.0, 5.0), (0.001, 5.0)])
+
+        def properties_for(rises):
+            samples = [(Point(0.0, 5.0), rise) for rise in rises]
+            features = derivations._dem_rim_features(
+                [(segment, samples)], 'Ribnica', 'left', latitude_metres, 80_000
+            )
+            return features[0]['properties']
+
+        self.assertNotIn('height', properties_for([]))
+        self.assertEqual(properties_for([10.0, 21.0])['height'], 16)
+        self.assertEqual(properties_for([10.0, 15.0])['height'], 13)
+
+    def test_nearby_cliff_samples_measure_reaches_in_metres(self):
+        east_west = derivations.LineString([(0.0, 5.0), (0.001, 5.0)])
+        north_south = derivations.LineString([(0.0, 5.0), (0.0, 5.001)])
+        # 29 m lies inside a 30 m reach and 31 m lies outside, east and north alike.
+        north = [(Point(0.0, 5.0002605), 3.0), (Point(0.0, 5.0002785), 4.0)]
+        east = [(Point(0.0003625, 5.0), 1.0), (Point(0.0003875, 5.0), 2.0)]
+        north_samples = derivations._nearby_rim_samples(
+            east_west, [(east_west, north)], 111_320, 80_000, 30
+        )
+        east_samples = derivations._nearby_rim_samples(
+            north_south, [(north_south, east)], 111_320, 80_000, 30
+        )
+        self.assertEqual([rise for _, rise in north_samples], [3.0])
+        self.assertEqual([rise for _, rise in east_samples], [1.0])
+
+    def test_joined_rims_carry_only_their_own_samples(self):
+        first = derivations.LineString([(0.0, 0.0), (0.001, 0.0)])
+        second = derivations.LineString([(0.0012, 0.0), (0.0022, 0.0)])
+        # This run crosses the joined line but is not part of it.
+        crossing = derivations.LineString([(0.0015, 0.001), (0.0015, -0.001)])
+        segments = [
+            (first, [(Point(0.0005, 0.0), 10.0)]),
+            (second, [(Point(0.0015, 0.0), 20.0)]),
+            (crossing, [(Point(0.0015, 0.0), 100.0)]),
+        ]
+        cleaned = derivations._clean_rim_segments(segments, 111_320, 80_000)
+        self.assertEqual([rise for _, rise in cleaned[0][1]], [10.0, 20.0])
+        self.assertEqual([rise for _, rise in cleaned[1][1]], [100.0])
+
     def test_an_osm_cliff_takes_height_only_from_nearby_bank_samples(self):
         part = derivations.LineString([(0.0, 5.0001), (0.002, 5.0001)])
         cliff = {'entityId': 'way/7', 'entityVersion': 3, 'coordinates': list(part.coords)}
@@ -128,6 +171,7 @@ class ReliefDerivationTests(unittest.TestCase):
             (Point(0.012, 5.0002), 100.0),
             (Point(0.014, 5.0002), 100.0),
         ]
+
         def properties_for(segments):
             features = derivations._cliff_rim_features(
                 [(part, cliff)], 'Ribnica', 'left', latitude_metres, 80_000, segments

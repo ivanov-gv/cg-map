@@ -166,10 +166,44 @@ const reliefKinds = {
 };
 const copernicusAttribution = '© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved';
 
+function canyonRimRules(contractsDirectory) {
+  const rimDefinition = readContract(contractsDirectory, 'relief.schema.json').$defs.canyonRim.then;
+  const height = readContract(contractsDirectory, 'editor-layers.json').layers['canyon-rims.geojson'].properties.height;
+  return {properties: rimDefinition.properties, height};
+}
+
+function validateCanyonRim(properties, label, rules) {
+  const isLocal = isLocalId(properties.entityId);
+  const isDrawn = properties.method === 'editor-drawn';
+  requireValue(isLocal === isDrawn, `${label}: ${isDrawn ? 'a drawn rim must use local identity' : 'a local rim must be editor-drawn'}`);
+  requireValue(rules.properties.method.enum.includes(properties.method), `${label}: invalid rim method`);
+  if (isDrawn) {
+    requireValue(!('river' in properties), `${label}: a drawn rim cannot name a river`);
+    requireValue(!('bank' in properties), `${label}: a drawn rim cannot name a bank`);
+  } else {
+    requireValue(rules.properties.river.enum.includes(properties.river) && rules.properties.bank.enum.includes(properties.bank), `${label}: invalid river bank`);
+  }
+  const {height} = properties;
+  requireValue(height === undefined || (
+    Number.isInteger(height) && height >= rules.height.minimum && height <= rules.height.maximum
+  ), `${label}: invalid rim height`);
+  requireValue(Number.isFinite(properties.lengthMetres) && properties.lengthMetres >= 0, `${label}: invalid rim length`);
+  requireValue(!('entityPart' in properties) || (Number.isInteger(properties.entityPart) && properties.entityPart >= 0), `${label}: invalid rim part`);
+  for (const key of ['bankDefinition', 'cliffWays', 'cliffLengthMetres', 'demLengthMetres', 'segmentLengthMetres', 'segmentBankRiseMetres', 'minimumBankRiseMetres', 'searchDistanceMetres', 'searchStepMetres']) {
+    requireValue(!(key in properties), `${label}: rim build parameters belong in provenance`);
+  }
+  if (properties.method === 'osm-cliff') {
+    requireValue(/^way\/[1-9][0-9]*$/.test(properties.entityId), `${label}: osm cliff rim must keep OSM identity`);
+    requireValue(Number.isInteger(properties.entityVersion) && properties.entityVersion > 0, `${label}: osm cliff rim must keep OSM version`);
+  }
+  if (properties.method === 'dem-canyon-bank') {
+    requireValue(/^derived:/.test(properties.entityId), `${label}: dem canyon rim must use derived identity`);
+  }
+}
+
 export function validateRelief(data, {label, contractsDirectory}) {
   const kind = reliefKinds[label];
-  const rimProperties = readContract(contractsDirectory, 'relief.schema.json').$defs.canyonRim.then.properties;
-  const heightMaximum = rimProperties.height.maximum;
+  const rimRules = kind === 'canyon-rim' ? canyonRimRules(contractsDirectory) : null;
   const count = validateCollection(data, {label, geometryTypes: reliefGeometryTypes[label], requireKind: true, contractsDirectory});
   for (const feature of data.features) {
     const properties = feature.properties;
@@ -211,30 +245,7 @@ export function validateRelief(data, {label, contractsDirectory}) {
         requireValue(typeof properties.summitName === 'string', `${label}: invalid summit name`);
       }
     }
-    if (kind === 'canyon-rim') {
-      const isDrawn = properties.method === 'editor-drawn';
-      if (isDrawn) {
-        requireValue(isLocalId(properties.entityId), `${label}: a drawn rim must use local identity`);
-        requireValue(!('river' in properties), `${label}: a drawn rim cannot name a river`);
-        requireValue(!('bank' in properties), `${label}: a drawn rim cannot name a bank`);
-      } else {
-        requireValue(rimProperties.river.enum.includes(properties.river) && rimProperties.bank.enum.includes(properties.bank), `${label}: invalid river bank`);
-      }
-      requireValue(rimProperties.method.enum.includes(properties.method), `${label}: invalid rim method`);
-      requireValue(!('height' in properties) || (Number.isInteger(properties.height) && properties.height >= 0 && properties.height <= heightMaximum), `${label}: invalid rim height`);
-      requireValue(Number.isFinite(properties.lengthMetres) && properties.lengthMetres >= 0, `${label}: invalid rim length`);
-      requireValue(!('entityPart' in properties) || (Number.isInteger(properties.entityPart) && properties.entityPart >= 0), `${label}: invalid rim part`);
-      for (const key of ['bankDefinition', 'cliffWays', 'cliffLengthMetres', 'demLengthMetres', 'segmentLengthMetres', 'segmentBankRiseMetres', 'minimumBankRiseMetres', 'searchDistanceMetres', 'searchStepMetres']) {
-        requireValue(!(key in properties), `${label}: rim build parameters belong in provenance`);
-      }
-      if (properties.method === 'osm-cliff') {
-        requireValue(/^way\/[1-9][0-9]*$/.test(properties.entityId), `${label}: osm cliff rim must keep OSM identity`);
-        requireValue(Number.isInteger(properties.entityVersion) && properties.entityVersion > 0, `${label}: osm cliff rim must keep OSM version`);
-      }
-      if (properties.method === 'dem-canyon-bank') {
-        requireValue(/^derived:/.test(properties.entityId), `${label}: dem canyon rim must use derived identity`);
-      }
-    }
+    if (kind === 'canyon-rim') validateCanyonRim(properties, label, rimRules);
   }
   return count;
 }
