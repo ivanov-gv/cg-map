@@ -148,6 +148,9 @@ test('one level is shown at a time, and roads under it are neither picked nor jo
   await expect(picker.getByRole('button')).toHaveText(['All', '0', '-1']);
   await picker.getByRole('button', {name: 'Level 0'}).click();
   await expect(picker.getByRole('button', {name: 'Level 0'})).toHaveAttribute('aria-pressed', 'true');
+  // Below the ground Main street still shows where it comes up and joins Side street.
+  await picker.getByRole('button', {name: 'Level -1'}).click();
+  await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'joined']);
   await picker.getByRole('button', {name: 'All levels'}).click();
   await tapAt(page, [-3, 0]);
   await expect(page.locator('#selection-title')).toHaveText('Main street');
