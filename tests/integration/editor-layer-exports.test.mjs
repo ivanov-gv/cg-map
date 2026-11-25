@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HeadlessEditor, newLocalId} from '../editor-exports.mjs';
+import {behaviorOf} from '../../apps/editor/src/layer-behaviors.js';
 import {disconnectEdits, junctionEdits, splitEdits} from '../../apps/editor/src/road-edits.js';
 import {jointAt} from '../../apps/editor/src/road-graph.js';
 import {turnKey, turnsAt} from '../../apps/editor/src/road-junctions.js';
@@ -189,4 +190,114 @@ test('a deleted road takes its turn rules out of the sources', async testContext
   await editor.exportAndImport();
   const rules = editor.written('turn-restrictions.json');
   assert.ok(!rules.some(({properties}) => properties.from === from || properties.to === from));
+});
+
+const square = ([longitude, latitude], size) => [
+  [longitude, latitude],
+  [longitude + size, latitude],
+  [longitude + size, latitude + size],
+  [longitude, latitude + size],
+  [longitude, latitude]
+].map(point => point.map(roundDegrees));
+
+test('a new area with a hole and a new protected area pass', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const meadow = {
+    type: 'Feature',
+    properties: {kind: 'grass', name: 'New meadow'},
+    geometry: {type: 'Polygon', coordinates: [square([19.2, 42.4], 0.004), square([19.201, 42.401], 0.001).toReversed()]}
+  };
+  assert.equal(editor.apply('land.geojson', newLocalId(), meadow), null);
+  const reserve = {
+    type: 'Feature',
+    properties: {kind: 'protected-area', osmTag: 'leisure=nature_reserve', name: 'New reserve'},
+    geometry: {type: 'Polygon', coordinates: [square([19.21, 42.41], 0.004)]}
+  };
+  assert.equal(editor.apply('protected-areas.geojson', newLocalId(), reserve), null);
+  await editor.exportAndImport();
+  assert.ok(editor.written('land.geojson').some(({geometry, properties}) => properties.name === 'New meadow' && geometry.coordinates.length === 2));
+  assert.ok(editor.written('protected-areas.geojson').some(({properties}) => properties.name === 'New reserve'));
+});
+
+// A couple of metres: the real coast has details of ten, which a longer move of one point would cross.
+const movedMiddle = ({geometry}) => {
+  const middle = geometry.coordinates.length >> 1;
+  const coordinates = geometry.coordinates.map((point, index) =>
+    index === middle ? point.map(value => roundDegrees(value + 0.00002)) : point
+  );
+  return {...geometry, coordinates};
+};
+
+const isLongLine = ({geometry}) => geometry.coordinates.length > 10;
+const isCoastline = ({properties, geometry}) => properties.kind === 'coastline' && geometry.coordinates.length > 4;
+
+test('wherever a coastline is moved, the sea, the country, the border and a municipality follow or it is refused', testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const coastlines = editor.session.workingEntries('water.geojson').filter(({feature}) => isCoastline(feature));
+  // Every tenth of them: each takes a moment.
+  const sample = coastlines.filter((_entry, index) => index % 10 === 0);
+  const {problem, companionEdits} = behaviorOf('water.geojson');
+  let followedCount = 0;
+  for (const {filename, key, feature} of sample) {
+    const edit = {filename, key, before: feature, feature: {...feature, geometry: movedMiddle(feature)}, extras: {}};
+    if (problem(edit, editor.context)) continue;
+    followedCount += 1;
+    const companions = companionEdits(edit, editor.context);
+    const files = filesOf(companions);
+    const isSeaMoved = companions.some(({after}) => after.properties.kind === 'ocean');
+    assert.ok(isSeaMoved, `the sea follows coastline ${key}`);
+    for (const follower of ['border-edges.geojson', 'land.geojson', 'municipalities.geojson']) {
+      assert.ok(files.includes(follower), `${follower} follows coastline ${key}`);
+    }
+  }
+  assert.ok(followedCount > sample.length * 0.9, `${followedCount} of ${sample.length} coastlines can be moved`);
+});
+
+test('the coast point where an inland border meets the sea stays, and the one beside it moves', testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const isSeaBorder = ({properties}) => [properties.left, properties.right].includes('sea');
+  const inlandEnds = editor
+    .features('border-edges.geojson')
+    .filter(feature => !isSeaBorder(feature))
+    .flatMap(({geometry}) => [geometry.coordinates[0], geometry.coordinates.at(-1)]);
+  const endNames = new Set(inlandEnds.map(String));
+  const coast = editor.find(
+    'water.geojson',
+    feature => isCoastline(feature) && isLongLine(feature) && endNames.has(String(feature.geometry.coordinates.at(-1)))
+  );
+  const {coordinates} = coast.feature.geometry;
+  const movedAt = movedIndex => ({
+    ...coast.feature,
+    geometry: {
+      ...coast.feature.geometry,
+      coordinates: coordinates.map((point, index) =>
+        index === movedIndex ? point.map(value => roundDegrees(value + 0.00002)) : point
+      )
+    }
+  });
+  const junctionIndex = coordinates.length - 1;
+  assert.match(editor.apply(coast.filename, coast.key, movedAt(junctionIndex)), /border meets the sea/);
+  assert.equal(editor.apply(coast.filename, coast.key, movedAt(junctionIndex - 1)), null);
+});
+
+test('a moved coastline passes the importer with everything that follows it', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const coast = editor.find('water.geojson', isCoastline);
+  assert.equal(editor.apply(coast.filename, coast.key, {...coast.feature, geometry: movedMiddle(coast.feature)}), null);
+  const operations = await editor.exportAndImport();
+  const expected = ['border-edges.geojson', 'land.geojson', 'municipalities.geojson', 'water.geojson'];
+  assert.deepEqual(filesOf(operations), expected);
+});
+
+test('a river moved at its joint and a reversed one pass', async testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const isRiver = ({properties, geometry}) => properties.kind === 'river' && geometry.type === 'LineString' && geometry.coordinates.length > 4;
+  const river = editor.find('water.geojson', isRiver);
+  const reversed = {...river.feature.geometry, coordinates: river.feature.geometry.coordinates.toReversed()};
+  assert.equal(editor.apply(river.filename, river.key, {...river.feature, geometry: reversed}), null);
+  const other = editor.find('water.geojson', (feature, key) => isRiver(feature) && key !== river.key);
+  assert.equal(editor.apply(other.filename, other.key, {...other.feature, geometry: movedMiddle(other.feature)}), null);
+  await editor.exportAndImport();
+  const written = editor.written('water.geojson').find(({properties}) => properties.entityId === river.feature.properties.entityId);
+  assert.ok(written);
 });

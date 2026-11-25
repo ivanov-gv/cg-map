@@ -12,8 +12,10 @@ import {EditSession} from '../apps/editor/src/edit-session.js';
 import {behaviorOf, registerBehaviors} from '../apps/editor/src/layer-behaviors.js';
 import {addressBehaviors} from '../apps/editor/src/layer-addresses.js';
 import {buildingBehaviors} from '../apps/editor/src/layer-buildings.js';
+import {greenBehaviors} from '../apps/editor/src/layer-green.js';
 import {placeBehaviors} from '../apps/editor/src/layer-places.js';
 import {roadBehaviors} from '../apps/editor/src/layer-roads.js';
+import {waterBehaviors} from '../apps/editor/src/layer-water.js';
 import {operationProblem} from '../apps/editor/src/layer-rules.js';
 import {collectionOf} from '../apps/editor/src/source-records.js';
 
@@ -23,7 +25,15 @@ const envelope = {id: 'layer-export', createdAt: now, author: 'Integration Test'
 const rules = readContractJSON('editor-layers.json');
 const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
 
-for (const behaviors of [buildingBehaviors, addressBehaviors, placeBehaviors, roadBehaviors]) registerBehaviors(behaviors);
+const layerBehaviors = [
+  buildingBehaviors,
+  addressBehaviors,
+  placeBehaviors,
+  roadBehaviors,
+  greenBehaviors,
+  waterBehaviors
+];
+layerBehaviors.forEach(behaviors => registerBehaviors(behaviors));
 
 export const newLocalId = () => `local:${crypto.randomUUID()}`;
 

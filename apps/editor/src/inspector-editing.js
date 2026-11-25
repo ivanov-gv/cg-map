@@ -236,7 +236,7 @@ export class InspectorEditing {
       origins: this.#transaction.origins,
       setExtras: whileOpen(extras => this.#setExtras(extras)),
       setFeature: whileOpen(feature => this.#setFeature(feature)),
-      setGeometry: whileOpen(geometry => this.#update(withGeometry(this.#transaction, geometry))),
+      setGeometry: whileOpen(geometry => this.#setFeature({...this.#currentFeature(), geometry})),
       startTool: whileOpen(tool => this.#startTool(tool)),
       hasUnappliedEdit: () => this.hasUnappliedEdit,
       showProblem: whileOpen(message => this.#refuse(message)),
@@ -459,7 +459,11 @@ export class InspectorEditing {
       this.#finishEdit(() => this.#context.onMarkedForDeletion(entry, title));
       return;
     }
-    const {message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    const {problem, message, edits, options = []} = this.#behavior.deletion(entry, behaviorContext);
+    if (problem) {
+      this.showProblem(problem);
+      return;
+    }
     const ownEdit = {filename: entry.filename, key: entry.key, after: null};
     confirmDeletion({title: `Delete ${title}?`, message, options}, async option => {
       const optionEdits = option?.resolve ? await option.resolve() : (option?.edits ?? []);
@@ -481,6 +485,8 @@ export class InspectorEditing {
   leaveMode() {
     if (!this.#transaction?.tool) return;
     this.#update(withTool(this.#transaction, null));
+    // What the inspector says about the object may depend on where it is now.
+    this.#renderForm();
     this.#context.showInspector();
   }
 

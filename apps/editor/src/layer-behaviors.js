@@ -86,7 +86,15 @@ const drawChoices = {
     {label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}},
     {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}}
   ],
-  green: [{label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}}],
+  green: [
+    {label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}},
+    {
+      label: 'Draw protected area',
+      filename: 'protected-areas.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'protected-area', osmTag: 'boundary=protected_area'}
+    }
+  ],
   water: [
     {label: 'Draw water area', filename: 'water.geojson', shape: 'Polygon', properties: {}},
     {label: 'Draw river', filename: 'water.geojson', shape: 'LineString', properties: {}}

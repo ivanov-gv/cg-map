@@ -56,10 +56,16 @@ export const nearestToGround = levels =>
 
 const boundsByFeature = new WeakMap();
 
-function boundsOf(feature) {
+// Every point of a line or of the outlines of an area.
+const nestedPointLevels = {Polygon: 1, MultiPolygon: 2};
+const pointsOf = ({type, coordinates}) => coordinates.flat(nestedPointLevels[type] ?? 0);
+
+// The box around a line or an area.
+export function boundsOf(feature) {
   if (!boundsByFeature.has(feature)) {
-    const longitudes = feature.geometry.coordinates.map(([longitude]) => longitude);
-    const latitudes = feature.geometry.coordinates.map(([, latitude]) => latitude);
+    const points = pointsOf(feature.geometry);
+    const longitudes = points.map(([longitude]) => longitude);
+    const latitudes = points.map(([, latitude]) => latitude);
     const bounds = [Math.min(...longitudes), Math.min(...latitudes), Math.max(...longitudes), Math.max(...latitudes)];
     boundsByFeature.set(feature, bounds);
   }
@@ -69,7 +75,9 @@ function boundsOf(feature) {
 // The entries whose box reaches into [west, south, east, north]. Boxes are kept, so this stays quick on every move.
 export function entriesWithin(entries, [west, south, east, north]) {
   return entries.filter(({feature}) => {
-    if (!feature.geometry || feature.geometry.coordinates.length < 2) return false;
+    const {geometry} = feature;
+    const isUnfinishedLine = geometry?.type === 'LineString' && geometry.coordinates.length < 2;
+    if (!geometry || isUnfinishedLine) return false;
     const [left, bottom, right, top] = boundsOf(feature);
     return left <= east && right >= west && bottom <= north && top >= south;
   });

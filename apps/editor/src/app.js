@@ -26,8 +26,10 @@ import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './
 import {buildingBehaviors} from './layer-buildings.js';
 import {junctionBehaviors, junctionFile, junctionRule} from './layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layer-places.js';
+import {greenBehaviors} from './layer-green.js';
 import {layerJoints, levelFacts, levelsByFile} from './layer-joints.js';
 import {roadBehaviors} from './layer-roads.js';
+import {waterBehaviors} from './layer-water.js';
 import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
 import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
 import {hideModeBar, showModeBar} from './mode-bar.js';
@@ -52,6 +54,8 @@ registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);
 registerBehaviors(placeBehaviors);
 registerBehaviors(roadBehaviors);
+registerBehaviors(greenBehaviors);
+registerBehaviors(waterBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 

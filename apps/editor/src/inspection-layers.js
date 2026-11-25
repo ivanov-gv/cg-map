@@ -42,6 +42,31 @@ function inspectionLayers() {
     lineLayer('editor-country-outlines', 'context-countries.geojson', '#aeac98', 1),
     lineLayer('editor-borders', 'border-edges.geojson', '#7d6a8f', 1.5, [4, 2]),
     lineLayer('editor-contours', 'contours.geojson', '#b59a72', 1),
+    {
+      id: 'editor-flow',
+      type: 'symbol',
+      minzoom: 14,
+      filter: [
+        'all',
+        fromFile('water.geojson'),
+        ['==', ['geometry-type'], 'LineString'],
+        ['!=', ['get', 'kind'], 'coastline']
+      ],
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': 80,
+        'text-field': '›',
+        'text-font': textFont,
+        'text-size': 18,
+        'text-keep-upright': false,
+        'text-allow-overlap': true
+      },
+      paint: {'text-color': '#2c6fb0', 'text-halo-color': haloColor, 'text-halo-width': 1.5}
+    },
+    {
+      ...lineLayer('editor-coastline', 'water.geojson', '#2c6fb0', 1),
+      filter: ['all', fromFile('water.geojson'), ['==', ['get', 'kind'], 'coastline']]
+    },
     lineLayer('editor-ridges', 'ridges.geojson', '#8a6d46', 2),
     lineLayer('editor-rims', 'canyon-rims.geojson', '#8b8276', 2),
     lineLayer('editor-protected-areas', 'protected-areas.geojson', '#5f8f57', 1.5, [4, 2]),
