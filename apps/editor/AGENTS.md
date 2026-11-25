@@ -5,7 +5,7 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 [readability](../../docs/engineering/readability.md), and [contracts](../../packages/contracts/README.md).
 
 - Layers are the wiki's ten, listed with their files in src/editor-layers.js. One layer is active; a command or undo
-  step may change only that layer's files, as one step
+  step may change only that layer's files, as one step; an imported changeset is the exception and is taken back whole
   ([ADR 0038](../../docs/decisions/0038-editor-layers-span-files.md)). What a layer does differently belongs in its
   behavior (src/layer-behaviors.js), never in app.js.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
