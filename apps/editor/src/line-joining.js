@@ -1,7 +1,6 @@
 // Putting a point of a line where it joins another one: while drawing, while dragging, and taking it apart again.
 import {removeVertex, roundedCoordinate} from './geometry-editing.js';
 import {coordinateAtOffset, distanceMetres, metricOffset} from './geometry-measures.js';
-import {pointKey} from './road-graph.js';
 
 const joinDistancePixels = 12;
 // How far a disconnected end is pulled back along its line, so that nobody reads it as joined.
@@ -18,16 +17,6 @@ export function joiningPoint(coordinate, candidates, map) {
   const existingPoint = nearest.points.find(isWithinReach);
   if (existingPoint) return existingPoint;
   return isWithinReach(nearest.coordinate) ? roundedCoordinate(nearest.coordinate) : null;
-}
-
-// Which point of a line a drag moves, or null when it moves the whole line.
-export function draggedIndex(geometry, previousGeometry) {
-  const previous = previousGeometry.coordinates;
-  if (previous.length !== geometry.coordinates.length) return null;
-  const movedIndexes = geometry.coordinates.flatMap((point, index) =>
-    pointKey(point) === pointKey(previous[index]) ? [] : [index]
-  );
-  return movedIndexes.length === 1 ? movedIndexes[0] : null;
 }
 
 export const withPoint = (geometry, index, coordinate) => ({

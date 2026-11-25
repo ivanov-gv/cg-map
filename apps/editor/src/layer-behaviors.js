@@ -16,7 +16,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   isViewOnly(context)                         the object can be read and not changed here
 //   isReshapable(context)                       whether its shape can be changed on this screen
 //   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
-//   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry}
+//   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry, origins,
+//                                             draggedIndex}, the point of a line that is dragged or null
 //   closesLines                                 a drawn line ends on its first point when that is tapped
 //   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
 //   prepared(feature, context, edit)            the feature as Apply will record it
@@ -28,8 +29,8 @@ import {kindLabel, objectName} from './object-names.js';
 //   deletion(entry, context)                    {problem} when it must stay, else {message, edits, options}. Options are
 //                                               [{label, edits or async resolve()}]; resolve() may ask for more on the
 //                                               map and gives the edits, or null to keep the object
-// problem and companionEdits get change = {filename, key, feature, before, extras}. An edit is the open one, as
-// InspectorEditing describes it in #editContext. The context is what app.js gives in behaviorContext().
+// problem and companionEdits get change = {filename, key, feature, before, extras, origins}; origins are those of
+// line-origins.js. An edit is the open one, as InspectorEditing describes it in #editContext. The context is what app.js gives in behaviorContext().
 const behaviors = new Map();
 
 const behaviorKey = (filename, layerId) => (layerId ? `${layerId}/${filename}` : filename);

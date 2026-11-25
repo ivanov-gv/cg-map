@@ -6,13 +6,13 @@ not describe the current application.
 
 The reviewed OSM extract timestamp is 2026-11-20T21:21:21Z. Display geometry remains simplified and rounded, but detail
 now covers the whole city within `[19.15, 42.37, 19.34, 42.51]`, alongside countrywide major roads, rivers, canals,
-attractions and the country outline. There are 43,978 buildings, 21,246 road features, 612 land features and 1,795 water
+attractions and the country outline. There are 43,978 buildings, 21,229 road features, 612 land features and 1,795 water
 features. The land file has 605 extracted green areas, one country outline and six preserved context countries; the
 water file has 1,122 polygons (including one derived ocean polygon) and 673 waterway or coastline lines. A
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,563,700
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,562,423
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -195,7 +195,7 @@ snapshot hashes remain in their own provenance files.
 | `buildings.geojson`          | 43,978 footprints                            | 14,601,929 |
 | `building-entrances.geojson` | 157 entrance nodes                           | 41,359     |
 | `building-labels.geojson`    | 1,207 labels                                 | 403,046    |
-| `roads.geojson`              | 21,246 road features                         | 7,932,196  |
+| `roads.geojson`              | 21,229 road features                         | 7,927,583  |
 | `road-nodes.geojson`         | 3,660 signal and crossing nodes              | 665,177    |
 | `turn-restrictions.json`     | 286 restriction relations                    | 39,365     |
 | `land.geojson`               | 612 areas and outlines                       | 493,167    |
@@ -215,8 +215,8 @@ snapshot hashes remain in their own provenance files.
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-64a035aaabc010af.pmtiles`, 23,563,700 bytes with SHA-256
-`64a035aaabc010af69653334ae567232d0f776f6a694325c0506e2a6f8342009`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-ec969666e13c3146.pmtiles`, 23,562,423 bytes with SHA-256
+`ec969666e13c31468d73cb3adc350820e0ac91d191ce2f78e216943b328a6338`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,
