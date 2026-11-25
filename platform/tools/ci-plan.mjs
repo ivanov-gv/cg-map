@@ -165,7 +165,7 @@ export const EDITOR_BROWSER_AREAS = {
   },
   layers: {
     specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
-    // 2 shards: layers took 122 s with 3 of its 8 specs (#417); 2 keep each near that.
+    // 2 shards: layers took 330 s with 7 specs in one (#421); 2 took 201 and 139 s with 8 (#422).
     jobs: 2,
     specFiles: LAYER_SPECS,
     sources: EDITING_ONLY_SOURCES
