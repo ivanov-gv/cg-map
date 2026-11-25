@@ -8,7 +8,6 @@ const fieldLabels = {
   'name:sr-Latn': 'Name in Latin script',
   'addr:street': 'Street',
   'addr:housenumber': 'House number',
-  display_number: 'Display number',
   building_number: 'Building number',
   nohousenumber: 'Building has no number',
   building: 'Building type',
