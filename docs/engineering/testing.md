@@ -13,7 +13,7 @@ regression that no other test catches. Readability and the language guidelines s
 3. **Is this the cheapest layer that can catch it?** Logic without a browser (state machines, parsers, formatters,
    filters, sorting, URL and attribute handling) is a unit test, in milliseconds. A browser test only checks what needs
    a real browser: layout that depends on CSS, input events, map rendering, the service worker, navigation and history.
-   The [file name](javascript.md#tests) says which layer a test belongs to.
+   In an app or map-core the [file name](javascript.md#tests) says which layer a test belongs to.
 4. **Does it test our code?** Not the browser, MapLibre, Playwright, Node or a library, and not the test's own helpers.
 5. **Will it break only when behaviour breaks?** It must not depend on data contents another project owns (use a
    [pinned version](../system-architecture/architecture.md#build-and-runtime-flow) or the project's own fixtures), on
