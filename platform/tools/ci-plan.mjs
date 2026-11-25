@@ -285,7 +285,6 @@ const ROOT_MAKEFILE_FOLDERS = [
 ];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
 const READABILITY_PROBE = 'platform/tools/eslint-readability-probe.mjs';
-const READABILITY_PROBE_IMPORT = /import\s+[^;]+?\sfrom\s+['"][^'"]*eslint-readability-probe\.mjs['"]/;
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
 // Consumers are discovered, not listed: each known project contributes its config when the file exists. The CLI runs
 // at the repository root; tests inject a config list to prove a new config joins without a planner code change.
@@ -298,24 +297,6 @@ function configPipeline(file, lintConfigs) {
   if (!file.endsWith(`/${ESLINT_CONFIG_NAME}`)) return '';
   const project = file.slice(0, -`/${ESLINT_CONFIG_NAME}`.length);
   return lintConfigs.includes(file) ? PROJECT_PIPELINES[project] ?? '' : '';
-}
-// Returns every file below a directory, or none when the project has no tests directory.
-function walkFiles(directory) {
-  if (!fs.existsSync(directory)) return [];
-  return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
-    const file = path.join(directory, entry.name);
-    return entry.isDirectory() ? walkFiles(file) : [file];
-  });
-}
-// The app readability tests import the probe. Find their projects from those imports, not from a hand-kept list.
-function discoveredProbeConsumers(root = process.cwd()) {
-  return Object.keys(PROJECT_PIPELINES)
-    .filter(project =>
-      walkFiles(path.join(root, project, 'tests')).some(
-        file => file.endsWith('.mjs') && READABILITY_PROBE_IMPORT.test(fs.readFileSync(file, 'utf8'))
-      )
-    )
-    .map(project => PROJECT_PIPELINES[project]);
 }
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
@@ -409,10 +390,10 @@ function toolingPlan(consumers) {
   return {folders: FOLDERS.filter(folder => selected.has(folder)), areas: [], editorAreas: []};
 }
 
-export function classify(file, lintConfigFiles = discoveredLintConfigs(), probeConsumers = discoveredProbeConsumers()) {
-  if (file === SHARED_ESLINT_RULES)
+export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
+  // Both shared modules are consumed by every project that lints; their configs supply the selection. No browser area.
+  if (file === SHARED_ESLINT_RULES || file === READABILITY_PROBE)
     return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
-  if (file === READABILITY_PROBE) return toolingPlan(probeConsumers);
   const pipeline = configPipeline(file, lintConfigFiles);
   if (pipeline) {
     // Until PR #465 changes the editor's selection, its config keeps the folder plan it has today. Every other config
@@ -427,10 +408,7 @@ export function classify(file, lintConfigFiles = discoveredLintConfigs(), probeC
 export function planChanges(files, options = {}) {
   if (files.length === 0) return {...EVERYTHING, everything: true};
   const lintConfigFiles = options.lintConfigFiles ?? discoveredLintConfigs();
-  const probeConsumers = files.includes(READABILITY_PROBE)
-    ? options.probeConsumers ?? discoveredProbeConsumers()
-    : [];
-  const results = files.map(file => classify(file, lintConfigFiles, probeConsumers));
+  const results = files.map(file => classify(file, lintConfigFiles));
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
   const editorAreasOf = result => (result.folders.includes('apps-editor') ? (result.editorAreas ?? ALL_EDITOR_AREAS) : []);

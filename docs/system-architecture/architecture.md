@@ -41,7 +41,7 @@ Projects depend on each other only through these concrete contracts:
 | Go host `run` target                                                  | services/backend   | apps/web `dev`                                                                                                              |
 | Static host and per-worktree ports                                    | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
 | Shared ESLint rules, platform/eslint-rules.mjs                        | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, platform, tests |
-| Shared readability probe, platform/tools/eslint-readability-probe.mjs | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
+| Shared readability probe, platform/tools/eslint-readability-probe.mjs | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, platform, tests |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
