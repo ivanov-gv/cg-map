@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {junctionBehaviors, junctionEntry, junctionFile} from '../src/layer-junctions.js';
 import {originsAfter, movedPoints, startingOrigins} from '../src/line-origins.js';
-import {roadBehaviors} from '../src/layer-roads.js';
+import {freePointsWithLevel, roadBehaviors} from '../src/layer-roads.js';
 import {
   companionsOfRoad,
   disconnectEdits,
@@ -312,6 +312,42 @@ test('a passing road stays on its level, and what ends at it stays joined to it'
   assert.deepEqual([follower.properties.endNode, follower.properties.endLevel], [5, 0]);
   assert.deepEqual(stepsOf(follower.geometry.coordinates.at(-1)), [1, -1]);
   assert.equal(afterOf(edits, '2'), undefined, 'the bridge above gets no point');
+});
+
+test('a junction moved onto a road of another level is joined to it there, and to nothing of its old level', () => {
+  const ends = [road([[0, 0], [1, 0]], {endNode: 5, endLevel: 0}), road([[1, 0], [1, 1]], {startNode: 5, startLevel: 0})];
+  const bridge = road([[2, -1], [2, 1]], {layer: '1'});
+  const context = contextWith({roads: [...ends, bridge]});
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  const {edits} = junctionEdits(joint, at(2, 0), {}, context);
+  assert.deepEqual(afterOf(edits, '2').geometry.coordinates.map(stepsOf), [[2, -1], [2, 0], [2, 1]]);
+  assert.deepEqual([afterOf(edits, '0').properties.endLevel, afterOf(edits, '1').properties.startLevel], [1, 1]);
+  // Two bridges end there, and a road on the ground passes below them.
+  const high = [road([[2, 0], [3, 0]], {startNode: 30, startLevel: 1}), road([[2, 0], [3, 1]], {startNode: 30, startLevel: 1})];
+  const below = contextWith({roads: [...ends, ...high, road([[2, -1], [2, 1]])]});
+  const onto = junctionEdits(jointAt(at(1, 0), roadsOf(below)), at(2, 0), {}, below).edits;
+  assert.equal(afterOf(onto, '0').properties.endNode, 30);
+  assert.equal(afterOf(onto, '4'), undefined, 'the road below gets no point');
+});
+
+test('an end with another level chosen leaves its junction when it is dragged, and not when the level is taken back', () => {
+  const first = road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [first, road([[1, 0], [1, 1]], {startNode: 5, startLevel: 0})]});
+  const session = {workingFeature: () => first};
+  const edit = {key: '0', feature: first, extras: {}, context: {...context, session}};
+  const freePoints = freePointsWithLevel('end', 1, edit);
+  assert.deepEqual(freePoints, ['19.250100 42.440000']);
+  assert.deepEqual(freePointsWithLevel('end', 0, {...edit, extras: {freePoints}}), []);
+  const change = {key: '0', before: first, coordinates: [[0, 0], [1, -1]], origins: [0, 1], properties: {endLevel: 1}};
+  const {own, edits} = applied({...change, freePoints: new Set(freePoints)}, context);
+  assert.match(own.properties.endNode, /^local:/);
+  assert.equal(own.properties.endLevel, 1);
+  assert.deepEqual(edits, [], 'what it was joined to stays');
+});
+
+test('a line of two points is followed through a reversal', () => {
+  const {coordinates} = line([[0, 0], [1, 0]]);
+  assert.deepEqual(originsAfter(coordinates, [0, 1], coordinates.toReversed()), [1, 0]);
 });
 
 test('the levels of a joint that is moved are not mixed', () => {
