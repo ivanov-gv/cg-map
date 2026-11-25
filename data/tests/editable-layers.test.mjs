@@ -360,6 +360,47 @@ test('a refused correction stops no other: a refreshed address and a way that is
   assert.ok(report.some(line => line.startsWith('turn-restrictions.json') && line.includes('not placed')), report.join('\n'));
 });
 
+test('roads of one junction are replayed together, and an end that cannot stay at its junction is reported', testContext => {
+  const root = temporaryRoot(testContext);
+  const roads = readSource(root, 'roads.geojson').features;
+  const meetingRoads = Map.groupBy(roads, ({properties}) => properties.endNode);
+  const startNodes = new Set(roads.map(({properties}) => properties.startNode));
+  const [pair, alone] = [...meetingRoads]
+    .filter(([node, meeting]) => node !== undefined && meeting.length === 2 && !startNodes.has(node))
+    .map(([, meeting]) => meeting);
+  const moveEnd = feature => {
+    const end = feature.geometry.coordinates.at(-1);
+    feature.geometry.coordinates[feature.geometry.coordinates.length - 1] = [end[0] + 0.00001, end[1]];
+  };
+  const builder = new ChangesetBuilder(root);
+  for (const road of pair) builder.change('roads.geojson', road, moveEnd);
+  builder.change('roads.geojson', alone[0], moveEnd);
+  const [town] = readSource(root, 'settlements.geojson').features;
+  builder.change('settlements.geojson', town, feature => (feature.properties.name = 'Reviewed'));
+  apply(root, builder.build());
+  const ledger = JSON.parse(fs.readFileSync(sourcePath(root, 'editor-corrections.json'), 'utf8'));
+  fs.cpSync(path.join(repositoryRoot, 'data/sources'), path.join(root, 'data/sources'), {recursive: true});
+  // A rule whose roads are gone does not fit, so the corrections are placed group by group.
+  ledger.corrections.push({
+    ...ledger.corrections.find(({filename}) => filename === 'settlements.geojson'),
+    filename: 'turn-restrictions.json',
+    operation: 'add',
+    reference: {localId: localId(77)},
+    before: null,
+    beforeFingerprint: null,
+    after: {type: 'Feature', geometry: null, properties: {restriction: 'no_left_turn', from: 1, to: 2, viaNodes: [3]}}
+  });
+  fs.writeFileSync(sourcePath(root, 'editor-corrections.json'), JSON.stringify(ledger));
+  const {report} = reapplyCorrections(root, {now, contractsDirectory});
+  assert.equal(readSource(root, 'settlements.geojson').features[0].properties.name, 'Reviewed');
+  const isLeft = line => line.includes('left junction') && line.includes(alone[0].properties.entityId);
+  assert.ok(report.some(isLeft), report.join('\n'));
+  const written = new Map(readSource(root, 'roads.geojson').features.map(road => [entityKey(road.properties), road]));
+  const nodes = pair.map(road => written.get(entityKey(road.properties)));
+  const places = nodes.map(({geometry}) => String(geometry.coordinates.at(-1)));
+  assert.equal(places[0], places[1], 'the pair is at one place');
+});
+
 test('a replay takes what a refresh put on a deleted building with it, and names what it leaves out', testContext => {
   const root = temporaryRoot(testContext);
   const builder = new ChangesetBuilder(root);

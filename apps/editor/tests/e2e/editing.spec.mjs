@@ -1251,7 +1251,7 @@ test.describe('source editing', () => {
     await openInspector(page);
     await page.locator('[name="name"]').fill(editedName);
     await openInspector(page);
-    await page.locator('[name="kind"]').fill('cafe');
+    await page.locator('[data-list-for="kind"]').selectOption('cafe');
     await openInspector(page);
     await page.locator('#apply-edit').click();
     await expect(page.locator('#edit-problem')).toContainText('category is required');
