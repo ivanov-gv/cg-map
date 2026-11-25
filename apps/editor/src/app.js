@@ -478,7 +478,8 @@ function finishPick(entry) {
   const {resolve} = pendingPick;
   pendingPick = null;
   hideModeBar();
-  if (!entry) showInspector();
+  // Whatever the edit does with the answer, its refusals and its buttons are in the inspector.
+  showInspector();
   resolve(entry);
 }
 
