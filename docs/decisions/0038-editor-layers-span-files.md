@@ -18,7 +18,8 @@ the map at once, while the editor showed it only in its own mode or in a separat
 - **A layer names its files** in `editor-layers.js`: those whose objects can be picked, and linked ones that change only
   with them. Exactly one layer is active. A command can reach only the active layer's files.
 - **A step is a list of edits** across those files, undone as a whole. History is per layer. A step can be undone only
-  while everything it wrote still stands, so undoing on one layer never drops a later edit from another.
+  while everything it wrote still stands, so undoing on one layer never drops a later edit from another. An imported
+  changeset names its own files: it is one step in the history of every layer it touches, taken back whole from any.
 - **Derived kinds** (country, neighbours, ocean) are drawn and never picked.
 - **Every applied change stays on the map** in public cartography, in every layer and in Browse. The preview is gone.
 - **Move, corners and drawing are modes** that shrink the inspector to one bar; new objects open their form when their
