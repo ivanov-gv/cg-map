@@ -101,6 +101,8 @@ const EDITING_ONLY_SOURCES = [
   'layer-buildings.js',
   'layer-junctions.js',
   'layer-roads.js',
+  'line-joining.js',
+  'line-origins.js',
   'opening-hours-dialog.js',
   'opening-hours.js',
   'street-choices.js',

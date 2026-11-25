@@ -641,7 +641,7 @@ function selectFeatureAtClick(event) {
     return;
   }
   const joint = jointLayer.jointAt(event.point);
-  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint);
+  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint, behaviorContext());
   if (jointEntry) {
     selectObject(jointEntry);
     return;

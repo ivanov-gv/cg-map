@@ -75,7 +75,16 @@ export function entriesWithin(entries, [west, south, east, north]) {
   });
 }
 
-const boxAround = ([longitude, latitude], degrees = 0.00005) => [
+// The box on the map that a finger covers around a place.
+export function boundsAround(coordinate, map, pixels = 16) {
+  const {x, y} = map.project(coordinate);
+  const corners = [map.unproject([x - pixels, y - pixels]), map.unproject([x + pixels, y + pixels])];
+  const longitudes = corners.map(({lng}) => lng);
+  const latitudes = corners.map(({lat}) => lat);
+  return [Math.min(...longitudes), Math.min(...latitudes), Math.max(...longitudes), Math.max(...latitudes)];
+}
+
+export const boxAround = ([longitude, latitude], degrees = 0.00005) => [
   longitude - degrees,
   latitude - degrees,
   longitude + degrees,
@@ -84,19 +93,51 @@ const boxAround = ([longitude, latitude], degrees = 0.00005) => [
 
 export const entriesNear = (coordinate, entries) => entriesWithin(entries, boxAround(coordinate));
 
-// One road at one point: {entry, index, end, level}. end is 'start', 'end' or null where the road passes.
+// A road that comes back to where it starts has no ends.
+export const isRing = ({geometry: {coordinates}}) =>
+  coordinates.length > 3 && pointKey(coordinates[0]) === pointKey(coordinates.at(-1));
+
+// One road at one point: {entry, index, end, isRing, level}. end is 'start', 'end' or null where the road passes. A ring
+// is there once, at the point where its line begins.
+function membersOf(entry) {
+  const {coordinates} = entry.feature.geometry;
+  const isClosed = isRing(entry.feature);
+  const points = isClosed ? coordinates.slice(0, -1) : coordinates;
+  return points.map((coordinate, index) => {
+    const end = endAt(index, coordinates.length);
+    return {entry, index, end, isRing: isClosed && end !== null, level: levelAt(entry.feature, index)};
+  });
+}
+
+const coordinateOf = ({entry, index}) => entry.feature.geometry.coordinates[index];
+
 function membersByPoint(entries) {
   const members = new Map();
-  for (const entry of entries) {
-    const {coordinates} = entry.feature.geometry;
-    coordinates.forEach((coordinate, index) => {
-      const key = pointKey(coordinate);
-      if (!members.has(key)) members.set(key, []);
-      const end = endAt(index, coordinates.length);
-      members.get(key).push({entry, index, end, level: levelAt(entry.feature, index)});
-    });
+  for (const member of entries.flatMap(membersOf)) {
+    const key = pointKey(coordinateOf(member));
+    if (!members.has(key)) members.set(key, []);
+    members.get(key).push(member);
   }
   return members;
+}
+
+// Around what is asked for, so that the next questions of a drag find it ready.
+const keptMarginDegrees = 0.002;
+let latestMembers = null;
+
+const contains = (outer, inner) =>
+  outer[0] <= inner[0] && outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] >= inner[3];
+
+// The members of every point within bounds. The session keeps one list of entries until something changes in it.
+function membersWithin(entries, bounds) {
+  const isKnown = latestMembers?.entries === entries && contains(latestMembers.bounds, bounds);
+  if (!isKnown) {
+    const [west, south, east, north] = bounds;
+    const margin = keptMarginDegrees;
+    const wideBounds = [west - margin, south - margin, east + margin, north + margin];
+    latestMembers = {entries, bounds: wideBounds, members: membersByPoint(entriesWithin(entries, wideBounds))};
+  }
+  return latestMembers.members;
 }
 
 // The roads of a point by level, as [{level, members}], the ground first.
@@ -107,23 +148,47 @@ function levelGroups(members) {
     .sort((first, second) => Math.abs(first.level) - Math.abs(second.level) || second.level - first.level);
 }
 
+// An extracted road cut by the edge of the detailed map ends there without a junction.
+const isCutOff = ({entry, end}) => {
+  const {properties} = entry.feature;
+  return end !== null && /^way\//.test(properties.entityId ?? '') && properties[nodeNameOf(end)] === undefined;
+};
+
 function statusOf(members, groups) {
   if (groups.length > 1) return 'apart';
-  return members.length > 1 ? 'joined' : 'deadEnd';
+  if (members.length > 1 || members[0].isRing) return 'joined';
+  return isCutOff(members[0]) ? 'cutOff' : 'deadEnd';
 }
 
-const coordinateOf = ({entry, index}) => entry.feature.geometry.coordinates[index];
-
-function jointFrom(members) {
+// A joint of these members, or null without any.
+export function jointFrom(members) {
+  if (members.length === 0) return null;
   const groups = levelGroups(members);
   return {coordinate: coordinateOf(members[0]), members, groups, status: statusOf(members, groups)};
 }
 
+// The members of a point, except those of some roads.
+export function membersAt(coordinate, entries, exceptKeys = new Set()) {
+  const members = membersWithin(entries, boxAround(coordinate)).get(pointKey(coordinate)) ?? [];
+  return members.filter(({entry}) => !exceptKeys.has(entry.key));
+}
+
 // The joint at a point, or null where no road has one.
-export function jointAt(coordinate, entries) {
-  const key = pointKey(coordinate);
-  const members = membersByPoint(entriesWithin(entries, boxAround(coordinate))).get(key);
-  return members ? jointFrom(members) : null;
+export const jointAt = (coordinate, entries, exceptKeys) => jointFrom(membersAt(coordinate, entries, exceptKeys));
+
+// The joint at a point of a road as it is being edited.
+export function jointWith({key, feature}, index, entries) {
+  const own = membersOf({filename: 'roads.geojson', key, feature}).filter(member => member.index === index);
+  return jointFrom([...own, ...membersAt(feature.geometry.coordinates[index], entries, new Set([key]))]);
+}
+
+// The points of a road that other roads share on the same level.
+export function sharedPointsOf({key, feature}, entries) {
+  const members = membersWithin(entries, boundsOf(feature));
+  return feature.geometry.coordinates.filter((coordinate, index) => {
+    const others = members.get(pointKey(coordinate)) ?? [];
+    return others.some(other => other.entry.key !== key && other.level === levelAt(feature, index));
+  });
 }
 
 // The road that an end should probably join: one that passes close by on the same level without sharing the point.
@@ -192,7 +257,7 @@ function crossingsOfRoads(first, second) {
 }
 
 // Places where two roads of one level cross without sharing a point: {coordinate, status: 'crossing', roads}.
-function unjoinedCrossings(entries) {
+export function unjoinedCrossings(entries) {
   const crossings = [];
   // From west to east, so each road meets only those that begin before it ends.
   const ordered = entries.toSorted((first, second) => boundsOf(first.feature)[0] - boundsOf(second.feature)[0]);
@@ -210,7 +275,7 @@ function unjoinedCrossings(entries) {
   return crossings;
 }
 
-const isWithin = ([longitude, latitude], [west, south, east, north]) =>
+export const isWithin = ([longitude, latitude], [west, south, east, north]) =>
   longitude >= west && longitude <= east && latitude >= south && latitude <= north;
 
 // Every joint in a view: where roads join or end, and where they touch or cross without joining.
@@ -218,10 +283,11 @@ export function jointsIn(bounds, allEntries) {
   const entries = entriesWithin(allEntries, bounds);
   const joints = [];
   for (const members of membersByPoint(entries).values()) {
-    const isOnlyPassed = members.length === 1 && members[0].end === null;
-    if (isOnlyPassed || !isWithin(coordinateOf(members[0]), bounds)) continue;
+    const [first] = members;
+    const isNoJoint = members.length === 1 && (first.end === null || first.isRing);
+    if (isNoJoint || !isWithin(coordinateOf(first), bounds)) continue;
     const joint = jointFrom(members);
-    const missed = joint.status === 'deadEnd' ? missedRoad(members[0], entries) : null;
+    const missed = joint.status === 'deadEnd' ? missedRoad(first, entries) : null;
     joints.push(missed ? {...joint, status: 'near', missed} : joint);
   }
   return [...joints, ...unjoinedCrossings(entries).filter(({coordinate}) => isWithin(coordinate, bounds))];
@@ -238,12 +304,11 @@ export function jointNear(coordinate, entries) {
   return crossings.find(crossing => pointKey(crossing.coordinate) === pointKey(coordinate)) ?? null;
 }
 
+export const nodeOfMember = ({entry, end}) => (end ? entry.feature.properties[nodeNameOf(end)] : undefined);
+
 // The junction ID the roads of one level share at a point. An OSM number stands before one from the editor.
 export function nodeOf(members) {
-  const nodes = members
-    .filter(({end}) => end)
-    .map(({entry, end}) => entry.feature.properties[nodeNameOf(end)])
-    .filter(node => node !== undefined);
+  const nodes = members.map(nodeOfMember).filter(node => node !== undefined);
   return nodes.find(Number.isInteger) ?? nodes[0] ?? null;
 }
 

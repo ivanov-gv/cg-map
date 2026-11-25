@@ -43,8 +43,8 @@ const dotLayer = {
   paint: {
     'circle-radius': ['case', isWarning, warningRadiusPixels, dotRadiusPixels],
     // A dead end is hollow, a join is full.
-    'circle-color': ['case', isWarning, stateColors.applied, ['==', ['get', 'status'], 'deadEnd'], '#ffffff', stateColors.editable],
-    'circle-stroke-color': ['case', isWarning, '#ffffff', ['==', ['get', 'status'], 'deadEnd'], stateColors.editable, '#ffffff'],
+    'circle-color': ['case', isWarning, stateColors.applied, ['in', ['get', 'status'], ['literal', ['deadEnd', 'cutOff']]], '#ffffff', stateColors.editable],
+    'circle-stroke-color': ['case', isWarning, '#ffffff', ['in', ['get', 'status'], ['literal', ['deadEnd', 'cutOff']]], stateColors.editable, '#ffffff'],
     'circle-stroke-width': 1.5
   }
 };

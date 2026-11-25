@@ -1,17 +1,22 @@
-// Edits of the road graph, as pure changes of the roads that meet at a joint. Every function returns
-// {edits: [{filename, key, after}], problem}.
-import {insertVertex, removeVertex, roundedCoordinate} from './geometry-editing.js';
-import {coordinateAtOffset, distanceMetres, metricOffset} from './geometry-measures.js';
+// Edits of the road graph. Every one ends in a state that is whole: roads that join share one junction, and no turn rule
+// names a junction that its road has left. Each function returns {edits: [{filename, key, after}], problem}.
+import {insertVertex, roundedCoordinate} from './geometry-editing.js';
+import {distanceMetres} from './geometry-measures.js';
+import {withoutJoin} from './line-joining.js';
+import {movedPoints} from './line-origins.js';
 import {nodeEntryAt, restrictionFor, ruleOfTurn, rulesAfterSplit, turnKey, turnsAt} from './road-junctions.js';
 import {
   entriesNear,
-  jointAt,
+  isRing,
+  jointFrom,
   levelAt,
   levelAtPlace,
   levelNameOf,
+  membersAt,
   nearestToGround,
   nodeNameOf,
   nodeOf,
+  nodeOfMember,
   pointKey,
   roadId
 } from './road-graph.js';
@@ -20,34 +25,61 @@ import {splitRoad, withJunctionAt} from './road-shapes.js';
 const roadsFile = 'roads.geojson';
 const nodesFile = 'road-nodes.geojson';
 const restrictionsFile = 'turn-restrictions.json';
-// How far a disconnected end is pulled back along its road, so that nobody reads it as joined.
-const pulledBackMetres = 1.5;
 // A point put on another road lies on it up to rounding.
 const touchMetres = 0.2;
+// A road passing this close has a point of its own to join.
+const ownPointMetres = 0.5;
 
 const newLocalId = () => `local:${crypto.randomUUID()}`;
 const refused = problem => ({edits: [], problem});
+const done = edits => ({edits, problem: null});
+const isSameJSON = (first, second) => JSON.stringify(first) === JSON.stringify(second);
 const withProperties = (feature, properties) => ({...feature, properties: {...feature.properties, ...properties}});
 const withCoordinates = (feature, coordinates) => ({...feature, geometry: {...feature.geometry, coordinates}});
 
-// Several changes of one road, such as a ring that meets itself, add up to one edit.
-class RoadChanges {
+// Several changes of one object, such as a rule that two split roads share, add up to one edit.
+class Changes {
+  #filename;
   #changed = new Map();
 
-  change({key, feature}, change) {
-    this.#changed.set(key, change(this.#changed.get(key) ?? feature));
+  constructor(filename) {
+    this.#filename = filename;
+  }
+
+  afterOf({key, feature}) {
+    return this.#changed.has(key) ? this.#changed.get(key).after : feature;
+  }
+
+  change(entry, change) {
+    const after = this.afterOf(entry);
+    if (after) this.#changed.set(entry.key, {entry, after: change(after)});
+  }
+
+  // Whatever was changed before stands.
+  changeIfUntouched(entry, change) {
+    if (!this.#changed.has(entry.key)) this.change(entry, change);
+  }
+
+  // The objects that are not what they were: [{entry, after}].
+  list() {
+    return [...this.#changed.values()].filter(({entry, after}) => !isSameJSON(entry.feature, after));
   }
 
   edits() {
-    return [...this.#changed].map(([key, after]) => ({filename: roadsFile, key, after}));
+    return this.list().map(({entry: {key}, after}) => ({filename: this.#filename, key, after}));
   }
 }
 
+const endsOfMember = ({end, isRing: isRingEnd}) => {
+  if (isRingEnd) return ['start', 'end'];
+  return end ? [end] : [];
+};
+
 // The roads that end at a joint on one level end at one junction.
-function shareJunction(changes, members, level, node) {
-  for (const {entry, end} of members) {
-    if (!end) continue;
-    changes.change(entry, feature => withProperties(feature, {[nodeNameOf(end)]: node, [levelNameOf(end)]: level}));
+function shareJunction(roads, members, level, node) {
+  for (const member of members) {
+    const facts = endsOfMember(member).flatMap(end => [[nodeNameOf(end), node], [levelNameOf(end), level]]);
+    if (facts.length > 0) roads.change(member.entry, feature => withProperties(feature, Object.fromEntries(facts)));
   }
 }
 
@@ -57,59 +89,90 @@ const withPointMoved = (feature, from, to) =>
     feature.geometry.coordinates.map(point => (pointKey(point) === pointKey(from) ? to : point))
   );
 
-// The pulled back end of a road, or null when the road is too short to have one.
-function pulledBack(feature, end) {
-  const {coordinates} = feature.geometry;
-  const [last, before] = end === 'end' ? [coordinates.at(-1), coordinates.at(-2)] : [coordinates[0], coordinates[1]];
-  const length = distanceMetres(last, before);
-  if (length === 0) return null;
-  const [east, north] = metricOffset(before, last);
-  const fraction = Math.min(pulledBackMetres / length, 0.5);
-  return roundedCoordinate(coordinateAtOffset([east * fraction, north * fraction], last));
+const endNodes = ({properties}) => [properties.startNode, properties.endNode];
+
+// The junction a road ends at now in place of one it ended at before, or undefined when it left it.
+function junctionInPlaceOf(node, before, after) {
+  if (endNodes(after).includes(node)) return node;
+  const index = endNodes(before).indexOf(node);
+  return endNodes(after)[index];
 }
 
-// Takes one road out of a joint: an end is pulled back a little, and a road that passes goes on without the point.
+// What becomes of the turn rules when roads change their junctions. A rule goes where both of its roads went, and one
+// whose road left the junction is gone.
+function rulesFollowing(changedRoads, context, rules = new Changes(restrictionsFile)) {
+  const roadsById = Map.groupBy(changedRoads.filter(({after}) => after), ({entry}) => roadId(entry));
+  if (roadsById.size === 0) return rules;
+  const junctionOf = (id, node) => {
+    const road = (roadsById.get(id) ?? []).find(({entry}) => endNodes(entry.feature).includes(node));
+    return road ? junctionInPlaceOf(node, road.entry.feature, road.after) : node;
+  };
+  for (const entry of context.entriesOf(restrictionsFile)) {
+    const {from, to, viaNodes = []} = entry.feature.properties;
+    if (viaNodes.length !== 1 || (!roadsById.has(from) && !roadsById.has(to))) continue;
+    const [node] = viaNodes;
+    const [fromNode, toNode] = [junctionOf(from, node), junctionOf(to, node)];
+    if (fromNode === node && toNode === node) continue;
+    const isMovedTogether = fromNode === toNode && isSameJunctionElsewhere(node, fromNode, changedRoads);
+    rules.changeIfUntouched(entry, rule => (isMovedTogether ? withProperties(rule, {viaNodes: [fromNode]}) : null));
+  }
+  return rules;
+}
+
+// Whether a junction is the one that another was: several roads went there, or it is one that was there already. A road
+// alone at an end of its own has nothing left to turn onto.
+function isSameJunctionElsewhere(previousNode, node, changedRoads) {
+  const arrived = changedRoads.filter(
+    ({entry, after}) =>
+      endNodes(entry.feature).includes(previousNode) && junctionInPlaceOf(previousNode, entry.feature, after) === node
+  );
+  return arrived.length > 1 || Number.isInteger(node);
+}
+
+// Everything of a change of roads, with the rules that follow from it.
+function withRules(roads, context, rules) {
+  return done([...roads.edits(), ...rulesFollowing(roads.list(), context, rules).edits()]);
+}
+
+// Takes one road out of a joint. An end gets a junction of its own.
 export function disconnectedRoad(feature, index) {
-  const {coordinates} = feature.geometry;
-  const isInner = index > 0 && index < coordinates.length - 1;
-  if (isInner) return {...feature, geometry: removeVertex(feature.geometry, {vertexIndex: index})};
+  const geometry = withoutJoin(feature.geometry, index);
+  if (!geometry) return null;
+  const isInner = geometry.coordinates.length < feature.geometry.coordinates.length;
+  if (isInner) return {...feature, geometry};
   const end = index === 0 ? 'start' : 'end';
-  const coordinate = pulledBack(feature, end);
-  if (!coordinate) return null;
-  const moved = withCoordinates(feature, coordinates.with(index, coordinate));
-  return withProperties(moved, {[nodeNameOf(end)]: newLocalId(), [levelNameOf(end)]: levelAt(feature, index)});
+  return withProperties({...feature, geometry}, {[nodeNameOf(end)]: newLocalId(), [levelNameOf(end)]: levelAt(feature, index)});
 }
 
-// A rule at a joint that its road leaves would name a turn that is gone.
-function rulesLeftBehind(member, {groups}, context) {
-  const group = groups.find(({members}) => members.includes(member));
-  const node = nodeOf(group.members);
-  const id = roadId(member.entry);
-  return context
-    .entriesOf(restrictionsFile)
-    .filter(({feature: {properties}}) => properties.viaNodes?.includes(node) && [properties.from, properties.to].includes(id))
-    .map(({filename, key}) => ({filename, key, after: null}));
+const ringProblem = 'A ring has no end to pull back here. Disconnect the other roads instead.';
+const shortProblem = 'This road is too short to be pulled back.';
+
+// Why a road cannot be taken out of a joint at this point, or null.
+export function disconnectProblem(feature, index) {
+  if (isRing(feature) && (index === 0 || index === feature.geometry.coordinates.length - 1)) return ringProblem;
+  return withoutJoin(feature.geometry, index) ? null : shortProblem;
 }
 
-export function disconnectEdits(joint, member, context) {
-  const after = disconnectedRoad(member.entry.feature, member.index);
-  if (!after) return refused('This road is too short to be pulled back.');
-  return {edits: [{filename: roadsFile, key: member.entry.key, after}, ...rulesLeftBehind(member, joint, context)], problem: null};
+export function disconnectEdits(member, context) {
+  const {entry, index} = member;
+  const problem = disconnectProblem(entry.feature, index);
+  if (problem) return refused(problem);
+  const roads = new Changes(roadsFile);
+  roads.change(entry, feature => disconnectedRoad(feature, index));
+  return withRules(roads, context);
 }
 
 // Puts every road of a joint on one level. A road that passes decides, because its level is that of the road itself.
-function joinLevels({members}) {
+function joinLevels({members}, context) {
   const passingLevels = [...new Set(members.filter(({end}) => !end).map(({level}) => level))];
   if (passingLevels.length > 1) {
     return refused('Roads pass here on different levels. Split one here, or change its layer, bridge or tunnel.');
   }
   const level = passingLevels[0] ?? nearestToGround(members.map(member => member.level));
-  const changes = new RoadChanges();
-  shareJunction(changes, members, level, nodeOf(members) ?? newLocalId());
-  return {edits: changes.edits(), problem: null};
+  const roads = new Changes(roadsFile);
+  shareJunction(roads, members, level, nodeOf(members) ?? newLocalId());
+  return withRules(roads, context);
 }
-
-const isWithinMetres = (first, second, metres) => distanceMetres(first, second) <= metres;
 
 function withPointAt(feature, coordinate, segmentIndex) {
   const geometry = insertVertex(feature.geometry, {vertexIndex: segmentIndex});
@@ -117,54 +180,110 @@ function withPointAt(feature, coordinate, segmentIndex) {
 }
 
 // Moves an end onto the road it nearly meets, at a point of that road if there is one close by.
-function joinNearMiss({members: [member], missed}) {
-  const {entry, coordinate, segmentIndex, level} = missed;
-  const known = entry.feature.geometry.coordinates.find(point => isWithinMetres(point, coordinate, 0.5));
-  const meeting = known ?? roundedCoordinate(coordinate);
-  const changes = new RoadChanges();
-  changes.change(member.entry, feature => withCoordinates(feature, feature.geometry.coordinates.with(member.index, meeting)));
-  if (!known) changes.change(entry, feature => withPointAt(feature, meeting, segmentIndex));
-  const otherEnd = [[0, 'start'], [-1, 'end']].find(([index]) => pointKey(entry.feature.geometry.coordinates.at(index)) === pointKey(meeting));
-  const otherMember = otherEnd ? [{entry, end: otherEnd[1]}] : [];
-  const meetingMembers = [...otherMember, {entry: member.entry, end: member.end}];
-  shareJunction(changes, meetingMembers, level, nodeOf(meetingMembers) ?? newLocalId());
-  return {edits: changes.edits(), problem: null};
+function joinNearMiss({coordinate, members, missed}, context) {
+  const {coordinates} = missed.entry.feature.geometry;
+  const known = coordinates.find(point => distanceMetres(point, missed.coordinate) <= ownPointMetres);
+  const meeting = known ?? roundedCoordinate(missed.coordinate);
+  const roads = new Changes(roadsFile);
+  if (!known) roads.change(missed.entry, feature => withPointAt(feature, meeting, missed.segmentIndex));
+  const problem = moveMembers(roads, members, {from: coordinate, to: meeting}, context);
+  return problem ? refused(problem) : withRules(roads, context);
 }
 
-function joinCrossing({coordinate, roads: [first, second], segments}) {
+function joinCrossing({coordinate, roads: [first, second], segments}, context) {
   const meeting = roundedCoordinate(coordinate);
-  const changes = new RoadChanges();
-  changes.change(first, feature => withPointAt(feature, meeting, segments.segmentIndex));
-  changes.change(second, feature => withPointAt(feature, meeting, segments.otherSegmentIndex));
-  return {edits: changes.edits(), problem: null};
+  const roads = new Changes(roadsFile);
+  roads.change(first, feature => withPointAt(feature, meeting, segments.segmentIndex));
+  roads.change(second, feature => withPointAt(feature, meeting, segments.otherSegmentIndex));
+  return withRules(roads, context);
 }
 
 const joinByStatus = {apart: joinLevels, near: joinNearMiss, crossing: joinCrossing};
 
 // Joins what touches, nearly touches or crosses here without being joined.
-export const joinEdits = joint => joinByStatus[joint.status](joint);
+export const joinEdits = (joint, context) => joinByStatus[joint.status](joint, context);
+
+// What roads put on a place meet there: [{level, node, members}]. A road that only passes has no junction there yet.
+function meetingsAt(coordinate, roads, exceptKeys) {
+  const joint = jointFrom(membersAt(coordinate, roads, exceptKeys));
+  if (joint) return joint.groups.map(({level, members}) => ({level, node: nodeOf(members), members}));
+  return entriesNear(coordinate, roads)
+    .filter(({key, feature}) => !exceptKeys.has(key) && withJunctionAt(feature, coordinate, touchMetres) !== null)
+    .map(({feature}) => ({level: levelAtPlace(feature, coordinate), node: null, members: []}));
+}
+
+// Which of them a road joins: the one on its own level, then on the shown one, then the one nearest to the ground.
+function chosenMeeting(meetings, levels) {
+  const level = levels.find(candidate => meetings.some(meeting => meeting.level === candidate));
+  const chosenLevel = level ?? nearestToGround(meetings.map(meeting => meeting.level));
+  const chosen = meetings.filter(meeting => meeting.level === chosenLevel);
+  return chosen.find(({node}) => node !== null) ?? chosen[0];
+}
+
+const levelProblem = 'A road passes here on another level, so these cannot be joined. Disconnect it first.';
+
+// Moves the roads of one level of a joint to a place, and joins them to what is there. Returns why that cannot be, or null.
+function moveMembers(roads, members, {from, to, facts = null, exceptKeys = new Set()}, context) {
+  for (const {entry} of members) roads.change(entry, feature => withPointMoved(feature, from, to));
+  const [{level}] = members;
+  const moving = new Set([...exceptKeys, ...members.map(({entry}) => entry.key)]);
+  const joined = facts ?? joinedFacts(to, level, nodeOf(members), context, moving);
+  if (!joined) return null;
+  const isPassingElsewhere = members.some(member => !member.end && member.level !== joined.level);
+  if (isPassingElsewhere) return levelProblem;
+  shareJunction(roads, members, joined.level, joined.node);
+  shareJunction(roads, (joined.members ?? []).filter(member => nodeOfMember(member) === undefined), joined.level, joined.node);
+  return null;
+}
+
+// The junction that roads coming to a place get there, or null where they meet nothing.
+function joinedFacts(coordinate, level, node, context, exceptKeys) {
+  const meetings = meetingsAt(coordinate, context.entriesOf(roadsFile), exceptKeys);
+  if (meetings.length === 0) return null;
+  const chosen = chosenMeeting(meetings, [level, context.shownLevel?.() ?? null]);
+  return {level: chosen.level, node: chosen.node ?? node ?? newLocalId(), members: chosen.members};
+}
+
+// The other roads that get a point at a place, because roads of this level now touch them there.
+function touchRoads(roads, coordinate, level, context, exceptKeys) {
+  for (const entry of entriesNear(coordinate, context.entriesOf(roadsFile))) {
+    if (exceptKeys.has(entry.key)) continue;
+    const isTouched = withJunctionAt(entry.feature, coordinate, touchMetres) !== null;
+    if (!isTouched || levelAtPlace(entry.feature, coordinate) !== level) continue;
+    roads.change(entry, feature => withJunctionAt(feature, coordinate, touchMetres) ?? feature);
+  }
+}
+
+function movedFurniture(from, to, context) {
+  const node = nodeEntryAt(context.entriesOf(nodesFile), from);
+  if (!node) return [];
+  return [{filename: nodesFile, key: node.key, after: {...node.feature, geometry: {...node.feature.geometry, coordinates: to}}}];
+}
 
 // Ends every road that passes here, so that its turns can have rules. One step.
 export function splitEdits(joint, context) {
-  const restrictions = context.entriesOf(restrictionsFile);
+  const roads = new Changes(roadsFile);
+  const rules = new Changes(restrictionsFile);
   const propertyRules = context.rules.layers[roadsFile].properties;
-  const edits = [];
+  const added = [];
   for (const {level, members} of joint.groups) {
     const node = nodeOf(members) ?? newLocalId();
-    const changes = new RoadChanges();
-    shareJunction(changes, members, level, node);
-    for (const {entry, index} of members.filter(({end}) => !end)) {
-      const secondKey = newLocalId();
-      const {edits: ruleEdits, problem} = rulesAfterSplit(restrictions, entry, secondKey);
-      if (problem) return refused(problem);
-      const [first, second] = splitRoad(entry.feature, index, propertyRules, {node, level});
-      edits.push({filename: roadsFile, key: entry.key, after: first}, {filename: roadsFile, key: secondKey, after: second}, ...ruleEdits);
+    shareJunction(roads, members, level, node);
+    const passing = members.filter(({end}) => !end);
+    if (new Set(passing.map(({entry}) => entry.key)).size < passing.length) {
+      return refused('A road passes here twice. Split it in Edit points instead.');
     }
-    edits.push(...changes.edits());
+    for (const {entry, index} of passing) {
+      const key = newLocalId();
+      const {edits, problem} = rulesAfterSplit(context.entriesOf(restrictionsFile), entry, key);
+      if (problem) return refused(problem);
+      for (const {entry: rule, renamed} of edits) rules.change(rule, feature => withProperties(feature, renamed(feature.properties)));
+      const [first, second] = splitRoad(roads.afterOf(entry), index, propertyRules, {node, level});
+      roads.change(entry, () => first);
+      added.push({filename: roadsFile, key, after: second});
+    }
   }
-  const keys = edits.map(({filename, key}) => `${filename}:${key}`);
-  if (new Set(keys).size < keys.length) return refused('A road passes here twice. Split it in Edit points instead.');
-  return {edits, problem: null};
+  return done([...roads.edits(), ...added, ...rules.edits()]);
 }
 
 function furnitureEdit(coordinate, kind, context) {
@@ -173,197 +292,218 @@ function furnitureEdit(coordinate, kind, context) {
   if (!kind) return [{filename: nodesFile, key: known.key, after: null}];
   if (known) {
     const {crossing, traffic_signals: signals, ...kept} = known.feature.properties;
-    const isCrossing = kind === 'crossing';
-    const facts = {...(isCrossing && crossing ? {crossing} : {}), ...(kind === 'traffic_signals' && signals ? {traffic_signals: signals} : {})};
-    return [{filename: nodesFile, key: known.key, after: {...known.feature, properties: {...kept, ...facts, kind}}}];
+    const ownFacts = {crossing: {crossing}, traffic_signals: {traffic_signals: signals}}[kind] ?? {};
+    const stated = Object.fromEntries(Object.entries(ownFacts).filter(([, value]) => value !== undefined));
+    return [{filename: nodesFile, key: known.key, after: {...known.feature, properties: {...kept, ...stated, kind}}}];
   }
   const geometry = {type: 'Point', coordinates: coordinate};
   return [{filename: nodesFile, key: newLocalId(), after: {type: 'Feature', properties: {kind}, geometry}}];
 }
 
-function turnEdit({from, to, kind, members, isForbidden, node}, restrictions) {
-  const {recorded, onlyRule} = ruleOfTurn(restrictions, from, to, members);
-  if (onlyRule || Boolean(recorded) === isForbidden) return [];
-  if (recorded) return [{filename: restrictionsFile, key: recorded.key, after: null}];
-  const ends = {from: roadId(from.member.entry), to: roadId(to.member.entry)};
-  const properties = {restriction: restrictionFor(kind), ...ends, viaNodes: [node]};
-  return [{filename: restrictionsFile, key: newLocalId(), after: {type: 'Feature', properties, geometry: null}}];
+export const levelChoiceKey = ({entry, index}) => `level:${entry.key}/${index}`;
+
+// The members of a joint on the levels chosen for them.
+const withChosenLevels = (joint, choices) =>
+  joint.members.map(member => ({...member, level: choices[levelChoiceKey(member)] ?? member.level, previousLevel: member.level}));
+
+// Which junction ID belongs to which level once some roads changed theirs: it stays with those that stayed, and goes along
+// only when every road of it went to one level.
+function nodesByLevel(members) {
+  const owned = new Map();
+  const byNode = Map.groupBy(members.filter(member => nodeOfMember(member) !== undefined), nodeOfMember);
+  for (const [node, holders] of byNode) {
+    const stayed = holders.filter(({level, previousLevel}) => level === previousLevel);
+    const {level} = stayed[0] ?? holders[0];
+    const isKeptAlready = Number.isInteger(owned.get(level)) || (owned.has(level) && !Number.isInteger(node));
+    if (!isKeptAlready) owned.set(level, node);
+  }
+  return owned;
 }
 
-// What was chosen about the turns of a joint. A junction without an ID gets one for its first rule.
-function turnChoiceEdits(joint, choices, context, changes) {
-  const restrictions = context.entriesOf(restrictionsFile);
-  const nodeByLevel = new Map();
-  return turnsAt(joint).flatMap(({from, members, turns}) =>
-    turns.flatMap(({to, kind, canRecord}) => {
-      const isAllowed = choices[turnKey(from, to)];
-      if (isAllowed === undefined || !canRecord) return [];
-      const {level} = from.member;
-      if (!nodeByLevel.has(level)) nodeByLevel.set(level, nodeOf(members) ?? newLocalId());
-      const node = nodeByLevel.get(level);
-      const edits = turnEdit({from, to, kind, members, isForbidden: !isAllowed, node}, restrictions);
-      if (edits.some(({after}) => after)) shareJunction(changes, members, level, node);
-      return edits;
+function applyLevelChoices(roads, members) {
+  const owned = nodesByLevel(members);
+  for (const [level, group] of Map.groupBy(members, member => member.level)) {
+    const hasMoved = group.some(member => member.level !== member.previousLevel);
+    if (hasMoved) shareJunction(roads, group, level, owned.get(level) ?? newLocalId());
+  }
+}
+
+// The joint as the open edit leaves it, for its turns: on other levels other roads meet.
+export function jointWithChoices(joint, choices) {
+  const roads = new Changes(roadsFile);
+  applyLevelChoices(roads, withChosenLevels(joint, choices));
+  return jointAfter(joint, roads);
+}
+
+// The same members with their roads as they are after the changes. They may have moved, so they stay by their positions.
+const jointAfter = (joint, roads) =>
+  jointFrom(
+    joint.members.map(member => {
+      const feature = roads.afterOf(member.entry);
+      return {...member, entry: {...member.entry, feature}, level: levelAt(feature, member.index)};
     })
   );
-}
 
-export const levelChoiceKey = ({entry, end}) => `level:${entry.key}/${end}`;
-
-// Ends that came to a level nobody else has there leave the junction, and those that met another one share its ID.
-function levelChoiceEdits(joint, choices, changes) {
-  const chosen = joint.members.map(member => ({...member, level: choices[levelChoiceKey(member)] ?? member.level}));
-  if (chosen.every(({level}, index) => level === joint.members[index].level)) return;
-  const usedNodes = new Set();
-  for (const [level, members] of Map.groupBy(chosen, member => member.level)) {
-    const known = nodeOf(members);
-    const node = known !== null && !usedNodes.has(known) ? known : newLocalId();
-    usedNodes.add(node);
-    shareJunction(changes, members, level, node);
+// What was chosen about the turns of a joint. A junction without an ID gets one for its first rule.
+function applyTurnChoices(roads, rules, joint, choices, context) {
+  const restrictions = context.entriesOf(restrictionsFile);
+  const added = [];
+  for (const {from, members, turns} of turnsAt(joint)) {
+    for (const {to, kind, canRecord} of turns) {
+      const isAllowed = choices[turnKey(from, to)];
+      if (isAllowed === undefined || !canRecord) continue;
+      const {recorded, onlyRule} = ruleOfTurn(restrictions, from, to, members);
+      if (onlyRule || Boolean(recorded) === !isAllowed) continue;
+      if (recorded) {
+        rules.change(recorded, () => null);
+        continue;
+      }
+      const node = nodeOf(members) ?? newLocalId();
+      for (const member of members) shareJunction(roads, [member], member.level, node);
+      const ends = {from: roadId(from.member.entry), to: roadId(to.member.entry)};
+      const properties = {restriction: restrictionFor(kind), ...ends, viaNodes: [node]};
+      added.push({filename: restrictionsFile, key: newLocalId(), after: {type: 'Feature', properties, geometry: null}});
+    }
   }
+  return added;
 }
 
 // Everything one Apply of a junction records: levels, lights, turns and its place.
 export function junctionEdits(joint, coordinate, choices, context) {
-  const changes = new RoadChanges();
-  levelChoiceEdits(joint, choices, changes);
-  const turnEdits = turnChoiceEdits(joint, choices, context, changes);
+  const roads = new Changes(roadsFile);
+  const rules = new Changes(restrictionsFile);
+  applyLevelChoices(roads, withChosenLevels(joint, choices));
+  const chosen = jointAfter(joint, roads);
+  const addedRules = applyTurnChoices(roads, rules, chosen, choices, context);
+  const kind = choices.furniture ?? nodeEntryAt(context.entriesOf(nodesFile), joint.coordinate)?.feature.properties.kind ?? '';
+  const furniture = furnitureEdit(joint.coordinate, kind, context);
   const isMoved = pointKey(coordinate) !== pointKey(joint.coordinate);
-  const place = isMoved ? roundedCoordinate(coordinate) : joint.coordinate;
-  if (isMoved) for (const {entry} of joint.members) changes.change(entry, feature => withPointMoved(feature, joint.coordinate, place));
-  const known = nodeEntryAt(context.entriesOf(nodesFile), joint.coordinate);
-  const kind = choices.furniture ?? known?.feature.properties.kind ?? '';
-  let nodeEdits = furnitureEdit(joint.coordinate, kind, context);
-  if (isMoved && kind) {
-    const after = nodeEdits[0]?.after ?? known.feature;
-    const key = nodeEdits[0]?.key ?? known.key;
-    nodeEdits = [{filename: nodesFile, key, after: {...after, geometry: {...after.geometry, coordinates: place}}}];
+  if (!isMoved) return done([...withRules(roads, context, rules).edits, ...addedRules, ...furniture]);
+  const place = roundedCoordinate(coordinate);
+  const problem = moveJoint(roads, chosen, place, context);
+  if (problem) return refused(problem);
+  return done([...withRules(roads, context, rules).edits, ...addedRules, ...furnitureAt(joint.coordinate, place, furniture, context)]);
+}
+
+function moveJoint(roads, joint, to, context) {
+  const exceptKeys = new Set(joint.members.map(({entry}) => entry.key));
+  for (const {level, members} of joint.groups) {
+    const problem = moveMembers(roads, members, {from: joint.coordinate, to, exceptKeys}, context);
+    if (problem) return problem;
+    touchRoads(roads, to, level, context, exceptKeys);
   }
-  return [...changes.edits(), ...turnEdits, ...nodeEdits];
+  return null;
 }
 
-// The points that a road has before and after, as pairs of their positions, in order.
-function keptPoints(previousKeys, nextKeys) {
-  const kept = [];
-  let from = 0;
-  previousKeys.forEach((key, index) => {
-    const nextIndex = nextKeys.indexOf(key, from);
-    if (nextIndex < 0) return;
-    kept.push([index, nextIndex]);
-    from = nextIndex + 1;
-  });
-  return kept;
+// What stands on a junction goes with it, whether it was there before or is put up in the same step.
+function furnitureAt(from, to, furniture, context) {
+  const [edit] = furniture.length > 0 ? furniture : movedFurniture(from, to, context);
+  if (!edit?.after) return furniture;
+  return [{...edit, after: {...edit.after, geometry: {...edit.after.geometry, coordinates: to}}}];
 }
 
-const nearestTo = (point, candidates) =>
-  candidates.reduce((nearest, candidate) =>
-    distanceMetres(candidate, point) < distanceMetres(nearest, point) ? candidate : nearest
-  );
+// --- A road that is drawn or reshaped
 
-// The points of a road that an edit moved, each with where it went. Between points that stayed, as many points as before
-// are the same ones moved; among more or fewer, a point went to the nearest. A point that was taken out moved nowhere.
-export function movedPoints(before, after) {
-  const previous = before.geometry.coordinates;
-  const next = after.geometry.coordinates;
-  const kept = keptPoints(previous.map(pointKey), next.map(pointKey));
-  const anchors = [[-1, -1], ...kept, [previous.length, next.length]];
-  return anchors.slice(1).flatMap(([end, nextEnd], gap) => {
-    const [start, nextStart] = anchors[gap];
-    const moved = previous.slice(start + 1, end);
-    const targets = next.slice(nextStart + 1, nextEnd);
-    if (targets.length === 0) return [];
-    return moved.map((from, offset) => ({
-      from,
-      to: moved.length === targets.length ? targets[offset] : nearestTo(from, targets),
-      index: start + 1 + offset
-    }));
-  });
+const isFree = (point, {freePoints = new Set()}) => freePoints.has(pointKey(point));
+
+// The roads that move along with a point of the edited one.
+function membersAlong({from, index}, {key, before}, context) {
+  const level = levelAt(before, index);
+  return membersAt(from, context.entriesOf(roadsFile), new Set([key])).filter(member => member.level === level);
 }
 
-// The other roads of the joints a road took along, and the lights and crossings on them. Joined roads stay joined.
-export function followingEdits({key, before, feature}, context, freePoints = new Set()) {
+// The points the edit moved, each place once: a ring is twice where it begins.
+function movesOf({before, feature, origins}) {
   if (!before) return [];
-  const roads = context.entriesOf(roadsFile);
-  const nodes = context.entriesOf(nodesFile);
-  const changes = new RoadChanges();
-  const nodeEdits = [];
-  for (const {from, to, index} of movedPoints(before, feature)) {
-    if (freePoints.has(pointKey(from))) continue;
-    const level = levelAt(before, index);
-    const joint = jointAt(from, roads);
-    const others = (joint?.members ?? []).filter(member => member.entry.key !== key && member.level === level);
-    for (const {entry} of others) changes.change(entry, road => withPointMoved(road, from, to));
-    const node = nodeEntryAt(nodes, from);
-    if (node) nodeEdits.push({filename: nodesFile, key: node.key, after: {...node.feature, geometry: {...node.feature.geometry, coordinates: to}}});
-  }
-  return [...changes.edits(), ...nodeEdits];
+  const moves = movedPoints(before.geometry, feature.geometry, origins ?? undefined);
+  const seen = new Set();
+  return moves.filter(({from}) => !seen.has(pointKey(from)) && seen.add(pointKey(from)));
 }
 
-// What a point put on other roads meets there: [{level, node}], a node only where one of them ends.
-function metAt(coordinate, key, roads) {
-  const others = entriesNear(coordinate, roads).filter(entry => entry.key !== key);
-  const joint = jointAt(coordinate, others);
-  if (joint) return joint.groups.map(({level, members}) => ({level, node: nodeOf(members)}));
-  return others
-    .filter(({feature}) => withJunctionAt(feature, coordinate, touchMetres) !== null)
-    .map(({feature}) => ({level: levelAtPlace(feature, coordinate), node: null}));
+// The junction and level of one end of the road, or nothing where they stay as they are.
+function endFacts(end, edit, context) {
+  const {key, feature, before} = edit;
+  const coordinate = feature.geometry.coordinates.at(end === 'start' ? 0 : -1);
+  const previous = before?.geometry.coordinates.at(end === 'start' ? 0 : -1);
+  const levelName = levelNameOf(end);
+  const nodeName = nodeNameOf(end);
+  const isSameEnd = previous !== undefined && isOriginOf(end, edit);
+  const level = feature.properties[levelName] ?? (before ? levelAt(before, end === 'start' ? 0 : before.geometry.coordinates.length - 1) : null);
+  if (isSameEnd && pointKey(previous) === pointKey(coordinate)) return levelFacts(end, level ?? 0, edit, context);
+  const isTakenAlong = isSameEnd && !isFree(previous, edit);
+  const origin = before && {from: previous, index: end === 'start' ? 0 : before.geometry.coordinates.length - 1};
+  const along = isTakenAlong ? membersAlong(origin, edit, context) : [];
+  const ownNode = isTakenAlong ? before.properties[nodeName] : undefined;
+  const exceptKeys = new Set([key, ...along.map(({entry}) => entry.key)]);
+  const ownLevel = isSameEnd ? level : levelOfNewEnd(end, edit);
+  const joined = joinedFacts(coordinate, ownLevel, ownNode, context, exceptKeys);
+  if (joined) return {[nodeName]: joined.node, [levelName]: joined.level};
+  return {[nodeName]: ownNode ?? newLocalId(), [levelName]: ownLevel ?? context.shownLevel?.() ?? 0};
 }
 
-function chosenMeeting(meetings, preferredLevel) {
-  const levels = meetings.map(({level}) => level);
-  const level = levels.includes(preferredLevel) ? preferredLevel : nearestToGround(levels);
-  const node = meetings.find(meeting => meeting.level === level && meeting.node !== null)?.node ?? null;
-  return {level, node};
+// Whether an end of the road is the point that was this end before, and not one that became it.
+function isOriginOf(end, {before, feature, origins}) {
+  if (!origins) return true;
+  const origin = origins.at(end === 'start' ? 0 : -1);
+  return origin === (end === 'start' ? 0 : before.geometry.coordinates.length - 1) && feature.geometry.coordinates.length > 1;
+}
+
+// A point inside the road that became its end is where the road was there.
+function levelOfNewEnd(end, {before, feature, origins}) {
+  const origin = origins?.at(end === 'start' ? 0 : -1);
+  if (before && Number.isInteger(origin)) return levelAt(before, origin);
+  return feature.properties[levelNameOf(end)] ?? null;
 }
 
 // An end that was put on another level leaves its junction for the one that roads of that level share there.
-function factsOnChosenLevel(end, feature, before, meetings) {
-  const level = feature.properties[levelNameOf(end)] ?? 0;
+function levelFacts(end, level, {key, feature, before}, context) {
   if (level === (before.properties[levelNameOf(end)] ?? 0)) return {};
+  const coordinate = feature.geometry.coordinates.at(end === 'start' ? 0 : -1);
+  const meetings = meetingsAt(coordinate, context.entriesOf(roadsFile), new Set([key]));
   const node = meetings.find(meeting => meeting.level === level)?.node ?? newLocalId();
   return {[levelNameOf(end)]: level, [nodeNameOf(end)]: node};
 }
 
-// The junction and level of one end of a drawn or reshaped road, or nothing where they stay as they are.
-function endFacts(end, {key, feature, before}, roads, {freePoints, preferredLevel}) {
-  const index = end === 'start' ? 0 : -1;
-  const coordinate = feature.geometry.coordinates.at(index);
-  const previous = before?.geometry.coordinates.at(index);
-  const meetings = metAt(coordinate, key, roads);
-  if (previous && pointKey(previous) === pointKey(coordinate)) return factsOnChosenLevel(end, feature, before, meetings);
-  if (meetings.length > 0) {
-    const {level, node} = chosenMeeting(meetings, preferredLevel);
-    return {[levelNameOf(end)]: level, [nodeNameOf(end)]: node ?? newLocalId()};
+// A drawn or reshaped road with the junctions and levels of what its ends meet.
+export function roadWithEnds(edit, context) {
+  const start = endFacts('start', edit, context);
+  // A ring starts and ends at one junction.
+  const end = isRing(edit.feature)
+    ? Object.fromEntries(Object.entries(start).map(([name, value]) => [name.replace('start', 'end'), value]))
+    : endFacts('end', edit, context);
+  return withProperties(edit.feature, {...start, ...end});
+}
+
+const nextMember = ({feature}, nextIndex) => {
+  const {length} = feature.geometry.coordinates;
+  return {level: levelAt(feature, nextIndex), end: nextIndex === 0 ? 'start' : nextIndex === length - 1 ? 'end' : null};
+};
+
+// What goes with a road as Apply records it: the roads joined to its moved points with what stands there, the roads it now
+// touches, and the turn rules of all of them.
+export function companionsOfRoad(edit, context) {
+  const {key, feature, before} = edit;
+  const roads = new Changes(roadsFile);
+  const furniture = [];
+  const movedIndexes = new Set();
+  for (const move of movesOf(edit)) {
+    movedIndexes.add(move.nextIndex);
+    if (isFree(move.from, edit)) continue;
+    furniture.push(...movedFurniture(move.from, move.to, context));
+    const along = membersAlong(move, edit, context);
+    if (along.length === 0) continue;
+    const {level, end} = nextMember(edit, move.nextIndex);
+    // The edited road has its place in the junction already, and the others share it.
+    const facts = end ? {level, node: feature.properties[nodeNameOf(end)]} : null;
+    const problem = moveMembers(roads, along, {...move, facts, exceptKeys: new Set([key])}, context);
+    if (problem) return refused(problem);
   }
-  const level = feature.properties[levelNameOf(end)] ?? 0;
-  // A junction that moves with its roads stays the same one.
-  const isTakenAlong = previous && !freePoints.has(pointKey(previous)) && before.properties[nodeNameOf(end)] !== undefined;
-  return isTakenAlong ? {[levelNameOf(end)]: level} : {[levelNameOf(end)]: level, [nodeNameOf(end)]: newLocalId()};
-}
-
-// A drawn or reshaped road with the junctions and levels of what its ends meet. A free point was disconnected, so its
-// end leaves the junction; preferredLevel decides where roads of several levels share a point.
-export function roadWithEnds(edit, roads, {freePoints = new Set(), preferredLevel = null} = {}) {
-  const choices = {freePoints, preferredLevel};
-  return withProperties(edit.feature, {
-    ...endFacts('start', edit, roads, choices),
-    ...endFacts('end', edit, roads, choices)
-  });
-}
-
-// The other roads that get a point, because a drawn or reshaped road now touches them on its level there.
-export function touchedRoadEdits({key, feature, before}, context) {
   const known = new Set((before?.geometry.coordinates ?? []).map(pointKey));
-  const roads = context.entriesOf(roadsFile).filter(entry => entry.key !== key);
-  const changes = new RoadChanges();
   feature.geometry.coordinates.forEach((point, index) => {
-    if (known.has(pointKey(point))) return;
-    const level = levelAt(feature, index);
-    for (const entry of entriesNear(point, roads)) {
-      const isTouched = withJunctionAt(entry.feature, point, touchMetres) !== null;
-      if (!isTouched || levelAtPlace(entry.feature, point) !== level) continue;
-      changes.change(entry, road => withJunctionAt(road, point, touchMetres) ?? road);
-    }
+    if (known.has(pointKey(point)) && !movedIndexes.has(index)) return;
+    touchRoads(roads, point, levelAt(feature, index), context, new Set([key]));
   });
-  return changes.edits();
+  const ownChange = before ? [{entry: {filename: roadsFile, key, feature: before}, after: feature}] : [];
+  const rules = rulesFollowing([...ownChange, ...roads.list()], context);
+  return done([...roads.edits(), ...rules.edits(), ...furniture]);
 }

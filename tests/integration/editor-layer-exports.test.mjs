@@ -135,7 +135,7 @@ test('a split road, forbidden turns at two junctions and a traffic light pass in
   const group = turnsAt(splitJoint).find(({turns}) => turns.some(turn => isOntoNewHalf(turn) && turn.kind !== 'uTurn'));
   const turn = group.turns.find(candidate => isOntoNewHalf(candidate) && candidate.kind !== 'uTurn');
   const choices = {[turnKey(group.from, turn.to)]: false, furniture: 'traffic_signals'};
-  editor.record(junctionEdits(splitJoint, splitJoint.coordinate, choices, editor.context));
+  editor.record(junctionEdits(splitJoint, splitJoint.coordinate, choices, editor.context).edits);
   const operations = await editor.exportAndImport();
   assert.ok(filesOf(operations).includes('turn-restrictions.json'));
   const rule = editor.written('turn-restrictions.json').find(({properties}) => properties.to === turn.to.member.entry.key);
@@ -154,11 +154,11 @@ test('a junction is moved, a road disconnected from it and joined to it again, a
     .map(({feature}) => jointAt(feature.geometry.coordinates[0], roads()))
     .find(isJunction);
   const moved = [joint.coordinate[0] + 0.00001, joint.coordinate[1]].map(value => Math.round(value * 1e7) / 1e7);
-  editor.record(junctionEdits(joint, moved, {}, editor.context));
+  editor.record(junctionEdits(joint, moved, {}, editor.context).edits);
   const movedJoint = jointAt(moved, roads());
   assert.equal(movedJoint.members.length, 3, 'every road went along');
   const [first] = movedJoint.members;
-  editor.record(disconnectEdits(movedJoint, first, editor.context).edits);
+  editor.record(disconnectEdits(first, editor.context).edits);
   assert.equal(jointAt(moved, roads()).members.length, 2);
   await editor.exportAndImport();
   const written = editor.written('roads.geojson').find(({properties}) => properties.entityId === first.entry.feature.properties.entityId && properties.entityPart === first.entry.feature.properties.entityPart);
