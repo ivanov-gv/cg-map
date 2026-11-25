@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGeoJSONOverlay} from './overlay.js';
+import {createGeoJSONOverlay} from './index.js';
 
 // Only source, layer and paint state matter here; GPU and event behaviour belongs to the map lifecycle tests.
 class OverlayMap {

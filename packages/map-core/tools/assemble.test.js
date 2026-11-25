@@ -40,6 +40,6 @@ test('artifact assembly copies runtime modules but no tests next to them', t => 
   assert.ok(fs.existsSync(path.join(artifactDirectory, 'map-core', 'map.js')));
   const copiedTests = fs
     .readdirSync(artifactDirectory, {recursive: true})
-    .filter(entry => typeof entry === 'string' && entry.endsWith('.test.js'));
+    .filter(entry => entry.endsWith('.test.js'));
   assert.deepEqual(copiedTests, []);
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMap, whenMapReady, hitTest, offsetCoordinate} from './map.js';
+import {createMap, whenMapReady, hitTest, offsetCoordinate} from './index.js';
 
 // A small eventful engine keeps lifecycle tests isolated from GPU, network and the DOM.
 class TestMap {
@@ -11,7 +11,6 @@ class TestMap {
     this.layers = new Map();
     this.resizeCount = 0;
     this.controls = [];
-    this.layout = new Map();
   }
   addControl(control, position) {
     this.controls.push({control, position});
@@ -50,26 +49,11 @@ class TestMap {
       }
     });
   }
-  getSource(name) {
-    return this.sources.get(name);
-  }
-  removeSource(name) {
-    this.sources.delete(name);
-  }
   addLayer(layer) {
     this.layers.set(layer.id, layer);
   }
   getLayer(name) {
     return this.layers.get(name);
-  }
-  removeLayer(name) {
-    this.layers.delete(name);
-  }
-  setLayoutProperty(name, _property, value) {
-    this.layout.set(name, value);
-  }
-  setPaintProperty(name, property, value) {
-    this.layers.get(name).paint[property] = value;
   }
   project([longitude, latitude]) {
     return {x: longitude * 10, y: latitude * 10};
@@ -113,7 +97,11 @@ test('map lifecycle installs shared controls and tears down observers/listeners'
       didDisconnect = true;
     }
   };
-  const engine = {Map: TestMap, NavigationControl: class {}, ScaleControl: class {}};
+  // Startup installs the building-number scale, which makes this one MapLibre call.
+  class StartupMap extends TestMap {
+    setLayoutProperty() {}
+  }
+  const engine = {Map: StartupMap, NavigationControl: class {}, ScaleControl: class {}};
   const map = createMap({engine, container: 'test', basemapURL: 'archive', assetBaseURL: 'https://local.test/'});
   const ready = whenMapReady(map);
   map.emit('load');

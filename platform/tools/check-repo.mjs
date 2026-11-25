@@ -116,7 +116,7 @@ for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
 // App tests, their browser configuration and tools written only for tests read data from the pinned package. Register a
 // new test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
-const testFilePattern = /\.test\.js$/;
+const testFilePattern = /\.(?:test|spec)\.m?js$/;
 const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
 const repositoryDataPattern = new RegExp(
   [
@@ -128,7 +128,7 @@ const repositoryDataPattern = new RegExp(
 for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
   const testFiles = [
-    ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
+    ...walk(application).filter(file => testFilePattern.test(file) && !file.includes('/node_modules/')),
     ...(fs.existsSync(configFile) ? [configFile] : []),
     ...TEST_ONLY_APP_TOOLS.filter(file => file.startsWith(`${application}/`))
   ];

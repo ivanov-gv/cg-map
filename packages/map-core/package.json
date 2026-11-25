@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint src tools",
-    "test": "node --test"
+    "test": "node --test '**/!(*.browser).test.js'"
   },
   "exports": {
     ".": "./src/index.js",

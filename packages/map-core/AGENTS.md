@@ -16,7 +16,7 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
   and tools/ export as a public API: a breaking change needs a major version, or before v1 a minor one
   ([decision 0039](../../docs/decisions/0039-strong-foundation-before-v1.md)).
 - Unit tests live beside the source they check as `*.test.js`, including tools/. The published package and every built
-  artifact leave them out; keep the consumer import paths under src/, tools/ and assets/ unchanged.
+  artifact leave them out.
 - Local `make verify PKG=packages/map-core` and `make -C apps/core-demo e2e` are optional for iterating; GitHub's
   map-core and consumer pipelines gate the merge. Review both deployment prefixes and the concept app manually while
   iterating.

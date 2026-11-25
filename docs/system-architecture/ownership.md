@@ -24,8 +24,9 @@ CODEOWNER; substitute real team handles as people join.
   breaks; before v1 it needs no migration path ([decision 0039](../decisions/0039-strong-foundation-before-v1.md)).
   Publish a contracts release before bumping a consumer's pin; the release and the bump are separate reviewed changes.
 - Cross-component contract and artifact integration tests live in tests/. Each browser app owns the browser acceptance
-  of its own artifact, under its tests/e2e; apps/web includes offline and mocked server-mode journeys. Local tests and
-  instructions live with their component.
+  of its own artifact: apps/core-demo keeps its journeys in e2e/, and apps/web and apps/editor keep theirs in
+  tests/e2e/. apps/web includes offline and mocked server-mode journeys. Local tests and instructions live with their
+  component.
 
 ## When to split teams further
 

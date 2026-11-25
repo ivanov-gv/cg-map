@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {featureFilter} from '@maplibre/maplibre-gl-style-spec';
-import {mapStyle} from './map-style.js';
-import {basemapColors} from './basemap-palette.js';
-import {drawingGroups, drawingGroupKey} from './drawing-order.js';
+import {mapStyle, basemapColors, drawingGroups, drawingGroupKey} from './index.js';
 
 const walkingLayerIds = ['paths', 'footways', 'park-routes', 'cycleways', 'steps'];
-const style = mapStyle('pmtiles://archive', 'https://local.test/');
-const filters = walkingLayerIds.map(id => ({id, filter: featureFilter(style.layers.find(layer => layer.id === id).filter)}));
+const walkingStyle = mapStyle('pmtiles://archive', 'https://local.test/');
+const filters = walkingLayerIds.map(id => ({id, filter: featureFilter(walkingStyle.layers.find(layer => layer.id === id).filter)}));
 
 function walkingLayersFor(properties) {
   const feature = {type: 2, properties};
