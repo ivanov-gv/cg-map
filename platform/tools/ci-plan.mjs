@@ -99,16 +99,12 @@ const EDITING_ONLY_SOURCES = [
   'deletion-dialog.js',
   'interior-point.js',
   'layer-buildings.js',
-  'joint-layer.js',
-  'layer-joints.js',
   'layer-junctions.js',
   'layer-roads.js',
-  'level-picker.js',
   'opening-hours-dialog.js',
   'opening-hours.js',
   'street-choices.js',
   'road-edits.js',
-  'road-graph.js',
   'road-junctions.js',
   'road-shapes.js',
   'street-dialog.js'
@@ -204,7 +200,11 @@ export const SHARED_EDITOR_SOURCES = [
   'inspector-editing.js',
   'inspector-viewport.js',
   'property-form.js',
-  'review-panel.js'
+  'review-panel.js',
+  'joint-layer.js',
+  'layer-joints.js',
+  'level-picker.js',
+  'road-graph.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
