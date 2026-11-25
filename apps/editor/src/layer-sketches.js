@@ -49,6 +49,7 @@ export const sketchBehaviors = {
   [sketchFile]: {
     kind: () => 'Sketch',
     title: ({properties}) => properties.what ?? 'New sketch',
+    hasMagnet: () => false,
     sections: () => [{title: 'What is it', fields: ['what', 'note']}],
     controls: () => ({note: noteControl}),
     renderExtras(container) {

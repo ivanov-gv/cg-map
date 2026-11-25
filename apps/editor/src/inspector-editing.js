@@ -41,7 +41,6 @@ import {isSameHandle, moveVertex, vertexHandles} from './geometry-editing.js';
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
-import {sketchFile} from './layer-sketches.js';
 import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
 import {hasMagnetEffect} from './magnet-tools.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
@@ -215,7 +214,8 @@ export class InspectorEditing {
   }
 
   get #overlapText() {
-    return overlapNotice(this.#overlaps, ({feature}) => this.#behavior.title(feature, this.#context.behaviorContext()));
+    const context = this.#context.behaviorContext();
+    return overlapNotice(this.#overlaps, ({feature}) => this.#behavior.overlapTitle(feature, context));
   }
 
   #magnetButton() {
@@ -233,12 +233,11 @@ export class InspectorEditing {
     const canChangePoint = hasMagnetEffect({
       tool,
       geometry: feature.geometry,
-      joins: Boolean(this.#behavior.joinsLines),
-      isSketch: this.#filename === sketchFile
+      joins: Boolean(this.#behavior.joinsLines)
     });
     if (!canChangePoint) return false;
-    // An outline is not a geometry until its first corner, so the layer cannot judge it yet.
-    return [editTools.drawPolygon, editTools.cutHole].includes(tool) || this.#behavior.hasMagnet(feature);
+    const isDrawingOutline = [editTools.drawPolygon, editTools.cutHole].includes(tool);
+    return this.#behavior.hasMagnet(feature, isDrawingOutline);
   }
 
   #drawingButtons() {

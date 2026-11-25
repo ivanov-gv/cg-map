@@ -13,7 +13,7 @@ import {
   roadWithEnds,
   splitEdits
 } from '../src/road-edits.js';
-import {jointAt, jointNear, jointsIn, keptResultWithin, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
+import {createKeptBox, jointAt, jointNear, jointsIn, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
 import {ruleOfTurn, turnKey, turnsAt} from '../src/road-junctions.js';
 
 const origin = [19.25, 42.44];
@@ -528,7 +528,7 @@ test('a junction records its roads and never itself', () => {
   assert.equal(behavior.isDerived, true);
 });
 
-test('a wide box is kept for one list of entries, and another list reads again', () => {
+test('a kept wide box is private to its cache and to its question', () => {
   const entries = [];
   const otherEntries = [];
   const reads = [];
@@ -537,10 +537,19 @@ test('a wide box is kept for one list of entries, and another list reads again',
     return bounds;
   };
   const wide = [-0.002, -0.002, 1.002, 1.002];
-  assert.deepEqual(keptResultWithin(entries, [0, 0, 1, 1], find), wide);
+  const cache = createKeptBox();
+  const otherCache = createKeptBox();
+  const firstWide = cache(entries, [0, 0, 1, 1], find);
+  assert.deepEqual(firstWide, wide);
   assert.equal(reads.length, 1);
-  keptResultWithin(entries, [0.1, 0.1, 0.9, 0.9], find);
+  assert.strictEqual(cache(entries, [0.1, 0.1, 0.9, 0.9], find), firstWide);
   assert.equal(reads.length, 1, 'a nearby question reuses the wide box');
-  keptResultWithin(otherEntries, [0.1, 0.1, 0.9, 0.9], find);
+  cache(otherEntries, [0.1, 0.1, 0.9, 0.9], find);
   assert.equal(reads.length, 2, 'replaced entries read again');
+  assert.notStrictEqual(otherCache(entries, [0.1, 0.1, 0.9, 0.9], find), firstWide);
+  assert.equal(reads.length, 3, 'another cache never uses the first answer');
+  assert.notStrictEqual(cache(entries, [0.1, 0.1, 0.9, 0.9], find, 'other rule'), firstWide);
+  assert.equal(reads.length, 4, 'another question of one cache reads again');
+  assert.strictEqual(cache(entries, [0.1, 0.1, 0.9, 0.9], find), firstWide);
+  assert.equal(reads.length, 4, 'the first question was not overwritten');
 });

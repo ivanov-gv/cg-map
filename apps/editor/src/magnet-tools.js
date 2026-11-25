@@ -5,8 +5,8 @@ import {editTools} from './edit-transaction.js';
 const outlineTools = new Set([editTools.drawPolygon, editTools.cutHole]);
 const joiningTools = new Set([editTools.drawLine, editTools.vertices]);
 
-export function hasMagnetEffect({tool, geometry, joins = false, isSketch = false}) {
-  if (isSketch || tool === editTools.placePoint) return false;
+export function hasMagnetEffect({tool, geometry, joins = false}) {
+  if (tool === editTools.placePoint) return false;
   // An outline is drawn point by point, so its geometry does not exist until the first corner.
   if (outlineTools.has(tool)) return true;
   if (tool === editTools.drawLine) return joins;

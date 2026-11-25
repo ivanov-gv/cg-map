@@ -38,6 +38,17 @@ test('neighbours are the other areas of the file that can be reshaped', () => {
   assert.deepEqual(found.map(({key}) => key), ['house']);
 });
 
+test('two rules keep their own neighbours for one file', () => {
+  const areaRule = {geometries: ['Polygon'], operations: ['modify'], properties: {}, editableKinds: ['building']};
+  const lineRule = {...areaRule, geometries: ['LineString']};
+  const entries = [entry('house', square(0, 0), {kind: 'building'})];
+  const own = {filename: 'buildings.geojson', key: 'own'};
+  const ask = rule =>
+    neighbouringAreas(square(2, 0), own, {rules: {layers: {'buildings.geojson': rule}}, entriesOf: () => entries}, 1);
+  assert.deepEqual(ask(areaRule).map(({key}) => key), ['house']);
+  assert.deepEqual(ask(lineRule).map(({key}) => key), []);
+});
+
 test('areas that share corners, sides or parts of sides do not overlap', () => {
   for (const neighbour of [square(2, 0), square(2, 1), square(2, 2), square(2, 0.5, 1), square(5, 5)]) {
     assert.equal(doOverlap(house.feature.geometry, neighbour, false), false);

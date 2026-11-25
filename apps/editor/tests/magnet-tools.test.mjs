@@ -20,7 +20,6 @@ test('the switch is offered only where this mode can change a point of this obje
     [{tool: editTools.drawLine, geometry: line, joins: false}, false, 'a drawn line that cannot join'],
     [{tool: editTools.move, geometry: point, joins: true}, true, 'a moved junction'],
     [{tool: editTools.vertices, geometry: point, joins: true}, false, 'a point with no corners'],
-    [{tool: editTools.drawPolygon, geometry: area, joins: true, isSketch: true}, false, 'a sketch'],
     [{tool: editTools.placePoint, geometry: null, joins: true}, false, 'placing a record']
   ];
   for (const [input, expected, name] of cases) {

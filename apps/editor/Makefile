@@ -11,7 +11,7 @@ verify test e2e e2e-built: export MAP_CONTRACTS_ROOT = $(if $(PINNED_CONTRACTS_R
 LAN_PORT ?= 8443
 LAN_TLS := $(ROOT)/.build/lan-tls
 
-.PHONY: verify lint test build dev lan e2e e2e-built measure-datasets benchmark-magnet
+.PHONY: verify lint test build dev lan e2e e2e-built measure-datasets
 
 verify: lint build test
 
@@ -43,7 +43,3 @@ e2e-built:
 # How startup and mode switches grow with source size, in a real browser. See README.md, "Larger datasets".
 measure-datasets: build
 	node tools/measure-datasets.mjs
-
-# Times the magnet's area and road lookups on the reviewed sources. See README.md, "Larger datasets".
-benchmark-magnet:
-	node tools/benchmark-magnet.mjs

@@ -3,6 +3,7 @@ import {kindLabel, objectName} from './object-names.js';
 
 // What a layer does differently with the objects of one file. Every hook is optional:
 //   kind(feature), title(feature, context)      the small label and the name in the inspector
+//   overlapTitle(feature, context)              the name in the overlap notice, when it needs more than the title
 //   sections(feature, edit)                     form sections in order, [{title, fields, isCollapsed}]
 //   controls(edit)                              controls that replace single fields, {name: value => element}
 //   usualValues(feature, context)               what free fields usually say, offered as a list, {name: [value]}
@@ -20,7 +21,7 @@ import {kindLabel, objectName} from './object-names.js';
 //   snappedPoint(event, context, feature)       where a placed or drawn point belongs, or null for where it was put
 //   limitedGeometry(geometry, change, context)  where a drag must stop, with change = {key, feature, previousGeometry,
 //                                             origins, draggedIndex}, the point of a line that is dragged or null
-//   hasMagnet(feature)                          whether its points go to what is close; areas do, unless a layer says more
+//   hasMagnet(feature, isDrawingOutline)        whether its points go to what is close; areas and outlines do by default
 //   mayContainOthers                            whether an area inside another one is no overlap
 //   closesLines                                 a drawn line ends on its first point when that is tapped
 //   dragTarget(geometry, context)               {feature, label} of what a moved object would belong to, or null
@@ -47,9 +48,10 @@ export function registerBehaviors(behaviorByFile, layerId = null) {
   }
 }
 
-const defaultBehavior = filename => ({
+const defaultBehavior = (filename, layerId) => ({
   kind: () => kindLabel(filename),
   title: feature => objectName(feature, filename),
+  overlapTitle: (feature, context) => behaviorOf(filename, layerId).title(feature, context),
   sections: () => null,
   tools: () => [],
   renderExtras: () => {},
@@ -65,7 +67,7 @@ const defaultBehavior = filename => ({
   marks: () => [],
   isDerived: false,
   isReshapable: () => true,
-  hasMagnet: feature => isArea(feature.geometry),
+  hasMagnet: (feature, isDrawingOutline) => isDrawingOutline || isArea(feature.geometry),
   mayContainOthers: true,
   isViewOnly: () => false,
   usualValues: () => ({}),
@@ -76,7 +78,7 @@ const defaultBehavior = filename => ({
 });
 
 export const behaviorOf = (filename, layerId = null) => ({
-  ...defaultBehavior(filename),
+  ...defaultBehavior(filename, layerId),
   ...behaviors.get(filename),
   ...behaviors.get(behaviorKey(filename, layerId))
 });

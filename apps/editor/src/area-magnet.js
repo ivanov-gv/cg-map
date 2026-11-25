@@ -2,7 +2,7 @@
 import {roundedCoordinate, translateGeometry} from './geometry-editing.js';
 import {coordinateAtOffset, distanceMetres, nearestPointOnOutline} from './geometry-measures.js';
 import {featureCapabilities} from './layer-rules.js';
-import {boundsOf, entriesWithin, keptResultWithin} from './road-graph.js';
+import {boundsOf, createKeptBox, entriesWithin} from './road-graph.js';
 
 const magnetReachPixels = 12;
 
@@ -44,22 +44,24 @@ function widenedBounds([west, south, east, north], metres) {
   return [west + left, south + bottom, east + right, north + top];
 }
 
-const overlapsBounds = ([left, bottom, right, top], [west, south, east, north]) =>
-  left <= east && right >= west && bottom <= north && top >= south;
+const keptAreaLists = createKeptBox();
 
 const canReshape = (entry, rule) =>
   isArea(entry.feature.geometry) && featureCapabilities(entry.feature, rule).canReshape;
 
 // The other areas of the same file around a place or a shape. What only frames the map, such as the sea, is none of them.
-// A wide box is kept under the entries' identity, so nearby questions of a drag need one read of the file.
+// A wide box is kept per rule, so nearby questions of a drag need one read of the file.
 export function neighbouringAreas(geometry, {filename, key}, context, marginMetres = 0) {
   const rule = context.rules.layers[filename];
   const bounds = widenedBounds(boundsOf({geometry}), marginMetres);
   const entries = context.entriesOf(filename);
-  const candidates = keptResultWithin(entries, bounds, wideBounds =>
-    entriesWithin(entries, wideBounds).filter(entry => canReshape(entry, rule))
+  const candidates = keptAreaLists(
+    entries,
+    bounds,
+    wideBounds => entriesWithin(entries, wideBounds).filter(entry => canReshape(entry, rule)),
+    rule
   );
-  return candidates.filter(entry => entry.key !== key && overlapsBounds(boundsOf(entry.feature), bounds));
+  return entriesWithin(candidates, bounds).filter(entry => entry.key !== key);
 }
 
 const pointGeometry = coordinate => ({type: 'LineString', coordinates: [coordinate, coordinate]});

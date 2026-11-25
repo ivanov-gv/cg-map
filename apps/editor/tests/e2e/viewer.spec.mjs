@@ -163,7 +163,7 @@ test.describe('source viewer', () => {
     const corners = quadrilateral.geometry.coordinates[0].slice(0, 4);
     await centerSourceMap(page, averageCoordinate(corners), closeZoom);
     await clickMapCenter(page, 'edit-preview-buildings');
-    await expect(page.locator('#selection-title')).toHaveText('a building without an address');
+    await expect(page.locator('#selection-title')).toHaveText('No address');
     await expect(page.locator('#selection-source')).toContainText('buildings.geojson · feature');
     await expectRenderedSelection(page, 'editor-source-selection-line');
 

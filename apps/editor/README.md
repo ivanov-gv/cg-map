@@ -130,11 +130,6 @@ Opening a mode grows about linearly, and at 8 times takes long enough to notice 
 one reading at an arbitrary moment of garbage collection, so only their overall growth means anything. This does not
 measure a phone, or edits and export at these sizes.
 
-`make -C apps/editor benchmark-magnet` times the magnet on the reviewed sources. A run on 2026-11-25 measured Skadarsko
-jezero `magneticallyMoved` at 10.890 ms first and 9.967 ms median; the shared wide-box cache served 200 nearby buildings
-queries at 0.018 ms median and 200 road queries at 0.004 ms median. Replacing the entry lists forced a fresh read at
-13.357 ms and 4.125 ms. The tool fails if the lake median exceeds 20 ms.
-
 ### Limits
 
 - Changed files are not a rebuild: see above. The importer says when tiles need one.
