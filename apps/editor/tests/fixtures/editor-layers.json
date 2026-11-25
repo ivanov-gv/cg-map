@@ -134,11 +134,6 @@
           "ignoredCharactersPattern": "[\\s./_-]",
           "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
         },
-        "display_number": {
-          "maxLength": 128,
-          "ignoredCharactersPattern": "[\\s./_-]",
-          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
-        },
         "building_number": {
           "maxLength": 128,
           "ignoredCharactersPattern": "[\\s./_-]",
