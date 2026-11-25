@@ -8,11 +8,12 @@ included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.i
 place to install it from. It has no access control, and its data is already public.
 
 The build assembles the thirteen reviewed source GeoJSON files of bundle version 2 through data-owned tooling. The
-editor also accepts version 1, the original eight files without later Feature sources, from older reviewed bundles. It
-verifies the manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source modes. Hashes
-bind revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source
-geometry/properties, never simplified tiles. Unknown properties, provenance and any source feature ID are displayed
-unchanged. Source files are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
+editor also accepts version 1, the original eight files, from older reviewed bundles, and version 3, every source file.
+It exports changesets of the version that the editing rules name. It verifies the manifest version, filenames, byte
+sizes, SHA-256 and feature counts before enabling source modes. Hashes bind revision-local indices; they are not
+invented upstream IDs. Selecting a feature reads full source geometry/properties, never simplified tiles. Unknown
+properties, provenance and any source feature ID are displayed unchanged. Source files are never written. Hashing needs
+a secure context, so anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Source details, offline status and attribution are in Layers. Select an

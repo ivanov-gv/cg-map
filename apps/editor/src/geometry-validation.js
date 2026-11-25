@@ -26,7 +26,17 @@ function pointTouchesSegment(start, end, point) {
   return isCollinear && isInsideBounds;
 }
 
+// Cheap, and true for almost every pair of edges of a long outline.
+function areSegmentsApart(firstStart, firstEnd, secondStart, secondEnd) {
+  return [0, 1].some(
+    axis =>
+      Math.max(firstStart[axis], firstEnd[axis]) < Math.min(secondStart[axis], secondEnd[axis]) ||
+      Math.max(secondStart[axis], secondEnd[axis]) < Math.min(firstStart[axis], firstEnd[axis])
+  );
+}
+
 function segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd) {
+  if (areSegmentsApart(firstStart, firstEnd, secondStart, secondEnd)) return false;
   const isSecondAcrossFirst =
     crossProduct(firstStart, firstEnd, secondStart) * crossProduct(firstStart, firstEnd, secondEnd) < 0;
   const isFirstAcrossSecond =
@@ -121,4 +131,39 @@ export function polygonProblem(rings) {
 export function pointInsidePolygon(point, rings) {
   const [outerRing, ...holes] = rings;
   return pointInsideRing(point, outerRing) && !holes.some(hole => pointInsideRing(point, hole));
+}
+
+// Returns why a set of separate polygons is unusable, or null.
+function multiPolygonProblem(polygons) {
+  if (!Array.isArray(polygons) || polygons.length === 0) return 'shape has no polygons';
+  return polygons.map(polygonProblem).find(Boolean) ?? null;
+}
+
+const problemByGeometryType = {
+  Point: coordinates => (isValidCoordinate(coordinates) ? null : 'point is not a WGS84 coordinate'),
+  LineString: lineProblem,
+  Polygon: polygonProblem,
+  MultiPolygon: multiPolygonProblem
+};
+
+// Returns why this geometry cannot be recorded, or null. "None" stands for a record without geometry, such as a route.
+export function geometryProblem(geometry, allowedTypes) {
+  const geometryType = geometry === null ? 'None' : geometry?.type;
+  if (!allowedTypes.includes(geometryType)) return `${geometryType ?? 'This'} geometry is not editable in this file`;
+  return problemByGeometryType[geometryType]?.(geometry.coordinates) ?? null;
+}
+
+const isClosedRing = ring =>
+  Array.isArray(ring) &&
+  ring.length >= 4 &&
+  ring.every(isValidCoordinate) &&
+  JSON.stringify(ring[0]) === JSON.stringify(ring.at(-1));
+
+// A derived shape, such as a municipality rebuilt from its shared edges, can have thousands of corners and touch itself
+// at one of them. Its topology is checked by check-shared-edges.py, so only its structure is judged here.
+export function derivedGeometryProblem(geometry, allowedTypes) {
+  if (!allowedTypes.includes(geometry?.type)) return `${geometry?.type ?? 'This'} geometry is not editable in this file`;
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  const rings = polygons.flat();
+  return rings.length > 0 && rings.every(isClosedRing) ? null : 'derived shape has an open or invalid ring';
 }

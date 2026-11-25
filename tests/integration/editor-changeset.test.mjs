@@ -55,7 +55,7 @@ function recordValidEdit(session, filename, key, feature) {
 
 // Exports through a JSON round trip, because that is the only way a changeset leaves the browser.
 async function exportAndApply(session, sources, root, newEntityId) {
-  const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope)));
+  const changeset = JSON.parse(JSON.stringify(await buildChangeset(session, sources, envelope, rules)));
   const options = {now: envelope.createdAt, contractsDirectory};
   if (newEntityId) options.newEntityId = newEntityId;
   return {changeset, result: applyChangeset(changeset, root, options)};
@@ -217,7 +217,7 @@ test('parks and rivers are editable through the importer, and the editor can res
   };
   renameFirst('land.geojson', 'park');
   renameFirst('water.geojson', 'river');
-  const changeset = await buildChangeset(session, sources, envelope);
+  const changeset = await buildChangeset(session, sources, envelope, rules);
   const resumed = new EditSession(sources);
   await importChangeset(JSON.parse(JSON.stringify(changeset)), resumed, sources, rules, levels);
   assert.deepEqual(resumed.changedFiles().toSorted(), filenames);

@@ -8,7 +8,6 @@ import {dataSourceDirectory, dataSourceURL, dataToolURL} from '../data-root.mjs'
 import {contractURL, readContractJSON} from '../contracts-root.mjs';
 import {
   bundleFilesByVersion,
-  currentBundleVersion,
   sourceFiles,
   validateBundleManifest,
   decodeSource
@@ -16,6 +15,8 @@ import {
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
 const editorBundleContractURL = contractURL('editor-bundle.schema.json');
+// What the producer of this commit writes. The editor can read it, and may already read a later one.
+const producedVersion = readContractJSON('editor-bundle.schema.json').oneOf.at(-1).properties.version.const;
 
 // Real producer/consumer integration proves that revision-bound indices refer to unchanged source bytes.
 test('reviewed source bundle round trips byte-for-byte through the editor consumer', async t => {
@@ -24,10 +25,10 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
   const manifest = validateBundleManifest(
     await writeEditorBundle(dataSourceDirectory, outputDirectory, editorBundleContractURL)
   );
-  assert.equal(manifest.version, currentBundleVersion);
+  assert.equal(manifest.version, producedVersion);
   assert.deepEqual(
     manifest.layers.map(layer => layer.filename),
-    sourceFiles
+    bundleFilesByVersion[producedVersion]
   );
   for (const metadata of manifest.layers) {
     const original = await readFile(dataSourceURL(metadata.filename));
@@ -78,7 +79,7 @@ test('producer manifest matches the shared bundle contract for its version', asy
   const layerSchema = schema.properties.layers.items;
   const branchLayerSchema = versionBranch.properties.layers.items;
   const contractFiles = branchLayerSchema.properties.filename.enum;
-  assert.equal(manifest.version, currentBundleVersion);
+  assert.equal(manifest.version, producedVersion);
   assert.deepEqual(Object.keys(manifest).sort(), [...schema.required].sort());
   assert.equal(manifest.layers.length, versionBranch.properties.layers.minItems);
   assert.equal(manifest.layers.length, versionBranch.properties.layers.maxItems);
