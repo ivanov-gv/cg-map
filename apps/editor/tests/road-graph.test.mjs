@@ -108,6 +108,19 @@ test('a forbidden turn names roads and junctions of the editor too, and gives th
   );
 });
 
+test('a forbidden turn at two unnamed ends gives both roads the one junction the rule names', () => {
+  const context = contextWith({roads: [road([[0, 0], [1, 0]]), road([[1, 0], [1, 1]])]});
+  const joint = jointAt(at(1, 0), roadsOf(context));
+  const {from, turns} = turnsAt(joint)[0];
+  const left = turns.find(({kind}) => kind === 'left');
+  const {edits} = junctionEdits(joint, joint.coordinate, {[turnKey(from, left.to)]: false}, context);
+  const [rule] = edits.filter(({filename}) => filename === 'turn-restrictions.json');
+  const nodes = ['0', '1'].map(key => afterOf(edits, key).properties).map(({startNode, endNode}) => startNode ?? endNode);
+  assert.match(nodes[0], /^local:/);
+  assert.equal(nodes[1], nodes[0], 'both roads end at the junction the rule names');
+  assert.deepEqual(rule.after.properties.viaNodes, [nodes[0]]);
+});
+
 test('an allowed turn takes its rule back, and an "only" rule stays', () => {
   const ruleOf = properties => ({type: 'Feature', geometry: null, properties: {from: 1, viaNodes: [12], ...properties}});
   const roads = [road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 12}), road([[1, 0], [1, 1]], {entityId: 'way/2', startNode: 12})];
@@ -213,9 +226,9 @@ test('roads are split at a junction in one step, and a rule at the far end follo
 });
 
 // What Apply of a road records, the road itself first.
-function applied({key, before, coordinates, origins, properties = {}, freePoints = new Set()}, context) {
+function applied({key, before, coordinates, origins, properties = {}, freePoints = new Set(), extras = {}}, context) {
   const feature = {...before, properties: {...before.properties, ...properties}, geometry: line(coordinates)};
-  const edit = {key, before, feature, origins, freePoints};
+  const edit = {key, before, feature, origins, freePoints, extras};
   const own = roadWithEnds(edit, context);
   const {edits, problem} = companionsOfRoad({...edit, feature: own}, context);
   return {own, edits, problem};
@@ -343,6 +356,23 @@ test('an end with another level chosen leaves its junction when it is dragged, a
   assert.match(own.properties.endNode, /^local:/);
   assert.equal(own.properties.endLevel, 1);
   assert.deepEqual(edits, [], 'what it was joined to stays');
+});
+
+test('a level taken back does not undo a Disconnect', () => {
+  const first = road([[0, 0], [1, 0]], {entityId: 'way/1', endNode: 5, endLevel: 0});
+  const context = contextWith({roads: [first, road([[1, 0], [1, 1]], {startNode: 5, startLevel: 0})]});
+  const session = {workingFeature: () => first};
+  const disconnected = '19.250100 42.440000';
+  const edit = {key: '0', feature: first, extras: {disconnectedPoints: [disconnected]}, context: {...context, session}};
+  const raised = freePointsWithLevel('end', 1, edit);
+  assert.deepEqual(raised, [disconnected], 'the level frees the end whatever a Disconnect did');
+  const lowered = freePointsWithLevel('end', 0, {...edit, extras: {...edit.extras, freePoints: raised}});
+  assert.deepEqual(lowered, [], 'the point freed by the level is taken back');
+  const extras = {freePoints: lowered, disconnectedPoints: [disconnected]};
+  const changed = {key: '0', before: first, origins: [0, 1], extras};
+  const feature = roadWithEnds({...changed, feature: {...first, geometry: line([[0, 0], [1, -1]])}}, context);
+  const edits = roadBehaviors['roads.geojson'].companionEdits({...changed, feature}, context);
+  assert.deepEqual(edits, [], 'the end that was disconnected still moves alone');
 });
 
 test('a line of two points is followed through a reversal', () => {
