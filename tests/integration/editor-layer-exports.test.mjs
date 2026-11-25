@@ -179,6 +179,7 @@ const movedMiddle = ({geometry}) => {
   return {...geometry, coordinates};
 };
 
+const isLongLine = ({geometry}) => geometry.coordinates.length > 10;
 const isCoastline = ({properties, geometry}) => properties.kind === 'coastline' && geometry.coordinates.length > 4;
 
 test('wherever a coastline is moved, the sea, the country, the border and a municipality follow or it is refused', testContext => {
@@ -201,6 +202,33 @@ test('wherever a coastline is moved, the sea, the country, the border and a muni
     }
   }
   assert.ok(followedCount > sample.length * 0.9, `${followedCount} of ${sample.length} coastlines can be moved`);
+});
+
+test('the coast point where an inland border meets the sea stays, and the one beside it moves', testContext => {
+  const editor = new HeadlessEditor(testContext);
+  const isSeaBorder = ({properties}) => [properties.left, properties.right].includes('sea');
+  const inlandEnds = editor
+    .features('border-edges.geojson')
+    .filter(feature => !isSeaBorder(feature))
+    .flatMap(({geometry}) => [geometry.coordinates[0], geometry.coordinates.at(-1)]);
+  const endNames = new Set(inlandEnds.map(String));
+  const coast = editor.find(
+    'water.geojson',
+    feature => isCoastline(feature) && isLongLine(feature) && endNames.has(String(feature.geometry.coordinates.at(-1)))
+  );
+  const {coordinates} = coast.feature.geometry;
+  const movedAt = movedIndex => ({
+    ...coast.feature,
+    geometry: {
+      ...coast.feature.geometry,
+      coordinates: coordinates.map((point, index) =>
+        index === movedIndex ? point.map(value => roundDegrees(value + 0.00002)) : point
+      )
+    }
+  });
+  const junctionIndex = coordinates.length - 1;
+  assert.match(editor.apply(coast.filename, coast.key, movedAt(junctionIndex)), /border meets the sea/);
+  assert.equal(editor.apply(coast.filename, coast.key, movedAt(junctionIndex - 1)), null);
 });
 
 test('a moved coastline passes the importer with everything that follows it', async testContext => {
@@ -226,7 +254,6 @@ test('a river moved at its joint and a reversed one pass', async testContext => 
 });
 
 const movedAtMiddle = entry => ({...entry.feature, geometry: movedMiddle(entry.feature)});
-const isLongLine = ({geometry}) => geometry.coordinates.length > 10;
 
 test('a ridge with its slopes, a contour and a new summit pass', async testContext => {
   const editor = new HeadlessEditor(testContext);
