@@ -83,3 +83,13 @@ smaller than 1,000 m² away from a coast are dropped, and the municipality label
 importer. Partial extraction now owns `neighbours` only for the neighbour-dependent groups, not for unrelated layers.
 The final topology check measured 661 m² neighbour overlap, 2,428 m² inland gap, 124 m² ocean on land, and 124 m²
 largest inland-ocean part.
+
+Review round 3 corrected the ownership inside Kosovo's hole without changing this scope. A Voronoi cell of a Natural
+Earth-shaped authority stays with that authority only within 0.2 degrees of Montenegro; a cell reaching farther goes
+whole to the touching authority with no Natural Earth outline. Publishing the original gap where every cell moves avoids
+a straight seam at the distance line. Mitrovica, Leposavic and Podujevo therefore join Pristina, Gjilan, Prizren and
+Istog in Kosovo, while Novi Pazar stays in Serbia. Regeneration measured Kosovo at 10,642.82 km² under the repository's
+local area factor; the review's 10,880 km² estimate could not be reproduced, and no area was adjusted to force it. The
+final topology check measured 95 m² neighbour overlap, 1,848 m² inland gap, 124 m² ocean on land, and 124 m² largest
+inland-ocean part. An OSM-only area also keeps clear of the reviewed ocean outline where a gap reaches into the sea
+without a coastline edge, which keeps the ocean source byte-stable.

@@ -14,7 +14,7 @@ Earth neighbour outlines that derivation reads; `sources/context-countries.geojs
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,284,034
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,284,558
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -51,8 +51,12 @@ field and still equals the hash of the pre-level snapshot. See the
 neighbour areas. The six Natural Earth outlines keep their `ne:<code>` identities and public-domain attribution; Kosovo,
 which that snapshot does not supply here, is derived from the reviewed OSM border as `derived:context-kosovo`. All seven
 are clipped at Montenegro's outline: geometry beyond the ocean box stays as published, inland gaps beside a reviewed
-border go to the touching authority, and gaps connected to the Adriatic stay with the ocean. Unlabelled coastline
-residue is not neighbour land. The OSM and Natural Earth licenses remain separate.
+border go to the touching authority, and gaps connected to the Adriatic stay with the ocean. Where a gap touches one
+authority with a Natural Earth outline and one without, a Voronoi cell of the shaped authority stays with it only inside
+0.2 degrees of Montenegro. A cell reaching farther goes whole to the unshaped authority, so the far field is not
+labelled from an unreviewed border edge and no straight band cut appears at the distance line; without an unshaped
+authority the Voronoi split stays as it is. Unlabelled coastline residue is not neighbour land. The OSM and Natural
+Earth licenses remain separate.
 
 The input PBF is not included in Git: it is an external downloadable dataset, not application source. Basemap rebuilding
 from the included GeoJSON needs no PBF. This release used the 34,780,415-byte
@@ -130,6 +134,32 @@ overlap, 2,428 m² of inland gap, 124 m² of ocean on land, and a 124 m² larges
 `municipalityLabelPointProblem` rule; context polygons are editable in both context files and marked `derivedGeometry`.
 Add and delete remain refused for these framing kinds. The scope is recorded in
 [decision 0037](../docs/decisions/0037-every-layer-editable.md#outcome-429-2026-11-25).
+
+Review round 3 kept the scope but corrected the Kosovo hole. Measured against the immutable Natural Earth outlines
+clipped at Montenegro, Albania gains 52.22 km² in pieces of 24.30 km² (19.4136, 42.3283, 19.6021, 42.5308), 16.50 km²
+(19.6098, 42.5485, 19.7004, 42.6451), 5.39 km² (19.2808, 42.1608, 19.3255, 42.2196), 3.10 km² (19.3418, 41.8879,
+19.3697, 41.9173) and 1.16 km² (19.3502, 41.9342, 19.3598, 41.9593). Bosnia and Herzegovina gains 136.07 km² in pieces
+of 128.61 km² (18.9215, 43.2509, 19.0834, 43.4242), 5.81 km² (18.5183, 42.5733, 18.5561, 42.6073) and 1.65 km² (18.5545,
+42.6416, 18.5749, 42.6619). Serbia gains 210.40 km² in pieces of 76.77 km² (19.9674, 42.9317, 20.2752, 43.1026), 66.83
+km² (19.6314, 43.086, 19.9549, 43.2133), 39.79 km² (19.2214, 43.392, 19.4224, 43.5198), 18.45 km² (19.5272, 43.232,
+19.6114, 43.3042) and 8.54 km² (19.4503, 43.3203, 19.5214, 43.3739). Croatia, Italy and Macedonia gain nothing. Kosovo
+has no Natural Earth outline; it covers 10,642.82 km², of which 1,694.32 km² was assigned to Serbia in round 2. The
+review's 10,880 km² estimate does not match this repository's published area factor: round 2 measured Kosovo at 8,948.50
+km², and Serbia's 1,694.32 km² misassignment adds to 10,642.82 km², so no geometry was adjusted to reach the estimate.
+Mitrovica (20.87, 42.89), Leposavic (20.80, 43.10), Podujevo (21.19, 42.91), Pristina (21.17, 42.67), Gjilan (21.42,
+42.47), Prizren (20.74, 42.21) and Istog (20.47, 42.78) are in Kosovo; Novi Pazar (20.51, 43.14) is in Serbia.
+
+Round 3 regenerated `context-countries.geojson` to 88,164 bytes (SHA-256
+`fec26fa1183319609e1f10afa941b232541a528c8a8df7889552887446868b68`) and `land.geojson` to 574,796 bytes (SHA-256
+`a8371387e87d8b1cbc408bf88de910b56675c98cccc6d0a807cc3b5dc886ff5e`), both with unchanged feature counts. `water.geojson`
+remains 2,154,972 bytes (SHA-256 `01700cb7dae5f2c1dddcd6fe2e429751d34ff750e9d5efd153b02909972ec659`) and the immutable
+NE source remains 6,535 bytes with six features (SHA-256
+`be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f`). The reviewed archive is
+`montenegro-1aba5df7c03ae3fa.pmtiles`, 23,284,558 bytes, SHA-256
+`1aba5df7c03ae3fa494b9bc55448bb3806d600ce5ac5a83eff44e8c2c120b73f`. The final topology check measured 95 m² of neighbour
+overlap, 1,848 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part. A derived gap may
+reach into the reviewed sea without a coastline edge bounding it; the OSM-only area keeps clear of that ocean outline so
+a neighbour does not claim sea and the ocean file stays unchanged.
 
 ## Bus stops
 

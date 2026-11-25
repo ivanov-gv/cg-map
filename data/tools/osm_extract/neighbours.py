@@ -15,10 +15,15 @@ from .writing import read_collection
 CONTEXT_FILE = 'context-countries.geojson'
 NEIGHBOUR_SOURCE_FILE = 'context-countries-source.geojson'
 LAND_FILE = 'land.geojson'
+WATER_FILE = 'water.geojson'
 OCEAN_BOUNDS = (17.5, 41.0, 21.5, 44.2)
 CONTEXT_KIND = 'context'
 DERIVED_CONTEXT_PREFIX = 'derived:context-'
 EDGE_TOUCH_TOLERANCE_DEGREES = 1e-9
+# The real slivers between Natural Earth outlines and the reviewed border all
+# sit this close to Montenegro. Further out, a Voronoi label is a guess from a
+# border we have not checked, not a fact about the neighbouring country.
+NEAR_BORDER_DISTANCE_DEGREES = 0.2
 
 
 def outside_edges(border_edges, authority_names):
@@ -91,12 +96,63 @@ def split_between_authorities(gap, labels, authorities):
     return voronoi_pieces(gap, labels, lines_by_authority)
 
 
-def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
+def reaches_far_field(piece, near_border_region):
+    """Report whether a Voronoi piece extends beyond the near-border band."""
+    return not piece.difference(near_border_region).is_empty
+
+
+def assign_gap_pieces(split, near_border_region, preserved_names):
+    """Keep near-border cells; give far-reaching cells to the unshaped neighbour.
+
+    A cell that reaches into the far field is labelled by the near end of a
+    border we have not reviewed. The whole cell goes to the authority without a
+    Natural Earth outline; moving only its far part would draw a straight band
+    cut through the hole instead of keeping the reviewed Voronoi boundary.
+    """
+    unshaped = [
+        label for label in split if label not in preserved_names
+    ]
+    if len(unshaped) != 1:
+        return split
+    far_owner = unshaped[0]
+    assigned = defaultdict(list)
+    for label, piece in split.items():
+        sends_far = (
+            label in preserved_names
+            and reaches_far_field(piece, near_border_region)
+        )
+        assigned[far_owner if sends_far else label].append(piece)
+    return {
+        label: unary_union(pieces) for label, pieces in assigned.items()
+    }
+
+
+def assign_gap(gap, split, near_border_region, preserved_names):
+    """Apply the near-border rule to the pieces of one gap.
+
+    When every piece goes to the unshaped neighbour, publish the original gap
+    instead of the union of its cells. The union leaves seams at the old cell
+    boundaries once the grid snapping runs, and those seams become gaps.
+    """
+    pieces = assign_gap_pieces(split, near_border_region, preserved_names)
+    unshaped = [
+        label for label in split if label not in preserved_names
+    ]
+    if len(unshaped) == 1 and set(pieces) == set(unshaped):
+        return {unshaped[0]: gap}
+    return pieces
+
+
+def gap_areas(
+    country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS,
+    reviewed_ocean_geometry=None
+):
     """Assign every inland gap to the outside authority that borders it."""
-    authority_names = (
-        {feature['properties']['name'] for feature in preserved}
-        | OSM_ONLY_AUTHORITIES
-    )
+    preserved_names = {
+        feature['properties']['name'] for feature in preserved
+    }
+    authority_names = preserved_names | OSM_ONLY_AUTHORITIES
+    near_border_region = country.buffer(NEAR_BORDER_DISTANCE_DEGREES)
     authorities, sea_lines = outside_edges(border_edges, authority_names)
     all_lines = [
         LineString(feature['geometry']['coordinates'])
@@ -121,14 +177,21 @@ def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
         labels = touching_authorities(gap, authorities)
         if len(labels) > 1:
             split = split_between_authorities(gap, labels, authorities)
-            for label, geometry in split.items():
-                assigned[label].append(geometry)
+            pieces = assign_gap(
+                gap, split, near_border_region, preserved_names
+            )
         elif labels:
-            assigned[labels[0]].append(gap)
+            pieces = {labels[0]: gap}
         else:
             # Coastline residue and slivers between mapped edges are not
             # neighbour land; a real inland gap runs beside an outside border.
             continue
+        for label, geometry in pieces.items():
+            if label not in preserved_names and reviewed_ocean_geometry:
+                # A gap can reach into the reviewed sea even when no coastline
+                # edge bounds it. Keep that part with the ocean, not a neighbour.
+                geometry = geometry.difference(reviewed_ocean_geometry)
+            assigned[label].append(geometry)
     return {
         label: unary_union(geometries)
         for label, geometries in assigned.items()
@@ -156,6 +219,44 @@ def reviewed_border_edges(options, state):
     return read_collection(options.sources_directory / EDGE_FILE)['features']
 
 
+def reviewed_ocean(options):
+    """Return the sea outline without claiming land in a partial extraction."""
+    path = options.sources_directory / WATER_FILE
+    if path.exists():
+        try:
+            polygons = [
+                shape(feature['geometry'])
+                for feature in read_collection(path)['features']
+                if feature['properties'].get('kind') == 'ocean'
+            ]
+            if polygons:
+                return unary_union(polygons)
+        except ValueError:
+            # A partial run marks files it did not regenerate instead of
+            # publishing a reviewed collection here.
+            pass
+    land_path = options.sources_directory / LAND_FILE
+    context_path = options.sources_directory / CONTEXT_FILE
+    if not (land_path.exists() and context_path.exists()):
+        return None
+    try:
+        land = read_collection(land_path)['features']
+        context = read_collection(context_path)['features']
+    except ValueError:
+        return None
+    country_feature = next(
+        (feature for feature in land
+         if feature['properties'].get('kind') == 'country'),
+        None
+    )
+    if country_feature is None or not context:
+        return None
+    published_land = [shape(country_feature['geometry'])] + [
+        shape(feature['geometry']) for feature in context
+    ]
+    return box(*OCEAN_BOUNDS).difference(unary_union(published_land))
+
+
 def derive_context_features(options, state, ocean_bounds=OCEAN_BOUNDS):
     """Return clipped NE neighbours plus derived areas for inland gaps."""
     # The pinned NE source never contains derived gaps, so repeated runs see
@@ -171,7 +272,8 @@ def derive_context_features(options, state, ocean_bounds=OCEAN_BOUNDS):
         for feature in preserved
     }
     assigned = gap_areas(
-        country, preserved, reviewed_border_edges(options, state), ocean_bounds
+        country, preserved, reviewed_border_edges(options, state), ocean_bounds,
+        reviewed_ocean(options)
     )
     preserved_names = set(clipped)
     for name, geometry in assigned.items():

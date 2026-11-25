@@ -222,9 +222,9 @@
       "sha256": "be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f"
     },
     "context-countries.geojson": {
-      "bytes": 97271,
+      "bytes": 88164,
       "features": 7,
-      "sha256": "94034058f9b07e729e778062d87bace231b86ddb98834538f052f91b68148f8d"
+      "sha256": "fec26fa1183319609e1f10afa941b232541a528c8a8df7889552887446868b68"
     },
     "contours.geojson": {
       "bytes": 950066,
@@ -232,9 +232,9 @@
       "sha256": "d2f5a28a507f2ba680bf3f848291758ae5d00eb0c4621bf34a3b5b58b2271c20"
     },
     "land.geojson": {
-      "bytes": 583903,
+      "bytes": 574796,
       "features": 613,
-      "sha256": "0ac4bba9b2a6b06280255bc09ad15650d82e38530ce4ea2b603f963b0ad13975"
+      "sha256": "a8371387e87d8b1cbc408bf88de910b56675c98cccc6d0a807cc3b5dc886ff5e"
     },
     "municipalities.geojson": {
       "bytes": 878446,

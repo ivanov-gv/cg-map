@@ -18,7 +18,8 @@ from osm_extract import ExtractionState  # noqa: E402
 from osm_extract.borders import EDGE_FILE  # noqa: E402
 from osm_extract.geometry import canonical_geometry, rounded_valid_geometry  # noqa: E402
 from osm_extract.neighbours import (  # noqa: E402
-    CONTEXT_FILE, NEIGHBOUR_SOURCE_FILE, derive_context_features,
+    CONTEXT_FILE, NEIGHBOUR_SOURCE_FILE, assign_gap, assign_gap_pieces,
+    derive_context_features,
 )
 from osm_extract.water import filter_non_coastal_ocean_parts  # noqa: E402
 from osm_extract.writing import serialize_collection  # noqa: E402
@@ -162,28 +163,48 @@ class NeighbourDerivationTest(unittest.TestCase):
         for area in areas.values():
             self.assertFalse(area.covers(Point(2.7, 0.3)))
 
-    def test_reviewed_towns_keep_their_authority(self):
+    def test_a_big_gap_keeps_only_the_near_sliver_for_a_shaped_authority(self):
+        # The band is the first 0.2 degrees north of Montenegro. A is a shaped
+        # neighbour; Kosovo has no Natural Earth outline. One Voronoi cell stays
+        # inside the band, the other reaches into the far field.
+        near_border_region = box(0, 0, 1, 0.2)
+        near_sliver = box(0.1, 0.05, 0.3, 0.15)
+        far_field = box(0.3, 0.05, 0.9, 3)
+        split = {'A': near_sliver, 'Kosovo': far_field}
+        pieces = assign_gap_pieces(split, near_border_region, {'A'})
+        self.assertTrue(pieces['A'].equals(near_sliver))
+        self.assertTrue(pieces['Kosovo'].equals(far_field))
+
+    def test_a_long_cell_gives_the_whole_hole_to_the_unshaped_authority(self):
+        near_border_region = box(0, 0, 1, 0.2)
+        hole = box(0.1, 0.05, 0.9, 3)
+        long_cell = box(0.1, 0.05, 0.3, 2)
+        far_field = hole.difference(long_cell)
+        split = {'A': long_cell, 'Kosovo': far_field}
+        pieces = assign_gap(hole, split, near_border_region, {'A'})
+        self.assertEqual(list(pieces), ['Kosovo'])
+        self.assertTrue(pieces['Kosovo'].equals(hole))
+
+    def test_reviewed_towns_have_the_authority_natural_earth_leaves_them_in(self):
         collection = json.loads(
             (ROOT / 'data/sources' / CONTEXT_FILE).read_text(encoding='utf-8')
         )
         expected = {
             'Kosovo': (
+                (20.87, 42.89), (20.80, 43.10), (21.19, 42.91),
                 (21.17, 42.67), (21.42, 42.47), (20.74, 42.21),
                 (20.47, 42.78),
             ),
-            'Republic of Serbia': (
-                (20.87, 42.89), (20.80, 43.10), (21.19, 42.91),
-                (20.51, 43.14),
-            ),
+            'Republic of Serbia': ((20.51, 43.14),),
+        }
+        areas = {
+            feature['properties']['name']: shape(feature['geometry'])
+            for feature in collection['features']
         }
         for name, towns in expected.items():
-            area = next(
-                shape(feature['geometry']) for feature in collection['features']
-                if feature['properties']['name'] == name
-            )
             for town in towns:
                 with self.subTest(authority=name, town=town):
-                    self.assertTrue(area.covers(Point(*town)))
+                    self.assertTrue(areas[name].covers(Point(*town)))
 
     def test_reviewed_derivation_is_stable_over_its_own_output(self):
         options = SimpleNamespace(
