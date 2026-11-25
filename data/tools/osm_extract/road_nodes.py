@@ -1,7 +1,8 @@
 """Road network nodes: traffic signals, crossings, and junctions.
 
-Extracts OSM nodes within the detail area that carry highway-related tags
-indicating a traffic control point or junction feature.
+Extracts OSM nodes that carry highway-related tags indicating a traffic control
+point or junction feature: every one in the detail area, and beyond it those on
+a published road.
 """
 
 from . import Layer
@@ -28,9 +29,13 @@ def road_node_sort_key(feature):
 
 
 class RoadNodesLayer(Layer):
-    """Collect road network nodes within the detail area."""
+    """Collect road network nodes in the detail area and on its roads."""
 
     filename = SOURCE_FILE
+
+    def __init__(self):
+        super().__init__()
+        self._outside_features = {}
 
     def node(self, node, options, state):
         """Record a node if it carries a road-network tag."""
@@ -38,10 +43,6 @@ class RoadNodesLayer(Layer):
             return
         if not node_has_road_tag(node):
             return
-        # Only include nodes within the detail area
-        if not options.contains(node.lon, node.lat):
-            return
-
         properties = {
             'kind': node.tags.get('highway', ''),
         }
@@ -64,9 +65,16 @@ class RoadNodesLayer(Layer):
             'geometry': geometry,
             'properties': {**properties, **identity},
         }
-        self.features.append(feature)
+        if options.contains(node.lon, node.lat):
+            self.features.append(feature)
+        else:
+            self._outside_features[node.id] = feature
 
     def finish(self, options, state):
-        """Sort nodes by OSM ID and return."""
+        """Add the nodes on roads beyond the detail area, sorted by OSM ID."""
+        self.features.extend(
+            feature for node_id, feature in self._outside_features.items()
+            if node_id in state.road_node_ids
+        )
         self.features.sort(key=road_node_sort_key)
         return self.features

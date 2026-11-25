@@ -322,6 +322,17 @@
     <tag k="name" v="North Crossing"/>
   </way>
 
+  <!-- A village with its area, around the point that stands for it -->
+  <node id="9401" version="1" lat="42.449" lon="19.279"/>
+  <node id="9402" version="1" lat="42.449" lon="19.281"/>
+  <node id="9403" version="1" lat="42.451" lon="19.281"/>
+  <node id="9404" version="1" lat="42.451" lon="19.279"/>
+  <way id="3011" version="3">
+    <nd ref="9401"/><nd ref="9402"/><nd ref="9403"/><nd ref="9404"/><nd ref="9401"/>
+    <tag k="place" v="village"/>
+    <tag k="name" v="Test Village"/>
+  </way>
+
   <!-- Highway outside detail area: restrictions touching it must be skipped -->
   <node id="7601" version="1" lat="42.60" lon="19.25"/>
   <node id="7602" version="1" lat="42.61" lon="19.25"/>

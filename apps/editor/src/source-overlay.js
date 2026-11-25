@@ -12,18 +12,19 @@ const placesFile = 'places.geojson';
 // Guides become useful at neighbourhood scale. Below this, select the normal rendered cartography instead.
 export const guideMinZoom = 15;
 const maximumZoom = 24;
+const levelLabelMinZoom = 16;
 
 const emptyCollection = () => ({type: 'FeatureCollection', features: []});
 const collectionOf = features => ({type: 'FeatureCollection', features});
 
 // Display copies preserve the properties used by public cartography and add the object's state. MapLibre needs a numeric
 // feature ID, so the position in the entries stands in for it here while the source feature keeps its own ID untouched.
-export function overlayCollection(entries, stateOf = () => 'editable') {
+export function overlayCollection(entries, stateOf = () => 'editable', factsOf = () => ({})) {
   const features = entries.map((entry, index) => ({
     type: 'Feature',
     id: index,
     geometry: entry.feature.geometry,
-    properties: {...entry.feature.properties, sourceFile: entry.filename, objectState: stateOf(entry)}
+    properties: {...entry.feature.properties, ...factsOf(entry), sourceFile: entry.filename, objectState: stateOf(entry)}
   }));
   return collectionOf(features);
 }
@@ -70,14 +71,69 @@ function styleGuides(map) {
   map.setPaintProperty(`${sourceName}-point`, 'circle-stroke-color', guideColor);
   map.setPaintProperty(`${sourceName}-point`, 'circle-stroke-width', 1.5);
   map.setPaintProperty(`${sourceName}-line`, 'line-color', guideColor);
-  map.setPaintProperty(`${sourceName}-line`, 'line-width', 1.5);
+  map.setPaintProperty(`${sourceName}-line`, 'line-width', ['case', ['>', ownLevel, 0], 3, 1.5]);
   map.setPaintProperty(`${sourceName}-line`, 'line-gap-width', lineGap(6));
-  map.setFilter(`${sourceName}-line`, [
-    'all',
-    ['!=', ['geometry-type'], 'Point'],
-    ['!=', ['get', 'objectState'], 'missing'],
-    isNotContext
-  ]);
+  map.setFilter(`${sourceName}-line`, guideFilter(null));
+}
+
+// Dashes cannot depend on a feature's data, so each dashed state has its own layer.
+const dashedLine = (id, source, color, widthPixels, dashes) => ({
+  id,
+  type: 'line',
+  source,
+  paint: {'line-color': color, 'line-width': widthPixels, 'line-dasharray': dashes}
+});
+
+const ownLevel = ['coalesce', ['get', 'ownLevel'], 0];
+
+// What is on the shown level, or everything when none is. Objects without levels are on all of them.
+const isOnLevel = level =>
+  level === null ? true : ['any', ['!', ['has', 'levelKeys']], ['in', `,${level},`, ['get', 'levelKeys']]];
+
+const guideFilter = shownLevel => [
+  'all',
+  ['!=', ['geometry-type'], 'Point'],
+  ['!=', ['get', 'objectState'], 'missing'],
+  ['>=', ownLevel, 0],
+  isNotContext,
+  isOnLevel(shownLevel)
+];
+const belowGroundFilter = shownLevel => ['all', ['<', ownLevel, 0], isOnLevel(shownLevel)];
+const offGroundFilter = shownLevel => ['all', ['!=', ownLevel, 0], isOnLevel(shownLevel)];
+
+// Roads under and over others: dashed rails below the ground, strong ones above it, and the level on the line.
+function levelLayers() {
+  return [
+    {
+      id: 'editor-below-ground',
+      type: 'line',
+      source: sourceName,
+      filter: belowGroundFilter(null),
+      paint: {
+        'line-color': guideColor,
+        'line-width': 2,
+        'line-gap-width': lineGap(6),
+        'line-dasharray': [3, 2]
+      }
+    },
+    {
+      id: 'editor-level-labels',
+      type: 'symbol',
+      source: sourceName,
+      minzoom: levelLabelMinZoom,
+      filter: offGroundFilter(null),
+      layout: {
+        'symbol-placement': 'line-center',
+        'text-field': ['case', ['>', ownLevel, 0], ['concat', '+', ['to-string', ownLevel]], ['to-string', ownLevel]],
+        'text-font': ['Open Sans Semibold'],
+        'text-size': 12,
+        'text-rotation-alignment': 'viewport',
+        'text-allow-overlap': true,
+        'text-ignore-placement': true
+      },
+      paint: {'text-color': stateColors.editable, 'text-halo-color': '#ffffff', 'text-halo-width': 2.5}
+    }
+  ];
 }
 
 function styleSelection(map) {
@@ -93,14 +149,7 @@ function styleSelection(map) {
   map.setPaintProperty(`${selection}-line`, 'line-gap-width', lineGap(10));
 }
 
-// Dashes cannot depend on a feature's data, so each dashed state has its own layer.
 function stateLayers() {
-  const dashedLine = (id, source, color, widthPixels, dashes) => ({
-    id,
-    type: 'line',
-    source,
-    paint: {'line-color': color, 'line-width': widthPixels, 'line-dasharray': dashes}
-  });
   return [
     {
       ...dashedLine('editor-missing', sourceName, stateColors.applied, 1.5, [3, 2]),
@@ -177,7 +226,7 @@ function installStateLayers(map) {
   for (const source of [appliedSource, ghostSource, drawingSource, deletionSource, targetSource]) {
     map.addSource(source, {type: 'geojson', data: emptyCollection()});
   }
-  const layers = stateLayers();
+  const layers = [...levelLayers(), ...stateLayers()];
   for (const layer of layers) map.addLayer(layer);
   return layers.map(({id}) => id);
 }
@@ -191,13 +240,17 @@ export function createSourceOverlay(map) {
   styleSelection(map);
   const firstSymbol = map.getStyle().layers.find(layer => layer.type === 'symbol').id;
   const selectionLayerIds = overlay.layerIds.map(id => id.replace(`${sourceName}-`, `${sourceName}-selection-`));
-  const lineStateLayers = stateLayerIds.filter(id => id !== 'editor-deletion-cross');
+  const textStateLayers = ['editor-deletion-cross', 'editor-level-labels'];
+  const lineStateLayers = stateLayerIds.filter(id => !textStateLayers.includes(id));
   // Text halos must also sit above the outer selection outline, not just the ordinary guides.
   for (const layerId of [...overlay.layerIds, ...lineStateLayers, ...selectionLayerIds]) {
     map.moveLayer(layerId, firstSymbol);
   }
-  const guideLayerIds = [...overlay.layerIds.filter(id => !id.endsWith('-fill')), 'editor-missing'];
+  const guideLayerIds = [...overlay.layerIds.filter(id => !id.endsWith('-fill')), 'editor-missing', 'editor-below-ground'];
   const setData = (source, features) => map.getSource(source).setData(collectionOf(features));
+  // Points keep their own filters while one level is shown.
+  const pointLayerIds = [`${sourceName}-point`, 'editor-road-nodes'];
+  const pointFilters = pointLayerIds.map(layerId => [layerId, map.getFilter(layerId)]);
   const setGuideMinZoom = (minimumZoom, pointMinimumZoom = minimumZoom) => {
     for (const layerId of guideLayerIds) {
       const isPointLayer = layerId === `${sourceName}-point`;
@@ -216,6 +269,12 @@ export function createSourceOverlay(map) {
     setGhost: geometry => setData(ghostSource, geometry ? [{type: 'Feature', properties: {}, geometry}] : []),
     setDrawing: (points, nextPoint) => setData(drawingSource, drawingFeatures(points, nextPoint)),
     setGuideMinZoom,
+    setShownLevel(level) {
+      map.setFilter(`${sourceName}-line`, guideFilter(level));
+      map.setFilter('editor-below-ground', belowGroundFilter(level));
+      for (const [layerId, filter] of pointFilters) map.setFilter(layerId, ['all', filter, isOnLevel(level)]);
+      map.setFilter('editor-level-labels', offGroundFilter(level));
+    },
     // A filter draws no cartography of its own, so the inside of its shapes takes the taps.
     setInteriorsPickable(isPickable) {
       map.setPaintProperty(`${sourceName}-fill`, 'fill-opacity', 0);
@@ -223,7 +282,7 @@ export function createSourceOverlay(map) {
     },
     interiorLayerId: `${sourceName}-fill`,
     setGuidesVisible(isVisible) {
-      for (const layerId of guideLayerIds) {
+      for (const layerId of [...guideLayerIds, 'editor-level-labels']) {
         map.setLayoutProperty(layerId, 'visibility', isVisible ? 'visible' : 'none');
       }
     }

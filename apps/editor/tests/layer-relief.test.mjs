@@ -67,25 +67,30 @@ test('a contour says whether it is a main line, and a summit is higher than the 
   assert.equal(problem(summit(1, [50, 50]), context), null);
 });
 
-test('a moved ridge recolours both slopes and keeps its ends', () => {
+test('a moved ridge recolours both slopes, and its ends stay on the outline of its hill', () => {
   const slope = (...steps) => feature({kind: 'slope'}, {type: 'Polygon', coordinates: [ringOf(...steps)]});
-  const context = contextWith({
-    'slopes.geojson': [
-      slope([0, 0], [4, 0], [4, 5], [2, 5], [0, 5]),
-      slope([0, 5], [2, 5], [4, 5], [4, 10], [0, 10])
-    ]
-  });
   const ridge = coordinates => feature({kind: 'ridge'}, {type: 'LineString', coordinates});
   const before = ridge(points([0, 5], [2, 5], [4, 5]));
+  const context = {
+    ...contextWith({
+      'slopes.geojson': [
+        slope([0, 0], [4, 0], [4, 5], [2, 5], [0, 5]),
+        slope([0, 5], [2, 5], [4, 5], [4, 10], [0, 10])
+      ]
+    }),
+    session: {workingFeature: () => before}
+  };
   const {limitedGeometry, companionEdits} = reliefBehaviors['ridges.geojson'];
   const dragged = {type: 'LineString', coordinates: points([1, 6], [2, 6], [4, 6])};
-  const limited = limitedGeometry(dragged, {previousGeometry: before.geometry});
-  assert.deepEqual(limited.coordinates, points([0, 5], [2, 6], [4, 5]));
+  const limited = limitedGeometry(dragged, {key: '0', previousGeometry: before.geometry}, context);
+  assert.deepEqual(limited.coordinates, points([0, 6], [2, 6], [4, 6]));
   const edits = companionEdits({feature: {...before, geometry: limited}, before}, context);
   assert.deepEqual(edits.map(({key}) => key), ['0', '1']);
-  for (const {after} of edits) {
-    assert.ok(after.geometry.coordinates[0].some(point => String(point) === String(at([2, 6]))));
-  }
+  const hasCorner = ({after}, step) => after.geometry.coordinates[0].some(point => String(point) === String(at(step)));
+  for (const edit of edits) assert.ok([[0, 6], [2, 6], [4, 6]].every(step => hasCorner(edit, step)));
+  const movedMiddle = companionEdits({feature: ridge(points([0, 5], [2, 6], [4, 5])), before}, context);
+  assert.deepEqual(movedMiddle.map(({key}) => key), ['0', '1']);
+  for (const edit of movedMiddle) assert.ok(hasCorner(edit, [2, 6]));
 });
 
 const municipality = (code, name, ...steps) =>

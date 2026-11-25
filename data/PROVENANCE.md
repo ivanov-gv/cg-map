@@ -6,13 +6,13 @@ not describe the current application.
 
 The reviewed OSM extract timestamp is 2026-11-20T21:21:21Z. Display geometry remains simplified and rounded, but detail
 now covers the whole city within `[19.15, 42.37, 19.34, 42.51]`, alongside countrywide major roads, rivers, canals,
-attractions and the country outline. There are 43,978 buildings, 21,247 road features, 612 land features and 1,795 water
+attractions and the country outline. There are 43,978 buildings, 21,246 road features, 612 land features and 1,795 water
 features. The land file has 605 extracted green areas, one country outline and six preserved context countries; the
 water file has 1,122 polygons (including one derived ocean polygon) and 673 waterway or coastline lines. A
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 22,719,076
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,563,700
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -68,6 +68,12 @@ Issue #402 adds `sources/protected-areas.geojson` from the same reviewed PBF (`-
 named protected areas that reach the detail box (`leisure=nature_reserve`, `boundary=protected_area`,
 `boundary=national_park`), among them way 28132307, Park šuma Gorica. They are names for the map, not land cover; see
 [decision 0036](../docs/decisions/0036-protected-areas-name-the-map-not-land.md).
+
+Issue #405 extracts the `roads` group again from the same reviewed PBF, so that roads stay a graph (see
+[decision 0037](../docs/decisions/0037-every-layer-editable.md)): every point that published roads share stays on them,
+major roads have their end nodes and levels beyond the detail box, and road nodes and turn restrictions follow the
+published roads. It adds `sources/settlement-areas.geojson` (`--layers settlements`): 257 areas from OSM `place` areas
+and administrative boundaries of levels 8–10, of which 242 name their settlement.
 
 Issue #328 adds three OSM-derived sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009 named
 place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26 areas
@@ -180,22 +186,23 @@ are not stable across a DEM or green-area change. See [relief sources](../docs/r
 
 ## Final Epic #322 source counts
 
-No source file was refreshed for the archive rebuild. These are the reviewed counts and bytes carried into the release;
-the hashes of the GeoJSON files remain in `sources/provenance.json` under `layers`, and the separate snapshot hashes
-remain in their own provenance files.
+Issue #405 extracted the roads again from the same reviewed PBF. These are the reviewed counts and bytes carried into
+the release; the hashes of the GeoJSON files remain in `sources/provenance.json` under `layers`, and the separate
+snapshot hashes remain in their own provenance files.
 
 | Source file                  | Reviewed count                               | Bytes      |
 | ---------------------------- | -------------------------------------------- | ---------- |
 | `buildings.geojson`          | 43,978 footprints                            | 14,601,929 |
 | `building-entrances.geojson` | 157 entrance nodes                           | 41,359     |
 | `building-labels.geojson`    | 1,207 labels                                 | 403,046    |
-| `roads.geojson`              | 21,247 road features                         | 7,110,391  |
-| `road-nodes.geojson`         | 2,534 signal and crossing nodes              | 462,217    |
-| `turn-restrictions.json`     | 69 restriction relations                     | 9,471      |
+| `roads.geojson`              | 21,246 road features                         | 7,932,196  |
+| `road-nodes.geojson`         | 3,660 signal and crossing nodes              | 665,177    |
+| `turn-restrictions.json`     | 286 restriction relations                    | 39,365     |
 | `land.geojson`               | 612 areas and outlines                       | 493,167    |
 | `water.geojson`              | 1,795 areas, waterways and coastlines        | 2,097,403  |
 | `places.geojson`             | 1,977 places                                 | 684,021    |
 | `settlements.geojson`        | 4,009 named places                           | 1,102,523  |
+| `settlement-areas.geojson`   | 257 settlement areas                         | 792,678    |
 | `border-edges.geojson`       | 141 shared edges                             | 624,849    |
 | `municipalities.geojson`     | 26 areas                                     | 878,446    |
 | `contours.geojson`           | 445 lines across 32 levels                   | 950,066    |
@@ -208,8 +215,8 @@ remain in their own provenance files.
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-566a9be61e898be8.pmtiles`, 23,149,168 bytes with SHA-256
-`566a9be61e898be88b786293fa910ae44be223c30d6c7490ac4dc3183b777ff9`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-64a035aaabc010af.pmtiles`, 23,563,700 bytes with SHA-256
+`64a035aaabc010af69653334ae567232d0f776f6a694325c0506e2a6f8342009`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next, while relief and road furniture stay detail-only. Turn restrictions,

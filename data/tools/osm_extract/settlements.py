@@ -134,4 +134,5 @@ class SettlementsLayer(Layer):
             feature['properties']['entityId'],
             feature['properties'].get('entityPart', -1),
         ))
+        state.settlement_features = self.features
         return self.features

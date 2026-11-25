@@ -16,11 +16,15 @@ import {kindLabel, objectName} from './object-names.js';
 //   measures(feature, before)     lines of facts shown under the form
 //   controls(edit)                controls that replace single fields, {name: value => element}
 //   vertexTools(feature, handle, edit)  what can be done at the picked point, [{id, label, run(), isDisabled}]
-//   suggestions(feature, context) usual values of free fields, {name: [value]}
+//   usualValues(feature, context) usual values of free fields, {name: [value]}
+//   joinedPoints(entry, context)  the points of a line that others share
+//   marks(feature)                letters on the map for the picked object, [{coordinate, label}]
+//   isDerived                     the object only stands for others: Apply records its companion edits and not itself
+//   isViewOnly(context)           the object can be read and not changed here
+//   isReshapable(context)         whether its shape can be changed on this screen
 //   applyLabel(edit)              what Apply is called
 //   afterApply(entry, context)    what happens once the edit is recorded
 //   closesLines                   a drawn line ends on its first point when that is tapped
-//   isReshapable(context)         whether its shape can be changed on this screen
 //   dragTarget(geometry, context) {feature, label} of what a moved object would belong to, or null
 // companionEdits and problem get {filename, key, feature, before, extras}.
 // The context is {session, rules, levels, map, layer, isPhone(), entriesOf(filename), findEntity(filename, entityId),
@@ -47,12 +51,17 @@ const defaultBehavior = filename => ({
   companionEdits: () => [],
   deletion: () => ({message: '', edits: []}),
   measures: () => [],
-  suggestions: () => ({}),
   controls: () => ({}),
   vertexTools: () => [],
+  joinedPoints: () => [],
+  marks: () => [],
+  isDerived: false,
+  isReshapable: () => true,
+  isViewOnly: () => false,
+  usualValues: () => ({}),
+  listsDependOn: [],
   applyLabel: () => 'Apply',
   afterApply: () => {},
-  isReshapable: () => true,
   dragTarget: () => null
 });
 
@@ -106,7 +115,14 @@ const drawChoices = {
     }
   ],
   settlements: [
-    {label: 'Add town', filename: 'settlements.geojson', shape: 'Point', properties: {kind: 'settlement'}}
+    {label: 'Add town', filename: 'settlements.geojson', shape: 'Point', properties: {kind: 'settlement'}},
+    {
+      label: 'Draw settlement area',
+      filename: 'settlement-areas.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'settlement-area'},
+      isDesktopOnly: true
+    }
   ]
 };
 

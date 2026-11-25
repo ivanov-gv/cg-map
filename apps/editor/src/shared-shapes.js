@@ -189,6 +189,14 @@ function runsOfRing(ring, before, toleranceMetres) {
   });
 }
 
+// How a ring runs along a whole line: the rest of the ring from the end of the line back to its start, or null when it
+// does not run along it.
+export function restOfRing(ring, line, toleranceMetres) {
+  const run = closestRun(runsOfRing(ring, line, toleranceMetres), line, toleranceMetres);
+  if (!run) return null;
+  return run.isForward ? run.kept : run.kept.toReversed();
+}
+
 // A ring with the stretch replaced, or null when it does not run along it. Of the two ways around between the ends of the
 // stretch, the one that follows it is replaced.
 export function splicedRing(ring, {before, after}, toleranceMetres) {
@@ -234,7 +242,7 @@ const entriesNear = (entries, stretch, toleranceMetres) =>
   entries.filter(({feature}) => linesOf(feature.geometry).some(ring => isRingNear(ring, stretch, toleranceMetres)));
 
 // A short stretch lies near more outlines than its own, so the tightest of these that any outline follows within counts.
-const tolerancesUpTo = toleranceMetres => [0.5, 5, 20].filter(value => value < toleranceMetres).concat(toleranceMetres);
+export const tolerancesUpTo = toleranceMetres => [0.5, 5, 20].filter(value => value < toleranceMetres).concat(toleranceMetres);
 
 // Edits of every object whose outline runs along the stretch.
 export function followingEdits(allEntries, stretch, toleranceMetres) {
