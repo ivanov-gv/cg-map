@@ -139,6 +139,44 @@ test('a dragged point joins the road it is put on and takes joined roads along',
   expect(stepsOf(side.after.geometry.coordinates.at(-1))).toEqual([2, 1]);
 });
 
+const shapesIn = (page, source) =>
+  page.evaluate(async name => {
+    const {features} = await window.editorDebug.map.getSource(name).getData();
+    return features.map(({geometry}) => geometry.coordinates);
+  }, source);
+
+test('a moved junction shows its roads where they will be, and Cancel leaves nothing behind', async ({page}) => {
+  await centreOn(page, [5, 2]);
+  await tapAt(page, [6, 0]);
+  await page.locator('#tool-move').click();
+  await dragFromTo(page, [5, 1], [5, 2]);
+  const following = () => shapesIn(page, 'editor-following');
+  await expect.poll(async () => (await following()).map(line => line.map(stepsOf).filter(([, north]) => north === 1).length)).toEqual([1, 1]);
+  // The roads as they are, and the place of the junction.
+  await expect.poll(async () => (await shapesIn(page, 'editor-ghost')).length).toBe(3);
+  await page.locator('#mode-done').click();
+  await page.locator('#cancel-edit').click();
+  await expect.poll(following).toEqual([]);
+  await expect.poll(() => shapesIn(page, 'editor-ghost')).toEqual([]);
+  await expect(page.locator('#change-count')).toBeHidden();
+});
+
+test('a line that loses its points is refused in the bar, and nothing breaks', async ({page}) => {
+  // Both its points are below the bar.
+  await centreOn(page, [6, 3], 18.5);
+  await tapAt(page, [6, 3]);
+  await editCorners(page);
+  for (const point of [[6, 5], [6, 0]]) {
+    await tapAt(page, point);
+    await page.locator('#vertex-remove').click();
+    await expect(page.locator('#mode-notice')).toBeVisible();
+  }
+  await page.locator('#mode-done').click();
+  await page.locator('#cancel-edit').click();
+  await tapAt(page, [6, 3]);
+  await expect(page.locator('#selection-title')).toHaveText('Side street');
+});
+
 test('one level is shown at a time, and roads under it are neither picked nor joined', async ({page}) => {
   await tapAt(page, [-3, 0]);
   await page.locator('[name="layer"]').evaluate(select => select.closest('details').setAttribute('open', ''));

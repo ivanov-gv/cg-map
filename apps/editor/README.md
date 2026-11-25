@@ -76,11 +76,12 @@ usually says the same things, such as floors, road numbers or the streets around
 property in one of these groups.
 
 Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
-thin dashed ghost until Apply. Moving is a relative drag or swipe that starts anywhere, so nothing jumps to the contact
-point. In corner mode a small handle in the middle of a side adds a point. While drawing, the bar shows the length of
-the side and the area; Shift keeps right angles, a click on the first corner closes a shape, a double click ends a line.
-On a phone drawing uses a fixed cross: move the map under it, then Add. A second finger or losing the window restores
-the position from before that gesture.
+thin dashed ghost until Apply. Whatever goes along with it, such as the roads of a moved junction, is shown in red where
+it would be, and the bar says why Apply would refuse it. Moving is a relative drag or swipe that starts anywhere, so
+nothing jumps to the contact point. In corner mode a small handle in the middle of a side adds a point. While drawing,
+the bar shows the length of the side and the area; Shift keeps right angles, a click on the first corner closes a shape,
+a double click ends a line. On a phone drawing uses a fixed cross: move the map under it, then Add. A second finger or
+losing the window restores the position from before that gesture.
 
 Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
 confirms it. Marks wait in Changes under From the field and are never written to a source.
