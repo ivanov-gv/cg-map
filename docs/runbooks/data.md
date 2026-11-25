@@ -246,9 +246,9 @@ smaller exterior residue joins the adjacent municipality with the longest shared
 code, on ties). Published gaps are recomputed after that fill, and Lake Skadar and its municipal neighbours share a
 cleaned six-decimal shoreline. Remaining slivers are measured in local square metres, and the check fails above 20,000
 m² uncovered or 10,000 m² extra. On the reviewed 2026-11-21 extract it reports 25 municipalities, one unassigned-water
-area, 141 edges, 4,009 settlements, 14,815 m² uncovered, 3,048 m² extra, 44 m² neighbour overlap, 1,966 m² inland gap
-and 125 m² ocean on land. The border and settlement sources are not inputs to the tile builder, so their first release
-did not change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path below.
+area, 141 edges, 4,009 settlements, 14,815 m² uncovered, 3,048 m² extra, 95 m² neighbour overlap, 470 m² inland gap and
+124 m² ocean on land. The border and settlement sources are not inputs to the tile builder, so their first release did
+not change the reviewed archive; a refresh of land, water, roads or buildings still follows the rebuild path below.
 
 ## Editor changesets
 

@@ -14,7 +14,7 @@ Earth neighbour outlines that derivation reads; `sources/context-countries.geojs
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,284,558
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,275,790
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -114,58 +114,36 @@ m² and 10,000 m² tolerances. The edge-construction rule is recorded in
 
 Issue #429 derives the neighbour areas from the reviewed border edges and the country outline, then recomputes the ocean
 from the same country and context geometry. Derivation reads immutable Natural Earth outlines from
-`sources/context-countries-source.geojson` and writes the published result to `context-countries.geojson` and the
-`kind=context` features of `land.geojson`, so a second run over its own output is byte-stable. The hidden `neighbours`
-part of every extraction writes both context files before water finishes; land, borders, and water extractions also pull
-it in, while unrelated partial runs do not. Simplified ocean edges are cut back to that land, non-coastal ocean parts
-smaller than 1,000 m² are dropped, and derived coordinates are canonicalised on the six-decimal grid (RFC 7946 ring
-order, lowest-start ring rotation, sorted holes and multipolygon parts) before identity is derived.
+`sources/context-countries-source.geojson` and the reviewed border edges; it never reads a published water file. It
+writes the result to `context-countries.geojson` and the `kind=context` features of `land.geojson`, so a second run over
+its own output is byte-stable. The hidden `neighbours` part of every extraction writes both context files before water
+finishes; land, borders, and water extractions also pull it in, while unrelated partial runs do not. Simplified ocean
+edges are cut back to the derived land, non-coastal ocean parts smaller than 1,000 m² are dropped, and derived
+coordinates are canonicalised on the six-decimal grid (RFC 7946 ring order, lowest-start ring rotation, sorted holes and
+multipolygon parts) before identity is derived.
 
-Review round 2 regenerated `context-countries.geojson` to 97,271 bytes (SHA-256
-`94034058f9b07e729e778062d87bace231b86ddb98834538f052f91b68148f8d`), `land.geojson` to 583,903 bytes (SHA-256
-`0ac4bba9b2a6b06280255bc09ad15650d82e38530ce4ea2b603f963b0ad13975`), and `water.geojson` to 2,154,972 bytes (SHA-256
-`01700cb7dae5f2c1dddcd6fe2e429751d34ff750e9d5efd153b02909972ec659`), all with the same feature counts as before. The
-immutable NE source `context-countries-source.geojson` is 6,535 bytes with six features (SHA-256
-`be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f`). The reviewed archive is
-`montenegro-8379ebd9a6764df0.pmtiles`, 23,284,034 bytes, SHA-256
-`8379ebd9a6764df023251e528bdae615b302a1df2eb60870cd3cc432d7e2c236`. The topology check measures 661 m² of neighbour
-overlap, 2,428 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part. Municipality
+The seven neighbour areas use the reviewed borders in one step. Gaps connected to the Adriatic stay with the ocean;
+unlabelled coastline residue is not neighbour land. Where one touching authority has a Natural Earth outline and the
+other does not, a Voronoi cell of the shaped authority stays with it only inside 0.2 degrees of Montenegro. A cell
+reaching farther goes whole to the unshaped authority, so the far field is not labelled from an unreviewed border edge
+and no straight band cut appears at the distance line; without an unshaped authority the Voronoi split stays as it is.
+Kosovo has no Natural Earth outline and covers 10,642.82 km² under this repository's local area factor. Mitrovica
+(20.87, 42.89), Leposavic (20.80, 43.10), Podujevo (21.19, 42.91), Pristina (21.17, 42.67), Gjilan (21.42, 42.47),
+Prizren (20.74, 42.21) and Istog (20.47, 42.78) are in Kosovo; Novi Pazar (20.51, 43.14) is in Serbia. Municipality
 `labelPoint` values are editable WGS84 positions checked to stay inside their own area through the shared
 `municipalityLabelPointProblem` rule; context polygons are editable in both context files and marked `derivedGeometry`.
 Add and delete remain refused for these framing kinds. The scope is recorded in
 [decision 0037](../docs/decisions/0037-every-layer-editable.md#outcome-429-2026-11-25).
 
-Review round 3 kept the scope but corrected the Kosovo hole. Measured against the immutable Natural Earth outlines
-clipped at Montenegro, Albania gains 52.22 km² in pieces of 24.30 km² (19.4136, 42.3283, 19.6021, 42.5308), 16.50 km²
-(19.6098, 42.5485, 19.7004, 42.6451), 5.39 km² (19.2808, 42.1608, 19.3255, 42.2196), 3.10 km² (19.3418, 41.8879,
-19.3697, 41.9173) and 1.16 km² (19.3502, 41.9342, 19.3598, 41.9593). Bosnia and Herzegovina gains 136.07 km² in pieces
-of 128.61 km² (18.9215, 43.2509, 19.0834, 43.4242), 5.81 km² (18.5183, 42.5733, 18.5561, 42.6073) and 1.65 km² (18.5545,
-42.6416, 18.5749, 42.6619). Serbia gains 210.40 km² in pieces of 76.77 km² (19.9674, 42.9317, 20.2752, 43.1026), 66.83
-km² (19.6314, 43.086, 19.9549, 43.2133), 39.79 km² (19.2214, 43.392, 19.4224, 43.5198), 18.45 km² (19.5272, 43.232,
-19.6114, 43.3042) and 8.54 km² (19.4503, 43.3203, 19.5214, 43.3739). Croatia, Italy and Macedonia gain nothing. Kosovo
-has no Natural Earth outline; it covers 10,642.82 km², of which 1,694.32 km² was assigned to Serbia in round 2. The
-review's 10,880 km² estimate does not match this repository's published area factor: round 2 measured Kosovo at 8,948.50
-km², and Serbia's 1,694.32 km² misassignment adds to 10,642.82 km², so no geometry was adjusted to reach the estimate.
-Mitrovica (20.87, 42.89), Leposavic (20.80, 43.10), Podujevo (21.19, 42.91), Pristina (21.17, 42.67), Gjilan (21.42,
-42.47), Prizren (20.74, 42.21) and Istog (20.47, 42.78) are in Kosovo; Novi Pazar (20.51, 43.14) is in Serbia.
-
-Round 3 regenerated `context-countries.geojson` to 88,164 bytes (SHA-256
-`fec26fa1183319609e1f10afa941b232541a528c8a8df7889552887446868b68`) and `land.geojson` to 574,796 bytes (SHA-256
-`a8371387e87d8b1cbc408bf88de910b56675c98cccc6d0a807cc3b5dc886ff5e`), both with unchanged feature counts. `water.geojson`
-remains 2,154,972 bytes (SHA-256 `01700cb7dae5f2c1dddcd6fe2e429751d34ff750e9d5efd153b02909972ec659`) and the immutable
-NE source remains 6,535 bytes with six features (SHA-256
+The reviewed `context-countries.geojson` is 88,120 bytes (SHA-256
+`ab701537c872ae15910eb44763097f246616d3b479ab1007c5b0a2c0f442a80b`), `land.geojson` is 574,752 bytes (SHA-256
+`22a04a483e742f337746ce783e9ddbedcfb73308e64b6e3eecf87bc6ed376b7d`), and `water.geojson` is 2,154,877 bytes (SHA-256
+`a3949c4ad531d7ea033fc4508a5dad6d708ccd25e5d5769a18688f60e8c1e28c`). The immutable NE source
+`context-countries-source.geojson` is 6,535 bytes with six features (SHA-256
 `be719c678afed581ae5819df6e3039b6c8af0fd50e4ddff701321a759dee090f`). The reviewed archive is
-`montenegro-1aba5df7c03ae3fa.pmtiles`, 23,284,558 bytes, SHA-256
-`1aba5df7c03ae3fa494b9bc55448bb3806d600ce5ac5a83eff44e8c2c120b73f`. The final topology check measured 95 m² of neighbour
-overlap, 1,848 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part. A derived gap may
-reach into the reviewed sea without a coastline edge bounding it; the OSM-only area keeps clear of the sea frame rebuilt
-from the reviewed inputs so a neighbour does not claim sea and the ocean file stays unchanged.
-
-Review round 4 removed neighbour derivation's dependency on the published `water.geojson`. It rebuilds the round-2 sea
-frame from the immutable Natural Earth outlines, the reviewed country outline and the reviewed border edges, using the
-water layer's simplification and area threshold, then keeps OSM-only gaps clear of that frame before snapping. A hostile
-written `water.geojson` and a source directory with no `water.geojson` now produce the same published context bytes.
-`context-countries.geojson`, `land.geojson`, `water.geojson` and the reviewed archive stayed byte-identical.
+`montenegro-67816a55c7e922b6.pmtiles`, 23,275,790 bytes, SHA-256
+`67816a55c7e922b6010b0b2ff46f03b9e1e0d41c4afbb0bc56a0d6b77dedf7a0`. The topology check measures 95 m² of neighbour
+overlap, 470 m² of inland gap, 124 m² of ocean on land, and a 124 m² largest inland-ocean part.
 
 ## Bus stops
 

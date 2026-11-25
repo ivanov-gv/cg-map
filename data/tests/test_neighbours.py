@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / 'data/tools'
 sys.path.insert(0, str(TOOLS))
 
-from geo_area import SQUARE_DEGREES_TO_SQUARE_METRES  # noqa: E402
 from osm_extract import ExtractionState  # noqa: E402
 from osm_extract.borders import EDGE_FILE  # noqa: E402
 from osm_extract.geometry import canonical_geometry, rounded_valid_geometry  # noqa: E402
@@ -238,8 +237,10 @@ class NeighbourDerivationTest(unittest.TestCase):
             published,
         )
 
-    def test_hostile_published_ocean_cannot_change_the_reviewed_areas(self):
-        sources = self.reviewed_source_copy()
+    def test_published_ocean_cannot_change_the_reviewed_areas(self):
+        published = (
+            ROOT / 'data/sources' / CONTEXT_FILE
+        ).read_text(encoding='utf-8')
         hostile_ocean = {
             'type': 'FeatureCollection',
             'features': [{
@@ -248,21 +249,20 @@ class NeighbourDerivationTest(unittest.TestCase):
                 'properties': {'kind': 'ocean'},
             }],
         }
-        (sources / 'water.geojson').write_text(
-            json.dumps(hostile_ocean), encoding='utf-8'
-        )
-        published = (
-            ROOT / 'data/sources' / CONTEXT_FILE
-        ).read_text(encoding='utf-8')
-        self.assertEqual(self.reviewed_derivation_text(sources), published)
-
-    def test_reviewed_derivation_needs_no_published_ocean(self):
-        sources = self.reviewed_source_copy()
-        self.assertFalse((sources / 'water.geojson').exists())
-        published = (
-            ROOT / 'data/sources' / CONTEXT_FILE
-        ).read_text(encoding='utf-8')
-        self.assertEqual(self.reviewed_derivation_text(sources), published)
+        for case in ('hostile', 'absent'):
+            with self.subTest(case=case):
+                sources = self.reviewed_source_copy()
+                if case == 'hostile':
+                    (sources / 'water.geojson').write_text(
+                        json.dumps(hostile_ocean), encoding='utf-8'
+                    )
+                else:
+                    water_path = sources / 'water.geojson'
+                    water_path.unlink(missing_ok=True)
+                    self.assertFalse(water_path.exists())
+                self.assertEqual(
+                    self.reviewed_derivation_text(sources), published
+                )
 
     def test_reviewed_derivation_publishes_valid_polygons(self):
         options = SimpleNamespace(

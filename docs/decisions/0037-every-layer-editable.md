@@ -76,22 +76,16 @@ both context files, and recomputes the ocean from that land. The importer checks
 containment of a mark; `make -C data check-topology` checks neighbour overlap, inland gaps and ocean on land before a
 release. This narrows "read-only neighbour" to "editable outline, fixed set of objects" and needs no new ADR.
 
-Review round 2 kept the same scope but hardened the derivation. Natural Earth input moved to immutable
-`context-countries-source.geojson`, so derived output is never treated as preserved input and a second run is
-byte-stable. Derived geometries are canonicalised on the six-decimal grid before identity is computed, ocean cut pieces
-smaller than 1,000 m² away from a coast are dropped, and the municipality label-point rule is shared between editor and
-importer. Partial extraction now owns `neighbours` only for the neighbour-dependent groups, not for unrelated layers.
-The final topology check measured 661 m² neighbour overlap, 2,428 m² inland gap, 124 m² ocean on land, and 124 m²
-largest inland-ocean part.
+The derivation reads only the immutable Natural Earth outlines in `context-countries-source.geojson`, the reviewed
+country outline and the reviewed border edges; it never reads a published water file. Derived geometries are
+canonicalised on the six-decimal grid before identity is computed, ocean cut pieces smaller than 1,000 m² away from a
+coast are dropped, and the municipality label-point rule is shared between editor and importer. A second derivation over
+its own output is byte-stable. Partial extraction owns `neighbours` only for the neighbour-dependent groups, not for
+unrelated layers.
 
-Review round 3 corrected the ownership inside Kosovo's hole without changing this scope. A Voronoi cell of a Natural
-Earth-shaped authority stays with that authority only within 0.2 degrees of Montenegro; a cell reaching farther goes
-whole to the touching authority with no Natural Earth outline. Publishing the original gap where every cell moves avoids
-a straight seam at the distance line. Mitrovica, Leposavic and Podujevo therefore join Pristina, Gjilan, Prizren and
-Istog in Kosovo, while Novi Pazar stays in Serbia. Regeneration measured Kosovo at 10,642.82 km² under the repository's
-local area factor; the review's 10,880 km² estimate could not be reproduced, and no area was adjusted to force it. The
-final topology check measured 95 m² neighbour overlap, 1,848 m² inland gap, 124 m² ocean on land, and 124 m² largest
-inland-ocean part. An OSM-only area also keeps clear of a sea frame rebuilt from the reviewed inputs where a gap reaches
-into the sea without a coastline edge, which keeps the ocean source byte-stable without making it an input to neighbour
-derivation. Review round 4 made that independence explicit: derivation no longer reads `water.geojson`, so a partial
-extraction with marker bytes in unselected generated files cannot change the context. The scope above is unchanged.
+Inside Kosovo's hole, a Voronoi cell of a Natural Earth-shaped authority stays with that authority only within 0.2
+degrees of Montenegro; a cell reaching farther goes whole to the touching authority with no Natural Earth outline.
+Publishing the original gap where every cell moves avoids a straight seam at the distance line. Mitrovica, Leposavic and
+Podujevo therefore join Pristina, Gjilan, Prizren and Istog in Kosovo, while Novi Pazar stays in Serbia. Regeneration
+measures Kosovo at 10,642.82 km² under the repository's local area factor. The final topology check measured 95 m²
+neighbour overlap, 470 m² inland gap, 124 m² ocean on land, and 124 m² largest inland-ocean part.

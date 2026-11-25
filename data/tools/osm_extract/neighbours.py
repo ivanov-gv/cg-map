@@ -2,16 +2,13 @@
 
 from collections import defaultdict
 
-from shapely.geometry import GeometryCollection, LineString, box, mapping, shape
+from shapely.geometry import LineString, box, shape
 from shapely.ops import polygonize, unary_union, voronoi_diagram
-
-from geo_area import SQUARE_DEGREES_TO_SQUARE_METRES
 
 from . import Layer
 from .borders import EDGE_FILE, country_geometry
 from .geometry import canonical_geometry, rounded_valid_geometry
 from .identity import content_version, make_feature
-from .rings import rfc7946_geometry
 from .shared_edges import OSM_ONLY_AUTHORITIES, SEA, slug
 from .writing import read_collection
 
@@ -145,11 +142,12 @@ def assign_gap(gap, split, near_border_region, preserved_names):
     return pieces
 
 
-def land_gaps(country, preserved, border_edges, ocean_bounds):
-    """Return inland gap polygons and the authority and sea lines beside them."""
-    authority_names = {
+def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
+    """Assign every inland gap to the outside authority that borders it."""
+    preserved_names = {
         feature['properties']['name'] for feature in preserved
-    } | OSM_ONLY_AUTHORITIES
+    }
+    authority_names = preserved_names | OSM_ONLY_AUTHORITIES
     authorities, sea_lines = outside_edges(border_edges, authority_names)
     all_lines = [
         LineString(feature['geometry']['coordinates'])
@@ -167,18 +165,7 @@ def land_gaps(country, preserved, border_edges, ocean_bounds):
         )
         if uncovered.covers(polygon.representative_point())
     ]
-    return gaps, authorities, sea_lines
-
-
-def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
-    """Assign every inland gap to the outside authority that borders it."""
-    preserved_names = {
-        feature['properties']['name'] for feature in preserved
-    }
     near_border_region = country.buffer(NEAR_BORDER_DISTANCE_DEGREES)
-    gaps, authorities, sea_lines = land_gaps(
-        country, preserved, border_edges, ocean_bounds
-    )
     assigned = defaultdict(list)
     for gap in gaps:
         if touches_sea(gap, sea_lines):
@@ -201,89 +188,6 @@ def gap_areas(country, preserved, border_edges, ocean_bounds=OCEAN_BOUNDS):
         label: unary_union(geometries)
         for label, geometries in assigned.items()
     }
-
-
-def round_two_gap_areas(country, preserved, border_edges, ocean_bounds):
-    """Return the direct Voronoi split used for the published ocean cut."""
-    gaps, authorities, sea_lines = land_gaps(
-        country, preserved, border_edges, ocean_bounds
-    )
-    assigned = defaultdict(list)
-    for gap in gaps:
-        if touches_sea(gap, sea_lines):
-            continue
-        labels = touching_authorities(gap, authorities)
-        if not labels:
-            continue
-        if len(labels) == 1:
-            assigned[labels[0]].append(gap)
-            continue
-        for label, geometry in split_between_authorities(
-            gap, labels, authorities
-        ).items():
-            assigned[label].append(geometry)
-    return {
-        label: unary_union(geometries)
-        for label, geometries in assigned.items()
-    }
-
-
-def round_two_sea_frame(country, preserved, border_edges, ocean_bounds):
-    """Return the ocean cut from the round-two land, built from reviewed inputs.
-
-    The published ocean has not changed since round two. Rebuilding its cut
-    keeps the round-three neighbour bytes stable without letting neighbour
-    derivation depend on the published water file.
-    """
-    # The water layer imports touches_sea from here, so its cut settings are
-    # imported only when the sea frame is needed.
-    from .water import OCEAN_PART_MIN_AREA_SQM, OCEAN_SIMPLIFY_DEGREES
-
-    assigned = round_two_gap_areas(
-        country, preserved, border_edges, ocean_bounds
-    )
-    clipped = {
-        feature['properties']['name']: shape(feature['geometry']).difference(
-            country
-        )
-        for feature in preserved
-    }
-    for name, geometry in assigned.items():
-        clipped[name] = (
-            unary_union([clipped[name], geometry])
-            if name in clipped else geometry
-        )
-    land = unary_union([
-        country,
-        *[
-            shape(canonical_geometry(rounded_valid_geometry(geometry)))
-            for geometry in clipped.values()
-        ],
-    ])
-    simplified_ocean = box(*ocean_bounds).difference(land).simplify(
-        OCEAN_SIMPLIFY_DEGREES, preserve_topology=True
-    )
-    parts = (
-        simplified_ocean.geoms
-        if hasattr(simplified_ocean, 'geoms')
-        else [simplified_ocean]
-    )
-    coastal_parts = [
-        part for part in parts
-        if part.area * SQUARE_DEGREES_TO_SQUARE_METRES
-        >= OCEAN_PART_MIN_AREA_SQM
-    ]
-    if not coastal_parts:
-        return GeometryCollection()
-    simplified = (
-        unary_union(coastal_parts)
-        if len(coastal_parts) != 1
-        else coastal_parts[0]
-    )
-    geometry = rfc7946_geometry(
-        rounded_valid_geometry(mapping(simplified.difference(land)))
-    )
-    return shape(geometry)
 
 
 def context_identity(feature, geometry_value):
@@ -324,12 +228,6 @@ def derive_context_features(options, state, ocean_bounds=OCEAN_BOUNDS):
     edges = reviewed_border_edges(options, state)
     assigned = gap_areas(country, preserved, edges, ocean_bounds)
     preserved_names = set(clipped)
-    sea_frame = round_two_sea_frame(country, preserved, edges, ocean_bounds)
-    # A gap can reach into the sea without a coastline edge bounding it. That
-    # part belongs to the ocean frame, not to the authority without a shape.
-    for name in list(assigned):
-        if name not in preserved_names:
-            assigned[name] = assigned[name].difference(sea_frame)
     for name, geometry in assigned.items():
         if name in clipped:
             clipped[name] = unary_union([clipped[name], geometry])
