@@ -1,8 +1,9 @@
 // Water areas with their islands, rivers as lines that point downstream, and the coastline that the sea follows.
 import {createElementWithText} from './dom.js';
 import {valueLabel} from './field-catalog.js';
-import {formatLength, lineLengthMetres} from './geometry-measures.js';
+import {formatLength, lineLengthMetres, nearestPointOnLine} from './geometry-measures.js';
 import {areaFacts, holeTool, renderHoles} from './layer-green.js';
+import {endsOf, isSamePoint} from './road-shapes.js';
 import {changedStretch, crossesItself, followingEdits, hasOutlineAlong} from './shared-shapes.js';
 import {flowsInto, linesKeepingJoins, riverEndingOnShores, riversKeepingShore} from './water-joins.js';
 
@@ -50,10 +51,31 @@ function coastFollowing(before, after, context) {
 
 const coastEdits = (before, after, context) => coastFollowing(before, after, context).flatMap(({edits}) => edits);
 
+// Where a border between municipalities, or with a neighbour, meets the sea, more than one outline shares the point. It
+// would be left out of those that do not follow, so the stretch that moves must not contain one.
+function hasBorderMeetingSea(before, after, context) {
+  const stretch = changedStretch(before.geometry.coordinates, after.geometry.coordinates);
+  if (!stretch) return false;
+  // The ends of the stretch stay where they are, unless the line itself ends there and was moved.
+  const stayingEnds = [
+    [stretch.before[0], stretch.after[0]],
+    [stretch.before.at(-1), stretch.after.at(-1)]
+  ].filter(([from, to]) => isSamePoint(from, to));
+  const isStaying = point => stayingEnds.some(([end]) => isSamePoint(end, point));
+  const inlandBorders = context.entriesOf(bordersFile).filter(entry => !isSeaBorder(entry));
+  return inlandBorders
+    .flatMap(({feature}) => endsOf(feature))
+    .some(end => {
+      const {coordinate, distanceMetres} = nearestPointOnLine(end, stretch.before);
+      return distanceMetres <= coastToleranceMetres && !isStaying(coordinate);
+    });
+}
+
 // A shape that runs along the coast and cannot follow it would leave a gap between land and sea, so Apply refuses that.
 function coastProblem({feature, before}, context) {
   if (!before || !isCoastline(feature)) return null;
   const behind = coastFollowing(before, feature, context).find(({isLeftBehind}) => isLeftBehind);
+  if (hasBorderMeetingSea(before, feature, context)) return 'A border meets the sea here, so this point stays.';
   if (behind) return `The ${behind.name} cannot follow this change. Move fewer points, or points farther from the ends.`;
   const isCrossing =
     crossesItself(before.geometry, feature.geometry) ||
@@ -68,7 +90,11 @@ function waterEdits({key, feature, before}, context) {
   const waterEntries = context.entriesOf(waterFile);
   if (isLine(feature)) {
     const joins = linesKeepingJoins(key, before.geometry, feature.geometry, waterEntries);
-    return isCoastline(feature) ? [...joins, ...coastEdits(before, feature, context)] : joins;
+    if (!isCoastline(feature)) return joins;
+    const edits = [...joins, ...coastEdits(before, feature, context)];
+    // The shapes it was found for are about to change.
+    latestFollowing = null;
+    return edits;
   }
   if (feature.geometry.type !== 'Polygon') return [];
   return riversKeepingShore(before.geometry, feature.geometry, waterEntries);
