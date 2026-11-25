@@ -137,7 +137,7 @@ uses external car/foot routing and local dated bus patterns; see [routing behavi
 - apps/core-demo: minimal consumer exposing shared capabilities without importing either application.
 - services/backend: server implementation; future editorial/auth/search capabilities when required.
 - data: acquisition, source snapshots, imagery/provenance, quality, tile generation, data releases.
-- packages/contracts: stable formats shared across producers and consumers.
+- packages/contracts: formats shared across producers and consumers.
 - platform: hosting, CI/deployment, local infrastructure, repository enforcement.
 - tests: cross-component contract and artifact integration. Each browser app owns its browser acceptance; unit tests
   stay with their components.

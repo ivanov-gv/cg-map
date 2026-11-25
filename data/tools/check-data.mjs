@@ -680,10 +680,10 @@ export function validateBuildingLabels(data, buildings, {requireAdopted = false,
     const hasNumber = properties['addr:housenumber'] !== undefined || properties.building_number !== undefined;
     const hasEntrances = Array.isArray(properties.entrances) && properties.entrances.length > 0;
     requireValue(properties.kind === 'building' && (hasNumber || hasEntrances), 'Missing building address or entrances');
-    for (const field of ['addr:housenumber', 'building_number', 'display_number', 'lamela', 'addr:street']) {
+    for (const field of ['addr:housenumber', 'building_number', 'lamela', 'addr:street']) {
       const value = properties[field];
       if (value === undefined) continue;
-      const isNumber = ['addr:housenumber', 'building_number', 'display_number'].includes(field);
+      const isNumber = ['addr:housenumber', 'building_number'].includes(field);
       requireValue(addressText(value) && (!isNumber || !noNumber(value, houseNumber)), `Invalid building ${field}`);
     }
     const hasKnownId = /^way\/\d+$/.test(feature.id) || isLocalId(feature.id);
