@@ -472,6 +472,14 @@ test('the editing spec on the mobile layout runs in two jobs', () => {
   );
 });
 
+test('the layer specs run in two jobs', () => {
+  const jobs = browserMatrix(['layers'], EDITOR_BROWSER_AREAS).include;
+  assert.deepEqual(jobs, [
+    {area: 'layers-1', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=1/2`},
+    {area: 'layers-2', specs: `${EDITOR_BROWSER_AREAS.layers.specs} --shard=2/2`}
+  ]);
+});
+
 test('an area too slow for one job runs every share of its tests', () => {
   assert.deepEqual(browserMatrix(['journeys']).include, [
     {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/3'},

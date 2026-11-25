@@ -155,6 +155,9 @@ export const EDITOR_BROWSER_AREAS = {
   },
   layers: {
     specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
+    // 2 shards: layers took 355 s in one job on #419 (264 s at #409); the gate ran 451 s against a 420 s budget.
+    // Splitting the area keeps each shard under ~180 s.
+    jobs: 2,
     specFiles: LAYER_SPECS,
     sources: EDITING_ONLY_SOURCES
   },
