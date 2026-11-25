@@ -40,6 +40,14 @@ export async function tapAt(page, position, options = {}) {
   await page.mouse.click(x, y, options);
 }
 
+// Starts editing corners, once their handles can be grabbed.
+export async function editCorners(page) {
+  await page.locator('#tool-vertices').click();
+  const handleCount = () =>
+    page.evaluate(() => window.editorDebug.map.queryRenderedFeatures({layers: ['editor-handles-point']}).length);
+  await expect.poll(handleCount).toBeGreaterThan(0);
+}
+
 export async function dragFromTo(page, from, to) {
   const start = await screenPoint(page, from);
   const end = await screenPoint(page, to);

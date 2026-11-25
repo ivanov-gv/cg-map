@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {applyEdit, chooseLayer, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
 import {openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
@@ -19,11 +19,16 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
 
   await tapAt(page, [-3, 0]);
   await expect(page.locator('#selection-title')).toHaveText('Main street');
-  await page.locator('#tool-vertices').click();
+  await editCorners(page);
   await tapAt(page, [0, 0]);
   await page.locator('#vertex-split').click();
   await expect(page.locator('#change-count')).toHaveText('3');
   await tapAt(page, [-3, 0]);
+  await page.getByRole('button', {name: 'Join roads'}).click();
+  // The path meets neither end, and the refusal is on screen with the edit it is about.
+  await tapAt(page, [2, 1]);
+  await expect(page.locator('#edit-problem')).toBeVisible();
+  await expect(page.locator('#edit-problem')).toContainText('do not meet end to end');
   await page.getByRole('button', {name: 'Join roads'}).click();
   await tapAt(page, [4, 0]);
   await expect(page.locator('#change-count')).toHaveText('2');
