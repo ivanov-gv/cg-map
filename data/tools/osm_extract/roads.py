@@ -241,12 +241,22 @@ class RoadsLayer(Layer):
             self.features.extend(
                 road_features(way, graph, kept_points, options)
             )
-        state.identified_road_node_ids |= furniture_nodes | {
-            feature['properties'][name]
-            for feature in self.features for name in ('startNode', 'endNode')
-            if name in feature['properties']
-        }
+        state.road_end_node_ids.update(end_nodes_by_way(self.features))
+        state.identified_road_node_ids |= furniture_nodes.union(
+            *state.road_end_node_ids.values()
+        )
         return self.features
+
+
+def end_nodes_by_way(features):
+    """Return the nodes where the parts of each published way end."""
+    nodes = {}
+    for feature in features:
+        properties = feature['properties']
+        way_id = int(properties['entityId'].removeprefix('way/'))
+        ends = {properties.get('startNode'), properties.get('endNode')}
+        nodes.setdefault(way_id, set()).update(ends - {None})
+    return nodes
 
 
 def road_properties(tags):

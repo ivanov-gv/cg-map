@@ -444,13 +444,14 @@ class OsmExtractTest(unittest.TestCase):
         self.assertIn('relation/9100', by_id)
         restriction = by_id['relation/9100']
         self.assertEqual(restriction['entityVersion'], 1)
-        self.assertEqual(restriction['restriction'], 'no_left_turn')
+        self.assertEqual(restriction['restriction'], 'no_u_turn')
         self.assertEqual(restriction['from'], 2003)
-        self.assertEqual(restriction['to'], 2007)
+        self.assertEqual(restriction['to'], 2003)
         self.assertEqual(restriction['viaNodes'], [2032])
         self.assertNotIn('relation/9101', by_id)
         self.assertNotIn('relation/9102', by_id)
         self.assertNotIn('relation/9103', by_id)
+        self.assertNotIn('relation/9104', by_id)
 
     def test_clipped_road_omits_node_at_clip_boundary(self):
         extract(self.first_root)

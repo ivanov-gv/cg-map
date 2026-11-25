@@ -80,7 +80,8 @@ export class ReviewPanel {
     }
     const createdAt = new Date().toISOString();
     const envelope = {id: crypto.randomUUID(), createdAt, author, reason};
-    const changeset = await buildChangeset(this.#context.session, this.#context.sources, envelope);
+    const {session, sources, rules} = this.#context;
+    const changeset = await buildChangeset(session, sources, envelope, rules);
     downloadJSON(`changeset-${createdAt.slice(0, 10)}.json`, changeset);
     return changeset;
   }
