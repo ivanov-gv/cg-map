@@ -16,4 +16,6 @@ data, apps/editor and tests.
 
 ## History
 
+- 2026-11-25: derived shapes (municipalities, slopes, the sea) moved from the importer to the editor, so the reviewer
+  sees them as operations. Located entrances of a label became editable positions, found while building #407.
 - 2026-11-25: plan written with the nine Features.

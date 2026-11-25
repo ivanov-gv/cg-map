@@ -1,5 +1,5 @@
 import {createElementWithText, elementById} from './dom.js';
-import {objectLabel} from './source-overlay.js';
+import {objectLabel} from './object-names.js';
 
 // Bound DOM work even for country-wide views, while keeping every object reachable by keyboard.
 const pageSize = 40;

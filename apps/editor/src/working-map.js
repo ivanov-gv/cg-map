@@ -1,9 +1,10 @@
 import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeLayers} from '@ivanov-gv/map-core';
 
-// Shows the map as a rebuild would, with every pending edit in every file applied and drawn in the public cartography.
-// It is not a rebuild: tiles simplify geometry and leave out minor roads at low zoom, which this does not, so it shows
+// Draws changed files, and the files of the active layer, with the public cartography from their working features. It is
+// not a rebuild: tiles simplify geometry and leave out minor roads at low zoom, which this does not, so it shows
 // more detail than the release below street scale. At street scale the two match.
 const previewPrefix = 'edit-preview-';
+const fadedOpacity = 0.2;
 const placesFile = 'places.geojson';
 const labelsFile = 'building-labels.geojson';
 const placesSource = 'places';
@@ -15,10 +16,15 @@ const featureCollection = features => ({type: 'FeatureCollection', features});
 
 // Copies of the published layers that draw one file, reading a GeoJSON source instead of the vector archive. Paint,
 // layout, filters and zoom ranges stay as they are, so the edit looks as it will once released.
-export function previewLayers(publishedLayers, sourceName) {
+// A shared source holds several files, so each copy then draws only its own.
+export function previewLayers(publishedLayers, sourceName, sharedFilename = null) {
   return publishedLayers.map(layer => {
     const copy = {...layer, id: previewPrefix + layer.id, source: sourceName};
     delete copy['source-layer'];
+    if (sharedFilename) {
+      const isOwnFile = ['==', ['get', 'sourceFile'], sharedFilename];
+      copy.filter = layer.filter ? ['all', layer.filter, isOwnFile] : isOwnFile;
+    }
     return copy;
   });
 }
@@ -29,7 +35,7 @@ function placeMarkers(features, visibilityConfig) {
   return featureCollection(buildPlaceMarkers(directory, markerKeys(directory)));
 }
 
-export class EditPreview {
+export class WorkingMap {
   #map;
   #basemapLayers;
   #visibilityConfig;
@@ -39,7 +45,7 @@ export class EditPreview {
   #addedLayerIds = [];
   #addedSourceIds = [];
   #replacedSources = new Map();
-  #isShown = false;
+  #shownLevel = null;
 
   // basemapLayers maps a source file to the published layers that draw it from the vector archive. publishedPlaces are
   // the places as released, to put back when the preview ends.
@@ -58,14 +64,11 @@ export class EditPreview {
     return [...this.#addedLayerIds, ...layers.filter(layer => replacedSources.has(layer.source)).map(layer => layer.id)];
   }
 
-  get isShown() {
-    return this.#isShown;
-  }
-
-  // Replaces what is shown with these files. Each entry is a changed file and all its working features; a file with no
-  // entry keeps its published form. Everything that can fail is built before the map changes, so a throw, such as a place
+  // Replaces what is shown with these files. Each entry is a file and all its working features; a file with no entry keeps
+  // its published form. Files in sharedFiles are already in the shared source, where their features can be picked.
+  // Everything that can fail is built before the map changes, so a throw, such as a place
   // the public map would refuse, leaves the published map as it was and the preview hidden.
-  show(workingFeaturesByFile) {
+  show(workingFeaturesByFile, sharedFiles = new Set()) {
     this.hide();
     const placeData = workingFeaturesByFile.has(placesFile)
       ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
@@ -78,9 +81,26 @@ export class EditPreview {
     for (const [filename, features] of workingFeaturesByFile) {
       if (filename === labelsFile)
         this.#replaceSourceData(labelsSource, featureCollection(features), this.#publishedData(labelsSource));
-      else if (this.#basemapLayers[filename]) this.#drawInsteadOfBasemap(filename, features);
+      else if (this.#basemapLayers[filename]) {
+        this.#drawInsteadOfBasemap(filename, features, sharedFiles.has(filename));
+      }
     }
-    this.#isShown = true;
+  }
+
+  // Fades what is under or over the shown level, so that its own lines stand out. null shows every level as published.
+  setShownLevel(level) {
+    const isAnythingFaded = this.#shownLevel !== null || level !== null;
+    this.#shownLevel = level;
+    if (!isAnythingFaded) return;
+    const layers = this.#map.getStyle().layers.filter(({id, type}) => type === 'line' && this.#addedLayerIds.includes(id));
+    for (const {id} of layers) this.#map.setPaintProperty(id, 'line-opacity', this.#opacityOf(id));
+  }
+
+  #opacityOf(layerId) {
+    const published = this.#map.getPaintProperty(layerId.slice(previewPrefix.length), 'line-opacity');
+    if (this.#shownLevel === null) return published;
+    const isOnLevel = ['any', ['!', ['has', 'levelKeys']], ['in', `,${this.#shownLevel},`, ['get', 'levelKeys']]];
+    return ['case', isOnLevel, published ?? 1, fadedOpacity];
   }
 
   // Puts the published map back exactly as it was.
@@ -93,7 +113,6 @@ export class EditPreview {
     this.#addedSourceIds = [];
     this.#hiddenFilters = new Map();
     this.#replacedSources = new Map();
-    this.#isShown = false;
   }
 
   // A move or addition can create a shared marker with a level combination absent from the release. Install its bands
@@ -123,15 +142,15 @@ export class EditPreview {
   }
 
   // Each copy goes directly below its hidden original, so the drawing order stays the published one.
-  #drawInsteadOfBasemap(filename, features) {
-    const sourceId = this.#sharedSource ?? previewPrefix + filename;
-    if (!this.#sharedSource) {
+  #drawInsteadOfBasemap(filename, features, isShared) {
+    const sourceId = isShared ? this.#sharedSource : previewPrefix + filename;
+    if (!isShared) {
       this.#map.addSource(sourceId, {type: 'geojson', data: featureCollection(features)});
       this.#addedSourceIds.push(sourceId);
     }
     const layerIds = this.#basemapLayers[filename];
     const publishedLayers = this.#map.getStyle().layers.filter(layer => layerIds.includes(layer.id));
-    for (const layer of previewLayers(publishedLayers, sourceId)) {
+    for (const layer of previewLayers(publishedLayers, sourceId, isShared ? filename : null)) {
       const originalId = layer.id.slice(previewPrefix.length);
       this.#map.addLayer(layer, originalId);
       this.#addedLayerIds.push(layer.id);

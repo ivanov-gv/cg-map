@@ -1,8 +1,10 @@
 import {test, expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import {browseStatus, deleteObject, layerButton, openObjects} from './workspace.mjs';
 
 const coordinate = [19.259, 42.441];
+const isPhone = testInfo => testInfo.project.name === 'pages-mobile';
 
 // A synthetic, hash-pinned bundle gives the real renderer exactly co-located POIs without changing reviewed data.
 async function openOverlappingPlaces(page, count = 2) {
@@ -26,10 +28,10 @@ async function openOverlappingPlaces(page, count = 2) {
     await route.fulfill({json: manifest});
   });
   await page.goto('./');
-  await expect(page.locator('#status')).toHaveText('Browse · all source files locked');
+  await expect(page.locator('#status')).toHaveText(browseStatus);
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
-  await page.locator('[data-mode="places.geojson"]').click();
-  await expect(page.locator('#status')).toContainText('source features');
+  await layerButton(page, 'places.geojson').click();
+  await expect(page.locator('#status')).toContainText('objects');
   await page.evaluate(coordinate => new Promise(resolve => {
     const {map} = window.editorDebug;
     map.once('idle', resolve);
@@ -46,8 +48,7 @@ async function tapOverlap(page) {
 }
 
 async function chooseWithKeyboard(page, number) {
-  await page.locator('#open-objects').focus();
-  await page.keyboard.press('Enter');
+  await openObjects(page, 'Enter');
   await expect(page.locator('#objects-heading')).toHaveText('Objects in view');
   // Opening the list transfers focus directly to its first object.
   await expect(page.getByRole('button', {name: 'Overlap 1 · Point · feature 0', exact: true})).toBeFocused();
@@ -80,18 +81,17 @@ test('co-located POIs can each be selected with Tab and Enter or Space', {tag: '
     await expect(page.locator('#close-inspector')).toBeFocused();
     await page.locator('#cancel-edit').click();
   }
-  await page.locator('#open-objects').focus();
-  await page.keyboard.press('Enter');
+  await openObjects(page, 'Enter');
   await page.keyboard.press('Escape');
   await expect(page.locator('#objects-panel')).toBeHidden();
-  await expect(page.locator('#open-objects')).toBeFocused();
+  await expect(page.getByRole('button', {name: 'Tools', exact: true})).toBeFocused();
 });
 
 test('the view list follows camera and layer changes and preserves unfinished edits', {tag: '@phone'}, async ({page}) => {
   await openOverlappingPlaces(page);
   await chooseWithKeyboard(page, 1);
   await page.locator('[name="name"]').fill('Unapplied name');
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await expect(page.locator('#objects-list button')).toHaveCount(2);
   await expect(page.locator('#objects-list')).not.toContainText('Outside view');
   await page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true}).click();
@@ -99,26 +99,25 @@ test('the view list follows camera and layer changes and preserves unfinished ed
   await page.locator('#open-inspector').click();
   await expect(page.locator('[name="name"]')).toHaveValue('Unapplied name');
   await page.locator('#cancel-edit').click();
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await page.evaluate(() => window.editorDebug.map.jumpTo({center: [18.5, 43]}));
   await expect(page.locator('#objects-list button')).toHaveText(['Outside view · Point · feature 2']);
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
   await page.locator('#browse').click();
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await expect(page.locator('#objects-status')).toHaveText('Choose a layer to list its objects.');
   await expect(page.locator('#objects-list button')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
-  await page.locator('[data-mode="transport-stops.geojson"]').click();
-  await expect(page.locator('#status')).toContainText('source features');
-  await page.locator('#open-objects').click();
+  await layerButton(page, 'transport-stops.geojson').click();
+  await expect(page.locator('#status')).toContainText('objects');
+  await openObjects(page);
   await expect(page.locator('#objects-list')).not.toContainText('Overlap');
 });
 
 test('large view lists keep every co-located object reachable on keyboard pages', {tag: '@phone'}, async ({page}) => {
   await openOverlappingPlaces(page, 45);
-  await page.locator('#open-objects').focus();
-  await page.keyboard.press('Enter');
+  await openObjects(page, 'Enter');
   await expect(page.locator('#objects-status')).toHaveText('1–40 of 45 objects');
   await page.getByRole('button', {name: 'Next objects', exact: true}).focus();
   await page.keyboard.press('Enter');
@@ -128,21 +127,41 @@ test('large view lists keep every co-located object reachable on keyboard pages'
   await expect(page.locator('#selection-title')).toHaveText('Overlap 41');
 });
 
-test('list selection keeps original references after deletion and refreshes applied names', {tag: '@phone'}, async ({page}) => {
+test('list selection keeps original references after deletion and refreshes applied names', {tag: '@phone'}, async ({
+  page
+}, testInfo) => {
   await openOverlappingPlaces(page);
   await chooseWithKeyboard(page, 1);
-  await page.locator('#delete-feature').click();
-  await expect(page.locator('#status')).toContainText('source features');
-  await page.locator('#open-objects').click();
-  const remaining = page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true});
-  await expect(page.locator('#objects-list button')).toHaveCount(1);
-  await remaining.press('Enter');
-  await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  await deleteObject(page);
+  if (isPhone(testInfo)) {
+    // The phone only marks the first object, so both entries stay and the second one is still selectable.
+    await openObjects(page);
+    await expect(page.locator('#objects-list button')).toHaveText([
+      'Overlap 1 · Point · feature 0',
+      'Overlap 2 · Point · feature 1'
+    ]);
+    await page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true}).press('Enter');
+    await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  } else {
+    await expect(page.locator('#status')).toContainText('objects');
+    await openObjects(page);
+    const remaining = page.getByRole('button', {name: 'Overlap 2 · Point · feature 1', exact: true});
+    await expect(page.locator('#objects-list button')).toHaveCount(1);
+    await remaining.press('Enter');
+    await expect(page.locator('#selection-source')).toHaveText('places.geojson · feature 1');
+  }
   await page.locator('[name="name"]').fill('Renamed overlap');
   await page.locator('#apply-edit').click();
-  await expect(page.locator('#status')).toContainText('source features');
-  await page.locator('#open-objects').click();
-  await expect(page.locator('#objects-list button')).toHaveText(['Renamed overlap · Point · feature 1']);
+  await expect(page.locator('#status')).toContainText('objects');
+  await openObjects(page);
+  if (isPhone(testInfo)) {
+    await expect(page.locator('#objects-list button')).toHaveText([
+      'Overlap 1 · Point · feature 0',
+      'Renamed overlap · Point · feature 1'
+    ]);
+  } else {
+    await expect(page.locator('#objects-list button')).toHaveText(['Renamed overlap · Point · feature 1']);
+  }
 });
 
 test('single-hit map selection preserves a utility panel on a wide window', {tag: '@phone'}, async ({page}) => {
@@ -159,7 +178,7 @@ test('single-hit map selection preserves a utility panel on a wide window', {tag
   await expect(page.locator('#changes-panel')).toBeVisible();
   await expect(page.locator('.inspector')).toBeVisible();
   await page.locator('#cancel-edit').click();
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await page.getByRole('button', {name: 'Outside view · Point · feature 2', exact: true}).click();
   await expect(page.locator('#objects-panel')).toBeHidden();
   await expect(page.locator('.inspector')).toBeVisible();
@@ -175,7 +194,7 @@ test('clicking empty map clears the previous location chooser', {tag: '@phone'},
   await canvas.click({position: {x: bounds.width / 2 + emptyOffsetPixels, y: bounds.height / 2}});
   await expect(page.locator('#objects-panel')).toBeHidden();
   await expect(page.locator('#selection-title')).toHaveText('Select an object');
-  await page.locator('#open-objects').click();
+  await openObjects(page);
   await expect(page.locator('#objects-heading')).toHaveText('Objects in view');
   await expect(page.locator('#objects-list button')).toHaveCount(2);
 });
@@ -199,8 +218,8 @@ test('opening Objects during mode loading focuses the first object once it is re
     };
   });
   await page.getByRole('button', {name: 'Layers', exact: true}).click();
-  await page.locator('[data-mode="places.geojson"]').click();
-  await page.locator('#open-objects').click();
+  await layerButton(page, 'places.geojson').click();
+  await openObjects(page);
   await expect(page.locator('#objects-status')).toHaveText('Loading objects…');
   await expect(page.locator('#objects-status')).toBeFocused();
   await expect.poll(() => page.evaluate(() => window.editorDebug.map.isSourceLoaded('editor-source'))).toBe(true);
