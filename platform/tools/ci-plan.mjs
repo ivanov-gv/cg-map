@@ -144,6 +144,7 @@ export const SHARED_EDITOR_SOURCES = [
   'dom.js',
   'hashing.js',
   'source-bundle.js',
+  'source-records.js',
   'draft-store.js',
   'layer-rules.js',
   'source-overlay.js',

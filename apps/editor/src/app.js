@@ -43,7 +43,17 @@ const layerNames = {
   'land.geojson': 'Land',
   'water.geojson': 'Water',
   'context-countries.geojson': 'Country outlines',
-  'transport-stops.geojson': 'Bus stops'
+  'transport-stops.geojson': 'Bus stops',
+  'road-nodes.geojson': 'Road nodes',
+  'contours.geojson': 'Contour lines',
+  'summits.geojson': 'Summits',
+  'ridges.geojson': 'Ridges',
+  'slopes.geojson': 'Slopes',
+  'canyon-rims.geojson': 'Canyon rims',
+  'protected-areas.geojson': 'Protected areas',
+  'settlement-areas.geojson': 'Settlement areas',
+  'transit-routes.json': 'Routes',
+  'turn-restrictions.json': 'Turn restrictions'
 };
 const basemapLayers = {
   'buildings.geojson': ['buildings'],
