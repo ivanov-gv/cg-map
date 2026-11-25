@@ -304,6 +304,8 @@ test('an object with source identity is named by it, and is found after others o
   session.recordEdit('places.geojson', '1', renamed(identified(2), 'Renamed'));
   const changeset = await buildChangeset(session, sources, envelope);
   assert.deepEqual(changeset.operations[0].reference, {entityId: 'node/2'});
+  const earlier = await buildChangeset(session, sources, envelope, {version: 1});
+  assert.deepEqual([earlier.version, earlier.operations[0].reference], [1, {featureIndex: 1}], 'an earlier importer reads its version');
   const refreshed = sourcesWith({'places.geojson': [identified(2)]});
   refreshed.get('places.geojson').metadata.sha256 = 'b'.repeat(64);
   const resumed = new EditSession(refreshed);
