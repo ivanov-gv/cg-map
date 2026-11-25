@@ -1,6 +1,6 @@
 import js from '@eslint/js';
 import globals from 'globals';
-const nodeFiles = ['packages/contracts/tests/*.mjs', 'packages/map-core/tools/*.mjs', 'packages/map-core/tests/*.mjs', 'apps/core-demo/tools/*.mjs', 'apps/core-demo/tests/**/*.mjs', 'apps/core-demo/*.mjs', 'apps/editor/tools/*.mjs', 'apps/editor/tests/**/*.mjs', 'apps/editor/*.mjs', 'apps/web/tools/*.mjs', 'apps/web/tests/**/*.mjs', 'apps/web/*.mjs', 'data/**/*.mjs', 'services/transit-relay/*.mjs', 'services/transit-relay/tests/**/*.mjs', 'platform/**/*.mjs', 'tests/**/*.mjs', '*.mjs'];
+const nodeFiles = ['packages/contracts/tests/*.mjs', 'packages/map-core/src/*.test.js', 'packages/map-core/tools/*.mjs', 'packages/map-core/tools/*.test.js', 'apps/core-demo/src/*.test.js', 'apps/core-demo/tools/*.mjs', 'apps/core-demo/tools/*.test.js', 'apps/core-demo/tests/**/*.mjs', 'apps/core-demo/tests/*.test.js', 'apps/core-demo/e2e/*.spec.js', 'apps/core-demo/*.mjs', 'apps/editor/tools/*.mjs', 'apps/editor/tests/**/*.mjs', 'apps/editor/*.mjs', 'apps/web/tools/*.mjs', 'apps/web/tests/**/*.mjs', 'apps/web/*.mjs', 'data/**/*.mjs', 'services/transit-relay/*.mjs', 'services/transit-relay/tests/**/*.mjs', 'platform/**/*.mjs', 'tests/**/*.mjs', '*.mjs'];
 export default [
   {ignores: ['node_modules/**', 'dist/**', '.build/**', 'packages/map-core/assets/vendor/**']},
   js.configs.recommended,

@@ -116,6 +116,7 @@ for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
 // App tests, their browser configuration and tools written only for tests read data from the pinned package. Register a
 // new test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
+const testFilePattern = /\.test\.js$/;
 const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
 const repositoryDataPattern = new RegExp(
   [
@@ -212,7 +213,7 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
 
 // Keep shared runtime independent, and keep the concept consumer honest about its public-only imports.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
-  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js'))) {
+  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !testFilePattern.test(file))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
     for (const match of text.matchAll(moduleDependencyPattern)) {

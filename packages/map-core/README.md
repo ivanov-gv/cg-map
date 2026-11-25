@@ -52,6 +52,8 @@ same policy and palette as the public app; public search/selection orchestration
 
 assets/ holds the vendored MapLibre and PMTiles bundles and fonts. tools/assemble.mjs is the build-time half of the
 contract: each application's own build tool uses it to copy the runtime, assets and verified map data into its artifact.
+It leaves `*.test.js` out of artifacts, and `npm pack` leaves them out of the published package while keeping the
+`src/*`, `tools/*` and `assets/*` paths its consumers import.
 
 Local `make verify PKG=packages/map-core` is optional for iterating; GitHub's map-core and consumer pipelines gate the
 merge. Open the independent [concept app](../../apps/core-demo/README.md) to inspect features visually while iterating.
