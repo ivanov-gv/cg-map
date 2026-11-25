@@ -246,8 +246,10 @@ The gate's planner selects the workflows a change touches and the gate proves th
   the default tagged phone tests: web passes `smoke_browser_matrix` (its `discover`, five tests), while editor passes
   `smoke: true` and builds one shard from `apps/editor/browser-jobs.json`. These calls prove the workflow's jobs and
   steps, not every test. A regular web call keeps its planned matrix, except that an in-place call with no selected area
-  uses the smoke matrix. Any editor folder selection runs the app's whole sharded suite; a test run or an in-place
-  editor workflow call uses `smoke: true` so it only proves the browser job. An in-place `ci-workflows` call with no
+  uses the smoke matrix. A regular editor call passes no `smoke`, so both an editor change and an in-place editor
+  workflow call run the app's whole sharded suite; only a test run of `ci-pr-checks` uses the one-shard smoke proof. The
+  editor owns the shard count in [apps/editor/AGENTS.md](../../apps/editor/AGENTS.md), and
+  [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md) records why. An in-place `ci-workflows` call with no
   changed CD workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a
   test run. A shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in

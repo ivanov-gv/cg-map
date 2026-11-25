@@ -54,7 +54,7 @@ jobs:
       - name: Build browser matrix
         id: matrix
         run: |
-          if [ "$SMOKE" = true ] || [ "$SMOKE" = 'true' ]; then
+          if [ "$SMOKE" = true ]; then
             matrix="$(node apps/editor/tools/browser-matrix.mjs --smoke)"
           else
             matrix="$(node apps/editor/tools/browser-matrix.mjs)"
@@ -105,7 +105,6 @@ jobs:
       # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
       E2E_PHONE: ${{ inputs.phone_tests }}
-      AREA: shard-${{ matrix.shard }}
       SHARD: ${{ matrix.shard }}
       JOBS: ${{ matrix.jobs }}
     steps: &browser-steps
@@ -124,7 +123,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: browser-failure-evidence-editor-${{ env.AREA }}
+          name: browser-failure-evidence-editor-shard-${{ matrix.shard }}
           path: apps/editor/test-results/
           retention-days: 7
   browser-test-run:

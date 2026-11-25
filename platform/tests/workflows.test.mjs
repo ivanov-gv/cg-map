@@ -535,11 +535,24 @@ test('the editor workflow builds its own browser shards', () => {
   assert.match(raw, /E2E_ARGS="--shard=\$SHARD\/\$JOBS"/);
   // The app owns its specs; platform must not keep a second list to fall out of date.
   assert.doesNotMatch(raw, /EDITOR_BROWSER_AREAS|SHARED_EDITOR_SOURCES|tests\/e2e\/.*\.spec\.mjs/);
+  assert.match(raw, /if \[ "\$SMOKE" = true \]; then/);
+  assert.doesNotMatch(raw, /\bAREA\b/, 'the shard is not an area');
+  assert.match(raw, /browser-failure-evidence-editor-shard-\$\{\{ matrix\.shard \}\}/);
   const {jobs} = load('ci-apps-editor.yml');
   for (const name of ['browser', 'browser-test-run']) {
     assert.equal(jobs[name].if, undefined, `${name} must not skip the editor browser suite`);
     assert.match(jobs[name].strategy.matrix, /needs\.verify.*browser_matrix/);
   }
+});
+
+test('an in-place editor call tests every shard; only a test run is smoke', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  assert.equal(
+    jobs['apps-editor'].with.smoke,
+    "${{ needs.switch.outputs.test_run == 'true' }}",
+    'an in-place editor workflow call must not run only one shard'
+  );
+  assert.equal(jobs['test-ci-apps-editor'].with.smoke, true, 'the separate test call must still run one shard');
 });
 
 for (const file of ['cd-map-data.yml', 'cd-map-contracts.yml'])
@@ -1411,7 +1424,8 @@ test('web passes planned areas, while the editor runs its own shards and smoke i
   assert.equal(allJobs['apps-editor'].with.browser_matrix, undefined, 'the planner no longer builds editor areas');
   assert.equal(
     allJobs['apps-editor'].with.smoke,
-    "${{ needs.switch.outputs.test_run == 'true' || contains(needs.plan.outputs.ci_in_place_test_runs || needs.plan-test-run.outputs.ci_in_place_test_runs, '\"ci-apps-editor.yml\"') }}"
+    "${{ needs.switch.outputs.test_run == 'true' }}",
+    'an in-place editor call must run every shard'
   );
   const {jobs: editorJobs} = load('ci-apps-editor.yml');
   for (const name of ['browser', 'browser-test-run']) assert.equal(editorJobs[name].if, undefined);

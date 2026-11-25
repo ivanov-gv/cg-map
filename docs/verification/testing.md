@@ -85,7 +85,7 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | `platform/tools/lan_certificate.py`                            | `platform`, `apps-editor`                                                                                                                                                                     |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform`    | That folder, except as listed below                                                                                                                                                           |
 | `apps/web`                                                     | `apps-web`, `tests`, `platform`, and the browser areas below                                                                                                                                  |
-| `apps/editor`                                                  | `apps-editor`, `tests`, and the editor browser areas below                                                                                                                                    |
+| `apps/editor`                                                  | `apps-editor`, `tests`, and the whole editor browser suite                                                                                                                                    |
 | `apps/core-demo`                                               | `apps-core-demo`                                                                                                                                                                              |
 | `packages/map-core`                                            | `map-core`, every map application, `tests`, `platform`, every browser area                                                                                                                    |
 | `data/tools/editor-bundle.mjs`                                 | `data`, `apps-editor`, `tests`                                                                                                                                                                |
@@ -153,15 +153,10 @@ owns that mapping.
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
 every web area, because every browser test boots them.
 
-The editor takes a different approach: any change to an editor file runs the whole browser suite. The app owns its specs
-and its shard count in [browser-jobs.json](../../apps/editor/browser-jobs.json), and
-[tools/browser-matrix.mjs](../../apps/editor/tools/browser-matrix.mjs) turns that one number into a Playwright matrix.
-There are ten shards, chosen from full browser runs that took about 2,400–2,700 seconds across 16–17 jobs: dividing that
-work by ten leaves roughly 250 job-seconds, with room under the seven-minute job limit. Playwright divides tests by
-count, not duration, and both browser projects run in every shard. A changed job count needs a `--list` check of every
-shard with `E2E_WORKERS=2`, because CI's two workers let Playwright divide individual tests instead of keeping a whole
-slow file in one shard. CI test runs use only the first shard to prove the workflow; a normal PR run uses all ten.
-[ADR 0040](../decisions/0040-app-owned-browser-shards.md) records why the app, not the planner, owns this split.
+The editor takes a different approach: it owns its browser suite and its shard count. The
+[editor instructions](../../apps/editor/AGENTS.md) hold the count and its proof rule;
+[workflow testing](../../.github/TESTING.md#on-github) says when CI runs the whole suite or a smoke proof; and
+[ADR 0040](../decisions/0040-app-owned-browser-shards.md) records why the app owns the split.
 
 ## Monorepo verification — 2026-10-18
 

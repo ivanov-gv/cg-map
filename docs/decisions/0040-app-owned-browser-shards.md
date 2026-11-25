@@ -19,11 +19,11 @@ even though some shards take longer than others.
 
 ## Decision
 
-Any change to an editor file runs all of the editor's browser tests. The editor owns `browser-jobs.json`, which holds
-only a positive integer `jobs`, and `tools/browser-matrix.mjs`, which turns it into a Playwright shard matrix. The
-platform planner selects the `apps-editor` folder and no longer exports editor areas, source lists or an editor smoke
-matrix. A CI test run, an in-place editor workflow call and the static workflow test call pass `smoke: true`; the app
-tool then runs only the first shard. A normal PR run uses all shards.
+Any editor change runs all of the editor's browser tests, including a regular in-place call of `ci-apps-editor.yml`. The
+editor, not the platform planner, owns `browser-jobs.json` and `tools/browser-matrix.mjs`; the planner exports no editor
+areas, source lists or smoke matrix. The current workflow mechanism is in
+[.github/TESTING.md](../../.github/TESTING.md), and the shard-count rule is in
+[apps/editor/AGENTS.md](../../apps/editor/AGENTS.md).
 
 ## Consequences
 
@@ -31,7 +31,8 @@ tool then runs only the first shard. A normal PR run uses all shards.
 - Every editor change pays for the whole browser suite, rather than only the areas an old mapping considered relevant.
   Ten jobs still fit the run's job budget and replace the former 16–17 jobs.
 - A shard can be slower than another because Playwright divides tests by count, not duration. The seven-minute job limit
-  makes that unevenness safe; the app's unit test checks the matrix, and a changed job count needs a local
-  `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` check of every shard. Matching CI's workers
-  matters: with one worker Playwright keeps a whole slow file in one shard, but with two it divides individual tests.
-- Workflow test runs prove only the first shard. They do not replace the PR's full editor browser suite.
+  makes that unevenness safe, and the app's unit test checks the matrix. Matching CI's workers matters: with one worker
+  Playwright keeps a whole slow file in one shard, but with two it divides individual tests. The count's proof stays
+  with the editor.
+- A smoke proof proves the workflow's jobs and steps, not the editor suite; its call sites are in
+  [workflow testing](../../.github/TESTING.md#on-github).
