@@ -52,7 +52,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 
 - **Before v1, break compatibility for the right structure**
   ([why](docs/decisions/0039-strong-foundation-before-v1.md)): store each fact once, link by ID, derive the rest. A
-  country links to its border lines; no check compares copies, no override or view-only field hides a wrong value.
+  country links to its border lines; no check stands in for that, no override or view-only field hides a wrong value.
 - **Merge only when [tests pass on GitHub](.github/TESTING.md)**; locally the pre-push `make check` is required.
 - **No CI/CD change reaches main unproved:** [prove it on the branch](.github/TESTING.md#prove-cicd-before-main).
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.

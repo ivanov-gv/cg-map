@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted. Decided by the owner on 2026-11-25. Replaces the part of [ADR 0024](0024-editor-bundle-versions.md) that keeps
-an older format readable for its own sake.
+Accepted. Decided by the owner on 2026-11-25. Replaces the rule of [ADR 0024](0024-editor-bundle-versions.md) that older
+bundle versions stay readable.
 
 ## Context
 
@@ -26,8 +26,9 @@ removes the field.
 
 ## Decision
 
-Until the project's first v1 release, a wrong structure is replaced by the right one, even when that breaks a data
-format, a contract, saved drafts or an API. The versions of packages or protocols do not end this rule.
+Until the project's first v1 release, or until it gets users if that is earlier, a wrong structure is replaced by the
+right one, even when that breaks a data format, a contract, saved drafts or an API. The versions of packages or
+protocols do not end this rule.
 
 - A fact is stored once. Objects are connected by ID, and everything else is derived.
 - A state that must not exist is made impossible by the structure. A check that copies agree, a tolerance and a match by
@@ -35,9 +36,10 @@ format, a contract, saved drafts or an API. The versions of packages or protocol
   somebody drags across another.
 - A problem is fixed where it is. No view-only field, override, rule by name or check is added to hide it, also when an
   issue, a page or a review asks for it. When the fix is too big for now, the problem stays visible and is reported.
-- The old format is removed, without an adapter beside the new one. One exception: the tests of an app read a
-  [pinned release](../system-architecture/architecture.md#map-data-modes), so an app may read the old format until its
-  pin moves; the PR that moves the pin removes the old path.
+- The old format is removed, without an adapter beside the new one. One exception: a consumer (an app or map-core) may
+  read the old format until the pin concerned moves, of
+  [map data](../system-architecture/architecture.md#map-data-modes) or of
+  [contracts](../system-architecture/architecture.md#contract-modes); the PR that moves the pin removes the old path.
 - Formats that are still read for compatibility today stay until a change touches them; nothing is removed unasked.
 - Data, its provenance and licences are carried over. Published versions never change. The invariants in AGENTS.md hold,
   offline downloads included. Tests are rewritten for the new structure and prove at least as much.
@@ -50,4 +52,4 @@ format, a contract, saved drafts or an API. The versions of packages or protocol
   HEAD, so they must work after each merge; pins keep the tests of the apps on their release meanwhile.
 - Drafts and changesets of the editor made before such a change can become unusable; the PR tells their owner.
 - Later changes have less to keep in step, and no rule or tolerance to please.
-- After v1, compatibility needs a new decision.
+- After that, compatibility needs a new decision.
