@@ -354,6 +354,102 @@
       "isValid": false
     },
     {
+      "name": "turn restriction between a road of the editor and an OSM road",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": "local:11111111-1111-4111-8111-111111111111",
+        "to": 5,
+        "viaNodes": [
+          "local:22222222-2222-4222-8222-222222222222",
+          7
+        ]
+      },
+      "isValid": true
+    },
+    {
+      "name": "turn restriction with a road that is neither OSM nor local",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": "way/5",
+        "to": 5,
+        "viaNodes": [
+          7
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "turn restriction through a junction that is neither OSM nor local",
+      "filename": "turn-restrictions.json",
+      "properties": {
+        "restriction": "no_left_turn",
+        "from": 4,
+        "to": 5,
+        "viaNodes": [
+          "7"
+        ]
+      },
+      "isValid": false
+    },
+    {
+      "name": "road that ends at a junction of the editor",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "startNode": "local:22222222-2222-4222-8222-222222222222",
+        "startLevel": 0
+      },
+      "isValid": true
+    },
+    {
+      "name": "road that ends at no real junction",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "startNode": 0,
+        "startLevel": 0
+      },
+      "isValid": false
+    },
+    {
+      "name": "road with a smoothness that does not exist",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "smoothness": "Nkjhvvdffg"
+      },
+      "isValid": false
+    },
+    {
+      "name": "road with a listed smoothness",
+      "filename": "roads.geojson",
+      "properties": {
+        "kind": "service",
+        "smoothness": "very_bad"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement area",
+      "filename": "settlement-areas.geojson",
+      "properties": {
+        "kind": "settlement-area",
+        "name": "Zabjelo",
+        "settlementEntityId": "node/2878357619"
+      },
+      "isValid": true
+    },
+    {
+      "name": "settlement area without a name",
+      "filename": "settlement-areas.geojson",
+      "properties": {
+        "kind": "settlement-area"
+      },
+      "isValid": false
+    },
+    {
       "name": "turn restriction with a missing way",
       "filename": "turn-restrictions.json",
       "properties": {

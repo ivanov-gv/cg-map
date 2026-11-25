@@ -48,6 +48,7 @@ test('manifest accepts every bundle version and requires one entry per supported
     'contours.geojson',
     'protected-areas.geojson',
     'ridges.geojson',
+    'settlement-areas.geojson',
     'slopes.geojson',
     'summits.geojson',
     'transit-routes.json',
@@ -61,7 +62,7 @@ test('manifest accepts every bundle version and requires one entry per supported
   }
   const duplicate = manifest();
   duplicate.layers[1] = duplicate.layers[0];
-  assert.throws(() => validateBundleManifest(duplicate), /exactly the 21/);
+  assert.throws(() => validateBundleManifest(duplicate), /exactly the 22/);
   const v1WithEntrance = manifest(1);
   v1WithEntrance.layers.push(metadata('building-entrances.geojson'));
   assert.throws(() => validateBundleManifest(v1WithEntrance), /exactly the 8/);
@@ -70,7 +71,7 @@ test('manifest accepts every bundle version and requires one entry per supported
     layers: sourceFiles.filter(entry => entry !== filename).map(metadata)
   });
   for (const filename of ['building-entrances.geojson', 'settlements.geojson']) {
-    assert.throws(() => validateBundleManifest(withoutFile(filename)), /exactly the 21/);
+    assert.throws(() => validateBundleManifest(withoutFile(filename)), /exactly the 22/);
   }
   for (const invalid of [
     {version: 4, layers: sourceFiles.map(metadata)},

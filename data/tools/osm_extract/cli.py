@@ -24,6 +24,7 @@ from .places import PlacesLayer
 from .protected_areas import ProtectedAreasLayer
 from .road_nodes import RoadNodesLayer
 from .roads import RoadsLayer
+from .settlement_areas import SettlementAreasLayer
 from .settlements import SettlementsLayer
 from .turn_restrictions import TurnRestrictionsLayer
 from .water import WaterLayer
@@ -43,7 +44,7 @@ LAYER_GROUPS = {
     'roads': (RoadsLayer, RoadNodesLayer, TurnRestrictionsLayer),
     'land': (CountryLayer, LandLayer),
     'borders': (BorderEdgesLayer, MunicipalitiesLayer),
-    'settlements': (SettlementsLayer,),
+    'settlements': (SettlementsLayer, SettlementAreasLayer),
     'water': (WaterLayer,),
     'places': (BuildingGeometryLayer, PlacesLayer),
     'protected-areas': (ProtectedAreasLayer,),
