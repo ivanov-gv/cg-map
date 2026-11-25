@@ -87,19 +87,20 @@ export class WorkingMap {
     }
   }
 
-  // Fades what is under or over the shown level, so that its own lines stand out. null shows every level.
+  // Fades what is under or over the shown level, so that its own lines stand out. null shows every level as published.
   setShownLevel(level) {
+    const isAnythingFaded = this.#shownLevel !== null || level !== null;
     this.#shownLevel = level;
-    for (const layerId of this.#addedLayerIds) this.#fadeOtherLevels(layerId);
+    if (!isAnythingFaded) return;
+    const layers = this.#map.getStyle().layers.filter(({id, type}) => type === 'line' && this.#addedLayerIds.includes(id));
+    for (const {id} of layers) this.#map.setPaintProperty(id, 'line-opacity', this.#opacityOf(id));
   }
 
-  #fadeOtherLevels(layerId) {
-    const layer = this.#map.getStyle().layers.find(({id}) => id === layerId);
-    if (layer.type !== 'line') return;
-    const fullOpacity = this.#map.getPaintProperty(layerId.slice(previewPrefix.length), 'line-opacity') ?? 1;
+  #opacityOf(layerId) {
+    const published = this.#map.getPaintProperty(layerId.slice(previewPrefix.length), 'line-opacity');
+    if (this.#shownLevel === null) return published;
     const isOnLevel = ['any', ['!', ['has', 'levelKeys']], ['in', `,${this.#shownLevel},`, ['get', 'levelKeys']]];
-    const opacity = this.#shownLevel === null ? fullOpacity : ['case', isOnLevel, fullOpacity, fadedOpacity];
-    this.#map.setPaintProperty(layerId, 'line-opacity', opacity);
+    return ['case', isOnLevel, published ?? 1, fadedOpacity];
   }
 
   // Puts the published map back exactly as it was.

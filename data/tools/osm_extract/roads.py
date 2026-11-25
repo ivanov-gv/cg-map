@@ -266,13 +266,17 @@ def road_features(way, graph, kept_points, options):
     """Return the parts of one way with the node and level at their ends.
 
     Major roads cross the detail box whole, so that the graph goes on beyond
-    it. Other roads end at its edge.
+    it. Other roads end at its edge. Cutting one that is inside anyway would
+    part a way where it meets itself.
     """
     geometry = {'type': 'LineString', 'coordinates': way.coordinates}
     tolerance = (
         DETAIL_SIMPLIFY_DEGREES if way.is_local else COUNTRY_SIMPLIFY_DEGREES
     )
-    if way.is_major or not way.is_local:
+    is_whole = way.is_major or not way.is_local or all(
+        options.contains(*coordinate) for coordinate in way.coordinates
+    )
+    if is_whole:
         features = geometry_features(
             geometry, way.identity, way.properties,
             simplify_tolerance=tolerance, kept_points=kept_points

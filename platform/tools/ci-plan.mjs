@@ -104,6 +104,7 @@ const EDITING_ONLY_SOURCES = [
   'line-joining.js',
   'layer-water.js',
   'layer-junctions.js',
+  'line-origins.js',
   'opening-hours-dialog.js',
   'opening-hours.js',
   'shared-shapes.js',
