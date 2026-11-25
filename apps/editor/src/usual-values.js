@@ -74,7 +74,6 @@ const typedNames = new Set([
   'name:en',
   'name:sr-Latn',
   'addr:housenumber',
-  'display_number',
   'building_number',
   'phone',
   'website',

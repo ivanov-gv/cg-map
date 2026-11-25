@@ -46,7 +46,7 @@ function buildingEdit({feature, before}, context) {
 // "bb" in the field: the building says it has no number and its address goes.
 function noNumberEdits(label, context) {
   const building = buildingOfLabel(label.feature, context);
-  const withoutNumber = withValues(label.feature.properties, {'addr:housenumber': undefined, display_number: undefined});
+  const withoutNumber = withValues(label.feature.properties, {'addr:housenumber': undefined});
   const keepsLabel = locatedFactNames.some(name => withoutNumber[name] !== undefined);
   const labelEdit = {
     filename: labelsFile,
@@ -76,7 +76,7 @@ async function moveToBuilding(edit) {
   }
   const feature = edit.typedFeature();
   const properties = {kind: 'building', buildingEntityId: buildingId(target)};
-  for (const name of [...addressNames, 'display_number']) {
+  for (const name of addressNames) {
     if (feature.properties[name] !== undefined) properties[name] = feature.properties[name];
   }
   const geometry = {type: 'Point', coordinates: interiorPoint(target.feature.geometry.coordinates)};
@@ -156,7 +156,7 @@ export function nearestGap(gaps, coordinate, skippedKeys = new Set()) {
 export const addressBehaviors = {
   [labelsFile]: {
     title: feature => addressText(feature.properties) || feature.properties.building_number || 'Address',
-    sections: () => [{title: 'Address', fields: ['addr:housenumber', 'display_number', 'addr:street']}],
+    sections: () => [{title: 'Address', fields: ['addr:housenumber', 'addr:street']}],
     companionEdits: buildingEdit,
     renderExtras: renderAddressExtras,
     limitedGeometry: addressInside,
