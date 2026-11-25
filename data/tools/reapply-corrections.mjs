@@ -146,8 +146,63 @@ const groupByFile = new Map([
   ['slopes.geojson', 'ridges']
 ]);
 
+const roadsFile = 'roads.geojson';
+const roadGraphFiles = new Set([roadsFile, 'road-nodes.geojson', 'turn-restrictions.json']);
+
+// What ties an object of the road graph to others: its roads, its junctions and the places where it ends or stands.
+function graphTokens({filename, reference, before, after}) {
+  const states = [before, after].filter(Boolean);
+  const roadName = entityId => /^way\/(\d+)$/.exec(entityId ?? '')?.[1] ?? entityId;
+  const namesOf = ({properties, geometry}) => {
+    if (filename === roadsFile) {
+      const {startNode, endNode} = properties;
+      const {coordinates} = geometry;
+      const roadId = roadName(reference.localId ?? properties.entityId);
+      return [`road ${roadId}`, `junction ${startNode}`, `junction ${endNode}`, `at ${coordinates[0]}`, `at ${coordinates.at(-1)}`];
+    }
+    if (geometry) return [`at ${geometry.coordinates}`];
+    const {from, to, viaNodes = [], viaWays = []} = properties;
+    return [...[from, to, ...viaWays].map(road => `road ${road}`), ...viaNodes.map(node => `junction ${node}`)];
+  };
+  return states.flatMap(namesOf).filter(token => !token.endsWith('undefined'));
+}
+
+// The group of every operation on the road graph: those that share a road, a junction or a place hold only together.
+function roadGraphGroups(operations) {
+  const groupByToken = new Map();
+  const leaderOf = group => {
+    let leader = group;
+    while (leader.mergedInto) leader = leader.mergedInto;
+    return leader;
+  };
+  const groups = operations.map((operation, index) => {
+    const group = {name: `roads ${index + 1}`, mergedInto: null};
+    for (const token of graphTokens(operation)) {
+      const known = groupByToken.has(token) ? leaderOf(groupByToken.get(token)) : null;
+      if (known && known !== leaderOf(group)) known.mergedInto = leaderOf(group);
+      groupByToken.set(token, group);
+    }
+    return group;
+  });
+  return new Map(operations.map((operation, index) => [nameOf(operation), leaderOf(groups[index]).name]));
+}
+
+// The ends that had to leave the junction a correction put them at, because other roads still are elsewhere. The importer
+// gives them one of their own, and a reviewer has to look.
+function renamedJunctions(operations, written) {
+  const roadByKey = new Map(written.features.map(({properties}) => [entityKey(properties), properties]));
+  return operations
+    .filter(({filename, after}) => filename === roadsFile && after)
+    .flatMap(operation => {
+      const {reference, after} = operation;
+      const properties = roadByKey.get(entityKey({entityId: reference.localId, ...reference}));
+      const names = ['startNode', 'endNode'].filter(name => properties && properties[name] !== after.properties[name]);
+      return names.map(name => `${nameOf(operation)}: its ${name} left junction ${after.properties[name]}, where other roads are elsewhere`);
+    });
+}
+
 // What is placed or refused together when not everything can be placed: a building with what is on it, the outlines, the
-// transport lines, the ridges. Everything else stands alone.
+// transport lines, the ridges, the roads of a junction. Everything else stands alone.
 function groupOf(operation, sourceBuildings) {
   const {filename, reference, before, after} = operation;
   const feature = after ?? before;
@@ -299,8 +354,12 @@ export function replayChangeset(root, now, contractsDirectory) {
     operations
   };
   const sourceBuildings = [...readSource(buildingsFile).values()];
+  const roadGroups = roadGraphGroups(operations.filter(({filename}) => roadGraphFiles.has(filename)));
   const groupByOperation = new Map(
-    operations.map(operation => [nameOf(operation), groupOf(operation, sourceBuildings)])
+    operations.map(operation => {
+      const name = nameOf(operation);
+      return [name, roadGroups.get(name) ?? groupOf(operation, sourceBuildings)];
+    })
   );
   return {changeset, report, groupByOperation};
 }
@@ -356,15 +415,24 @@ export function reapplyCorrections(root, {now = new Date().toISOString(), contra
   const {changeset, report} = replayChangeset(root, now, contractsDirectory);
   if (changeset.operations.length === 0) return {operations: 0, report};
   const applyOptions = {now, contractsDirectory, ...options, recordsCorrections: false};
+  const placed = placeCorrections(changeset, root, applyOptions);
+  const roads = parseSource(roadsFile, fs.readFileSync(path.join(root, sourcesPath, roadsFile), 'utf8'));
+  return {
+    operations: placed.operations,
+    report: [...report, ...placed.report, ...renamedJunctions(changeset.operations, roads)]
+  };
+}
+
+function placeCorrections(changeset, root, options) {
   try {
-    applyChangeset(partOf(changeset, changeset.operations), root, applyOptions);
-    return {operations: changeset.operations.length, report};
+    applyChangeset(partOf(changeset, changeset.operations), root, options);
+    return {operations: changeset.operations.length, report: []};
   } catch (error) {
     // Groups are only tried over sources that are as they were.
     if (error.hasUnrestoredFiles) throw error;
-    const placed = applyByGroups(root, applyOptions);
+    const placed = applyByGroups(root, options);
     const reason = `Not everything fits at once, so the corrections were placed one by one: ${error.message}`;
-    return {operations: placed.operations, report: [...report, reason, ...placed.report]};
+    return {operations: placed.operations, report: [reason, ...placed.report]};
   }
 }
 
