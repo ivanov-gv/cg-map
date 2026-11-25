@@ -41,6 +41,17 @@ for (const file of docs) {
     assert.ok(fs.existsSync(path.resolve(path.dirname(file), target)), `${file}: broken link ${target}`);
   }
 }
+// Shared ESLint rules are development tooling, not a map of project files. A concrete path in the module would make
+// every project's lint depend on another project's layout; each config owns its own patterns.
+const eslintRuleProjectFilePattern = /\b(?:apps|packages|services|data|platform|tests)\/[\w./-]+\.(?:js|mjs|cjs|json)\b/;
+const eslintRulesText = fs.readFileSync('platform/eslint-rules.mjs', 'utf8');
+for (const probe of ["'apps/web/src/core.js'", "'data/tools/check-data.mjs'"]) {
+  assert.match(probe, eslintRuleProjectFilePattern, `${probe} must be rejected as a project file in the shared rules`);
+}
+assert.ok(
+  !eslintRuleProjectFilePattern.test(eslintRulesText),
+  'platform/eslint-rules.mjs must not name a project file; put project patterns in that project\'s config'
+);
 // Import lists may span lines, so the clause between the keyword and `from` must accept newlines.
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
 const imports = {

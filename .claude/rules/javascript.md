@@ -31,9 +31,9 @@ it.
 
 Each project that lints owns `eslint.config.mjs` beside its Makefile or package.json and chooses its own file patterns
 and globals; ESLint finds it from the folder the lint command runs in. Rule sets live in
-[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: each project's lint
-target, the pre-commit hook and [ci-plan](platform/tools/ci-plan.mjs)'s tests. See
-[ADR 0040](docs/decisions/0040-project-owned-eslint-configurations.md).
+[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`.
+Each project's lint target and the pre-commit hook enforce the rules; [ci-plan](platform/tools/ci-plan.mjs)'s tests
+cover the selection. See [ADR 0040](docs/decisions/0040-project-owned-eslint-configurations.md).
 
 ## Code
 

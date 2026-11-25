@@ -3,6 +3,7 @@
 // Local use: make ci-plan BASE=origin/main. CI use: .github/TESTING.md.
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {formatWorkflowTestRuns, selectWorkflowTestRuns} from './workflow-test-runs.mjs';
 
@@ -21,6 +22,20 @@ export const FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
+
+// The root Makefile's project directories and their CI folder pipelines. Lint config discovery uses this existing map,
+// so the planner never needs a second list of projects that lint.
+export const PROJECT_PIPELINES = {
+  'packages/map-core': 'map-core',
+  'apps/web': 'apps-web',
+  'apps/editor': 'apps-editor',
+  'apps/core-demo': 'apps-core-demo',
+  data: 'data',
+  'packages/contracts': 'contracts',
+  'services/transit-relay': 'transit-relay',
+  platform: 'platform',
+  tests: 'tests'
+};
 
 // Each web source file is listed once, so a new file falls through to every area until someone maps it.
 export const BROWSER_AREAS = {
@@ -266,32 +281,20 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
-// Platform owns the one ESLint rule module; these are the projects whose configs import it. No rule can change what a
-// browser does, so a change here selects their verifies and no browser areas.
-const ESLINT_PROJECT_FOLDERS = [
-  'apps-web',
-  'apps-editor',
-  'apps-core-demo',
-  'map-core',
-  'contracts',
-  'data',
-  'transit-relay',
-  'platform',
-  'tests'
-];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
-// A project's config selects its own verify. The web readability test lives with web, so its config needs no exception.
-// Editor and core-demo keep their existing folder rules, so their configs still select what they did before; neither
-// needs an entry here.
-const ESLINT_CONFIG_FOLDERS = new Map([
-  ['apps/web/eslint.config.mjs', 'apps-web'],
-  ['packages/map-core/eslint.config.mjs', 'map-core'],
-  ['packages/contracts/eslint.config.mjs', 'contracts'],
-  ['data/eslint.config.mjs', 'data'],
-  ['services/transit-relay/eslint.config.mjs', 'transit-relay'],
-  ['platform/eslint.config.mjs', 'platform'],
-  ['tests/eslint.config.mjs', 'tests']
-]);
+const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
+// Consumers are discovered, not listed: each known project contributes its config when the file exists. The CLI runs
+// at the repository root; tests inject a config list to prove a new config joins without a planner code change.
+function discoveredLintConfigs(root = process.cwd()) {
+  return Object.keys(PROJECT_PIPELINES)
+    .map(project => `${project}/${ESLINT_CONFIG_NAME}`)
+    .filter(file => fs.existsSync(path.join(root, file)));
+}
+function configPipeline(file, lintConfigs) {
+  if (!file.endsWith(`/${ESLINT_CONFIG_NAME}`)) return '';
+  const project = file.slice(0, -`/${ESLINT_CONFIG_NAME}`.length);
+  return lintConfigs.includes(file) ? PROJECT_PIPELINES[project] ?? '' : '';
+}
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
@@ -321,7 +324,7 @@ const areasForEditorFile = file =>
 
 // Returns the folders and browser areas one changed path needs. A result without editorAreas that selects apps-editor
 // comes from outside the editor, such as its source bundle, and so needs all of them.
-export function classify(file) {
+function classifyGeneric(file) {
   const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
   const isMarkdown = file.endsWith('.md') && !isPublishedFile;
   if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json')
@@ -329,15 +332,6 @@ export function classify(file) {
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/(ci-plan|workflow-test-runs)\./.test(file))
     return {folders: ['workflows', 'platform'], areas: []};
   if (file === 'Makefile') return {folders: ROOT_MAKEFILE_FOLDERS, areas: [], editorAreas: []};
-  if (file === SHARED_ESLINT_RULES)
-    return {folders: ESLINT_PROJECT_FOLDERS, areas: [], editorAreas: []};
-  const lintConfigFolder = ESLINT_CONFIG_FOLDERS.get(file);
-  if (lintConfigFolder)
-    return {
-      folders: [lintConfigFolder],
-      areas: [],
-      editorAreas: []
-    };
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
   if (/^services\/backend\/(.*\.go|go\.mod|go\.sum)$/.test(file)) return {folders: ['backend'], areas: []};
@@ -387,10 +381,27 @@ export function classify(file) {
   return EVERYTHING;
 }
 
+export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
+  if (file === SHARED_ESLINT_RULES) {
+    const consumers = new Set(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
+    return {folders: FOLDERS.filter(folder => consumers.has(folder)), areas: [], editorAreas: []};
+  }
+  const pipeline = configPipeline(file, lintConfigFiles);
+  if (pipeline) {
+    const generic = classifyGeneric(file);
+    // A config whose generic plan is already narrow and carries editor areas keeps that plan: editor tests run through
+    // the editor's config. Anything else narrows to its own verify; a generic "everything" must not leak back in.
+    const keepsGeneric = generic.folders.length < FOLDERS.length && (generic.editorAreas ?? []).length > 0;
+    return keepsGeneric ? generic : {folders: [pipeline], areas: [], editorAreas: []};
+  }
+  return classifyGeneric(file);
+}
+
 // An empty list means the diff could not be trusted, so it selects everything too.
-export function planChanges(files) {
+export function planChanges(files, options = {}) {
   if (files.length === 0) return {...EVERYTHING, everything: true};
-  const results = files.map(classify);
+  const lintConfigFiles = options.lintConfigFiles ?? discoveredLintConfigs();
+  const results = files.map(file => classify(file, lintConfigFiles));
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
   const editorAreasOf = result => (result.folders.includes('apps-editor') ? (result.editorAreas ?? ALL_EDITOR_AREAS) : []);

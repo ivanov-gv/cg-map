@@ -24,23 +24,23 @@ changed.
 
 Projects depend on each other only through these concrete contracts:
 
-| Contract                                       | Producer           | Consumers                                                                                                         |
-| ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                        |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                    |
-| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                |
-| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                          |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                               |
-| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                 |
-| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                         |
-| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion            |
-| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                |
-| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                     |
-| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                |
-| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                    |
-| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                             |
-| Shared ESLint rules, platform/eslint-rules.mjs | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, tests |
+| Contract                                       | Producer           | Consumers                                                                                                                   |
+| ---------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                                  |
+| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                              |
+| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                          |
+| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                          |
+| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                    |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                         |
+| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                           |
+| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                   |
+| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                      |
+| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                          |
+| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                               |
+| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                          |
+| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                              |
+| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                       |
+| Shared ESLint rules, platform/eslint-rules.mjs | platform           | apps/web, apps/editor, apps/core-demo, packages/map-core, data, packages/contracts, services/transit-relay, platform, tests |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -58,9 +58,13 @@ Rules:
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev
-  builds are the separate HEAD mode described below. The scoped exception is `tests/`, the cross-project integration
+  builds are the separate HEAD mode described below. The scoped exceptions are `tests/`, the cross-project integration
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
-  it publishes by setting the data and contracts versions.
+  it publishes by setting the data and contracts versions; and development tooling: each project's lint and readability
+  tests read `platform/eslint-rules.mjs` at HEAD through their own config, and the app readability tests call
+  `platform/tools/eslint-readability-probe.mjs`. Both are repository tooling like the ESLint binary and its plugins, not
+  runtime data; a pinned package would need a release for each rule change. Owner approval for this narrow exception is
+  requested in the #458 PR ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)).
 
 ### Map data modes
 

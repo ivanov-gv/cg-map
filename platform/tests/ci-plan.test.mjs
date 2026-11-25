@@ -8,6 +8,7 @@ import {
   BROWSER_AREAS,
   EDITOR_BROWSER_AREAS,
   FOLDERS,
+  PROJECT_PIPELINES,
   SHARED_EDITOR_SOURCES,
   SHARED_WEB_SOURCES,
   SMOKE_BROWSER_MATRIX,
@@ -220,6 +221,19 @@ test('the shared ESLint rules select every consuming verify and no browser areas
   assert.deepEqual(plan.areas, []);
   assert.deepEqual(plan.editorAreas, []);
   assert.equal(plan.everything, false);
+});
+
+test('a new project config joins the shared-rule consumers without a code change', () => {
+  const lintConfigFiles = ['apps/web/eslint.config.mjs'];
+  const before = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
+  assert.deepEqual(before.folders, ['apps-web']);
+
+  const after = planChanges(['platform/eslint-rules.mjs'], {
+    lintConfigFiles: [...lintConfigFiles, 'apps/editor/eslint.config.mjs']
+  });
+  assert.deepEqual(after.folders, ['apps-web', 'apps-editor']);
+  assert.deepEqual(after.areas, []);
+  assert.deepEqual(after.editorAreas, []);
 });
 
 test('Editor and core-demo lint configs keep their existing selection', () => {
@@ -594,17 +608,7 @@ test('smoke matrices run one short unsharded area for each separate browser test
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.
 test('make check runs every project, and every project has a pipeline that verifies it', () => {
-  const pipelineByProject = {
-    'packages/map-core': 'map-core',
-    'apps/web': 'apps-web',
-    'apps/editor': 'apps-editor',
-    'apps/core-demo': 'apps-core-demo',
-    data: 'data',
-    'packages/contracts': 'contracts',
-    'services/transit-relay': 'transit-relay',
-    platform: 'platform',
-    tests: 'tests'
-  };
+  const pipelineByProject = PROJECT_PIPELINES;
   // What each project's verify must keep running, so no check can quietly drop out of make check and CI.
   const requiredChecks = {
     'packages/map-core': ['lint', 'test'],
