@@ -27,7 +27,7 @@ import {
 import {rightAngledCorner} from './geometry-measures.js';
 import {formControls} from './form-controls.js';
 import {behaviorOf} from './layer-behaviors.js';
-import {featureCapabilities, featureProblem} from './layer-rules.js';
+import {featureCapabilities, featureProblem, operationProblem} from './layer-rules.js';
 import {hideModeBar, setCrossVisible, showModeBar} from './mode-bar.js';
 import {formValues, propertiesFromForm, renderPropertyForm} from './property-form.js';
 
@@ -393,8 +393,11 @@ export class InspectorEditing {
   #problemOf(edits) {
     const {rules, levels, session} = this.#context;
     for (const {filename, key, after} of edits) {
-      if (!after) continue;
-      const problem = featureProblem(after, rules.layers[filename], levels, session.baseFeature(filename, key));
+      const before = session.baseFeature(filename, key);
+      const isUnchanged = !after || JSON.stringify(before) === JSON.stringify(after);
+      if (isUnchanged) continue;
+      const operation = {filename, operation: before ? 'modify' : 'add', reference: {localId: key}, before, after};
+      const problem = operationProblem(operation, rules, levels);
       if (problem) return `${behaviorOf(filename).title(after, this.#context.behaviorContext())}: ${problem}.`;
     }
     return null;
