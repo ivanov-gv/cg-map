@@ -17,7 +17,7 @@ const ledgerPath = `${sourcesPath}/editor-corrections.json`;
 const buildingsFile = 'buildings.geojson';
 const labelsFile = 'building-labels.geojson';
 const placesFile = 'places.geojson';
-const addressFacts = ['addr:housenumber', 'addr:street', 'display_number'];
+const addressFacts = ['addr:housenumber', 'addr:street'];
 const buildingPartFiles = [labelsFile, 'building-entrances.geojson', placesFile];
 // Positions and joins follow the sources; the importer computes them again.
 const derivedNames = new Set(['footprintIndex', 'addr:streetEntityId', 'addr:streetEntityIds']);
