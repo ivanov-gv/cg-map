@@ -166,7 +166,9 @@ function snappedWhileDragged(geometry, change, context) {
 
 // Takes the picked point out of its join, so that it moves alone from then on.
 function waterVertexTools(feature, handle, edit) {
-  if (edit.isNew || !isLine(feature) || isCoastline(feature)) return [];
+  // Joins are taken apart at the desk, as those of roads are.
+  const canDisconnect = !edit.isNew && isLine(feature) && !isCoastline(feature) && !edit.context.isPhone();
+  if (!canDisconnect) return [];
   const coordinate = handle && feature.geometry.coordinates[handle.vertexIndex];
   const joinedKeys = joinedWaterPoints(edit, edit.context.entriesOf(waterFile)).map(pointKey);
   const disconnect = () => {

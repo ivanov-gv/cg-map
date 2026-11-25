@@ -90,6 +90,7 @@ test('turns are named by their angle, and only roads on the same level meet', ()
 function contextWith(featuresByFile) {
   return {
     isPhone: () => false,
+    rules: {layers: {'roads.geojson': {properties: {}}}},
     entriesOf: filename =>
       (featuresByFile[filename] ?? []).map((feature, index) => ({filename, key: String(index), feature}))
   };
@@ -133,7 +134,7 @@ test('a split gives a rule at the far end to its half, and is refused while a ru
     key: '0',
     feature: whole,
     extras: {},
-    context: {...contextWith({'turn-restrictions.json': [through.feature]}), rules: {layers: {'roads.geojson': {properties: {}}}}},
+    context: contextWith({'turn-restrictions.json': [through.feature]}),
     showProblem: message => problems.push(message),
     hasUnappliedEdit: () => false,
     replaceWith: () => assert.fail('nothing is split')

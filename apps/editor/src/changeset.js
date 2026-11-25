@@ -3,8 +3,8 @@ import {fieldItemProblem} from './field-items.js';
 import {featureFingerprint} from './hashing.js';
 import {operationProblem} from './layer-rules.js';
 
-const changesetVersion = 2;
-const readableVersions = [1, 2];
+const latestVersion = 2;
+const readableVersions = [1, latestVersion];
 const entityKey = ({entityId, entityPart}) => `${entityId}#${entityPart ?? ''}`;
 
 // An object with source identity is named by it, so the change still applies after others of its file changed. Objects
@@ -15,20 +15,23 @@ function exportedReference(reference, before) {
   return entityPart === undefined ? {entityId} : {entityId, entityPart};
 }
 
-// Builds the reviewable export described by the editor-changeset schema.
-export async function buildChangeset(session, sources, {id, createdAt, author, reason}) {
+// Builds the reviewable export described by the editor-changeset schema, in the version that the importer of these rules
+// reads.
+export async function buildChangeset(session, sources, {id, createdAt, author, reason}, rules = {version: latestVersion}) {
+  const fieldItems = session.fieldItems();
+  // Earlier changesets have no field items.
+  const version = fieldItems.length > 0 ? latestVersion : Math.min(rules.version, latestVersion);
   const bases = {};
   const operations = [];
   for (const filename of session.changedFiles()) {
     bases[filename] = sources.get(filename).metadata.sha256;
     for (const {operation, reference, before, after} of session.changes(filename)) {
       const beforeFingerprint = before ? await featureFingerprint(before) : null;
-      const exported = exportedReference(reference, before);
+      const exported = version === 1 ? reference : exportedReference(reference, before);
       operations.push({filename, operation, reference: exported, beforeFingerprint, before, after});
     }
   }
-  const fieldItems = session.fieldItems();
-  const changeset = {version: changesetVersion, id, createdAt, author, reason, bases, operations};
+  const changeset = {version, id, createdAt, author, reason, bases, operations};
   return fieldItems.length > 0 ? {...changeset, fieldItems} : changeset;
 }
 
