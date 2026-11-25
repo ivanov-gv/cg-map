@@ -104,15 +104,19 @@ const EDITING_ONLY_SOURCES = [
   'layer-relief.js',
   'layer-roads.js',
   'layer-settlements.js',
+  'line-joining.js',
   'layer-water.js',
+  'layer-junctions.js',
   'opening-hours-dialog.js',
   'opening-hours.js',
   'shared-shapes.js',
   'street-choices.js',
+  'road-edits.js',
   'road-junctions.js',
   'road-shapes.js',
   'street-dialog.js',
-  'water-joins.js'
+  'water-joins.js',
+  'ridge-ends.js'
 ];
 const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
 
@@ -205,7 +209,11 @@ export const SHARED_EDITOR_SOURCES = [
   'inspector-editing.js',
   'inspector-viewport.js',
   'property-form.js',
-  'review-panel.js'
+  'review-panel.js',
+  'joint-layer.js',
+  'layer-joints.js',
+  'level-picker.js',
+  'road-graph.js'
 ];
 
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
