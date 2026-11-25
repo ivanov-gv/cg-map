@@ -201,7 +201,7 @@
           "agricultural", "forestry", "use_sidepath", "dismount", "discouraged"
         ]},
         "maxspeed": {"enum": [
-          "5", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100", "110", "120", "130", "walk", "none"
+          "5", "8", "10", "15", "20", "30", "40", "50", "60", "70", "80", "90", "100", "110", "120", "130", "walk", "none", "RS:urban"
         ]},
         "surface": {"enum": [
           "asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes", "paving_stones", "sett", "cobblestone",

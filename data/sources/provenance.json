@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23563700,
+    "bytes": 23562423,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -92,11 +92,11 @@
       },
       "roads": {
         "byZoomBand": {
-          "0-8": 607774,
-          "13-16": 5208437,
-          "9-12": 2050226
+          "0-8": 607759,
+          "13-16": 5206855,
+          "9-12": 2049739
         },
-        "bytes": 7866437
+        "bytes": 7864353
       },
       "settlements": {
         "byZoomBand": {
@@ -131,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-64a035aaabc010af.pmtiles",
-    "sha256": "64a035aaabc010af69653334ae567232d0f776f6a694325c0506e2a6f8342009",
+    "file": "montenegro-ec969666e13c3146.pmtiles",
+    "sha256": "ec969666e13c31468d73cb3adc350820e0ac91d191ce2f78e216943b328a6338",
     "tiles": 229422
   },
   "building_details": {
@@ -252,9 +252,9 @@
       "sha256": "41cc9063fc14ac17459e96ec4ef502ebe2bcb5c094d2143a9c339064e47bc4c2"
     },
     "roads.geojson": {
-      "bytes": 7932196,
-      "features": 21246,
-      "sha256": "2a65e35d64645c4150a315fe23fa251320cff2ccdfbac1e0622c8dcc3ef4dd9e"
+      "bytes": 7927583,
+      "features": 21229,
+      "sha256": "a9fef19ab28eb14408ff2ec3695211e0fb5c742dd0687f8f3066d4cf47e807ea"
     },
     "settlement-areas.geojson": {
       "bytes": 792678,
