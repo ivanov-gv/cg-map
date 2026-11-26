@@ -52,12 +52,16 @@ Rules:
 - A project never runs another project's checks or tests. Applications never import each other.
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception.
+- The planner may narrow web browser tests by area. The editor owns its browser suite and shard count; see
+  [editor instructions](../../apps/editor/AGENTS.md) and [workflow testing](../../.github/TESTING.md#on-github).
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev
   builds are the separate HEAD mode described below. The scoped exception is `tests/`, the cross-project integration
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
-  it publishes by setting the data and contracts versions.
+  it publishes by setting the data and contracts versions. The other narrow exception is
+  `platform/tools/phone-tags.mjs`: platform's web phone-tag check and the editor's own unit test read that platform tool
+  at HEAD, and `apps/web` imports nothing from it.
 
 ### Map data modes
 

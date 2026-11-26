@@ -55,9 +55,6 @@ outputs:
   browser_matrix:
     description: Browser test matrix for apps-web; an in-place workflow with no area uses the smoke matrix.
     value: ${{ steps.plan.outputs.browser_matrix }}
-  editor_browser_matrix:
-    description: Browser test matrix for apps-editor; an in-place workflow with no area uses the smoke matrix.
-    value: ${{ steps.plan.outputs.editor_browser_matrix }}
   image_matrix:
     description: Image build matrix for publishing.
     value: ${{ steps.plan.outputs.image_matrix }}
@@ -79,9 +76,6 @@ outputs:
   smoke_browser_matrix:
     description: One short web browser area, for a workflow test-run call.
     value: ${{ steps.plan.outputs.smoke_browser_matrix }}
-  smoke_editor_browser_matrix:
-    description: One short editor browser area, for a workflow test-run call.
-    value: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
 runs:
   using: composite
   steps:

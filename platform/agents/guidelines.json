@@ -33,7 +33,7 @@
     {
       "id": "testing",
       "source": "docs/engineering/testing.md",
-      "paths": ["**/tests/**", "**/*.test.mjs", "**/*.test.js", "**/*_test.go", "**/test_*.py", "**/*.spec.mjs", "**/playwright.config.*"]
+      "paths": ["**/tests/**", "**/*.test.mjs", "**/*.test.js", "**/*_test.go", "**/test_*.py", "**/*.spec.mjs", "**/*.spec.js", "**/e2e/**", "**/playwright.config.*"]
     }
   ]
 }

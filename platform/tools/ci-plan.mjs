@@ -88,171 +88,11 @@ export const SHARED_WEB_SOURCES = [
   'attribution.js'
 ];
 
-// Only moving, drawing or deleting reaches these, which the offline and viewer tests never do.
-const EDITING_ONLY_SOURCES = [
-  'drag-gestures.js',
-  'drawing-hints.js',
-  'geometry-editing.js',
-  'geometry-measures.js',
-  'handle-layer.js',
-  'mode-bar.js',
-  'note-dialog.js',
-  'contour-rules.js',
-  'deletion-dialog.js',
-  'interior-point.js',
-  'layer-buildings.js',
-  'layer-green.js',
-  'layer-relief.js',
-  'layer-roads.js',
-  'layer-routes.js',
-  'layer-settlements.js',
-  'layer-sketches.js',
-  'layer-stops.js',
-  'area-magnet.js',
-  'area-overlap.js',
-  'drag-budget.js',
-  'following-shapes.js',
-  'magnet-switch.js',
-  'magnet-tools.js',
-  'line-joining.js',
-  'layer-water.js',
-  'layer-junctions.js',
-  'line-origins.js',
-  'opening-hours-dialog.js',
-  'opening-hours.js',
-  'shared-shapes.js',
-  'street-choices.js',
-  'road-edits.js',
-  'road-junctions.js',
-  'road-paths.js',
-  'road-shapes.js',
-  'route-stops.js',
-  'street-dialog.js',
-  'water-joins.js',
-  'ridge-ends.js'
-];
-const OFFLINE_SOURCES = ['sw.js', 'offline-cache.js', 'offline-install.js', 'update-quiet.js'];
-
-// One spec per layer on the fixture city, small enough to share jobs.
-const LAYER_SPECS = [
-  'layers.spec.mjs',
-  'buildings.spec.mjs',
-  'addresses.spec.mjs',
-  'roads.spec.mjs',
-  'nature.spec.mjs',
-  'relief.spec.mjs',
-  'transport.spec.mjs',
-  'sketches.spec.mjs'
-];
-
-// The same rule as web's areas: a new editor source falls through to every area until someone maps it. An area limited to
-// one project has a partner for the other, and both run the same sources.
-export const EDITOR_BROWSER_AREAS = {
-  'editing-desktop': {
-    specs: 'tests/e2e/editing.spec.mjs --project=root-desktop',
-    // 5 shards: editing-desktop-1..3 averaged 193, 189, 270 s with 3 shards; 5 keep each under ~170 s (measured 166 s max).
-    jobs: 5,
-    specFiles: ['editing.spec.mjs'],
-    sources: EDITING_ONLY_SOURCES
-  },
-  'editing-mobile': {
-    specs: 'tests/e2e/editing.spec.mjs --project=pages-mobile',
-    // 2 shards: editing-mobile took 327 s with every phone test (nightly); 2 split to 31+31 tests keeps each under ~165 s.
-    jobs: 2,
-    specFiles: ['editing.spec.mjs'],
-    sources: EDITING_ONLY_SOURCES
-  },
-  'offline-desktop': {
-    specs: 'tests/e2e/offline.spec.mjs --project=root-desktop',
-    // 2 shards: offline-desktop took 209 s with 1 shard; 2 split to 8+7 tests keeps each under ~150 s.
-    jobs: 2,
-    specFiles: ['offline.spec.mjs'],
-    sources: OFFLINE_SOURCES
-  },
-  'offline-mobile': {
-    specs: 'tests/e2e/offline.spec.mjs --project=pages-mobile',
-    specFiles: ['offline.spec.mjs'],
-    sources: OFFLINE_SOURCES
-  },
-  layers: {
-    specs: LAYER_SPECS.map(spec => `tests/e2e/${spec}`).join(' '),
-    // 3 shards: #441 took 367 and 222 s with 2 jobs against the 420 s gate. At CI's 2 workers, Playwright divides the
-    // 33 listed tests (both projects, tagged phone tests) into 11 each; the order of LAYER_SPECS does not move them.
-    // Shard 1 holds addresses, buildings, layers, nature and one relief test (~270 s per job); shard 2 holds four relief
-    // and seven roads tests (~230 s); shard 3 holds desktop sketches and transport plus five phone tests (~130 s).
-    // The estimates use #441's per-test times; all eight specs stay in the list.
-    jobs: 3,
-    specFiles: LAYER_SPECS,
-    sources: EDITING_ONLY_SOURCES
-  },
-  selection: {
-    specs: 'tests/e2e/selection.spec.mjs',
-    specFiles: ['selection.spec.mjs'],
-    sources: ['object-list.js']
-  },
-  viewer: {
-    specs: 'tests/e2e/viewer.spec.mjs',
-    // 3 shards: viewer took 220 s with 1 shard; 3 split to 7+7+6 tests keeps each under ~90 s.
-    jobs: 3,
-    specFiles: ['viewer.spec.mjs'],
-    sources: []
-  }
-};
-
-// Every editor browser test goes through these: startup validates the rules and builds the session and review, every mode
-// draws and hit tests through the overlay, selecting a feature opens an edit, and the offline tests also edit, save a draft
-// and export. So what narrows a change here is mostly whether it is offline code or a spec, not which edit it touches.
-export const SHARED_EDITOR_SOURCES = [
-  'app.js',
-  'draft-keeper.js',
-  'editor-layers.js',
-  'field-catalog.js',
-  'field-items.js',
-  'inspection-layers.js',
-  'keyboard-shortcuts.js',
-  'layer-behaviors.js',
-  'form-controls.js',
-  'layer-addresses.js',
-  'layer-places.js',
-  'layers-panel.js',
-  'object-names.js',
-  'object-states.js',
-  'toast.js',
-  'working-map.js',
-  'workspace-panels.js',
-  'feature-diff.js',
-  'derived-facts.js',
-  'dom.js',
-  'hashing.js',
-  'source-bundle.js',
-  'source-records.js',
-  'draft-store.js',
-  'layer-rules.js',
-  'source-overlay.js',
-  'geometry-validation.js',
-  'active-layer-commands.js',
-  'changeset.js',
-  'cross-file-checks.js',
-  'edit-session.js',
-  'edit-transaction.js',
-  'inspector-editing.js',
-  'inspector-viewport.js',
-  'property-form.js',
-  'usual-values.js',
-  'review-panel.js',
-  'joint-layer.js',
-  'layer-joints.js',
-  'level-picker.js',
-  'road-graph.js'
-];
-
 const ALL_AREAS = Object.keys(BROWSER_AREAS);
-const ALL_EDITOR_AREAS = Object.keys(EDITOR_BROWSER_AREAS);
-const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS, editorAreas: ALL_EDITOR_AREAS};
+const EVERYTHING = {folders: FOLDERS, areas: ALL_AREAS};
 // CI calls the root Makefile only through `make verify PKG=<path>` in these folder pipelines and `make check-docs` in
 // ci-docs; the lint-workflows and act test targets live in workflows too. Browser jobs, the backend and the browser image
-// call their own project Makefiles, so they need no areas here, and the explicit empty editorAreas stops planChanges from
-// giving an apps-editor result every editor area.
+// call their own project Makefiles, so they need no areas here.
 const ROOT_MAKEFILE_FOLDERS = [
   'docs',
   'workflows',
@@ -272,29 +112,24 @@ const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
 const HEAD_DATA_CONSUMERS = ['tests'];
 
-// Returns the areas of one project that a changed file needs. Anything not known to be narrower runs every area.
-function areasForFile(file, {project, areaTable, sharedSources}) {
-  const allAreas = Object.keys(areaTable);
+// Returns the web browser areas a changed file needs. Anything not known to be narrower runs every area.
+function areasForWebFile(file) {
+  const allAreas = Object.keys(BROWSER_AREAS);
   const name = file.split('/').pop();
-  const isUnitTest = file.startsWith(`${project}/tests/`) && !file.includes('/e2e/') && file.endsWith('.test.mjs');
+  const isUnitTest = file.startsWith('apps/web/tests/') && !file.includes('/e2e/') && file.endsWith('.test.mjs');
   if (isUnitTest) return [];
-  const isSource = file.startsWith(`${project}/src/`);
-  if (isSource && sharedSources.includes(name)) return allAreas;
-  const isSpec = file.startsWith(`${project}/tests/e2e/`);
+  const isSource = file.startsWith('apps/web/src/');
+  if (isSource && SHARED_WEB_SOURCES.includes(name)) return allAreas;
+  const isSpec = file.startsWith('apps/web/tests/e2e/');
   const mapped = allAreas.filter(area => {
-    const {sources, specFiles} = areaTable[area];
+    const {sources, specFiles} = BROWSER_AREAS[area];
     return (isSource && sources.includes(name)) || (isSpec && specFiles.includes(name));
   });
   return mapped.length ? mapped : allAreas;
 }
 
-const areasForWebFile = file =>
-  areasForFile(file, {project: 'apps/web', areaTable: BROWSER_AREAS, sharedSources: SHARED_WEB_SOURCES});
-const areasForEditorFile = file =>
-  areasForFile(file, {project: 'apps/editor', areaTable: EDITOR_BROWSER_AREAS, sharedSources: SHARED_EDITOR_SOURCES});
-
-// Returns the folders and browser areas one changed path needs. A result without editorAreas that selects apps-editor
-// comes from outside the editor, such as its source bundle, and so needs all of them.
+// Returns the folders and web browser areas one changed path needs. The editor owns its whole browser suite in its
+// workflow, so selecting its folder is enough to run it.
 export function classify(file) {
   const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
   const isMarkdown = file.endsWith('.md') && !isPublishedFile;
@@ -302,7 +137,7 @@ export function classify(file) {
     return {folders: ['docs'], areas: []};
   if (file.startsWith('.github/') || /^platform\/(tools|tests)\/(ci-plan|workflow-test-runs)\./.test(file))
     return {folders: ['workflows', 'platform'], areas: []};
-  if (file === 'Makefile') return {folders: ROOT_MAKEFILE_FOLDERS, areas: [], editorAreas: []};
+  if (file === 'Makefile') return {folders: ROOT_MAKEFILE_FOLDERS, areas: []};
   if (file.startsWith('.claude/') || file.startsWith('.codex/')) return {folders: ['platform'], areas: []};
 
   if (/^services\/backend\/(.*\.go|go\.mod|go\.sum)$/.test(file)) return {folders: ['backend'], areas: []};
@@ -334,11 +169,8 @@ export function classify(file) {
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
   if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform'], areas: []};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
-  // platform checks that a phone-only browser test is tagged.
-  if (file.startsWith('apps/editor/tests/e2e/') || file === 'apps/editor/playwright.config.mjs')
-    return {folders: ['apps-editor', 'tests', 'platform'], areas: [], editorAreas: areasForEditorFile(file)};
-  if (file.startsWith('apps/editor/'))
-    return {folders: ['apps-editor', 'tests', ...platformFolders], areas: [], editorAreas: areasForEditorFile(file)};
+  // Any editor change runs the app's whole browser suite; the app owns its shard count and specs.
+  if (file.startsWith('apps/editor/')) return {folders: ['apps-editor', 'tests', ...platformFolders], areas: []};
   if (file.startsWith('apps/core-demo/')) return {folders: ['apps-core-demo', ...platformFolders], areas: []};
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS, areas: areasForWebFile(file)};
 
@@ -346,6 +178,8 @@ export function classify(file) {
     return {folders: ['platform', ...MAP_APPLICATIONS], areas: ALL_AREAS};
   // Only the editor's LAN install uses it.
   if (file === 'platform/tools/lan_certificate.py') return {folders: ['platform', 'apps-editor'], areas: []};
+  // The platform web phone-tag check and the editor's own unit test read this tool; apps/web imports nothing from it.
+  if (file === 'platform/tools/phone-tags.mjs') return {folders: ['platform', 'apps-editor'], areas: []};
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform'], areas: []};
   if (file.startsWith('platform/')) return {folders: ['platform'], areas: []};
 
@@ -358,14 +192,12 @@ export function planChanges(files) {
   const results = files.map(classify);
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   const areas = ALL_AREAS.filter(area => results.some(result => result.areas.includes(area)));
-  const editorAreasOf = result => (result.folders.includes('apps-editor') ? (result.editorAreas ?? ALL_EDITOR_AREAS) : []);
-  const editorAreas = ALL_EDITOR_AREAS.filter(area => results.some(result => editorAreasOf(result).includes(area)));
-  return {folders, areas, editorAreas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
+  return {folders, areas, everything: folders.length === FOLDERS.length && areas.length === ALL_AREAS.length};
 }
 
 // An area too slow for one job runs as several, each with its own share of the tests.
-function browserJobs(area, areaTable) {
-  const {specs, jobs = 1} = areaTable[area];
+function browserJobs(area) {
+  const {specs, jobs = 1} = BROWSER_AREAS[area];
   if (jobs === 1) return [{area, specs}];
   return Array.from({length: jobs}, (_, index) => ({
     area: `${area}-${index + 1}`,
@@ -373,14 +205,12 @@ function browserJobs(area, areaTable) {
   }));
 }
 
-export function browserMatrix(areas, areaTable = BROWSER_AREAS) {
-  return {include: areas.flatMap(area => browserJobs(area, areaTable))};
+export function browserMatrix(areas) {
+  return {include: areas.flatMap(area => browserJobs(area))};
 }
 
-// A separate test call proves the workflow's jobs and steps, not every test: discover runs 5 tests in one web job and
-// selection runs 8 in one editor job, with no sharding. The full matrices stay in the PR's regular browser calls.
+// A separate web test call proves one short area with this matrix.
 export const SMOKE_BROWSER_MATRIX = JSON.stringify(browserMatrix(['discover']));
-export const SMOKE_EDITOR_BROWSER_MATRIX = JSON.stringify(browserMatrix(['selection'], EDITOR_BROWSER_AREAS));
 
 // A change to an app, or to what it is built from, publishes that app's image.
 export function imageMatrix(folders) {
@@ -407,40 +237,29 @@ function testRunCallsFor(folders, changedFiles) {
   return {testRuns, inPlace, separate, proveCdTestRuns};
 }
 
-// An in-place call must prove every job of the changed workflow. An empty plan would skip its browser job, so the
-// regular call gets the same smoke area a separate test call would use. Other empty plans still run no browser area.
-function matrixForInPlaceBrowserCall(areas, workflow, inPlace, smokeMatrix, areaTable = BROWSER_AREAS) {
-  if (areas.length === 0 && inPlace.includes(workflow)) return smokeMatrix;
-  return JSON.stringify(browserMatrix(areas, areaTable));
-}
-
-export function formatOutputs({folders, areas, editorAreas}, changedFiles = []) {
+export function formatOutputs({folders, areas}, changedFiles = []) {
   const folderLines = FOLDERS.map(folder => `${folder}=${folders.includes(folder)}`);
   const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
-  const browserMatrixForCall = matrixForInPlaceBrowserCall(areas, 'ci-apps-web.yml', inPlace, SMOKE_BROWSER_MATRIX);
-  const editorBrowserMatrixForCall = matrixForInPlaceBrowserCall(
-    editorAreas,
-    'ci-apps-editor.yml',
-    inPlace,
-    SMOKE_EDITOR_BROWSER_MATRIX,
-    EDITOR_BROWSER_AREAS
-  );
+  // A changed web workflow with no selected area still needs one browser job to prove its steps. The editor owns its
+  // own matrix, so this planner emits no editor output.
+  const browserMatrixForCall =
+    areas.length === 0 && inPlace.includes('ci-apps-web.yml')
+      ? SMOKE_BROWSER_MATRIX
+      : JSON.stringify(browserMatrix(areas));
   return [
     ...folderLines,
     `browser_matrix=${browserMatrixForCall}`,
-    `editor_browser_matrix=${editorBrowserMatrixForCall}`,
     `image_matrix=${JSON.stringify(imageMatrix(folders))}`,
     `ci_in_place_test_runs=${JSON.stringify(inPlace)}`,
     `ci_test_runs=${JSON.stringify(separate)}`,
     `cd_test_runs=${JSON.stringify(testRuns.cd)}`,
     `prove_cd_test_runs=${proveCdTestRuns}`,
     `manual_test_runs=${JSON.stringify(testRuns.manual)}`,
-    `smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`,
-    `smoke_editor_browser_matrix=${SMOKE_EDITOR_BROWSER_MATRIX}`
+    `smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`
   ].join('\n');
 }
 
-export function formatSummary({folders, areas, editorAreas, everything}, reason, changedFiles = []) {
+export function formatSummary({folders, areas, everything}, reason, changedFiles = []) {
   const {testRuns, inPlace, separate, proveCdTestRuns} = testRunCallsFor(folders, changedFiles);
   // formatWorkflowTestRuns still owns the CD and manual lines. Drop its unsplit CI line in favor of the split pair.
   const dispatchLines = formatWorkflowTestRuns({...testRuns, ci: []}).split('\n').slice(1);
@@ -448,7 +267,6 @@ export function formatSummary({folders, areas, editorAreas, everything}, reason,
     `Selected ${everything ? 'everything' : 'a subset of pipelines'}${reason ? ` (${reason})` : ''}.`,
     `- Folders: ${folders.join(', ') || 'none'}`,
     `- Browser areas: ${areas.join(', ') || 'none'}`,
-    `- Editor browser areas: ${editorAreas.join(', ') || 'none'}`,
     `- CI test-run calls (separate): ${separate.join(', ') || 'none'}`,
     `- CI test runs in place: ${inPlace.join(', ') || 'none'}`,
     ...(proveCdTestRuns ? ['- CD proof flag: true'] : []),

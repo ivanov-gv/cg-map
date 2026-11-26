@@ -1,5 +1,6 @@
 name: ci-apps-editor
-# The source viewer: its checks, artifact and browser tests, split so that each job stays inside the job time limit.
+# The source viewer: its checks, artifact and browser tests, split into app-owned shards so each job stays inside the
+# job time limit.
 on:
   workflow_call:
     inputs:
@@ -10,11 +11,11 @@ on:
         description: On the phone layout, run only tests tagged @phone, or all.
         type: string
         default: tagged
-      browser_matrix:
-        description: The browser areas to run, from the planner. Empty runs them all.
-        type: string
+      smoke:
+        description: On a test call, prove the browser job with only the first shard.
+        type: boolean
         required: false
-        default: ''
+        default: false
   workflow_dispatch:
     inputs:
       test_run:
@@ -25,6 +26,10 @@ on:
         description: On the phone layout, run only tests tagged @phone, or all.
         type: string
         default: tagged
+      smoke:
+        description: Run only the first browser shard.
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: read
@@ -35,9 +40,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs: &verify-outputs
-      browser_matrix: ${{ steps.areas.outputs.editor_browser_matrix }}
+      browser_matrix: ${{ steps.matrix.outputs.browser_matrix }}
     env: &verify-env
-      BROWSER_MATRIX: ${{ inputs.browser_matrix }}
+      SMOKE: ${{ inputs.smoke }}
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -46,14 +51,15 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=apps/editor
-      - name: Select browser areas
-        id: areas
+      - name: Build browser matrix
+        id: matrix
         run: |
-          if [ -n "$BROWSER_MATRIX" ]; then
-            echo "editor_browser_matrix=$BROWSER_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+          if [ "$SMOKE" = true ]; then
+            matrix="$(node apps/editor/tools/browser-matrix.mjs --smoke)"
           else
-            node platform/tools/ci-plan.mjs --all
+            matrix="$(node apps/editor/tools/browser-matrix.mjs)"
           fi
+          echo "browser_matrix=$matrix" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - name: Share the built artifact with the browser jobs
         uses: actions/upload-artifact@v5
@@ -74,10 +80,8 @@ jobs:
     env: *verify-env
     steps: *verify-steps
   browser:
-    name: Browser tests (${{ matrix.area }})
+    name: Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify
-    # A change such as an editor unit test needs the editor checks but no browser area.
-    if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -93,16 +97,13 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
-      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
-      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
       matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}') }}
     env: &browser-env
       # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
       E2E_PHONE: ${{ inputs.phone_tests }}
-      AREA: ${{ matrix.area }}
-      E2E_SPECS: ${{ matrix.specs }}
+      SHARD: ${{ matrix.shard }}
+      JOBS: ${{ matrix.jobs }}
     steps: &browser-steps
       - uses: actions/checkout@v7
         with:
@@ -114,18 +115,17 @@ jobs:
           path: dist/editor
       - uses: ./.github/actions/run-check
         with:
-          command: make -C apps/editor e2e-built E2E_ARGS="$E2E_SPECS"
+          command: make -C apps/editor e2e-built E2E_ARGS="--shard=$SHARD/$JOBS"
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: browser-failure-evidence-editor-${{ env.AREA }}
+          name: browser-failure-evidence-editor-shard-${{ env.SHARD }}
           path: apps/editor/test-results/
           retention-days: 7
   browser-test-run:
-    name: (test-run) Browser tests (${{ matrix.area }})
+    name: (test-run) Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify-test-run
-    if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -141,9 +141,6 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
-      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
-      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
       matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || '{"include":[]}') }}
     env: *browser-env
     steps: *browser-steps

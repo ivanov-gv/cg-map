@@ -36,3 +36,8 @@ test('editor tests read contracts from the app pin', () => {
   assert.match(pin, /^\d+\.\d+\.\d+$/);
   assert.equal(pin, installed.version);
 });
+
+test('the browser config defaults to the pinned contracts root', () => {
+  const browserConfig = fileSystem.readFileSync(new URL('../playwright.config.mjs', import.meta.url), 'utf8');
+  assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
+});
