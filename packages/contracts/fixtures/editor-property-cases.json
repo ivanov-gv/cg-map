@@ -457,6 +457,72 @@
         "from": 1
       },
       "isValid": false
+    },
+    {
+      "name": "locally drawn canyon rim with a measured height",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 120
+      },
+      "isValid": true
+    },
+    {
+      "name": "locally drawn canyon rim without a stated fact",
+      "filename": "canyon-rims.geojson",
+      "properties": {},
+      "isValid": true
+    },
+    {
+      "name": "an OSM cliff keeps its method when its height changes",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 141
+      },
+      "previous": {
+        "method": "osm-cliff",
+        "river": "Morača",
+        "bank": "left",
+        "height": 140
+      },
+      "isValid": true
+    },
+    {
+      "name": "canyon rim with a changed height",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 140
+      },
+      "previous": {
+        "method": "dem-canyon-bank",
+        "river": "Morača",
+        "bank": "left",
+        "height": 120
+      },
+      "isValid": true
+    },
+    {
+      "name": "canyon rim with a fractional height",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 12.5
+      },
+      "isValid": false
+    },
+    {
+      "name": "canyon rim with a negative height",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": -1
+      },
+      "isValid": false
+    },
+    {
+      "name": "canyon rim above the highest measured height",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 2601
+      },
+      "isValid": false
     }
   ]
 }

@@ -374,9 +374,11 @@
       }
     },
     "canyon-rims.geojson": {
-      "operations": ["modify", "delete"],
+      "operations": ["add", "modify", "delete"],
       "geometries": ["LineString"],
-      "properties": {}
+      "properties": {
+        "height": {"type": "integer", "minimum": 0, "maximum": 2600}
+      }
     },
     "transit-routes.json": {
       "operations": ["add", "modify", "delete"],
