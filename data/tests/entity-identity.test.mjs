@@ -128,7 +128,7 @@ test('check-data enforces adopted metadata in all published source files before 
     'turn-restrictions.json',
     'contours.geojson', 'summits.geojson', 'slopes.geojson', 'ridges.geojson',
     'canyon-rims.geojson', 'protected-areas.geojson', 'settlement-areas.geojson',
-    'railways.geojson'
+    'railways.geojson', 'bridges.geojson'
   ];
   for (const filename of [...sourceFiles, ...supportingFiles]) {
     symlinkSync(path.join(repositoryRoot, 'data/sources', filename), path.join(sourceDirectory, filename));

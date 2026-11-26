@@ -1170,6 +1170,94 @@ export function validateRailwayCounts(counts, railways) {
   }
 }
 
+export const bridgeMethods = new Set(['osm', 'traced']);
+
+// One bridge is one Polygon: an OSM man_made=bridge area, or a reviewed outline traced once around its bridge roads.
+export function validateBridges(data, {label='bridges.geojson', requireAdopted=false, contractsDirectory, roads}={}) {
+  const count=validateCollection(data, {
+    label,
+    geometryTypes: ['Polygon'],
+    requireKind: true,
+    requireAdopted,
+    contractsDirectory,
+    requireRfc7946Rings: true
+  });
+  const knownRoadIds=roads ? new Set(roads.features.map(feature => feature.properties.entityId)) : null;
+  for (const [index, feature] of data.features.entries()) {
+    const name=`${label} feature ${index}`;
+    const properties=feature.properties;
+    requireValue(properties.kind === 'bridge', `${name}: wrong bridge kind ${properties.kind}`);
+    requireValue(bridgeMethods.has(properties.method), `${name}: invalid bridge method ${properties.method}`);
+    for (const field of ['name', 'name:en']) {
+      const value=properties[field];
+      if (value === undefined) continue;
+      requireValue(typeof value === 'string' && value.trim().length > 0 && value.length <= 128, `${name}: invalid ${field}`);
+    }
+    const isOsm=properties.method === 'osm';
+    if (isOsm) {
+      requireValue(properties.osmTag === 'man_made=bridge', `${name}: osmTag must be man_made=bridge`);
+      requireValue(/^(way|relation)\/[1-9][0-9]*$/.test(properties.entityId), `${name}: an OSM bridge must keep OSM identity`);
+      requireValue(!('sourceRoadIds' in properties), `${name}: an OSM bridge has no traced road list`);
+    } else {
+      requireValue(/^derived:bridge-/.test(properties.entityId), `${name}: a traced bridge must use derived identity`);
+      requireValue(!('osmTag' in properties), `${name}: a traced bridge has no OSM tag`);
+      requireValue(
+        Array.isArray(properties.sourceRoadIds) && properties.sourceRoadIds.length > 0
+        && properties.sourceRoadIds.every(id => typeof id === 'string' && /^(way|relation)\/[1-9][0-9]*$/.test(id))
+        && new Set(properties.sourceRoadIds).size === properties.sourceRoadIds.length
+        && JSON.stringify(properties.sourceRoadIds) === JSON.stringify([...properties.sourceRoadIds].sort()),
+        `${name}: invalid sourceRoadIds`
+      );
+      if (knownRoadIds) {
+        requireValue(
+          properties.sourceRoadIds.every(id => knownRoadIds.has(id)),
+          `${name}: sourceRoadIds must name published roads`
+        );
+      }
+    }
+  }
+  return count;
+}
+
+// The seed counts describe the reviewed roads once: an OSM outline or a traced outline accounts for each one.
+export function validateBridgeCounts(counts, bridges, roads) {
+  requireValue(counts && typeof counts === 'object', 'bridge_counts missing from provenance');
+  for (const field of [
+    'osmAreas', 'tracedOutlines', 'bridgeRoadFeatures',
+    'coveredByOsm', 'tracedRoadFeatures'
+  ]) {
+    requireValue(Number.isSafeInteger(counts[field]) && counts[field] >= 0, `bridge_counts.${field}: invalid count`);
+  }
+  const osmOutlines=bridges.features.filter(feature => feature.properties.method === 'osm').length;
+  const tracedOutlines=bridges.features.filter(feature => feature.properties.method === 'traced').length;
+  requireValue(counts.osmAreas === osmOutlines, 'bridge_counts.osmAreas: count differs from bridges.geojson');
+  requireValue(counts.tracedOutlines === tracedOutlines, 'bridge_counts.tracedOutlines: count differs from bridges.geojson');
+  const bridgeRoads=roads.features.filter(feature => {
+    const value=feature.properties.bridge;
+    return value !== undefined && value !== '' && value !== 'no';
+  });
+  requireValue(
+    counts.bridgeRoadFeatures === bridgeRoads.length,
+    'bridge_counts.bridgeRoadFeatures: count differs from roads.geojson'
+  );
+  requireValue(
+    counts.coveredByOsm + counts.tracedRoadFeatures === bridgeRoads.length,
+    'bridge_counts: OSM-covered and traced roads must account for every bridge road'
+  );
+  const tracedRoadIds=new Set(
+    bridges.features.filter(feature => feature.properties.method === 'traced')
+      .flatMap(feature => feature.properties.sourceRoadIds ?? [])
+  );
+  requireValue(
+    tracedRoadIds.size === counts.tracedRoadFeatures,
+    'bridge_counts.tracedRoadFeatures: traced outlines must name every uncovered road once'
+  );
+  requireValue(
+    [...tracedRoadIds].every(id => bridgeRoads.some(road => road.properties.entityId === id)),
+    'bridges.geojson: a traced source road is not a bridge road'
+  );
+}
+
 // Named protected areas carry names for the map, not land cover: one kind, a name and the OSM tag that selected them.
 // The tags are the extractor's PROTECTED_AREA_TAGS (osm_extract/protected_areas.py); a data test keeps them equal.
 export const protectedAreaTags = new Set(['leisure=nature_reserve', 'boundary=protected_area', 'boundary=national_park']);
@@ -1246,6 +1334,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   requireValue(Number.isFinite(Date.parse(provenance.upstream_snapshot)) && typeof provenance.coverage === 'string', 'Source timestamp/coverage missing');
   const specificValidators = {
     'border-edges.geojson': validateBorderEdges,
+    'bridges.geojson': validateBridges,
     'municipalities.geojson': validateMunicipalities,
     'settlement-areas.geojson': validateSettlementAreas,
     'settlements.geojson': validateSettlements,
@@ -1290,6 +1379,7 @@ export function checkData(root = rootDirectory, {contractsDirectory} = {}) {
   }
   const readSource = name => JSON.parse(fs.readFileSync(path.join(root, 'data/sources', name)));
   validateRailwayCounts(provenance.railway_counts, readSource('railways.geojson'));
+  validateBridgeCounts(provenance.bridge_counts, readSource('bridges.geojson'), readSource('roads.geojson'));
   validateSettlementsOfAreas(readSource('settlement-areas.geojson'), readSource('settlements.geojson'));
   // Validate roads specifically (pathClass, graph nodes, levels)
   const roadsPath = path.join(root, 'data/sources/roads.geojson');

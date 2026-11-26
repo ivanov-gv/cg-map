@@ -1,10 +1,10 @@
 {
   "version": 1,
   "sourceTimestamp": "2026-11-20T21:21:21Z",
-  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline, railways and water.",
+  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline, bridges, railways and water.",
   "archive": {
-    "file": "montenegro-e8882b5ea0e21c19.pmtiles",
-    "sha256": "e8882b5ea0e21c19a2f5fe23ad0fcea434db947a105e9bd6e229a0e7cdbc6ec7",
-    "bytes": 23605663
+    "file": "montenegro-aa141be49e76604f.pmtiles",
+    "sha256": "aa141be49e76604f4ccff9e992d504acde9f76f991981a9139813345488ea9ce",
+    "bytes": 23787871
   }
 }
