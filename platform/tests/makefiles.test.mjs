@@ -103,6 +103,27 @@ test('repo boundary rejects forbidden imports whose list spans several lines', t
   assert.match(result.stderr, /forbidden dependency \.\.\/\.\.\/web\/src\/core\.js/);
 });
 
+test('editor import boundary allows relative imports inside src and skips test files', t => {
+  const dir = path.join(repoRoot, 'apps/editor/src', `__boundary-dir-${process.pid}`);
+  const nested = path.join(dir, 'nested');
+  const dep = path.join(nested, 'dep.js');
+  const main = path.join(dir, 'main.js');
+  const testFile = path.join(dir, 'main.test.js');
+  const escape = path.join(nested, 'escape.js');
+  fs.mkdirSync(nested, {recursive: true});
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  fs.writeFileSync(dep, 'export const value = 1;\n');
+  fs.writeFileSync(main, "import {value} from './nested/dep.js';\nexport {value};\n");
+  fs.writeFileSync(testFile, "import {bad} from '../../../web/src/core.js';\n");
+  const allowed = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.equal(allowed.status, 0, `${allowed.stdout ?? ''}${allowed.stderr ?? ''}`);
+
+  fs.writeFileSync(escape, "import {bad} from '../../../../../web/src/core.js';\n");
+  const rejected = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(rejected.status, 0);
+  assert.match(`${rejected.stdout ?? ''}${rejected.stderr ?? ''}`, /forbidden dependency/);
+});
+
 // Core-demo keeps this guard in the platform check; web and editor own it in their own tests/pinned-data.test.mjs.
 for (const application of ['apps/core-demo']) {
   test(`${application} repo boundary rejects repository data paths in tests`, t => {
