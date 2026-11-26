@@ -83,9 +83,10 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | `platform/tools/serve.py`, `dev-port.mjs`                      | `platform`, every map application, every browser area                                                                                                                                         |
 | `platform/browser-image`                                       | `browser-image`, `platform`                                                                                                                                                                   |
 | `platform/tools/lan_certificate.py`                            | `platform`, `apps-editor`                                                                                                                                                                     |
+| `platform/tools/phone-tags.mjs`                                | `platform`, `apps-editor`                                                                                                                                                                     |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform`    | That folder, except as listed below                                                                                                                                                           |
 | `apps/web`                                                     | `apps-web`, `tests`, `platform`, and the browser areas below                                                                                                                                  |
-| `apps/editor`                                                  | `apps-editor`, `tests`, and the editor browser areas below                                                                                                                                    |
+| `apps/editor`                                                  | `apps-editor`, `tests`, and the whole editor browser suite                                                                                                                                    |
 | `apps/core-demo`                                               | `apps-core-demo`                                                                                                                                                                              |
 | `packages/map-core`                                            | `map-core`, every map application, `tests`, `platform`, every browser area                                                                                                                    |
 | `data/tools/editor-bundle.mjs`                                 | `data`, `apps-editor`, `tests`                                                                                                                                                                |
@@ -124,9 +125,9 @@ takes a different path. List the scoped cases with
 Tag a test `@phone` when it:
 
 - only runs on the phone layout, or behaves differently there, branching on `isMobile`, `hasTouch`, touch input or the
-  viewport width, in its own body, a helper it calls, or the skips and hooks of its describe: a check in
-  [phone-tags](../../platform/tools/phone-tags.mjs) fails if such a test has no tag. A helper that only chooses how to
-  press something on each layout, such as `closeCard`, is listed as neutral in its test;
+  viewport width, in its own body, a helper it calls, or the skips and hooks of its describe: a check in each app's
+  tests fails if such a test has no tag. Both checks use [phone-tags](../../platform/tools/phone-tags.mjs); apps/web
+  imports nothing from it, and the app test owns its neutral helpers, such as `closeCard`;
 - needs the `/cg-map/` prefix, which only the phone project uses;
 - is the one whole journey for its app, or its one check of layout overflow.
 
@@ -134,10 +135,12 @@ The editor's install test is also tagged. The web app has no install test to tag
 
 ## Browser test areas
 
-Browser tests are split by area. CI builds once, then runs each selected area as its own job with its own time limit.
-Pull requests run only the areas a change maps to, and the nightly run checks every area. Pushes to main run no tests;
+CI builds once, then runs browser tests as separate jobs with their own time limit. Pushes to main run no tests;
 [ADR 0006](../decisions/0006-ci-time-limits-and-tests-before-merge.md) records that decision, and
 [ADR 0032](../decisions/0032-tests-pass-on-github-and-earn-their-cost.md) changes the merge rule to GitHub runs.
+
+The web app splits by area: a change runs only the areas its files map to, while the nightly run and a full test
+dispatch check all areas. The planner owns that mapping.
 
 | Area        | Specs in apps/web/tests/e2e                                                                 | Covers                                                                                          | Code it depends on most                                                                                  |
 | ----------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -149,22 +152,12 @@ Pull requests run only the areas a change maps to, and the nightly run checks ev
 | poi-mobile  | poi-visibility.spec.mjs, pages-mobile project                                               | POI levels, marker selection                                                                    | data/sources/places*, contracts                                                                          |
 
 app.js, core.js, packages/map-core, style.css, index.html, shared test helpers, build tools, and anything unmapped run
-every area, because every browser test boots them.
+every web area, because every browser test boots them.
 
-The editor's areas work the same way, from `EDITOR_BROWSER_AREAS` in the planner:
-
-| Area            | Specs in apps/editor/tests/e2e            | Code only it depends on                                                 |
-| --------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
-| editing-desktop | editing.spec.mjs, root-desktop, five jobs | drag-gestures.js, geometry-editing.js, handle-layer.js, edit-preview.js |
-| editing-mobile  | editing.spec.mjs, pages-mobile, two jobs  | The same                                                                |
-| offline-desktop | offline.spec.mjs, root-desktop, two jobs  | sw.js, offline-cache.js, offline-install.js, update-quiet.js            |
-| offline-mobile  | offline.spec.mjs, pages-mobile            | The same                                                                |
-| selection       | selection.spec.mjs, both projects         | object-list.js                                                          |
-| viewer          | viewer.spec.mjs, three jobs               | None                                                                    |
-
-Every other editor source runs every editor area, because each test boots, selects, or edits and exports through it. So
-do public/, build tools, anything unmapped, and a change from outside the editor that selects it, such as its source
-bundle.
+The editor takes a different approach: it owns its browser suite and the count in
+[browser-jobs.json](../../apps/editor/browser-jobs.json). The [editor instructions](../../apps/editor/AGENTS.md) hold
+its proof rule; [workflow testing](../../.github/TESTING.md#on-github) says when CI uses the count or a smoke proof; and
+[ADR 0041](../decisions/0041-app-owned-browser-shards.md) records why the app owns the split.
 
 ## Monorepo verification — 2026-10-18
 
