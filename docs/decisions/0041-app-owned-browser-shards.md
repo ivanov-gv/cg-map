@@ -46,4 +46,20 @@ app-owned shard count; only the separate workflow-proof call passes `smoke: true
 ## Outcome note: phone tag parser (issue #458, 26 November 2026)
 
 Pending owner approval in the PR: `platform/tools/phone-tags.mjs` is the single narrow exception to the HEAD-read rule,
-read only by platform's web phone-tag check and the editor's own unit test; `apps/web` imports nothing from it.
+read only by platform's tag check and both apps' own unit tests; no runtime app imports it.
+
+## Outcome note: web shards (issue #458, 26 November 2026)
+
+Web now follows the same mechanism: its 16 shards are counted in
+[apps/web/browser-jobs.json](../../apps/web/browser-jobs.json) and built by its own matrix tool; the platform planner
+owns no web areas, source lists or matrices. A real web-only PR run (45183281958) starts four other jobs in the browser
+wave — docs, platform, tests and workflows lint — so 16 shards fill GitHub's 20 concurrent slots exactly. The last green
+full runs put the slowest interface shards at 320 seconds with 12 area shards; at two workers `--list --shard=i/16`
+gives 20–21 tagged tests per shard, while 15 shards give 21–22. The earlier estimate of 250 seconds including 60 seconds
+of setup for the slowest of 16–17 all-phone tests at 24 shards scales to about 295 seconds at 16 shards, under the
+300-second aim; 15 shards scale to about 306 seconds. Web runs only tagged phone tests in every run, and only the
+separate workflow-proof call uses one shard.
+
+A web-only PR takes about 5m 45s: roughly 12 seconds for the plan, 36 seconds for the folder verifies and about 295
+seconds for the slowest shard including setup. A run selecting both apps takes about 11 minutes, because 16 web shards
+plus the editor's 15 exceed 20 concurrent jobs and the second wave starts after the first.

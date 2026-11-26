@@ -73,8 +73,9 @@ mechanical rules in services/backend, through golangci-lint; everything else res
 
 - `make setup` sets `core.hooksPath` to [platform/git-hooks](../../platform/git-hooks). pre-commit rejects commits in
   the main checkout, then runs agent-rule drift, check-repo, and all-source Markdown lint/format checks, plus
-  ESLint/gofmt/py_compile on staged code. pre-push runs `make check`, plus `make check-go` when backend files changed.
-  See [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
+  ESLint/gofmt/py_compile on staged code. ESLint runs from a staged file's project when that project owns a config, and
+  from the repository root otherwise. pre-push runs `make check`, plus `make check-go` when backend files changed. See
+  [Markdown checks and formatting](../runbooks/development.md#markdown-checks-and-formatting).
 - CI runs each affected folder's checks and browser acceptance, and `CI gate` reports the result. `main` requires it, so
   `gh pr merge --auto --squash` waits for it. `make check` runs them all locally, including `check:agents`. CI is the
   contract.
