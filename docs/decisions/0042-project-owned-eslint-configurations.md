@@ -1,4 +1,4 @@
-# 0040: Project-owned ESLint configurations
+# 0042: Project-owned ESLint configurations
 
 ## Status
 
@@ -21,8 +21,8 @@ so the config chooses that project's file patterns and globals. All rule sets co
 The planner gives a project's own config that project's verify; it discovers the shared rules' consumers from the
 project configs present in the checkout; the shared probe selects the same projects. Neither selection includes a Web
 browser area: lint and readability tooling cannot change what a browser does. Each app owns a readability test that
-calls the shared probe helper against its own config. Editor and core-demo keep the folder rules they have today for
-their configs.
+calls the shared probe helper against its own config. A project's config selects that project's verify; changes under
+`apps/editor/` still run the editor's own browser suite through its workflow.
 
 ## Consequences
 

@@ -33,7 +33,7 @@ Each project that lints owns `eslint.config.mjs` beside its Makefile or package.
 and globals; ESLint finds it from the folder the lint command runs in. Rule sets live in
 [platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`.
 Each project's lint target and the pre-commit hook enforce the rules; [ci-plan](platform/tools/ci-plan.mjs)'s tests
-cover the selection. See [ADR 0040](docs/decisions/0040-project-owned-eslint-configurations.md).
+cover the selection. See [ADR 0042](docs/decisions/0042-project-owned-eslint-configurations.md).
 
 ## Code
 
@@ -53,8 +53,18 @@ cover the selection. See [ADR 0040](docs/decisions/0040-project-owned-eslint-con
 
 ## Tests
 
-- Use `node:test` with `node:assert/strict`. Component tests live in `<component>/tests/*.test.mjs`; cross-component
-  tests in tests/integration; browser journeys in apps/web/tests/e2e (Playwright).
+- Use `node:test` with `node:assert/strict`. In an app or packages/map-core a test lies next to the code it tests, and
+  its name says what it needs ([why](docs/decisions/0040-tests-next-to-their-code.md)). apps/web and apps/editor sort
+  their sources into folders by feature. Example:
+  - `roads/roads.js`: the component;
+  - `roads/roads.test.js`: its unit tests, without a browser;
+  - `roads/roads.browser.test.js`: only what needs a real browser (Playwright). It starts the component, not the whole
+    app, and globs for unit tests leave it out;
+  - `e2e/roads.spec.js`, beside `src`: a user's job from start to end (Playwright).
+- A project that moves its tests leaves them out of its build or published package. Until a component has moved, its new
+  tests go into `tests/` as `*.test.mjs` or `*.spec.mjs`.
+- Contracts, data, platform and service tests live in `<component>/tests/*.test.mjs`; cross-component tests in
+  tests/integration.
 - Add or update a test that fails without your change. Never delete, skip, or loosen an assertion to get green output.
 - A browser test waits for a state: an event, or a poll on a condition. A fixed delay is not synchronization. A failure
   seen only with parallel workers is not a flake to dismiss: investigate both races and resource limits (frame rate,

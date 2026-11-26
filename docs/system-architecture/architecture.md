@@ -54,20 +54,24 @@ Rules:
 - A project never runs another project's checks or tests. Applications never import each other.
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules and readability probe
-  ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)) are development dependencies recorded above;
+  ([ADR 0042](../decisions/0042-project-owned-eslint-configurations.md)) are development dependencies recorded above;
   the planner selects the projects that consume each, and no browser areas, when either changes. A root
   `eslint.config.mjs`, added, changed or deleted, has that same selection: lint configuration can change what every
   project's lint finds, never what a browser does.
+- The planner may narrow web browser tests by area. The editor owns its browser suite and shard count; see
+  [editor instructions](../../apps/editor/AGENTS.md) and [workflow testing](../../.github/TESTING.md#on-github).
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev
   builds are the separate HEAD mode described below. The scoped exceptions are `tests/`, the cross-project integration
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
-  it publishes by setting the data and contracts versions; and development tooling: each project's lint and readability
-  tests read `platform/eslint-rules.mjs` at HEAD through their own config, and the app readability tests call
-  `platform/tools/eslint-readability-probe.mjs`. Both are repository tooling like the ESLint binary and its plugins, not
-  runtime data; a pinned package would need a release for each rule change. Owner approval for this narrow exception is
-  requested in the #458 PR ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)).
+  it publishes by setting the data and contracts versions; `platform/tools/phone-tags.mjs`, which platform's web
+  phone-tag check and the editor's own unit test read at HEAD while `apps/web` imports nothing from it; and development
+  tooling: each project's lint and readability tests read `platform/eslint-rules.mjs` at HEAD through their own config,
+  and the app readability tests call `platform/tools/eslint-readability-probe.mjs`. Both are repository tooling like the
+  ESLint binary and its plugins, not runtime data; a pinned package would need a release for each rule change. Owner
+  approval for this narrow exception is requested in the #458 PR
+  ([ADR 0042](../decisions/0042-project-owned-eslint-configurations.md)).
 
 ### Map data modes
 

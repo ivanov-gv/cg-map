@@ -99,8 +99,11 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
 
     const helper = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tests/pinned-contracts.mjs'), 'utf8');
     assert.match(helper, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
-    const browserConfig = fileSystem.readFileSync(path.join(repositoryRoot, application, 'playwright.config.mjs'), 'utf8');
-    assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
+    // The editor asserts its own browser configuration in apps/editor/tests/contracts-root.test.mjs.
+    if (application !== 'apps/editor') {
+      const browserConfig = fileSystem.readFileSync(path.join(repositoryRoot, application, 'playwright.config.mjs'), 'utf8');
+      assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
+    }
     const lifecycleBuilds = ['pretest', 'pretest:built', 'pretest:e2e'].filter(name => appPackage.scripts[name]);
     assert.ok(lifecycleBuilds.length > 0, 'a test lifecycle must build from the pinned contracts');
     for (const name of lifecycleBuilds) {

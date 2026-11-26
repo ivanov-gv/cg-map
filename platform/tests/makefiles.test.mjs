@@ -103,7 +103,8 @@ test('repo boundary rejects forbidden imports whose list spans several lines', t
   assert.match(result.stderr, /forbidden dependency \.\.\/\.\.\/web\/src\/core\.js/);
 });
 
-for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+// The editor owns this guard in apps/editor/tests/pinned-data.test.mjs.
+for (const application of ['apps/web', 'apps/core-demo']) {
   test(`${application} repo boundary rejects repository data paths in tests`, t => {
     const probe = path.join(repoRoot, application, 'tests', `__data-probe-${process.pid}.mjs`);
     t.after(() => fs.rmSync(probe, {force: true}));
