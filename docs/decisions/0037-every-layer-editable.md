@@ -65,4 +65,4 @@ on two levels; the extractor names such nodes, and they stay unjoined.
 
 [#446](https://github.com/ivanov-gv/cg-map/issues/446) opened canyon rims; border lines and ridges keep their limits
 ([#429](https://github.com/ivanov-gv/cg-map/issues/429), [#453](https://github.com/ivanov-gv/cg-map/issues/453)).
-[ADR 0040](0040-one-measured-canyon-rim-height.md) records height and direction.
+[ADR 0042](0042-one-measured-canyon-rim-height.md) records height and direction.

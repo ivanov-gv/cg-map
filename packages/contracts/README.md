@@ -160,7 +160,7 @@ OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-
 and `method: "dem-canyon-bank"`; a rim added in the editor has `method: "editor-drawn"` and no `river` or `bank`. A rim
 may publish one optional integer `height`; how the build measures it belongs to the data runbook. Every canyon rim keeps
 the low side on its right; an edge without a river is not compared with a centreline
-([ADR 0040](../../docs/decisions/0040-one-measured-canyon-rim-height.md)). Every contour runs with higher ground on its
+([ADR 0042](../../docs/decisions/0042-one-measured-canyon-rim-height.md)). Every contour runs with higher ground on its
 left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height checks
 and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
 

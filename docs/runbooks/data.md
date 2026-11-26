@@ -66,7 +66,7 @@ height association measures it in metres in both directions, so an east offset a
 judged alike. Each finished rim publishes the median of its samples as one whole-metre `height`, rounded with halves
 upward; an OSM cliff takes that value only from DEM samples measured beside that cliff part, not from a distant rise
 elsewhere on a joined bank, and otherwise carries no height. The statistic and rounding are described by
-[ADR 0040](../decisions/0040-one-measured-canyon-rim-height.md). The contract owns which facts an editor may state; see
+[ADR 0042](../decisions/0042-one-measured-canyon-rim-height.md). The contract owns which facts an editor may state; see
 the [shared contracts](../../packages/contracts/README.md). Green kinds come from the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
 nine configured kinds occur in the current `land.geojson` (`garden` is absent). Green kinds, minimum slope area, the

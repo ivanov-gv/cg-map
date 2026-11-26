@@ -159,7 +159,7 @@ and ambiguous joins are excluded. The runtime label layer is bundled for offline
 rebuilt from pinned inputs; [ADR 0030](../docs/decisions/0030-relief-derived-read-only-sources.md) describes the build,
 and [ADR 0037](../docs/decisions/0037-every-layer-editable.md) describes editor corrections. The shared
 [contract](../packages/contracts/README.md) owns which rim facts an editor may state; the measured-height decision is in
-[ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md). `make -C data build-relief` rebuilds them from the
+[ADR 0042](../docs/decisions/0042-one-measured-canyon-rim-height.md). `make -C data build-relief` rebuilds them from the
 local Copernicus DEM GLO-30 tiles, the reviewed OSM PBF, and the reviewed `land.geojson` and `water.geojson`. The raster
 tiles, PBF and full report are external build artifacts and are not committed; their checksums, the DEM
 EULA/attribution, and all output counts, bytes and SHA-256 values are recorded in `sources/provenance.json`.
@@ -179,7 +179,7 @@ one `LineString` per retained bank segment with numbered `entityPart` values on 
 unmeasured rim has no height; `relief` in `sources/provenance.json` records the statistic name
 `median of sampled bank rise`, pinned inputs, tool hashes, output counts, bytes and SHA-256 values. Measurement rules
 live in the [data runbook](../docs/runbooks/data.md#relief-sources), allowed values in `editor-layers.json`, and the
-decision in [ADR 0040](../docs/decisions/0040-one-measured-canyon-rim-height.md). River banks are named relative to the
+decision in [ADR 0042](../docs/decisions/0042-one-measured-canyon-rim-height.md). River banks are named relative to the
 DEM-oriented downstream centreline. The slope builder reads the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum. The nine configured kinds are `park`, `garden`,
 `woods`, `meadow`, `grass`, `scrub`, `sports`, `cemetery` and `playground`; eight occur in the current `land.geojson`
