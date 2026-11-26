@@ -11,6 +11,48 @@ const supportDirectoryNames = new Set(['test-support', 'test-helpers', 'tests', 
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
 const dynamicImportPattern = /\bimport\s*\(/;
 const gestureHandlerPattern = /\.(?:scrollZoom|touchZoomRotate|doubleClickZoom|dragPan|dragRotate|keyboard|boxZoom|touchPitch|cooperativeGestures)\b/;
+const publishedCoreEntry = '@ivanov-gv/map-core';
+
+// main's flat import graph has no naming or layer rule that predicts every edge: interface.js imports history-steps.js
+// while app.js does not, and offline.js imports only core.js. Keep the reviewed edges as rules, scoped to the modules
+// main constrained. New nested modules follow the general relative-module rule below instead of needing a list entry.
+const modulesWithoutLocalImports = new Set([
+  'app-updates.js',
+  'attribution.js',
+  'core.js',
+  'data-mode.js',
+  'device-class.js',
+  'dom.js',
+  'history-steps.js',
+  'map-taps.js',
+  'object-selection.js',
+  'point-selection.js',
+  'routing.js',
+  'vehicle-direction.js'
+]);
+const transitiveOnlyModules = new Set(['history-steps.js', 'routing.js', 'transit-routing.js', 'vehicle-direction.js']);
+const reviewedDependencies = new Map([
+  ['interface.js', ['device-class.js', 'history-steps.js']],
+  ['location-controls.js', [publishedCoreEntry, 'core.js', 'dom.js', 'position.js', 'status-messages.js']],
+  ['map-selection.js', [publishedCoreEntry, 'point-selection.js']],
+  ['offline-controls.js', ['data-mode.js', 'dom.js', 'offline.js']],
+  ['offline.js', ['core.js']],
+  ['place-details.js', [publishedCoreEntry, 'core.js', 'dom.js']],
+  ['place-selection.js', [publishedCoreEntry, 'core.js', 'dom.js', 'interface.js', 'place-details.js']],
+  ['position.js', ['core.js']],
+  ['public-map-layers.js', [publishedCoreEntry, 'core.js']],
+  ['route-planner.js', ['core.js', 'dom.js', 'routing.js', 'transit-routing.js']],
+  ['status-messages.js', ['core.js']],
+  ['transit-routing.js', ['core.js']],
+  ['transport.js', ['data-mode.js', 'vehicle-direction.js']]
+]);
+const runtimeModulesOnMain = ['app.js', ...modulesWithoutLocalImports, ...reviewedDependencies.keys()].sort();
+reviewedDependencies.set(
+  'app.js',
+  runtimeModulesOnMain
+    .filter(module => module !== 'app.js' && !transitiveOnlyModules.has(module))
+    .concat(publishedCoreEntry)
+);
 
 const defaultSourceDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 
@@ -55,33 +97,86 @@ export function copyRuntimeSource(sourceDirectory, outputDirectory) {
   });
 }
 
-// Enforces ADR 0015 and the published-package boundary for every runtime module, including nested ones.
-export function assertRuntimeBoundaries(sourceDirectory = defaultSourceDirectory) {
-  for (const relativePath of findRuntimeModules(sourceDirectory)) {
-    const filePath = path.join(sourceDirectory, relativePath);
-    const text = fs.readFileSync(filePath, 'utf8');
-    assert.ok(!dynamicImportPattern.test(text), `${relativePath}: dynamic imports need an explicit boundary check`);
-    assert.ok(
-      !gestureHandlerPattern.test(text),
-      `${relativePath}: map gestures stay MapLibre's own (docs/decisions/0015-maplibre-gestures-unchanged.md)`
-    );
-    for (const match of text.matchAll(moduleDependencyPattern)) {
-      const dependency = match[1];
-      const isPublishedCoreEntry = dependency === '@ivanov-gv/map-core';
-      const isRelativeModule = /^\.\.?\/.*\.js$/.test(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency);
-      assert.ok(
-        isPublishedCoreEntry || isRelativeModule,
-        `${relativePath}: forbidden dependency ${dependency}. Only relative runtime modules inside src and the published @ivanov-gv/map-core entry are allowed.`
-      );
-    }
-  }
+// Returns import specifiers in source order, including the published entry. Boundary checks use this one view.
+function readDependencies(filePath) {
+  const text = fs.readFileSync(filePath, 'utf8');
+  return [...text.matchAll(moduleDependencyPattern)].map(match => match[1]);
 }
 
+// Returns relative import specifiers only, so a test can name a fact such as core.js having no local imports.
+export function readLocalDependencies(filePath) {
+  return readDependencies(filePath).filter(dependency => dependency.startsWith('.'));
+}
+
+function isRelativeJs(dependency) {
+  return /^\.\.?\/.*\.js$/.test(dependency);
+}
+
+// Returns true when a relative import resolves to a runtime module inside this app's source tree.
 function isRuntimeDependency(sourceDirectory, sourceFile, dependency) {
   const resolvedPath = path.resolve(path.dirname(sourceFile), dependency);
   const relativePath = relativePathFrom(sourceDirectory, resolvedPath);
-  const isInsideSource = relativePath !== '..' && !relativePath.startsWith('../');
-  return isInsideSource && isRuntimeSourcePath(relativePath);
+  if (relativePath === '..' || relativePath.startsWith('../')) return false;
+  return isRuntimeSourcePath(relativePath);
+}
+
+// Returns the relative path when an import adds a module that did not exist in main's flat tree.
+function newRuntimeModulePath(sourceDirectory, sourceFile, dependency) {
+  const resolvedPath = path.resolve(path.dirname(sourceFile), dependency);
+  const relativePath = relativePathFrom(sourceDirectory, resolvedPath);
+  if (relativePath === 'sw.js' || runtimeModulesOnMain.includes(relativePath)) return null;
+  return isRuntimeSourcePath(relativePath) ? relativePath : null;
+}
+
+function dependenciesOnMainFor(relativePath) {
+  if (reviewedDependencies.has(relativePath)) return reviewedDependencies.get(relativePath);
+  if (modulesWithoutLocalImports.has(relativePath)) return [];
+  return null;
+}
+
+function assertDependencyAllowed(sourceDirectory, relativePath, filePath, dependency) {
+  const dependenciesOnMain = dependenciesOnMainFor(relativePath);
+  if (dependenciesOnMain) {
+    const isReviewedSpecifier =
+      dependency === publishedCoreEntry ||
+      (isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency));
+    const specifierOnMain = dependency === publishedCoreEntry ? dependency : dependency.replace(/^\.\//, '');
+    // An importer that had local edges on main may gain a new nested module; a zero-import module may not, and no
+    // importer may gain an unrelated module that main already knew.
+    const mayAddNestedModule =
+      dependenciesOnMain.length > 0 && Boolean(newRuntimeModulePath(sourceDirectory, filePath, dependency));
+    assert.ok(
+      isReviewedSpecifier && (dependenciesOnMain.includes(specifierOnMain) || mayAddNestedModule),
+      `${relativePath}: forbidden dependency ${dependency}. Web keeps main's reviewed import graph; only its listed modules and new nested modules are allowed.`
+    );
+    return;
+  }
+  const isPublishedCoreEntry = dependency === publishedCoreEntry;
+  const isRelativeRuntimeModule = isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency);
+  assert.ok(
+    isPublishedCoreEntry || isRelativeRuntimeModule,
+    `${relativePath}: forbidden dependency ${dependency}. Only relative runtime modules inside src and the published @ivanov-gv/map-core entry are allowed.`
+  );
+}
+
+function assertModuleBoundaries(sourceDirectory, relativePath) {
+  const filePath = path.join(sourceDirectory, relativePath);
+  const text = fs.readFileSync(filePath, 'utf8');
+  assert.ok(!dynamicImportPattern.test(text), `${relativePath}: dynamic imports need an explicit boundary check`);
+  assert.ok(
+    !gestureHandlerPattern.test(text),
+    `${relativePath}: map gestures stay MapLibre's own (docs/decisions/0015-maplibre-gestures-unchanged.md)`
+  );
+  for (const dependency of readDependencies(filePath)) {
+    assertDependencyAllowed(sourceDirectory, relativePath, filePath, dependency);
+  }
+}
+
+// Enforces ADR 0015 and the published-package boundary for every runtime module, including nested ones.
+export function assertRuntimeBoundaries(sourceDirectory = defaultSourceDirectory) {
+  for (const relativePath of findRuntimeModules(sourceDirectory)) {
+    assertModuleBoundaries(sourceDirectory, relativePath);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

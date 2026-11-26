@@ -27,7 +27,6 @@ export function createFixtureProject(testContext) {
   fs.cpSync(path.join(appRoot, 'public'), path.join(app, 'public'), {recursive: true});
   fs.copyFileSync(path.join(appRoot, 'package.json'), path.join(app, 'package.json'));
   fs.symlinkSync(path.join(appRoot, 'node_modules'), path.join(app, 'node_modules'), 'dir');
-  fs.copyFileSync(path.join(appRoot, 'src/sw.js'), path.join(source, 'sw.js'));
   fs.writeFileSync(path.join(source, 'app.js'), "import {featureValue} from './feature/nested.js';\nexport {featureValue};\n");
   fs.writeFileSync(path.join(source, 'sw.js'), "self.addEventListener('install', () => {});\n");
   fs.writeFileSync(

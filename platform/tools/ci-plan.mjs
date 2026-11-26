@@ -56,8 +56,8 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
-// Platform still selects Web files for build-web and hosting tests, package pins, Makefiles and dev-site tests. Issue
-// #456 moved the import, dynamic-import and gesture guards out of check-repo; Web owns those source checks.
+// Platform still checks web files: check:repo (allowed imports, dynamic-import ban, gesture guard), build-web and
+// hosting tests, package pins, Makefiles and dev-site tests. Issue #456 moves those checks out of platform.
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];

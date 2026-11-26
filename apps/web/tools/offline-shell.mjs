@@ -26,13 +26,15 @@ export function isShellAsset(relativePath) {
   if (!isRuntimeSourcePath(relativePath)) return false;
   const segments = relativePath.split('/');
   const filename = segments.at(-1);
+  // The data allow rules include archive-like extensions; this guard is what keeps a widened rule from caching full
+  // archives or partial range downloads. Those bytes stay in OPFS and HTTP caches.
   if (filename.endsWith('.pmtiles') || filename.endsWith('.partial')) return false;
   if (segments[0] === 'vendor') return /\.(?:js|css)$/.test(filename);
   if (segments[0] === 'map-core') return filename.endsWith('.js');
   if (segments[0] === 'fonts') return filename.endsWith('.pbf');
   if (segments[0] === 'data') {
-    if (segments[1] === 'satellite') return /\.(?:webp|png|json)$/.test(filename);
-    return /\.(?:geojson|json)$/.test(filename) && filename !== 'manifest.json';
+    if (segments[1] === 'satellite') return /\.(?:webp|png|json|pmtiles|partial)$/.test(filename);
+    return /\.(?:geojson|json|pmtiles|partial)$/.test(filename) && filename !== 'manifest.json';
   }
   return /\.(?:js|html|css|svg|png|webmanifest)$/.test(filename);
 }

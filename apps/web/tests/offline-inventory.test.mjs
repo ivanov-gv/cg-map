@@ -37,7 +37,7 @@ test('shell discovery excludes host config, generated output, downloads, and tes
   ])
     assert.ok(!discovered.includes(excluded), `${excluded} must stay outside the shell`);
   assert.ok(!discovered.some(asset => asset.endsWith('.pmtiles')));
-  assert.ok(!discovered.some(asset => asset.startsWith('data/satellite/') === false && asset.endsWith('.bin')));
+  assert.ok(!discovered.some(asset => !asset.startsWith('data/satellite/') && asset.endsWith('.bin')));
 
   for (const included of [
     'index.html',
@@ -51,6 +51,25 @@ test('shell discovery excludes host config, generated output, downloads, and tes
     'data/satellite/manifest.json'
   ])
     assert.ok(discovered.includes(included), `${included} must stay in the shell`);
+});
+
+test('shell discovery excludes archive and partial files even when the data allow rule matches them', testContext => {
+  const fixture = createFixtureProject(testContext);
+  buildFixture(fixture);
+  fs.writeFileSync(path.join(fixture.output, 'data/archive.pmtiles'), 'full archive bytes');
+  fs.writeFileSync(path.join(fixture.output, 'data/archive.pmtiles.partial'), 'partial download bytes');
+  finalizeFixture(fixture);
+
+  const discovered = discoverShellAssets(fixture.output);
+  assert.ok(!discovered.includes('data/archive.pmtiles'));
+  assert.ok(!discovered.includes('data/archive.pmtiles.partial'));
+});
+
+test('shell discovery returns sorted asset paths', testContext => {
+  const fixture = createFixtureProject(testContext);
+  buildFixture(fixture);
+  const discovered = discoverShellAssets(fixture.output);
+  assert.deepEqual(discovered, [...discovered].sort());
 });
 
 test('manifest keeps self-inclusion and a stable hash across repeated finalization', testContext => {

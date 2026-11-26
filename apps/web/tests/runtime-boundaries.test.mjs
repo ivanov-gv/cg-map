@@ -2,12 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {assertRuntimeBoundaries} from '../tools/runtime-modules.mjs';
+import {fileURLToPath} from 'node:url';
+import {assertRuntimeBoundaries, readLocalDependencies} from '../tools/runtime-modules.mjs';
 import {createFixtureProject} from './fixture-project.mjs';
 
 test('web boundaries accept a nested runtime module and ignore colocated tests', testContext => {
   const fixture = createFixtureProject(testContext);
   assert.doesNotThrow(() => assertRuntimeBoundaries(fixture.source));
+});
+
+test('web boundaries keep main reviewed imports and core.js has no local imports', testContext => {
+  const fixture = createFixtureProject(testContext);
+  fs.writeFileSync(path.join(fixture.source, 'offline.js'), "import {elementById} from './dom.js';\n");
+  fs.writeFileSync(path.join(fixture.source, 'dom.js'), 'export const elementById = () => {};\n');
+  assert.throws(() => assertRuntimeBoundaries(fixture.source), /main's reviewed import graph/);
+
+  const appSource = fileURLToPath(new URL('../src/', import.meta.url));
+  assert.doesNotThrow(() => assertRuntimeBoundaries(appSource));
+  assert.deepEqual(readLocalDependencies(path.join(appSource, 'core.js')), []);
 });
 
 test('web boundaries reject a forbidden dependency in a nested runtime module', testContext => {
