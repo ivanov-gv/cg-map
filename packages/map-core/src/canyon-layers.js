@@ -30,10 +30,8 @@ function pixelsPerMetreAtZoom16(latitudeDegrees) {
   return groundPixels(1, latitudeDegrees, wallReferenceZoom);
 }
 
-// One stop per whole zoom keeps exponential interpolation on the ground scale between stops. Compute the floor at
-// every stop: a fixed floor at only 13, 16 and 20 flattened the curve wherever the floor won at a stop. The floor is
-// the no-width wall at that zoom, never below the visible minimum, and each band takes its share of it.
-function groundScaled(pixelsAtZoom16, widthShare) {
+// A stop at every whole zoom keeps both the ground width and the floor exact between stops.
+function groundScaled(pixelsAtZoom16, floorShare) {
   const stops = [];
   for (let atZoom = canyonMinZoom; atZoom <= wallMaxZoom; atZoom += 1) {
     const zoomFactor = 2 ** (atZoom - wallReferenceZoom);
@@ -41,7 +39,7 @@ function groundScaled(pixelsAtZoom16, widthShare) {
       minimumVisibleWallWidthPixels,
       unpaintedWallWidthPixelsAtZoom16 * zoomFactor
     );
-    const floorPixels = unpaintedWidthPixels * widthShare;
+    const floorPixels = unpaintedWidthPixels * floorShare;
     stops.push(atZoom, ['max', floorPixels, ['*', pixelsAtZoom16, zoomFactor]]);
   }
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
@@ -85,7 +83,7 @@ function colorForDepth(bandIndex) {
 // Rims run with the river on their right (relief contract), so a positive offset moves a band toward the water.
 function wallBand(bandIndex) {
   const widthShare = (wallBandCount - bandIndex) / wallBandCount;
-  const paintedWidthPixels = ['*', ['coalesce', ['get', 'width'], 0], groundPixelsPerMetreAtZoom16];
+  const paintedWidthPixelsAtZoom16 = ['*', ['coalesce', ['get', 'width'], 0], groundPixelsPerMetreAtZoom16];
   return inDrawingGroup('canyon-walls', {
     id: `canyon-wall-${bandIndex}`,
     type: 'line',
@@ -95,8 +93,8 @@ function wallBand(bandIndex) {
     layout: {'line-cap': 'butt', 'line-join': 'round'},
     paint: {
       'line-color': colorForDepth(bandIndex),
-      'line-width': groundScaled(['*', paintedWidthPixels, widthShare], widthShare),
-      'line-offset': groundScaled(['*', paintedWidthPixels, widthShare / 2], widthShare / 2)
+      'line-width': groundScaled(['*', paintedWidthPixelsAtZoom16, widthShare], widthShare),
+      'line-offset': groundScaled(['*', paintedWidthPixelsAtZoom16, widthShare / 2], widthShare / 2)
     }
   });
 }

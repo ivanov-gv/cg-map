@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {createPropertyExpression, latest} from '@maplibre/maplibre-gl-style-spec';
 import {mapStyle} from '../src/map-style.js';
 
@@ -50,6 +47,18 @@ function evaluatePaint(paint, paintProperty, properties, atZoom) {
 
 function brightness(color) {
   return color.r + color.g + color.b;
+}
+
+function readsRiver(value) {
+  const isRiverGet = Array.isArray(value) && value[0] === 'get' && value[1] === 'river';
+  if (isRiverGet) return true;
+  if (Array.isArray(value)) return value.some(readsRiver);
+  if (value !== null && typeof value === 'object') return Object.values(value).some(readsRiver);
+  return false;
+}
+
+function layerReadsRiver(layer) {
+  return [layer.paint, layer.layout, layer.filter].some(section => readsRiver(section));
 }
 
 function widthShareFor(bandIndex) {
@@ -113,10 +122,6 @@ test('a shallow edge ends lighter than a deep edge, and an unmeasured edge uses 
 });
 
 test('no style expression reads or matches the river property', () => {
-  const sourceDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
-  const runtimeFiles = fs.readdirSync(sourceDirectory).filter(name => name.endsWith('.js'));
-  for (const filename of runtimeFiles) {
-    const source = fs.readFileSync(path.join(sourceDirectory, filename), 'utf8');
-    assert.doesNotMatch(source, /\['get',\s*'river'\]/u, filename);
-  }
+  const riverLayers = style.layers.filter(layerReadsRiver).map(layer => layer.id);
+  assert.deepEqual(riverLayers, []);
 });
