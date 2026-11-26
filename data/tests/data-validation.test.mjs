@@ -12,6 +12,10 @@ import {
   validateBuildingSources,
   validateCollection,
   validateMunicipalities,
+  validateRailwayCounts,
+  validateRailways,
+  railwayKinds,
+  railwayTags,
   validateRelief,
   validateProtectedAreas,
   protectedAreaTags,
@@ -1050,13 +1054,96 @@ test('the extractor and check-data accept the same protected-area tags', () => {
   assert.deepEqual(extractorTags.sort(), [...protectedAreaTags].sort());
 });
 
-test('the editor bundle holds the source of every object on the map, relief and transit records included', async t => {
+test('railway sources validate copied facts, geometry and lifecycle counts', () => {
+  const railways = JSON.parse(fs.readFileSync('data/sources/railways.geojson'));
+  const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
+  const counts = provenance.railway_counts;
+  assert.equal(
+    validateRailways(railways, {contractsDirectory, requireAdopted: true}),
+    provenance.layers['railways.geojson'].features
+  );
+  validateRailwayCounts(counts, railways);
+  const trackIndex = railways.features.findIndex(feature => feature.properties.kind === 'rail');
+  const stationIndex = railways.features.findIndex(feature => feature.properties.kind === 'station');
+  const namedIndex = railways.features.findIndex(feature => feature.properties.name);
+  const platformAreaIndex = railways.features.findIndex(feature =>
+    feature.properties.kind === 'platform' && feature.geometry.type === 'Polygon'
+  );
+  assert.ok(trackIndex >= 0, 'the reviewed railways include a track');
+  assert.ok(stationIndex >= 0, 'the reviewed railways include a station');
+  assert.ok(namedIndex >= 0, 'the reviewed railways include a name');
+  assert.ok(platformAreaIndex >= 0, 'the reviewed railways include a platform area');
+  const mutations = [
+    [trackIndex, 'kind', 'maglev', /unsupported railway kind/],
+    [trackIndex, 'osmTag', 'railway=station', /osmTag disagrees with kind/],
+    [trackIndex, 'osmTag', 'railway=maglev', /unsupported osmTag/],
+    [namedIndex, 'name', ' ', /invalid name/]
+  ];
+  for (const [index, field, value, expected] of mutations) {
+    const bad = structuredClone(railways);
+    bad.features[index].properties[field] = value;
+    assert.throws(() => validateRailways(bad, {contractsDirectory}), expected);
+  }
+  const wrongGeometry = structuredClone(railways);
+  wrongGeometry.features[stationIndex].geometry = {
+    type: 'LineString', coordinates: [[19.2, 42.4], [19.21, 42.41]]
+  };
+  assert.throws(
+    () => validateRailways(wrongGeometry, {contractsDirectory}),
+    /geometry type violates railway kind/
+  );
+  const reversedRing = structuredClone(railways);
+  reversedRing.features[platformAreaIndex].geometry.coordinates[0].reverse();
+  assert.throws(
+    () => validateRailways(reversedRing, {contractsDirectory}),
+    /exterior must be counterclockwise/
+  );
+  assert.throws(
+    () => validateRailwayCounts(
+      {...counts, importedDisused: counts.importedDisused + 1}, railways
+    ),
+    /railway_counts.importedDisused/
+  );
+});
+
+test('the extractor and check-data accept the same railway kinds and tags', () => {
+  const extractor = fs.readFileSync('data/tools/osm_extract/railways.py', 'utf8');
+  const declared = name => {
+    const match = new RegExp(`${name} = \\(([\\s\\S]*?)\\n\\)`).exec(extractor);
+    assert.ok(match, `${name} is declared by the extractor`);
+    return [...match[1].matchAll(/'([^']+)'/g)].map(([, value]) => value);
+  };
+  assert.deepEqual(declared('RAILWAY_KINDS').sort(), [...railwayKinds].sort());
+  assert.deepEqual(declared('RAILWAY_TAGS').sort(), [...railwayTags].sort());
+});
+
+test('check-data rejects an unsupported railway kind from the reviewed source', t => {
+  const root = reviewedCheckRoot(t);
+  const sourcePath = path.join(root, 'data/sources/railways.geojson');
+  const originalBytes = fs.readFileSync(sourcePath);
+  const railways = JSON.parse(originalBytes);
+  railways.features[0].properties.kind = 'maglev';
+  fs.unlinkSync(sourcePath);
+  fs.writeFileSync(sourcePath, JSON.stringify(railways));
+  assert.throws(
+    () => checkData(root, {contractsDirectory}),
+    /unsupported railway kind maglev/
+  );
+  fs.unlinkSync(sourcePath);
+  fs.writeFileSync(sourcePath, originalBytes);
+});
+
+// Railways are display geometry already, but their editor mode arrives in the next stacked step.
+test('the editor bundle excludes only the staged, non-editable railway source', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
   const filenames = manifest.layers.map(layer => layer.filename);
   const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
-  assert.deepEqual([...filenames].sort(), [...everyGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
+  const editableGeoJSON = everyGeoJSON.filter(name => name !== 'railways.geojson');
+  assert.ok(everyGeoJSON.includes('railways.geojson'));
+  assert.ok(!filenames.includes('railways.geojson'));
+  assert.deepEqual([...filenames].sort(), [...editableGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
   assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
   assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());
 });
