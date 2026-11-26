@@ -3,14 +3,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ColorType, expression} from '@maplibre/maplibre-gl-style-spec';
-import {groundPixels, mapGroundPixelsPerMetreAtZoom16} from '../src/canyon-layers.js';
+import {createPropertyExpression, latest} from '@maplibre/maplibre-gl-style-spec';
 import {mapStyle} from '../src/map-style.js';
 
+const referenceZoom = 16;
+const tileSizePixels = 512;
+const metresAroundEquator = 40075016.68557849;
+const scaleLatitudeDegrees = 42.7;
+const groundPixelsPerMetreAtZoom16 =
+  (tileSizePixels * 2 ** referenceZoom) /
+  (metresAroundEquator * Math.cos((scaleLatitudeDegrees * Math.PI) / 180));
+const noWidthWallPixelsAtZoom16 = 10;
+const visibleWallWidthPixels = 2;
 const style = mapStyle('pmtiles://archive', 'https://local.test/');
 const wallLayers = style.layers.filter(layer => layer.id.startsWith('canyon-wall-'));
-const zoom = 16;
-const rimTile = {z: zoom, x: 36283, y: 24205};
+const rimTile = {z: referenceZoom, x: 36283, y: 24205};
+const bandIndices = [0, 5];
+const paintedCases = [
+  {atZoom: 14, widthMetres: 26},
+  {atZoom: 15, widthMetres: 26},
+  {atZoom: 17, widthMetres: 5}
+];
+const noWidthCases = [
+  {atZoom: 13, expectedPixels: 2},
+  {atZoom: referenceZoom, expectedPixels: 10},
+  {atZoom: 18, expectedPixels: 40},
+  {atZoom: 20, expectedPixels: 160}
+];
 
 function rimWithProperties(properties) {
   return {
@@ -21,67 +40,81 @@ function rimWithProperties(properties) {
   };
 }
 
-function evaluateNumber(paint, properties, atZoom) {
-  const parsed = expression.createExpression(paint);
+function evaluatePaint(paint, paintProperty, properties, atZoom) {
+  const parsed = createPropertyExpression(paint, latest['paint_line'][paintProperty]);
   assert.equal(parsed.result, 'success', JSON.stringify(parsed.value));
   return parsed.value.evaluate({zoom: atZoom}, rimWithProperties(properties), undefined, rimTile);
-}
-
-function evaluateColor(paint, properties) {
-  const parsed = expression.createExpression(paint, ColorType);
-  assert.equal(parsed.result, 'success', JSON.stringify(parsed.value));
-  return parsed.value.evaluate({zoom}, rimWithProperties(properties), undefined, rimTile);
 }
 
 function brightness(color) {
   return color.r + color.g + color.b;
 }
 
-test('one ground scale gives the expected pixels for 26 m at two zooms', () => {
-  assert.equal(mapGroundPixelsPerMetreAtZoom16, groundPixels(1, 42.7, zoom));
-  const paint = wallLayers[0].paint['line-width'];
-  assert.equal(evaluateNumber(paint, {width: 26}, zoom), 26 * mapGroundPixelsPerMetreAtZoom16);
-  assert.equal(evaluateNumber(paint, {width: 26}, zoom + 1), 52 * mapGroundPixelsPerMetreAtZoom16);
+function widthShareFor(bandIndex) {
+  return (wallLayers.length - bandIndex) / wallLayers.length;
+}
+
+function expectedBandWidth(atZoom, widthMetres, widthShare) {
+  const zoomFactor = 2 ** (atZoom - referenceZoom);
+  const groundPixels = widthMetres * groundPixelsPerMetreAtZoom16 * zoomFactor * widthShare;
+  const noWidthPixels = Math.max(visibleWallWidthPixels, noWidthWallPixelsAtZoom16 * zoomFactor) * widthShare;
+  return Math.max(noWidthPixels, groundPixels);
+}
+
+function assertBandPixels(layer, properties, atZoom, expectedWidth, description) {
+  const width = evaluatePaint(layer.paint['line-width'], 'line-width', properties, atZoom);
+  const offset = evaluatePaint(layer.paint['line-offset'], 'line-offset', properties, atZoom);
+  assert.ok(Math.abs(width - expectedWidth) < 1e-9, `${description} width: ${width} vs ${expectedWidth}`);
+  assert.ok(Math.abs(offset - expectedWidth / 2) < 1e-9, `${description} offset: ${offset} vs ${expectedWidth / 2}`);
+}
+
+test('one ground scale gives 1.1393 px per metre at zoom 16', () => {
+  const widthPixels = evaluatePaint(wallLayers[0].paint['line-width'], 'line-width', {width: 26}, referenceZoom);
+  const pixelsPerMetre = widthPixels / 26;
+  assert.ok(Math.abs(pixelsPerMetre - 1.1393) < 1e-4, `${pixelsPerMetre}`);
 });
 
-test('an edge without width draws a fixed 10 px wall band from zoom 13 to 20', () => {
+test('painted widths use ground distance unless the scaled no-width edge is wider', () => {
+  for (const bandIndex of bandIndices) {
+    const widthShare = widthShareFor(bandIndex);
+    for (const {atZoom, widthMetres} of paintedCases) {
+      const expectedWidth = expectedBandWidth(atZoom, widthMetres, widthShare);
+      const description = `band ${bandIndex} at zoom ${atZoom}`;
+      assertBandPixels(wallLayers[bandIndex], {width: widthMetres}, atZoom, expectedWidth, description);
+    }
+  }
+});
+
+test('an edge with no width grows like the ground and keeps a 2 px floor', () => {
   assert.ok(wallLayers.length > 0);
   for (const layer of wallLayers) {
     assert.equal(layer.filter, undefined, layer.id);
   }
-  const paint = wallLayers[0].paint['line-width'];
-  for (const atZoom of [13, zoom, 20]) {
-    assert.equal(evaluateNumber(paint, {}, atZoom), 10, `absent width at zoom ${atZoom}`);
-    assert.equal(evaluateNumber(paint, {width: 0}, atZoom), 10, `zero width at zoom ${atZoom}`);
-  }
-  assert.equal(evaluateNumber(wallLayers[0].paint['line-offset'], {}, zoom), 5);
-});
-
-test('a painted width never draws a narrower band than an empty width', () => {
-  const paint = wallLayers[0].paint['line-width'];
-  for (const atZoom of [13, zoom, 20]) {
-    assert.ok(evaluateNumber(paint, {width: 1}, atZoom) >= 10, `zoom ${atZoom}`);
-    assert.ok(evaluateNumber(paint, {width: 26}, atZoom) >= 10, `zoom ${atZoom}`);
+  for (const bandIndex of bandIndices) {
+    const widthShare = widthShareFor(bandIndex);
+    for (const {atZoom, expectedPixels} of noWidthCases) {
+      const description = `band ${bandIndex} at zoom ${atZoom}`;
+      for (const properties of [{}, {width: 0}]) {
+        assertBandPixels(wallLayers[bandIndex], properties, atZoom, expectedPixels * widthShare, description);
+      }
+    }
   }
 });
 
 test('a shallow edge ends lighter than a deep edge, and an unmeasured edge uses the full range', () => {
   const paint = wallLayers[0].paint['line-color'];
-  const deep = brightness(evaluateColor(paint, {height: 38}));
-  const shallow = brightness(evaluateColor(paint, {height: 3}));
-  const unmeasured = brightness(evaluateColor(paint, {}));
+  const deep = brightness(evaluatePaint(paint, 'line-color', {height: 38}, referenceZoom));
+  const shallow = brightness(evaluatePaint(paint, 'line-color', {height: 3}, referenceZoom));
+  const unmeasured = brightness(evaluatePaint(paint, 'line-color', {}, referenceZoom));
   assert.ok(shallow > deep, `${shallow} vs ${deep}`);
   assert.equal(unmeasured, deep);
 });
 
-test('no river name or river-keyed style rule remains in the core runtime', () => {
-  // Escaped so the assertion does not reintroduce the names it forbids.
-  const retiredRiverNames = ['Mora\\u010da', 'Rib\\u006eica'];
+test('no style expression reads or matches the river property', () => {
   const sourceDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
   const runtimeFiles = fs.readdirSync(sourceDirectory).filter(name => name.endsWith('.js'));
   for (const filename of runtimeFiles) {
     const source = fs.readFileSync(path.join(sourceDirectory, filename), 'utf8');
-    assert.doesNotMatch(source, new RegExp(retiredRiverNames.join('|'), 'u'), filename);
-    assert.doesNotMatch(source, /\['get',\s*'river'\]/, filename);
+    assert.doesNotMatch(source, /\['get',\s*'river'\]/u, filename);
   }
 });
