@@ -34,9 +34,11 @@ it.
 
 Each project that lints owns `eslint.config.mjs` beside its Makefile or package.json and chooses its own file patterns
 and globals; ESLint finds it from the folder the lint command runs in. Rule sets live in
-[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`.
-Each project's lint target and the pre-commit hook enforce the rules; [ci-plan](platform/tools/ci-plan.mjs)'s tests
-cover the selection. See [ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md).
+[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`. The
+pre-commit hook uses a staged file's own config when it has one and the root config otherwise;
+[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. The apps still use the root config until their
+own migration PR; the current split is in [architecture](docs/system-architecture/architecture.md#independent-projects).
+See [ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md).
 
 ## Code
 

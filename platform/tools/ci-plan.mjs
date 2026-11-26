@@ -64,7 +64,6 @@ const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
 const HEAD_DATA_CONSUMERS = ['tests'];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
-const READABILITY_PROBE = 'platform/tools/eslint-readability-probe.mjs';
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
 // Consumers are discovered, not listed: each known project contributes its config when the file exists. The CLI runs
 // at the repository root; tests inject a config list to prove a new config joins without a planner code change.
@@ -79,7 +78,8 @@ function configPipeline(file, lintConfigs) {
   return lintConfigs.includes(file) ? PROJECT_PIPELINES[project] ?? '' : '';
 }
 
-// Shared lint tooling selects the projects whose configs consume it, and never schedules a browser job.
+// Shared rules select only projects whose config exists in this checkout. An app without a config still uses the root
+// file, so it is not a consumer here; once an app owns a config, its folder joins and its workflow runs its browser suite.
 function toolingPlan(consumers) {
   const selected = new Set(consumers);
   return {folders: FOLDERS.filter(folder => selected.has(folder))};
@@ -88,9 +88,7 @@ function toolingPlan(consumers) {
 // Returns the folders one changed path needs. Each app owns its whole browser suite in its workflow, so selecting its
 // folder is enough to run it.
 export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
-  // The shared modules and a root config, added, changed or deleted, are lint configuration: they select every project
-  // that lints through its config, never a browser job.
-  if (file === SHARED_ESLINT_RULES || file === READABILITY_PROBE || file === ESLINT_CONFIG_NAME)
+  if (file === SHARED_ESLINT_RULES)
     return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
   const pipeline = configPipeline(file, lintConfigFiles);
   if (pipeline) return {folders: [pipeline]};
@@ -147,6 +145,8 @@ export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform']};
   if (file.startsWith('platform/')) return {folders: ['platform']};
 
+  // The root eslint.config.mjs still governs every app, so a change to it keeps the whole-plan selection until the
+  // app-owned configs land. Narrowing it now would hide lint checks the apps still run.
   return EVERYTHING;
 }
 

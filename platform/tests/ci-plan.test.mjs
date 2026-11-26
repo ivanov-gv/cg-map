@@ -188,11 +188,8 @@ test('the root Makefile folders match the workflows that call root make', () => 
   assert.deepEqual([...classify('Makefile').folders].sort(), expectedFolders);
 });
 
-test('a project lint config selects its own verify and no browser jobs', () => {
+test('a project lint config selects its own verify', () => {
   const cases = [
-    ['apps/web/eslint.config.mjs', ['apps-web']],
-    ['apps/editor/eslint.config.mjs', ['apps-editor']],
-    ['apps/core-demo/eslint.config.mjs', ['apps-core-demo']],
     ['packages/map-core/eslint.config.mjs', ['map-core']],
     ['packages/contracts/eslint.config.mjs', ['contracts']],
     ['data/eslint.config.mjs', ['data']],
@@ -205,45 +202,49 @@ test('a project lint config selects its own verify and no browser jobs', () => {
     assert.deepEqual(new Set(plan.folders), new Set(folders), file);
     assert.equal(plan.areas, undefined, file);
     assert.equal(plan.everything, false, file);
+    assert.deepEqual(imageMatrix(plan.folders).include, [], `${file} must not publish an app image`);
   }
 });
 
-test('the shared ESLint rules select every consuming verify and no browser jobs', () => {
+test('an app config joins its own pipeline only when that app migrates', () => {
+  const lintConfigFiles = ['apps/web/eslint.config.mjs'];
+  const plan = planChanges(lintConfigFiles, {lintConfigFiles});
+  assert.deepEqual(plan.folders, ['apps-web']);
+  // The app folder calls the whole app workflow, which owns its browser shards; this is not a lint-only selection.
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
+});
+
+test('the shared ESLint rules select only the configs present in this checkout', () => {
   const plan = planChanges(['platform/eslint-rules.mjs']);
   assert.deepEqual(
     new Set(plan.folders),
-    new Set(['apps-web', 'apps-editor', 'apps-core-demo', 'map-core', 'contracts', 'data', 'transit-relay', 'platform', 'tests'])
+    new Set(['map-core', 'contracts', 'data', 'transit-relay', 'platform', 'tests'])
   );
+  for (const appFolder of ['apps-web', 'apps-editor', 'apps-core-demo'])
+    assert.ok(!plan.folders.includes(appFolder), `${appFolder} has no config yet`);
   assert.equal(plan.areas, undefined);
   assert.equal(plan.everything, false);
+  assert.deepEqual(imageMatrix(plan.folders).include, []);
 });
 
 test('a new project config joins the shared-rule consumers without a code change', () => {
-  const lintConfigFiles = ['apps/web/eslint.config.mjs'];
+  const lintConfigFiles = ['data/eslint.config.mjs'];
   const before = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
-  assert.deepEqual(before.folders, ['apps-web']);
+  assert.deepEqual(before.folders, ['data']);
 
   const after = planChanges(['platform/eslint-rules.mjs'], {
-    lintConfigFiles: [...lintConfigFiles, 'apps/editor/eslint.config.mjs']
+    lintConfigFiles: [...lintConfigFiles, 'platform/eslint.config.mjs']
   });
-  assert.deepEqual(after.folders, ['apps-web', 'apps-editor']);
+  assert.deepEqual(after.folders, ['platform', 'data']);
   assert.equal(after.areas, undefined);
 });
 
-test('the probe selects the same projects as the shared rules', () => {
-  const rules = planChanges(['platform/eslint-rules.mjs']);
-  const probe = planChanges(['platform/tools/eslint-readability-probe.mjs']);
-  assert.deepEqual(probe.folders, rules.folders);
-  assert.equal(probe.areas, undefined);
-  assert.equal(probe.everything, false);
-});
-
-test('a root lint config selects the projects that lint, like the shared rules', () => {
-  const rules = planChanges(['platform/eslint-rules.mjs']);
-  const rootConfig = planChanges(['eslint.config.mjs']);
-  assert.deepEqual(rootConfig.folders, rules.folders);
-  assert.equal(rootConfig.areas, undefined);
-  assert.equal(rootConfig.everything, false);
+test('the root lint config keeps every pipeline while it serves the apps', () => {
+  // The root file owns the apps' lint; a folder selection also calls its browser workflow, so narrowing it here would
+  // hide checks. The final foundation diff does not change this file.
+  const plan = planChanges(['eslint.config.mjs']);
+  assert.deepEqual(plan, {folders: FOLDERS, everything: true});
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}, {app: 'editor'}, {app: 'core-demo'}]);
 });
 
 test('outputs give every folder a value and the selected test runs', () => {

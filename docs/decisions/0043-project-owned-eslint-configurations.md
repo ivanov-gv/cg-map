@@ -35,6 +35,20 @@ the shared probe helper against its own config. A project's config selects that 
   consumers from the project configs.
 - Every project keeps linting the files it linted before; the lint config files themselves are linted by their owners.
 
+### Outcome note: staged recovery in #475 (2026-11-26)
+
+- #466 proposed all nine project configs in one change. Its discussion asked for a stack because selecting both map
+  apps' folders also runs their browser shards, and the owner required at most one app per PR. The accepted decision
+  stays the target; #475 lands only the shared rules and the six non-app configs.
+- The root `eslint.config.mjs` stays byte-for-byte as on main and keeps serving Web, Editor and core-demo. Platform
+  keeps its original root-config readability test until the replacement app-owned tests land. The readability probe
+  helper and its planner rule are deferred to those app migrations.
+- Shared rules select only configs present in the checkout, so no app is selected now. A root-config change keeps the
+  whole-plan selection; an app config change will select that app's folder and its whole workflow. The current consumers
+  live in [architecture](../../docs/system-architecture/architecture.md#independent-projects).
+- Pre-commit uses a staged file's own config when one exists and otherwise runs the root config with unchanged paths.
+- Next: Web, Editor and core-demo migrate in their own PRs; the root config is deleted only once no app reads it.
+
 ### Outcome note: HEAD reads for lint tooling (2026-11-26)
 
 - Rule: a project's tests read only its own files or an exact published version of another project, never another's HEAD
@@ -42,10 +56,10 @@ the shared probe helper against its own config. A project's config selects that 
 - Constraint: ESLint resolves each project's config and the shared rules from the checkout, and a readability test must
   lint sample code through the real config or a narrowed glob would pass unnoticed.
 - Experiment: scratch probes showed that removing the restricted-import rule, narrowing the pure-module glob and
-  removing a data boundary are each caught, so the probe has to read the live config.
-- Reasoning: `platform/eslint-rules.mjs` and `platform/tools/eslint-readability-probe.mjs` are development tooling like
-  the ESLint binary and its plugins, not runtime data or a published contract. Pinning them would need a package release
-  for every rule change and would stop the probe from testing the config as it is about to ship.
-- Scope: only those two files, read by project lint and readability tests. Runtime, data and contract pins are
+  removing a data boundary are each caught, so the readability test has to read the live config.
+- Reasoning: `platform/eslint-rules.mjs` is development tooling like the ESLint binary and its plugins, not runtime data
+  or a published contract. Pinning it would need a package release for every rule change and would stop the test from
+  checking the config as it is about to ship.
+- Scope: that file, read by project lint through its own config or the root config. Runtime, data and contract pins are
   unchanged.
 - Owner approval: requested in the #458 PR.
