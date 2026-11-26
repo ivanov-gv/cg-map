@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withoutJoin} from '../src/line-joining.js';
-import {waterBehaviors} from '../src/layer-water.js';
-import {flowsInto, joinedWaterPoints, linesTouched, riverEndingOnShores, waterJointsIn} from '../src/water-joins.js';
+import {withoutJoin} from '../src/geometry/line-joining.js';
+import {waterBehaviors} from '../src/layers/water/layer-water.js';
+import {flowsInto, joinedWaterPoints, linesTouched, riverEndingOnShores, waterJointsIn} from '../src/layers/water/water-joins.js';
 
 const origin = [19.25, 42.44];
 // About eight metres east and eleven north.

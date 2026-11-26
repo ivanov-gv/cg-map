@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {addressBehaviors, buildingsWithoutNumber, nearestGap} from '../src/layer-addresses.js';
-import {buildingAt, placeBehaviors} from '../src/layer-places.js';
-import {matchingStreets, streetsNear} from '../src/street-choices.js';
+import {addressBehaviors, buildingsWithoutNumber, nearestGap} from '../src/layers/addresses/layer-addresses.js';
+import {buildingAt, placeBehaviors} from '../src/layers/places/layer-places.js';
+import {matchingStreets, streetsNear} from '../src/layers/addresses/street-choices.js';
 
 const square = (west, size = 0.001) => [
   [west, 42.44],
