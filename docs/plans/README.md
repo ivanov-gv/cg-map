@@ -12,6 +12,8 @@ deletes it. Git history keeps deleted plans.
 - [Editable layers](editable-layers.md): Epic #404. Every layer of the map editable, as nine stacked Features.
 - [Faster browser tests](faster-browser-tests.md): CI jobs are split to fit their limit; the remaining steps towards a
   5-minute full suite locally.
+- [Web tests next to their components](web-tests-next-to-the-components.md): issue #456; test relocation, build-derived
+  lists and browser reduction, with the lists/harness step recorded.
 - [Automatic workflow test runs](auto-workflow-test-runs.md): issue #334; planned move from manual test-run evidence to
   reusable CI calls and dispatched CD runs inside `CI gate`.
 - [Project-owned ESLint configuration](project-owned-lint-configuration.md): issue #458; #466 recovered as a shared-rule

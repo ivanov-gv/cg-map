@@ -168,8 +168,9 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    content-addressed archive and checksum.
 2. data/tools validates sources against provenance and shared contracts. Full geography regeneration is an explicit,
    separate operation.
-3. apps/web/tools/build.mjs assembles public assets and runtime modules with the reviewed data release into dist/web. It
-   generates offline manifests there.
+3. apps/web/tools/build.mjs copies public assets and discovers runtime modules recursively with the reviewed data
+   release into dist/web, preserving nested paths. finalize.mjs derives the offline shell from that artifact and
+   generates its manifests ([ADR 0045](../decisions/0045-build-derived-web-shell.md)).
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
 5. A merge to main triggers ci-publish, whose `pages` job builds all three apps from source, writes version.json with
@@ -191,8 +192,9 @@ search, focus, and visible-viewport geometry. Map gestures are MapLibre's own, u
 ([ADR 0015](../decisions/0015-maplibre-gestures-unchanged.md)). app.js imports the map-core entry and the public
 workflow modules. offline.js imports core.js for formatting; core.js has no local imports. The map-core package imports
 no app code. app-updates.js checks for releases once per page load or reload; sw.js installs a complete replacement
-shell before activating and reloading open tabs. sw.js imports its generated offline manifest. Repository checks enforce
-these boundaries.
+shell before activating and reloading open tabs. sw.js imports its generated offline manifest. Web owns its runtime
+import, dynamic-import and gesture checks in apps/web/tools/runtime-modules.mjs; Platform no longer reads Web source for
+those rules. Platform still selects Web builds for hosting and package checks.
 
 Shared place categories live in the published contract; integration tests verify UI categories agree. Data validation
 never imports web code. The backend module builds without npm or raw datasets.
