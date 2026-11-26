@@ -7,7 +7,8 @@ import {
   exportChangeset,
   operationsOn,
   startDrawing,
-  tapAt
+  tapAt,
+  waitForRepaint
 } from '../tests/e2e/city-steps.mjs';
 import {openFixtureCity, stepsOf} from '../tests/e2e/fixture-city.mjs';
 
@@ -16,16 +17,6 @@ const jointStatusesOnMap = page =>
     const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
     return features.map(({properties}) => properties.status).sort();
   });
-
-const waitForRepaint = page =>
-  page.evaluate(
-    () =>
-      new Promise(resolve => {
-        const {map} = window.editorDebug;
-        map.once('idle', resolve);
-        map.triggerRepaint();
-      })
-  );
 
 test.beforeEach(async ({page}, testInfo) => {
   test.skip(testInfo.project.name === 'pages-mobile', 'The road graph and joining are desk work.');
@@ -84,6 +75,13 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
   await picker.getByRole('button', {name: 'Level -1'}).click();
   await expect(picker.getByRole('button', {name: 'Level -1'})).toHaveAttribute('aria-pressed', 'true');
   const belowGroundJoints = await jointStatusesOnMap(page);
+  // The directory follows the shown level: it lists Main street but offers no ground road at Level -1.
+  const tools = page.getByRole('button', {name: 'Tools', exact: true});
+  if ((await tools.getAttribute('aria-expanded')) !== 'true') await tools.click();
+  await page.locator('#open-objects').click();
+  await expect(page.locator('#objects-list')).toContainText('Main street');
+  await expect(page.locator('#objects-list')).not.toContainText('Side street');
+  await page.locator('#objects-panel [data-close-panel]').click();
   // A road on the ground cannot be picked while the level below is shown.
   await tapAt(page, [6, 2]);
   await expect(page.locator('.inspector')).toBeHidden();

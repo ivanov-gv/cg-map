@@ -1,5 +1,4 @@
 import {isLayerObject} from '../shared/editor-layers.js';
-import {featureForEntry} from './layer-junctions.js';
 import {entryOnShownLevel, jointOnShownLevel, layerJoints} from '../shared/layer-joints.js';
 import {jointMinZoom} from '../shared/joint-layer.js';
 import {sourceEntriesForHits} from '../../source-data/source-overlay.js';
@@ -32,6 +31,3 @@ export function roadsClickTarget({point, jointLayer, layer, context, entries, sh
   if (jointEntry) return {entry: jointEntry, candidates: []};
   return {entry: null, candidates: roadsPickableEntries({hits: hitsOf(), entries, layer, shownLevel})};
 }
-
-// A junction has no working feature; every other entry opens the feature the session now holds.
-export const roadFeatureForSelection = (entry, session) => featureForEntry(entry, session);

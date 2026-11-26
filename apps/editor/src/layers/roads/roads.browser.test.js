@@ -7,7 +7,8 @@ import {
   dragFromTo,
   editCorners,
   operationsOn,
-  tapAt
+  tapAt,
+  waitForRepaint
 } from '../../../tests/e2e/city-steps.mjs';
 import {stepsOf} from '../../../tests/e2e/fixture-city.mjs';
 import {openRoadsHarness} from '../../../tests/e2e/support/roads-harness.mjs';
@@ -22,6 +23,14 @@ const statusesOnMap = page =>
     const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
     return features.map(({properties}) => properties.status).sort();
   });
+
+const jointCoordinatesOnMap = async page => {
+  const coordinates = await page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+    return features.map(({geometry}) => geometry.coordinates);
+  });
+  return coordinates.map(stepsOf).sort(([eastA, northA], [eastB, northB]) => eastA - eastB || northA - northB);
+};
 
 const shapesIn = (page, source) =>
   page.evaluate(async name => {
@@ -152,8 +161,25 @@ test('one level is shown at a time, and roads under it are neither picked nor jo
   const picker = page.locator('#level-picker');
   await expect(picker.getByRole('button')).toHaveText(['All', '0', '-1']);
   await picker.getByRole('button', {name: 'Level 0'}).click();
-  await expect(picker.getByRole('button', {name: 'Level 0'})).toHaveAttribute('aria-pressed', 'true');
-  // Below the ground Main street still shows where it comes up and joins Side street.
+  await centreOn(page, [6, 2], 18.5);
+  await expect.poll(() => jointCoordinatesOnMap(page)).toEqual([
+    [-6, 0],
+    [6, 0],
+    [6, 5]
+  ]);
+  // One level down keeps only the shared joint; Side street's own end is filtered out.
   await picker.getByRole('button', {name: 'Level -1'}).click();
-  await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'joined']);
+  await expect.poll(() => jointCoordinatesOnMap(page)).toEqual([
+    [-6, 0],
+    [6, 0]
+  ]);
+  // The ground road is drawn for context, but cannot be picked while the level below is shown.
+  await tapAt(page, [6, 3]);
+  await expect(page.locator('.inspector')).toBeHidden();
+  // All levels restores the road on the level it was moved to.
+  await picker.getByRole('button', {name: 'All levels'}).click();
+  await waitForRepaint(page);
+  await centreOn(page, [0, 0]);
+  await tapAt(page, [-3, 0]);
+  await expect(page.locator('#selection-title')).toHaveText('Main street');
 });

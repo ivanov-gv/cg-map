@@ -11,14 +11,14 @@ import {isMagnetOn} from '__APP_BASE__map-tools/magnet-switch.js';
 import {createJointLayer} from '__APP_BASE__layers/shared/joint-layer.js';
 import {availableLayers} from '__APP_BASE__layers/shared/editor-layers.js';
 import {behaviorOf, createBehaviorContext, registerBehaviors} from '__APP_BASE__layers/shared/layer-behaviors.js';
-import {junctionBehaviors, junctionFile, junctionRule} from '__APP_BASE__layers/roads/layer-junctions.js';
+import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from '__APP_BASE__layers/roads/layer-junctions.js';
 import {roadBehaviors} from '__APP_BASE__layers/roads/layer-roads.js';
 import {layerJoints, levelFacts} from '__APP_BASE__layers/shared/layer-joints.js';
 import {validateLayerRules} from '__APP_BASE__layers/shared/layer-rules.js';
 import {derivedFacts} from '__APP_BASE__source-data/derived-facts.js';
 import {createSourceOverlay, overlayCollection} from '__APP_BASE__source-data/source-overlay.js';
 import {showLevelPicker} from '__APP_BASE__layers/roads/level-picker.js';
-import {roadFeatureForSelection, roadsClickTarget, roadsJointsToShow} from '__APP_BASE__layers/roads/roads-host.js';
+import {roadsClickTarget, roadsJointsToShow} from '__APP_BASE__layers/roads/roads-host.js';
 
 const element = id => document.getElementById(id);
 const setStatus = message => {
@@ -113,7 +113,7 @@ function selectObject(state, entry) {
     setStatus('Apply or Cancel the current edit first.');
     return false;
   }
-  const feature = roadFeatureForSelection(entry, state.session);
+  const feature = featureForEntry(entry, state.session);
   if (!feature) return false;
   state.editing.close();
   const behavior = behaviorOf(entry.filename, state.activeLayer.id);

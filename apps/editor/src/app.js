@@ -30,19 +30,13 @@ import {
   registerBehaviors
 } from './layers/shared/layer-behaviors.js';
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
-import {junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
+import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
 import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
 import {roadBehaviors} from './layers/roads/layer-roads.js';
-import {
-  isPickableEntry,
-  roadFeatureForSelection,
-  roadsClickTarget,
-  roadsJointsToShow,
-  roadsPickableEntries
-} from './layers/roads/roads-host.js';
+import {isPickableEntry, roadsClickTarget, roadsJointsToShow, roadsPickableEntries} from './layers/roads/roads-host.js';
 import {routeBehaviors} from './layers/routes/layer-routes.js';
 import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
@@ -336,8 +330,7 @@ function refreshOverlay() {
 
 // Where lines of the layer join, end or only touch, in the view. On one level, only its own.
 function renderJoints() {
-  const jointsOfLayer = layerJoints[activeLayer?.id];
-  if (!jointsOfLayer || activeFilter || map.getZoom() < jointMinZoom) {
+  if (activeFilter) {
     jointLayer.show([]);
     return;
   }
@@ -737,7 +730,7 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const feature = roadFeatureForSelection(entry, session);
+  const feature = featureForEntry(entry, session);
   if (!feature) return false;
   showFeature({...entry, feature});
   if (shouldFocus) elementById('close-inspector').focus();
