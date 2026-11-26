@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fieldItemLabel, fieldItemProblem, isReferencedObject, newDeletionMark, newNote, referenceTo} from '../src/field-items.js';
-import {layerForSketch, sketchBehaviors, sketchFile, sketchRule} from '../src/layer-sketches.js';
-import {featureProblem} from '../src/layer-rules.js';
+import {fieldItemLabel, fieldItemProblem, isReferencedObject, newDeletionMark, newNote, referenceTo} from '../src/editing/field-items.js';
+import {layerForSketch, sketchBehaviors, sketchFile, sketchRule} from '../src/layers/shared/layer-sketches.js';
+import {featureProblem} from '../src/layers/shared/layer-rules.js';
 
 const building = {
   filename: 'buildings.geojson',

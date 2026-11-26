@@ -9,45 +9,45 @@ import {
   setSatelliteVisible,
   whenMapReady
 } from '@ivanov-gv/map-core';
-import {createActiveLayerCommands} from './active-layer-commands.js';
-import {derivedFacts} from './derived-facts.js';
-import {DraftKeeper} from './draft-keeper.js';
-import {createElementWithText, elementById} from './dom.js';
-import {EditSession} from './edit-session.js';
-import {availableLayers, isLayerObject} from './editor-layers.js';
-import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './field-items.js';
-import {createHandleLayer} from './handle-layer.js';
-import {createJointLayer, jointMinZoom} from './joint-layer.js';
-import {InspectorEditing} from './inspector-editing.js';
-import {installInspectorViewport} from './inspector-viewport.js';
-import {installKeyboardShortcuts, updateShortcutHints} from './keyboard-shortcuts.js';
-import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layer-addresses.js';
-import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layer-behaviors.js';
-import {buildingBehaviors} from './layer-buildings.js';
-import {junctionBehaviors, junctionFile, junctionRule} from './layer-junctions.js';
-import {buildingAt, placeBehaviors} from './layer-places.js';
-import {greenBehaviors} from './layer-green.js';
-import {reliefBehaviors} from './layer-relief.js';
-import {layerJoints, levelFacts, levelsByFile} from './layer-joints.js';
-import {roadBehaviors} from './layer-roads.js';
-import {routeBehaviors} from './layer-routes.js';
-import {settlementBehaviors} from './layer-settlements.js';
-import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layer-sketches.js';
-import {stopBehaviors} from './layer-stops.js';
-import {waterBehaviors} from './layer-water.js';
-import {featureCapabilities, layerLockReason, validateLayerRules} from './layer-rules.js';
-import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers-panel.js';
-import {isMagnetOn} from './magnet-switch.js';
-import {hideModeBar, showModeBar} from './mode-bar.js';
-import {writeNote} from './note-dialog.js';
-import {ObjectList} from './object-list.js';
-import {startOfflineCopy} from './offline-install.js';
-import {ReviewPanel} from './review-panel.js';
-import {loadSourceBundle} from './source-bundle.js';
-import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from './source-overlay.js';
-import {showLevelPicker} from './level-picker.js';
-import {hideToast, showToast} from './toast.js';
-import {WorkingMap} from './working-map.js';
+import {createActiveLayerCommands} from './editing/active-layer-commands.js';
+import {derivedFacts} from './source-data/derived-facts.js';
+import {DraftKeeper} from './editing/draft-keeper.js';
+import {createElementWithText, elementById} from './shared/dom.js';
+import {EditSession} from './editing/edit-session.js';
+import {availableLayers, isLayerObject} from './layers/shared/editor-layers.js';
+import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './editing/field-items.js';
+import {createHandleLayer} from './map-tools/handle-layer.js';
+import {createJointLayer, jointMinZoom} from './layers/shared/joint-layer.js';
+import {InspectorEditing} from './inspector/inspector-editing.js';
+import {installInspectorViewport} from './inspector/inspector-viewport.js';
+import {installKeyboardShortcuts, updateShortcutHints} from './map-tools/keyboard-shortcuts.js';
+import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layers/addresses/layer-addresses.js';
+import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layers/shared/layer-behaviors.js';
+import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
+import {junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
+import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
+import {greenBehaviors} from './layers/green/layer-green.js';
+import {reliefBehaviors} from './layers/relief/layer-relief.js';
+import {layerJoints, levelFacts, levelsByFile} from './layers/shared/layer-joints.js';
+import {roadBehaviors} from './layers/roads/layer-roads.js';
+import {routeBehaviors} from './layers/routes/layer-routes.js';
+import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
+import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
+import {stopBehaviors} from './layers/stops/layer-stops.js';
+import {waterBehaviors} from './layers/water/layer-water.js';
+import {featureCapabilities, layerLockReason, validateLayerRules} from './layers/shared/layer-rules.js';
+import {renderFeatureCounts, renderLayerChoices, renderSourceTable, showActiveLayer} from './layers/shared/layers-panel.js';
+import {isMagnetOn} from './map-tools/magnet-switch.js';
+import {hideModeBar, showModeBar} from './map-tools/mode-bar.js';
+import {writeNote} from './inspector/note-dialog.js';
+import {ObjectList} from './map-tools/object-list.js';
+import {startOfflineCopy} from './offline/offline-install.js';
+import {ReviewPanel} from './editing/review-panel.js';
+import {loadSourceBundle} from './source-data/source-bundle.js';
+import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from './source-data/source-overlay.js';
+import {showLevelPicker} from './layers/roads/level-picker.js';
+import {hideToast, showToast} from './map-tools/toast.js';
+import {WorkingMap} from './map-tools/working-map.js';
 import {
   hideInspector,
   inspectorHasFocus,
@@ -55,7 +55,7 @@ import {
   setPanelOpener,
   showInspector,
   showPanel
-} from './workspace-panels.js';
+} from './app/workspace-panels.js';
 
 registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);

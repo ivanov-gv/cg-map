@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HeadlessEditor, newLocalId} from '../editor-exports.mjs';
-import {behaviorOf} from '../../apps/editor/src/layer-behaviors.js';
-import {disconnectEdits, junctionEdits, splitEdits} from '../../apps/editor/src/road-edits.js';
-import {jointAt} from '../../apps/editor/src/road-graph.js';
-import {sidesOfRidge, slidEnd} from '../../apps/editor/src/ridge-ends.js';
-import {turnKey, turnsAt} from '../../apps/editor/src/road-junctions.js';
+import {behaviorOf} from '../../apps/editor/src/layers/shared/layer-behaviors.js';
+import {disconnectEdits, junctionEdits, splitEdits} from '../../apps/editor/src/layers/roads/road-edits.js';
+import {jointAt} from '../../apps/editor/src/layers/roads/road-graph.js';
+import {sidesOfRidge, slidEnd} from '../../apps/editor/src/layers/relief/ridge-ends.js';
+import {turnKey, turnsAt} from '../../apps/editor/src/layers/roads/road-junctions.js';
 
 const roundDegrees = value => Number(value.toFixed(6));
 const filesOf = operations => [...new Set(operations.map(({filename}) => filename))].toSorted();
