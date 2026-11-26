@@ -30,6 +30,19 @@ it.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 
+## Lint configuration
+
+Migrated projects own `eslint.config.mjs` beside their Makefile or package.json and choose their own file patterns and
+globals; ESLint finds it from the folder the lint command runs in. Their rule sets live in
+[platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`. The
+pre-commit hook uses a staged file's own config when it has one and the root config otherwise;
+[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. The six non-app projects and apps/editor consume
+the shared rules; apps/web and apps/core-demo still use the unchanged root config until their own migration PR. It
+imports ESLint's own presets directly, not the shared module, and some of its app rules may temporarily duplicate future
+shared rules. Those migrations and the later root cleanup bound that transition; the current split is in
+[architecture](docs/system-architecture/architecture.md#independent-projects). See
+[ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md).
+
 ## Code
 
 - Two-space indent, single quotes, semicolons, LF (.editorconfig). Do not reformat code you are not changing.

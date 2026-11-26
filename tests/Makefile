@@ -19,7 +19,7 @@ endif
 verify: lint build-web integration-test
 
 lint:
-	cd $(ROOT) && MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" npx --no-install eslint tests
+	MAP_DATA_ROOT="$(DATA_ROOT)" MAP_CONTRACTS_ROOT="$(CONTRACTS_ROOT)" npx --no-install eslint .
 
 # Integration tests read the built web artifact, a listed contract. That build uses the same data and contracts roots.
 build-web:

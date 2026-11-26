@@ -29,7 +29,8 @@ holds each layer with `layers/shared/` for the registry and shared layer UI, `so
 service-worker scope, and `shared/` holds small DOM and hash helpers. Unit tests go next to their source as `*.test.js`;
 browser cases that need only a component go next to it as `*.browser.test.js` and use the harness in `tests/e2e/support`
 without starting `app.js`. Whole-app journeys live in `e2e/`; tests that span sources stay in `tests/`; tool tests stay
-in `tools/`; `npm test` skips `*.browser.test.js`.
+in `tools/`; `npm test` skips `*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules;
+`npm run lint` covers the source folders, tools, tests, `e2e/`, both app configs and that config itself.
 
 ## Layers
 
