@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {FOLDERS, classify, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
+import {FOLDERS, PROJECT_PIPELINES, classify, discoveredLintConfigs, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -21,6 +21,18 @@ const OUTPUT_NAMES = [
   'prove_cd_test_runs',
   'manual_test_runs'
 ];
+
+// A scratch checkout lets the discovery test own its config set. Adding a real app config must not change this file.
+function configFixture(context, projects) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-lint-configs-'));
+  context.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const project of projects) {
+    const config = path.join(root, project, 'eslint.config.mjs');
+    fs.mkdirSync(path.dirname(config), {recursive: true});
+    fs.writeFileSync(config, 'export default [];\n');
+  }
+  return root;
+}
 
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs']],
@@ -138,7 +150,6 @@ for (const [name, files] of [
   ['an unknown root file', ['.editorconfig']],
   ['the lockfile', ['package-lock.json']],
   ['the Node version', ['.node-version']],
-  ['the lint configuration', ['eslint.config.mjs']],
   ['an unknown file beside known ones', ['docs/README.md', 'brand-new.txt']]
 ]) {
   test(`plan: ${name} selects everything`, () => {
@@ -187,6 +198,68 @@ test('the root Makefile folders match the workflows that call root make', () => 
   // The lint-workflows and act test targets live in the root Makefile too, but no ci-workflows step calls it.
   const expectedFolders = ['workflows', ...callingFolders].sort();
   assert.deepEqual([...classify('Makefile').folders].sort(), expectedFolders);
+});
+
+test('a project lint config selects its own verify', () => {
+  const cases = [
+    ['packages/map-core/eslint.config.mjs', ['map-core']],
+    ['packages/contracts/eslint.config.mjs', ['contracts']],
+    ['data/eslint.config.mjs', ['data']],
+    ['services/transit-relay/eslint.config.mjs', ['transit-relay']],
+    ['platform/eslint.config.mjs', ['platform']],
+    ['tests/eslint.config.mjs', ['tests']]
+  ];
+  for (const [file, folders] of cases) {
+    const plan = planChanges([file]);
+    assert.deepEqual(new Set(plan.folders), new Set(folders), file);
+    assert.equal(plan.areas, undefined, file);
+    assert.equal(plan.everything, false, file);
+    assert.deepEqual(imageMatrix(plan.folders).include, [], `${file} must not publish an app image`);
+  }
+});
+
+test('an app config joins its own pipeline only when that app migrates', () => {
+  const lintConfigFiles = ['apps/web/eslint.config.mjs'];
+  const plan = planChanges(lintConfigFiles, {lintConfigFiles});
+  assert.deepEqual(plan.folders, ['apps-web']);
+  // The app folder calls the whole app workflow, which owns its browser shards; this is not a lint-only selection.
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
+});
+
+test('shared-rule consumers follow scratch configs, including a migrated and an unmigrated app', context => {
+  const root = configFixture(context, ['data', 'apps/web', 'services/transit-relay']);
+  const lintConfigFiles = discoveredLintConfigs(root);
+  assert.deepEqual(
+    new Set(lintConfigFiles),
+    new Set(['data/eslint.config.mjs', 'apps/web/eslint.config.mjs', 'services/transit-relay/eslint.config.mjs'])
+  );
+
+  const plan = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
+  assert.deepEqual(new Set(plan.folders), new Set(['data', 'transit-relay', 'apps-web']));
+  assert.ok(!plan.folders.includes('apps-editor'), 'the unmigrated app stays on the root config');
+  assert.equal(plan.areas, undefined);
+  assert.equal(plan.everything, false);
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
+});
+
+test('a new project config joins the shared-rule consumers without a code change', () => {
+  const lintConfigFiles = ['data/eslint.config.mjs'];
+  const before = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
+  assert.deepEqual(before.folders, ['data']);
+
+  const after = planChanges(['platform/eslint-rules.mjs'], {
+    lintConfigFiles: [...lintConfigFiles, 'platform/eslint.config.mjs']
+  });
+  assert.deepEqual(after.folders, ['platform', 'data']);
+  assert.equal(after.areas, undefined);
+});
+
+test('the root lint config keeps every pipeline while it serves the apps', () => {
+  // The root file owns the apps' lint; a folder selection also calls its browser workflow, so narrowing it here would
+  // hide checks. The final foundation diff does not change this file.
+  const plan = planChanges(['eslint.config.mjs']);
+  assert.deepEqual(plan, {folders: FOLDERS, everything: true});
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}, {app: 'editor'}, {app: 'core-demo'}]);
 });
 
 test('outputs give every folder a value and the selected test runs', () => {
@@ -337,17 +410,7 @@ test('Markdown never selects code checks, wherever it lives, while Go stays inde
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.
 test('make check runs every project, and every project has a pipeline that verifies it', () => {
-  const pipelineByProject = {
-    'packages/map-core': 'map-core',
-    'apps/web': 'apps-web',
-    'apps/editor': 'apps-editor',
-    'apps/core-demo': 'apps-core-demo',
-    data: 'data',
-    'packages/contracts': 'contracts',
-    'services/transit-relay': 'transit-relay',
-    platform: 'platform',
-    tests: 'tests'
-  };
+  const pipelineByProject = PROJECT_PIPELINES;
   // What each project's verify must keep running, so no check can quietly drop out of make check and CI.
   const requiredChecks = {
     'packages/map-core': ['lint', 'test'],

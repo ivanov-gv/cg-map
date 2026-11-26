@@ -22,7 +22,10 @@ bounded step without moving application sources.
 
 ## History
 
-- 2026-11-26: created this plan from the approved step order. Why: the lists/harness step is uncommitted work on
-  `platform/456-web-lists` and its choices need a history beyond issue comments. (#477)
+- 2026-11-26: Stacked this step after its formal `#475` blocker, which added the lint foundation and ADR 0043. The Web
+  decision record moved from 0043 to 0044 and its authored links were updated. Why: the stack keeps decision numbers
+  contiguous and leaves the root-config transition with its owning task. (#477)
 - 2026-11-26: recorded that Web modules and the offline shell are discovered from the build, with a decision record for
   the build-derived inventory. Why: the first step is complete before any source folder moves. (#477)
+- 2026-11-26: created this plan from the approved step order. Why: the lists/harness step is uncommitted work on
+  `platform/456-web-lists` and its choices need a history beyond issue comments. (#477)

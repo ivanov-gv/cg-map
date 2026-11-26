@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {findLogProblems, readLog} from './decision-log.mjs';
 import {unreachableInstructions} from './instruction-reach.mjs';
+import {assertSharedRulesHaveNoProjectFiles} from './shared-rule-boundary.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -41,6 +42,7 @@ for (const file of docs) {
     assert.ok(fs.existsSync(path.resolve(path.dirname(file), target)), `${file}: broken link ${target}`);
   }
 }
+assertSharedRulesHaveNoProjectFiles();
 // Import lists may span lines, so the clause between the keyword and `from` must accept newlines.
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {

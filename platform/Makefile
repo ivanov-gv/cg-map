@@ -4,8 +4,10 @@ ROOT := ..
 
 verify: lint markdown-check repo agents-check build-web test python-test python-check
 
+# The root config stays Platform-owned until the app migrations remove it, so lint it from the root separately.
 lint:
-	cd $(ROOT) && npx --no-install eslint platform eslint.config.mjs
+	npx --no-install eslint .
+	cd $(ROOT) && npx --no-install eslint eslint.config.mjs
 
 markdown-check:
 	cd $(ROOT) && npm run -s lint:md

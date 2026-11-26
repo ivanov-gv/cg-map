@@ -16,3 +16,5 @@ deletes it. Git history keeps deleted plans.
   lists and browser reduction, with the lists/harness step recorded.
 - [Automatic workflow test runs](auto-workflow-test-runs.md): issue #334; planned move from manual test-run evidence to
   reusable CI calls and dispatched CD runs inside `CI gate`.
+- [Project-owned ESLint configuration](project-owned-lint-configuration.md): issue #458; #466 recovered as a shared-rule
+  foundation, with app migrations held for their own PRs.

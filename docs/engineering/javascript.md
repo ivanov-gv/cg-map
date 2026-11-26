@@ -13,7 +13,7 @@ it.
 - A web runtime module may import relative files inside apps/web/src and the published map-core entry; no per-file
   import list is needed. Dynamic `import()` and MapLibre gesture handlers are rejected. The build discovers modules at
   every depth, preserves their paths and derives the offline shell from the built artifact
-  ([ADR 0043](../decisions/0043-build-derived-web-shell.md)); colocated tests, support files, config.json, generated
+  ([ADR 0044](../decisions/0044-build-derived-web-shell.md)); colocated tests, support files, config.json, generated
   manifests and archive/range responses stay out. Playwright discovers browser tests, so no planner entry is needed. Web
   owns these source checks in apps/web/tools/runtime-modules.mjs and its component tests. A web change still selects
   platform: build-web and hosting tests, package pins, Makefiles and dev-site tests read web files until issue #456
@@ -21,6 +21,18 @@ it.
   verify still cover repository layout, data roots and other component boundaries.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
+
+## Lint configuration
+
+Migrated projects own `eslint.config.mjs` beside their Makefile or package.json and choose their own file patterns and
+globals; ESLint finds it from the folder the lint command runs in. Their rule sets live in
+[platform/eslint-rules.mjs](../../platform/eslint-rules.mjs), which names no project file. Enforced:
+`npm run check:repo`. The pre-commit hook uses a staged file's own config when it has one and the root config otherwise;
+[ci-plan](../../platform/tools/ci-plan.mjs)'s tests cover pipeline selection. The apps still use the root config until
+their own migration PR: it imports ESLint's own presets directly, not the shared module, and some of its app rules may
+temporarily duplicate future shared rules. App migrations and the later root cleanup bound that transition; the current
+split is in [architecture](../system-architecture/architecture.md#independent-projects). See
+[ADR 0043](../decisions/0043-project-owned-eslint-configurations.md).
 
 ## Code
 

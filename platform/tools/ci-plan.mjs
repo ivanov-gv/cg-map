@@ -3,6 +3,7 @@
 // Local use: make ci-plan BASE=origin/main. CI use: .github/TESTING.md.
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {formatWorkflowTestRuns, selectWorkflowTestRuns} from './workflow-test-runs.mjs';
 
@@ -22,6 +23,22 @@ export const FOLDERS = [
   'apps-core-demo'
 ];
 
+// CI folders mirror the root Makefile's PROJECTS: apps keep their group prefix, other projects use their last folder.
+// Lint config discovery uses this map, so the planner never needs a second list of projects that lint.
+const makeProjects = fs
+  .readFileSync(new URL('../../Makefile', import.meta.url), 'utf8')
+  .match(/^PROJECTS := (.+)$/m)[1]
+  .split(' ');
+const appsFolderPrefix = 'apps/';
+export const PROJECT_PIPELINES = Object.fromEntries(
+  makeProjects.map(project => [
+    project,
+    project.startsWith(appsFolderPrefix)
+      ? `apps-${project.slice(appsFolderPrefix.length)}`
+      : project.split('/').pop()
+  ])
+);
+
 const EVERYTHING = {folders: FOLDERS};
 // CI calls the root Makefile only through `make verify PKG=<path>` in these folder pipelines and `make check-docs` in
 // ci-docs; the lint-workflows and act test targets live in workflows too. Browser jobs, the backend and the browser image
@@ -39,17 +56,42 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
-// Platform still checks web files: check:repo (allowed imports, dynamic-import ban, gesture guard), build-web and
-// hosting tests, package pins, Makefiles and dev-site tests. Issue #456 moves those checks out of platform.
+// Platform still selects Web files for build-web and hosting tests, package pins, Makefiles and dev-site tests. Issue
+// #456 moved the import, dynamic-import and gesture guards out of check-repo; Web owns those source checks.
 const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
 const HEAD_DATA_CONSUMERS = ['tests'];
+const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
+const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
+// Returns config paths for known projects that have one under root. A missing config leaves that project on the root
+// file and outside the shared-rule consumers; tests use scratch fixtures, not the current checkout's config set.
+export function discoveredLintConfigs(root = process.cwd()) {
+  return Object.keys(PROJECT_PIPELINES)
+    .map(project => `${project}/${ESLINT_CONFIG_NAME}`)
+    .filter(file => fs.existsSync(path.join(root, file)));
+}
+function configPipeline(file, lintConfigs) {
+  if (!file.endsWith(`/${ESLINT_CONFIG_NAME}`)) return '';
+  const project = file.slice(0, -`/${ESLINT_CONFIG_NAME}`.length);
+  return lintConfigs.includes(file) ? PROJECT_PIPELINES[project] ?? '' : '';
+}
+
+// Shared rules select only projects whose config exists in this checkout. An app without a config still uses the root
+// file, so it is not a consumer here; once an app owns a config, its folder joins and its workflow runs its browser suite.
+function toolingPlan(consumers) {
+  const selected = new Set(consumers);
+  return {folders: FOLDERS.filter(folder => selected.has(folder))};
+}
 
 // Returns the folders one changed path needs. Each app owns its whole browser suite in its workflow, so selecting its
 // folder is enough to run it.
-export function classify(file) {
+export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
+  if (file === SHARED_ESLINT_RULES)
+    return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
+  const pipeline = configPipeline(file, lintConfigFiles);
+  if (pipeline) return {folders: [pipeline]};
   const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
   const isMarkdown = file.endsWith('.md') && !isPublishedFile;
   if (isMarkdown || file.startsWith('docs/') || file.startsWith('.markdownlint') || file === '.prettierrc.json')
@@ -103,13 +145,16 @@ export function classify(file) {
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform']};
   if (file.startsWith('platform/')) return {folders: ['platform']};
 
+  // The root eslint.config.mjs still governs every app, so a change to it keeps the whole-plan selection until the
+  // app-owned configs land. Narrowing it now would hide lint checks the apps still run.
   return EVERYTHING;
 }
 
 // An empty list means the diff could not be trusted, so it selects everything too.
-export function planChanges(files) {
+export function planChanges(files, options = {}) {
   if (files.length === 0) return {...EVERYTHING, everything: true};
-  const results = files.map(classify);
+  const lintConfigFiles = options.lintConfigFiles ?? discoveredLintConfigs();
+  const results = files.map(file => classify(file, lintConfigFiles));
   const folders = FOLDERS.filter(folder => results.some(result => result.folders.includes(folder)));
   return {folders, everything: folders.length === FOLDERS.length};
 }
