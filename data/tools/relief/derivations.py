@@ -11,12 +11,14 @@ import unicodedata
 
 import numpy as np
 from contourpy import contour_generator
+from shapely.affinity import affine_transform
 from shapely.geometry import LineString, MultiLineString, Point, Polygon, box, mapping, shape
 from shapely.ops import linemerge, transform, unary_union
 from shapely.prepared import prep
 
 from .terrain import (
     CANYON_BANK_RISE_METRES,
+    CANYON_BANK_SAMPLE_NEARBY_METRES,
     CANYON_RIM_JOIN_GAP_METRES,
     CANYON_RIM_MINIMUM_LENGTH_METRES,
     CANYON_SEARCH_DISTANCE_METRES,
@@ -36,7 +38,7 @@ from .terrain import (
     drop_short_paths,
     is_canyon_bank,
     is_index_level,
-    join_short_gaps,
+    join_short_gap_groups,
     path_length_metres,
     rounded_coordinates,
     separate_line_paths,
@@ -832,31 +834,31 @@ def _segments_from_samples(samples, maximum_gap):
     for run in runs:
         if len(run) < 2:
             continue
-        segments.append((LineString([point for point, _ in run]), max(
-            rise for _, rise in run
-        )))
+        segments.append((LineString([point for point, _ in run]), list(run)))
     return segments
 
 
 def _clean_rim_segments(segments, latitude_metres, longitude_metres):
-    """Join gap speckle into bank lines and remove the short lines left behind."""
+    """Join gap speckle into bank lines, carrying the samples of each joined run."""
     if not segments:
         return []
     paths = [list(segment.coords) for segment, _ in segments]
-    joined_paths = join_short_gaps(
+    groups = join_short_gap_groups(
         paths, CANYON_RIM_JOIN_GAP_METRES, longitude_metres, latitude_metres
     )
-    kept_paths = drop_short_paths(
-        joined_paths, CANYON_RIM_MINIMUM_LENGTH_METRES,
-        longitude_metres, latitude_metres,
-    )
     cleaned = []
-    for path in kept_paths:
-        joined_line = LineString(path)
-        rise = max(
-            rise for segment, rise in segments if joined_line.intersects(segment)
-        )
-        cleaned.append((joined_line, rise))
+    for group in groups:
+        path = [list(point) for index in group for point in paths[index]]
+        if path_length_metres(
+            path, longitude_metres, latitude_metres
+        ) < CANYON_RIM_MINIMUM_LENGTH_METRES:
+            continue
+        bank_samples = [
+            sample
+            for index in group
+            for sample in segments[index][1]
+        ]
+        cleaned.append((LineString(path), bank_samples))
     return cleaned
 
 
@@ -933,7 +935,27 @@ def _metric_length(geometry, latitude_metres, longitude_metres):
     return transform(to_metres, geometry).length
 
 
-def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitude_metres):
+def _rim_height(rises):
+    """Return the median sampled bank rise in whole metres, or None without samples."""
+    if not rises:
+        return None
+    return math.floor(statistics.median(rises) + 0.5)
+
+
+def _nearby_rim_samples(part, dem_segments, latitude_metres, longitude_metres, nearby_metres):
+    """Return the bank samples within a metre reach of this cliff part."""
+    scale = [longitude_metres, 0, 0, latitude_metres, 0, 0]
+    metric_part = affine_transform(part, scale)
+    return [
+        (point, rise)
+        for _, samples in dem_segments
+        for point, rise in samples
+        if metric_part.distance(affine_transform(point, scale)) <= nearby_metres
+    ]
+
+
+def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitude_metres,
+                        dem_segments=()):
     grouped = {}
     for part, cliff in cliff_parts:
         grouped.setdefault(
@@ -960,6 +982,13 @@ def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitud
             }
             if len(ordered_parts) > 1:
                 properties['entityPart'] = index
+            nearby_samples = _nearby_rim_samples(
+                part, dem_segments, latitude_metres, longitude_metres,
+                CANYON_BANK_SAMPLE_NEARBY_METRES,
+            )
+            height = _rim_height([rise for _, rise in nearby_samples])
+            if height is not None:
+                properties['height'] = height
             features.append({
                 'type': 'Feature',
                 'id': entity_id,
@@ -971,12 +1000,12 @@ def _cliff_rim_features(cliff_parts, river_name, bank, latitude_metres, longitud
 
 def _dem_rim_features(segments, river_name, bank, latitude_metres, longitude_metres):
     parts = []
-    for segment, _ in segments:
+    for segment, samples in segments:
         geometry = {
             'type': 'LineString',
             'coordinates': rounded_coordinates(list(segment.coords)),
         }
-        parts.append(({
+        properties = {
             'kind': 'canyon-rim',
             'river': river_name,
             'bank': bank,
@@ -984,7 +1013,11 @@ def _dem_rim_features(segments, river_name, bank, latitude_metres, longitude_met
             'lengthMetres': round(
                 _metric_length(segment, latitude_metres, longitude_metres)
             ),
-        }, geometry))
+        }
+        height = _rim_height([rise for _, rise in samples])
+        if height is not None:
+            properties['height'] = height
+        parts.append((properties, geometry))
     if not parts:
         return []
     return derived_parts(f'canyon-rim-{entity_slug(river_name)}-{bank}', parts)
@@ -1053,17 +1086,18 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
             rim_geometry = unary_union([line for line, _ in dem_segments]) if dem_segments else LineString()
             cliff_parts = _qualifying_cliff_parts(
                 cliffs, lines, bank, detail_bounds, latitude_metres, longitude_metres,
-                rim_geometry, CANYON_SEARCH_DISTANCE_METRES / 2,
+                rim_geometry, CANYON_BANK_SAMPLE_NEARBY_METRES,
             )
             cliff_parts = [
                 (_with_water_on_right(part, lines, bank), cliff) for part, cliff in cliff_parts
             ]
             dem_segments = [
-                (_with_water_on_right(segment, lines, bank), rise)
-                for segment, rise in dem_segments
+                (_with_water_on_right(segment, lines, bank), samples)
+                for segment, samples in dem_segments
             ]
             cliff_features = _cliff_rim_features(
-                cliff_parts, river_name, bank, latitude_metres, longitude_metres
+                cliff_parts, river_name, bank, latitude_metres, longitude_metres,
+                dem_segments,
             )
             dem_features = _dem_rim_features(
                 dem_segments, river_name, bank, latitude_metres, longitude_metres
@@ -1082,6 +1116,8 @@ def build_canyon_rims(model, water, cliffs, detail_bounds,
         'searchStepMetres': CANYON_SEARCH_STEP_METRES,
         'joinGapMetres': CANYON_RIM_JOIN_GAP_METRES,
         'minimumSegmentLengthMetres': CANYON_RIM_MINIMUM_LENGTH_METRES,
+        'heightStatistic': 'median of sampled bank rise',
+        'heightRounding': 'nearest metre, halves upward',
         'geometry': 'OSM cliff segments keep way identity; DEM canyon banks are derived parts',
     }
     return features, report

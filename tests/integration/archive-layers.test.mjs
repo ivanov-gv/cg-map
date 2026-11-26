@@ -116,3 +116,13 @@ test('archive metadata advertises the shared maximum zoom for every layer', asyn
     assert.equal(entry.maxzoom, MAX_TILE_ZOOM, layer.name);
   }
 });
+
+test('archive canyon rims carry a whole-metre height when one is published', async () => {
+  const rims = TILE_LAYERS.find(({name}) => name === 'canyon_rims');
+  const atMinZoom = await decodedTile(rims.minZoom);
+  const features = layerFeatures(atMinZoom, 'canyon_rims');
+  assert.ok(features.length > 0, 'the sampled tile contains a canyon rim');
+  const heights = features.map(feature => feature.properties.height).filter(height => height !== undefined);
+  assert.ok(heights.length > 0, 'the sampled tile contains a measured rim');
+  assert.ok(heights.every(Number.isInteger), 'every published height is a whole number of metres');
+});
