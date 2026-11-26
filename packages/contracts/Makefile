@@ -6,7 +6,7 @@ ROOT := ../..
 verify: lint test
 
 lint:
-	npx --no-install eslint tests
+	npx --no-install eslint tests eslint.config.mjs
 
 test:
 	node --test tests/*.test.mjs

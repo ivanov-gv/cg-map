@@ -17,16 +17,13 @@ export function projectFolder(file) {
   return rootFolder;
 }
 
-function configPath(project) {
-  return project === rootFolder ? configFileName : `${project}/${configFileName}`;
-}
-
 // Files in a project without a config keep their repository paths, because ESLint finds the root config from there.
 export function lintGroups(files, configExists = file => fs.existsSync(file)) {
   const groups = new Map();
   for (const file of files) {
     const project = projectFolder(file);
-    const hasOwnConfig = configExists(configPath(project));
+    const projectConfigPath = project === rootFolder ? configFileName : `${project}/${configFileName}`;
+    const hasOwnConfig = configExists(projectConfigPath);
     const folder = hasOwnConfig ? project : rootFolder;
     const group = groups.get(folder) ?? {cwd: folder, files: []};
     const isInsideProject = hasOwnConfig && project !== rootFolder;

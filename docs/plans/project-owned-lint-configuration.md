@@ -20,11 +20,15 @@ configs land now, while the root config keeps serving the three apps.
 
 ## History
 
+- 2026-11-26: Compliance review restored lint coverage of the root config and every migrated project config, replaced
+  the one-use configPath helper with a local path, ordered this History newest first, and proved the shared-rule guard
+  test catches a disabled guard on a scratch copy. Effective-rule equivalence was already proved for linted files; this
+  change is about which files the owning commands enumerate. (#475)
+- 2026-11-26: Lead review corrected the transitional dependency: the root config imports ESLint's own presets, not the
+  shared module, and its app rules may duplicate future shared rules until app migrations and root cleanup. It also
+  moved consumer discovery tests to scratch fixtures and took synthetic regex probes out of production tooling. (#475)
 - 2026-11-26: #475 restores the root config and Platform's root-config readability test, keeps PR #466's shared rules,
   non-app configs and Makefiles, and adds pre-commit fallback with focused tests. Why: the owner asked for a foundation
   that touches no app and for no weakening of CI selection. (#475)
 - 2026-11-26: PR #466's review proposed a stack: shared tooling first, then one PR per app, then root-config removal.
   The owner allowed one PR for the projects without browser suites and kept the CI time budget unchanged. (#466, #475)
-- 2026-11-26: Lead review corrected the transitional dependency: the root config imports ESLint's own presets, not the
-  shared module, and its app rules may duplicate future shared rules until app migrations and root cleanup. It also
-  moved consumer discovery tests to scratch fixtures and took synthetic regex probes out of production tooling. (#475)

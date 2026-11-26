@@ -6,7 +6,7 @@ PYTHON ?= python3
 verify: lint check test python-test python-check check-topology
 
 lint:
-	npx --no-install eslint tools tests
+	npx --no-install eslint tools tests eslint.config.mjs
 
 check:
 	npm run -s check
