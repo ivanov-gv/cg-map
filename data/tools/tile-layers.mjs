@@ -73,8 +73,8 @@ export const TILE_LAYERS = [
     name: 'railways',
     sourceFile: 'railways.geojson',
     minZoom: 12,
-    // kind separates tracks, platforms and stations; names label stations and halts.
-    fields: ['kind', 'name']
+    // kind separates tracks, platforms and stations; names label them, and ref carries an OSM reference where mapped.
+    fields: ['kind', 'name', 'name:en', 'ref']
   },
   {
     name: 'buildings',

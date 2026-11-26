@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23787871,
+    "bytes": 23790824,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -85,10 +85,10 @@
       "railways": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 52455,
-          "9-12": 5918
+          "13-16": 56448,
+          "9-12": 6193
         },
-        "bytes": 58373
+        "bytes": 62641
       },
       "ridges": {
         "byZoomBand": {
@@ -147,8 +147,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-aa141be49e76604f.pmtiles",
-    "sha256": "aa141be49e76604f4ccff9e992d504acde9f76f991981a9139813345488ea9ce",
+    "file": "montenegro-0c9a48b0c92da130.pmtiles",
+    "sha256": "0c9a48b0c92da1308a41a35fc131a0bac492ec4fc772c4089e859ed547927710",
     "tiles": 229422
   },
   "bridge_counts": {
@@ -359,7 +359,7 @@
       "canyonRimHeightRounding": "nearest metre, halves upward",
       "canyonRimHeightStatistic": "median of sampled bank rise",
       "canyonRimJoinGapMetres": 60,
-      "canyonRimMinimumBankRiseMetres": 8.0,
+      "canyonRimMinimumBankRiseMetres": 8,
       "canyonRimMinimumLengthMetres": 100,
       "canyonRimSearchDistanceMetres": 60,
       "canyonRimSearchStepMetres": 10,
@@ -388,7 +388,7 @@
       ],
       "minimumAreaSquareMetres": 2500,
       "ridgeMinimumLengthMetres": 100,
-      "ridgeSimplificationToleranceDegrees": 1e-05,
+      "ridgeSimplificationToleranceDegrees": 0.00001,
       "summitLinkDistanceMetres": 50
     },
     "detailBounds": [
