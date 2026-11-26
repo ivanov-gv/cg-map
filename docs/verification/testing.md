@@ -157,7 +157,7 @@ every web area, because every browser test boots them.
 The editor takes a different approach: it owns its browser suite and the count in
 [browser-jobs.json](../../apps/editor/browser-jobs.json). The [editor instructions](../../apps/editor/AGENTS.md) hold
 its proof rule; [workflow testing](../../.github/TESTING.md#on-github) says when CI uses the count or a smoke proof; and
-[ADR 0040](../decisions/0040-app-owned-browser-shards.md) records why the app owns the split.
+[ADR 0041](../decisions/0041-app-owned-browser-shards.md) records why the app owns the split.
 
 ## Monorepo verification — 2026-10-18
 

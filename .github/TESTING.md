@@ -248,7 +248,7 @@ The gate's planner selects the workflows a change touches and the gate proves th
   app-owned count: every shard runs for an editor change. Only the separate editor test call uses the one-shard proof.
   The count lives in [browser-jobs.json](../apps/editor/browser-jobs.json), with the proof rule in
   [apps/editor/AGENTS.md](../apps/editor/AGENTS.md) and the reason in
-  [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). An in-place `ci-workflows` call with no changed CD
+  [ADR 0041](../docs/decisions/0041-app-owned-browser-shards.md). An in-place `ci-workflows` call with no changed CD
   workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a test run. A
   shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
