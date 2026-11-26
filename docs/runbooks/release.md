@@ -43,6 +43,10 @@ Contracts follow the same dependency modes as data:
 - **Future app production release:** every dependency, contracts included, will be pinned. No app production release
   exists yet, so this is a rule for future CD rather than a current command.
 
+apps/editor's core follows the same split through `tools/core-root.mjs`: non-release builds use this commit's
+`packages/map-core`, while `make -C apps/editor build-release` and automated tests use the exact `@ivanov-gv/map-core`
+pin. The release build refuses another core root ([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
+
 Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
 installs that package and points the shared integration helper at it. See
 [Releasing map-contracts](#releasing-map-contracts).
@@ -195,15 +199,16 @@ browser jobs in one PR.
 
 ## Upgrading an app to a new core
 
-web and editor each pin an exact version, and upgrade in their own change. That changes package-lock.json, so its PR
-runs every pipeline:
+web pins an exact version for every build. apps/editor pins one for release builds and automated tests; its dev builds,
+CI artifacts and dev Pages site take the core of their own commit. Each app upgrades in its own change, which changes
+package-lock.json and runs every pipeline:
 
 ```sh
 npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
 ```
 
-To try a release candidate, do the same with its version in a branch. A bad core merge cannot reach these apps: going
-back means pinning the older version.
+To try a release candidate, do the same with its version in a branch. A bad core merge reaches the editor's dev artifact
+but not its release or tests, and never web: going back means pinning the older version.
 
 ## Offline app updates
 
