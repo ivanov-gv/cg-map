@@ -68,7 +68,8 @@ export function usualValuesOf(filename, feature, context) {
 }
 
 // What is different for nearly every object, so that a list would only be in the way: names, contacts, numbers of houses
-// and entrances, links to other works, and heights. Road numbers repeat, so roads keep their list.
+// and entrances, links to other works, and heights. A name is typed unless its file lists usual values, which is why
+// road numbers keep their list.
 const typedNames = new Set([
   'name',
   'name:en',
