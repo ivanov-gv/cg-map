@@ -1,7 +1,15 @@
 # Internal layer editor
 
-A separately built real-map source editor, using the published `@ivanov-gv/map-core` package, like the public app. It
-changes nothing by itself: edits stay in the browser until exported as a changeset for the data-owned importer.
+A separately built real-map source editor on `@ivanov-gv/map-core`, like the public app. Non-release builds bundle the
+core of this commit; a release bundles the exact pinned version. It changes nothing by itself: edits stay in the browser
+until exported as a changeset for the data-owned importer.
+
+## Build inputs
+
+`build`, `dev`, `lan`, the CI artifact and the dev Pages site take core, data and contracts from the checked-out commit.
+`make -C apps/editor build-release` takes the exact versions pinned in `package.json` and refuses any other core.
+Automated tests and the browser suite keep their pins, so a change in core cannot change a test without a pin bump
+([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
 
 Run `make -C apps/editor dev` and open the printed local URL. The standalone artifact is `dist/editor`; it is never
 included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.io/cg-map/editor/), which is the simplest

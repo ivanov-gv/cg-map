@@ -9,25 +9,25 @@ Each project stands on its own: its own Makefile, build, run, lint and tests, it
 pipeline. A change to one project runs only that project's pipeline, plus those of projects that consume a contract it
 changed.
 
-| Project                | Own Makefile targets              | CI pipeline       |
-| ---------------------- | --------------------------------- | ----------------- |
-| apps/web               | verify, build, dev, dev-mock, e2e | ci-apps-web       |
-| apps/editor            | verify, build, dev, e2e           | ci-apps-editor    |
-| apps/core-demo         | verify, build, dev, e2e           | ci-apps-core-demo |
-| packages/map-core      | verify                            | ci-map-core       |
-| packages/contracts     | verify                            | ci-contracts      |
-| data                   | verify, check, build-data         | ci-data           |
-| services/backend       | verify, check, build, generate    | ci-backend        |
-| services/transit-relay | verify                            | ci-transit-relay  |
-| platform               | verify, agent-rules, worktree     | ci-platform       |
-| tests                  | verify                            | ci-tests          |
+| Project                | Own Makefile targets                   | CI pipeline       |
+| ---------------------- | -------------------------------------- | ----------------- |
+| apps/web               | verify, build, dev, dev-mock, e2e      | ci-apps-web       |
+| apps/editor            | verify, build, build-release, dev, e2e | ci-apps-editor    |
+| apps/core-demo         | verify, build, dev, e2e                | ci-apps-core-demo |
+| packages/map-core      | verify                                 | ci-map-core       |
+| packages/contracts     | verify                                 | ci-contracts      |
+| data                   | verify, check, build-data              | ci-data           |
+| services/backend       | verify, check, build, generate         | ci-backend        |
+| services/transit-relay | verify                                 | ci-transit-relay  |
+| platform               | verify, agent-rules, worktree          | ci-platform       |
+| tests                  | verify                                 | ci-tests          |
 
 Projects depend on each other only through these concrete contracts:
 
 | Contract                                       | Producer           | Consumers                                                                                                                    |
 | ---------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                                   |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                               |
+| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web; release builds and automated tests of apps/editor, at a pinned version                                             |
+| Local map-core, unreleased                     | packages/map-core  | apps/core-demo and non-release builds of apps/editor                                                                         |
 | Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                           |
 | Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                           |
 | Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                     |
@@ -75,6 +75,14 @@ Rules:
   migration and later root cleanup remove that duplication. It is repository tooling like the ESLint binary and its
   plugins, not runtime data; a pinned package would need a release for each rule change. Owner approval for this narrow
   exception is requested in the #458 PR ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
+
+### Core modes
+
+apps/editor bundles the core of its own commit in every build that is not a release: `build`, `dev`, `lan`, CI artifacts
+and the dev Pages site. One resolver, `tools/core-root.mjs`, defaults to repository `packages/map-core` and honours
+`MAP_CORE_ROOT`. `build-release` sets that root from `tests/pinned-core.mjs`, so the artifact carries exactly the pinned
+`@ivanov-gv/map-core` and a release refuses any other root. Editor unit and browser tests also use the pin; apps/web
+still consumes a pinned core. See [ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md).
 
 ### Map data modes
 

@@ -2,11 +2,13 @@ import {defineConfig} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {pinnedContractsRoot} from './tests/pinned-contracts.mjs';
+import {pinnedCoreRoot} from './tests/pinned-core.mjs';
 import {pinnedDataRoot} from './tests/pinned-data.mjs';
 
-// The browser suite's build reads data and contracts through these roots unless a caller already chose one.
+// The browser suite's build reads core, data and contracts through these roots unless a caller already chose one.
 process.env.MAP_DATA_ROOT ??= pinnedDataRoot;
 process.env.MAP_CONTRACTS_ROOT ??= pinnedContractsRoot;
+process.env.MAP_CORE_ROOT ??= pinnedCoreRoot;
 const applicationRoot = fileURLToPath(new URL('.', import.meta.url));
 const portTool = fileURLToPath(new URL('../../platform/tools/dev-port.mjs', import.meta.url));
 const serverTool = fileURLToPath(new URL('../../platform/tools/serve.py', import.meta.url));

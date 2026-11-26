@@ -2,14 +2,14 @@
 import fileSystem from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {copyMapCore, copyRuntimeAssets} from '@ivanov-gv/map-core/tools/assemble.mjs';
 import {resolveContractsRoot} from './contracts-root.mjs';
+import {importCoreModule, resolveCoreRoot} from './core-root.mjs';
 import {writeOfflineManifest} from './offline-manifest.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../../../dist/editor/', import.meta.url));
-// Dev builds use HEAD; a future app production release pins every dependency. Test targets set both roots to the pinned
-// data and contracts packages.
+// A build that is not a release takes core, data and contracts from its own commit. Test targets and a release use the
+// pins this app declares; EDITOR_RELEASE marks the release invocation so another core cannot be substituted.
 function resolveDataRoot(defaultRoot) {
   if ('MAP_DATA_ROOT' in process.env && !process.env.MAP_DATA_ROOT) {
     throw new Error('MAP_DATA_ROOT is set but empty; test targets must resolve the pinned @ivanov-gv/map-data package');
@@ -19,6 +19,9 @@ function resolveDataRoot(defaultRoot) {
 
 const dataRoot = resolveDataRoot(path.join(repositoryRoot, 'data'));
 const contractsRoot = resolveContractsRoot();
+const releaseBuild = process.env.EDITOR_RELEASE === '1';
+const coreRoot = resolveCoreRoot({release: releaseBuild});
+const {copyMapCore, copyRuntimeAssets} = await importCoreModule('tools/assemble.mjs', coreRoot);
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const editorBundleURL = pathToFileURL(path.join(dataRoot, 'tools/editor-bundle.mjs')).href;
 const {copyMapData, readVerifiedRelease} = await import(dataToolsURL);
@@ -79,4 +82,4 @@ fileSystem.copyFileSync(
 // Last, because the manifest hashes every other file in the artifact.
 const {release} = readVerifiedRelease(dataRoot);
 const offlineRelease = writeOfflineManifest(outputDirectory, `data/${release.archive.file}`);
-console.log(`Built dist/editor/ (release ${offlineRelease})`);
+console.log(`Built dist/editor/ (release ${offlineRelease}; core from ${coreRoot})`);
