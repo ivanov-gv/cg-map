@@ -22,13 +22,19 @@ import {InspectorEditing} from './inspector/inspector-editing.js';
 import {installInspectorViewport} from './inspector/inspector-viewport.js';
 import {installKeyboardShortcuts, updateShortcutHints} from './map-tools/keyboard-shortcuts.js';
 import {addressBehaviors, gapBehaviors, layerFilters, nearestGap} from './layers/addresses/layer-addresses.js';
-import {behaviorOf, drawChoicesOf, newFeatureFields, registerBehaviors} from './layers/shared/layer-behaviors.js';
+import {
+  behaviorOf,
+  createBehaviorContext,
+  drawChoicesOf,
+  newFeatureFields,
+  registerBehaviors
+} from './layers/shared/layer-behaviors.js';
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
-import {junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
+import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
-import {layerJoints, levelFacts, levelsByFile} from './layers/shared/layer-joints.js';
+import {entryOnShownLevel, jointOnShownLevel, layerJoints, levelFacts} from './layers/shared/layer-joints.js';
 import {roadBehaviors} from './layers/roads/layer-roads.js';
 import {routeBehaviors} from './layers/routes/layer-routes.js';
 import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
@@ -165,7 +171,7 @@ const entriesOf = filename => (sources.has(filename) ? session.workingEntries(fi
 
 // What a layer's behavior may read, never a way around the commands.
 function behaviorContext() {
-  return {
+  return createBehaviorContext({
     session,
     rules,
     levels,
@@ -174,10 +180,6 @@ function behaviorContext() {
     isPhone: () => phoneLayout.matches,
     isMagnetOn,
     entriesOf,
-    findEntity: (filename, entityId) =>
-      behaviorContext()
-        .entriesOf(filename)
-        .find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
     // The one level of the road graph that is shown, or null for all.
     shownLevel: () => shownLevel,
     select: entry => selectObject(entry, true),
@@ -187,7 +189,7 @@ function behaviorContext() {
     saveSketch,
     showPath: (coordinates, colour) => overlay.setPath(coordinates, colour),
     showNextGap
-  };
+  });
 }
 
 function appendProperty(name, value) {
@@ -333,11 +335,8 @@ function renderJoints() {
     jointLayer.show([]);
     return;
   }
-  // Where a road of the level goes on to another level is one of its connections.
-  const isOfShownLevel = ({entry}) => levelsByFile[entry.filename](entry.feature).includes(shownLevel);
-  const hasShownLevel = ({members, level}) =>
-    shownLevel === null || (members ? members.some(isOfShownLevel) : level === shownLevel);
-  jointLayer.show(jointsOfLayer.joints(viewBounds(), behaviorContext()).filter(hasShownLevel));
+  jointLayer
+    .show(jointsOfLayer.joints(viewBounds(), behaviorContext()).filter(joint => jointOnShownLevel(joint, shownLevel)));
 }
 
 // The levels in the view, and always the shown one, so that it can be left.
@@ -700,12 +699,10 @@ function selectableLayerIds() {
   return [...workingMap.layerIds, ...overlay.inspectionLayerIds, ...(areGuidesVisible ? overlay.layerIds : [])];
 }
 
-// With one level shown, what fades behind it is not picked.
-const isOnShownLevel = ({filename, feature}) =>
-  shownLevel === null || (levelsByFile[filename]?.(feature).includes(shownLevel) ?? true);
-
 const pickableEntries = hits =>
-  sourceEntriesForHits(hits, activeEntries).filter(entry => isPickable(entry) && isOnShownLevel(entry));
+  sourceEntriesForHits(hits, activeEntries).filter(
+    entry => isPickable(entry) && entryOnShownLevel(entry, shownLevel)
+  );
 
 // Rendered hits limit the directory to visible objects in the current map view. Objects without geometry have no place
 // on the map, so they are always listed.
@@ -729,8 +726,7 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const isDerived = entry.filename === junctionFile;
-  const feature = isDerived ? entry.feature : session.workingFeature(entry.filename, entry.key);
+  const feature = featureForEntry(entry, session);
   if (!feature) return false;
   showFeature({...entry, feature});
   if (shouldFocus) elementById('close-inspector').focus();

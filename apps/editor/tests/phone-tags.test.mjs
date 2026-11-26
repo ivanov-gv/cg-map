@@ -8,12 +8,25 @@ import {untaggedPhoneTests} from '../../../platform/tools/phone-tags.mjs';
 const NEUTRAL_HELPERS = new Set(['closeCard']);
 
 test('a phone-dependent editor test is tagged, or a PR would not run it there', () => {
-  const directory = path.resolve(import.meta.dirname, 'e2e');
-  const names = fs.readdirSync(directory);
-  const read = name => fs.readFileSync(path.join(directory, name), 'utf8');
-  const helpers = names.filter(name => name.endsWith('.mjs') && !name.endsWith('.spec.mjs')).map(read);
-  for (const spec of names.filter(name => name.endsWith('.spec.mjs'))) {
-    assert.deepEqual(untaggedPhoneTests(read(spec), helpers, NEUTRAL_HELPERS), [], spec);
+  const filesUnder = (directory, suffix) =>
+    fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
+      const filePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) return filesUnder(filePath, suffix);
+      return entry.name.endsWith(suffix) ? [{filePath, text: fs.readFileSync(filePath, 'utf8')}] : [];
+    });
+  const testDirectory = path.resolve(import.meta.dirname, 'e2e');
+  const journeyDirectory = path.resolve(import.meta.dirname, '../e2e');
+  const sourceDirectory = path.resolve(import.meta.dirname, '../src');
+  const helpers = filesUnder(testDirectory, '.mjs')
+    .filter(({filePath}) => !filePath.endsWith('.spec.mjs'))
+    .map(({text}) => text);
+  const specs = [
+    ...filesUnder(testDirectory, '.spec.mjs'),
+    ...filesUnder(journeyDirectory, '.spec.js'),
+    ...filesUnder(sourceDirectory, '.browser.test.js')
+  ];
+  for (const {filePath, text} of specs) {
+    assert.deepEqual(untaggedPhoneTests(text, helpers, NEUTRAL_HELPERS), [], filePath);
   }
 });
 

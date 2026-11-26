@@ -12,5 +12,7 @@ deletes it. Git history keeps deleted plans.
 - [Editable layers](editable-layers.md): Epic #404. Every layer of the map editable, as nine stacked Features.
 - [Faster browser tests](faster-browser-tests.md): CI jobs are split to fit their limit; the remaining steps towards a
   5-minute full suite locally.
+- [Editor roads component tests](editor-roads-component-tests.md): issue #476; colocated browser cases for roads and
+  junctions, with one whole-app journey retained.
 - [Automatic workflow test runs](auto-workflow-test-runs.md): issue #334; planned move from manual test-run evidence to
   reusable CI calls and dispatched CD runs inside `CI gate`.

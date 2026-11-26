@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "eslint src tools tests playwright.config.mjs",
+    "lint": "eslint src tools tests e2e playwright.config.mjs",
     "test": "node --test $(find src tests tools \\( -name '*.test.js' ! -name '*.browser.test.js' -o -name '*.test.mjs' \\) | sort)",
     "build": "node tools/build.mjs",
     "pretest:e2e": "MAP_DATA_ROOT=\"$(node tests/pinned-data.mjs)\" MAP_CONTRACTS_ROOT=\"$(node tests/pinned-contracts.mjs)\" npm run build",
