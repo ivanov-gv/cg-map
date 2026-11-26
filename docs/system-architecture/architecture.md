@@ -55,7 +55,9 @@ Rules:
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules and readability probe
   ([ADR 0040](../decisions/0040-project-owned-eslint-configurations.md)) are development dependencies recorded above;
-  the planner selects the projects that consume each, and no browser areas, when either changes.
+  the planner selects the projects that consume each, and no browser areas, when either changes. A root
+  `eslint.config.mjs`, added, changed or deleted, has that same selection: lint configuration can change what every
+  project's lint finds, never what a browser does.
 - A project's tests read only its own files or an exact published version of another project, never another project's
   HEAD. A change in one project never requires test changes in another. For example, app and platform hosting tests pin
   `@ivanov-gv/map-data`; app, map-core and backend contract reads in tests pin `@ivanov-gv/map-contracts`. App dev

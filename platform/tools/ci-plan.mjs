@@ -391,8 +391,9 @@ function toolingPlan(consumers) {
 }
 
 export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
-  // Both shared modules are consumed by every project that lints; their configs supply the selection. No browser area.
-  if (file === SHARED_ESLINT_RULES || file === READABILITY_PROBE)
+  // The shared modules and a root config, added, changed or deleted, are lint configuration: they select every project
+  // that lints through its config, never a browser area.
+  if (file === SHARED_ESLINT_RULES || file === READABILITY_PROBE || file === ESLINT_CONFIG_NAME)
     return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
   const pipeline = configPipeline(file, lintConfigFiles);
   if (pipeline) {

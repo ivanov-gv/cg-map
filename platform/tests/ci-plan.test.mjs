@@ -149,7 +149,6 @@ for (const [name, files] of [
   ['an unknown root file', ['.editorconfig']],
   ['the lockfile', ['package-lock.json']],
   ['the Node version', ['.node-version']],
-  ['a removed root lint configuration', ['eslint.config.mjs']],
   ['an unknown file beside known ones', ['docs/README.md', 'brand-new.txt']]
 ]) {
   test(`plan: ${name} selects everything`, () => {
@@ -243,6 +242,15 @@ test('the probe selects the same projects as the shared rules', () => {
   assert.deepEqual(probe.areas, []);
   assert.deepEqual(probe.editorAreas, []);
   assert.equal(probe.everything, false);
+});
+
+test('a root lint config selects the projects that lint, like the shared rules', () => {
+  const rules = planChanges(['platform/eslint-rules.mjs']);
+  const rootConfig = planChanges(['eslint.config.mjs']);
+  assert.deepEqual(rootConfig.folders, rules.folders);
+  assert.deepEqual(rootConfig.areas, []);
+  assert.deepEqual(rootConfig.editorAreas, []);
+  assert.equal(rootConfig.everything, false);
 });
 
 test('Editor and core-demo lint configs keep their existing selection', () => {
