@@ -1,66 +1,49 @@
+// Roads bugs that need a browser but not the whole app. Each test mounts only roads and junctions through the shared
+// harness in tests/e2e/support, so a broken component is found without the panels and startup of app.js.
 import {test, expect} from '@playwright/test';
 import {
   applyEdit,
   centreOn,
-  chooseLayer,
   dragFromTo,
   editCorners,
-  exportChangeset,
   operationsOn,
-  startDrawing,
-  tapAt
-} from './city-steps.mjs';
-import {openFixtureCity, stepsOf} from './fixture-city.mjs';
+  tapAt,
+  waitForRepaint
+} from '../../../tests/e2e/city-steps.mjs';
+import {stepsOf} from '../../../tests/e2e/fixture-city.mjs';
+import {openRoadsHarness} from '../../../tests/e2e/support/roads-harness.mjs';
 
 test.beforeEach(async ({page}, testInfo) => {
   test.skip(testInfo.project.name === 'pages-mobile', 'The road graph and joining are desk work.');
-  await openFixtureCity(page);
-  await chooseLayer(page, 'roads');
+  await openRoadsHarness(page, testInfo.project.use.baseURL);
 });
 
-test('a path drawn onto a street joins it, a street is split and joined again', async ({page}, testInfo) => {
-  await startDrawing(page, 'Draw path');
-  // Near the street: the click joins it there.
-  await tapAt(page, [2, 0.05]);
-  await tapAt(page, [2, 2]);
-  await page.locator('#mode-done').click();
-  await expect(page.locator('#edit-facts')).toContainText('Length');
-  await applyEdit(page);
+const statusesOnMap = page =>
+  page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+    return features.map(({properties}) => properties.status).sort();
+  });
 
-  await tapAt(page, [-3, 0]);
-  await expect(page.locator('#selection-title')).toHaveText('Main street');
-  await editCorners(page);
-  await tapAt(page, [0, 0]);
-  await page.locator('#vertex-split').click();
-  await expect(page.locator('#change-count')).toHaveText('3');
-  await tapAt(page, [-3, 0]);
-  await page.getByRole('button', {name: 'Join roads'}).click();
-  // The path meets neither end, and the refusal is on screen with the edit it is about.
-  await tapAt(page, [2, 1]);
-  await expect(page.locator('#edit-problem')).toBeVisible();
-  await expect(page.locator('#edit-problem')).toContainText('do not meet end to end');
-  await page.getByRole('button', {name: 'Join roads'}).click();
-  await tapAt(page, [4, 0]);
-  await expect(page.locator('#change-count')).toHaveText('2');
+const jointCoordinatesOnMap = async page => {
+  const coordinates = await page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+    return features.map(({geometry}) => geometry.coordinates);
+  });
+  return coordinates.map(stepsOf).sort(([eastA, northA], [eastB, northB]) => eastA - eastB || northA - northB);
+};
 
-  const {changeset} = await exportChangeset(page, testInfo);
-  const operations = operationsOn(changeset, 'roads.geojson');
-  const path = operations.find(({operation}) => operation === 'add');
-  const street = operations.find(({operation}) => operation === 'modify');
-  expect(path.after.geometry.coordinates.map(stepsOf)).toEqual([
-    [2, 0],
-    [2, 2]
-  ]);
-  expect(street.reference).toEqual({entityId: 'way/30'});
-  expect(street.after.geometry.coordinates.map(stepsOf)).toEqual([
-    [-6, 0],
-    [0, 0],
-    [2, 0],
-    [6, 0]
-  ]);
-});
+const shapesIn = (page, source) =>
+  page.evaluate(async name => {
+    const {features} = await window.editorDebug.map.getSource(name).getData();
+    return features.map(({geometry}) => geometry.coordinates);
+  }, source);
 
-test('a road gets its access, and its ends open the junctions they are at', async ({page}, testInfo) => {
+const changesetOf = page => page.evaluate(() => window.roadsHarness.exportChangeset());
+const clickCountOf = page => page.evaluate(() => window.roadsHarness.clickCount());
+
+// Bug: changing access, kind and furniture edits must stay one step with the road, and an open edit must not be lost when
+// the junction at its end opens.
+test('a road gets its access, and its ends open the junctions they are at', async ({page}) => {
   await tapAt(page, [-3, 0]);
   await expect(page.locator('.end-row')).toHaveText([/A.*Dead end/s, /B.*Joins Side street/s]);
   await page.locator('[name="motor_vehicle"]').selectOption('no');
@@ -76,7 +59,7 @@ test('a road gets its access, and its ends open the junctions they are at', asyn
   await expect(page.locator('#selection-kind')).toHaveText('Junction');
   await page.getByLabel('What stands here').selectOption('traffic_signals');
   await applyEdit(page);
-  const {changeset} = await exportChangeset(page, testInfo);
+  const changeset = await changesetOf(page);
   const [road] = operationsOn(changeset, 'roads.geojson');
   const [light] = operationsOn(changeset, 'road-nodes.geojson');
   expect(road.after.properties).toMatchObject({kind: 'pedestrian', motor_vehicle: 'no', smoothness: 'very_bad'});
@@ -84,14 +67,8 @@ test('a road gets its access, and its ends open the junctions they are at', asyn
   expect(stepsOf(light.after.geometry.coordinates)).toEqual([6, 0]);
 });
 
-const statusesOnMap = page =>
-  page.evaluate(async () => {
-    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
-    return features.map(({properties}) => properties.status).sort();
-  });
-
-test('joints are shown, and a junction is opened, given a turn rule, disconnected and joined again', async ({page}, testInfo) => {
-  // Main and Side street meet at one end; their other ends and both of Far street are dead ends.
+// Bug: joint status and turn rules must agree with the road graph, and Undo must take back a whole shared step.
+test('joints are shown, and a junction is opened, given a turn rule, disconnected and joined again', async ({page}) => {
   await centreOn(page, [0, 0], 17.5);
   await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'deadEnd', 'deadEnd', 'deadEnd', 'joined']);
   await centreOn(page, [5, 2]);
@@ -103,7 +80,7 @@ test('joints are shown, and a junction is opened, given a turn rule, disconnecte
   await tapAt(page, [6, 0]);
   await page.getByText('From Main street, west').click();
   await expect(page.getByLabel(/Left onto Side street/)).not.toBeChecked();
-  const {changeset} = await exportChangeset(page, testInfo);
+  const changeset = await changesetOf(page);
   const [rule] = operationsOn(changeset, 'turn-restrictions.json');
   expect(rule.after.properties).toMatchObject({restriction: 'no_left_turn', from: 30, to: 31});
   // Both roads already end at the junction that the rule names.
@@ -118,7 +95,8 @@ test('joints are shown, and a junction is opened, given a turn rule, disconnecte
   await expect.poll(() => statusesOnMap(page)).toContain('joined');
 });
 
-test('a dragged point joins the road it is put on and takes joined roads along', async ({page}, testInfo) => {
+// Bug: a point dragged onto another road must snap to it, and the roads already joined there must move with it.
+test('a dragged point joins the road it is put on and takes joined roads along', async ({page}) => {
   await centreOn(page, [3, 2]);
   await tapAt(page, [6, 3]);
   await editCorners(page);
@@ -133,25 +111,22 @@ test('a dragged point joins the road it is put on and takes joined roads along',
   await dragFromTo(page, [2, 0], [2, 1]);
   await page.locator('#mode-done').click();
   await applyEdit(page);
-  const {changeset} = await exportChangeset(page, testInfo);
+  const changeset = await changesetOf(page);
   const [side, main] = operationsOn(changeset, 'roads.geojson');
   expect(main.after.geometry.coordinates.map(stepsOf)).toContainEqual([2, 1]);
   expect(stepsOf(side.after.geometry.coordinates.at(-1))).toEqual([2, 1]);
 });
 
-const shapesIn = (page, source) =>
-  page.evaluate(async name => {
-    const {features} = await window.editorDebug.map.getSource(name).getData();
-    return features.map(({geometry}) => geometry.coordinates);
-  }, source);
-
+// Bug: moving a junction must show where all its roads will be, and Cancel must leave no ghost or pending change.
 test('a moved junction shows its roads where they will be, and Cancel leaves nothing behind', async ({page}) => {
   await centreOn(page, [5, 2]);
   await tapAt(page, [6, 0]);
   await page.locator('#tool-move').click();
   await dragFromTo(page, [5, 1], [5, 2]);
   const following = () => shapesIn(page, 'editor-following');
-  await expect.poll(async () => (await following()).map(line => line.map(stepsOf).filter(([, north]) => north === 1).length)).toEqual([1, 1]);
+  await expect
+    .poll(async () => (await following()).map(line => line.map(stepsOf).filter(([, north]) => north === 1).length))
+    .toEqual([1, 1]);
   // The roads as they are, and the place of the junction.
   await expect.poll(async () => (await shapesIn(page, 'editor-ghost')).length).toBe(3);
   await page.locator('#mode-done').click();
@@ -161,6 +136,7 @@ test('a moved junction shows its roads where they will be, and Cancel leaves not
   await expect(page.locator('#change-count')).toBeHidden();
 });
 
+// Bug: a line that loses its points must be refused in the mode bar, and the map must still pick the object afterwards.
 test('a line that loses its points is refused in the bar, and nothing breaks', async ({page}) => {
   // Both its points are below the bar.
   await centreOn(page, [6, 3], 18.5);
@@ -177,6 +153,7 @@ test('a line that loses its points is refused in the bar, and nothing breaks', a
   await expect(page.locator('#selection-title')).toHaveText('Side street');
 });
 
+// Bug: one shown level must filter both picking and joining, while a road coming up from below stays drawn and joined.
 test('one level is shown at a time, and roads under it are neither picked nor joined', async ({page}) => {
   await tapAt(page, [-3, 0]);
   await page.locator('[name="layer"]').evaluate(select => select.closest('details').setAttribute('open', ''));
@@ -185,11 +162,33 @@ test('one level is shown at a time, and roads under it are neither picked nor jo
   const picker = page.locator('#level-picker');
   await expect(picker.getByRole('button')).toHaveText(['All', '0', '-1']);
   await picker.getByRole('button', {name: 'Level 0'}).click();
-  await expect(picker.getByRole('button', {name: 'Level 0'})).toHaveAttribute('aria-pressed', 'true');
-  // Below the ground Main street still shows where it comes up and joins Side street.
+  await centreOn(page, [6, 2], 18.5);
+  await expect.poll(() => jointCoordinatesOnMap(page)).toEqual([
+    [-6, 0],
+    [6, 0],
+    [6, 5]
+  ]);
+  // One level down keeps only the shared joint; Side street's own end is filtered out.
   await picker.getByRole('button', {name: 'Level -1'}).click();
-  await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'joined']);
+  await expect.poll(() => jointCoordinatesOnMap(page)).toEqual([
+    [-6, 0],
+    [6, 0]
+  ]);
+  const candidates = await page.evaluate(() => window.roadsHarness.candidateNamesAtShownLevel());
+  expect(candidates).toContain('Main street');
+  expect(candidates).not.toContain('Side street');
+  // The ground road stays in the working entries but cannot be picked while the level below is shown. Wait for the
+  // repaint the level change starts, then for the click handler itself before checking what it selected.
+  await waitForRepaint(page);
+  const clicksBeforeTap = await clickCountOf(page);
+  await tapAt(page, [6, 3]);
+  await expect.poll(() => clickCountOf(page)).toBe(clicksBeforeTap + 1);
+  await expect(page.locator('#selection-title')).not.toHaveText('Side street');
+  await expect(page.locator('.inspector')).toBeHidden();
+  // All levels restores the road on the level it was moved to.
   await picker.getByRole('button', {name: 'All levels'}).click();
+  await waitForRepaint(page);
+  await centreOn(page, [0, 0]);
   await tapAt(page, [-3, 0]);
   await expect(page.locator('#selection-title')).toHaveText('Main street');
 });

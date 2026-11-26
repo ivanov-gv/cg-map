@@ -23,6 +23,14 @@ export const layerJoints = {
 // their own; nearly all of them are on the ground, and the junction shows those that are not.
 export const levelsByFile = {[roadsFile]: levelsOf, [nodesFile]: () => [0]};
 
+// One shown level filters picking and joining. Files without levels are on every level.
+export const entryOnShownLevel = ({filename, feature}, shownLevel) =>
+  shownLevel === null || (levelsByFile[filename]?.(feature).includes(shownLevel) ?? true);
+
+// A joint belongs to the shown level when one of its roads does, or by the joint's own level when no members are kept.
+export const jointOnShownLevel = ({members, level}, shownLevel) =>
+  shownLevel === null || (members ? members.some(({entry}) => entryOnShownLevel(entry, shownLevel)) : level === shownLevel);
+
 // What the map needs to know of them. A text is the only list that a style can search.
 export function levelFacts({filename, feature}) {
   const levels = levelsByFile[filename]?.(feature);
