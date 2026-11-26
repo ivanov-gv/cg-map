@@ -6,7 +6,7 @@ ROOT := ../..
 verify: lint test
 
 lint:
-	cd $(ROOT) && npx --no-install eslint packages/contracts/tests
+	npx --no-install eslint tests eslint.config.mjs
 
 test:
 	node --test tests/*.test.mjs
