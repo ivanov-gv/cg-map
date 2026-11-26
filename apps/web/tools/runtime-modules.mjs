@@ -157,10 +157,14 @@ function assertReviewedImport(sourceDirectory, moduleName, filePath, dependency)
     (isRelativeJs(dependency) && isRuntimeDependency(sourceDirectory, filePath, dependency));
   // A module with local edges on main may gain a new module; a zero-import module may not, and no reviewed module may
   // gain a different module that main already knew.
+  const isZeroImportModule = dependenciesOnMain.length === 0;
   const addsModule = dependenciesOnMain.length > 0 && isModuleAddedSinceMain(sourceDirectory, filePath, dependency);
+  const message = isZeroImportModule
+    ? `${moduleName}: may not import ${dependency}. Modules with no local imports on main may not gain any local module, new or old.`
+    : `${moduleName}: forbidden dependency ${dependency}. Web keeps main's reviewed import graph; only its listed modules and new modules are allowed.`;
   assert.ok(
     isReviewedSpecifier && (dependenciesOnMain.includes(dependency) || addsModule),
-    `${moduleName}: forbidden dependency ${dependency}. Web keeps main's reviewed import graph; only its listed modules and new modules are allowed.`
+    message
   );
 }
 
@@ -186,6 +190,8 @@ function reviewedClosure(moduleName) {
   visit(moduleName);
   return reached;
 }
+
+// A new import path must not widen a reviewed module's main imports; the closure records the allowed reach.
 const reviewedClosures = new Map(mainRuntimeModules.map(moduleName => [moduleName, reviewedClosure(moduleName)]));
 
 // Returns the main modules a module reaches now, following imports through modules added since main.

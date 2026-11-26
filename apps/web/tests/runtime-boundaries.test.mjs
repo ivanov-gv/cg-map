@@ -50,7 +50,7 @@ test('web boundaries keep zero-import modules free of new local imports', testCo
   for (const moduleName of ['core.js', 'dom.js']) {
     fs.writeFileSync(path.join(fixture.source, moduleName), "import {added} from './x/added.js';\nexport {added};\n");
   }
-  assert.throws(() => assertRuntimeBoundaries(fixture.source), /forbidden dependency \.\/x\/added\.js/);
+  assert.throws(() => assertRuntimeBoundaries(fixture.source), /may not import \.\/x\/added\.js/);
 });
 
 test('web boundaries reject a forbidden dependency in a new runtime module', testContext => {

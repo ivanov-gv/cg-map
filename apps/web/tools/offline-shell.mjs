@@ -26,8 +26,8 @@ export function isShellAsset(relativePath) {
   if (!isRuntimeSourcePath(relativePath)) return false;
   const segments = relativePath.split('/');
   const filename = segments.at(-1);
-  // The data allow rules include archive-like extensions; this guard is what keeps a widened rule from caching full
-  // archives or partial range downloads. Those bytes stay in OPFS and HTTP caches.
+  // No allow rule below matches archives or partial downloads. This guard keeps a future widened rule from caching them;
+  // the bytes stay in OPFS and HTTP caches.
   if (filename.endsWith('.pmtiles') || filename.endsWith('.partial')) return false;
   if (segments[0] === 'vendor') return /\.(?:js|css)$/.test(filename);
   if (segments[0] === 'map-core') return filename.endsWith('.js');

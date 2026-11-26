@@ -23,8 +23,9 @@ the verified archive remains content-addressed, so a failed replacement cannot r
 `apps/web/tools/build.mjs` copies `src/` recursively, leaves colocated tests and support directories out, and rewrites
 only the published map-core import at each destination's relative depth. Web owns the runtime import, dynamic-import and
 gesture checks that Platform used to keep in its per-file list. Each module that existed on main keeps the local imports
-it had there, so `core.js` and `dom.js` still import nothing local; a new nested module may import any runtime module
-inside `src`. The per-folder rules of #456 replace that reviewed graph when the sources move into folders.
+it had there, so every module with no local imports on main (for example `core.js` and `dom.js`) may not gain any; a new
+module may import any runtime module inside `src`. Moving a reviewed module fails until its rule moves into the
+per-folder rules of #456, which replace that reviewed graph when the sources move into folders.
 
 ## Consequences
 
