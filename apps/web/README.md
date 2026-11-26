@@ -664,12 +664,12 @@ CI. Root package.json and package-lock.json remain the shared workspace manifest
 checks, browser setup, browser journeys, and static preview are owned here; repository checks aggregate component
 commands. Cross-component contract/artifact tests remain in tests/integration.
 
-GitHub runs the full acceptance suite by area for web/UI, offline, and release behavior changes. A local full run is
-optional for iterating; targeted results do not establish that the full suite passed. Documentation-only changes do not
-need browser tests.
+GitHub runs the full acceptance suite as app-owned shards for web/UI, offline, and release behavior changes. A local
+full run is optional for iterating; targeted results do not establish that the full suite passed. Documentation-only
+changes do not need browser tests.
 
-Browser specs are split by area, and CI runs each area as its own job; see
-[browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
+CI splits the browser suite into shards counted in `browser-jobs.json`; see
+[browser test shards](../../docs/verification/testing.md#browser-test-shards). Shared helpers are in
 tests/e2e/helpers.mjs.
 
 Card gesture specs size step swipes from the measured card box and viewport edge, so distance alone crosses the settle
