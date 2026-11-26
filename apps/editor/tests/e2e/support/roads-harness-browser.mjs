@@ -8,21 +8,17 @@ import {EditSession} from '__APP_BASE__editing/edit-session.js';
 import {InspectorEditing} from '__APP_BASE__inspector/inspector-editing.js';
 import {createHandleLayer} from '__APP_BASE__map-tools/handle-layer.js';
 import {isMagnetOn} from '__APP_BASE__map-tools/magnet-switch.js';
-import {createJointLayer, jointMinZoom} from '__APP_BASE__layers/shared/joint-layer.js';
+import {createJointLayer} from '__APP_BASE__layers/shared/joint-layer.js';
 import {availableLayers} from '__APP_BASE__layers/shared/editor-layers.js';
 import {behaviorOf, createBehaviorContext, registerBehaviors} from '__APP_BASE__layers/shared/layer-behaviors.js';
-import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from '__APP_BASE__layers/roads/layer-junctions.js';
+import {junctionBehaviors, junctionFile, junctionRule} from '__APP_BASE__layers/roads/layer-junctions.js';
 import {roadBehaviors} from '__APP_BASE__layers/roads/layer-roads.js';
-import {
-  entryOnShownLevel,
-  jointOnShownLevel,
-  layerJoints,
-  levelFacts
-} from '__APP_BASE__layers/shared/layer-joints.js';
+import {layerJoints, levelFacts} from '__APP_BASE__layers/shared/layer-joints.js';
 import {validateLayerRules} from '__APP_BASE__layers/shared/layer-rules.js';
 import {derivedFacts} from '__APP_BASE__source-data/derived-facts.js';
-import {createSourceOverlay, overlayCollection, sourceEntriesForHits} from '__APP_BASE__source-data/source-overlay.js';
+import {createSourceOverlay, overlayCollection} from '__APP_BASE__source-data/source-overlay.js';
 import {showLevelPicker} from '__APP_BASE__layers/roads/level-picker.js';
+import {roadFeatureForSelection, roadsClickTarget, roadsJointsToShow} from '__APP_BASE__layers/roads/roads-host.js';
 
 const element = id => document.getElementById(id);
 const setStatus = message => {
@@ -117,7 +113,7 @@ function selectObject(state, entry) {
     setStatus('Apply or Cancel the current edit first.');
     return false;
   }
-  const feature = featureForEntry(entry, state.session);
+  const feature = roadFeatureForSelection(entry, state.session);
   if (!feature) return false;
   state.editing.close();
   const behavior = behaviorOf(entry.filename, state.activeLayer.id);
@@ -137,7 +133,6 @@ function updateChangeCount(state) {
 function showStatus(state) {
   setStatus(`Roads · ${state.activeEntries.length} objects · editable`);
 }
-
 
 function createEditing(state) {
   return new InspectorEditing({
@@ -181,13 +176,15 @@ function viewBounds(state) {
 }
 
 function renderJoints(state) {
-  const {map, jointLayer} = state;
-  if (map.getZoom() < jointMinZoom) {
-    jointLayer.show([]);
-    return;
-  }
-  const joints = layerJoints.roads.joints(viewBounds(state), state.context());
-  jointLayer.show(joints.filter(joint => jointOnShownLevel(joint, state.shownLevel)));
+  state.jointLayer.show(
+    roadsJointsToShow({
+      layer: state.activeLayer,
+      bounds: viewBounds(state),
+      context: state.context(),
+      shownLevel: state.shownLevel,
+      zoom: state.map.getZoom()
+    })
+  );
 }
 
 function renderLevels(state) {
@@ -228,21 +225,19 @@ function selectFeatureAtClick(state, event) {
     setStatus('Apply or Cancel the current edit first.');
     return;
   }
-  const joint = state.jointLayer.jointAt(event.point);
-  const jointEntry = joint && layerJoints.roads.entry?.(joint, state.context());
-  if (jointEntry) {
-    selectObject(state, jointEntry);
-    return;
-  }
-  const hits = hitTest(state.map, event.point, [...state.overlay.layerIds, ...state.overlay.inspectionLayerIds]);
-  const candidates = sourceEntriesForHits(hits, state.activeEntries).filter(
-    ({filename, feature}) =>
-      state.activeLayer.files.includes(filename) &&
-      Boolean(feature.geometry) &&
-      entryOnShownLevel({filename, feature}, state.shownLevel)
-  );
-  if (candidates.length === 0) state.editing.close();
-  else selectObject(state, candidates[0]);
+  const target = roadsClickTarget({
+    point: event.point,
+    jointLayer: state.jointLayer,
+    layer: state.activeLayer,
+    context: state.context(),
+    entries: state.activeEntries,
+    shownLevel: state.shownLevel,
+    hitsOf: () =>
+      hitTest(state.map, event.point, [...state.overlay.layerIds, ...state.overlay.inspectionLayerIds])
+  });
+  if (target.entry) selectObject(state, target.entry);
+  else if (target.candidates.length > 0) selectObject(state, target.candidates[0]);
+  else state.editing.close();
 }
 
 function installMapListeners(state) {
@@ -271,16 +266,6 @@ export async function mountRoadsHarness({sourceEntries, rulesConfig, appBase}) {
   refreshOverlay(state);
   window.roadsHarness = {
     exportChangeset: envelope =>
-      buildChangeset(state.session, state.sources, envelope ?? {author: 'Browser Test', reason: 'Browser test'}, state.rules),
-    get shownLevel() {
-      return state.shownLevel;
-    },
-    session: state.session,
-    state: {
-      get activeEntries() {
-        return state.activeEntries;
-      }
-    }
+      buildChangeset(state.session, state.sources, envelope ?? {author: 'Browser Test', reason: 'Browser test'}, state.rules)
   };
-  return {mounted: true, layers: state.activeLayer.files};
 }

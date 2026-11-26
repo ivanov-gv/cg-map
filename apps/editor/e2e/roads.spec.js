@@ -1,6 +1,31 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from '../tests/e2e/city-steps.mjs';
+import {
+  applyEdit,
+  centreOn,
+  chooseLayer,
+  editCorners,
+  exportChangeset,
+  operationsOn,
+  startDrawing,
+  tapAt
+} from '../tests/e2e/city-steps.mjs';
 import {openFixtureCity, stepsOf} from '../tests/e2e/fixture-city.mjs';
+
+const jointStatusesOnMap = page =>
+  page.evaluate(async () => {
+    const {features} = await window.editorDebug.map.getSource('editor-joints').getData();
+    return features.map(({properties}) => properties.status).sort();
+  });
+
+const waitForRepaint = page =>
+  page.evaluate(
+    () =>
+      new Promise(resolve => {
+        const {map} = window.editorDebug;
+        map.once('idle', resolve);
+        map.triggerRepaint();
+      })
+  );
 
 test.beforeEach(async ({page}, testInfo) => {
   test.skip(testInfo.project.name === 'pages-mobile', 'The road graph and joining are desk work.');
@@ -34,6 +59,7 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
   await expect(page.locator('#change-count')).toHaveText('2');
 
   const {changeset} = await exportChangeset(page, testInfo);
+  await page.getByRole('button', {name: 'Close'}).first().click();
   const operations = operationsOn(changeset, 'roads.geojson');
   const path = operations.find(({operation}) => operation === 'add');
   const street = operations.find(({operation}) => operation === 'modify');
@@ -48,4 +74,27 @@ test('a path drawn onto a street joins it, a street is split and joined again', 
     [2, 0],
     [6, 0]
   ]);
+
+  // The host still passes the shown level to the real joint and pick helpers.
+  await tapAt(page, [-3, 0]);
+  await page.locator('[name="layer"]').evaluate(select => select.closest('details').setAttribute('open', ''));
+  await page.locator('[name="layer"]').selectOption('-1');
+  await applyEdit(page);
+  const picker = page.locator('#level-picker');
+  await picker.getByRole('button', {name: 'Level -1'}).click();
+  await expect(picker.getByRole('button', {name: 'Level -1'})).toHaveAttribute('aria-pressed', 'true');
+  const belowGroundJoints = await jointStatusesOnMap(page);
+  // A road on the ground cannot be picked while the level below is shown.
+  await tapAt(page, [6, 2]);
+  await expect(page.locator('.inspector')).toBeHidden();
+  await picker.getByRole('button', {name: 'All levels'}).click();
+  await expect.poll(() => jointStatusesOnMap(page)).not.toEqual(belowGroundJoints);
+  await waitForRepaint(page);
+  await tapAt(page, [6, 2]);
+  await expect(page.locator('#selection-title')).toHaveText('Side street');
+  // A joint is picked before the road under it.
+  await centreOn(page, [6, 0]);
+  await tapAt(page, [6, 0]);
+  await expect(page.locator('#selection-kind')).toHaveText('Junction');
+  await expect(page.locator('#selection-title')).toHaveText('Main street × Side street');
 });

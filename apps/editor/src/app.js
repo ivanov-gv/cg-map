@@ -14,7 +14,7 @@ import {derivedFacts} from './source-data/derived-facts.js';
 import {DraftKeeper} from './editing/draft-keeper.js';
 import {createElementWithText, elementById} from './shared/dom.js';
 import {EditSession} from './editing/edit-session.js';
-import {availableLayers, isLayerObject} from './layers/shared/editor-layers.js';
+import {availableLayers} from './layers/shared/editor-layers.js';
 import {fieldItemLabel, isReferencedObject, newDeletionMark, newNote} from './editing/field-items.js';
 import {createHandleLayer} from './map-tools/handle-layer.js';
 import {createJointLayer, jointMinZoom} from './layers/shared/joint-layer.js';
@@ -30,12 +30,19 @@ import {
   registerBehaviors
 } from './layers/shared/layer-behaviors.js';
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
-import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
+import {junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
 import {reliefBehaviors} from './layers/relief/layer-relief.js';
-import {entryOnShownLevel, jointOnShownLevel, layerJoints, levelFacts} from './layers/shared/layer-joints.js';
+import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
 import {roadBehaviors} from './layers/roads/layer-roads.js';
+import {
+  isPickableEntry,
+  roadFeatureForSelection,
+  roadsClickTarget,
+  roadsJointsToShow,
+  roadsPickableEntries
+} from './layers/roads/roads-host.js';
 import {routeBehaviors} from './layers/routes/layer-routes.js';
 import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
@@ -163,8 +170,7 @@ function layerStatus() {
 }
 
 // Kinds that only follow from other objects, and files another layer edits, are drawn and never picked.
-const isPickable = ({filename, feature}) =>
-  isLayerObject(filename, feature) && !activeLayer?.contextFiles.includes(filename);
+const isPickable = entry => isPickableEntry(entry, activeLayer);
 
 // The working objects of a file, or none when the bundle does not have it.
 const entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
@@ -335,8 +341,15 @@ function renderJoints() {
     jointLayer.show([]);
     return;
   }
-  jointLayer
-    .show(jointsOfLayer.joints(viewBounds(), behaviorContext()).filter(joint => jointOnShownLevel(joint, shownLevel)));
+  jointLayer.show(
+    roadsJointsToShow({
+      layer: activeLayer,
+      bounds: viewBounds(),
+      context: behaviorContext(),
+      shownLevel,
+      zoom: map.getZoom()
+    })
+  );
 }
 
 // The levels in the view, and always the shown one, so that it can be left.
@@ -700,9 +713,7 @@ function selectableLayerIds() {
 }
 
 const pickableEntries = hits =>
-  sourceEntriesForHits(hits, activeEntries).filter(
-    entry => isPickable(entry) && entryOnShownLevel(entry, shownLevel)
-  );
+  roadsPickableEntries({hits, entries: activeEntries, layer: activeLayer, shownLevel});
 
 // Rendered hits limit the directory to visible objects in the current map view. Objects without geometry have no place
 // on the map, so they are always listed.
@@ -726,7 +737,7 @@ function selectObject(entry, shouldFocus = false) {
     setStatus(applyOrCancelMessage, true);
     return false;
   }
-  const feature = featureForEntry(entry, session);
+  const feature = roadFeatureForSelection(entry, session);
   if (!feature) return false;
   showFeature({...entry, feature});
   if (shouldFocus) elementById('close-inspector').focus();
@@ -794,13 +805,20 @@ function selectFeatureAtClick(event) {
     setStatus(applyOrCancelMessage, true);
     return;
   }
-  const joint = jointLayer.jointAt(event.point);
-  const jointEntry = joint && layerJoints[activeLayer.id]?.entry?.(joint, behaviorContext());
-  if (jointEntry) {
-    selectObject(jointEntry);
+  const target = roadsClickTarget({
+    point: event.point,
+    jointLayer,
+    layer: activeLayer,
+    context: behaviorContext(),
+    entries: activeEntries,
+    shownLevel,
+    hitsOf: () => hitTest(map, event.point, selectableLayerIds())
+  });
+  if (target.entry) {
+    selectObject(target.entry);
     return;
   }
-  const candidates = pickableEntries(hitTest(map, event.point, selectableLayerIds()));
+  const candidates = target.candidates;
   const hadClickCandidates = clickCandidates !== null;
   clickCandidates = null;
   if (hadClickCandidates && !elementById('objects-panel').hidden) showPanel(null);

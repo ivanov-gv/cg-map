@@ -40,6 +40,7 @@ test('a road gets its access, and its ends open the junctions they are at', asyn
   await page.getByText('More', {exact: true}).click();
   await page.locator('[name="smoothness"]').selectOption('very_bad');
   await page.locator('[name="kind"]').selectOption('pedestrian');
+  // An open edit is not lost to a look at the junction.
   await page.getByRole('button', {name: 'Open the junction at B'}).click();
   await expect(page.locator('#edit-problem')).toContainText('Apply or Cancel');
   await applyEdit(page);
@@ -72,6 +73,7 @@ test('joints are shown, and a junction is opened, given a turn rule, disconnecte
   const changeset = await changesetOf(page);
   const [rule] = operationsOn(changeset, 'turn-restrictions.json');
   expect(rule.after.properties).toMatchObject({restriction: 'no_left_turn', from: 30, to: 31});
+  // Both roads already end at the junction that the rule names.
   expect(rule.after.properties.viaNodes).toEqual([301]);
   expect(operationsOn(changeset, 'roads.geojson')).toEqual([]);
 
@@ -93,6 +95,7 @@ test('a dragged point joins the road it is put on and takes joined roads along',
   await applyEdit(page);
   await tapAt(page, [-1, 0]);
   await editCorners(page);
+  // A tap on a joined point picks the point, not its junction.
   await tapAt(page, [2, 0]);
   await expect(page.locator('#vertex-disconnect')).toBeEnabled();
   await dragFromTo(page, [2, 0], [2, 1]);
@@ -114,6 +117,7 @@ test('a moved junction shows its roads where they will be, and Cancel leaves not
   await expect
     .poll(async () => (await following()).map(line => line.map(stepsOf).filter(([, north]) => north === 1).length))
     .toEqual([1, 1]);
+  // The roads as they are, and the place of the junction.
   await expect.poll(async () => (await shapesIn(page, 'editor-ghost')).length).toBe(3);
   await page.locator('#mode-done').click();
   await page.locator('#cancel-edit').click();
@@ -124,6 +128,7 @@ test('a moved junction shows its roads where they will be, and Cancel leaves not
 
 // Bug: a line that loses its points must be refused in the mode bar, and the map must still pick the object afterwards.
 test('a line that loses its points is refused in the bar, and nothing breaks', async ({page}) => {
+  // Both its points are below the bar.
   await centreOn(page, [6, 3], 18.5);
   await tapAt(page, [6, 3]);
   await editCorners(page);
@@ -148,9 +153,7 @@ test('one level is shown at a time, and roads under it are neither picked nor jo
   await expect(picker.getByRole('button')).toHaveText(['All', '0', '-1']);
   await picker.getByRole('button', {name: 'Level 0'}).click();
   await expect(picker.getByRole('button', {name: 'Level 0'})).toHaveAttribute('aria-pressed', 'true');
+  // Below the ground Main street still shows where it comes up and joins Side street.
   await picker.getByRole('button', {name: 'Level -1'}).click();
   await expect.poll(() => statusesOnMap(page)).toEqual(['deadEnd', 'joined']);
-  await picker.getByRole('button', {name: 'All levels'}).click();
-  await tapAt(page, [-3, 0]);
-  await expect(page.locator('#selection-title')).toHaveText('Main street');
 });

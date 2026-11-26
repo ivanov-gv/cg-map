@@ -95,10 +95,10 @@ async function installHarness(page, baseURL) {
 }
 
 async function mountComponents(page, baseURL) {
-  return page.evaluate(async ({sourceEntries, rulesConfig, appBase}) => {
-    window.harness = await window.mountRoadsHarness({sourceEntries, rulesConfig, appBase});
-    return window.harness;
-  }, {sourceEntries: sourcesFromFixture(), rulesConfig: rules, appBase: baseURL});
+  await page.evaluate(
+    ({sourceEntries, rulesConfig, appBase}) => window.mountRoadsHarness({sourceEntries, rulesConfig, appBase}),
+    {sourceEntries: sourcesFromFixture(), rulesConfig: rules, appBase: baseURL}
+  );
 }
 
 // One place for every roads browser test: app modules and the fixture city, but no app.js and no side panel.

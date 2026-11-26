@@ -26,5 +26,13 @@ tests next to the code they test; this pilot applies it to roads without changin
 
 - 2026-11-26: replaced six repeated whole-app roads cases with colocated component browser tests and unit tests for the
   extracted seams, kept one full-app journey in `e2e/`, and recorded proof that each replacement fails on a realistic
-  code mutation. The 11 mutation diffs and full failure logs are under `/tmp/task476/proofs/`, indexed by
-  `run-corrected.log`. (#476)
+  code mutation. The mutation proofs ran in disposable copies, one at a time; their failure summaries are recorded in
+  the runtime entry below. (#476)
+- 2026-11-26: review round moved the remaining host logic into `src/layers/roads/roads-host.js`, imported by both
+  `app.js` and the component harness, and kept one level step and one joint tap in the whole-app journey to cover the
+  host's own call sites. Runtime check on `root-desktop` with `E2E_WORKERS=1` and `E2E_ANGLE=swiftshader`, on 16 CPUs
+  (AMD Ryzen 7 5700U with Radeon Graphics, 14 GiB memory): before on `origin/main`, seven whole-app roads cases passed
+  in 2.1m (131.82 s wall); after on this branch, six colocated cases plus the whole-app journey passed in 1.2m (73.48 s
+  wall). `make verify PKG=apps/editor`: 354 tests, 0 failures. Mutations of `jointOnShownLevel`, `entryOnShownLevel`,
+  joint-before-hits ordering and `isPickable` each failed a browser case; dropping the shown level or the joint target
+  at the remaining `app.js` call sites also failed the whole-app case. (#476)
