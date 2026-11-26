@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {crossesContours, highestContourAround, isClosedLine, keptClosed} from '../src/contour-rules.js';
-import {reliefBehaviors} from '../src/layer-relief.js';
-import {settlementBehaviors} from '../src/layer-settlements.js';
+import {crossesContours, highestContourAround, isClosedLine, keptClosed} from '../src/layers/relief/contour-rules.js';
+import {reliefBehaviors} from '../src/layers/relief/layer-relief.js';
+import {settlementBehaviors} from '../src/layers/settlements/layer-settlements.js';
 
 const step = 0.001;
 const at = ([east, north]) => [19 + east * step, 42 + north * step];

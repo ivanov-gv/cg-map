@@ -4,8 +4,8 @@ import fileSystem from 'node:fs';
 import operatingSystem from 'node:os';
 import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {byteRangeResponse, parseByteRange} from '../src/offline-cache.js';
-import {answerQuietRequests, whenEveryWindowIsQuiet} from '../src/update-quiet.js';
+import {byteRangeResponse, parseByteRange} from '../src/offline/offline-cache.js';
+import {answerQuietRequests, whenEveryWindowIsQuiet} from '../src/offline/update-quiet.js';
 import {offlineManifest, writeOfflineManifest} from '../tools/offline-manifest.mjs';
 
 const archivePath = 'data/map.pmtiles';

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {junctionBehaviors, junctionEntry, junctionFile} from '../src/layer-junctions.js';
-import {originsAfter, movedPoints, startingOrigins} from '../src/line-origins.js';
-import {freePointsWithLevel, roadBehaviors} from '../src/layer-roads.js';
+import {junctionBehaviors, junctionEntry, junctionFile} from '../src/layers/roads/layer-junctions.js';
+import {originsAfter, movedPoints, startingOrigins} from '../src/geometry/line-origins.js';
+import {freePointsWithLevel, roadBehaviors} from '../src/layers/roads/layer-roads.js';
 import {
   companionsOfRoad,
   disconnectEdits,
@@ -12,9 +12,9 @@ import {
   levelChoiceKey,
   roadWithEnds,
   splitEdits
-} from '../src/road-edits.js';
-import {createKeptBox, jointAt, jointNear, jointsIn, levelsOf, nearestToGround, roadLevel} from '../src/road-graph.js';
-import {ruleOfTurn, turnKey, turnsAt} from '../src/road-junctions.js';
+} from '../src/layers/roads/road-edits.js';
+import {createKeptBox, jointAt, jointNear, jointsIn, levelsOf, nearestToGround, roadLevel} from '../src/layers/roads/road-graph.js';
+import {ruleOfTurn, turnKey, turnsAt} from '../src/layers/roads/road-junctions.js';
 
 const origin = [19.25, 42.44];
 // About eight metres east and eleven north.

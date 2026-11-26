@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
-import {buildChangeset, importChangeset, materializedLayer} from '../src/changeset.js';
-import {labelJoinProblems} from '../src/cross-file-checks.js';
-import {createActiveLayerCommands} from '../src/active-layer-commands.js';
+import {buildChangeset, importChangeset, materializedLayer} from '../src/editing/changeset.js';
+import {labelJoinProblems} from '../src/editing/cross-file-checks.js';
+import {createActiveLayerCommands} from '../src/editing/active-layer-commands.js';
 import {
   clearSetAsideDrafts,
   openSavedDraft,
@@ -11,18 +11,18 @@ import {
   readSetAsideDrafts,
   removeSavedDraft,
   saveDraft
-} from '../src/draft-store.js';
-import {EditSession} from '../src/edit-session.js';
-import {editorLayers} from '../src/editor-layers.js';
-import {newDeletionMark} from '../src/field-items.js';
+} from '../src/editing/draft-store.js';
+import {EditSession} from '../src/editing/edit-session.js';
+import {editorLayers} from '../src/layers/shared/editor-layers.js';
+import {newDeletionMark} from '../src/editing/field-items.js';
 import {
   insertVertex,
   moveVertex,
   removeVertex,
   translateGeometry,
   vertexHandles
-} from '../src/geometry-editing.js';
-import {lineProblem, pointInsidePolygon, polygonProblem, ringProblem} from '../src/geometry-validation.js';
+} from '../src/geometry/geometry-editing.js';
+import {lineProblem, pointInsidePolygon, polygonProblem, ringProblem} from '../src/geometry/geometry-validation.js';
 import {
   featureCapabilities,
   featureProblem,
@@ -30,7 +30,7 @@ import {
   operationProblem,
   propertyProblem,
   validateLayerRules
-} from '../src/layer-rules.js';
+} from '../src/layers/shared/layer-rules.js';
 
 const readContract = name =>
   JSON.parse(fileSystem.readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${name}`))));
