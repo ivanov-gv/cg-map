@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {editTools} from '../src/edit-transaction.js';
-import {hasMagnetEffect} from '../src/magnet-tools.js';
+import {editTools} from '../src/editing/edit-transaction.js';
+import {hasMagnetEffect} from '../src/map-tools/magnet-tools.js';
 
 const area = {type: 'Polygon', coordinates: [[]]};
 const line = {type: 'LineString', coordinates: []};

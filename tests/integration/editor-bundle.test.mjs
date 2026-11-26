@@ -11,8 +11,8 @@ import {
   sourceFiles,
   validateBundleManifest,
   decodeSource
-} from '../../apps/editor/src/source-bundle.js';
-import {collectionOf} from '../../apps/editor/src/source-records.js';
+} from '../../apps/editor/src/source-data/source-bundle.js';
+import {collectionOf} from '../../apps/editor/src/source-data/source-records.js';
 
 const {writeEditorBundle} = await import(dataToolURL('editor-bundle.mjs'));
 const editorBundleContractURL = contractURL('editor-bundle.schema.json');

@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {decodeSource} from '../src/source-bundle.js';
-import {EditSession} from '../src/edit-session.js';
-import {buildChangeset} from '../src/changeset.js';
-import {operationProblem} from '../src/layer-rules.js';
+import {decodeSource} from '../src/source-data/source-bundle.js';
+import {EditSession} from '../src/editing/edit-session.js';
+import {buildChangeset} from '../src/editing/changeset.js';
+import {operationProblem} from '../src/layers/shared/layer-rules.js';
 
 const readContract = filename =>
   JSON.parse(readFileSync(new URL(import.meta.resolve(`@ivanov-gv/map-contracts/${filename}`))));

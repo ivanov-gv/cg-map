@@ -53,6 +53,26 @@ the shared probe helper against its own config. A project's config selects that 
   app migrations and the later root cleanup, not a second source of truth for migrated projects.
 - Next: Web, Editor and core-demo migrate in their own PRs; the root config is deleted only once no app reads it.
 
+### Outcome note: Editor migration in #478 (2026-11-26)
+
+- #478 merges main with #466 (`1913b69`, closing #475) into the reorganized Editor branch and adds
+  `apps/editor/eslint.config.mjs`. The root file is byte-for-byte identical to main; it keeps serving apps/web and
+  apps/core-demo, so only the Editor's lint scope moved. Its Editor globs are now unused and leave with the root
+  cleanup.
+- The Editor config keeps browser globals for runtime, service-worker globals for `src/sw.js`, Node and browser globals
+  for tools, colocated tests and both app configs, the shared mechanical rules, and the 80-line production/tools budget.
+  Long linear scenarios stay allowed in `*.test.js` and `*.browser.test.js`. An Editor-owned test lints samples at
+  nested production, unit and browser-test paths through that real config. The Editor's pin guard keeps its original
+  full `tests/` scan, including browser specs and helpers, and adds colocated source/tool tests and the optional `e2e/`
+  folder beside `src` without scanning production build tools.
+- The shared probe helper stays deferred: #478 changes no Platform code, so the Editor's lint test repeats the Platform
+  probe samples until the next app migration adds the helper and moves both tests to it.
+- The planner needs no change: the new config maps to the Editor's own folder and workflow.
+  `make ci-plan BASE=origin/main` selected the subset `docs, platform, tests, apps-editor`, with no CI test-run calls,
+  in-place runs, CD dispatches or manual runs. Platform stays a genuine consumer of Editor paths until its other HEAD
+  checks move later in #458. CI budgets are unchanged; Web and core-demo migrate separately before the root file is
+  removed.
+
 ### Outcome note: HEAD reads for lint tooling (2026-11-26)
 
 - Rule: a project's tests read only its own files or an exact published version of another project, never another's HEAD
@@ -72,7 +92,7 @@ the shared probe helper against its own config. A project's config selects that 
 
 - Task #479 moves only apps/core-demo to its own `eslint.config.mjs`, which imports the shared rule exports. Its lint
   command runs from that folder over source, tools, tests, journeys and the app config; the root file stays
-  byte-for-byte unchanged on this branch and still serves Web and Editor.
+  byte-for-byte unchanged and still serves Web.
 - Recursive patterns cover runtime, tools in both extensions, source unit tests, component-browser tests and nested
   `tests/**/*.mjs`, including current `tests/e2e/*.spec.mjs` journeys. `e2e/**/*.js` also covers the beside-src journey
   layout in JavaScript conventions. Runtime and tool helpers keep the 80-line function budget; `max-lines-per-function`
@@ -82,5 +102,5 @@ the shared probe helper against its own config. A project's config selects that 
   readability violations, that nested runtime files also reject excessive depth, that `_`-prefixed parameters stay
   accepted, that helpers keep the function budget for both tool extensions, that unit, browser and journey paths accept
   their globals, that long tests keep the exception, and that journey paths still reject readability violations.
-- Current consumers in this checkout are the six non-app projects and apps/core-demo. Web and Editor are not migrated
-  here; other branches' merges will reconcile their consumer set later.
+- With the Editor migration (#478, merged in #473) on main, the consumers are the six non-app projects, apps/editor and
+  apps/core-demo. Only apps/web still uses the root file.
