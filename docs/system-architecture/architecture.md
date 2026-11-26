@@ -54,11 +54,11 @@ Rules:
 - A new dependency between projects needs a row above, and a rule in platform/tools/ci-plan.mjs that runs the consumers
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)) are a development dependency recorded above;
-  the planner selects the projects whose configs exist in the checkout. None of the apps has a config yet, so a shared
-  rule change selects only the six non-app projects. A root `eslint.config.mjs` change keeps the whole-plan selection
-  while the root still serves the apps: lint configuration can change what their checks find. An app config selects that
-  app's folder, and the folder calls the app's whole workflow, including its browser shards; the planner has no
-  lint-only folder.
+  the planner selects the projects whose configs exist in the checkout. In this transition the only configs are the six
+  non-app projects; an app config joins the consumers without a planner change. A root `eslint.config.mjs` change keeps
+  the whole-plan selection while the root still serves the apps: lint configuration can change what their checks find.
+  An app config selects that app's folder, and the folder calls the app's whole workflow, including its browser shards;
+  the planner has no lint-only folder.
 - Both map apps own their browser suites and shard counts; the planner only selects folders. See
   [web instructions](../../apps/web/AGENTS.md), [editor instructions](../../apps/editor/AGENTS.md) and
   [workflow testing](../../.github/TESTING.md#on-github).
@@ -68,8 +68,10 @@ Rules:
   builds are the separate HEAD mode described below. The scoped exceptions are `tests/`, the cross-project integration
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
   it publishes by setting the data and contracts versions; `platform/tools/phone-tags.mjs`, which platform's tag check
-  and both apps' own unit tests read at HEAD while no runtime app imports it; and development tooling: project lint
-  reads `platform/eslint-rules.mjs` at HEAD through its own config, and the apps keep doing so through the root config.
+  and both apps' own unit tests read at HEAD while no runtime app imports it; and development tooling: the six migrated
+  non-app configs read `platform/eslint-rules.mjs` at HEAD. The apps still read the unchanged root `eslint.config.mjs`,
+  which imports ESLint's own presets directly and does not consume the shared module. During this bounded transition its
+  app rule values may duplicate future shared rules; the app migrations and later root cleanup remove that duplication.
   It is repository tooling like the ESLint binary and its plugins, not runtime data; a pinned package would need a
   release for each rule change. Owner approval for this narrow exception is requested in the #458 PR
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).

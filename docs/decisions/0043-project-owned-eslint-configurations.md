@@ -43,10 +43,14 @@ the shared probe helper against its own config. A project's config selects that 
 - The root `eslint.config.mjs` stays byte-for-byte as on main and keeps serving Web, Editor and core-demo. Platform
   keeps its original root-config readability test until the replacement app-owned tests land. The readability probe
   helper and its planner rule are deferred to those app migrations.
-- Shared rules select only configs present in the checkout, so no app is selected now. A root-config change keeps the
-  whole-plan selection; an app config change will select that app's folder and its whole workflow. The current consumers
-  live in [architecture](../../docs/system-architecture/architecture.md#independent-projects).
+- Shared rules select only configs present in the checkout, so only the six non-app configs are consumers in this step.
+  A root-config change keeps the whole-plan selection; an app config change will select that app's folder and its whole
+  workflow without a planner change. The current consumers live in
+  [architecture](../../docs/system-architecture/architecture.md#independent-projects).
 - Pre-commit uses a staged file's own config when one exists and otherwise runs the root config with unchanged paths.
+- The unchanged root config owns app lint and imports `@eslint/js` and `globals` directly; it does not import the shared
+  module. Its app rule values may temporarily duplicate future shared rules. That duplication is bounded by the planned
+  app migrations and the later root cleanup, not a second source of truth for migrated projects.
 - Next: Web, Editor and core-demo migrate in their own PRs; the root config is deleted only once no app reads it.
 
 ### Outcome note: HEAD reads for lint tooling (2026-11-26)
@@ -60,6 +64,6 @@ the shared probe helper against its own config. A project's config selects that 
 - Reasoning: `platform/eslint-rules.mjs` is development tooling like the ESLint binary and its plugins, not runtime data
   or a published contract. Pinning it would need a package release for every rule change and would stop the test from
   checking the config as it is about to ship.
-- Scope: that file, read by project lint through its own config or the root config. Runtime, data and contract pins are
-  unchanged.
+- Scope: that file, read at HEAD only by the migrated non-app configs through their own configs. The apps' root config
+  does not import it. Runtime, data and contract pins are unchanged.
 - Owner approval: requested in the #458 PR.

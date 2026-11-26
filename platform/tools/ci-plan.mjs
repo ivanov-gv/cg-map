@@ -65,9 +65,9 @@ const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 const HEAD_DATA_CONSUMERS = ['tests'];
 const SHARED_ESLINT_RULES = 'platform/eslint-rules.mjs';
 const ESLINT_CONFIG_NAME = 'eslint.config.mjs';
-// Consumers are discovered, not listed: each known project contributes its config when the file exists. The CLI runs
-// at the repository root; tests inject a config list to prove a new config joins without a planner code change.
-function discoveredLintConfigs(root = process.cwd()) {
+// Returns config paths for known projects that have one under root. A missing config leaves that project on the root
+// file and outside the shared-rule consumers; tests use scratch fixtures, not the current checkout's config set.
+export function discoveredLintConfigs(root = process.cwd()) {
   return Object.keys(PROJECT_PIPELINES)
     .map(project => `${project}/${ESLINT_CONFIG_NAME}`)
     .filter(file => fs.existsSync(path.join(root, file)));

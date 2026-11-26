@@ -25,3 +25,6 @@ configs land now, while the root config keeps serving the three apps.
   that touches no app and for no weakening of CI selection. (#475)
 - 2026-11-26: PR #466's review proposed a stack: shared tooling first, then one PR per app, then root-config removal.
   The owner allowed one PR for the projects without browser suites and kept the CI time budget unchanged. (#466, #475)
+- 2026-11-26: Lead review corrected the transitional dependency: the root config imports ESLint's own presets, not the
+  shared module, and its app rules may duplicate future shared rules until app migrations and root cleanup. It also
+  moved consumer discovery tests to scratch fixtures and took synthetic regex probes out of production tooling. (#475)

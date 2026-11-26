@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {FOLDERS, PROJECT_PIPELINES, classify, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
+import {FOLDERS, PROJECT_PIPELINES, classify, discoveredLintConfigs, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -21,6 +21,18 @@ const OUTPUT_NAMES = [
   'prove_cd_test_runs',
   'manual_test_runs'
 ];
+
+// A scratch checkout lets the discovery test own its config set. Adding a real app config must not change this file.
+function configFixture(context, projects) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-lint-configs-'));
+  context.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const project of projects) {
+    const config = path.join(root, project, 'eslint.config.mjs');
+    fs.mkdirSync(path.dirname(config), {recursive: true});
+    fs.writeFileSync(config, 'export default [];\n');
+  }
+  return root;
+}
 
 const cases = [
   ['docs only', ['docs/runbooks/release.md'], ['docs']],
@@ -214,17 +226,20 @@ test('an app config joins its own pipeline only when that app migrates', () => {
   assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
 });
 
-test('the shared ESLint rules select only the configs present in this checkout', () => {
-  const plan = planChanges(['platform/eslint-rules.mjs']);
+test('shared-rule consumers follow scratch configs, including a migrated and an unmigrated app', context => {
+  const root = configFixture(context, ['data', 'apps/web', 'services/transit-relay']);
+  const lintConfigFiles = discoveredLintConfigs(root);
   assert.deepEqual(
-    new Set(plan.folders),
-    new Set(['map-core', 'contracts', 'data', 'transit-relay', 'platform', 'tests'])
+    new Set(lintConfigFiles),
+    new Set(['data/eslint.config.mjs', 'apps/web/eslint.config.mjs', 'services/transit-relay/eslint.config.mjs'])
   );
-  for (const appFolder of ['apps-web', 'apps-editor', 'apps-core-demo'])
-    assert.ok(!plan.folders.includes(appFolder), `${appFolder} has no config yet`);
+
+  const plan = planChanges(['platform/eslint-rules.mjs'], {lintConfigFiles});
+  assert.deepEqual(new Set(plan.folders), new Set(['data', 'transit-relay', 'apps-web']));
+  assert.ok(!plan.folders.includes('apps-editor'), 'the unmigrated app stays on the root config');
   assert.equal(plan.areas, undefined);
   assert.equal(plan.everything, false);
-  assert.deepEqual(imageMatrix(plan.folders).include, []);
+  assert.deepEqual(imageMatrix(plan.folders).include, [{app: 'web'}]);
 });
 
 test('a new project config joins the shared-rule consumers without a code change', () => {

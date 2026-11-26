@@ -36,6 +36,8 @@ export function lintGroups(files, configExists = file => fs.existsSync(file)) {
   return [...groups.values()];
 }
 
+// Returns the first nonzero runEslint status and stops there, or 0 when every group passes. configExists decides which
+// config owns each file; runEslint receives that config's folder and paths relative to it.
 export function lintStaged(files, runEslint, configExists) {
   for (const group of lintGroups(files, configExists)) {
     const status = runEslint(group.cwd, group.files);
