@@ -12,7 +12,7 @@ import {repoRoot} from '../agents/lib.mjs';
 const plannerEnv = {...process.env};
 delete plannerEnv.GITHUB_OUTPUT;
 delete plannerEnv.GITHUB_STEP_SUMMARY;
-const WEB = ['tests', 'apps-web'];
+const WEB = ['platform', 'tests', 'apps-web'];
 const OUTPUT_NAMES = [
   'image_matrix',
   'ci_in_place_test_runs',
@@ -408,7 +408,7 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   git('add', '.');
   git('commit', '-qm', 'web');
   const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
-  assert.match(narrowed, /Folders: tests, apps-web\n/);
+  assert.match(narrowed, /Folders: platform, tests, apps-web\n/);
 });
 
 test('each browser project checks only itself, and only the public app reaches the deployment', () => {

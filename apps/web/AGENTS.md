@@ -9,9 +9,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - The browser suite is split into the shards counted in `browser-jobs.json`; `tools/browser-matrix.mjs` builds the CI
   matrix from that one number. Keep the number in web, never in platform tooling. Any web change runs all shards;
   [workflow testing](../../.github/TESTING.md#on-github) owns the smoke and full-run rule. Keep specs and per-file area
-  lists out of the platform planner; prove a changed job count for both phone modes with
-  `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` and
-  `E2E_WORKERS=2 E2E_PHONE=all npx playwright test --list --shard=i/N` for every shard, matching CI's worker count.
+  lists out of the platform planner; prove a changed job count for the tagged phone tests with
+  `E2E_WORKERS=2 npx playwright test --list --shard=i/N` for every shard, matching CI's worker count. Web runs only
+  tagged phone tests, in PRs and nightly alike.
 - Data inputs belong to data/, not this component. Dev builds on main read repository data and contracts at HEAD through
   tools/data-root.mjs and tools/contracts-root.mjs; no other file here may name a repository contracts path.
 - tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact

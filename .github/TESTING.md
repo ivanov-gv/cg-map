@@ -241,13 +241,13 @@ The gate's planner selects the workflows a change touches and the gate proves th
   by the diff, the regular folder call passes `test_run` instead of a second call running: the planner's
   `ci_in_place_test_runs` output drives that and keeps the workflow out of `ci_test_runs`. Workflows without a folder
   call, such as `ci-publish`, still get a separate `(test run) …` call. Both separate browser calls pass `smoke: true`
-  and the default tagged phone tests, so each builds one shard from its own job count. These calls prove the workflow's
+  so each builds one shard from its own job count, with the default tagged phone tests. These calls prove the workflow's
   jobs and steps, not whole suites. The regular browser calls pass no `smoke`, so a PR, the nightly run and a full
   dispatch run use each app-owned count: every shard runs for a web or editor change. The planner emits no browser
   matrix. The counts live in [web](../apps/web/browser-jobs.json) and [editor](../apps/editor/browser-jobs.json), with
   the proof rules in [apps/web/AGENTS.md](../apps/web/AGENTS.md) and [apps/editor/AGENTS.md](../apps/editor/AGENTS.md),
-  and the reason in [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). `ci-pr-checks` forwards its
-  `phone_tests` mode to both regular browser calls; a separate test call keeps the tagged default. An in-place
+  and the reason in [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). The `phone_tests` input applies only
+  to `ci-apps-editor`, whose nightly runs every phone test; web runs only tagged phone tests in every run. An in-place
   `ci-workflows` call with no changed CD workflows still runs `cd-test-runs` with the empty list, whose script reports
   that no CD workflows need a test run. A shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in

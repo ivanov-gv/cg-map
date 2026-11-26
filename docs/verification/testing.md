@@ -79,20 +79,20 @@ it to GitHub Pages. [ci-nightly](../../.github/workflows/ci-nightly.yml) runs ev
 | Markdown, except under `apps/*/public`                         | `docs` only: no code checks                                                                                                                                                 |
 | Backend Go code                                                | `backend` only                                                                                                                                                              |
 | `services/transit-relay`                                       | `transit-relay`                                                                                                                                                             |
-| `platform/pages`                                               | `platform`                                                                                                                                                                  |
+| `platform/pages`                                               | `platform`, `apps-web`, every browser area                                                                                                                                  |
 | `platform/tools/serve.py`, `dev-port.mjs`                      | `platform` and every map application, whose workflows run their own browser suites                                                                                          |
 | `platform/browser-image`                                       | `browser-image`, `platform`                                                                                                                                                 |
 | `platform/tools/lan_certificate.py`                            | `platform`, `apps-editor`                                                                                                                                                   |
 | `platform/tools/phone-tags.mjs`                                | `platform`, `apps-web`, `apps-editor`                                                                                                                                       |
 | `tests`, `data/tools`, `data/tests`, the rest of `platform`    | That folder, except as listed below                                                                                                                                         |
-| `apps/web`                                                     | `apps-web`, `tests`, and the whole web browser suite                                                                                                                        |
+| `apps/web`                                                     | `apps-web`, `tests`, `platform`, and the whole web browser suite                                                                                                            |
 | `apps/editor`                                                  | `apps-editor`, `tests`, and the whole editor browser suite                                                                                                                  |
 | `apps/core-demo`                                               | `apps-core-demo`                                                                                                                                                            |
-| `packages/map-core`                                            | `map-core`, `apps-core-demo`, `platform`                                                                                                                                    |
-| `data/tools/editor-bundle.mjs`                                 | `data`, `tests`                                                                                                                                                             |
+| `packages/map-core`                                            | `map-core`, every map application, `tests`, `platform`, every browser area                                                                                                  |
+| `data/tools/editor-bundle.mjs`                                 | `data`, `apps-editor`, `tests`                                                                                                                                              |
 | `data/tools` changeset importer, data check, level policy      | `data`, `tests`                                                                                                                                                             |
-| `data/tests/fixtures`                                          | `data`                                                                                                                                                                      |
-| `data/sources`, `artifacts`, `imagery`                         | `data`, `tests`                                                                                                                                                             |
+| `data/tests/fixtures`                                          | `data`, `apps-web`, `tests`, `platform`, every browser area                                                                                                                 |
+| `data/sources`, `artifacts`, `imagery`                         | `data`, every map application, `tests`, `platform`, every browser area                                                                                                      |
 | `packages/contracts`                                           | `contracts`, `data`, `tests`, `platform`                                                                                                                                    |
 | `.github`, the planner                                         | `workflows`, `platform`, plus test runs: see [.github/TESTING.md](../../.github/TESTING.md)                                                                                 |
 | Root `Makefile`                                                | Only the folders whose CI calls it: `docs`, `workflows`, `platform`, `contracts`, `data`, `transit-relay`, `tests`, `map-core`, `apps-web`, `apps-editor`, `apps-core-demo` |
@@ -107,10 +107,10 @@ Check a branch with `make ci-plan BASE=origin/main`.
 
 ## Phone layout tests
 
-A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. Both apps read the `phone_tests`
-CI input: a PR, a CI test run and a plain `make e2e` keep the tagged default, while the nightly passes `all` and runs
-every test on the phone. A test that misses the tag never runs on the phone in a PR. The desktop project runs everything
-except tests scoped to another project. List the web phone selection with
+A PR runs web and editor tests on the phone layout only when they are tagged `@phone`. In apps/web every run does the
+same — nightly, CI test runs and a plain `make e2e` — so a test that misses the tag never runs on the phone. The
+`phone_tests` CI input applies only to apps/editor, whose nightly still runs every test on the phone. The desktop
+project runs everything except tests scoped to another project. List the web phone selection with
 `npx playwright test --list --project=pages-mobile`.
 
 In apps/web, a test that works on one layout only declares that in its tags instead of skipping itself after setup and

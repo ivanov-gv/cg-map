@@ -22,8 +22,11 @@ it.
   and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
   and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
 - A new web module needs its allowed imports declared in platform/tools/check-repo.mjs and its file in the offline shell
-  list in apps/web/tools/finalize.mjs. Playwright discovers browser tests, so no planner entry is needed. Dynamic
-  `import()` in web runtime is rejected. Enforced: `npm run check:repo` and the offline inventory test.
+  list in apps/web/tools/finalize.mjs. Playwright discovers browser tests, so no planner entry is needed. A web change
+  still selects platform: check:repo's allowed imports, dynamic-import ban and gesture guard, build-web and hosting
+  tests, package pins, Makefiles and dev-site tests read web files until issue #456 moves those checks. Dynamic
+  `import()` in web runtime is rejected. Enforced: `npm run check:repo`, platform's verify and the offline inventory
+  test.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 

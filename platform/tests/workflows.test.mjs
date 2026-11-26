@@ -915,11 +915,7 @@ test('every static test call passes inputs meant for its workflow', () => {
   for (const [name, expected] of Object.entries(staticTestCallInputs)) {
     assert.deepEqual(jobs[name].with, expected, `${name} passes the wrong inputs`);
   }
-  assert.equal(
-    jobs['apps-editor'].with.phone_tests,
-    '${{ inputs.phone_tests || \'tagged\' }}',
-    'the regular editor call forwards the app-owned phone mode'
-  );
+  assert.equal('smoke' in jobs['apps-editor'].with, false, 'the regular editor call uses the app-owned shard count');
 });
 
 test('the browser test calls use their app-owned shards with tagged phone tests', () => {
@@ -1424,8 +1420,8 @@ test('only the new pipelines run on the repository', () => {
 
 test('the regular web call uses every app-owned shard', () => {
   const call = load('ci-pr-checks.yml').jobs['apps-web'];
-  assert.deepEqual(Object.keys(call.with).toSorted(), ['phone_tests', 'test_run']);
-  assert.equal(call.with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
+  assert.deepEqual(Object.keys(call.with).toSorted(), ['test_run']);
+  assert.equal('smoke' in call.with, false, 'the regular web call uses the app-owned shard count');
 });
 
 test('the plan action and both plan jobs expose the same test-run outputs', () => {
@@ -1489,18 +1485,23 @@ test('browser jobs and local runs pin one image, whose version matches the repos
   assert.match([...pins][0], expected);
 });
 
-test('ci-pr-checks forwards its phone mode to both browser calls', () => {
+test('web runs only tagged phone tests', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  for (const app of ['apps-web', 'apps-editor']) {
-    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}', `${app} ignores the phone mode`);
-  }
+  const config = fs.readFileSync(path.join(repoRoot, 'apps/web/playwright.config.mjs'), 'utf8');
+
+  assert.equal(jobs['apps-web'].with.phone_tests, undefined);
+  assert.equal(load('ci-apps-web.yml').jobs.browser.env.E2E_PHONE, undefined);
+  assert.match(config, /grep: \/@phone\/, grepInvert: \/@desktop\//);
 });
 
-test('each browser job forwards its phone mode to E2E_PHONE', () => {
-  for (const app of ['web', 'editor']) {
-    const {browser} = load(`ci-apps-${app}.yml`).jobs;
-    assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}', `${app} ignores the phone mode`);
-  }
+test('ci-pr-checks forwards its phone mode to the editor call', () => {
+  const {jobs} = load('ci-pr-checks.yml');
+  assert.equal(jobs['apps-editor'].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
+});
+
+test('the editor browser job forwards its phone mode to E2E_PHONE', () => {
+  const {browser} = load('ci-apps-editor.yml').jobs;
+  assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
 });
 
 test('the browser image runs the Node version the repository pins', () => {

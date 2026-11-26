@@ -17,10 +17,9 @@ test('a phone-dependent web test is tagged, or a PR would not run it there', () 
   }
 });
 
-// Platform tests the workflow inputs; the web app tests that its own config reads the mode those inputs supply.
-test('the browser config applies the phone mode from CI', () => {
+// Platform tests the workflow inputs; the web app tests that its phone project keeps the tagged default of both runs.
+test('the web phone project runs only tagged phone tests', () => {
   const config = fs.readFileSync(new URL('../playwright.config.mjs', import.meta.url), 'utf8');
-  assert.match(config, /process\.env\.E2E_PHONE === 'all' \? allPhoneTests : taggedPhoneTests/);
-  assert.match(config, /const taggedPhoneTests = \{grep: \/@phone\/, grepInvert: \/@desktop\/\}/);
-  assert.match(config, /const allPhoneTests = \{grepInvert: \/@desktop\/\}/);
+  assert.match(config, /const phoneFilter = \{grep: \/@phone\/, grepInvert: \/@desktop\/\}/);
+  assert.match(config, /name: 'pages-mobile',\n\s*\.\.\.phoneFilter,/);
 });

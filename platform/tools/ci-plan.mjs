@@ -39,7 +39,9 @@ const ROOT_MAKEFILE_FOLDERS = [
   'apps-editor',
   'apps-core-demo'
 ];
-const WEB_DEPENDENTS = ['apps-web', 'tests'];
+// Platform still checks web files: check:repo (allowed imports, dynamic-import ban, gesture guard), build-web and
+// hosting tests, package pins, Makefiles and dev-site tests. Issue #456 moves those checks out of platform.
+const WEB_DEPENDENTS = ['apps-web', 'tests', 'platform'];
 // Every map application consumes the map-core runtime: that is their concrete contract.
 const MAP_APPLICATIONS = ['apps-web', 'apps-editor', 'apps-core-demo'];
 // App and platform tests pin a published map-data release. HEAD data reaches only the cross-project integration tests.
@@ -85,7 +87,7 @@ export function classify(file) {
   if (file.startsWith('packages/contracts/')) return {folders: ['contracts', 'data', 'tests', 'platform']};
   // Only core-demo runs unreleased core. web and editor pin a release, so a core change cannot affect them.
   if (file.startsWith('packages/map-core/')) return {folders: ['map-core', 'apps-core-demo', 'platform']};
-  // Every web file selects the app and its cross-project consumer, never platform. The app owns its browser shards.
+  // A web change selects the app, its cross-project consumer and platform's checks of web files. The app owns its shards.
   if (file.startsWith('apps/web/')) return {folders: WEB_DEPENDENTS};
   const platformFolders = /(^|\/)(Makefile|package\.json)$/.test(file) ? ['platform'] : [];
   // Any editor change runs the app's whole browser suite; the app owns its shard count and specs.
