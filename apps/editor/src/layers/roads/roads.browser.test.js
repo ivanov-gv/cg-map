@@ -39,6 +39,7 @@ const shapesIn = (page, source) =>
   }, source);
 
 const changesetOf = page => page.evaluate(() => window.roadsHarness.exportChangeset());
+const clickCountOf = page => page.evaluate(() => window.roadsHarness.clickCount());
 
 // Bug: changing access, kind and furniture edits must stay one step with the road, and an open edit must not be lost when
 // the junction at its end opens.
@@ -173,8 +174,16 @@ test('one level is shown at a time, and roads under it are neither picked nor jo
     [-6, 0],
     [6, 0]
   ]);
-  // The ground road is drawn for context, but cannot be picked while the level below is shown.
+  const candidates = await page.evaluate(() => window.roadsHarness.candidateNamesAtShownLevel());
+  expect(candidates).toContain('Main street');
+  expect(candidates).not.toContain('Side street');
+  // The ground road stays in the working entries but cannot be picked while the level below is shown. Wait for the
+  // repaint the level change starts, then for the click handler itself before checking what it selected.
+  await waitForRepaint(page);
+  const clicksBeforeTap = await clickCountOf(page);
   await tapAt(page, [6, 3]);
+  await expect.poll(() => clickCountOf(page)).toBe(clicksBeforeTap + 1);
+  await expect(page.locator('#selection-title')).not.toHaveText('Side street');
   await expect(page.locator('.inspector')).toBeHidden();
   // All levels restores the road on the level it was moved to.
   await picker.getByRole('button', {name: 'All levels'}).click();

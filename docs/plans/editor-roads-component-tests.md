@@ -35,9 +35,9 @@ tests next to the code they test; this pilot applies it to roads without changin
   in 2.1m (131.82 s wall). A round-2 review then added unit proofs for `isPickableEntry` and the `app.js` binding, a
   directory assertion at Level `-1`, the restored closing step of the harness level case, and direct `featureForEntry`
   imports; it also removed the duplicate guards from `app.js`. After those changes, six colocated cases plus the
-  whole-app journey passed in 1.5m (90 s wall) under the same settings. `make verify PKG=apps/editor`: 356 tests, 0
-  failures. Each mutation below was applied alone in a disposable copy and observed to fail; attempts that passed are
-  not counted as proof. (#476)
+  whole-app journey passed in 1.5m (90 s wall) under the same settings. After round 3's harness seam, the same seven
+  tests passed again in 1.3m (81 s wall). `make verify PKG=apps/editor`: 356 tests, 0 failures. Each mutation below was
+  applied alone in a disposable copy and observed to fail; attempts that passed are not counted as proof. (#476)
   - `isPickableEntry` replaced by `() => true` in `roads-host.js`: both `roads-host.test.js` tests failed.
   - `const isPickable = entry => isPickableEntry(entry, activeLayer)` replaced by `() => true` in `app.js`: the `app.js`
     binding test failed, while the shared-rule test still passed.
@@ -45,8 +45,8 @@ tests next to the code they test; this pilot applies it to roads without changin
     `expect(page.locator('#objects-list')).not.toContainText('Side street')` at Level `-1`.
   - The `jointOnShownLevel` filter removed from `roadsJointsToShow`: the harness level case failed its joint-coordinate
     assertion after switching to Level `-1`.
-  - The `entryOnShownLevel` filter removed from `roadsPickableEntries`: the harness level case failed
-    `expect(page.locator('.inspector')).toBeHidden()` when the ground road was tapped at Level `-1`.
+  - The `entryOnShownLevel` filter removed from `roadsPickableEntries`: the harness level case failed the candidate
+    assertion described in the round-3 entry below.
   - Road hits given priority over the joint in `roadsClickTarget`: the harness junction case failed with
     `#selection-title` showing `Main street` instead of `Main street × Side street`.
   - `roadsJointsToShow` given `shownLevel: null` at the remaining `app.js` call site: the whole-app case failed its
@@ -55,3 +55,10 @@ tests next to the code they test; this pilot applies it to roads without changin
     failed with `#selection-kind` showing `Road · Residential` instead of `Junction`.
   - Only computing hits before the joint lookup, without changing priority, was also tried and passed. It is recorded
     here as a rejected proof attempt, not as a mutation proof.
+- 2026-11-26: review round 3 removed the timing dependence from the harness level case. The case now waits for the
+  repaint the level change starts, waits for the click handler through a harness click count, and checks the shared
+  candidate filter with one synthetic hit per entry before asserting that the ground road is not selected. On
+  `root-desktop` with `E2E_WORKERS=1` and `E2E_ANGLE=swiftshader`, and with free memory above 4 GiB before every run,
+  the unmutated roads browser specs passed **3/3** runs (six tests each) and the `entryOnShownLevel`-removed mutation
+  failed **5/5** runs, each on the level case's `expect(candidates).not.toContain('Side street')` assertion. Every
+  mutation ran alone in a disposable copy under the same scratch path, deleted after the run. (#476)

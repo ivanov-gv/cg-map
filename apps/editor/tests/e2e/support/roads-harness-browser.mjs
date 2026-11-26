@@ -18,7 +18,7 @@ import {validateLayerRules} from '__APP_BASE__layers/shared/layer-rules.js';
 import {derivedFacts} from '__APP_BASE__source-data/derived-facts.js';
 import {createSourceOverlay, overlayCollection} from '__APP_BASE__source-data/source-overlay.js';
 import {showLevelPicker} from '__APP_BASE__layers/roads/level-picker.js';
-import {roadsClickTarget, roadsJointsToShow} from '__APP_BASE__layers/roads/roads-host.js';
+import {roadsClickTarget, roadsJointsToShow, roadsPickableEntries} from '__APP_BASE__layers/roads/roads-host.js';
 
 const element = id => document.getElementById(id);
 const setStatus = message => {
@@ -79,7 +79,8 @@ function createHarnessState({sourceEntries, rulesConfig, map}) {
     jointLayer: createJointLayer(map),
     handles: createHandleLayer(map),
     activeEntries: [],
-    shownLevel: null
+    shownLevel: null,
+    clickCount: 0
   };
   state.entriesOf = filename => (sources.has(filename) ? session.workingEntries(filename) : []);
   state.context = () => behaviorContextOf(state);
@@ -217,27 +218,31 @@ function refreshOverlay(state) {
 }
 
 function selectFeatureAtClick(state, event) {
-  if (state.editing.hasGeometryTool) {
-    state.editing.tap(event);
-    return;
+  try {
+    if (state.editing.hasGeometryTool) {
+      state.editing.tap(event);
+      return;
+    }
+    if (state.editing.hasUnappliedEdit) {
+      setStatus('Apply or Cancel the current edit first.');
+      return;
+    }
+    const target = roadsClickTarget({
+      point: event.point,
+      jointLayer: state.jointLayer,
+      layer: state.activeLayer,
+      context: state.context(),
+      entries: state.activeEntries,
+      shownLevel: state.shownLevel,
+      hitsOf: () =>
+        hitTest(state.map, event.point, [...state.overlay.layerIds, ...state.overlay.inspectionLayerIds])
+    });
+    if (target.entry) selectObject(state, target.entry);
+    else if (target.candidates.length > 0) selectObject(state, target.candidates[0]);
+    else state.editing.close();
+  } finally {
+    state.clickCount += 1;
   }
-  if (state.editing.hasUnappliedEdit) {
-    setStatus('Apply or Cancel the current edit first.');
-    return;
-  }
-  const target = roadsClickTarget({
-    point: event.point,
-    jointLayer: state.jointLayer,
-    layer: state.activeLayer,
-    context: state.context(),
-    entries: state.activeEntries,
-    shownLevel: state.shownLevel,
-    hitsOf: () =>
-      hitTest(state.map, event.point, [...state.overlay.layerIds, ...state.overlay.inspectionLayerIds])
-  });
-  if (target.entry) selectObject(state, target.entry);
-  else if (target.candidates.length > 0) selectObject(state, target.candidates[0]);
-  else state.editing.close();
 }
 
 function installMapListeners(state) {
@@ -264,7 +269,19 @@ export async function mountRoadsHarness({sourceEntries, rulesConfig, appBase}) {
   registerBehaviors(roadBehaviors);
   registerBehaviors(junctionBehaviors);
   refreshOverlay(state);
+  // The overlay hides objects off the shown level, so a click can only prove what is hit-testable. Checking the shared
+  // candidate filter with one synthetic hit per entry proves the off-level object is not selectable even if it stays in
+  // the working entries.
+  const candidateNamesAtShownLevel = () =>
+    roadsPickableEntries({
+      hits: state.activeEntries.map((entry, id) => ({id, properties: {sourceFile: entry.filename}})),
+      entries: state.activeEntries,
+      layer: state.activeLayer,
+      shownLevel: state.shownLevel
+    }).map(({feature}) => feature.properties.name ?? feature.properties.kind);
   window.roadsHarness = {
+    candidateNamesAtShownLevel,
+    clickCount: () => state.clickCount,
     exportChangeset: envelope =>
       buildChangeset(state.session, state.sources, envelope ?? {author: 'Browser Test', reason: 'Browser test'}, state.rules)
   };
