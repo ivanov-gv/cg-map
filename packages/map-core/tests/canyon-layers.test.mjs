@@ -18,10 +18,10 @@ function rimWithProperties(properties) {
   };
 }
 
-function wallWidthPixels(properties) {
+function wallWidthPixels(properties, atZoom = zoom) {
   const parsed = expression.createExpression(wallLayers[0].paint['line-width']);
   assert.equal(parsed.result, 'success', JSON.stringify(parsed.value));
-  return parsed.value.evaluate({zoom}, rimWithProperties(properties), undefined, rimTile);
+  return parsed.value.evaluate({zoom: atZoom}, rimWithProperties(properties), undefined, rimTile);
 }
 
 // An unmeasured rim is still a rim; it just has no wall to draw.
@@ -46,4 +46,10 @@ test('two edges of one river get widths from their own heights', () => {
 
 test('no river name appears in the canyon style', () => {
   assert.doesNotMatch(JSON.stringify(style), /Morača|Ribnica/);
+});
+
+// Variant B fixes one pixels-per-metre scale; one zoom level doubles the pixel width.
+test('scaled walls use one scale and keep it across zooms', () => {
+  assert.equal(wallWidthPixels({river: 'Example River', height: 10}), 15);
+  assert.equal(wallWidthPixels({river: 'Example River', height: 10}, 17), 30);
 });

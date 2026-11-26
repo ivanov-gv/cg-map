@@ -1,20 +1,10 @@
 import {basemapColors as colors, colorChannels} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 
-const earthEquatorialCircumferenceMetres = 40075016.686;
-const maplibreTileSizePixels = 512;
-const groundTruthZoom = 16;
-const metresPerLatitudeDegree = earthEquatorialCircumferenceMetres / 360;
-// MapLibre's distance expression measures from the evaluated feature, so a rim's distance to the equator gives its
-// latitude without adding a field to the tiles.
-const equator = {type: 'LineString', coordinates: [[-180, 0], [0, 0], [180, 0]]};
-const latitudeDegrees = ['/', ['distance', equator], metresPerLatitudeDegree];
-// At zoom z one pixel covers circumference × cos(latitude) / (512 × 2^z) metres on the ground.
-const pixelsPerGroundMetreAtZoom16 = [
-  '/',
-  maplibreTileSizePixels * 2 ** groundTruthZoom,
-  ['*', earthEquatorialCircumferenceMetres, ['cos', ['*', latitudeDegrees, Math.PI / 180]]]
-];
+const scaleReferenceZoom = 16;
+// One scale for all rims: today's two typical widths divided by their median heights give 2 px/m and 1 px/m at
+// zoom 16. One scale cannot match both, so use their midpoint.
+const scaledPixelsPerMetreAtZoom16 = (2 + 1) / 2;
 // MapLibre cannot fill a gradient across a line, so nested bands approximate one; ten is the design's minimum
 // for steps that do not show.
 const wallBandCount = 10;
@@ -27,11 +17,11 @@ const groundZoomStops = Array.from(
 );
 const hasMeasuredHeight = ['has', 'height'];
 
-// Returns a line-width expression; doubling the pixel width per zoom level keeps the ground width unchanged.
-function groundWidthPixels(metres) {
+// Returns a line-width expression; doubling the pixel width per zoom level keeps the same ground scale.
+function scaledWidthPixels(metres) {
   const stops = groundZoomStops.flatMap(zoom => [
     zoom,
-    ['*', metres, pixelsPerGroundMetreAtZoom16, 2 ** (zoom - groundTruthZoom)]
+    ['*', metres, scaledPixelsPerMetreAtZoom16, 2 ** (zoom - scaleReferenceZoom)]
   ]);
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
 }
@@ -62,8 +52,8 @@ function wallBand(bandIndex) {
     layout: {'line-cap': 'butt', 'line-join': 'round'},
     paint: {
       'line-color': mixedColor(colors.canyonWallAtWater, colors.canyonWallAtRim, lightness),
-      'line-width': groundWidthPixels(['*', rimHeight, widthShare]),
-      'line-offset': groundWidthPixels(['*', rimHeight, widthShare / 2])
+      'line-width': scaledWidthPixels(['*', rimHeight, widthShare]),
+      'line-offset': scaledWidthPixels(['*', rimHeight, widthShare / 2])
     }
   });
 }
