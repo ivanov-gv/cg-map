@@ -27,6 +27,9 @@ ROAD_FILE = 'roads.geojson'
 JOIN_DISTANCE_METRES = 15
 OUTLINE_HALF_WIDTH_METRES = 10
 SIMPLIFICATION_METRES = 1
+# OSM areas and road lines are simplified and rounded independently, so a sub-metre gap is not a second bridge.
+# The same clearance keeps a traced deck from touching a neighbouring OSM deck after six-decimal rounding.
+OSM_OUTLINE_TOLERANCE_METRES = 1
 WALKING_KINDS = frozenset({
     'footway', 'cycleway', 'path', 'pedestrian', 'track', 'bridleway'
 })
@@ -82,25 +85,25 @@ def bridge_roads(roads):
     ]
 
 
-def osm_areas(bridges):
-    """Return the extracted OSM bridge polygons that cover bridge roads."""
+def osm_areas(bridges, scales):
+    """Return extracted OSM bridge polygons scaled to local metres."""
     return [
-        shape(feature['geometry']) for feature in bridges['features']
+        to_local(shape(feature['geometry']), scales) for feature in bridges['features']
         if feature['properties'].get('method') == 'osm'
     ]
 
 
-def covered_road_indexes(roads, areas):
-    """Index every bridge road touched by an OSM bridge outline."""
+def covered_road_indexes(lines, areas):
+    """Index roads within the OSM outline tolerance of an extracted bridge polygon."""
     if not areas:
         return set()
     index = STRtree(areas)
     covered = set()
-    for position, feature in enumerate(roads):
-        geometry = shape(feature['geometry'])
+    for position, line in enumerate(lines):
+        search_area = line.buffer(OSM_OUTLINE_TOLERANCE_METRES)
         if any(
-            areas[int(candidate)].intersects(geometry)
-            for candidate in index.query(geometry)
+            areas[int(candidate)].intersects(search_area)
+            for candidate in index.query(search_area)
         ):
             covered.add(position)
     return covered
@@ -163,13 +166,25 @@ def connected_groups(roads, lines, covered):
     return list(groups.values())
 
 
-def trace_outline(group_lines):
+def clear_from_osm(deck, osm_union):
+    """Remove OSM decks and their clearance, leaving the largest remaining deck."""
+    cleared = deck.difference(
+        osm_union.buffer(OSM_OUTLINE_TOLERANCE_METRES)
+    )
+    polygons = [cleared] if cleared.geom_type == 'Polygon' else [
+        part for part in cleared.geoms if part.geom_type == 'Polygon'
+    ]
+    if not polygons:
+        raise ValueError('a bridge road has no traced deck outside OSM areas')
+    return max(polygons, key=lambda polygon: polygon.area)
+
+
+def trace_outline(group_lines, osm_union):
     """Return one simplified polygon around the road pieces of a crossing."""
     deck = unary_union([
         line.buffer(OUTLINE_HALF_WIDTH_METRES) for line in group_lines
     ])
-    if deck.geom_type != 'Polygon':
-        deck = deck.convex_hull
+    deck = clear_from_osm(deck, osm_union)
     outline = deck.simplify(SIMPLIFICATION_METRES, preserve_topology=True)
     if outline.geom_type != 'Polygon':
         outline = outline.convex_hull
@@ -185,7 +200,7 @@ def unanimous_property(roads, field):
     return values.pop() if len(values) == 1 else None
 
 
-def traced_feature(group, roads, outlines, scales):
+def traced_feature(group, roads, lines, osm_union, scales):
     """Return one adopted traced outline with its contributing road identities."""
     source_road_ids = sorted({
         roads[position]['properties']['entityId'] for position in group
@@ -201,7 +216,9 @@ def traced_feature(group, roads, outlines, scales):
         if value:
             properties[field] = value
     geometry = rounded_geometry(mapping(
-        orient(to_wgs84(trace_outline([outlines[i] for i in group]), scales))
+        orient(to_wgs84(
+            trace_outline([lines[i] for i in group], osm_union), scales
+        ))
     ))
     entity_id = f'derived:bridge-{source_road_ids[0].replace("/", "-")}'
     identity = {
@@ -222,14 +239,15 @@ def seed(root):
     scales = local_scales(reference_latitude)
 
     candidates = bridge_roads(roads)
-    areas = osm_areas(bridges)
-    covered = covered_road_indexes(candidates, areas)
+    areas = osm_areas(bridges, scales)
     local_lines = [
         to_local(shape(feature['geometry']), scales) for feature in candidates
     ]
+    covered = covered_road_indexes(local_lines, areas)
+    osm_union = unary_union(areas)
     groups = connected_groups(candidates, local_lines, covered)
     traced = [
-        traced_feature(group, candidates, local_lines, scales)
+        traced_feature(group, candidates, local_lines, osm_union, scales)
         for group in groups
     ]
     features = [
@@ -256,6 +274,7 @@ def seed(root):
         'joinDistanceMetres': JOIN_DISTANCE_METRES,
         'outlineHalfWidthMetres': OUTLINE_HALF_WIDTH_METRES,
         'simplificationMetres': SIMPLIFICATION_METRES,
+        'osmOutlineToleranceMetres': OSM_OUTLINE_TOLERANCE_METRES,
         'walkingKinds': sorted(WALKING_KINDS),
         'referenceLatitude': round(reference_latitude, 6),
     }

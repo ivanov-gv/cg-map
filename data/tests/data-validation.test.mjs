@@ -1184,6 +1184,14 @@ test('bridge sources validate methods, identities, geometry and reviewed counts'
     () => validateBridges(reversedRing, {contractsDirectory}),
     /exterior must be counterclockwise/
   );
+  const copiedOntoOsm = structuredClone(bridges);
+  copiedOntoOsm.features[tracedIndex].geometry = structuredClone(
+    copiedOntoOsm.features[osmIndex].geometry
+  );
+  assert.throws(
+    () => validateBridges(copiedOntoOsm, {contractsDirectory, roads}),
+    /traced outline overlaps an OSM outline/
+  );
   assert.throws(
     () => validateBridgeCounts(
       {...provenance.bridge_counts, osmAreas: provenance.bridge_counts.osmAreas + 1},

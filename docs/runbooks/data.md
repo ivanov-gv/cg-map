@@ -164,12 +164,14 @@ python3 data/tools/seed_bridge_outlines.py --root .
 ```
 
 The seed groups uncovered bridge roads within 15 m when they share an endpoint or name, or either is a walking or
-cycling kind; it buffers each group by 10 m, unions the buffers, simplifies by 1 m and rounds to six decimals. Each
-traced outline records its source road IDs, uses `derived:bridge-*` identity with a content-hash version, and is marked
-`method: traced`. OSM areas keep `method: osm` and their OSM identity. Review the counts in `bridge_counts` and the
-parameters in `bridge_seed` in `sources/provenance.json`, then rebuild the archive because the geometry changed. See
-[decision 0046](../decisions/0046-bridge-outlines-seeded-once.md). Like railways, this source is staged display geometry
-outside the pinned editor bundle until a later step defines its editor mode.
+cycling kind. A road within 1 m of an OSM outline counts as covered: the OSM area and the road line are simplified and
+rounded independently, so a sub-metre gap is not a second bridge. It buffers each uncovered group by 10 m, removes OSM
+outlines with that same 1 m clearance so no traced deck overlaps a mapped one, then simplifies by 1 m and rounds to six
+decimals. Each traced outline records its source road IDs, uses `derived:bridge-*` identity with a content-hash version,
+and is marked `method: traced`. OSM areas keep `method: osm` and their OSM identity. Review the counts in
+`bridge_counts` and the parameters in `bridge_seed` in `sources/provenance.json`, then rebuild the archive because the
+geometry changed. See [decision 0046](../decisions/0046-bridge-outlines-seeded-once.md). Like railways, this source is
+staged display geometry outside the pinned editor bundle until a later step defines its editor mode.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
 an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a

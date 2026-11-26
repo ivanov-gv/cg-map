@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23790824,
+    "bytes": 23790415,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -13,10 +13,10 @@
       "bridges": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 241960,
-          "9-12": 36818
+          "13-16": 241422,
+          "9-12": 36598
         },
-        "bytes": 278778
+        "bytes": 278020
       },
       "buildings": {
         "byZoomBand": {
@@ -147,19 +147,20 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-0c9a48b0c92da130.pmtiles",
-    "sha256": "0c9a48b0c92da1308a41a35fc131a0bac492ec4fc772c4089e859ed547927710",
+    "file": "montenegro-7c60358ac9961a75.pmtiles",
+    "sha256": "7c60358ac9961a7534295aa1013be96170642a1967dad35e6471c00197397043",
     "tiles": 229422
   },
   "bridge_counts": {
     "bridgeRoadFeatures": 689,
-    "coveredByOsm": 34,
+    "coveredByOsm": 35,
     "osmAreas": 12,
-    "tracedOutlines": 600,
-    "tracedRoadFeatures": 655
+    "tracedOutlines": 599,
+    "tracedRoadFeatures": 654
   },
   "bridge_seed": {
     "joinDistanceMetres": 15,
+    "osmOutlineToleranceMetres": 1,
     "outlineHalfWidthMetres": 10,
     "referenceLatitude": 42.44,
     "simplificationMetres": 1,
@@ -240,9 +241,9 @@
       "sha256": "828f4be005a96e1d5217fea1ad454b5bcfa69b5755e191772cdbf3ac8d9c95bf"
     },
     "bridges.geojson": {
-      "bytes": 332852,
-      "features": 612,
-      "sha256": "424c453a961f168e24115c478ee2252ff97494eb7aa92ed4dd0e6aaca6da9cd7"
+      "bytes": 332100,
+      "features": 611,
+      "sha256": "741c857076f6bb282271e91f8e60ba92e5bdd05e3e6eef01502acaa4f18cc947"
     },
     "building-entrances.geojson": {
       "bytes": 41359,
@@ -359,7 +360,7 @@
       "canyonRimHeightRounding": "nearest metre, halves upward",
       "canyonRimHeightStatistic": "median of sampled bank rise",
       "canyonRimJoinGapMetres": 60,
-      "canyonRimMinimumBankRiseMetres": 8,
+      "canyonRimMinimumBankRiseMetres": 8.0,
       "canyonRimMinimumLengthMetres": 100,
       "canyonRimSearchDistanceMetres": 60,
       "canyonRimSearchStepMetres": 10,
@@ -388,7 +389,7 @@
       ],
       "minimumAreaSquareMetres": 2500,
       "ridgeMinimumLengthMetres": 100,
-      "ridgeSimplificationToleranceDegrees": 0.00001,
+      "ridgeSimplificationToleranceDegrees": 1e-05,
       "summitLinkDistanceMetres": 50
     },
     "detailBounds": [

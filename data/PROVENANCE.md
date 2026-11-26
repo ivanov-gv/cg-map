@@ -85,17 +85,17 @@ imported disused object; zero counts are explicit. The archive layer carries `ki
 This step publishes display geometry only, so the staged source stays outside the pinned editor bundle until a later
 step defines its editor mode.
 
-Issue #487 adds `sources/bridges.geojson` with one Polygon per crossing: 612 outlines, 332,852 bytes (SHA-256
-`424c453a961f168e24115c478ee2252ff97494eb7aa92ed4dd0e6aaca6da9cd7`). The `bridges` extraction group finds 12
+Issue #487 adds `sources/bridges.geojson` with one Polygon per crossing: 611 outlines, 332,100 bytes (SHA-256
+`741c857076f6bb282271e91f8e60ba92e5bdd05e3e6eef01502acaa4f18cc947`). The `bridges` extraction group finds 12
 `man_made=bridge` areas inside the detail box; those features keep their OSM `way/N` or `relation/N` identity, upstream
 version and `method: osm`. Most Milenijum is the single OSM relation 3085030, so its four named road ways are not traced
 again. `data/tools/seed_bridge_outlines.py` was then run once over the reviewed roads: 689 bridge road features, of
-which 34 are covered by an OSM area, produced 600 traced outlines from the remaining 655 roads. Grouping joins nearby
+which 35 lie within 1 m of an OSM area, produced 599 traced outlines from the remaining 654 roads. Grouping joins nearby
 uncovered roads that share an endpoint or name, or that are walking and cycling kinds, within 15 m; each group is
-buffered by 10 m, unioned, simplified by 1 m and rounded to six decimals in WGS84. Traced features use
-`derived:bridge-*` identity with a content-hash version, list their `sourceRoadIds` and carry `method: traced`. Later
-`bridges` extractions carry those reviewed outlines forward unchanged rather than deriving them again. Counts and seed
-parameters live under `bridge_counts` and `bridge_seed` in `sources/provenance.json`; see
+buffered by 10 m, cleared of OSM outlines with that same 1 m tolerance, simplified by 1 m and rounded to six decimals in
+WGS84. Traced features use `derived:bridge-*` identity with a content-hash version, list their `sourceRoadIds` and carry
+`method: traced`. Later `bridges` extractions carry those reviewed outlines forward unchanged rather than deriving them
+again. Counts and seed parameters live under `bridge_counts` and `bridge_seed` in `sources/provenance.json`; see
 [decision 0046](../docs/decisions/0046-bridge-outlines-seeded-once.md). This is display geometry only, so the source
 stays outside the pinned editor bundle until a later step defines its editor mode.
 
@@ -240,13 +240,13 @@ snapshot hashes remain in their own provenance files.
 | `canyon-rims.geojson`        | 50 segments                                  | 45,434     |
 | `protected-areas.geojson`    | 4 named protected areas                      | 39,710     |
 | `railways.geojson`           | 167 tracks, platforms, stations and halts    | 62,929     |
-| `bridges.geojson`            | 612 bridge outlines (12 OSM, 600 traced)     | 332,852    |
+| `bridges.geojson`            | 611 bridge outlines (12 OSM, 599 traced)     | 332,100    |
 | `transport-stops.geojson`    | 719 stops                                    | 219,913    |
 | `transit-network.json`       | 29 routes, 60 patterns, 719 stop coordinates | 76,763     |
 | `transit-routes.json`        | 44 lines (42 city, 2 intercity)              | 36,379     |
 
-The archive released from these sources is `montenegro-aa141be49e76604f.pmtiles`, 23,787,871 bytes with SHA-256
-`aa141be49e76604f4ccff9e992d504acde9f76f991981a9139813345488ea9ce`; `release.json` is its checksummed index. Its archive
+The archive released from these sources is `montenegro-7c60358ac9961a75.pmtiles`, 23,790,415 bytes with SHA-256
+`7c60358ac9961a7534295aa1013be96170642a1967dad35e6471c00197397043`; `release.json` is its checksummed index. Its archive
 metadata names every published layer, with fields and zooms from `data/tools/tile-layers.mjs`. The `archive` block in
 `sources/provenance.json` records the encoded bytes for each layer in the 0–8, 9–12 and 13–16 zoom bands; land
 dominates, with roads, buildings and water next; bridges and railways join relief and road furniture as detail-only

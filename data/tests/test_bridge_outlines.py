@@ -14,9 +14,10 @@ sys.path.insert(0, str(TOOLS))
 
 from osm_extract.writing import write_collection  # noqa: E402
 from seed_bridge_outlines import (  # noqa: E402
-    ABSENT_BRIDGE_VALUES, JOIN_DISTANCE_METRES, OUTLINE_HALF_WIDTH_METRES,
-    SIMPLIFICATION_METRES, bridge_roads, connected_groups, detail_midpoint,
-    local_scales, seed, to_local,
+    ABSENT_BRIDGE_VALUES, JOIN_DISTANCE_METRES, OSM_OUTLINE_TOLERANCE_METRES,
+    OUTLINE_HALF_WIDTH_METRES, SIMPLIFICATION_METRES, bridge_roads,
+    connected_groups, covered_road_indexes, detail_midpoint, local_scales,
+    seed, to_local,
 )
 
 DETAIL_BBOX = (19.0, 42.0, 19.3, 42.6)
@@ -131,6 +132,19 @@ class BridgeSeedTest(unittest.TestCase):
         groups = connected_groups(roads, lines, covered={0})
         self.assertEqual(groups, [[1, 2], [3], [4]])
 
+    def test_road_just_outside_simplified_osm_ring_is_covered(self):
+        scales = local_scales(REFERENCE_LATITUDE)
+        area = to_local(shape(osm_area()['geometry']), scales)
+        near = to_local(shape(road(
+            'way/7', [[19.10, 42.399974], [19.11, 42.399974]]
+        )['geometry']), scales)
+        far = to_local(shape(road(
+            'way/8', [[19.10, 42.401], [19.11, 42.401]]
+        )['geometry']), scales)
+        self.assertGreater(area.distance(near), 0)
+        self.assertLessEqual(area.distance(near), OSM_OUTLINE_TOLERANCE_METRES)
+        self.assertEqual(covered_road_indexes([near, far], [area]), {0})
+
     def test_seed_writes_one_outline_per_crossing_and_repeatable_counts(self):
         temporary = tempfile.TemporaryDirectory(prefix='cg-map-bridge-seed-')
         self.addCleanup(temporary.cleanup)
@@ -167,10 +181,12 @@ class BridgeSeedTest(unittest.TestCase):
         )
         self.assertEqual(traced[0]['properties']['name'], 'Main')
         self.assertNotIn('osmTag', traced[0]['properties'])
+        osm_shape = shape(area_before['geometry'])
         for feature in traced:
             self.assertEqual(feature['geometry']['type'], 'Polygon')
             self.assertEqual(feature['properties']['kind'], 'bridge')
             self.assertEqual(feature['properties']['method'], 'traced')
+            self.assertFalse(shape(feature['geometry']).intersects(osm_shape))
             self.assertRegex(
                 feature['properties']['entityVersion'],
                 r'^sha256:[a-f0-9]{64}$'
@@ -187,6 +203,7 @@ class BridgeSeedTest(unittest.TestCase):
             'joinDistanceMetres': JOIN_DISTANCE_METRES,
             'outlineHalfWidthMetres': OUTLINE_HALF_WIDTH_METRES,
             'simplificationMetres': SIMPLIFICATION_METRES,
+            'osmOutlineToleranceMetres': OSM_OUTLINE_TOLERANCE_METRES,
             'walkingKinds': [
                 'bridleway', 'cycleway', 'footway', 'path', 'pedestrian',
                 'track'

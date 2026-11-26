@@ -576,6 +576,36 @@ function insideRing(point, ring) {
   }
   return inside;
 }
+// Bridge outlines are rounded to six decimals, so a shared edge or vertex still counts as an overlap.
+function segmentOrientation(firstStart, firstEnd, point) {
+  const cross = (firstEnd[0] - firstStart[0]) * (point[1] - firstStart[1])
+    - (firstEnd[1] - firstStart[1]) * (point[0] - firstStart[0]);
+  return cross === 0 ? 0 : cross > 0 ? 1 : 2;
+}
+function segmentsCross(firstStart, firstEnd, secondStart, secondEnd) {
+  const secondStartSide = segmentOrientation(firstStart, firstEnd, secondStart);
+  const secondEndSide = segmentOrientation(firstStart, firstEnd, secondEnd);
+  const firstStartSide = segmentOrientation(secondStart, secondEnd, firstStart);
+  const firstEndSide = segmentOrientation(secondStart, secondEnd, firstEnd);
+  return secondStartSide !== secondEndSide && firstStartSide !== firstEndSide;
+}
+function ringVerticesOverlap(first, second) {
+  return first.slice(0, -1).some(
+    point => insideRing(point, second) || onRing(point, second)
+  );
+}
+function ringSegmentsCross(first, second) {
+  return first.slice(1).some((firstEnd, firstIndex) => second.slice(1).some(
+    (secondEnd, secondIndex) => segmentsCross(
+      first[firstIndex], firstEnd, second[secondIndex], secondEnd
+    )
+  ));
+}
+function ringsOverlap(first, second) {
+  if (ringVerticesOverlap(first, second)) return true;
+  if (ringVerticesOverlap(second, first)) return true;
+  return ringSegmentsCross(first, second);
+}
 // Footprints are rounded to six decimals; boundary doors may differ by that precision.
 function onRing(point, ring) {
   const coordinateToleranceDegrees = 0.000001;
@@ -1215,6 +1245,17 @@ export function validateBridges(data, {label='bridges.geojson', requireAdopted=f
         );
       }
     }
+  }
+  const osmRings=data.features
+    .filter(feature => feature.properties.method === 'osm')
+    .map(feature => feature.geometry.coordinates[0]);
+  for (const [index, feature] of data.features.entries()) {
+    if (feature.properties.method !== 'traced' || !osmRings.length) continue;
+    const ring=feature.geometry.coordinates[0];
+    requireValue(
+      !osmRings.some(osmRing => ringsOverlap(ring, osmRing)),
+      `${label} feature ${index}: traced outline overlaps an OSM outline`
+    );
   }
   return count;
 }
