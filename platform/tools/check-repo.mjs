@@ -213,6 +213,7 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
 
 // Keep shared runtime independent, and keep the concept consumer honest about its public-only imports.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
+  // Source-owned unit tests live next to code in these components; boundary checks apply to runtime modules only.
   for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !file.endsWith('.test.js'))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);

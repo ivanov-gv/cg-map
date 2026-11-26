@@ -109,13 +109,19 @@ test('editor import boundary allows relative imports inside src and skips test f
   const dep = path.join(nested, 'dep.js');
   const main = path.join(dir, 'main.js');
   const testFile = path.join(dir, 'main.test.js');
+  const escape = path.join(nested, 'escape.js');
   fs.mkdirSync(nested, {recursive: true});
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   fs.writeFileSync(dep, 'export const value = 1;\n');
   fs.writeFileSync(main, "import {value} from './nested/dep.js';\nexport {value};\n");
   fs.writeFileSync(testFile, "import {bad} from '../../../web/src/core.js';\n");
-  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
-  assert.equal(result.status, 0, `${result.stdout ?? ''}${result.stderr ?? ''}`);
+  const allowed = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.equal(allowed.status, 0, `${allowed.stdout ?? ''}${allowed.stderr ?? ''}`);
+
+  fs.writeFileSync(escape, "import {bad} from '../../../../../web/src/core.js';\n");
+  const rejected = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(rejected.status, 0);
+  assert.match(`${rejected.stdout ?? ''}${rejected.stderr ?? ''}`, /forbidden dependency/);
 });
 
 // The editor owns this guard in apps/editor/tests/pinned-data.test.mjs.
