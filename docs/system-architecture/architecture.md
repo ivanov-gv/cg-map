@@ -24,23 +24,23 @@ changed.
 
 Projects depend on each other only through these concrete contracts:
 
-| Contract                                       | Producer           | Consumers                                                                                                           |
-| ---------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                          |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                      |
-| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                  |
-| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                  |
-| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                            |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                 |
-| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                   |
-| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                           |
-| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion              |
-| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                  |
-| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                       |
-| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                  |
-| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                      |
-| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                               |
-| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/editor; other apps later |
+| Contract                                       | Producer           | Consumers                                                                                                                    |
+| ---------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web, apps/editor, at a pinned version                                                                                   |
+| Local map-core, unreleased                     | packages/map-core  | apps/core-demo                                                                                                               |
+| Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                           |
+| Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                           |
+| Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                     |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                          |
+| Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                            |
+| Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                    |
+| Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                       |
+| Place test fixture                             | data               | apps/web browser tests via the pin                                                                                           |
+| Built web artifact, dist/web                   | apps/web           | platform hosting tests, tests                                                                                                |
+| Built web artifact, dist/web                   | apps/web           | the dev Pages site                                                                                                           |
+| Go host `run` target                           | services/backend   | apps/web `dev`                                                                                                               |
+| Static host and per-worktree ports             | platform           | apps/web, apps/editor, apps/core-demo                                                                                        |
+| Shared ESLint rules, platform/eslint-rules.mjs | platform           | packages/map-core, data, packages/contracts, services/transit-relay, platform, tests, apps/editor, apps/core-demo; Web: root |
 
 services/backend also hosts dist/web and reads the release at runtime. That is a runtime contract only: its tests use a
 synthetic artifact, so it has no pipeline dependency on either. The tests project exists to check these contracts, so it
@@ -55,10 +55,10 @@ Rules:
   when the producer changes. Runtime-only contracts are the exception. The shared ESLint rules
   ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)) are a development dependency recorded above;
   the planner selects the projects whose configs exist in the checkout. In this transition the configs are the six
-  non-app projects and apps/editor; another app config joins the consumers without a planner change. A root
-  `eslint.config.mjs` change keeps the whole-plan selection while the root still serves apps/web and apps/core-demo:
-  lint configuration can change what their checks find. An app config selects that app's folder, and the folder calls
-  the app's whole workflow, including its browser shards; the planner has no lint-only folder.
+  non-app projects, apps/editor and apps/core-demo; Web still uses the root file, and its config will join the consumers
+  without a planner change. A root `eslint.config.mjs` change keeps the whole-plan selection while the root still serves
+  apps/web: lint configuration can change what its checks find. An app config selects that app's folder, and the folder
+  calls the app's whole workflow, including its browser shards; the planner has no lint-only folder.
 - Both map apps own their browser suites and shard counts; the planner only selects folders. See
   [web instructions](../../apps/web/AGENTS.md), [editor instructions](../../apps/editor/AGENTS.md) and
   [workflow testing](../../.github/TESTING.md#on-github).
@@ -69,13 +69,12 @@ Rules:
   project: it reads contracts at HEAD through one helper by default, and a release is tested against the exact version
   it publishes by setting the data and contracts versions; `platform/tools/phone-tags.mjs`, which platform's tag check
   and both apps' own unit tests read at HEAD while no runtime app imports it; and development tooling: the six non-app
-  configs and apps/editor read `platform/eslint-rules.mjs` at HEAD through their own configs. Apps/web and
-  apps/core-demo still read the unchanged root `eslint.config.mjs`, which imports ESLint's own presets directly and does
-  not consume the shared module. During this bounded transition its app rule values may duplicate future shared rules;
-  the remaining app migrations and later root cleanup remove that duplication. It is repository tooling like the ESLint
-  binary and its plugins, not runtime data; a pinned package would need a release for each rule change. Owner approval
-  for this narrow exception is requested in the #458 PR
-  ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
+  configs, apps/editor and apps/core-demo read `platform/eslint-rules.mjs` at HEAD through their own configs. Apps/web
+  still reads the unchanged root `eslint.config.mjs`, which imports ESLint's own presets directly and does not consume
+  the shared module. During this bounded transition its app rule values may duplicate future shared rules; the Web
+  migration and later root cleanup remove that duplication. It is repository tooling like the ESLint binary and its
+  plugins, not runtime data; a pinned package would need a release for each rule change. Owner approval for this narrow
+  exception is requested in the #458 PR ([ADR 0043](../decisions/0043-project-owned-eslint-configurations.md)).
 
 ### Map data modes
 
