@@ -10,7 +10,11 @@ const packageName = '@ivanov-gv/map-core';
 
 // Each artifact carries its own copy of the runtime, under map-core/.
 export function copyMapCore(outputDirectory) {
-  fs.cpSync(path.join(packageRoot, 'src'), path.join(outputDirectory, 'map-core'), {recursive: true});
+  fs.cpSync(path.join(packageRoot, 'src'), path.join(outputDirectory, 'map-core'), {
+    recursive: true,
+    // Tests live beside the runtime but are not part of an application artifact.
+    filter: source => !source.endsWith('.test.mjs')
+  });
 }
 
 // Libraries and fonts are local runtime assets, served beside each application's own files.

@@ -17,9 +17,13 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 group in `metadata`, and a unit test fails when a layer is out of order. Applications install points of interest after
 the style; both apps place them below street labels today.
 
-Canyon walls are nested bands offset from each canyon rim toward the water, darkest at the water; they rely on the
-relief contract's rule that every rim runs with the river on its right. Bridge decks reuse their street's casing width
-and add dark edges.
+Canyon walls are nested bands offset from each canyon rim toward the water; their width is the owner-painted edge
+`width` in ground metres, converted to pixels at that edge's latitude and doubled at each zoom level. An empty or zero
+`width` draws a fixed 10 px band, visible from zoom 13 to 20 and no wider than today's narrowest look; any painted width
+draws at least that band. The bands go from lightest at the rim to darkest at the foot, using the full colour range at 9
+m of depth or more (the shallowest measured edge, which keeps today's reviewed walls unchanged), a shorter lighter range
+below it, and the full range again when `height` is absent. They rely on the relief contract's rule that every rim runs
+with the river on its right. Bridge decks reuse their street's casing width and add dark edges.
 
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
@@ -36,11 +40,12 @@ hit-tests walking paths by layer id adds them when it upgrades.
 
 ## Lifecycle
 
-`createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling and the local satellite
-sources. Call `whenMapReady` before installing overlays or POIs; handle its rejection and the map's `error` events
-visibly. Dispose with `map.remove()`; the core disconnects its resize observer and number-scale listeners.
-`registerArchiveProtocol` takes the vendored PMTiles module and, optionally, an archive source for the public app's
-offline adapter. The caller owns archive/offline policy.
+`createMap` installs navigation, scale, frame-scheduled resizing, house-number scale handling, a `sourcedata` listener
+that gives each canyon rim its own ground scale, and the local satellite sources. Call `whenMapReady` before installing
+overlays or POIs; handle its rejection and the map's `error` events visibly. Dispose with `map.remove()`; the core
+disconnects its resize observer, number-scale and canyon-scale listeners. `registerArchiveProtocol` takes the vendored
+PMTiles module and, optionally, an archive source for the public app's offline adapter. The caller owns archive/offline
+policy.
 
 `createGeoJSONOverlay` renders mixed points, lines and polygons and holds an independent selection source. The overlay
 starts in the Default state and `setState('editable')` switches it to the Editor's thin green outline; the selection is

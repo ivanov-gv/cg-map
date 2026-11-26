@@ -92,6 +92,10 @@ class TestMap {
     this.lastQuery = {bounds, options};
     return [{id: 1}];
   }
+  querySourceFeatures(_source, _options) {
+    return [];
+  }
+  setFeatureState(_feature, _state) {}
 }
 
 for (const prefix of ['/', '/cg-map/']) {
@@ -193,6 +197,7 @@ test('map lifecycle installs shared controls and tears down observers/listeners'
   assert.equal(didDisconnect, true);
   assert.equal(map.events.get('move').size, 0);
   assert.equal(map.events.get('resize').size, 0);
+  assert.equal(map.events.get('sourcedata').size, 0);
 });
 
 test('startup rejects removal and timeout, cleaning listeners', async () => {

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint src tools tests",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test src/*.test.mjs tests/*.test.mjs"
   },
   "exports": {
     ".": "./src/index.js",
@@ -32,6 +32,7 @@
   },
   "files": [
     "src",
+    "!src/**/*.test.mjs",
     "assets",
     "tools",
     "README.md",
