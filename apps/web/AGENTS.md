@@ -5,6 +5,12 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
+- tools/runtime-modules.mjs owns this app's runtime import, dynamic-import and MapLibre gesture checks, and supplies the
+  module discovery shared by build.mjs and finalize.mjs. New runtime modules need no per-file list and may import any
+  runtime module in src/; modules that existed on main keep their reviewed imports transitively, and every module with
+  no local imports on main (for example core.js and dom.js) may not gain any. Moving a reviewed module fails until its
+  rule moves into #456's per-folder rules. The build keeps each path and the offline shell is derived from the artifact.
+  Colocated tests and support files never reach either.
 - tests/ owns component tests and tests/e2e browser acceptance; playwright.config.mjs owns browser projects and ports.
 - The browser suite is split into the shards counted in `browser-jobs.json`; `tools/browser-matrix.mjs` builds the CI
   matrix from that one number. Keep the number in web, never in platform tooling. Any web change runs all shards;
