@@ -26,6 +26,8 @@ const paintedCases = [
 ];
 const noWidthCases = [
   {atZoom: 13, expectedPixels: 2},
+  {atZoom: 14, expectedPixels: 2.5},
+  {atZoom: 15, expectedPixels: 5},
   {atZoom: referenceZoom, expectedPixels: 10},
   {atZoom: 18, expectedPixels: 40},
   {atZoom: 20, expectedPixels: 160}
