@@ -3,7 +3,7 @@ import {appFunctionRules, appReadabilityRules, commonRules, recommended} from '.
 
 // Runtime sees the same browser globals as the other apps, plus the vendored map globals.
 const browserGlobals = {...globals.browser, maplibregl: 'readonly', pmtiles: 'readonly'};
-const nodeAndBrowserGlobals = {...globals.node, ...globals.browser, maplibregl: 'readonly', pmtiles: 'readonly'};
+const nodeAndBrowserGlobals = {...globals.node, ...globals.browser};
 
 const nodeFiles = [
   'src/**/*.test.js',
