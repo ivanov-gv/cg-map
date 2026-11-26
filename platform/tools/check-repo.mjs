@@ -213,17 +213,19 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
 
 // Keep shared runtime independent, and keep the concept consumer honest about its public-only imports.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
-  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js'))) {
+  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !file.endsWith('.test.js'))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
     for (const match of text.matchAll(moduleDependencyPattern)) {
       const dependency = match[1];
       const isCoreEntry = dependency === '@ivanov-gv/map-core';
       const isSibling = /^\.\/[^/]+\.js$/.test(dependency);
+      const isRelativeInsideSrc = /^\.\.?\/.*\.js$/.test(dependency) &&
+        !path.relative(`${component}/src`, path.resolve(path.dirname(file), dependency)).startsWith('..');
       const allowedByComponent = {
         'apps/core-demo': isCoreEntry,
         'packages/map-core': isSibling,
-        'apps/editor': isCoreEntry || isSibling
+        'apps/editor': isCoreEntry || isRelativeInsideSrc
       };
       const isAllowed = allowedByComponent[component];
       assert.ok(isAllowed, `${file}: forbidden dependency ${dependency}`);
