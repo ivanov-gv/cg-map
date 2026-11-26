@@ -71,13 +71,16 @@ the shared probe helper against its own config. A project's config selects that 
 ### Outcome note: Core Demo migration (2026-11-26)
 
 - Task #479 moves only apps/core-demo to its own `eslint.config.mjs`, which imports the shared rule exports. Its lint
-  command runs from that folder over source, tools, tests and the app config; the root file stays byte-for-byte
-  unchanged on this branch and still serves Web and Editor.
-- Recursive patterns cover runtime, tools, source unit tests and component-browser tests. Runtime and tool helpers keep
-  the 80-line function budget; `max-lines-per-function` is off only for `*.test.js` paths. Existing representative paths
-  keep their effective rules and globals, and the lint file set gains only the app config and the new app-owned test.
+  command runs from that folder over source, tools, tests, journeys and the app config; the root file stays
+  byte-for-byte unchanged on this branch and still serves Web and Editor.
+- Recursive patterns cover runtime, tools in both extensions, source unit tests, component-browser tests and nested
+  `tests/**/*.mjs`, including current `tests/e2e/*.spec.mjs` journeys. `e2e/**/*.js` also covers the beside-src journey
+  layout in JavaScript conventions. Runtime and tool helpers keep the 80-line function budget; `max-lines-per-function`
+  is off only for `*.test.js` paths. Node globals cover `.mjs` tools, nested tests, unit and browser tests, and
+  journeys. Existing representative paths keep their effective rules and globals; no lint target is removed.
 - A Core Demo test calls ESLint through the real app config. It proves that nested runtime and tool files reject
-  readability violations, that helpers keep the function budget, that unit and browser tests accept their globals and
-  long functions, and that test paths still reject readability violations.
+  readability violations, that nested runtime files also reject excessive depth, that `_`-prefixed parameters stay
+  accepted, that helpers keep the function budget for both tool extensions, that unit, browser and journey paths accept
+  their globals, that long tests keep the exception, and that journey paths still reject readability violations.
 - Current consumers in this checkout are the six non-app projects and apps/core-demo. Web and Editor are not migrated
   here; other branches' merges will reconcile their consumer set later.

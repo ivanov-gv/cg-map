@@ -3,11 +3,13 @@ import {appFunctionRules, appReadabilityRules, commonRules, recommended} from '.
 
 const nodeAndBrowserGlobals = {...globals.node, ...globals.browser};
 const runtimeFiles = ['src/**/*.js'];
-const toolFiles = ['tools/**/*.mjs'];
+// Root parity: Node globals belong to .mjs tools; the function budget belongs to both tool extensions.
+const nodeToolFiles = ['tools/**/*.mjs'];
+const toolFiles = [...nodeToolFiles, 'tools/**/*.js'];
 const sourceTestFiles = ['src/**/*.test.js'];
 const browserTestFiles = ['src/**/*.browser.test.js'];
 const unitTestFiles = ['src/**/!(*.browser).test.js'];
-const nodeFiles = [...toolFiles, 'tests/**/*.mjs', ...unitTestFiles, '*.mjs'];
+const nodeFiles = [...nodeToolFiles, 'e2e/**/*.js', 'tests/**/*.mjs', ...unitTestFiles, '*.mjs'];
 
 export default [
   {ignores: ['node_modules/**', 'dist/**', '.build/**']},
