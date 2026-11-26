@@ -134,16 +134,21 @@ from another edit; `addOnly` values become identity once written; a label's loca
 building. `editor-changeset.schema.json` defines the export. Version 2 names an existing object by `entityId` (and
 `entityPart`) with a fingerprint and full before/after features; a new object keeps its `local:` ID as its entity ID.
 `featureIndex`, bound to one snapshot, remains for routes and for version 1. `fieldItems` carry rough work from the
-field, which the importer never writes. Canyon rims accept add, change and delete: a new rim states only an optional
-integer `height`. Its range is a contract limit because a sampled value outside it is a bad build, not a missing
-measurement. `river`, `bank` and `method` are not editable. The importer assigns its `local:` ID, `canyon-rim` kind,
-`editor-drawn` method and `lengthMetres`, and refuses a changeset that states those derived facts. The importer computes
-label positions, street joins, measures, summit checks, contour direction and provenance, so a changeset never carries
-them; an added label states `buildingEntityId` instead of `footprintIndex`. `fixtures/editor-geometry-cases.json` and
-`fixtures/editor-property-cases.json` define the geometry and property rules; the editor and the importer both test
-against them, and tests/integration/editor-changeset.test.mjs runs one's output through the other.
-`editor-corrections.schema.json` defines the ledger of what was applied, replayed over a fresh extract. For land and
-water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a published kind nor invent one.
+field, which the importer never writes. Canyon rims accept add, change and delete: a new rim may state optional
+whole-metre `height` and `width`. The build measures height; the owner paints width. Width is the horizontal distance
+seen from above, from the rim to the slope foot, in whole metres, and no edge has one until then. An omitted width means
+`0 m`, a vertical edge. The height range is a contract limit because a sampled value outside it is a bad build, not a
+missing measurement. Width runs from `0` to `2000` m because zero is a real edge and a local canyon is far below two
+kilometres wide; a larger typed value is a units or typing mistake
+([ADR 0044](../../docs/decisions/0044-owner-painted-canyon-width.md)). `river`, `bank` and `method` are not editable.
+The importer assigns its `local:` ID, `canyon-rim` kind, `editor-drawn` method and `lengthMetres`, and refuses a
+changeset that states those derived facts. The importer computes label positions, street joins, measures, summit checks,
+contour direction and provenance, so a changeset never carries them; an added label states `buildingEntityId` instead of
+`footprintIndex`. `fixtures/editor-geometry-cases.json` and `fixtures/editor-property-cases.json` define the geometry
+and property rules; the editor and the importer both test against them, and tests/integration/editor-changeset.test.mjs
+runs one's output through the other. `editor-corrections.schema.json` defines the ledger of what was applied, replayed
+over a fresh extract. For land and water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a
+published kind nor invent one.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those
@@ -158,8 +163,9 @@ contour above OSM height around the summit or an OSM/DEM difference over 25 m, a
 fact without a mismatch. Canyon rims publish OSM `natural=cliff` segments as `method: "osm-cliff"` features with their
 OSM `way/N` identity and version; DEM-derived bank segments use `derived:canyon-rim-<river>-<bank>` with `entityPart`
 and `method: "dem-canyon-bank"`; a rim added in the editor has `method: "editor-drawn"` and no `river` or `bank`. A rim
-may publish one optional integer `height`; how the build measures it belongs to the data runbook. Every canyon rim keeps
-the low side on its right; an edge without a river is not compared with a centreline
+may publish one optional integer `height`; how the build measures it belongs to the data runbook. Its owner-painted
+`width` belongs to [ADR 0044](../../docs/decisions/0044-owner-painted-canyon-width.md). Every canyon rim keeps the low
+side on its right; an edge without a river is not compared with a centreline
 ([ADR 0042](../../docs/decisions/0042-one-measured-canyon-rim-height.md)). Every contour runs with higher ground on its
 left. Feature length is a fact; build parameters live in provenance. Consumers must keep DEM elevations, height checks
 and rim methods separate from OSM facts. It is a structural contract, not a GIS topology proof.
