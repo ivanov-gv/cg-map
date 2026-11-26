@@ -84,8 +84,8 @@ own files.
 
 A property whose rule lists its values is picked from a list, and so is a small range of whole numbers. A free one that
 usually says the same things, such as floors, road numbers or the streets around, offers those with Other…
-([usual-values.js](src/inspector/usual-values.js)). Names, contacts, house numbers and heights are typed. A test keeps
-every property in one of these groups.
+([usual-values.js](src/inspector/usual-values.js)). Names, contacts, house numbers, entrance numbers and heights are
+typed. A test keeps every property in one of these groups.
 
 Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
 thin dashed ghost until Apply. Whatever goes along with it, such as the roads of a moved junction, is shown in red where
