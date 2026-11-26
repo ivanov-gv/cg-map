@@ -2,13 +2,30 @@ import fileSystem from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {copyMapCore, copyRuntimeAssets, relocateCoreImports} from '@ivanov-gv/map-core/tools/assemble.mjs';
+import {copyMapCore, copyRuntimeAssets} from '@ivanov-gv/map-core/tools/assemble.mjs';
 import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/src/place-visibility.js';
 import {resolveContractsRoot} from './contracts-root.mjs';
 import {resolveDataRoot} from './data-root.mjs';
+import {copyRuntimeSource, findRuntimeModules} from './runtime-modules.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = path.join(root, 'dist/web');
+const source = path.join(root, 'apps/web/src');
+const publishedCorePackage = '@ivanov-gv/map-core';
+const publishedCoreSourcePrefix = `${publishedCorePackage}/src/`;
+// Import specifiers, not every quoted string: a module's sibling path and an asset URL must keep their own meaning.
+const publishedCoreImportPattern = /(\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?)(['"])(@ivanov-gv\/map-core(?:\/src\/[^'"]*)?)\2/g;
+
+// Browsers cannot resolve the published package name, so each import becomes relative to its own artifact depth.
+function relocatePublishedCoreImports(sourceText, corePrefix) {
+  return sourceText.replace(publishedCoreImportPattern, (_match, beforeSpecifier, quote, specifier) => {
+    const relativeSpecifier =
+      specifier === publishedCorePackage
+        ? `${corePrefix}/index.js`
+        : `${corePrefix}/${specifier.slice(publishedCoreSourcePrefix.length)}`;
+    return `${beforeSpecifier}${quote}${relativeSpecifier}${quote}`;
+  });
+}
 // Dev builds default to the repository's HEAD; a future app production release pins every dependency, data included.
 // Test targets set MAP_DATA_ROOT and MAP_CONTRACTS_ROOT, so tools and contracts come from the pinned releases.
 const dataRoot = resolveDataRoot(path.join(root, 'data'));
@@ -17,15 +34,17 @@ const {readVerifiedRelease} = await import(dataToolsURL);
 const {release, archiveBytes} = readVerifiedRelease(dataRoot);
 fileSystem.rmSync(output, {recursive: true, force: true});
 fileSystem.cpSync(path.join(root, 'apps/web/public'), output, {recursive: true});
-fileSystem.cpSync(path.join(root, 'apps/web/src'), output, {recursive: true});
+copyRuntimeSource(source, output);
 copyMapCore(output);
 copyRuntimeAssets(output);
-const webModules = fileSystem
-  .readdirSync(path.join(root, 'apps/web/src'))
-  .filter(name => name.endsWith('.js'));
-for (const filename of webModules) {
-  const source = fileSystem.readFileSync(path.join(output, filename), 'utf8');
-  fileSystem.writeFileSync(path.join(output, filename), relocateCoreImports(source));
+const coreDirectory = path.join(output, 'map-core');
+for (const modulePath of findRuntimeModules(source)) {
+  const destination = path.join(output, modulePath);
+  const relativeCore = path.relative(path.dirname(destination), coreDirectory).split(path.sep).join('/');
+  const corePrefix = relativeCore.startsWith('.') ? relativeCore : `./${relativeCore}`;
+  // A package name has no browser meaning; each published import must reach the core copy at this module's depth.
+  const relocated = relocatePublishedCoreImports(fileSystem.readFileSync(destination, 'utf8'), corePrefix);
+  fileSystem.writeFileSync(destination, relocated);
 }
 fileSystem.mkdirSync(path.join(output, 'data'), {recursive: true});
 fileSystem.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);

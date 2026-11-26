@@ -89,6 +89,20 @@ test('the editing rules cover exactly the files of the current bundle', () => {
   assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), [...bundledFiles].sort());
 });
 
+test('canyon rims state one optional whole-metre width beside their height', () => {
+  const rimProperties = readJSON('relief.schema.json').$defs.canyonRim.then.properties;
+  assert.equal(rimProperties.width.type, 'integer');
+  assert.match(rimProperties.width.description, /omitted width means 0 m: a vertical edge/);
+  const layerRules = readJSON('editor-layers.json').layers['canyon-rims.geojson'].properties;
+  assert.deepEqual(layerRules.width, {type: 'integer', minimum: 0, maximum: 2000});
+  const widthCases = readJSON('fixtures/editor-property-cases.json').cases.filter(
+    ({properties}) => Object.hasOwn(properties, 'width')
+  );
+  assert.ok(widthCases.some(({properties, isValid}) => isValid && properties.width === 0), 'zero width is valid');
+  assert.ok(widthCases.some(({properties, isValid}) => isValid && properties.width > 0), 'a painted width is valid');
+  assert.ok(widthCases.some(({isValid}) => !isValid), 'an invalid width case is shared');
+});
+
 test('shared fixtures are valid JSON', () => {
   for (const filename of readdirSync(new URL('fixtures/', contractsDirectory))) {
     assert.doesNotThrow(() => readJSON(`fixtures/${filename}`), filename);

@@ -17,9 +17,12 @@ service worker, editor modes or writes. See [architecture](../../docs/system-arc
 group in `metadata`, and a unit test fails when a layer is out of order. Applications install points of interest after
 the style; both apps place them below street labels today.
 
-Canyon walls are nested bands offset from each canyon rim toward the water, darkest at the water; they rely on the
-relief contract's rule that every rim runs with the river on its right. Bridge decks reuse their street's casing width
-and add dark edges.
+Canyon walls are nested bands offset from each canyon rim toward the water, using the relief rule that rims run with the
+river on their right. A painted `width` is ground metres at one constant scale, 1.1393 px/m at zoom 16, doubling at each
+zoom. An empty or zero width draws as 10 px at zoom 16 with the same doubling, but never thinner than 2 px for the whole
+wall at low zoom; a painted width narrower than that no-width edge draws as the no-width edge. Their colour goes from
+lightest at the rim to darkest at the foot, using the full depth range at 9 m or more, a shorter lighter range below,
+and the full range when `height` is absent. Bridge decks reuse their street's casing width and add dark edges.
 
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for

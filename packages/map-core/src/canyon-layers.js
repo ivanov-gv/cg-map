@@ -1,28 +1,51 @@
 import {basemapColors as colors, colorChannels} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 
-// Penpot Core rules: the wall band is as wide as the canyon is deep, about 30 px for the Morača and 10 px for the
-// Ribnica at zoom 16. Rivers without a measured width get the shallower one.
-const wallWidthPixelsAtZoom16 = {Morača: 30, Ribnica: 10};
-const defaultWallWidthPixelsAtZoom16 = 10;
-// MapLibre cannot fill a gradient across a line, so nested bands approximate one; eight is the design's minimum
+const basemapSource = 'basemap';
+const canyonSourceLayer = 'canyon_rims';
+const canyonMinZoom = 13;
+const wallMaxZoom = 20;
+const wallReferenceZoom = 16;
+const metresAroundEquator = 40075016.68557849;
+const tileSizePixels = 512;
+// One scale suffices across the map: cos(latitude) varies only about ±2.3% from 41.3° N to 44.1° N.
+const groundPixelsPerMetreAtZoom16 = pixelsPerMetreAtZoom16((41.3 + 44.1) / 2);
+// The shallowest measured edge today is 9 m, so every reviewed edge keeps the full colour range it has now.
+const fullRangeDepthMetres = 9;
+// An edge with no painted width keeps today's look: 10 px at zoom 16, growing like the ground. At low zoom a
+// ground-scaled edge would vanish, so 2 px is the visible floor for the whole wall.
+const unpaintedWallWidthPixelsAtZoom16 = 10;
+const minimumVisibleWallWidthPixels = 2;
+// MapLibre cannot fill a gradient across a line, so nested bands approximate one; ten is the design's minimum
 // for steps that do not show.
 const wallBandCount = 10;
-const canyonMinZoom = 13;
 
-// Scales a zoom-16 pixel size so it stays the same ground distance at every zoom: twice as wide per zoom level.
-function groundScaled(pixelsAtZoom16) {
-  const zoomSteps = [canyonMinZoom, 16, 20];
-  const stops = zoomSteps.flatMap(zoom => [zoom, ['*', pixelsAtZoom16, 2 ** (zoom - 16)]]);
-  return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
+// Ground pixels on MapLibre's 512 px tiles at a WGS84 latitude and zoom.
+function groundPixels(metres, latitudeDegrees, zoom) {
+  const latitudeRadians = (latitudeDegrees * Math.PI) / 180;
+  return (metres * tileSizePixels * 2 ** zoom) / (metresAroundEquator * Math.cos(latitudeRadians));
 }
 
-const riverWallWidth = [
-  'match',
-  ['get', 'river'],
-  ...Object.entries(wallWidthPixelsAtZoom16).flat(),
-  defaultWallWidthPixelsAtZoom16
-];
+function pixelsPerMetreAtZoom16(latitudeDegrees) {
+  return groundPixels(1, latitudeDegrees, wallReferenceZoom);
+}
+
+// A stop at every whole zoom keeps painted widths at exact ground distance between stops and keeps the no-width edge
+// growing like the ground. Between low-zoom stops the clamped floor interpolates slightly above 2 px, never below:
+// about 2.2 px at zoom 13.5.
+function groundScaled(pixelsAtZoom16, floorShare) {
+  const stops = [];
+  for (let atZoom = canyonMinZoom; atZoom <= wallMaxZoom; atZoom += 1) {
+    const zoomFactor = 2 ** (atZoom - wallReferenceZoom);
+    const unpaintedWidthPixels = Math.max(
+      minimumVisibleWallWidthPixels,
+      unpaintedWallWidthPixelsAtZoom16 * zoomFactor
+    );
+    const floorPixels = unpaintedWidthPixels * floorShare;
+    stops.push(atZoom, ['max', floorPixels, ['*', pixelsAtZoom16, zoomFactor]]);
+  }
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
+}
 
 function mixedColor(fromHex, toHex, fraction) {
   const fromChannels = colorChannels(fromHex);
@@ -34,23 +57,46 @@ function mixedColor(fromHex, toHex, fraction) {
   return `#${mixed.join('')}`;
 }
 
-// Band 0 is the widest and reaches the water; each next band is narrower and lighter, so the rim ends lightest.
+// Band 0 reaches the water and is darkest. A shallower edge stops partway towards that colour; without a height
+// it uses the full range, as all reviewed edges did before heights were measured.
+function colorForDepth(bandIndex) {
+  const fullRangeColor = mixedColor(
+    colors.canyonWallAtWater,
+    colors.canyonWallAtRim,
+    bandIndex / (wallBandCount - 1)
+  );
+  return [
+    'case',
+    ['has', 'height'],
+    [
+      'interpolate',
+      ['linear'],
+      ['number', ['get', 'height']],
+      0,
+      ['to-color', colors.canyonWallAtRim],
+      fullRangeDepthMetres,
+      ['to-color', fullRangeColor]
+    ],
+    ['to-color', fullRangeColor]
+  ];
+}
+
+// Band 0 is widest and reaches the water; each next band is narrower and lighter, so the rim ends lightest.
 // Rims run with the river on their right (relief contract), so a positive offset moves a band toward the water.
 function wallBand(bandIndex) {
   const widthShare = (wallBandCount - bandIndex) / wallBandCount;
-  const lightness = bandIndex / (wallBandCount - 1);
-  const bandWidth = groundScaled(['*', riverWallWidth, widthShare]);
+  const paintedWidthPixelsAtZoom16 = ['*', ['coalesce', ['get', 'width'], 0], groundPixelsPerMetreAtZoom16];
   return inDrawingGroup('canyon-walls', {
     id: `canyon-wall-${bandIndex}`,
     type: 'line',
-    source: 'basemap',
-    'source-layer': 'canyon_rims',
+    source: basemapSource,
+    'source-layer': canyonSourceLayer,
     minzoom: canyonMinZoom,
     layout: {'line-cap': 'butt', 'line-join': 'round'},
     paint: {
-      'line-color': mixedColor(colors.canyonWallAtWater, colors.canyonWallAtRim, lightness),
-      'line-width': bandWidth,
-      'line-offset': groundScaled(['*', riverWallWidth, widthShare / 2])
+      'line-color': colorForDepth(bandIndex),
+      'line-width': groundScaled(['*', paintedWidthPixelsAtZoom16, widthShare], widthShare),
+      'line-offset': groundScaled(['*', paintedWidthPixelsAtZoom16, widthShare / 2], widthShare / 2)
     }
   });
 }
@@ -61,8 +107,8 @@ export function canyonLayers() {
   const rim = inDrawingGroup('canyon-rims', {
     id: 'canyon-rims',
     type: 'line',
-    source: 'basemap',
-    'source-layer': 'canyon_rims',
+    source: basemapSource,
+    'source-layer': canyonSourceLayer,
     minzoom: canyonMinZoom,
     layout: {'line-cap': 'round', 'line-join': 'round'},
     paint: {'line-color': colors.canyonRim, 'line-width': 1}
