@@ -11,9 +11,10 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   behavior (`src/layers/shared/layer-behaviors.js`), never in `app.js`.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
-- Non-release builds (`build`, `dev`, `lan`, CI artifact, dev Pages) bundle this commit's core through the one
-  tools/core-root.mjs default, with the repository data and contracts roots. `build-release` pins all three from this
-  app's package.json and refuses another core
+- Local `build`, `dev` and `lan`, plus ci-publish's dev-image and Pages builds, bundle this commit's core through the
+  one tools/core-root.mjs default, with repository data and contracts roots. `make verify`, whose `dist/editor`
+  ci-apps-editor uploads, uses this app's pinned core, data and contracts; `test`, `e2e`, `e2e-built` and
+  `build-release` use those pins too, and a release refuses another core
   ([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
 - tests/ reads core through tests/pinned-core.mjs, data through tests/pinned-data.mjs and contracts through
   tests/pinned-contracts.mjs, using the exact pins in package.json. Bump a pin only in its own change after a release;

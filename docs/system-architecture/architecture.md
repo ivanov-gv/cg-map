@@ -26,12 +26,12 @@ Projects depend on each other only through these concrete contracts:
 
 | Contract                                       | Producer           | Consumers                                                                                                                    |
 | ---------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web; release builds and automated tests of apps/editor, at a pinned version                                             |
-| Local map-core, unreleased                     | packages/map-core  | apps/core-demo and non-release builds of apps/editor                                                                         |
+| Published `@ivanov-gv/map-core` package        | packages/map-core  | apps/web; apps/editor `make verify` artifact, automated tests and release builds, at a pinned version                        |
+| Local map-core, unreleased                     | packages/map-core  | apps/core-demo; apps/editor local `build`, `dev`, `lan` and ci-publish dev-image/Pages builds                                |
 | Published `@ivanov-gv/map-data` package        | data               | map application and platform hosting tests, pinned                                                                           |
 | Map data for an artifact, data/tools/app-data  | data               | dev and CI artifact builds on main                                                                                           |
 | Published `@ivanov-gv/map-contracts` package   | packages/contracts | app tests, platform hosting tests, map-core and services/backend, pinned                                                     |
-| Shared formats and schemas at HEAD             | packages/contracts | app dev and CI artifact builds, data validation, tests/ integration                                                          |
+| Shared formats and schemas at HEAD             | packages/contracts | app dev builds, ci-publish dev-image/Pages builds, data validation, tests/ integration                                       |
 | Reviewed sources, release archive and imagery  | data               | dev and CI artifact builds, cross-component tests                                                                            |
 | Relief sources; temporary report               | data               | data checks, tests; packages/map-core through the archive's relief layers                                                    |
 | Editor source bundle                           | data               | apps/editor tests via the pin, integration tests at HEAD by default, an exact release during promotion                       |
@@ -78,11 +78,12 @@ Rules:
 
 ### Core modes
 
-apps/editor bundles the core of its own commit in every build that is not a release: `build`, `dev`, `lan`, CI artifacts
-and the dev Pages site. One resolver, `tools/core-root.mjs`, defaults to repository `packages/map-core` and honours
-`MAP_CORE_ROOT`. `build-release` sets that root from `tests/pinned-core.mjs`, so the artifact carries exactly the pinned
-`@ivanov-gv/map-core` and a release refuses any other root. Editor unit and browser tests also use the pin; apps/web
-still consumes a pinned core. See [ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md).
+apps/editor bundles the core of its own commit in local `build`, `dev` and `lan` and in ci-publish's dev-image and Pages
+builds. One resolver, `tools/core-root.mjs`, defaults to repository `packages/map-core` and honours `MAP_CORE_ROOT`.
+`make verify` builds the `dist/editor` artifact ci-apps-editor uploads with the pinned `@ivanov-gv/map-core`; `test`,
+`e2e`, `e2e-built` and `build-release` use that pin too, and a release refuses any other root. Automated tests keep
+their pins, while apps/web still consumes a pinned core. See
+[ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md).
 
 ### Map data modes
 
