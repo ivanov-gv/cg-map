@@ -4,10 +4,11 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 [JavaScript](../../docs/engineering/javascript.md), [UI](../../docs/engineering/ui.md),
 [readability](../../docs/engineering/readability.md), and [contracts](../../packages/contracts/README.md).
 
-- Layers are the wiki's ten, listed with their files in src/editor-layers.js. One layer is active; a command or undo
-  step may change only that layer's files, as one step; an imported changeset is the exception and is taken back whole
+- Source layout and unit test locations are in [README.md](README.md#source-layout). The ten layers are listed in
+  `src/layers/shared/editor-layers.js`. One layer is active; a command or undo step may change only that layer's files,
+  as one step; an imported changeset is the exception and is taken back whole
   ([ADR 0038](../../docs/decisions/0038-editor-layers-span-files.md)). What a layer does differently belongs in its
-  behavior (src/layer-behaviors.js), never in app.js.
+  behavior (`src/layers/shared/layer-behaviors.js`), never in `app.js`.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
 - Dev builds on main use the repository data root and the one tools/contracts-root.mjs default for contracts. A future

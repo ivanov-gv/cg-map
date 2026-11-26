@@ -20,14 +20,25 @@ Its heading and Cancel / Apply stay visible while the fields scroll. Collapse ke
 geometry preview; a compact button reopens it. Opening another panel keeps the edit too. The phone inspector follows the
 visual viewport so the active field and actions stay above the onscreen keyboard.
 
+## Source layout
+
+`src/` is sorted by feature: `app.js` wires the editor at `src/` root, `app/` holds workspace panels, `editing/` keeps
+draft, changeset and review state, `inspector/` owns the property panel, `geometry/` holds shape math, `layers/<name>/`
+holds each layer with `layers/shared/` for the registry and shared layer UI, `source-data/` loads the verified bundle,
+`map-tools/` holds map interaction tools, `offline/` keeps the local copy while `sw.js` stays at `src/` root for
+service-worker scope, and `shared/` holds small DOM and hash helpers. Unit tests go next to their source as `*.test.js`;
+tests that span sources and whole-app tests stay in `tests/`; tool tests stay in `tools/`; `npm test` skips
+`*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules; `npm run lint` covers the source
+folders, tools, tests, both app configs and that config itself.
+
 ## Layers
 
 The ten layers are the wiki's ([UI 4.Editor](https://github.com/ivanov-gv/cg-map/wiki/UI---4.Editor)); their files are
-in [editor-layers.js](src/editor-layers.js). Exactly one is active. Its objects have a green outline, applied changes of
-every layer are amber, the picked object is red, an object marked in the field is dashed red with a cross. The others
-stay as context. Guides appear from zoom 15, or earlier on layers edited zoomed out, and can reveal POIs below their
-public threshold; with guides off in Tools, only normally rendered objects can be picked. Country, neighbour and sea
-shapes are drawn and never picked, because they follow from other objects.
+in [editor-layers.js](src/layers/shared/editor-layers.js). Exactly one is active. Its objects have a green outline,
+applied changes of every layer are amber, the picked object is red, an object marked in the field is dashed red with a
+cross. The others stay as context. Guides appear from zoom 15, or earlier on layers edited zoomed out, and can reveal
+POIs below their public threshold; with guides off in Tools, only normally rendered objects can be picked. Country,
+neighbour and sea shapes are drawn and never picked, because they follow from other objects.
 
 When a tap hits several objects, a named chooser lets you pick one. Objects in view, in Tools, lists what is on screen,
 including co-located places and records without a place on the map; use Tab and Enter or Space. Selecting from a list
@@ -44,11 +55,11 @@ What the layers do beyond shape and fields:
 - **Places & points** belong to the building they are put on, or stand on their own. Opening hours have an editor for
   the OpenStreetMap format; text it cannot show is kept.
 - **Roads & paths** are a graph: two roads join where they share a point on the same level
-  ([road-graph.js](src/road-graph.js)). From zoom 16 a full dot is a join, a hollow one a dead end, and `!` marks roads
-  that touch, cross or nearly meet without joining. A dot opens its junction: the level of each road there, what stands
-  on it, the allowed turns, and joining, disconnecting or splitting roads. Letters A and B name the ends of the picked
-  road. A dragged point joins the road it is put on and takes joined roads along until it is disconnected. The level
-  picker shows one level at a time; below the ground rails are dashed, above it strong.
+  ([road-graph.js](src/layers/roads/road-graph.js)). From zoom 16 a full dot is a join, a hollow one a dead end, and `!`
+  marks roads that touch, cross or nearly meet without joining. A dot opens its junction: the level of each road there,
+  what stands on it, the allowed turns, and joining, disconnecting or splitting roads. Letters A and B name the ends of
+  the picked road. A dragged point joins the road it is put on and takes joined roads along until it is disconnected.
+  The level picker shows one level at a time; below the ground rails are dashed, above it strong.
 - **Parks & green** and **Water** have holes and islands. Waterways show their joins with the same dots and keep them
   when either side moves; moving the coastline moves the sea, the country, its border and the municipalities.
 - **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it, a ridge
@@ -65,15 +76,16 @@ From the field; choosing one opens its layer, over satellite for a sketch, and A
 ## Editing
 
 `packages/contracts/editor-layers.json` says what each file allows; what a layer adds to that is its behavior in
-[layer-behaviors.js](src/layer-behaviors.js) and the modules that register one. Nothing is recorded until Apply, which
-validates the result with the same rules as the importer. One Apply is one step, which can change several files of the
-layer and is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a toast offers
-Undo. Importing a reviewed changeset is the one exception to "only the active layer", because it names its own files.
+[layer-behaviors.js](src/layers/shared/layer-behaviors.js) and the modules that register one. Nothing is recorded until
+Apply, which validates the result with the same rules as the importer. One Apply is one step, which can change several
+files of the layer and is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a
+toast offers Undo. Importing a reviewed changeset is the one exception to "only the active layer", because it names its
+own files.
 
 A property whose rule lists its values is picked from a list, and so is a small range of whole numbers. A free one that
 usually says the same things, such as floors, road numbers or the streets around, offers those with Other…
-([usual-values.js](src/usual-values.js)). Names, contacts, house numbers and heights are typed. A test keeps every
-property in one of these groups.
+([usual-values.js](src/inspector/usual-values.js)). Names, contacts, house numbers and heights are typed. A test keeps
+every property in one of these groups.
 
 Move, Edit corners and drawing are modes: the inspector shrinks to one bar with Done, and the original shape stays as a
 thin dashed ghost until Apply. Whatever goes along with it, such as the roads of a moved junction, is shown in red where
@@ -91,7 +103,7 @@ cross says so in the bar and adds nothing. A hole corner also stays off the outl
 and waterways join others the same way. The `Magnet` button in the modes where it applies shows its state with
 `aria-pressed` and is remembered in this browser. What an edit newly overlaps is outlined in blue and counted and named
 in the bar and in the inspector; it is not refused, because some sources do overlap
-([area-magnet.js](src/area-magnet.js), [area-overlap.js](src/area-overlap.js)).
+([area-magnet.js](src/geometry/area-magnet.js), [area-overlap.js](src/geometry/area-overlap.js)).
 
 Deleting asks first at the desk. On a phone it only marks the object: the mark travels in the exported file and the desk
 confirms it. Marks wait in Changes under From the field and are never written to a source.

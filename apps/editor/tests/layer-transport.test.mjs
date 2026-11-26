@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {routeBehaviors, turnIndex} from '../src/layer-routes.js';
-import {roadsidePosition, stopBehaviors} from '../src/layer-stops.js';
-import {RoadNetwork} from '../src/road-paths.js';
-import {lineEdits, movedStop, reversedStops, routeWithoutStop} from '../src/route-stops.js';
+import {routeBehaviors, turnIndex} from '../src/layers/routes/layer-routes.js';
+import {roadsidePosition, stopBehaviors} from '../src/layers/stops/layer-stops.js';
+import {RoadNetwork} from '../src/layers/roads/road-paths.js';
+import {lineEdits, movedStop, reversedStops, routeWithoutStop} from '../src/layers/routes/route-stops.js';
 
 const step = 0.001;
 const at = (east, north) => [Math.round((19.26 + east * step) * 1e6) / 1e6, Math.round((42.44 + north * step) * 1e6) / 1e6];

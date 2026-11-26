@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {roadBehaviors} from '../src/layer-roads.js';
-import {jointAt} from '../src/road-graph.js';
-import {rulesAfterSplit, turnKind, turnRule, turnsAt} from '../src/road-junctions.js';
-import {joinedRoad, splitProblem, splitRoad, withJunctionAt} from '../src/road-shapes.js';
+import {roadBehaviors} from '../src/layers/roads/layer-roads.js';
+import {jointAt} from '../src/layers/roads/road-graph.js';
+import {rulesAfterSplit, turnKind, turnRule, turnsAt} from '../src/layers/roads/road-junctions.js';
+import {joinedRoad, splitProblem, splitRoad, withJunctionAt} from '../src/layers/roads/road-shapes.js';
 
 const road = (coordinates, properties = {}) => ({
   type: 'Feature',

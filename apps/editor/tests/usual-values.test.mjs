@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {valueLabel} from '../src/field-catalog.js';
-import {hasClosedList, isFormField} from '../src/property-form.js';
-import {byFrequency, hasUsualValues, isTyped, lineColours, usualValuesOf} from '../src/usual-values.js';
+import {valueLabel} from '../src/inspector/field-catalog.js';
+import {hasClosedList, isFormField} from '../src/inspector/property-form.js';
+import {byFrequency, hasUsualValues, isTyped, lineColours, usualValuesOf} from '../src/inspector/usual-values.js';
 
 const rules = JSON.parse(fs.readFileSync(new URL('fixtures/editor-layers.json', import.meta.url), 'utf8'));
 

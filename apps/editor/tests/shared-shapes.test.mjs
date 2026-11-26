@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {changedStretch, followingEdits, splicedLine, splicedRing} from '../src/shared-shapes.js';
-import {flowsInto, linesKeepingJoins, riverEndingOnShores, riversKeepingShore} from '../src/water-joins.js';
+import {changedStretch, followingEdits, splicedLine, splicedRing} from '../src/geometry/shared-shapes.js';
+import {flowsInto, linesKeepingJoins, riverEndingOnShores, riversKeepingShore} from '../src/layers/water/water-joins.js';
 
 const step = 0.001;
 const at = ([east, north]) => [19 + east * step, 42 + north * step];
