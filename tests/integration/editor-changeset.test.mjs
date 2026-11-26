@@ -6,12 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {dataToolURL, stageDataInto, stagedSourcePath} from '../data-root.mjs';
 import {contractsDirectory, readContractJSON, stageContractsInto} from '../contracts-root.mjs';
-import {buildChangeset, importChangeset, materializedLayer} from '../../apps/editor/src/changeset.js';
-import {labelJoinProblems} from '../../apps/editor/src/cross-file-checks.js';
-import {EditSession} from '../../apps/editor/src/edit-session.js';
-import {translateGeometry} from '../../apps/editor/src/geometry-editing.js';
-import {featureProblem} from '../../apps/editor/src/layer-rules.js';
-import {collectionOf} from '../../apps/editor/src/source-records.js';
+import {buildChangeset, importChangeset, materializedLayer} from '../../apps/editor/src/editing/changeset.js';
+import {labelJoinProblems} from '../../apps/editor/src/editing/cross-file-checks.js';
+import {EditSession} from '../../apps/editor/src/editing/edit-session.js';
+import {translateGeometry} from '../../apps/editor/src/geometry/geometry-editing.js';
+import {featureProblem} from '../../apps/editor/src/layers/shared/layer-rules.js';
+import {collectionOf} from '../../apps/editor/src/source-data/source-records.js';
 
 const {applyChangeset} = await import(dataToolURL('apply-changeset.mjs'));
 

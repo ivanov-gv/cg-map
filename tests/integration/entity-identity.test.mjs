@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {dataToolURL} from '../data-root.mjs';
 import {contractURL, contractsDirectory, readContractJSON} from '../contracts-root.mjs';
-import {decodeSource, validateBundleManifest} from '../../apps/editor/src/source-bundle.js';
+import {decodeSource, validateBundleManifest} from '../../apps/editor/src/source-data/source-bundle.js';
 import {normalizePlaces, parseVisibilityConfig, markerKeys} from '@ivanov-gv/map-core';
 import {matchesPlaceSearch, selectNearestPlaces} from '../../apps/web/src/core.js';
 
