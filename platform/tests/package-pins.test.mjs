@@ -99,8 +99,8 @@ for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
 
     const helper = fileSystem.readFileSync(path.join(repositoryRoot, application, 'tests/pinned-contracts.mjs'), 'utf8');
     assert.match(helper, /import\.meta\.resolve\('@ivanov-gv\/map-contracts\/package\.json'\)/);
-    // The editor asserts its own browser configuration in apps/editor/tests/contracts-root.test.mjs.
-    if (application !== 'apps/editor') {
+    // The apps assert their own browser configuration in tests/contracts-root.test.mjs.
+    if (application === 'apps/core-demo') {
       const browserConfig = fileSystem.readFileSync(path.join(repositoryRoot, application, 'playwright.config.mjs'), 'utf8');
       assert.match(browserConfig, /MAP_CONTRACTS_ROOT \?\?= pinnedContractsRoot/);
     }

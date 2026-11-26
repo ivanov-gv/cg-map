@@ -124,8 +124,8 @@ test('editor import boundary allows relative imports inside src and skips test f
   assert.match(`${rejected.stdout ?? ''}${rejected.stderr ?? ''}`, /forbidden dependency/);
 });
 
-// The editor owns this guard in apps/editor/tests/pinned-data.test.mjs.
-for (const application of ['apps/web', 'apps/core-demo']) {
+// Core-demo keeps this guard in the platform check; web and editor own it in their own tests/pinned-data.test.mjs.
+for (const application of ['apps/core-demo']) {
   test(`${application} repo boundary rejects repository data paths in tests`, t => {
     const probe = path.join(repoRoot, application, 'tests', `__data-probe-${process.pid}.mjs`);
     t.after(() => fs.rmSync(probe, {force: true}));
@@ -246,17 +246,6 @@ test('the published data root resolves an installed package and rejects reposito
   const repositoryData = spawnSync('node', [helper, '--published'], {cwd: repoRoot, encoding: 'utf8'});
   assert.notEqual(repositoryData.status, 0);
   assert.match(repositoryData.stderr, /must resolve an installed @ivanov-gv\/map-data package, not repository data/);
-});
-
-test('repo boundary rejects path builders that target repository data', t => {
-  const probe = path.join(repoRoot, 'apps/web/tests', `__data-join-probe-${process.pid}.mjs`);
-  t.after(() => fs.rmSync(probe, {force: true}));
-  fs.writeFileSync(probe, "export const source = path.join(repositoryRoot, 'data', 'sources', 'places.geojson');\n");
-  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
-  assert.notEqual(result.status, 0);
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  assert.ok(output.includes(path.basename(probe)), output);
-  assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
 });
 
 test('each application owns its build and run targets, and the root Makefile has neither', () => {

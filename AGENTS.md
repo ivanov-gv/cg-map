@@ -36,7 +36,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
 - `make check` (the pre-push hook): `verify` in every project but services/backend, no browser suites; `make check-go`
   checks that Go module. `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
-- `make ci-plan BASE=origin/main`: show which CI pipelines and browser areas a branch selects.
+- `make ci-plan BASE=origin/main`: show which CI pipelines a branch selects.
 - `make lint-workflows` (required for `.github/**`), `make test-<workflow>` / `make test-all-workflows`: lint, act run.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
 - `make test-e2e`: optional local browser tests of every browser project, each building itself first.
