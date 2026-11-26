@@ -36,10 +36,11 @@ Migrated projects own `eslint.config.mjs` beside their Makefile or package.json 
 globals; ESLint finds it from the folder the lint command runs in. Their rule sets live in
 [platform/eslint-rules.mjs](platform/eslint-rules.mjs), which names no project file. Enforced: `npm run check:repo`. The
 pre-commit hook uses a staged file's own config when it has one and the root config otherwise;
-[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. The apps still use the root config until their
-own migration PR: it imports ESLint's own presets directly, not the shared module, and some of its app rules may
-temporarily duplicate future shared rules. App migrations and the later root cleanup bound that transition; the current
-split is in [architecture](docs/system-architecture/architecture.md#independent-projects). See
+[ci-plan](platform/tools/ci-plan.mjs)'s tests cover pipeline selection. Core Demo has migrated; Web and Editor still use
+the root config until their own migration PRs. That file imports ESLint's own presets directly, not the shared module,
+and its remaining app rules may temporarily duplicate future shared rules. App migrations and the later root cleanup
+bound that transition; the current split is in
+[architecture](docs/system-architecture/architecture.md#independent-projects). See
 [ADR 0043](docs/decisions/0043-project-owned-eslint-configurations.md).
 
 ## Code

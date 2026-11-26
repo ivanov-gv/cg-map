@@ -67,3 +67,17 @@ the shared probe helper against its own config. A project's config selects that 
 - Scope: that file, read at HEAD only by the migrated non-app configs through their own configs. The apps' root config
   does not import it. Runtime, data and contract pins are unchanged.
 - Owner approval: requested in the #458 PR.
+
+### Outcome note: Core Demo migration (2026-11-26)
+
+- Task #479 moves only apps/core-demo to its own `eslint.config.mjs`, which imports the shared rule exports. Its lint
+  command runs from that folder over source, tools, tests and the app config; the root file stays byte-for-byte
+  unchanged on this branch and still serves Web and Editor.
+- Recursive patterns cover runtime, tools, source unit tests and component-browser tests. Runtime and tool helpers keep
+  the 80-line function budget; `max-lines-per-function` is off only for `*.test.js` paths. Existing representative paths
+  keep their effective rules and globals, and the lint file set gains only the app config and the new app-owned test.
+- A Core Demo test calls ESLint through the real app config. It proves that nested runtime and tool files reject
+  readability violations, that helpers keep the function budget, that unit and browser tests accept their globals and
+  long functions, and that test paths still reject readability violations.
+- Current consumers in this checkout are the six non-app projects and apps/core-demo. Web and Editor are not migrated
+  here; other branches' merges will reconcile their consumer set later.

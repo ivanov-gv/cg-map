@@ -6,7 +6,8 @@ real local map assets; no editor or public-app code is imported.
 
 Run `make -C apps/core-demo dev` then open the printed local URL. The standalone artifact is `dist/core-demo`; it works
 at root or under a URL prefix. `make verify PKG=apps/core-demo` builds and checks it, and `make -C apps/core-demo e2e`
-runs tests/e2e on desktop and mobile.
+runs tests/e2e on desktop and mobile. Lint uses this app's own `eslint.config.mjs`, so its source, tools, tests and
+config are checked from this folder.
 
 Use the street/overview buttons to compare POI thresholds; select the green overlay, shift its point by 20 screen
 pixels, replace it with a polygon, toggle it, switch it to the Editable state, then recreate the map. Errors and stalled
