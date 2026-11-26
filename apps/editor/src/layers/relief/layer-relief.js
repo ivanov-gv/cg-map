@@ -3,7 +3,7 @@ import {createElementWithText} from '../../shared/dom.js';
 import {crossesContours, highestContourAround, isClosedLine, keptClosed, surrounds} from './contour-rules.js';
 import {roundedCoordinate} from '../../geometry/geometry-editing.js';
 import {isSamePoint} from '../roads/road-shapes.js';
-import {hasMovedEnds, sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
+import {hasMovedEnds, isEndRemoved, sidesOfRidge, slidEnd, slopesWithSlidEnds} from './ridge-ends.js';
 import {changedStretch, crossesItself, followingEdits} from '../../geometry/shared-shapes.js';
 
 const contoursFile = 'contours.geojson';
@@ -17,6 +17,7 @@ const positionTimeoutMilliseconds = 15000;
 const slopesOfRidge = 2;
 const smallestDragFraction = 1 / 256;
 const crossingMessage = 'Contour lines never cross.';
+const removedEndMessage = 'A ridge end cannot be removed. Move it along the outline of its hill instead.';
 
 // Lines need a big screen; their fields do not.
 const isDesk = context => !context.isPhone();
@@ -158,6 +159,7 @@ function slopeEdits({feature, before}, context) {
 function ridgeProblem(edit, context) {
   const {feature, before} = edit;
   if (JSON.stringify(before.geometry) === JSON.stringify(feature.geometry)) return null;
+  if (isEndRemoved(before.geometry.coordinates, feature.geometry.coordinates)) return removedEndMessage;
   const slopes = slopeEdits(edit, context);
   // One is sunlit and one is shaded.
   if (slopes.length < slopesOfRidge) return 'The slopes beside this ridge do not run along it here, so they cannot follow.';

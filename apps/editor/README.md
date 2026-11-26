@@ -63,7 +63,8 @@ What the layers do beyond shape and fields:
 - **Parks & green** and **Water** have holes and islands. Waterways show their joins with the same dots and keep them
   when either side moves; moving the coastline moves the sea, the country, its border and the municipalities.
 - **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it, a ridge
-  recolours the slopes beside it and its ends slide along the outline of its hill.
+  recolours the slopes beside it and its ends slide along the outline of its hill. An end cannot be removed, only moved
+  there. Ridges are derived edges between slopes, so they cannot be added or deleted here.
 - **Settlements & borders:** a settlement says its type and opens its area, or draws one. A border changes both sides at
   once. Its ends stay, because more than two municipalities meet there. The coast is moved on Water.
 - **Stops** go to the side of the road that is clicked and follow the road when moved.
