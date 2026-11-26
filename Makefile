@@ -28,7 +28,7 @@ check-docs:
 	npm run check:agents
 	node --test platform/tests/agents.test.mjs
 
-# Which folder pipelines a change needs: make ci-plan [BASE=origin/main]
+# Which folder pipelines and browser areas a change needs: make ci-plan [BASE=origin/main]
 ci-plan:
 	node platform/tools/ci-plan.mjs --base $(or $(BASE),origin/main)
 
