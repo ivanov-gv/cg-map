@@ -32,3 +32,13 @@ shell before replacing open tabs, without clearing OPFS or the verified archive.
 rules under test, because a too-wide extension rule would put host config or range responses in the cache. Current
 behavior lives in the [web guide](../../apps/web/README.md) and the
 [architecture](../system-architecture/architecture.md).
+
+## Outcome note (2026-11-26)
+
+A follow-up review found two ways the original implementation could pass its own fixture while breaking a real build: a
+broad `./map-core/` rewrite also changed local sibling paths and ordinary asset strings, and a scratch project that
+linked the repository root's `node_modules` resolved map-core from the workspace HEAD instead of Web's published `0.2.0`
+pin. The accepted decision is unchanged: `build.mjs` now relocates only published map-core import specifiers at the
+destination depth, and scratch projects resolve dependencies through Web's installed package tree. Implementation
+mutations under `/tmp/opencode/proof-477/implementation/` run the committed tests against broken production guards and
+manifest invariants, so each failure is attributable to the implementation rather than to a mutated input fixture.

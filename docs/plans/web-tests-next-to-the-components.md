@@ -22,6 +22,11 @@ bounded step without moving application sources.
 
 ## History
 
+- 2026-11-26: Follow-up review found that a broad `./map-core/` rewrite changed local sibling imports and ordinary asset
+  strings, and that the scratch fixture resolved map-core from the workspace HEAD instead of Web's published `0.2.0`
+  pin. Relocation now targets only published import specifiers, fixtures use Web's installed package tree, and
+  implementation mutations run the committed rejection tests. Why: those tests must fail for a broken production guard,
+  not only for a bad input fixture. (#477)
 - 2026-11-26: Stacked this step after its formal `#475` blocker, which added the lint foundation and ADR 0043. The Web
   decision record moved from 0043 to 0044 and its authored links were updated. Why: the stack keeps decision numbers
   contiguous and leaves the root-config transition with its owning task. (#477)
