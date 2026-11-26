@@ -53,6 +53,19 @@ the shared probe helper against its own config. A project's config selects that 
   app migrations and the later root cleanup, not a second source of truth for migrated projects.
 - Next: Web, Editor and core-demo migrate in their own PRs; the root config is deleted only once no app reads it.
 
+### Outcome note: Editor migration in #478 (2026-11-26)
+
+- #478 merges #475 into the reorganized Editor branch and adds `apps/editor/eslint.config.mjs`. The root file is
+  restored byte-for-byte to #475 and keeps serving apps/web and apps/core-demo; only the Editor's lint scope moved.
+- The Editor config keeps browser globals for runtime, service-worker globals for `src/sw.js`, Node and browser globals
+  for tools, colocated tests and both app configs, the shared mechanical rules, and the 80-line production/tools budget.
+  Long linear scenarios stay allowed in `*.test.js` and `*.browser.test.js`. An Editor-owned test lints samples at
+  nested production, unit and browser-test paths through that real config.
+- The planner needs no change: the new config maps to the Editor's own folder and workflow.
+  `make ci-plan BASE=feature/458-lint-config` selects every folder because that base carries #475's later root-config
+  state while this integration restores the merge parent verbatim; the planner treats any root config diff as whole-plan
+  selection. CI budgets are unchanged; Web and core-demo migrate separately before the root file is removed.
+
 ### Outcome note: HEAD reads for lint tooling (2026-11-26)
 
 - Rule: a project's tests read only its own files or an exact published version of another project, never another's HEAD

@@ -28,7 +28,8 @@ holds each layer with `layers/shared/` for the registry and shared layer UI, `so
 `map-tools/` holds map interaction tools, `offline/` keeps the local copy while `sw.js` stays at `src/` root for
 service-worker scope, and `shared/` holds small DOM and hash helpers. Unit tests go next to their source as `*.test.js`;
 tests that span sources and whole-app tests stay in `tests/`; tool tests stay in `tools/`; `npm test` skips
-`*.browser.test.js`.
+`*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules; `npm run lint` covers the source
+folders, tools, tests, both app configs and that config itself.
 
 ## Layers
 
