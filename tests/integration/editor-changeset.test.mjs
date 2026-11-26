@@ -264,7 +264,7 @@ test('objects of every other layer pass from the editor through the importer', a
   assert.equal(writtenRoutes.features[0].properties.colour, '#1b75bb');
 });
 
-test('canyon rims can be added, changed and deleted with one measured height each', async testContext => {
+test('canyon rims can be added, changed and deleted with one measured height and width each', async testContext => {
   const root = temporaryRoot(testContext);
   const sources = loadSources(root, ['canyon-rims.geojson']);
   const session = new EditSession(sources);
@@ -273,6 +273,8 @@ test('canyon rims can be added, changed and deleted with one measured height eac
   const changed = structuredClone(features[0]);
   const changedHeight = changed.properties.height === 200 ? 201 : 200;
   changed.properties.height = changedHeight;
+  const changedWidth = changed.properties.width === 200 ? 201 : 200;
+  changed.properties.width = changedWidth;
   recordValidEdit(session, 'canyon-rims.geojson', '0', changed);
   const deleted = features[1];
   session.recordEdit('canyon-rims.geojson', '1', null);
@@ -280,7 +282,7 @@ test('canyon rims can be added, changed and deleted with one measured height eac
   const localId = 'local:55555555-5555-4555-8555-555555555555';
   const drawn = {
     type: 'Feature',
-    properties: {height: 77},
+    properties: {height: 77, width: 26},
     geometry: {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
   };
   recordValidEdit(session, 'canyon-rims.geojson', localId, drawn);
@@ -301,6 +303,10 @@ test('canyon rims can be added, changed and deleted with one measured height eac
     written.features.find(({properties}) => identityOf(properties) === identityOf(changed.properties)).properties.height,
     changedHeight
   );
+  assert.equal(
+    written.features.find(({properties}) => identityOf(properties) === identityOf(changed.properties)).properties.width,
+    changedWidth
+  );
   assert.ok(
     !written.features.some(({properties}) => identityOf(properties) === identityOf(deleted.properties)),
     'a deleted rim is absent from the reviewed source'
@@ -310,11 +316,13 @@ test('canyon rims can be added, changed and deleted with one measured height eac
   assert.equal(added.properties.method, 'editor-drawn');
   assert.equal(added.properties.kind, 'canyon-rim');
   assert.equal(added.properties.height, 77);
+  assert.equal(added.properties.width, 26);
   assert.equal('river' in added.properties, false);
   assert.equal('bank' in added.properties, false);
   const unmeasuredWritten = written.features.find(({properties}) => properties.entityId === unmeasuredId);
   assert.equal(unmeasuredWritten.properties.method, 'editor-drawn');
   assert.equal(unmeasuredWritten.properties.height, undefined);
+  assert.equal(unmeasuredWritten.properties.width, undefined);
   assert.equal('river' in unmeasuredWritten.properties, false);
   assert.equal('bank' in unmeasuredWritten.properties, false);
   const changedWritten = written.features.find(
@@ -355,6 +363,44 @@ test('a rim height edit keeps the original length', async testContext => {
   );
   assert.equal(written.properties.height, edited.properties.height);
   assert.equal(written.properties.lengthMetres, original.properties.lengthMetres);
+});
+
+test('a rim width edit keeps the original height and length', async testContext => {
+  const root = temporaryRoot(testContext);
+  const sources = loadSources(root, ['canyon-rims.geojson']);
+  const session = new EditSession(sources);
+  const {features} = sources.get('canyon-rims.geojson').collection;
+  const index = features.findIndex(({properties}) => Number.isInteger(properties.width));
+  assert.notEqual(index, -1, 'the reviewed rims include an edge with a width');
+  const original = features[index];
+  const edited = structuredClone(original);
+  edited.properties.width = original.properties.width === 1 ? 2 : original.properties.width + 1;
+  recordValidEdit(session, 'canyon-rims.geojson', String(index), edited);
+
+  const {result} = await exportAndApply(session, sources, root);
+  assert.deepEqual(result.files, ['canyon-rims.geojson']);
+  const written = readSource(root, 'canyon-rims.geojson').features.find(({properties}) =>
+    properties.entityId === original.properties.entityId &&
+    properties.entityPart === original.properties.entityPart
+  );
+  assert.equal(written.properties.width, edited.properties.width);
+  assert.equal(written.properties.height, original.properties.height);
+  assert.equal(written.properties.lengthMetres, original.properties.lengthMetres);
+  assert.equal(written.properties.method, original.properties.method);
+  assert.deepEqual(written.geometry, original.geometry);
+});
+
+test('the importer refuses an out-of-range rim width with the file and rule', async testContext => {
+  const root = temporaryRoot(testContext);
+  const sources = loadSources(root, ['canyon-rims.geojson']);
+  const session = new EditSession(sources);
+  const original = sources.get('canyon-rims.geojson').collection.features[0];
+  const edited = structuredClone(original);
+  edited.properties.width = 2001;
+  session.recordEdit('canyon-rims.geojson', '0', edited);
+  const originalBytes = fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson'));
+  await assert.rejects(exportAndApply(session, sources, root), /canyon-rims\.geojson.*width is above 2000/);
+  assert.deepEqual(fs.readFileSync(stagedSourcePath(root, 'canyon-rims.geojson')), originalBytes);
 });
 
 test('a reshaped rim gets a longer measured length', async testContext => {

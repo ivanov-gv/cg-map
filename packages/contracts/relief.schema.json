@@ -106,6 +106,7 @@
           "bank": {"enum": ["left", "right"]},
           "method": {"enum": ["osm-cliff", "dem-canyon-bank", "editor-drawn"]},
           "height": {"type": "integer"},
+          "width": {"type": "integer"},
           "lengthMetres": {"type": "number", "minimum": 0},
           "bankDefinition": false,
           "cliffWays": false,

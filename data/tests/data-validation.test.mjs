@@ -934,7 +934,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
     'summits.geojson': [data => {data.features[0].properties.heightCheck = 'unknown';}, data => {data.features[0].properties.mismatch = !data.features[0].properties.mismatch;}, data => {data.features[0].properties.demElevation = 'high';}],
     'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}, data => {data.features[0].properties.greenKinds = ['park'];}],
     'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}, data => {data.features[0].properties.radiusMetres = 400;}],
-    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}, data => {data.features[0].properties.height = 12.5;}, data => {data.features[0].properties.height = -1;}, data => {data.features[0].properties.height = 2601;}]
+    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}, data => {data.features[0].properties.height = 12.5;}, data => {data.features[0].properties.height = -1;}, data => {data.features[0].properties.height = 2601;}, data => {data.features[0].properties.width = 8.5;}, data => {data.features[0].properties.width = 0;}, data => {data.features[0].properties.width = 2001;}]
   };
   for (const [filename, changes] of Object.entries(mutations)) {
     for (const change of changes) {
@@ -976,6 +976,10 @@ test('canyon rim validation keeps derived facts with the build and off drawn edg
 
   assert.equal(check(drawn), 1);
   assert.equal(isValid(drawn), true);
+  assert.equal(check({...drawn, width: 26}), 1);
+  assert.equal(isValid({...drawn, width: 26}), true);
+  assert.equal(isValid({...drawn, width: 26.5}), false);
+  assert.equal(isValid({...drawn, width: '26'}), false);
   assert.throws(() => check({...drawn, river}), /a drawn rim cannot name a river/);
   assert.throws(() => check({...drawn, bank}), /a drawn rim cannot name a bank/);
   assert.equal(isValid({...drawn, river}), false);
@@ -1005,6 +1009,19 @@ test('relief validation reads the rim height range from the editor rule', () => 
     () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
     error => error.message === 'canyon-rims.geojson: invalid rim height'
   );
+});
+
+test('relief validation reads the rim width range from the editor rule and names the file', () => {
+  const widthRule = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'editor-layers.json')))
+    .layers['canyon-rims.geojson'].properties.width;
+  for (const width of [widthRule.minimum - 1, widthRule.maximum + 1, 8.5]) {
+    const bad = readRelief('canyon-rims.geojson');
+    bad.features[0].properties.width = width;
+    assert.throws(
+      () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
+      error => error.message === 'canyon-rims.geojson: invalid rim width: expected a whole number of metres from 1 to 2000'
+    );
+  }
 });
 
 // A protected area is only worth publishing with its name; the label layer relies on this check to skip none.

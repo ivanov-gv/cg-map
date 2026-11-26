@@ -18,9 +18,10 @@ check-topology:
 build-data:
 	npm run build
 
-# Rebuilds the five reviewed relief sources from external inputs outside Git.
+# Rebuilds the five reviewed relief sources from external inputs outside Git, then replays reviewed corrections.
 build-relief:
 	cd $(ROOT) && $(PYTHON) data/tools/build-relief.py
+	$(MAKE) reapply-corrections
 
 # Applies a reviewed editor export to data/sources: make -C data apply-changeset CHANGESET=<absolute path>. Never commits.
 apply-changeset:

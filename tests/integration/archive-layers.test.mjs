@@ -117,12 +117,16 @@ test('archive metadata advertises the shared maximum zoom for every layer', asyn
   }
 });
 
-test('archive canyon rims carry a whole-metre height when one is published', async () => {
+test('archive canyon rims carry whole-metre height and width beside each other', async () => {
   const rims = TILE_LAYERS.find(({name}) => name === 'canyon_rims');
+  assert.deepEqual(rims.fields.slice(-2), ['height', 'width']);
   const atMinZoom = await decodedTile(rims.minZoom);
   const features = layerFeatures(atMinZoom, 'canyon_rims');
   assert.ok(features.length > 0, 'the sampled tile contains a canyon rim');
   const heights = features.map(feature => feature.properties.height).filter(height => height !== undefined);
+  const widths = features.map(feature => feature.properties.width).filter(width => width !== undefined);
   assert.ok(heights.length > 0, 'the sampled tile contains a measured rim');
+  assert.ok(widths.length > 0, 'the sampled tile contains a reviewed width');
   assert.ok(heights.every(Number.isInteger), 'every published height is a whole number of metres');
+  assert.ok(widths.every(Number.isInteger), 'every published width is a whole number of metres');
 });

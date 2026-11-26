@@ -35,7 +35,9 @@ those checks; it does not run the external DEM/PBF rebuild. The builder verifies
 deriving anything. `RELIEF_DEM_DIR`, `RELIEF_OSM_PATH`, and `RELIEF_OSM_SHA256` can point a disposable build at another
 reviewed snapshot; the committed build records the exact inputs. The raster tiles, PBF and `.build/relief-report.json`
 stay outside Git. Outputs are deterministic bytes: run the build twice and compare their hashes before committing a
-source change.
+source change. The target ends by replaying the corrections ledger, which puts the reviewed widths back on canyon rims.
+If a rebuild renumbers a rim's `entityPart`, replay reports the old part-keyed correction as unmatched instead of
+placing its width on another part; see [ADR 0042](../decisions/0042-one-measured-canyon-rim-height.md).
 
 Summits are clipped to the `kind=country` boundary in `land.geojson`: both the OSM point and its published six-decimal
 coordinate must be inside or on the boundary. A point that rounds across the boundary in either direction is dropped.
@@ -100,7 +102,7 @@ already shows.
 | contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
 | slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
 | ridges            | `ridges.geojson`                                    | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
-| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`, `height`                                                                                                     |
+| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`, `height`, `width`                                                                                            |
 | summits           | `summits.geojson`                                   | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
 | protected_areas   | `protected-areas.geojson`                           | 10–17                                         | `kind`, `name`, `name:en`                                                                                                     |
 | green_area_labels | `land.geojson`, `protected-areas.geojson` (derived) | 13–17                                         | `name`, `name:en`                                                                                                             |
@@ -274,7 +276,8 @@ data/sources/editor-corrections.json; see [provenance](../../data/PROVENANCE.md)
 `local:<uuid v4>` ID, get a `sha256:` base version and claim nothing the rules do not list; a new place also takes the
 contract's local source value. An edit or deletion that would replace or remove a commercial override is refused by
 name: review it in the policy first. Field items in a changeset (sketches, notes, deletion marks) are counted and left
-there.
+there. Canyon rim width is an editorial fact: the current style's widths were carried into the reviewed edges once by a
+changeset, and a width-only edit leaves height, length and geometry as they are.
 
 Label positions, street joins, slope areas, rim lengths, summit checks, contour direction, ring order and provenance
 follow from the edits and are computed by the importer. After border, coastline or country edits also run
@@ -287,7 +290,8 @@ make -C data reapply-corrections
 ```
 
 An edit wins over upstream for exactly what it changed. The report names objects that are gone and facts that upstream
-changed too.
+changed too. `make -C data build-relief` ends with this command, because a rebuilt canyon rim has no measured width;
+[ADR 0042](../decisions/0042-one-measured-canyon-rim-height.md) records why width is an editorial correction.
 
 The command says whether a tile rebuild is needed. POI and label changes follow the source validation and web-build
 path; geometry changes need an intentional `make -C data build-data` and a release review. A drawn road changes the

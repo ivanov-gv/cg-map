@@ -36,8 +36,14 @@ restrictions, places, context countries, binary archive and release metadata wer
 `sources/editor-corrections.json` appears once a reviewed changeset has been applied. Shaped by
 `packages/contracts/editor-corrections.schema.json`, it records each local correction with its author, reason and full
 before and after values. It is what tells a local correction from an imported upstream fact: an edited feature keeps its
-upstream attribution, so read the ledger to see what changed locally. Its references are bound to one snapshot and do
-not survive a re-extract, which replaces the source files.
+upstream attribution, so read the ledger to see what changed locally. Version-2 changeset references name objects by
+entity ID and part, so `make -C data reapply-corrections` restores reviewed facts after a re-extract or relief rebuild;
+only version-1 feature-index references stay bound to one snapshot.
+
+The 50 reviewed canyon rims carry width from one 2026-11-26 changeset. The carried-over pixels, their conversion to
+whole metres and why the relief build measures height only are recorded in
+[ADR 0042](../docs/decisions/0042-one-measured-canyon-rim-height.md). The corrections ledger restores those widths after
+a rebuild; height remains the relief build's bank-rise measurement.
 
 `visibilityLevel` on each place is editorial product metadata from `sources/place-visibility-policy.json`, not an OSM
 fact or a measure of significance. `places_facts_sha256` in `sources/provenance.json` covers the snapshot without that

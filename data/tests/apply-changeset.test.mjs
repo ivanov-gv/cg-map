@@ -67,6 +67,10 @@ for (const {name, line, isValid} of cases.lines) {
 
 test('a metadata edit updates the source, provenance and ledger, and still passes the data check', testContext => {
   const root = temporaryRoot(testContext);
+  const ledgerPath = sourcePath(root, 'editor-corrections.json');
+  const previousCount = fs.existsSync(ledgerPath)
+    ? JSON.parse(fs.readFileSync(ledgerPath)).corrections.length
+    : 0;
   const operation = modifyOperation(root, 'places.geojson', 0, feature => {
     feature.properties.name = 'Corrected name';
   });
@@ -74,10 +78,11 @@ test('a metadata edit updates the source, provenance and ledger, and still passe
   assert.equal(summary.needsTileRebuild, false);
   assert.equal(readSource(root, 'places.geojson').features[0].properties.name, 'Corrected name');
   assert.doesNotThrow(() => checkData(root, {contractsDirectory}));
-  const {corrections} = JSON.parse(fs.readFileSync(sourcePath(root, 'editor-corrections.json')));
-  assert.equal(corrections.length, 1);
-  assert.equal(corrections[0].beforeFingerprint, operation.beforeFingerprint);
-  assert.equal(corrections[0].author, 'Test Editor');
+  const {corrections} = JSON.parse(fs.readFileSync(ledgerPath));
+  assert.equal(corrections.length, previousCount + 1);
+  const correction = corrections.find(({beforeFingerprint}) => beforeFingerprint === operation.beforeFingerprint);
+  assert.ok(correction, 'the new correction is in the ledger');
+  assert.equal(correction.author, 'Test Editor');
 });
 
 test('a level edit becomes a policy override, and survives regenerating levels', testContext => {
@@ -353,9 +358,9 @@ test('the ledger keeps both values and matches its schema, and a failed final ch
   const schema = JSON.parse(
     fs.readFileSync(path.join(repositoryRoot, 'packages/contracts/editor-corrections.schema.json'))
   );
-  const [correction] = corrections;
+  const correction = corrections.find(({after}) => after.properties.name === 'Corrected');
+  assert.ok(correction, 'the test correction is in the ledger');
   assert.deepEqual(Object.keys(correction).toSorted(), schema.properties.corrections.items.required.toSorted());
-  assert.equal(correction.after.properties.name, 'Corrected');
   assert.notEqual(correction.before.properties.name, 'Corrected');
 });
 
