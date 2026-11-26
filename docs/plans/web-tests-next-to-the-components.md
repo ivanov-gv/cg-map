@@ -22,6 +22,10 @@ bounded step without moving application sources.
 
 ## History
 
+- 2026-11-26: Web keeps main's reviewed import graph transitively until the per-folder rules of #456 replace it, and the
+  ci-plan comment edit was reverted so this PR selects only docs, platform, tests and Web. Why: a new module must not
+  widen which main modules a reviewed module reaches, and this one-app change must not pay for workflow test runs.
+  (#477)
 - 2026-11-26: Follow-up review found that a broad `./map-core/` rewrite changed local sibling imports and ordinary asset
   strings, and that the scratch fixture resolved map-core from the workspace HEAD instead of Web's published `0.2.0`
   pin. Relocation now targets only published import specifiers, fixtures use Web's installed package tree, and

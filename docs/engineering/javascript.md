@@ -10,9 +10,10 @@ it.
 - apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension,
   and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
   and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
-- A web runtime module may import relative files inside apps/web/src and the published map-core entry; no per-file
-  import list is needed. Dynamic `import()` and MapLibre gesture handlers are rejected. The build discovers modules at
-  every depth, preserves their paths and derives the offline shell from the built artifact
+- Modules that existed on main keep their reviewed imports transitively: a new module may not widen which main modules
+  they reach, and `core.js` and `dom.js` still import nothing local. New modules may import any runtime module inside
+  apps/web/src and the published map-core entry. Dynamic `import()` and MapLibre gesture handlers are rejected. The
+  build discovers modules at every depth, preserves their paths and derives the offline shell from the built artifact
   ([ADR 0044](../decisions/0044-build-derived-web-shell.md)); colocated tests, support files, config.json, generated
   manifests and archive/range responses stay out. Playwright discovers browser tests, so no planner entry is needed. Web
   owns these source checks in apps/web/tools/runtime-modules.mjs and its component tests. A web change still selects

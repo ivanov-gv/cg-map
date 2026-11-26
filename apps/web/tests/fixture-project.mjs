@@ -8,13 +8,14 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {mainRuntimeModules} from '../tools/runtime-modules.mjs';
 import {pinnedContractsRoot} from './pinned-contracts.mjs';
 import {pinnedDataRoot} from './pinned-data.mjs';
 
 const appRoot = fileURLToPath(new URL('../', import.meta.url));
 
-// Returns an isolated project with a nested runtime module, a local map-core sibling path, two colocated tests, and a
-// support helper.
+// Returns an isolated project with main's flat modules, a nested runtime module, a local map-core sibling path, two
+// colocated tests, and a support helper.
 export function createFixtureProject(testContext) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-map-web-fixture-'));
   testContext.after(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -29,6 +30,10 @@ export function createFixtureProject(testContext) {
   fs.symlinkSync(path.join(appRoot, 'node_modules'), path.join(app, 'node_modules'), 'dir');
   fs.writeFileSync(path.join(source, 'app.js'), "import {featureValue} from './feature/nested.js';\nexport {featureValue};\n");
   fs.writeFileSync(path.join(source, 'sw.js'), "self.addEventListener('install', () => {});\n");
+  for (const moduleName of mainRuntimeModules) {
+    if (moduleName === 'app.js') continue;
+    fs.writeFileSync(path.join(source, moduleName), 'export {};\n');
+  }
   fs.writeFileSync(
     path.join(source, 'feature/nested.js'),
     [

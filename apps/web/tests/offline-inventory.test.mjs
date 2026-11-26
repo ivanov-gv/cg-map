@@ -53,7 +53,7 @@ test('shell discovery excludes host config, generated output, downloads, and tes
     assert.ok(discovered.includes(included), `${included} must stay in the shell`);
 });
 
-test('shell discovery excludes archive and partial files even when the data allow rule matches them', testContext => {
+test('shell discovery excludes archive and partial files from the whole artifact', testContext => {
   const fixture = createFixtureProject(testContext);
   buildFixture(fixture);
   fs.writeFileSync(path.join(fixture.output, 'data/archive.pmtiles'), 'full archive bytes');
@@ -65,10 +65,18 @@ test('shell discovery excludes archive and partial files even when the data allo
   assert.ok(!discovered.includes('data/archive.pmtiles.partial'));
 });
 
-test('shell discovery returns sorted asset paths', testContext => {
+test('shell discovery returns sorted asset paths regardless of walk order', testContext => {
   const fixture = createFixtureProject(testContext);
   buildFixture(fixture);
+  fs.mkdirSync(path.join(fixture.output, 'a'), {recursive: true});
+  fs.writeFileSync(path.join(fixture.output, 'A.js'), 'export const upper = true;\n');
+  fs.writeFileSync(path.join(fixture.output, 'a.js'), 'export const lower = true;\n');
+  fs.writeFileSync(path.join(fixture.output, 'a/z.js'), 'export const z = true;\n');
+  fs.writeFileSync(path.join(fixture.output, 'b.js'), 'export const b = true;\n');
+
   const discovered = discoverShellAssets(fixture.output);
+  assert.equal(discovered[0], 'A.js');
+  assert.ok(discovered.indexOf('a.js') < discovered.indexOf('a/z.js'));
   assert.deepEqual(discovered, [...discovered].sort());
 });
 

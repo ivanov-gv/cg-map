@@ -33,8 +33,8 @@ export function isShellAsset(relativePath) {
   if (segments[0] === 'map-core') return filename.endsWith('.js');
   if (segments[0] === 'fonts') return filename.endsWith('.pbf');
   if (segments[0] === 'data') {
-    if (segments[1] === 'satellite') return /\.(?:webp|png|json|pmtiles|partial)$/.test(filename);
-    return /\.(?:geojson|json|pmtiles|partial)$/.test(filename) && filename !== 'manifest.json';
+    if (segments[1] === 'satellite') return /\.(?:webp|png|json)$/.test(filename);
+    return /\.(?:geojson|json)$/.test(filename);
   }
   return /\.(?:js|html|css|svg|png|webmanifest)$/.test(filename);
 }

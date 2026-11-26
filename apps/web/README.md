@@ -585,10 +585,10 @@ adding a separate Playwright project; pass a viewport object for a real cover sc
 | Expand satellite coverage   | map-core/satellite.js, tiles, preview, provenance             | Keep bounds, corners and tile inventory consistent |
 | Change offline assets       | public/, src/, or map-core assets                             | Rebuild; both manifests are generated              |
 
-A new module under src/ needs no per-file list: build.mjs copies it at its nested path and finalize.mjs derives the
-offline shell from the built artifact. Runtime imports may use relative files inside src/ and the published map-core
-entry; colocated tests and support files stay out. config.json, generated manifests and archive/range responses are
-never shell-cached.
+A new module under src/ needs no per-file list: build.mjs copies it at its own path and finalize.mjs derives the offline
+shell from the built artifact. Modules that existed on main keep their reviewed imports transitively; core.js and dom.js
+import nothing local. New modules may import any runtime module inside src/ and the published map-core entry. Colocated
+tests and support files stay out. config.json, generated manifests and archive/range responses are never shell-cached.
 
 ## 13. Local development and publication
 
