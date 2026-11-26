@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {findLogProblems, readLog} from './decision-log.mjs';
 import {unreachableInstructions} from './instruction-reach.mjs';
+import {assertSharedRulesHaveNoProjectFiles} from './shared-rule-boundary.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -41,6 +42,7 @@ for (const file of docs) {
     assert.ok(fs.existsSync(path.resolve(path.dirname(file), target)), `${file}: broken link ${target}`);
   }
 }
+assertSharedRulesHaveNoProjectFiles();
 // Import lists may span lines, so the clause between the keyword and `from` must accept newlines.
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
 const imports = {
@@ -113,11 +115,11 @@ for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
-// Web and core-demo tests, their browser configuration and tools written only for tests read data from the pinned
-// package. The editor owns the same guard in apps/editor/tests/pinned-data.test.mjs. Register a new web or core-demo
-// test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
+// Core-demo tests, their browser configuration and tools written only for tests read data from the pinned package.
+// Web and editor own the same guard in their own tests/pinned-data.test.mjs. Register a new core-demo test-only tool
+// here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
-const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
+const pinnedDataRule = 'core-demo tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
 const repositoryDataPattern = new RegExp(
   [
     '(?:\\.\\./)+data(?:/|[\'"`])',
@@ -125,7 +127,7 @@ const repositoryDataPattern = new RegExp(
     '(?:join|resolve)\\s*\\([^)]*[\'"]data[\'"]\\s*,\\s*[\'"](?:sources|tools|artifacts|imagery)[\'"]'
   ].join('|')
 );
-for (const application of ['apps/web', 'apps/core-demo']) {
+for (const application of ['apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
   const testFiles = [
     ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
@@ -213,17 +215,20 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
 
 // Keep shared runtime independent, and keep the concept consumer honest about its public-only imports.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
-  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js'))) {
+  // Source-owned unit tests live next to code in these components; boundary checks apply to runtime modules only.
+  for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !file.endsWith('.test.js'))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
     for (const match of text.matchAll(moduleDependencyPattern)) {
       const dependency = match[1];
       const isCoreEntry = dependency === '@ivanov-gv/map-core';
       const isSibling = /^\.\/[^/]+\.js$/.test(dependency);
+      const isRelativeInsideSrc = /^\.\.?\/.*\.js$/.test(dependency) &&
+        !path.relative(`${component}/src`, path.resolve(path.dirname(file), dependency)).startsWith('..');
       const allowedByComponent = {
         'apps/core-demo': isCoreEntry,
         'packages/map-core': isSibling,
-        'apps/editor': isCoreEntry || isSibling
+        'apps/editor': isCoreEntry || isRelativeInsideSrc
       };
       const isAllowed = allowedByComponent[component];
       assert.ok(isAllowed, `${file}: forbidden dependency ${dependency}`);

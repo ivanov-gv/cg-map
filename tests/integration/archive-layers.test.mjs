@@ -127,6 +127,7 @@ test('archive canyon rims advertise width but publish none before the owner pain
   const heights = features.map(feature => feature.properties.height).filter(height => height !== undefined);
   assert.ok(heights.length > 0, 'the sampled tile contains a measured rim');
   assert.ok(heights.every(Number.isInteger), 'every published height is a whole number of metres');
+  // This guards this reviewed release, not the contract; it goes away with the owner's first painted width.
   assert.ok(
     features.every(feature => feature.properties.width === undefined),
     'no published rim has a painted width'
