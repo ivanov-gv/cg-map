@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import Ajv2020 from 'ajv/dist/2020.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -869,8 +870,17 @@ test('every relief collection satisfies its read-only domain contract', () => {
     'ridge boundaries must stay in the tens, not thousands');
   const rims = readRelief('canyon-rims.geojson');
   assert.ok(rims.features.length > 0);
-  assert.ok(rims.features.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
+  const measured = rims.features.filter(feature => feature.properties.method !== 'editor-drawn');
+  assert.ok(measured.length > 0);
+  assert.ok(measured.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
     .includes(`${feature.properties.river}:${feature.properties.bank}`)));
+  assert.ok(rims.features.filter(feature => feature.properties.method === 'editor-drawn').every(feature =>
+    !('river' in feature.properties) && !('bank' in feature.properties)));
+  assert.ok(rims.features.some(feature => Number.isInteger(feature.properties.height)),
+    'derived rims carry a measured height');
+  assert.ok(rims.features.every(feature =>
+    feature.properties.height === undefined || Number.isInteger(feature.properties.height)
+  ), 'a rim height is one whole number of metres');
 });
 
 test('relief features carry facts only and build parameters live in provenance', () => {
@@ -884,6 +894,8 @@ test('relief features carry facts only and build parameters live in provenance',
   assert.equal(parameters.summitLinkDistanceMetres, 50);
   assert.equal(parameters.canyonRimJoinGapMetres, 60);
   assert.equal(parameters.canyonRimMinimumLengthMetres, 100);
+  assert.equal(parameters.canyonRimHeightStatistic, 'median of sampled bank rise');
+  assert.equal(parameters.canyonRimHeightRounding, 'nearest metre, halves upward');
   assert.equal(provenance.relief.retiredBuildParameters.radiusMetres, 400);
   for (const filename of reliefFiles) {
     for (const feature of readRelief(filename).features) {
@@ -922,7 +934,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
     'summits.geojson': [data => {data.features[0].properties.heightCheck = 'unknown';}, data => {data.features[0].properties.mismatch = !data.features[0].properties.mismatch;}, data => {data.features[0].properties.demElevation = 'high';}],
     'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}, data => {data.features[0].properties.greenKinds = ['park'];}],
     'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}, data => {data.features[0].properties.radiusMetres = 400;}],
-    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}]
+    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}, data => {data.features[0].properties.height = 12.5;}, data => {data.features[0].properties.height = -1;}, data => {data.features[0].properties.height = 2601;}]
   };
   for (const [filename, changes] of Object.entries(mutations)) {
     for (const change of changes) {
@@ -931,6 +943,68 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
       assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
   }
+});
+
+test('canyon rim validation keeps derived facts with the build and off drawn edges', () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')));
+  const rimProperties = schema.$defs.canyonRim.then.properties;
+  const river = rimProperties.river.enum[0];
+  const bank = rimProperties.bank.enum[0];
+  const validate = new Ajv2020({strict: false}).compile(schema);
+  const collection = properties => ({
+    type: 'FeatureCollection',
+    entitySchemaVersion: 1,
+    features: [{
+      type: 'Feature',
+      geometry: {type: 'LineString', coordinates: [[19.4, 42.5], [19.41, 42.51]]},
+      properties
+    }]
+  });
+  const isValid = properties => validate(collection(properties));
+  const check = properties => validateRelief(collection(properties), {
+    label: 'canyon-rims.geojson',
+    contractsDirectory
+  });
+  const drawn = {
+    entityId: 'local:00000000-0000-4000-8000-000000000001',
+    entityVersion: `sha256:${'a'.repeat(64)}`,
+    kind: 'canyon-rim',
+    method: 'editor-drawn',
+    lengthMetres: 120,
+    height: 77
+  };
+
+  assert.equal(check(drawn), 1);
+  assert.equal(isValid(drawn), true);
+  assert.throws(() => check({...drawn, river}), /a drawn rim cannot name a river/);
+  assert.throws(() => check({...drawn, bank}), /a drawn rim cannot name a bank/);
+  assert.equal(isValid({...drawn, river}), false);
+  assert.equal(isValid({...drawn, bank}), false);
+
+  const derived = {...drawn, entityId: 'way/1', entityVersion: 3, method: 'osm-cliff', river, bank};
+  assert.equal(check(derived), 1);
+  assert.equal(isValid(derived), true);
+  const missingRiver = {...derived};
+  delete missingRiver.river;
+  assert.throws(() => check(missingRiver), /invalid river bank/);
+  assert.equal(isValid(missingRiver), false);
+
+  assert.throws(() => check({...drawn, entityId: 'way/2'}), /a drawn rim must use local identity/);
+  assert.throws(
+    () => check({...drawn, method: 'osm-cliff', river, bank}),
+    /a local rim must be editor-drawn/
+  );
+});
+
+test('relief validation reads the rim height range from the editor rule', () => {
+  const bad = readRelief('canyon-rims.geojson');
+  const maximum = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'editor-layers.json')))
+    .layers['canyon-rims.geojson'].properties.height.maximum;
+  bad.features[0].properties.height = maximum + 1;
+  assert.throws(
+    () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
+    error => error.message === 'canyon-rims.geojson: invalid rim height'
+  );
 });
 
 // A protected area is only worth publishing with its name; the label layer relies on this check to skip none.

@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23562423,
+    "bytes": 23565406,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -21,10 +21,10 @@
       "canyon_rims": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 34534,
+          "13-16": 38078,
           "9-12": 0
         },
-        "bytes": 34534
+        "bytes": 38078
       },
       "contours": {
         "byZoomBand": {
@@ -131,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-ec969666e13c3146.pmtiles",
-    "sha256": "ec969666e13c31468d73cb3adc350820e0ac91d191ce2f78e216943b328a6338",
+    "file": "montenegro-db7cb4f4d652ec30.pmtiles",
+    "sha256": "db7cb4f4d652ec303b06fd888d7cbbd459496f233ead1846cbcb047fad921eb3",
     "tiles": 229422
   },
   "building_details": {
@@ -212,9 +212,9 @@
       "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
     },
     "canyon-rims.geojson": {
-      "bytes": 44838,
+      "bytes": 45434,
       "features": 50,
-      "sha256": "0511b42b9c5679a1e29e71256986e71f919e7ab78123c13a343e0c5acde66eb6"
+      "sha256": "d2f38ae637b4d4ef74766a94cf426d504226d443daea6e9988a576fabcad4ae1"
     },
     "context-countries.geojson": {
       "bytes": 6535,
@@ -300,6 +300,8 @@
   "places_sha256": "cf9ca4f17327472d748f5eba2c86b1213cfd954b054b595d5e2d533db68677c6",
   "relief": {
     "buildParameters": {
+      "canyonRimHeightRounding": "nearest metre, halves upward",
+      "canyonRimHeightStatistic": "median of sampled bank rise",
       "canyonRimJoinGapMetres": 60,
       "canyonRimMinimumBankRiseMetres": 8.0,
       "canyonRimMinimumLengthMetres": 100,
@@ -341,7 +343,7 @@
     ],
     "inputs": {
       "contracts": {
-        "editor-layers.json": "6ff57bdc418d273a700133dfb45996b1858e52c48099e212f6659e63eec3382f"
+        "editor-layers.json": "f7ea7e377dbd0437949ea17009599b78dd1af9c826f20263b644e7bc80703b4b"
       },
       "dem": {
         "bucket": "https://copernicus-dem-30m.s3.amazonaws.com/",
@@ -367,10 +369,10 @@
       "tools": {
         "data/tools/build-relief.py": "011eb29bb9870208fc29e78dba153e8c9896a21f6afefa9b918c013fb01323f8",
         "data/tools/relief/__init__.py": "881d2d0cf67afa43aeff67501d72a8c63065925f4e2c6c2754917da260d92963",
-        "data/tools/relief/build.py": "0cbfe21fa3c08c71284489836182792bf9e34efdc61d626a2353e778761baf78",
-        "data/tools/relief/derivations.py": "64e7a659d0de0f24e6a33010dfefee16dda7801b9d6d16fdbb6789c5c1bac317",
+        "data/tools/relief/build.py": "b8fb14c39d1f8544015b93d4a3f4573c92aa420aaef92ea10df230f06c8efe97",
+        "data/tools/relief/derivations.py": "6a3fbc80685e075e6561755c4d7c8a09d4f44bc9aa347791794ca523b105e80b",
         "data/tools/relief/sources.py": "ec83ae43f165a834fc3d00d41041ea9557c3c8a8ddeb3902194971be0beb19cc",
-        "data/tools/relief/terrain.py": "7cce114335a3698f514dc0aab343836b14349b17b82e9f2addb4321fcaed8630"
+        "data/tools/relief/terrain.py": "3c3a1b2fa77f9834bb0681c08416f409da8b8fee5627da803c84ba5cd81ab8ec"
       }
     },
     "license": {
@@ -381,9 +383,9 @@
       "eula": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N42_00_E019_00_DEM/INFO/eula_F.pdf"
     },
     "osmSnapshot": "2026-11-20T21:21:21Z",
-    "reportBytes": 156310,
+    "reportBytes": 156418,
     "reportFile": ".build/relief-report.json",
-    "reportSha256": "02b3c26d1b9d51a3193d3d14d2d22c7fc4d3304ef468ba154f55314c81531164",
+    "reportSha256": "66347687323c719b87ad018ac739c8519912998acfbdc3592e8d484b58d795e9",
     "retiredBuildParameters": {
       "radiusMetres": 400
     },

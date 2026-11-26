@@ -95,8 +95,8 @@ export const TILE_LAYERS = [
     name: 'canyon_rims',
     sourceFile: 'canyon-rims.geojson',
     minZoom: 13,
-    // river and bank identify the canyon edge without publishing build parameters or OSM way lists.
-    fields: ['river', 'bank']
+    // river and bank identify the canyon edge; height is the single measured wall height, absent on unmeasured rims.
+    fields: ['river', 'bank', 'height']
   },
   {
     name: 'summits',

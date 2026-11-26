@@ -4,19 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {
-  BROWSER_AREAS,
-  FOLDERS,
-  PROJECT_PIPELINES,
-  SHARED_WEB_SOURCES,
-  SMOKE_BROWSER_MATRIX,
-  browserMatrix,
-  classify,
-  formatOutputs,
-  formatSummary,
-  planChanges,
-  imageMatrix
-} from '../tools/ci-plan.mjs';
+import {FOLDERS, PROJECT_PIPELINES, classify, formatOutputs, formatSummary, planChanges, imageMatrix} from '../tools/ci-plan.mjs';
 import {plans} from '../tools/verify.mjs';
 import {repoRoot} from '../agents/lib.mjs';
 
@@ -24,105 +12,107 @@ import {repoRoot} from '../agents/lib.mjs';
 const plannerEnv = {...process.env};
 delete plannerEnv.GITHUB_OUTPUT;
 delete plannerEnv.GITHUB_STEP_SUMMARY;
-const ALL_AREAS = Object.keys(BROWSER_AREAS);
 const WEB = ['platform', 'tests', 'apps-web'];
+const OUTPUT_NAMES = [
+  'image_matrix',
+  'ci_in_place_test_runs',
+  'ci_test_runs',
+  'cd_test_runs',
+  'prove_cd_test_runs',
+  'manual_test_runs'
+];
 
 const cases = [
-  ['docs only', ['docs/runbooks/release.md'], ['docs'], []],
-  ['Markdown inside a component', ['apps/web/README.md', 'services/backend/README.md'], ['docs'], []],
-  ['root instructions, whose assertions run with the docs', ['AGENTS.md'], ['docs'], []],
-  ['generated agent rules', ['.claude/rules/go.md'], ['docs'], []],
-  ['Markdown configuration', ['.markdownlint.jsonc'], ['docs'], []],
-  ['Go code', ['services/backend/cmd/server/main.go'], ['backend'], []],
-  ['go.mod', ['services/backend/go.mod'], ['backend'], []],
-  ['Go and docs together', ['services/backend/go.sum', 'docs/README.md'], ['docs', 'backend'], []],
-  ['backend Makefile', ['services/backend/Makefile'], ['platform', 'backend'], []],
-  ['transit relay', ['services/transit-relay/relay.mjs'], ['transit-relay'], []],
-  ['integration tests', ['tests/integration/archive.test.mjs'], ['tests'], []],
-  ['data tools', ['data/tools/pack.py'], ['data'], []],
-  ['data sources', ['data/sources/places.geojson'], ['data', 'tests'], []],
-  ['released artifact', ['data/artifacts/release.json'], ['data', 'tests'], []],
-  ['shared data tool', ['data/tools/app-data.mjs'], ['data', 'tests'], []],
+  ['docs only', ['docs/runbooks/release.md'], ['docs']],
+  ['Markdown inside a component', ['apps/web/README.md', 'services/backend/README.md'], ['docs']],
+  ['root instructions, whose assertions run with the docs', ['AGENTS.md'], ['docs']],
+  ['generated agent rules', ['.claude/rules/go.md'], ['docs']],
+  ['Markdown configuration', ['.markdownlint.jsonc'], ['docs']],
+  ['Go code', ['services/backend/cmd/server/main.go'], ['backend']],
+  ['go.mod', ['services/backend/go.mod'], ['backend']],
+  ['Go and docs together', ['services/backend/go.sum', 'docs/README.md'], ['docs', 'backend']],
+  ['backend Makefile', ['services/backend/Makefile'], ['platform', 'backend']],
+  ['transit relay', ['services/transit-relay/relay.mjs'], ['transit-relay']],
+  ['integration tests', ['tests/integration/archive.test.mjs'], ['tests']],
+  ['data tools', ['data/tools/pack.py'], ['data']],
+  ['data sources', ['data/sources/places.geojson'], ['data', 'tests']],
+  ['released artifact', ['data/artifacts/release.json'], ['data', 'tests']],
+  ['shared data tool', ['data/tools/app-data.mjs'], ['data', 'tests']],
   [
     'contracts',
     ['packages/contracts/places.schema.json'],
-    ['platform', 'contracts', 'data', 'tests'],
-    []
+    ['platform', 'contracts', 'data', 'tests']
   ],
-  ['mapped web source', ['apps/web/src/interface.js'], WEB, ['interface']],
-  ['POI spec runs both projects', ['apps/web/tests/e2e/poi-visibility.spec.mjs'], WEB, ['poi-desktop', 'poi-mobile']],
+  ['web source', ['apps/web/src/interface.js'], WEB],
+  ['web browser job count', ['apps/web/browser-jobs.json'], WEB],
+  ['web Makefile', ['apps/web/Makefile'], WEB],
+  ['web package', ['apps/web/package.json'], WEB],
+  ['POI spec runs both projects', ['apps/web/tests/e2e/poi-visibility.spec.mjs'], WEB],
   [
     'shared map runtime',
     ['packages/map-core/src/poi-icons.js'],
-    ['platform', 'map-core', 'apps-core-demo'],
-    []
+    ['platform', 'map-core', 'apps-core-demo']
   ],
   [
     'shared map build helpers',
     ['packages/map-core/tools/assemble.mjs'],
-    ['platform', 'map-core', 'apps-core-demo'],
-    []
+    ['platform', 'map-core', 'apps-core-demo']
   ],
-  ['editor source', ['apps/editor/src/app.js'], ['tests', 'apps-editor'], []],
-  ['editor browser job count', ['apps/editor/browser-jobs.json'], ['tests', 'apps-editor'], []],
-  ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor'], []],
-  ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo'], []],
-  ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo'], []],
-  ['source bundle producer', ['data/tools/editor-bundle.mjs'], ['data', 'tests'], []],
-  ['changeset importer', ['data/tools/apply-changeset.mjs'], ['data', 'tests'], []],
-  ['changeset importer module', ['data/tools/changeset-rules.mjs'], ['data', 'tests'], []],
-  ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor'], []],
+  ['editor source', ['apps/editor/src/app.js'], ['tests', 'apps-editor']],
+  ['editor browser job count', ['apps/editor/browser-jobs.json'], ['tests', 'apps-editor']],
+  ['source viewer Makefile', ['apps/editor/Makefile'], ['platform', 'tests', 'apps-editor']],
+  ['concept app alone', ['apps/core-demo/src/app.js'], ['apps-core-demo']],
+  ['concept app package', ['apps/core-demo/package.json'], ['platform', 'apps-core-demo']],
+  ['source bundle producer', ['data/tools/editor-bundle.mjs'], ['data', 'tests']],
+  ['changeset importer', ['data/tools/apply-changeset.mjs'], ['data', 'tests']],
+  ['changeset importer module', ['data/tools/changeset-rules.mjs'], ['data', 'tests']],
+  ['LAN certificate tool', ['platform/tools/lan_certificate.py'], ['platform', 'apps-editor']],
   [
-    'phone tag parser used by the editor',
+    'phone tag parser used by the app tests',
     ['platform/tools/phone-tags.mjs'],
-    ['platform', 'apps-editor'],
-    []
+    ['platform', 'apps-web', 'apps-editor']
   ],
-  ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests'], []],
-  ['level policy behind the importer', ['data/tools/apply-place-visibility.mjs'], ['data', 'tests'], []],
-  ['web test fixture in data', ['data/tests/fixtures/podgorica-places.geojson'], ['data'], []],
+  ['data check behind the importer', ['data/tools/check-data.mjs'], ['data', 'tests']],
+  ['level policy behind the importer', ['data/tools/apply-place-visibility.mjs'], ['data', 'tests']],
+  ['web test fixture in data', ['data/tests/fixtures/podgorica-places.geojson'], ['data']],
   [
     'preview port tool used by every map application',
     ['platform/tools/dev-port.mjs'],
-    ['platform', 'apps-web', 'apps-editor', 'apps-core-demo'],
-    ALL_AREAS
+    ['platform', 'apps-web', 'apps-editor', 'apps-core-demo']
   ],
-  ['published Markdown in an internal viewer', ['apps/editor/public/notes.md'], ['tests', 'apps-editor'], []],
+  ['published Markdown in an internal viewer', ['apps/editor/public/notes.md'], ['tests', 'apps-editor']],
   [
     'static host used by every map application',
     ['platform/tools/serve.py'],
-    ['platform', 'apps-web', 'apps-editor', 'apps-core-demo'],
-    ALL_AREAS
+    ['platform', 'apps-web', 'apps-editor', 'apps-core-demo']
   ],
-  ['spec runs its own area', ['apps/web/tests/e2e/journeys.spec.mjs'], WEB, ['journeys']],
-  ['shared web source', ['apps/web/src/app.js'], WEB, ALL_AREAS],
-  ['stylesheet', ['apps/web/public/style.css'], WEB, ALL_AREAS],
-  ['browser test helpers', ['apps/web/tests/e2e/helpers.mjs'], WEB, ALL_AREAS],
-  ['web build tool', ['apps/web/tools/build.mjs'], WEB, ALL_AREAS],
-  ['new unmapped web source', ['apps/web/src/brand-new.js'], WEB, ALL_AREAS],
-  ['web unit test', ['apps/web/tests/core.test.mjs'], WEB, []],
-  ['Markdown in the public web folder', ['apps/web/public/notes.md'], WEB, ALL_AREAS],
-  ['platform tooling', ['platform/tools/check-repo.mjs'], ['platform'], []],
-  ['workflow', ['.github/workflows/web.yml'], ['workflows', 'platform'], []],
-  ['composite action', ['.github/actions/setup-web/action.yml'], ['workflows', 'platform'], []],
-  ['Markdown under .github', ['.github/pull_request_template.md'], ['docs'], []],
-  ['the planner itself', ['platform/tools/ci-plan.mjs'], ['workflows', 'platform'], []],
-  ['the workflow test-run helper', ['platform/tools/workflow-test-runs.mjs'], ['workflows', 'platform'], []],
-  ['both sides of a rename', ['docs/old.md', 'services/backend/new.go'], ['docs', 'backend'], []]
+  ['web spec', ['apps/web/tests/e2e/journeys.spec.mjs'], WEB],
+  ['shared web source', ['apps/web/src/app.js'], WEB],
+  ['stylesheet', ['apps/web/public/style.css'], WEB],
+  ['browser test helpers', ['apps/web/tests/e2e/helpers.mjs'], WEB],
+  ['web build tool', ['apps/web/tools/build.mjs'], WEB],
+  ['new unmapped web source', ['apps/web/src/brand-new.js'], WEB],
+  ['web unit test', ['apps/web/tests/core.test.mjs'], WEB],
+  ['Markdown in the public web folder', ['apps/web/public/notes.md'], WEB],
+  ['platform tooling', ['platform/tools/check-repo.mjs'], ['platform']],
+  ['workflow', ['.github/workflows/web.yml'], ['workflows', 'platform']],
+  ['composite action', ['.github/actions/setup-web/action.yml'], ['workflows', 'platform']],
+  ['Markdown under .github', ['.github/pull_request_template.md'], ['docs']],
+  ['the planner itself', ['platform/tools/ci-plan.mjs'], ['workflows', 'platform']],
+  ['the workflow test-run helper', ['platform/tools/workflow-test-runs.mjs'], ['workflows', 'platform']],
+  ['both sides of a rename', ['docs/old.md', 'services/backend/new.go'], ['docs', 'backend']]
 ];
 
-for (const [name, files, folders, areas] of cases) {
+for (const [name, files, folders] of cases) {
   test(`plan: ${name}`, () => {
     const plan = planChanges(files);
     assert.deepEqual(new Set(plan.folders), new Set(folders));
-    assert.deepEqual(new Set(plan.areas), new Set(areas));
   });
 }
 
 test('a data-only change selects only data and cross-project tests', () => {
   const plan = planChanges(['data/sources/places.geojson', 'data/artifacts/release.json']);
   assert.deepEqual(new Set(plan.folders), new Set(['data', 'tests']));
-  assert.deepEqual(plan.areas, []);
 });
 
 test('every data path selects its own pipeline and no app or platform pipeline', () => {
@@ -136,10 +126,9 @@ test('every data path selects its own pipeline and no app or platform pipeline',
     ['data/tests/data.test.mjs', ['data']],
     ['data/tests/fixtures/places.geojson', ['data']]
   ];
-  for (const [path, expectedFolders] of samples) {
-    const result = planChanges([path]);
-    assert.deepEqual(new Set(result.folders), new Set(expectedFolders), path);
-    assert.deepEqual(result.areas, [], path);
+  for (const [file, expectedFolders] of samples) {
+    const result = planChanges([file]);
+    assert.deepEqual(new Set(result.folders), new Set(expectedFolders), file);
   }
 });
 
@@ -155,7 +144,6 @@ for (const [name, files] of [
     const plan = planChanges(files);
     assert.equal(plan.everything, true);
     assert.deepEqual(plan.folders, FOLDERS);
-    assert.deepEqual(plan.areas, ALL_AREAS);
   });
 }
 
@@ -175,17 +163,14 @@ test('only the root Makefile narrows the plan; other root files still select eve
   ];
   const makefileResult = classify('Makefile');
   assert.deepEqual([...makefileResult.folders].sort(), rootMakeFolders);
-  assert.deepEqual(makefileResult.areas, []);
 
   const makefilePlan = planChanges(['Makefile']);
   assert.equal(makefilePlan.everything, false);
-  assert.deepEqual(makefilePlan.areas, []);
 
   for (const file of ['package.json', 'brand-new.txt']) {
     const otherPlan = planChanges([file]);
     assert.equal(otherPlan.everything, true, file);
     assert.deepEqual(otherPlan.folders, FOLDERS, file);
-    assert.deepEqual(otherPlan.areas, ALL_AREAS, file);
   }
 });
 
@@ -203,7 +188,7 @@ test('the root Makefile folders match the workflows that call root make', () => 
   assert.deepEqual([...classify('Makefile').folders].sort(), expectedFolders);
 });
 
-test('a project lint config selects its own verify and no browser areas', () => {
+test('a project lint config selects its own verify and no browser jobs', () => {
   const cases = [
     ['apps/web/eslint.config.mjs', ['apps-web']],
     ['apps/editor/eslint.config.mjs', ['apps-editor']],
@@ -218,18 +203,18 @@ test('a project lint config selects its own verify and no browser areas', () => 
   for (const [file, folders] of cases) {
     const plan = planChanges([file]);
     assert.deepEqual(new Set(plan.folders), new Set(folders), file);
-    assert.deepEqual(plan.areas, [], file);
+    assert.equal(plan.areas, undefined, file);
     assert.equal(plan.everything, false, file);
   }
 });
 
-test('the shared ESLint rules select every consuming verify and no browser areas', () => {
+test('the shared ESLint rules select every consuming verify and no browser jobs', () => {
   const plan = planChanges(['platform/eslint-rules.mjs']);
   assert.deepEqual(
     new Set(plan.folders),
     new Set(['apps-web', 'apps-editor', 'apps-core-demo', 'map-core', 'contracts', 'data', 'transit-relay', 'platform', 'tests'])
   );
-  assert.deepEqual(plan.areas, []);
+  assert.equal(plan.areas, undefined);
   assert.equal(plan.everything, false);
 });
 
@@ -242,14 +227,14 @@ test('a new project config joins the shared-rule consumers without a code change
     lintConfigFiles: [...lintConfigFiles, 'apps/editor/eslint.config.mjs']
   });
   assert.deepEqual(after.folders, ['apps-web', 'apps-editor']);
-  assert.deepEqual(after.areas, []);
+  assert.equal(after.areas, undefined);
 });
 
 test('the probe selects the same projects as the shared rules', () => {
   const rules = planChanges(['platform/eslint-rules.mjs']);
   const probe = planChanges(['platform/tools/eslint-readability-probe.mjs']);
   assert.deepEqual(probe.folders, rules.folders);
-  assert.deepEqual(probe.areas, []);
+  assert.equal(probe.areas, undefined);
   assert.equal(probe.everything, false);
 });
 
@@ -257,38 +242,21 @@ test('a root lint config selects the projects that lint, like the shared rules',
   const rules = planChanges(['platform/eslint-rules.mjs']);
   const rootConfig = planChanges(['eslint.config.mjs']);
   assert.deepEqual(rootConfig.folders, rules.folders);
-  assert.deepEqual(rootConfig.areas, []);
+  assert.equal(rootConfig.areas, undefined);
   assert.equal(rootConfig.everything, false);
 });
 
-test('outputs give every folder a value, a usable matrix, and the selected test runs', () => {
+test('outputs give every folder a value and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 8);
+  assert.equal(lines.length, FOLDERS.length + 6);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
   assert.ok(lines.includes('prove_cd_test_runs=false'));
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
-  assert.ok(lines.includes(`smoke_browser_matrix=${SMOKE_BROWSER_MATRIX}`));
-  const matrixLine = lines.find(line => line.startsWith('browser_matrix='));
-  assert.deepEqual(JSON.parse(matrixLine.slice('browser_matrix='.length)), {
-    include: [
-      {area: 'interface-1', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=1/12'},
-      {area: 'interface-2', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=2/12'},
-      {area: 'interface-3', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=3/12'},
-      {area: 'interface-4', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=4/12'},
-      {area: 'interface-5', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=5/12'},
-      {area: 'interface-6', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=6/12'},
-      {area: 'interface-7', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=7/12'},
-      {area: 'interface-8', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=8/12'},
-      {area: 'interface-9', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=9/12'},
-      {area: 'interface-10', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=10/12'},
-      {area: 'interface-11', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=11/12'},
-      {area: 'interface-12', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=12/12'}
-    ]
-  });
+  assert.deepEqual(lines.slice(FOLDERS.length).map(line => line.split('=')[0]), OUTPUT_NAMES);
 });
 
 test('a changed folder workflow runs in place, while other changed workflows keep a separate test call', () => {
@@ -306,19 +274,13 @@ test('a changed folder workflow runs in place, while other changed workflows kee
   assert.ok(lines.includes('ci_test_runs=["ci-apps-editor.yml","ci-publish.yml"]'));
 });
 
-test('an in-place web workflow with no selected areas still proves its browser job', () => {
+test('a web workflow change needs no planner matrix for its in-place call', () => {
   const workflow = 'ci-apps-web.yml';
   const source = 'apps/web/tests/offline.test.mjs';
   const changedFiles = [`.github/workflows/${workflow}`, source];
-  const plan = planChanges(changedFiles);
-  assert.deepEqual(plan.areas, [], 'the web diff should select no browser area');
-  const lines = formatOutputs(plan, changedFiles).split('\n');
+  const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
   assert.ok(lines.includes(`ci_in_place_test_runs=["${workflow}"]`), 'the web call is not in place');
-  assert.ok(lines.includes(`browser_matrix=${SMOKE_BROWSER_MATRIX}`), 'the web call does not use the smoke matrix');
-
-  const regularFiles = [source];
-  const regularLines = formatOutputs(planChanges(regularFiles), regularFiles).split('\n');
-  assert.ok(regularLines.includes('browser_matrix={"include":[]}'), 'a web call without a workflow change stays empty');
+  assert.deepEqual(lines.slice(FOLDERS.length).map(line => line.split('=')[0]), OUTPUT_NAMES);
 });
 
 test('an in-place workflows call with no CD changes still proves its dispatcher', () => {
@@ -341,7 +303,6 @@ test('summary splits CI test-run calls and shows the CD proof flag', () => {
     [
       'Selected a subset of pipelines.',
       '- Folders: workflows, platform',
-      '- Browser areas: none',
       '- CI test-run calls (separate): ci-publish.yml',
       '- CI test runs in place: ci-workflows.yml',
       '- CD proof flag: true',
@@ -399,77 +360,8 @@ test('every verified component has a folder rule', () => {
   }
 });
 
-test('every web source is mapped to an area or shared, and listed only once', () => {
-  const mapped = Object.values(BROWSER_AREAS).flatMap(area => area.sources);
-  const sources = fs.readdirSync(path.join(repoRoot, 'apps/web/src'));
-  for (const source of sources) {
-    assert.ok(
-      mapped.includes(source) || SHARED_WEB_SOURCES.includes(source),
-      `apps/web/src/${source} needs an area or a shared entry`
-    );
-    assert.equal(
-      mapped.includes(source) && SHARED_WEB_SOURCES.includes(source),
-      false,
-      `${source} is both mapped and shared`
-    );
-  }
-  for (const source of [...mapped, ...SHARED_WEB_SOURCES])
-    assert.ok(sources.includes(source), `${source} no longer exists`);
-});
-
-test('every spec has an area, and the areas name real specs', () => {
-  const specs = fs.readdirSync(path.join(repoRoot, 'apps/web/tests/e2e')).filter(file => file.endsWith('.spec.mjs'));
-  const mapped = Object.values(BROWSER_AREAS).flatMap(area => area.specFiles);
-  for (const spec of specs) assert.ok(mapped.includes(spec), `${spec} needs a browser area`);
-  for (const area of Object.values(BROWSER_AREAS)) {
-    for (const spec of area.specFiles) {
-      assert.ok(specs.includes(spec), `${spec} no longer exists`);
-      assert.ok(area.specs.includes(`tests/e2e/${spec}`), `${spec} is missing from the area's command`);
-    }
-  }
-});
-
-test('an area limited to one project has a partner covering the other', () => {
-  const projects = ['root-desktop', 'pages-mobile'];
-  const config = fs.readFileSync(path.join(repoRoot, 'apps/web/playwright.config.mjs'), 'utf8');
-  for (const project of projects)
-    assert.ok(config.includes(`name: '${project}'`), `${project} is not a browser project`);
-  const areas = Object.values(BROWSER_AREAS);
-  for (const area of areas.filter(({specs}) => specs.includes('--project='))) {
-    const partners = areas.filter(({specFiles}) => specFiles[0] === area.specFiles[0]);
-    for (const project of projects) {
-      assert.ok(
-        partners.some(({specs}) => specs.includes(`--project=${project}`)),
-        `${area.specFiles[0]} does not run on ${project}`
-      );
-    }
-  }
-});
-
-test('an area too slow for one job runs every share of its tests', () => {
-  assert.deepEqual(browserMatrix(['journeys']).include, [
-    {area: 'journeys-1', specs: 'tests/e2e/journeys.spec.mjs --shard=1/3'},
-    {area: 'journeys-2', specs: 'tests/e2e/journeys.spec.mjs --shard=2/3'},
-    {area: 'journeys-3', specs: 'tests/e2e/journeys.spec.mjs --shard=3/3'}
-  ]);
-  assert.deepEqual(browserMatrix(['interface']).include, [
-    {area: 'interface-1', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=1/12'},
-    {area: 'interface-2', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=2/12'},
-    {area: 'interface-3', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=3/12'},
-    {area: 'interface-4', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=4/12'},
-    {area: 'interface-5', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=5/12'},
-    {area: 'interface-6', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=6/12'},
-    {area: 'interface-7', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=7/12'},
-    {area: 'interface-8', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=8/12'},
-    {area: 'interface-9', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=9/12'},
-    {area: 'interface-10', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=10/12'},
-    {area: 'interface-11', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=11/12'},
-    {area: 'interface-12', specs: 'tests/e2e/interface.spec.mjs tests/e2e/search-results.spec.mjs tests/e2e/history.spec.mjs tests/e2e/fold.spec.mjs --shard=12/12'}
-  ]);
-});
-
 test('the browser image has its own pipeline, and a change to it selects no application', () => {
-  assert.deepEqual(classify('platform/browser-image/Dockerfile'), {folders: ['browser-image', 'platform'], areas: []});
+  assert.deepEqual(classify('platform/browser-image/Dockerfile'), {folders: ['browser-image', 'platform']});
 });
 
 test('a merge publishes the image of each app it selected, and no other', () => {
@@ -492,27 +384,12 @@ test('Markdown never selects code checks, wherever it lives, while Go stays inde
     'data/PROVENANCE.md',
     'docs/plans/x.md'
   ]) {
-    assert.deepEqual(planChanges([file]), {folders: ['docs'], areas: [], everything: false}, file);
+    assert.deepEqual(planChanges([file]), {folders: ['docs'], everything: false}, file);
   }
   assert.deepEqual(planChanges(['services/backend/cmd/server/main.go']), {
     folders: ['backend'],
-    areas: [],
     everything: false
   });
-});
-
-test('the browser matrix contains exactly the requested areas', () => {
-  assert.deepEqual(browserMatrix([]), {include: []});
-  // A job of a split area is named after it, such as journeys-1.
-  const areaOfEachJob = browserMatrix(ALL_AREAS).include.map(({area}) => area.replace(/-\d+$/, ''));
-  assert.deepEqual(new Set(areaOfEachJob), new Set(ALL_AREAS));
-});
-
-test('the web smoke matrix runs one short unsharded area', () => {
-  const web = JSON.parse(SMOKE_BROWSER_MATRIX).include;
-  assert.equal(web.length, 1);
-  assert.equal(web[0].area, 'discover');
-  assert.doesNotMatch(web[0].specs, /--shard=/);
 });
 
 // Folder pipelines replace `make check` in CI, so nothing it runs may fall between them.
@@ -578,7 +455,7 @@ test('a real diff counts both sides of a rename, and deleted files', t => {
   git('add', '.');
   git('commit', '-qm', 'web');
   const narrowed = execFileSync('node', [planner, '--base', 'HEAD~1'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
-  assert.match(narrowed, /Browser areas: interface\n/);
+  assert.match(narrowed, /Folders: platform, tests, apps-web\n/);
 });
 
 test('each browser project checks only itself, and only the public app reaches the deployment', () => {

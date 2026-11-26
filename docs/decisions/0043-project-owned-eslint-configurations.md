@@ -1,4 +1,4 @@
-# 0042: Project-owned ESLint configurations
+# 0043: Project-owned ESLint configurations
 
 ## Status
 
@@ -19,10 +19,10 @@ so the config chooses that project's file patterns and globals. All rule sets co
 [JavaScript conventions](../../docs/engineering/javascript.md#lint-configuration). The root config is gone.
 
 The planner gives a project's own config that project's verify; it discovers the shared rules' consumers from the
-project configs present in the checkout; the shared probe selects the same projects. Neither selection includes a Web
-browser area: lint and readability tooling cannot change what a browser does. Each app owns a readability test that
-calls the shared probe helper against its own config. A project's config selects that project's verify; changes under
-`apps/editor/` still run the editor's own browser suite through its workflow.
+project configs present in the checkout; the shared probe selects the same projects. Neither selection schedules a
+browser job: lint and readability tooling cannot change what a browser does. Each app owns a readability test that calls
+the shared probe helper against its own config. A project's config selects that project's verify; changes under
+`apps/web/` or `apps/editor/` still run that app's own browser suite through its workflow.
 
 ## Consequences
 

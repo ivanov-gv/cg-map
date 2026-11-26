@@ -124,11 +124,11 @@ for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
-// Web and core-demo tests, their browser configuration and tools written only for tests read data from the pinned
-// package. The editor owns the same guard in apps/editor/tests/pinned-data.test.mjs. Register a new web or core-demo
-// test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
+// Core-demo tests, their browser configuration and tools written only for tests read data from the pinned package.
+// Web and editor own the same guard in their own tests/pinned-data.test.mjs. Register a new core-demo test-only tool
+// here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
-const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
+const pinnedDataRule = 'core-demo tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
 const repositoryDataPattern = new RegExp(
   [
     '(?:\\.\\./)+data(?:/|[\'"`])',
@@ -136,7 +136,7 @@ const repositoryDataPattern = new RegExp(
     '(?:join|resolve)\\s*\\([^)]*[\'"]data[\'"]\\s*,\\s*[\'"](?:sources|tools|artifacts|imagery)[\'"]'
   ].join('|')
 );
-for (const application of ['apps/web', 'apps/core-demo']) {
+for (const application of ['apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
   const testFiles = [
     ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),

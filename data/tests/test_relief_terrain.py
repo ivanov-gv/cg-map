@@ -141,18 +141,15 @@ class ReliefTerrainTests(unittest.TestCase):
         self.assertTrue(TERRAIN.is_canyon_bank(100, [105, 108]))
         self.assertEqual(TERRAIN.bank_rise(100, [105, 107]), 7)
 
-    def test_rim_paths_join_only_gaps_under_sixty_metres(self):
+    def test_rim_paths_group_only_gaps_under_sixty_metres(self):
         self.assertEqual(TERRAIN.CANYON_RIM_JOIN_GAP_METRES, 60)
         first = [[0.0, 0.0], [10.0, 0.0]]
         near = [[15.0, 0.0], [25.0, 0.0]]
         far = [[85.0, 0.0], [95.0, 0.0]]
-        joined = TERRAIN.join_short_gaps(
+        groups = TERRAIN.join_short_gap_groups(
             [first, near, far], TERRAIN.CANYON_RIM_JOIN_GAP_METRES, 1, 1
         )
-        self.assertEqual(joined, [
-            [[0.0, 0.0], [10.0, 0.0], [15.0, 0.0], [25.0, 0.0]],
-            [[85.0, 0.0], [95.0, 0.0]],
-        ])
+        self.assertEqual(groups, [[0, 1], [2]])
 
     def test_rim_paths_under_one_hundred_metres_are_dropped(self):
         self.assertEqual(TERRAIN.CANYON_RIM_MINIMUM_LENGTH_METRES, 100)
