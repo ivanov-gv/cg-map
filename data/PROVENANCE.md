@@ -12,7 +12,7 @@ water file has 1,122 polygons (including one derived ocean polygon) and 673 wate
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,605,663
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,608,626
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
@@ -81,8 +81,9 @@ detail box — 159 `rail` ways, four station platforms (two areas and two lines)
 `abandoned_*` kinds selected from `disused:railway` and `abandoned:railway`. The file is 62,929 bytes (SHA-256
 `d6ac41d70a2492faa77ad155e38ed9e17ecc45a508c1018ee87cef8617506033`). Features keep their OSM `node/N` or `way/N`
 identity and upstream version. `railway_counts` records one disused way candidate, no abandoned candidates and one
-imported disused object; zero counts are explicit. This step publishes display geometry only, so the staged source stays
-outside the pinned editor bundle until a later step defines its editor mode.
+imported disused object; zero counts are explicit. The archive layer carries `kind`, `name`, mapped `name:en` and `ref`.
+This step publishes display geometry only, so the staged source stays outside the pinned editor bundle until a later
+step defines its editor mode.
 
 Issue #328 adds three OSM-derived sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009 named
 place nodes, `sources/border-edges.geojson` has 141 shared boundaries, and `sources/municipalities.geojson` has 26 areas

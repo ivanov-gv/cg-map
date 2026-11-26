@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23605663,
+    "bytes": 23608626,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -77,10 +77,10 @@
       "railways": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 52455,
-          "9-12": 5918
+          "13-16": 56448,
+          "9-12": 6193
         },
-        "bytes": 58373
+        "bytes": 62641
       },
       "ridges": {
         "byZoomBand": {
