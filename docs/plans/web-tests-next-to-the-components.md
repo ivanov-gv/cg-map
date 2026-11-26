@@ -22,6 +22,8 @@ bounded step without moving application sources.
 
 ## History
 
+- 2026-11-26: renumbered the Web decision record from 0044 to 0045 after merging main. Why: #471 merged first with its
+  own 0044, and the log has no gaps. (#477)
 - 2026-11-26: Web keeps main's reviewed import graph transitively until the per-folder rules of #456 replace it, and the
   ci-plan comment edit was reverted so this PR selects only docs, platform, tests and Web. Why: a new module must not
   widen which main modules a reviewed module reaches, and this one-app change must not pay for workflow test runs.

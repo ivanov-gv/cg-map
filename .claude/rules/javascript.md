@@ -26,7 +26,7 @@ it.
   Moving a reviewed module fails until its rule moves into #456's per-folder rules. New modules may import any runtime
   module inside apps/web/src and the published map-core entry. Dynamic `import()` and MapLibre gesture handlers are
   rejected. The build discovers modules at every depth, preserves their paths and derives the offline shell from the
-  built artifact ([ADR 0044](docs/decisions/0044-build-derived-web-shell.md)); colocated tests, support files,
+  built artifact ([ADR 0045](docs/decisions/0045-build-derived-web-shell.md)); colocated tests, support files,
   config.json, generated manifests and archive/range responses stay out. Playwright discovers browser tests, so no
   planner entry is needed. Web owns these source checks in apps/web/tools/runtime-modules.mjs and its component tests. A
   web change still selects platform: build-web and hosting tests, package pins, Makefiles and dev-site tests read web

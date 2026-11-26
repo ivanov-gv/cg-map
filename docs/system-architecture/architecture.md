@@ -170,7 +170,7 @@ See [ownership](ownership.md) for teams, interfaces, and future split triggers.
    separate operation.
 3. apps/web/tools/build.mjs copies public assets and discovers runtime modules recursively with the reviewed data
    release into dist/web, preserving nested paths. finalize.mjs derives the offline shell from that artifact and
-   generates its manifests ([ADR 0044](../decisions/0044-build-derived-web-shell.md)).
+   generates its manifests ([ADR 0045](../decisions/0045-build-derived-web-shell.md)).
 4. A PR's CI tests the assembled artifact at / and /cg-map/, including real archive download and offline reload. The
    nightly run does the same on main.
 5. A merge to main triggers ci-publish, whose `pages` job builds all three apps from source, writes version.json with
