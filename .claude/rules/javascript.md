@@ -21,12 +21,15 @@ it.
 - apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension,
   and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
   and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
-- A new web module needs its allowed imports declared in platform/tools/check-repo.mjs and its file in the offline shell
-  list in apps/web/tools/finalize.mjs. Playwright discovers browser tests, so no planner entry is needed. A web change
-  still selects platform: check:repo's allowed imports, dynamic-import ban and gesture guard, build-web and hosting
-  tests, package pins, Makefiles and dev-site tests read web files until issue #456 moves those checks. Dynamic
-  `import()` in web runtime is rejected. Enforced: `npm run check:repo`, platform's verify and the offline inventory
-  test.
+- A web runtime module may import relative files inside apps/web/src and the published map-core entry; no per-file
+  import list is needed. Dynamic `import()` and MapLibre gesture handlers are rejected. The build discovers modules at
+  every depth, preserves their paths and derives the offline shell from the built artifact
+  ([ADR 0043](docs/decisions/0043-build-derived-web-shell.md)); colocated tests, support files, config.json, generated
+  manifests and archive/range responses stay out. Playwright discovers browser tests, so no planner entry is needed. Web
+  owns these source checks in apps/web/tools/runtime-modules.mjs and its component tests. A web change still selects
+  platform: build-web and hosting tests, package pins, Makefiles and dev-site tests read web files until issue #456
+  moves those checks. Enforced: `npm run lint` in apps/web and its component tests. `npm run check:repo` and platform's
+  verify still cover repository layout, data roots and other component boundaries.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 
