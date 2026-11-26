@@ -95,7 +95,7 @@ export const TILE_LAYERS = [
     name: 'canyon_rims',
     sourceFile: 'canyon-rims.geojson',
     minZoom: 13,
-    // river and bank identify the canyon edge; height is measured and width is reviewed, both absent when unknown.
+    // river and bank identify the canyon edge; height and width are optional properties.
     fields: ['river', 'bank', 'height', 'width']
   },
   {

@@ -26,6 +26,7 @@ const podgorica = {longitude: 19.26, latitude: 42.437};
 const existingLayers = new Set(['land', 'water', 'roads', 'buildings']);
 // These fields are present only on some source features, so the sampled Podgorica tile can omit them.
 const optionalFieldsByLayer = new Map([
+  ['canyon_rims', new Set(['width'])],
   ['summits', new Set(['name:en'])],
   ['road_nodes', new Set(['name'])],
   ['entrances', new Set(['ref', 'level', 'door', 'wheelchair'])]
@@ -117,16 +118,17 @@ test('archive metadata advertises the shared maximum zoom for every layer', asyn
   }
 });
 
-test('archive canyon rims carry whole-metre height and width beside each other', async () => {
+test('archive canyon rims advertise width but publish none before the owner paints it', async () => {
   const rims = TILE_LAYERS.find(({name}) => name === 'canyon_rims');
-  assert.deepEqual(rims.fields.slice(-2), ['height', 'width']);
+  assert.ok(rims.fields.includes('width'));
   const atMinZoom = await decodedTile(rims.minZoom);
   const features = layerFeatures(atMinZoom, 'canyon_rims');
   assert.ok(features.length > 0, 'the sampled tile contains a canyon rim');
   const heights = features.map(feature => feature.properties.height).filter(height => height !== undefined);
-  const widths = features.map(feature => feature.properties.width).filter(width => width !== undefined);
   assert.ok(heights.length > 0, 'the sampled tile contains a measured rim');
-  assert.ok(widths.length > 0, 'the sampled tile contains a reviewed width');
   assert.ok(heights.every(Number.isInteger), 'every published height is a whole number of metres');
-  assert.ok(widths.every(Number.isInteger), 'every published width is a whole number of metres');
+  assert.ok(
+    features.every(feature => feature.properties.width === undefined),
+    'no published rim has a painted width'
+  );
 });

@@ -264,7 +264,7 @@ test('objects of every other layer pass from the editor through the importer', a
   assert.equal(writtenRoutes.features[0].properties.colour, '#1b75bb');
 });
 
-test('canyon rims can be added, changed and deleted with one measured height and width each', async testContext => {
+test('canyon rims can be added, changed and deleted with optional height and width', async testContext => {
   const root = temporaryRoot(testContext);
   const sources = loadSources(root, ['canyon-rims.geojson']);
   const session = new EditSession(sources);
@@ -273,8 +273,7 @@ test('canyon rims can be added, changed and deleted with one measured height and
   const changed = structuredClone(features[0]);
   const changedHeight = changed.properties.height === 200 ? 201 : 200;
   changed.properties.height = changedHeight;
-  const changedWidth = changed.properties.width === 200 ? 201 : 200;
-  changed.properties.width = changedWidth;
+  changed.properties.width = 12;
   recordValidEdit(session, 'canyon-rims.geojson', '0', changed);
   const deleted = features[1];
   session.recordEdit('canyon-rims.geojson', '1', null);
@@ -282,7 +281,7 @@ test('canyon rims can be added, changed and deleted with one measured height and
   const localId = 'local:55555555-5555-4555-8555-555555555555';
   const drawn = {
     type: 'Feature',
-    properties: {height: 77, width: 26},
+    properties: {height: 77, width: 12},
     geometry: {type: 'LineString', coordinates: [[19.4001, 42.5001], [19.4011, 42.5011]]}
   };
   recordValidEdit(session, 'canyon-rims.geojson', localId, drawn);
@@ -305,7 +304,7 @@ test('canyon rims can be added, changed and deleted with one measured height and
   );
   assert.equal(
     written.features.find(({properties}) => identityOf(properties) === identityOf(changed.properties)).properties.width,
-    changedWidth
+    12
   );
   assert.ok(
     !written.features.some(({properties}) => identityOf(properties) === identityOf(deleted.properties)),
@@ -316,7 +315,7 @@ test('canyon rims can be added, changed and deleted with one measured height and
   assert.equal(added.properties.method, 'editor-drawn');
   assert.equal(added.properties.kind, 'canyon-rim');
   assert.equal(added.properties.height, 77);
-  assert.equal(added.properties.width, 26);
+  assert.equal(added.properties.width, 12);
   assert.equal('river' in added.properties, false);
   assert.equal('bank' in added.properties, false);
   const unmeasuredWritten = written.features.find(({properties}) => properties.entityId === unmeasuredId);
@@ -365,17 +364,15 @@ test('a rim height edit keeps the original length', async testContext => {
   assert.equal(written.properties.lengthMetres, original.properties.lengthMetres);
 });
 
-test('a rim width edit keeps the original height and length', async testContext => {
+test('a rim width edit leaves every other rim fact as it was', async testContext => {
   const root = temporaryRoot(testContext);
   const sources = loadSources(root, ['canyon-rims.geojson']);
   const session = new EditSession(sources);
-  const {features} = sources.get('canyon-rims.geojson').collection;
-  const index = features.findIndex(({properties}) => Number.isInteger(properties.width));
-  assert.notEqual(index, -1, 'the reviewed rims include an edge with a width');
-  const original = features[index];
+  const original = sources.get('canyon-rims.geojson').collection.features[0];
+  assert.equal(original.properties.width, undefined, 'no reviewed rim has a painted width');
   const edited = structuredClone(original);
-  edited.properties.width = original.properties.width === 1 ? 2 : original.properties.width + 1;
-  recordValidEdit(session, 'canyon-rims.geojson', String(index), edited);
+  edited.properties.width = 12;
+  recordValidEdit(session, 'canyon-rims.geojson', '0', edited);
 
   const {result} = await exportAndApply(session, sources, root);
   assert.deepEqual(result.files, ['canyon-rims.geojson']);
@@ -383,10 +380,12 @@ test('a rim width edit keeps the original height and length', async testContext 
     properties.entityId === original.properties.entityId &&
     properties.entityPart === original.properties.entityPart
   );
-  assert.equal(written.properties.width, edited.properties.width);
+  assert.equal(written.properties.width, 12);
   assert.equal(written.properties.height, original.properties.height);
   assert.equal(written.properties.lengthMetres, original.properties.lengthMetres);
   assert.equal(written.properties.method, original.properties.method);
+  assert.equal(written.properties.river, original.properties.river);
+  assert.equal(written.properties.bank, original.properties.bank);
   assert.deepEqual(written.geometry, original.geometry);
 });
 

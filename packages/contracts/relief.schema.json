@@ -106,7 +106,7 @@
           "bank": {"enum": ["left", "right"]},
           "method": {"enum": ["osm-cliff", "dem-canyon-bank", "editor-drawn"]},
           "height": {"type": "integer"},
-          "width": {"type": "integer"},
+          "width": {"type": "integer", "description": "Whole metres from rim to slope foot, painted by the owner. An omitted width means 0 m: a vertical edge."},
           "lengthMetres": {"type": "number", "minimum": 0},
           "bankDefinition": false,
           "cliffWays": false,

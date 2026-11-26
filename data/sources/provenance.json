@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23567100,
+    "bytes": 23565414,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -21,10 +21,10 @@
       "canyon_rims": {
         "byZoomBand": {
           "0-8": 0,
-          "13-16": 40663,
+          "13-16": 38078,
           "9-12": 0
         },
-        "bytes": 40663
+        "bytes": 38078
       },
       "contours": {
         "byZoomBand": {
@@ -131,8 +131,8 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-b227e16f03931084.pmtiles",
-    "sha256": "b227e16f03931084518b79faaba45f9c6a7b9016d5e051b2eead7552b86c9b24",
+    "file": "montenegro-888d081e1c70a1ca.pmtiles",
+    "sha256": "888d081e1c70a1ca55f2fd402543c249e9a280c3f8a12e45efafcb1071626c6f",
     "tiles": 229422
   },
   "building_details": {
@@ -212,9 +212,9 @@
       "sha256": "07fa857d33af478387d826bf4c3902076c0e16733fc634d731bdf2246a5d64f9"
     },
     "canyon-rims.geojson": {
-      "bytes": 45973,
+      "bytes": 45434,
       "features": 50,
-      "sha256": "2b4297d231fc17a1c764621ad868ee68d80c8b33e48c0a9aa58b440614098d35"
+      "sha256": "d2f38ae637b4d4ef74766a94cf426d504226d443daea6e9988a576fabcad4ae1"
     },
     "context-countries.geojson": {
       "bytes": 6535,

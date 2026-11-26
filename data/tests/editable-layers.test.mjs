@@ -464,10 +464,9 @@ test('corrections are replayed over refreshed sources and conflicts are reported
   assert.equal(fs.readFileSync(ledgerPath, 'utf8'), ledger);
 });
 
-test('canyon rim corrections survive a refresh with their measured heights and widths', testContext => {
+test('canyon rim corrections survive a refresh with their measured heights', testContext => {
   const root = temporaryRoot(testContext);
-  const originals = readSource(root, 'canyon-rims.geojson').features;
-  const [changed, deleted] = originals;
+  const [changed, deleted] = readSource(root, 'canyon-rims.geojson').features;
   const changedHeight = changed.properties.height === 200 ? 201 : 200;
   const addedId = localId(9);
   const builder = new ChangesetBuilder(root);
@@ -487,19 +486,11 @@ test('canyon rim corrections survive a refresh with their measured heights and w
 
   fs.cpSync(path.join(repositoryRoot, 'data/sources'), path.join(root, 'data/sources'), {recursive: true});
   fs.writeFileSync(ledgerPath, ledger);
-  const rimPath = sourcePath(root, 'canyon-rims.geojson');
-  const rebuiltRims = parseSource('canyon-rims.geojson', fs.readFileSync(rimPath, 'utf8'));
-  for (const feature of rebuiltRims.features) delete feature.properties.width;
-  fs.writeFileSync(rimPath, serializeSource('canyon-rims.geojson', rebuiltRims));
   reapplyCorrections(root, {now, contractsDirectory});
 
   const written = readSource(root, 'canyon-rims.geojson').features;
   const isSameEntity = (feature, original) => entityKey(feature.properties) === entityKey(original.properties);
   assert.equal(written.find(feature => isSameEntity(feature, changed)).properties.height, changedHeight);
-  for (const original of originals.filter(feature => !isSameEntity(feature, deleted))) {
-    const restored = written.find(feature => isSameEntity(feature, original));
-    assert.equal(restored.properties.width, original.properties.width, 'a relief rebuild does not erase reviewed widths');
-  }
   assert.ok(!written.some(feature => isSameEntity(feature, deleted)), 'a deleted rim stays deleted');
   const added = written.find(({properties}) => properties.entityId === addedId);
   assert.equal(added.properties.method, 'editor-drawn');
@@ -512,36 +503,4 @@ test('canyon rim corrections survive a refresh with their measured heights and w
   assert.equal(changedWritten.properties.method, changed.properties.method);
   assert.equal(changedWritten.properties.river, changed.properties.river);
   assert.equal(changedWritten.properties.bank, changed.properties.bank);
-});
-
-test('a renumbered canyon rim part is reported instead of inheriting a reviewed width', testContext => {
-  const root = temporaryRoot(testContext);
-  const rimPath = sourcePath(root, 'canyon-rims.geojson');
-  const rims = readSource(root, 'canyon-rims.geojson');
-  const firstPart = rims.features.find(({properties}) => properties.entityPart !== undefined);
-  const entityId = firstPart.properties.entityId;
-  const parts = rims.features.filter(
-    ({properties}) => properties.entityId === entityId && properties.entityPart !== undefined
-  );
-  const highestPart = Math.max(...parts.map(({properties}) => properties.entityPart));
-  const renumberedPart = highestPart + 1;
-  const changedHeight = firstPart.properties.height === 200 ? 199 : 200;
-  rims.features[rims.features.indexOf(firstPart)] = {
-    ...firstPart,
-    properties: {...firstPart.properties, entityPart: renumberedPart, height: changedHeight}
-  };
-  for (const feature of rims.features) delete feature.properties.width;
-  fs.writeFileSync(rimPath, serializeSource('canyon-rims.geojson', rims));
-
-  const {report} = reapplyCorrections(root, {now, contractsDirectory});
-  const written = readSource(root, 'canyon-rims.geojson').features.find(
-    ({properties}) => properties.entityId === entityId && properties.entityPart === renumberedPart
-  );
-  assert.ok(written, 'the rebuilt part is still published');
-  assert.equal(written.properties.height, changedHeight, 'the rebuilt height is kept');
-  assert.equal(written.properties.width, undefined, 'a renumbered part does not inherit a reviewed width');
-  assert.ok(
-    report.some(line => line.includes(`canyon-rims.geojson ${entityId}: gone from the refreshed sources`)),
-    report.join('\n')
-  );
 });

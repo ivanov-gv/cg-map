@@ -378,7 +378,7 @@
       "geometries": ["LineString"],
       "properties": {
         "height": {"type": "integer", "minimum": 0, "maximum": 2600},
-        "width": {"type": "integer", "minimum": 1, "maximum": 2000}
+        "width": {"type": "integer", "minimum": 0, "maximum": 2000}
       }
     },
     "transit-routes.json": {

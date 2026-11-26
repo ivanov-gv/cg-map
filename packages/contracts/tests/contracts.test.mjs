@@ -91,13 +91,15 @@ test('the editing rules cover exactly the files of the current bundle', () => {
 
 test('canyon rims state one optional whole-metre width beside their height', () => {
   const rimProperties = readJSON('relief.schema.json').$defs.canyonRim.then.properties;
-  assert.deepEqual(rimProperties.width, {type: 'integer'});
+  assert.equal(rimProperties.width.type, 'integer');
+  assert.match(rimProperties.width.description, /omitted width means 0 m: a vertical edge/);
   const layerRules = readJSON('editor-layers.json').layers['canyon-rims.geojson'].properties;
-  assert.deepEqual(layerRules.width, {type: 'integer', minimum: 1, maximum: 2000});
+  assert.deepEqual(layerRules.width, {type: 'integer', minimum: 0, maximum: 2000});
   const widthCases = readJSON('fixtures/editor-property-cases.json').cases.filter(
     ({properties}) => Object.hasOwn(properties, 'width')
   );
-  assert.ok(widthCases.some(({isValid}) => isValid), 'a valid width case is shared');
+  assert.ok(widthCases.some(({properties, isValid}) => isValid && properties.width === 0), 'zero width is valid');
+  assert.ok(widthCases.some(({properties, isValid}) => isValid && properties.width > 0), 'a painted width is valid');
   assert.ok(widthCases.some(({isValid}) => !isValid), 'an invalid width case is shared');
 });
 
