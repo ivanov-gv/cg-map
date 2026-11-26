@@ -30,7 +30,9 @@ function pixelsPerMetreAtZoom16(latitudeDegrees) {
   return groundPixels(1, latitudeDegrees, wallReferenceZoom);
 }
 
-// A stop at every whole zoom keeps both the ground width and the floor exact between stops.
+// A stop at every whole zoom keeps painted widths at exact ground distance between stops and keeps the no-width edge
+// growing like the ground. Between low-zoom stops the clamped floor interpolates slightly above 2 px, never below:
+// about 2.2 px at zoom 13.5.
 function groundScaled(pixelsAtZoom16, floorShare) {
   const stops = [];
   for (let atZoom = canyonMinZoom; atZoom <= wallMaxZoom; atZoom += 1) {
