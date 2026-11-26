@@ -17,8 +17,6 @@ decide where a rim runs but published only that decision, so a rim drawn by hand
   with halves upward. An OSM cliff uses only samples measured beside that part; without samples it has no height.
 - An added rim states only an optional integer `height`; the importer assigns its `local:` ID, `kind`, `editor-drawn`
   method and `lengthMetres`, and a height-only edit keeps the reviewed length.
-- A rim may also carry an optional integer `width`, the rim-to-slope-foot span in whole metres. The owner paints width;
-  no edge has one until then, and a width-only edit leaves height, length and geometry as they are.
 - Every rim keeps the low side on its right. An edge with no river has no centreline to compare, but is not exempt.
 - `editor-layers.json` owns the height range and `check-data` reads it from there. An out-of-range measurement fails
   validation. Cliff-part selection keeps its existing half-search-reach constant; height association measures the same
