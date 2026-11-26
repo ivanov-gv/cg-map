@@ -168,8 +168,8 @@ const copernicusAttribution = '© DLR e.V. 2010-2014 and © Airbus Defence and S
 
 function canyonRimRules(contractsDirectory) {
   const rimDefinition = readContract(contractsDirectory, 'relief.schema.json').$defs.canyonRim.then;
-  const height = readContract(contractsDirectory, 'editor-layers.json').layers['canyon-rims.geojson'].properties.height;
-  return {properties: rimDefinition.properties, height};
+  const editable = readContract(contractsDirectory, 'editor-layers.json').layers['canyon-rims.geojson'].properties;
+  return {properties: rimDefinition.properties, height: editable.height, width: editable.width};
 }
 
 function validateCanyonRim(properties, label, rules) {
@@ -183,10 +183,15 @@ function validateCanyonRim(properties, label, rules) {
   } else {
     requireValue(rules.properties.river.enum.includes(properties.river) && rules.properties.bank.enum.includes(properties.bank), `${label}: invalid river bank`);
   }
-  const {height} = properties;
-  requireValue(height === undefined || (
+  const {height, width} = properties;
+  const heightIsValid = height === undefined || (
     Number.isInteger(height) && height >= rules.height.minimum && height <= rules.height.maximum
-  ), `${label}: invalid rim height`);
+  );
+  requireValue(heightIsValid, `${label}: invalid rim height`);
+  const widthIsValid = width === undefined || (
+    Number.isInteger(width) && width >= rules.width.minimum && width <= rules.width.maximum
+  );
+  requireValue(widthIsValid, `${label}: invalid rim width: expected a whole number of metres from ${rules.width.minimum} to ${rules.width.maximum}`);
   requireValue(Number.isFinite(properties.lengthMetres) && properties.lengthMetres >= 0, `${label}: invalid rim length`);
   requireValue(!('entityPart' in properties) || (Number.isInteger(properties.entityPart) && properties.entityPart >= 0), `${label}: invalid rim part`);
   for (const key of ['bankDefinition', 'cliffWays', 'cliffLengthMetres', 'demLengthMetres', 'segmentLengthMetres', 'segmentBankRiseMetres', 'minimumBankRiseMetres', 'searchDistanceMetres', 'searchStepMetres']) {
