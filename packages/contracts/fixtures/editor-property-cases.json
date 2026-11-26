@@ -523,6 +523,75 @@
         "height": 2601
       },
       "isValid": false
+    },
+    {
+      "name": "locally drawn canyon rim with a height and a width",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "height": 120,
+        "width": 12
+      },
+      "isValid": true
+    },
+    {
+      "name": "an OSM cliff keeps its method when its width changes",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": 12
+      },
+      "previous": {
+        "method": "osm-cliff",
+        "river": "Morača",
+        "bank": "left",
+        "width": 11
+      },
+      "isValid": true
+    },
+    {
+      "name": "canyon rim with a changed width",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": 8
+      },
+      "previous": {
+        "method": "dem-canyon-bank",
+        "river": "Ribnica",
+        "bank": "right",
+        "width": 7
+      },
+      "isValid": true
+    },
+    {
+      "name": "canyon rim with a zero width",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": 0
+      },
+      "isValid": true
+    },
+    {
+      "name": "canyon rim with a fractional width",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": 8.5
+      },
+      "isValid": false
+    },
+    {
+      "name": "canyon rim with a negative width",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": -1
+      },
+      "isValid": false
+    },
+    {
+      "name": "canyon rim wider than the contract range",
+      "filename": "canyon-rims.geojson",
+      "properties": {
+        "width": 2001
+      },
+      "isValid": false
     }
   ]
 }
