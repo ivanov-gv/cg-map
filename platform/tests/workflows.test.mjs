@@ -549,6 +549,29 @@ test('each editor browser job names its exact matrix source', () => {
   );
 });
 
+test('the web workflow builds its own browser shards', () => {
+  const raw = fs.readFileSync(path.join(workflowDir, 'ci-apps-web.yml'), 'utf8');
+  assert.match(raw, /node apps\/web\/tools\/browser-matrix\.mjs/);
+  assert.match(raw, /node apps\/web\/tools\/browser-matrix\.mjs --smoke/);
+  assert.match(raw, /E2E_ARGS="--shard=\$SHARD\/\$JOBS"/);
+  assert.match(raw, /if \[ "\$SMOKE" = true \]; then/);
+  assert.match(raw, /browser-failure-evidence-web-shard-\$\{\{ env\.SHARD \}\}/);
+});
+
+test('each web browser job names its exact matrix source', () => {
+  const {jobs} = load('ci-apps-web.yml');
+  assert.equal(
+    jobs.browser.strategy.matrix,
+    '${{ fromJSON(needs.verify.outputs.browser_matrix || \'{"include":[]}\') }}'
+  );
+  assert.equal(
+    jobs['browser-test-run'].strategy.matrix,
+    '${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || \'{"include":[]}\') }}'
+  );
+  assert.equal(jobs.browser.name, 'Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})');
+  assert.equal(jobs['browser-test-run'].name, '(test-run) Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})');
+});
+
 for (const file of ['cd-map-data.yml', 'cd-map-contracts.yml'])
   test(`${file} shares its publish env and steps with the test-run twin`, () => {
     const raw = fs.readFileSync(path.join(workflowDir, file), 'utf8');
@@ -863,17 +886,11 @@ test('ci-pr-checks calls every callable CI workflow in test-run mode when it cha
   }
 });
 
-// A static test call proves a changed workflow's jobs and steps with one short area of that workflow's own project.
-// Passing another project's matrix makes the called app look for specs it does not have, so each input is named here.
-const plannerMatrixInput = output => `\${{ needs.plan.outputs.${output} || needs.plan-test-run.outputs.${output} }}`;
-
+// A static test call proves a changed workflow's jobs and steps with one shard from that workflow's own project.
 const staticTestCallInputs = {
   'test-ci-apps-core-demo': {test_run: true},
   'test-ci-apps-editor': {test_run: true, smoke: true},
-  'test-ci-apps-web': {
-    test_run: true,
-    browser_matrix: plannerMatrixInput('smoke_browser_matrix')
-  },
+  'test-ci-apps-web': {test_run: true, smoke: true},
   'test-ci-backend': {test_run: true},
   'test-ci-browser-image': {test_run: true},
   'test-ci-contracts': {test_run: true},
@@ -898,18 +915,21 @@ test('every static test call passes inputs meant for its workflow', () => {
   for (const [name, expected] of Object.entries(staticTestCallInputs)) {
     assert.deepEqual(jobs[name].with, expected, `${name} passes the wrong inputs`);
   }
-  assert.equal('smoke' in jobs['apps-editor'].with, false, 'the regular editor call uses the app-owned shard count');
+  assert.equal(
+    jobs['apps-editor'].with.phone_tests,
+    '${{ inputs.phone_tests || \'tagged\' }}',
+    'the regular editor call forwards the app-owned phone mode'
+  );
 });
 
-test('the browser test calls keep their own phone and matrix inputs', () => {
+test('the browser test calls use their app-owned shards with tagged phone tests', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  assert.equal(
-    jobs['test-ci-apps-web'].with.browser_matrix,
-    plannerMatrixInput('smoke_browser_matrix'),
-    'the web test call passes its own smoke matrix'
+  assert.deepEqual(jobs['test-ci-apps-web'].with, {test_run: true, smoke: true}, 'the web test call proves one shard');
+  assert.deepEqual(
+    jobs['test-ci-apps-editor'].with,
+    {test_run: true, smoke: true},
+    'the editor test call proves one shard'
   );
-  assert.equal(jobs['test-ci-apps-editor'].with.phone_tests, undefined, 'the editor test call keeps the tagged default');
-  assert.equal(jobs['test-ci-apps-web'].with.phone_tests, undefined, 'web no longer has a phone_tests input');
 });
 
 // CD workflows cannot be reusable, so ci-workflows dispatches them and waits for the real conclusion.
@@ -1402,32 +1422,22 @@ test('only the new pipelines run on the repository', () => {
   );
 });
 
-test('web passes planned areas and skips its browser job only for an empty matrix', () => {
-  const allJobs = load('ci-pr-checks.yml').jobs;
-  assert.equal(
-    allJobs['apps-web'].with.browser_matrix,
-    '${{ needs.plan.outputs.browser_matrix || needs.plan-test-run.outputs.browser_matrix }}'
-  );
-  const {jobs: webJobs} = load('ci-apps-web.yml');
-  assert.equal(webJobs.browser.if, `\${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}`);
-  assert.equal(
-    webJobs['browser-test-run'].if,
-    `\${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}`
-  );
+test('the regular web call uses every app-owned shard', () => {
+  const call = load('ci-pr-checks.yml').jobs['apps-web'];
+  assert.deepEqual(Object.keys(call.with).toSorted(), ['phone_tests', 'test_run']);
+  assert.equal(call.with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
 });
 
-test('the plan action and both plan jobs expose the same test-run and smoke outputs', () => {
+test('the plan action and both plan jobs expose the same test-run outputs', () => {
   const action = parseYaml(fs.readFileSync(path.join(repoRoot, '.github/actions/plan/action.yml'), 'utf8'));
-  const outputNames = [
-    'ci_in_place_test_runs',
-    'ci_test_runs',
-    'prove_cd_test_runs',
-    'smoke_browser_matrix'
-  ];
+  const outputNames = ['ci_in_place_test_runs', 'ci_test_runs', 'prove_cd_test_runs'];
   for (const name of outputNames) {
     assert.equal(action.outputs[name]?.value, `\${{ steps.plan.outputs.${name} }}`);
   }
-  assert.equal(action.outputs.all_browser_matrix, undefined, 'the full matrix is no longer a test-call input');
+  assert.deepEqual(
+    Object.keys(action.outputs).toSorted(),
+    [...FOLDERS, 'image_matrix', ...outputNames, 'cd_test_runs', 'manual_test_runs'].toSorted()
+  );
   const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
   assert.match(text, /outputs: &plan-outputs/);
   assert.match(text, /outputs: \*plan-outputs/);
@@ -1439,14 +1449,12 @@ test('the planner has an output on the plan job for every folder and every test-
     new Set(Object.keys(plan.outputs)),
     new Set([
       ...FOLDERS,
-      'browser_matrix',
       'image_matrix',
       'ci_in_place_test_runs',
       'ci_test_runs',
       'cd_test_runs',
       'prove_cd_test_runs',
-      'manual_test_runs',
-      'smoke_browser_matrix'
+      'manual_test_runs'
     ])
   );
 });
@@ -1481,23 +1489,18 @@ test('browser jobs and local runs pin one image, whose version matches the repos
   assert.match([...pins][0], expected);
 });
 
-test('web runs only tagged phone tests', () => {
+test('ci-pr-checks forwards its phone mode to both browser calls', () => {
   const {jobs} = load('ci-pr-checks.yml');
-  const config = fs.readFileSync(path.join(repoRoot, 'apps/web/playwright.config.mjs'), 'utf8');
-
-  assert.equal(jobs['apps-web'].with.phone_tests, undefined);
-  assert.equal(load('ci-apps-web.yml').jobs.browser.env.E2E_PHONE, undefined);
-  assert.match(config, /grep: \/@phone\/, grepInvert: \/@desktop\//);
+  for (const app of ['apps-web', 'apps-editor']) {
+    assert.equal(jobs[app].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}', `${app} ignores the phone mode`);
+  }
 });
 
-test('ci-pr-checks forwards its phone mode to the editor call', () => {
-  const {jobs} = load('ci-pr-checks.yml');
-  assert.equal(jobs['apps-editor'].with.phone_tests, '${{ inputs.phone_tests || \'tagged\' }}');
-});
-
-test('the editor browser job forwards its phone mode to E2E_PHONE', () => {
-  const {jobs} = load('ci-apps-editor.yml');
-  assert.equal(jobs.browser.env.E2E_PHONE, '${{ inputs.phone_tests }}');
+test('each browser job forwards its phone mode to E2E_PHONE', () => {
+  for (const app of ['web', 'editor']) {
+    const {browser} = load(`ci-apps-${app}.yml`).jobs;
+    assert.equal(browser.env.E2E_PHONE, '${{ inputs.phone_tests }}', `${app} ignores the phone mode`);
+  }
 });
 
 test('the browser image runs the Node version the repository pins', () => {

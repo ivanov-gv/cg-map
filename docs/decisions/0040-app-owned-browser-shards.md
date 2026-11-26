@@ -46,4 +46,13 @@ app-owned shard count; only the separate workflow-proof call passes `smoke: true
 ## Outcome note: phone tag parser (issue #458, 26 November 2026)
 
 Pending owner approval in the PR: `platform/tools/phone-tags.mjs` is the single narrow exception to the HEAD-read rule,
-read only by platform's web phone-tag check and the editor's own unit test; `apps/web` imports nothing from it.
+read only by platform's tag check and both apps' own unit tests; no runtime app imports it.
+
+## Outcome note: web shards (issue #458, 26 November 2026)
+
+Web now follows the same mechanism: its 24 shards are counted in
+[apps/web/browser-jobs.json](../../apps/web/browser-jobs.json) and built by its own matrix tool; the platform planner
+owns no web areas, source lists or matrices. The last green full runs put the slowest interface shards at 320 seconds
+with 12 interface shards. At two workers, `--list --shard=i/N` with 24 shards gives 13–14 tagged tests and 16–17 tests
+with all phone tests per shard; about 250 seconds including 60 seconds of setup is the estimate for the slowest. Regular
+web calls use every shard, the nightly uses `phone_tests=all`, and only the separate workflow-proof call uses one shard.

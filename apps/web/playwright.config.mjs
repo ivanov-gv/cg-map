@@ -22,10 +22,12 @@ const port = Number(
 const workers = Number(process.env.E2E_WORKERS ?? 1);
 const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
 
-// Only tagged tests run on the phone layout, in PRs and nightly alike: docs/verification/testing.md.
-// @desktop and @phone-only tests choose their project here, so their bodies no longer skip after setup and page load.
+// A PR and a local run use only tagged phone tests; a nightly run asks for all of them: docs/verification/testing.md.
+// @desktop and @mobile-only tests choose their project here, so their bodies no longer skip after setup and page load.
 const desktopFilter = {grepInvert: /@mobile-only|@phone-only/};
-const phoneFilter = {grep: /@phone/, grepInvert: /@desktop/};
+const taggedPhoneTests = {grep: /@phone/, grepInvert: /@desktop/};
+const allPhoneTests = {grepInvert: /@desktop/};
+const phoneTests = process.env.E2E_PHONE === 'all' ? allPhoneTests : taggedPhoneTests;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -59,7 +61,7 @@ export default defineConfig({
     },
     {
       name: 'pages-mobile',
-      ...phoneFilter,
+      ...phoneTests,
       use: {
         baseURL: `http://127.0.0.1:${port}/cg-map/`,
         viewport: {width: 412, height: 840},

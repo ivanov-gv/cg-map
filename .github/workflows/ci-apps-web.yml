@@ -1,22 +1,35 @@
 name: ci-apps-web
-# Verifies the web app and its built artifact, then runs browser tests on that artifact, one job per area.
+# Verifies the web app and its built artifact, then runs browser tests on that artifact, split into app-owned shards so
+# each job stays inside the job time limit.
 on:
   workflow_call:
     inputs:
       test_run:
         type: boolean
         required: true
-      browser_matrix:
-        description: The browser areas to run, from the planner. Empty runs them all.
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
         type: string
+        default: tagged
+      smoke:
+        description: On a test call, prove the browser job with only the first shard.
+        type: boolean
         required: false
-        default: ''
+        default: false
   workflow_dispatch:
     inputs:
       test_run:
         description: Test run
         type: boolean
         default: true
+      phone_tests:
+        description: On the phone layout, run only tests tagged @phone, or all.
+        type: string
+        default: tagged
+      smoke:
+        description: Run only the first browser shard.
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: read
@@ -31,11 +44,11 @@ jobs:
       name: dev
       deployment: false
     outputs: &verify-outputs
-      browser_matrix: ${{ steps.areas.outputs.browser_matrix }}
+      browser_matrix: ${{ steps.matrix.outputs.browser_matrix }}
     env: &verify-env
       WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
       WEB_ARTIFACT_RETENTION_DAYS: ${{ vars.WEB_ARTIFACT_RETENTION_DAYS }}
-      BROWSER_MATRIX: ${{ inputs.browser_matrix }}
+      SMOKE: ${{ inputs.smoke }}
     steps: &verify-steps
       - uses: actions/checkout@v7
         with:
@@ -44,14 +57,15 @@ jobs:
       - uses: ./.github/actions/run-check
         with:
           command: make verify PKG=apps/web
-      - name: Select browser areas
-        id: areas
+      - name: Build browser matrix
+        id: matrix
         run: |
-          if [ -n "$BROWSER_MATRIX" ]; then
-            echo "browser_matrix=$BROWSER_MATRIX" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
+          if [ "$SMOKE" = true ]; then
+            matrix="$(node apps/web/tools/browser-matrix.mjs --smoke)"
           else
-            node platform/tools/ci-plan.mjs --all
+            matrix="$(node apps/web/tools/browser-matrix.mjs)"
           fi
+          echo "browser_matrix=$matrix" | tee -a "$GITHUB_OUTPUT" "$GITHUB_STEP_SUMMARY"
       # Not v6: act's artifact server rejects its uploads as unauthorized, and these jobs must also run locally.
       - name: Share the built artifact with the browser jobs
         uses: actions/upload-artifact@v5
@@ -72,10 +86,8 @@ jobs:
     env: *verify-env
     steps: *verify-steps
   browser:
-    name: Browser tests (${{ matrix.area }})
+    name: Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify
-    # A change such as a web unit test needs the web checks but no browser area.
-    if: ${{ needs.verify.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -91,15 +103,13 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
-      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
-      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
       matrix: ${{ fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}') }}
     env: &browser-env
-      # Each job has its own 4 CPUs, and one worker left the slowest area at the job time limit.
+      # Each job has its own 4 CPUs.
       E2E_WORKERS: 2
-      AREA: ${{ matrix.area }}
-      E2E_SPECS: ${{ matrix.specs }}
+      E2E_PHONE: ${{ inputs.phone_tests }}
+      SHARD: ${{ matrix.shard }}
+      JOBS: ${{ matrix.jobs }}
       WEB_ARTIFACT_NAME: ${{ vars.WEB_ARTIFACT_NAME }}
     steps: &browser-steps
       - uses: actions/checkout@v7
@@ -112,17 +122,16 @@ jobs:
           path: dist/web
       - uses: ./.github/actions/run-check
         with:
-          command: make -C apps/web e2e-built E2E_ARGS="$E2E_SPECS"
+          command: make -C apps/web e2e-built E2E_ARGS="--shard=$SHARD/$JOBS"
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: browser-failure-evidence-${{ env.AREA }}
+          name: browser-failure-evidence-web-shard-${{ env.SHARD }}
           path: apps/web/test-results/
           retention-days: 7
   browser-test-run:
-    name: (test-run) Browser tests (${{ matrix.area }})
+    name: (test-run) Browser tests (${{ matrix.shard }}/${{ matrix.jobs }})
     needs: verify-test-run
-    if: ${{ needs.verify-test-run.outputs.browser_matrix != '{"include":[]}' }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/ivanov-gv/cg-map/browser-ci:1.56.1-r1
@@ -138,9 +147,6 @@ jobs:
       deployment: false
     strategy:
       fail-fast: false
-      # act (nektos/act) evaluates the matrix expression before `needs` outputs exist in called workflows,
-      # producing a literal string that fails JSON parsing and creates a phantom job (nektos/act#2313, #927).
-      # The fallback ensures act can always parse the matrix; the `if` guard above skips the job when empty.
       matrix: ${{ fromJSON(needs.verify-test-run.outputs.browser_matrix || '{"include":[]}') }}
     env: *browser-env
     steps: *browser-steps

@@ -14,17 +14,17 @@ tooling they run (`platform/tools/ci-plan.mjs`, `platform/tools/workflow-test-ru
 
 Options to prove a change before it reaches `main`:
 
-| Option                    | Command                                                                                                                                                                                         | Proves                                                                                                           |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Lint                      | `make lint-workflows` (pinned actionlint and shellcheck)                                                                                                                                        | Syntax, expressions, shell                                                                                       |
-| Platform tests            | `make verify PKG=platform`, with a failure proof for each new assertion                                                                                                                         | Structure, selection logic, inputs                                                                               |
-| act dry run               | `make test-<workflow> ACT="$ACT -n"`                                                                                                                                                            | That the workflow parses; never a test                                                                           |
-| act test run              | `make test-<workflow>`                                                                                                                                                                          | Steps and their order, locally, in `test_run` mode                                                               |
-| PR gate test runs         | Push the branch; `CI gate` calls changed `ci-*` workflows and dispatches changed `cd-*` ones                                                                                                    | The PR's own workflows on GitHub, in `test_run` mode                                                             |
-| Branch dispatch           | `gh workflow run <file> --ref <branch> -f test_run=true …`, with inputs that reach the path                                                                                                     | Any path the gate does not reach: fallbacks, other commits or versions, error branches                           |
-| Proof branch              | A throwaway branch on top of the PR with a small change that selects the path, then `gh workflow run ci-pr-checks.yml --ref <proof branch> -f test_run=false -f run_all=false`; delete it after | Paths the PR's own diff does not select: an in-place call with no browser area, a publish job, every CD dispatch |
-| Dry-run publishing        | The `test_run` dispatch of a publishing workflow, whose test-run environment publishes with `--dry-run`                                                                                         | Publishing steps without a real release                                                                          |
-| Fix on the failing branch | Cherry-pick the fix onto the branch that showed the bug and read that branch's run                                                                                                              | That the fix fixes the failure that was seen                                                                     |
+| Option                    | Command                                                                                                                                                                                         | Proves                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Lint                      | `make lint-workflows` (pinned actionlint and shellcheck)                                                                                                                                        | Syntax, expressions, shell                                                                                                |
+| Platform tests            | `make verify PKG=platform`, with a failure proof for each new assertion                                                                                                                         | Structure, selection logic, inputs                                                                                        |
+| act dry run               | `make test-<workflow> ACT="$ACT -n"`                                                                                                                                                            | That the workflow parses; never a test                                                                                    |
+| act test run              | `make test-<workflow>`                                                                                                                                                                          | Steps and their order, locally, in `test_run` mode                                                                        |
+| PR gate test runs         | Push the branch; `CI gate` calls changed `ci-*` workflows and dispatches changed `cd-*` ones                                                                                                    | The PR's own workflows on GitHub, in `test_run` mode                                                                      |
+| Branch dispatch           | `gh workflow run <file> --ref <branch> -f test_run=true …`, with inputs that reach the path                                                                                                     | Any path the gate does not reach: fallbacks, other commits or versions, error branches                                    |
+| Proof branch              | A throwaway branch on top of the PR with a small change that selects the path, then `gh workflow run ci-pr-checks.yml --ref <proof branch> -f test_run=false -f run_all=false`; delete it after | Paths the PR's own diff does not select: an in-place workflow call without a folder job, a publish job, every CD dispatch |
+| Dry-run publishing        | The `test_run` dispatch of a publishing workflow, whose test-run environment publishes with `--dry-run`                                                                                         | Publishing steps without a real release                                                                                   |
+| Fix on the failing branch | Cherry-pick the fix onto the branch that showed the bug and read that branch's run                                                                                                              | That the fix fixes the failure that was seen                                                                              |
 
 A fix to a bug found after a merge follows the same rule: its own PR must run the path it fixes before it merges.
 
@@ -72,9 +72,9 @@ workflows it calls, with the same inputs, instead.
 
 A job aims for 5 minutes and stops at 7: every job sets `timeout-minutes` to 7 or less, and `platform/tests/workflows`
 checks that. `Check job times` warns about any job over 5 minutes. When a job gets close, split it into more jobs, as
-`ci-apps-editor` splits its browser tests into the shards counted in `apps/editor/browser-jobs.json`; do not raise the
-limit. The exception is `cd-test-runs` in `ci-workflows`: it occupies a runner while it polls, but avoids repeating the
-browser-image build and waits up to 30 minutes for it.
+`ci-apps-web` and `ci-apps-editor` split their browser tests into the shards counted in each app's `browser-jobs.json`;
+do not raise the limit. The exception is `cd-test-runs` in `ci-workflows`: it occupies a runner while it polls, but
+avoids repeating the browser-image build and waits up to 30 minutes for it.
 
 The whole PR run also has a time budget: from approval to `CI gate`, the aim is 5 minutes and the limit is 7. The
 `CI gate` job runs `platform/tools/run-budget.mjs` after the existing checks: it fetches the run attempt metadata (from
@@ -216,8 +216,8 @@ not count: check `docker ps`, then run it again with a lower `ACT_JOBS`.
 
 **Matrix in called workflows:** `act` evaluates `matrix: ${{ fromJSON(needs.*.outputs.*) }}` before `needs` outputs
 exist when the workflow is triggered by `workflow_call` (nektos/act#2313, #927), producing a literal string that fails
-JSON parsing and creates a phantom failing job. `ci-apps-editor.yml` uses
-`fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` so `act` can always parse the matrix. The editor
+JSON parsing and creates a phantom failing job. `ci-apps-web.yml` and `ci-apps-editor.yml` use
+`fromJSON(needs.verify.outputs.browser_matrix || '{"include":[]}')` so `act` can always parse the matrix. Each app
 always supplies a matrix, so its browser jobs need no condition to skip an empty one.
 
 ## On GitHub
@@ -240,17 +240,16 @@ The gate's planner selects the workflows a change touches and the gate proves th
 - Every changed callable `ci-*` workflow is proved by a `uses:` call with `test_run: true`. When its folder is selected
   by the diff, the regular folder call passes `test_run` instead of a second call running: the planner's
   `ci_in_place_test_runs` output drives that and keeps the workflow out of `ci_test_runs`. Workflows without a folder
-  call, such as `ci-publish`, still get a separate `(test run) …` call. A separate browser call gets one short proof and
-  the default tagged phone tests: web passes `smoke_browser_matrix` (its `discover`, five tests), while editor passes
-  `smoke: true` and builds one shard from the editor's job count. These calls prove the workflow's jobs and steps, not
-  whole suites. A regular web call keeps its planned matrix, except that an in-place call with no selected area uses the
-  smoke matrix. The regular editor call passes no `smoke`, so a PR, the nightly run and a full dispatch run use the
-  app-owned count: every shard runs for an editor change. Only the separate editor test call uses the one-shard proof.
-  The count lives in [browser-jobs.json](../apps/editor/browser-jobs.json), with the proof rule in
-  [apps/editor/AGENTS.md](../apps/editor/AGENTS.md) and the reason in
-  [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). An in-place `ci-workflows` call with no changed CD
-  workflows still runs `cd-test-runs` with the empty list, whose script reports that no CD workflows need a test run. A
-  shared action is proved by a workflow that really executes it.
+  call, such as `ci-publish`, still get a separate `(test run) …` call. Both separate browser calls pass `smoke: true`
+  and the default tagged phone tests, so each builds one shard from its own job count. These calls prove the workflow's
+  jobs and steps, not whole suites. The regular browser calls pass no `smoke`, so a PR, the nightly run and a full
+  dispatch run use each app-owned count: every shard runs for a web or editor change. The planner emits no browser
+  matrix. The counts live in [web](../apps/web/browser-jobs.json) and [editor](../apps/editor/browser-jobs.json), with
+  the proof rules in [apps/web/AGENTS.md](../apps/web/AGENTS.md) and [apps/editor/AGENTS.md](../apps/editor/AGENTS.md),
+  and the reason in [ADR 0040](../docs/decisions/0040-app-owned-browser-shards.md). `ci-pr-checks` forwards its
+  `phone_tests` mode to both regular browser calls; a separate test call keeps the tagged default. An in-place
+  `ci-workflows` call with no changed CD workflows still runs `cd-test-runs` with the empty list, whose script reports
+  that no CD workflows need a test run. A shared action is proved by a workflow that really executes it.
 - The regular PR run still dispatches changed CD workflows to `ci-workflows` even when that call runs in place in
   test-run mode. Only a test run of `ci-pr-checks` suppresses dispatch, so a dispatched test run cannot dispatch another
   test run.

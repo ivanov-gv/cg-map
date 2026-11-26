@@ -10,9 +10,9 @@ it.
 - apps/web/src has no bundler or npm runtime imports. Import sibling modules by relative path with the `.js` extension,
   and shared map code only through the packages/map-core entry; builds relocate that import into each artifact. MapLibre
   and PMTiles are vendored globals (`maplibregl`, `pmtiles`). Enforced: ESLint `no-restricted-imports`.
-- A new web module needs its allowed imports declared in platform/tools/check-repo.mjs, its file in the offline shell
-  list in apps/web/tools/finalize.mjs, and a browser area or shared-source entry in platform/tools/ci-plan.mjs. Dynamic
-  `import()` in web runtime is rejected. Enforced: `npm run check:repo`, the offline inventory test, and ci-plan tests.
+- A new web module needs its allowed imports declared in platform/tools/check-repo.mjs and its file in the offline shell
+  list in apps/web/tools/finalize.mjs. Playwright discovers browser tests, so no planner entry is needed. Dynamic
+  `import()` in web runtime is rejected. Enforced: `npm run check:repo` and the offline inventory test.
 - core.js stays pure: no DOM, storage, network, or service-worker globals. Enforced: ESLint `no-restricted-globals`.
 - data/tools never imports apps/web or services code; share formats through packages/contracts. Enforced: check-repo.
 
