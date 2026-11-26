@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ESLint} from 'eslint';
 
+// Repeats platform/tests/eslint-readability.test.mjs until the shared probe helper lands (ADR 0043).
 const editorRoot = fileURLToPath(new URL('..', import.meta.url));
 const productionPath = 'src/layers/roads/readability-probe.js';
 const unitTestPath = 'src/layers/roads/road-graph.test.js';
@@ -38,6 +39,9 @@ test('the Editor config keeps browser globals and documented test exceptions at 
     ''
   ].join('\n');
   assert.deepEqual(await ruleIdsAt(productionPath, runtimeGlobals), []);
+
+  const toolMapGlobal = 'export const engine = maplibregl.Map;\n';
+  assert.deepEqual(await ruleIdsAt('tools/x.mjs', toolMapGlobal), ['no-undef']);
 
   const testGlobals = [
     'export const mode = process.env.E2E_PHONE;',
