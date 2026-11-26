@@ -1,28 +1,40 @@
 import {basemapColors as colors, colorChannels} from './basemap-palette.js';
 import {inDrawingGroup} from './drawing-order.js';
 
-// Penpot Core rules: the wall band is as wide as the canyon is deep, about 30 px for the Morača and 10 px for the
-// Ribnica at zoom 16. Rivers without a measured width get the shallower one.
-const wallWidthPixelsAtZoom16 = {Morača: 30, Ribnica: 10};
-const defaultWallWidthPixelsAtZoom16 = 10;
-// MapLibre cannot fill a gradient across a line, so nested bands approximate one; eight is the design's minimum
+const earthEquatorialCircumferenceMetres = 40075016.686;
+const maplibreTileSizePixels = 512;
+const groundTruthZoom = 16;
+const metresPerLatitudeDegree = earthEquatorialCircumferenceMetres / 360;
+// MapLibre's distance expression measures from the evaluated feature, so a rim's distance to the equator gives its
+// latitude without adding a field to the tiles.
+const equator = {type: 'LineString', coordinates: [[-180, 0], [0, 0], [180, 0]]};
+const latitudeDegrees = ['/', ['distance', equator], metresPerLatitudeDegree];
+// At zoom z one pixel covers circumference × cos(latitude) / (512 × 2^z) metres on the ground.
+const pixelsPerGroundMetreAtZoom16 = [
+  '/',
+  maplibreTileSizePixels * 2 ** groundTruthZoom,
+  ['*', earthEquatorialCircumferenceMetres, ['cos', ['*', latitudeDegrees, Math.PI / 180]]]
+];
+// MapLibre cannot fill a gradient across a line, so nested bands approximate one; ten is the design's minimum
 // for steps that do not show.
 const wallBandCount = 10;
 const canyonMinZoom = 13;
+const groundMaxZoom = 20;
+// Consecutive one-zoom stops let MapLibre's exponential interpolation double the pixel width at every zoom level.
+const groundZoomStops = Array.from(
+  {length: groundMaxZoom - canyonMinZoom + 1},
+  (_, offset) => canyonMinZoom + offset
+);
+const hasMeasuredHeight = ['has', 'height'];
 
-// Scales a zoom-16 pixel size so it stays the same ground distance at every zoom: twice as wide per zoom level.
-function groundScaled(pixelsAtZoom16) {
-  const zoomSteps = [canyonMinZoom, 16, 20];
-  const stops = zoomSteps.flatMap(zoom => [zoom, ['*', pixelsAtZoom16, 2 ** (zoom - 16)]]);
+// Returns a line-width expression; doubling the pixel width per zoom level keeps the ground width unchanged.
+function groundWidthPixels(metres) {
+  const stops = groundZoomStops.flatMap(zoom => [
+    zoom,
+    ['*', metres, pixelsPerGroundMetreAtZoom16, 2 ** (zoom - groundTruthZoom)]
+  ]);
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
 }
-
-const riverWallWidth = [
-  'match',
-  ['get', 'river'],
-  ...Object.entries(wallWidthPixelsAtZoom16).flat(),
-  defaultWallWidthPixelsAtZoom16
-];
 
 function mixedColor(fromHex, toHex, fraction) {
   const fromChannels = colorChannels(fromHex);
@@ -39,18 +51,19 @@ function mixedColor(fromHex, toHex, fraction) {
 function wallBand(bandIndex) {
   const widthShare = (wallBandCount - bandIndex) / wallBandCount;
   const lightness = bandIndex / (wallBandCount - 1);
-  const bandWidth = groundScaled(['*', riverWallWidth, widthShare]);
+  const rimHeight = ['get', 'height'];
   return inDrawingGroup('canyon-walls', {
     id: `canyon-wall-${bandIndex}`,
     type: 'line',
     source: 'basemap',
     'source-layer': 'canyon_rims',
     minzoom: canyonMinZoom,
+    filter: hasMeasuredHeight,
     layout: {'line-cap': 'butt', 'line-join': 'round'},
     paint: {
       'line-color': mixedColor(colors.canyonWallAtWater, colors.canyonWallAtRim, lightness),
-      'line-width': bandWidth,
-      'line-offset': groundScaled(['*', riverWallWidth, widthShare / 2])
+      'line-width': groundWidthPixels(['*', rimHeight, widthShare]),
+      'line-offset': groundWidthPixels(['*', rimHeight, widthShare / 2])
     }
   });
 }

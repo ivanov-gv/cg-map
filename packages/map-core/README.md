@@ -18,8 +18,11 @@ group in `metadata`, and a unit test fails when a layer is out of order. Applica
 the style; both apps place them below street labels today.
 
 Canyon walls are nested bands offset from each canyon rim toward the water, darkest at the water; they rely on the
-relief contract's rule that every rim runs with the river on its right. Bridge decks reuse their street's casing width
-and add dark edges.
+relief contract's rule that every rim runs with the river on its right. Each band's width comes from the edge's own
+`height`: a wall of `h` metres is `h` metres wide on the ground at every zoom. At zoom `z` and latitude `φ`, its pixel
+width is `h × 2^z × 512 / (40075016.686 × cos φ)`; the style reads the rim's latitude from its geometry. An edge without
+`height` draws only its rim line, with no wall bands. The style names no river. Bridge decks reuse their street's casing
+width and add dark edges.
 
 Hills use the relief layers inside green areas: a shaded and a sunlit tone, a summit triangle with "Name · height m",
 and park names along the `green_area_labels` lines. `createMap` adds the summit triangle when the style first asks for
