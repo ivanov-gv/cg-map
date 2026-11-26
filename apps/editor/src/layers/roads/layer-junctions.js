@@ -34,6 +34,10 @@ export const junctionEntry = coordinate => ({
   feature: {type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: coordinate}}
 });
 
+// A junction stands for the roads around it and has no working feature. Any other selection opens its current one.
+export const featureForEntry = (entry, session) =>
+  entry.filename === junctionFile ? entry.feature : session.workingFeature(entry.filename, entry.key);
+
 const coordinateOfKey = key => key.slice('local:'.length).split(' ').map(Number);
 
 // The levels a road can be on, the highest first, as the choices of a select.

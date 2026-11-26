@@ -35,9 +35,10 @@ draft, changeset and review state, `inspector/` owns the property panel, `geomet
 holds each layer with `layers/shared/` for the registry and shared layer UI, `source-data/` loads the verified bundle,
 `map-tools/` holds map interaction tools, `offline/` keeps the local copy while `sw.js` stays at `src/` root for
 service-worker scope, and `shared/` holds small DOM and hash helpers. Unit tests go next to their source as `*.test.js`;
-tests that span sources and whole-app tests stay in `tests/`; tool tests stay in `tools/`; `npm test` skips
-`*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules; `npm run lint` covers the source
-folders, tools, tests, both app configs and that config itself.
+browser cases that need only a component go next to it as `*.browser.test.js` and use the harness in `tests/e2e/support`
+without starting `app.js`. Whole-app journeys live in `e2e/`; tests that span sources stay in `tests/`; tool tests stay
+in `tools/`; `npm test` skips `*.browser.test.js`. ESLint uses this app's `eslint.config.mjs` with the shared rules;
+`npm run lint` covers the source folders, tools, tests, `e2e/`, both app configs and that config itself.
 
 ## Layers
 
@@ -240,7 +241,7 @@ on any mismatch. Apply it with `make -C data apply-changeset CHANGESET=<absolute
 
 Local `make verify PKG=apps/editor` and `make -C apps/editor e2e` after runtime changes are optional for iterating; the
 pre-push `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge.
-tests/e2e covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
+The browser suite covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
 packages/contracts. This app has no editorial API.
 
 The default preview uses a separate deterministic port/origin from the public app, preserving that app's service worker

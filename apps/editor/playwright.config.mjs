@@ -30,7 +30,9 @@ const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
 const phoneTests = process.env.E2E_PHONE === 'tagged' ? {grep: /@phone/} : {};
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: '.',
+  testMatch: ['tests/e2e/**/*.spec.mjs', 'e2e/**/*.spec.js', 'src/**/*.browser.test.js'],
+  testIgnore: ['**/dist/**', '**/node_modules/**'],
   timeout: 90000,
   expect: {timeout: 15000},
   workers,
