@@ -1,5 +1,4 @@
 import {mapStyle, installBuildingNumberScale} from './map-style.js';
-import {installCanyonWallScales} from './canyon-layers.js';
 import {installSatellite} from './satellite.js';
 import {installSummitIcon} from './hill-layers.js';
 
@@ -56,9 +55,7 @@ export function createMap({engine, container, basemapURL, assetBaseURL, options 
   });
   observer.observe(map.getContainer());
   let stopNumberScale;
-  let stopCanyonWallScales;
   map.once('load', () => {
-    stopCanyonWallScales = installCanyonWallScales(map);
     stopNumberScale = installBuildingNumberScale(map);
     installSatellite(map, assetBaseURL);
     mapStates.set(map, 'ready');
@@ -68,7 +65,6 @@ export function createMap({engine, container, basemapURL, assetBaseURL, options 
     observer.disconnect();
     cancelAnimationFrame(resizeFrame);
     stopNumberScale?.();
-    stopCanyonWallScales?.();
     stopSummitIcon();
   });
   return map;

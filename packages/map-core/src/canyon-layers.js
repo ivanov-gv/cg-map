@@ -6,13 +6,12 @@ const canyonSourceLayer = 'canyon_rims';
 const canyonMinZoom = 13;
 const wallMaxZoom = 20;
 const wallReferenceZoom = 16;
-// MapLibre's Web Mercator tiles are 512 px: at Podgorica's latitude 26 m is about 30 px and 9 m about 10 px at zoom 16.
 const metresAroundEquator = 40075016.68557849;
 const tileSizePixels = 512;
-const fallbackLatitudeDegrees = 42.442;
+// One scale suffices across the map: cos(latitude) varies only about ±2.3% from 41.3° N to 44.1° N.
+export const mapGroundPixelsPerMetreAtZoom16 = pixelsPerMetreAtZoom16((41.3 + 44.1) / 2);
 // The shallowest measured edge today is 9 m, so every reviewed edge keeps the full colour range it has now.
 const fullRangeDepthMetres = 9;
-export const wallPixelsPerMetreStateKey = 'canyonWallPixelsPerMetre';
 // An unpainted edge must still read as a canyon: 10 px is visible from zoom 13 to 20 and matches the narrowest
 // wall in today's reviewed style at zoom 16.
 const minimumWallWidthPixels = 10;
@@ -40,12 +39,6 @@ function groundScaled(pixelsAtZoom16, floorPixels) {
   });
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops];
 }
-
-const wallPixelsPerMetre = [
-  'coalesce',
-  ['feature-state', wallPixelsPerMetreStateKey],
-  pixelsPerMetreAtZoom16(fallbackLatitudeDegrees)
-];
 
 function mixedColor(fromHex, toHex, fraction) {
   const fromChannels = colorChannels(fromHex);
@@ -85,7 +78,7 @@ function colorForDepth(bandIndex) {
 // Rims run with the river on their right (relief contract), so a positive offset moves a band toward the water.
 function wallBand(bandIndex) {
   const widthShare = (wallBandCount - bandIndex) / wallBandCount;
-  const paintedWidthPixels = ['*', ['coalesce', ['get', 'width'], 0], wallPixelsPerMetre];
+  const paintedWidthPixels = ['*', ['coalesce', ['get', 'width'], 0], mapGroundPixelsPerMetreAtZoom16];
   const minimumBandPixels = minimumWallWidthPixels * widthShare;
   return inDrawingGroup('canyon-walls', {
     id: `canyon-wall-${bandIndex}`,
@@ -100,55 +93,6 @@ function wallBand(bandIndex) {
       'line-offset': groundScaled(['*', paintedWidthPixels, widthShare / 2], minimumBandPixels / 2)
     }
   });
-}
-
-// Gives each rim its own pixel scale as tiles arrive; a rim without a scale falls back until this runs.
-export function installCanyonWallScales(map) {
-  const latitudeTotals = new Map();
-  const seenCoordinates = new Map();
-  const appliedLatitudes = new Map();
-  // A rim can be clipped across tiles; averaging every distinct vertex stops the first tile choosing its latitude.
-  const collectRimLatitudes = rims => {
-    for (const rim of rims) {
-      if (rim.id === undefined) continue;
-      const coordinates = rim.geometry?.coordinates ?? [];
-      const total = latitudeTotals.get(rim.id) ?? {sum: 0, count: 0};
-      const seen = seenCoordinates.get(rim.id) ?? new Set();
-      for (const coordinate of coordinates) {
-        if (!Number.isFinite(coordinate[1])) continue;
-        const coordinateKey = coordinate.join(',');
-        if (seen.has(coordinateKey)) continue;
-        seen.add(coordinateKey);
-        total.sum += coordinate[1];
-        total.count += 1;
-      }
-      if (seen.size) {
-        seenCoordinates.set(rim.id, seen);
-        latitudeTotals.set(rim.id, total);
-      }
-    }
-  };
-  const applyNewScales = () => {
-    for (const [id, total] of latitudeTotals) {
-      const latitude = total.sum / total.count;
-      if (appliedLatitudes.get(id) === latitude) continue;
-      appliedLatitudes.set(id, latitude);
-      map.setFeatureState(
-        {source: basemapSource, sourceLayer: canyonSourceLayer, id},
-        {[wallPixelsPerMetreStateKey]: pixelsPerMetreAtZoom16(latitude)}
-      );
-    }
-  };
-  const measureNewRims = () => {
-    collectRimLatitudes(map.querySourceFeatures(basemapSource, {sourceLayer: canyonSourceLayer}));
-    applyNewScales();
-  };
-  const onSourceData = event => {
-    if (event.sourceId === basemapSource) measureNewRims();
-  };
-  map.on('sourcedata', onSourceData);
-  measureNewRims();
-  return () => map.off('sourcedata', onSourceData);
 }
 
 // A canyon wall on each bank from the water up to the rim, and the rim itself as a thin edge, not a border.
