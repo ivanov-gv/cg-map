@@ -6,9 +6,19 @@ real local map assets; no editor or public-app code is imported.
 
 Run `make -C apps/core-demo dev` then open the printed local URL. The standalone artifact is `dist/core-demo`; it works
 at root or under a URL prefix. `make verify PKG=apps/core-demo` builds and checks it, and `make -C apps/core-demo e2e`
-runs the journeys in e2e/ on desktop and mobile. Unit tests sit beside the src/ and tools/ files they check; pinned data
-and contract helpers and their test stay in tests/ because platform's pin checks name that folder. Lint uses this app's
-own `eslint.config.mjs`, so its source, tools, unit tests, journeys and config are checked from this folder.
+runs the journeys in e2e/ on desktop and mobile. Unit tests sit beside the src/ and tools/ files they check; pinned
+core, data and contract helpers and their tests stay in tests/ because platform's pin checks name that folder. Lint uses
+this app's own `eslint.config.mjs`, so its source, tools, unit tests, journeys and config are checked from this folder.
+
+## Build inputs
+
+Plain `make -C apps/core-demo build`, `dev` and the ci-publish image/Pages builds take map-core, data and contracts from
+the checked-out commit, so `/core-demo/` previews everything on main. `make verify PKG=apps/core-demo`, its test targets
+and `make -C apps/core-demo e2e` build from the exact pins in [package.json](package.json); the browser configuration
+sets the same core, data and contracts pins. `make -C apps/core-demo build-release` takes exactly those pins and refuses
+another core, data or contracts root. Core-demo pins map-core's workspace `0.0.0-dev` because it is core's dev
+environment, so its tests and release build follow core HEAD until a core release is published
+([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
 
 Use the street/overview buttons to compare POI thresholds; select the green overlay, shift its point by 20 screen
 pixels, replace it with a polygon, toggle it, switch it to the Editable state, then recreate the map. Errors and stalled
