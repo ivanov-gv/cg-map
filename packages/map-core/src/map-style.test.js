@@ -124,3 +124,75 @@ test('bridge drawing uses outlines instead of bridge-tagged roads', () => {
     assert.ok(!JSON.stringify(layer.filter ?? []).includes('"bridge"'), `${layer.id} still selects bridge roads`);
   }
 });
+
+const railwayTrackLayerIds = ['platform-areas', 'platform-lines', 'rail-casing', 'rail-ties', 'disused-rail'];
+const railwayLabelLayerIds = ['railway-stations', 'railway-halts'];
+const railwayLayerIds = [...railwayTrackLayerIds, ...railwayLabelLayerIds];
+
+function railwayLayers() {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  return Object.fromEntries(
+    railwayLayerIds.map(id => [id, style.layers.find(layer => layer.id === id)])
+  );
+}
+
+function railwayLayersFor(layers, feature) {
+  return railwayLayerIds.filter(id => featureFilter(layers[id].filter).filter({zoom: 16}, feature));
+}
+
+// The data publishes one `railways` source with a `kind`; each drawing layer must select its own geometry and kind.
+test('railway layers read the railways source and separate their kinds', () => {
+  const layers = railwayLayers();
+  for (const id of railwayLayerIds) {
+    assert.ok(layers[id], `${id} is missing`);
+    assert.equal(layers[id].source, 'basemap', id);
+    assert.equal(layers[id]['source-layer'], 'railways', id);
+  }
+  const cases = [
+    [{type: 2, properties: {kind: 'rail'}}, ['rail-casing', 'rail-ties']],
+    [{type: 2, properties: {kind: 'disused_rail'}}, ['disused-rail']],
+    [{type: 3, properties: {kind: 'platform'}}, ['platform-areas']],
+    [{type: 2, properties: {kind: 'platform'}}, ['platform-lines']],
+    [{type: 1, properties: {kind: 'station'}}, ['railway-stations']],
+    [{type: 1, properties: {kind: 'halt'}}, ['railway-halts']],
+    [{type: 3, properties: {kind: 'rail'}}, []]
+  ];
+  for (const [feature, expected] of cases) {
+    assert.deepEqual(railwayLayersFor(layers, feature), expected, JSON.stringify(feature));
+  }
+});
+
+test('rail ties are lighter dashes over a widening casing, and disused track is fainter', () => {
+  const layers = railwayLayers();
+  const casing = layers['rail-casing'].paint;
+  const ties = layers['rail-ties'].paint;
+  assert.equal(casing['line-color'], basemapColors.railwayTrack);
+  assert.equal(ties['line-color'], basemapColors.railwayTie);
+  assert.ok(ties['line-dasharray']?.length > 0, 'ties need a dash pattern');
+  // Interpolation stops are zoom, width pairs; a flat width would break the widening track.
+  const casingWidths = casing['line-width'].slice(4).filter((_value, index) => index % 2 === 1);
+  assert.deepEqual(casingWidths, [...casingWidths].sort((left, right) => left - right));
+  assert.ok(casingWidths.at(-1) > casingWidths[0]);
+  assert.equal(layers['disused-rail'].paint['line-color'], basemapColors.railwayTrack);
+  assert.ok(layers['disused-rail'].paint['line-opacity'] < 1);
+  assert.ok(layers['disused-rail'].paint['line-dasharray']?.length > 0);
+  assert.equal(layers['platform-areas'].paint['fill-color'], basemapColors.railwayPlatform);
+});
+
+test('railways sit above land and bridge decks but below roads', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const positionOf = id => style.layers.findIndex(layer => layer.id === id);
+  const trackPositions = railwayTrackLayerIds.map(positionOf);
+  const labelPositions = railwayLabelLayerIds.map(positionOf);
+  const below = ['land', 'meadows', 'bridge-decks', 'bridge-deck-edges'].map(positionOf);
+  const above = ['road-casing', 'minor-casing', 'minor-roads', 'major-roads', 'steps'].map(positionOf);
+  assert.ok([...trackPositions, ...labelPositions].every(position => position >= 0));
+  assert.ok(Math.max(...below) < Math.min(...trackPositions), 'railways must cover land and bridge decks');
+  assert.ok(Math.max(...trackPositions) < Math.min(...above), 'roads must cover railways');
+  assert.ok(Math.max(...above) < Math.min(...labelPositions), 'station names stay above roads');
+  assert.ok(drawingGroups.indexOf('meadows') < drawingGroups.indexOf('railways'));
+  assert.ok(drawingGroups.indexOf('railways') < drawingGroups.indexOf('streets'));
+  for (const id of railwayLabelLayerIds) {
+    assert.equal(style.layers.find(layer => layer.id === id).metadata[drawingGroupKey], 'labels');
+  }
+});
