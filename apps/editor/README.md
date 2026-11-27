@@ -134,8 +134,12 @@ stays in place and autosave stays off, with a visible error, until you do. Disca
 The Changes panel compares changed fields beside the change list on wide screens, and opens one change at a time on
 narrow screens. Export opens a dialog for the author and reason; import and discard are under Secondary actions.
 
-Changed files are drawn with the public map's own layers from their working features. This is not a rebuild: below
-street scale the tiles simplify geometry and drop minor roads, which the editor does not do.
+Changed files are drawn at once with the published layers found in the running map's own style, from their working
+features: a canyon edge gets all of map-core's wall bands and its rim, and protected areas get park names of their own
+alongside land's. The editor copies the style's paint, layout, filters and zoom ranges; it keeps no parallel
+cartography. When two files share a published layer, each gets its own preview and the original is hidden and restored
+once. A file the public style does not draw, such as an entrance or a bus stop, keeps its editor inspection layer. This
+is not a rebuild: below street scale the tiles simplify geometry and drop minor roads, which the editor does not do.
 
 ### Larger datasets
 

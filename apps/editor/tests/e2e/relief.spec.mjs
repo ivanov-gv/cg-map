@@ -1,5 +1,15 @@
 import {test, expect} from '@playwright/test';
-import {applyEdit, chooseLayer, dragFromTo, editCorners, exportChangeset, operationsOn, startDrawing, tapAt} from './city-steps.mjs';
+import {
+  applyEdit,
+  chooseLayer,
+  dragFromTo,
+  editCorners,
+  exportChangeset,
+  operationsOn,
+  startDrawing,
+  tapAt,
+  waitForRepaint
+} from './city-steps.mjs';
 import {at, openFixtureCity, stepsOf} from './fixture-city.mjs';
 
 test.beforeEach(async ({page}) => {
@@ -51,6 +61,51 @@ test('a contour stops at its neighbour, a summit must be above them, and a ridge
   const slopes = operationsOn(changeset, 'slopes.geojson');
   expect(slopes).toHaveLength(2);
   for (const slope of slopes) expect(includesStep(slope, [15, 6])).toBe(true);
+});
+
+test("an edited canyon edge is drawn at once with map-core's own canyon layers", async ({page}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Canyon edges are desk work.');
+  await chooseLayer(page, 'relief', [-8, 9], 18);
+  await tapAt(page, [-8, 9]);
+  await expect(page.locator('#selection-kind')).toHaveText('Canyon edge');
+  await editCorners(page);
+  await dragFromTo(page, [-7, 9], [-6, 9]);
+  await page.locator('#mode-done').click();
+  await applyEdit(page);
+  await waitForRepaint(page);
+
+  const preview = await page.evaluate(() => {
+    const {map} = window.editorDebug;
+    const styleLayers = map.getStyle().layers;
+    const published = styleLayers.filter(layer => layer.id.startsWith('canyon-'));
+    const copies = styleLayers.filter(layer => layer.id.startsWith('edit-preview-canyon-'));
+    return {
+      publishedIds: published.map(({id}) => id),
+      previewIds: copies.map(({id}) => id),
+      copy: copies.find(({id}) => id === 'edit-preview-canyon-rims'),
+      published: published.find(({id}) => id === 'canyon-rims'),
+      rendered: map.queryRenderedFeatures({layers: copies.map(({id}) => id)}).length,
+      originalFilter: map.getFilter('canyon-rims')
+    };
+  });
+  expect(preview.publishedIds).toContain('canyon-rims');
+  expect(preview.publishedIds).toContain('canyon-wall-0');
+  expect(preview.previewIds.sort()).toEqual(preview.publishedIds.map(id => `edit-preview-${id}`).sort());
+  expect(preview.copy.paint).toEqual(preview.published.paint);
+  expect(preview.copy.layout).toEqual(preview.published.layout);
+  expect(preview.rendered).toBeGreaterThan(0);
+  expect(preview.originalFilter).toEqual(['==', ['literal', 1], 0]);
+
+  const {features} = await page.evaluate(() => window.editorDebug.map.getSource('editor-source').getData());
+  const rim = features.find(feature => feature.properties.sourceFile === 'canyon-rims.geojson');
+  expect(rim).toBeDefined();
+  const drawnSteps = rim.geometry.coordinates.map(stepsOf);
+  expect(drawnSteps).toContainEqual([-6, 9]);
+  expect(drawnSteps).not.toContainEqual([-7, 9]);
+
+  const {changeset} = await exportChangeset(page, testInfo);
+  const [edit] = operationsOn(changeset, 'canyon-rims.geojson');
+  expect(edit.operation).toBe('modify');
 });
 
 test('a town is renamed and added, and on the phone only towns can be picked', {tag: '@phone'}, async ({page}, testInfo) => {
