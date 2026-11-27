@@ -10,6 +10,7 @@ const editorRoot = fileURLToPath(new URL('..', import.meta.url));
 const productionPath = 'src/layers/roads/readability-probe.js';
 const unitTestPath = 'src/layers/roads/road-graph.test.js';
 const browserTestPath = 'src/layers/roads/road-graph.browser.test.js';
+const e2eSpecPath = 'e2e/roads.spec.js';
 const longBody = count => Array.from({length: count}, (_, index) => `  total += ${index};`).join('\n');
 
 async function ruleIdsAt(filePath, code) {
@@ -51,7 +52,8 @@ test('the Editor config keeps browser globals and documented test exceptions at 
     ''
   ].join('\n');
   const longTest = `export function scenario() {\n  let total = 0;\n${longBody(85)}\n  return total;\n}\n`;
-  for (const filePath of [unitTestPath, browserTestPath]) {
+  // An e2e spec reads Node globals while driving the browser, just as a colocated test does.
+  for (const filePath of [unitTestPath, browserTestPath, e2eSpecPath]) {
     assert.deepEqual(await ruleIdsAt(filePath, testGlobals), [], filePath);
     assert.ok(!(await ruleIdsAt(filePath, longTest)).includes('max-lines-per-function'), filePath);
   }

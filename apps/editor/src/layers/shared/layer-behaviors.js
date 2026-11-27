@@ -83,6 +83,48 @@ export const behaviorOf = (filename, layerId = null) => ({
   ...behaviors.get(behaviorKey(filename, layerId))
 });
 
+// What every behavior hook may read. The host supplies the session, rules and callbacks; findEntity stays here so a
+// behavior never has to know how a source entry keeps its identity.
+export function createBehaviorContext({
+  session,
+  rules,
+  levels,
+  map,
+  layer,
+  isPhone,
+  isMagnetOn,
+  entriesOf,
+  shownLevel,
+  select,
+  startNew,
+  pick,
+  pickPoint,
+  saveSketch,
+  showPath,
+  showNextGap
+}) {
+  return {
+    session,
+    rules,
+    levels,
+    map,
+    layer,
+    isPhone,
+    isMagnetOn,
+    entriesOf,
+    findEntity: (filename, entityId) =>
+      entriesOf(filename).find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
+    shownLevel,
+    select,
+    startNew,
+    pick,
+    pickPoint,
+    saveSketch,
+    showPath,
+    showNextGap
+  };
+}
+
 // What can be added on each layer. properties are the facts the choice itself states.
 const drawChoices = {
   buildings: [
