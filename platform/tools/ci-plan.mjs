@@ -93,6 +93,8 @@ function toolingPlan(consumers) {
 export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
   if (file === SHARED_ESLINT_RULES)
     return toolingPlan(lintConfigFiles.map(config => configPipeline(config, lintConfigFiles)));
+  // The retired root config now belongs to platform's hook and layout checks, not to any app's lint.
+  if (file === ESLINT_CONFIG_NAME) return {folders: ['platform']};
   const pipeline = configPipeline(file, lintConfigFiles);
   if (pipeline) return {folders: [pipeline]};
   const isPublishedFile = /^apps\/[^/]+\/public\//.test(file);
@@ -148,8 +150,7 @@ export function classify(file, lintConfigFiles = discoveredLintConfigs()) {
   if (file.startsWith('platform/browser-image/')) return {folders: ['browser-image', 'platform']};
   if (file.startsWith('platform/')) return {folders: ['platform']};
 
-  // The root eslint.config.mjs still governs every app, so a change to it keeps the whole-plan selection until the
-  // app-owned configs land. Narrowing it now would hide lint checks the apps still run.
+  // Anything this planner cannot classify still selects everything, so a new path cannot silently lose checks.
   return EVERYTHING;
 }
 
