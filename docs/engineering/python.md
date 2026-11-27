@@ -30,6 +30,6 @@ browser-test server (apps/web/tests/e2e), and their tests. Python 3.12.
 - Tests use `unittest` and live in `<component>/tests/test_*.py`.
 - Enforced: `python3 -m py_compile` on platform/tools, data/tools, and apps/web/tests/e2e, plus the platform unittest
   suite, in `make check`.
-- `make verify PKG=<component>` and browser suites are optional for iterating; the pre-push hook's `make check` is
-  required (builds and non-browser checks, no browser suites). A PR merges only when its tests pass on GitHub
-  ([the rule](../../.github/TESTING.md)). Geometry changes also need `make -C data build-data`.
+- `make verify PKG=<component>` and browser suites are optional for iterating; the pre-push hook runs the checks
+  selected by the pushed diff, with no browser suites and `make check` as the fail-safe. A PR merges only when its tests
+  pass on GitHub ([the rule](../../.github/TESTING.md)). Geometry changes also need `make -C data build-data`.

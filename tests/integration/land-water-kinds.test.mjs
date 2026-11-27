@@ -21,6 +21,10 @@ const roadLayers = roadLayerIds([
   'major-roads'
 ]);
 
+// The shared rules are not versioned: they already offer the pending version-5 shade, while data and consumers still
+// use the kinds extracted at HEAD.
+const pendingEditorLandKinds = ['shade'];
+
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
@@ -67,10 +71,11 @@ test('extracted land and water kinds stay in step with validation and consumers'
   );
   const waterKinds = contract.$defs.waterKind.enum;
   const editableWaterKinds = waterKinds.filter(kind => !derivedWaterKinds.has(kind));
+  assert.ok(pendingEditorLandKinds.every(kind => !landKinds.includes(kind)), 'shade is not yet extracted');
 
   assert.deepEqual(greenKindsFromStyle().slice().sort(), landKinds.slice().sort());
   for (const [filename, expectedKinds] of [
-    ['land.geojson', landKinds],
+    ['land.geojson', [...landKinds, ...pendingEditorLandKinds]],
     ['water.geojson', editableWaterKinds]
   ]) {
     const rule = editorRules.layers[filename];

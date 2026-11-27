@@ -255,9 +255,9 @@ on any mismatch. Apply it with `make -C data apply-changeset CHANGESET=<absolute
 [data runbook](../../docs/runbooks/data.md#editor-changesets).
 
 Local `make verify PKG=apps/editor` and `make -C apps/editor e2e` after runtime changes are optional for iterating; the
-pre-push `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge.
-The browser suite covers both URL prefixes. Sources and their provenance stay with data; the bundle contract lives in
-packages/contracts. This app has no editorial API.
+pre-push hook runs the checks selected by the pushed diff (no browser suites, `make check` on failure). GitHub's PR run
+gates the merge. The browser suite covers both URL prefixes. Sources and their provenance stay with data; the bundle
+contract lives in packages/contracts. This app has no editorial API.
 
 The default preview uses a separate deterministic port/origin from the public app, preserving that app's service worker
 and offline caches. The editor's own worker keeps its caches under an `editor-` prefix and never touches another app's.
