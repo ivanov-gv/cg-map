@@ -611,6 +611,14 @@ apps/web dev-mock serves it statically (mock mode). Rebuild after edits; there i
 reviewed data/artifacts, data/sources/places.geojson, and data/imagery without regenerating geography. Offline manifests
 exist only in dist/web.
 
+### Build inputs
+
+`make -C apps/web build`, `dev`, `dev-mock` and the ci-publish Pages build take map-core, data and contracts from the
+checked-out commit, so the dev site previews everything on main. `make -C apps/web build-release` and
+`npm run release:prepare` take exactly the versions pinned in [package.json](package.json) and refuse another core, data
+or contracts root. Automated tests keep their pins; a package change cannot change a test without a pin bump
+([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
+
 Geometry changes require make -C data build-data with its optional Python dependencies. UI changes need only a web
 build. GitHub Actions validates dist/web on a PR and publishes it from main. Do not commit built output. See
 [release](../../docs/runbooks/release.md) and [data](../../docs/runbooks/data.md).

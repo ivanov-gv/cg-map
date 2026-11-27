@@ -18,12 +18,17 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   lists out of the platform planner; prove a changed job count for the tagged phone tests with
   `E2E_WORKERS=2 npx playwright test --list --shard=i/N` for every shard, matching CI's worker count. Web runs only
   tagged phone tests, in PRs and nightly alike.
-- Data inputs belong to data/, not this component. Dev builds on main read repository data and contracts at HEAD through
-  tools/data-root.mjs and tools/contracts-root.mjs; no other file here may name a repository contracts path.
-- tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
-  `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins. Bump a pin only in its own change after a release; never
-  point tests at repository data/ or packages/contracts/. Test targets set both roots. A future app production release
-  pins every dependency (no production release exists yet).
+- Data inputs belong to data/, not this component. Non-release builds (`build`, `dev`, `dev-mock` and the Pages build)
+  take core, data and contracts from this commit through tools/core-root.mjs, tools/data-root.mjs and
+  tools/contracts-root.mjs; no other file here may name a repository contracts path.
+- `make -C apps/web build-release` and `npm run release:prepare` take the exact `@ivanov-gv/map-core`,
+  `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins from package.json and refuse another root
+  ([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)). No production release has been published
+  yet.
+- tests/ reads core through tests/pinned-core.mjs, data through tests/pinned-data.mjs and contracts through
+  tests/pinned-contracts.mjs, using the exact pins in package.json. Bump a pin only in its own change after a release;
+  never point tests at repository data/ or packages/contracts/. Test targets set all three roots, so a package change
+  cannot alter a test without a pin bump.
 - Keep core.js free of DOM/browser state. Preserve one map instance and local runtime assets.
 - Keep archive/range responses outside shell caching and preserve verified downloads on failed replacements.
 - Use relative paths so the built app works at / and /cg-map/.
