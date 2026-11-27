@@ -50,6 +50,14 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
     version4Files,
     [...version3EditableFiles, 'bridges.geojson', 'railways.geojson'].sort()
   );
+  const version5 = schema.oneOf.find(branch => branch.properties.version.const === 5);
+  assert.ok(version5, 'the contract declares version 5');
+  const version5Files = version5.properties.layers.items.properties.filename.enum;
+  // Version 5 is not emitted yet; check its files against the Editor's frozen version-4 reader, not just the schema.
+  assert.deepEqual(
+    version5Files,
+    bundleFilesByVersion[4].filter(filename => filename !== 'ridges.geojson' && filename !== 'slopes.geojson')
+  );
   assert.equal(producedVersion, 3);
 
   const manifest = validateBundleManifest(
