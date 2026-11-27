@@ -25,7 +25,7 @@ const angleBackend = process.env.E2E_ANGLE ?? 'swiftshader';
 
 // The same artifact must work at the origin root and under a project prefix.
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: './e2e',
   timeout: 90000,
   expect: {timeout: 15000},
   workers,

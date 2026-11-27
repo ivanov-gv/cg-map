@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fileSystem from 'node:fs';
 import path from 'node:path';
-import {repositoryContractsRoot, resolveContractsRoot} from '../tools/contracts-root.mjs';
-import {pinnedContractsRoot} from './pinned-contracts.mjs';
+import {repositoryContractsRoot, resolveContractsRoot} from './contracts-root.mjs';
+import {pinnedContractsRoot} from '../tests/pinned-contracts.mjs';
 
 function preserveEnvironment(t) {
   const previous = process.env.MAP_CONTRACTS_ROOT;
