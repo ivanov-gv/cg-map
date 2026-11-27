@@ -41,14 +41,15 @@ Contracts follow the same dependency modes as data:
   app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT` and
   `MAP_CORE_ROOT`. Platform's `build-web` sets data and contracts from its own pins and calls apps/web's
   `build-pinned-core` target for Web's core pin. A contract-only change therefore selects no app pipeline.
-- **Release builds:** `make -C apps/web build-release`, `npm run release:prepare` and
-  `make -C apps/editor build-release` pin core, data and contracts. A future app production release will follow the same
-  rule. No production app release exists yet, so these are local release-candidate commands, not CD.
+- **Release builds:** `make -C apps/web build-release`, `npm run release:prepare`, `make -C apps/editor build-release`
+  and `make -C apps/core-demo build-release` pin core, data and contracts. A future app production release will follow
+  the same rule. No production app release exists yet, so these are local release-candidate commands, not CD.
 
-Both map apps' cores follow the same split through their own `tools/core-root.mjs`: plain local `build`, `dev` and
+All three apps' cores follow the same split through their own `tools/core-root.mjs`: plain local `build`, `dev` and
 ci-publish image/Pages builds use this commit's `packages/map-core`, while `make verify`, the automated tests and
-`build-release` use the exact `@ivanov-gv/map-core` pin. A release refuses another core root
-([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
+`build-release` use the exact `@ivanov-gv/map-core` pin. A release refuses another core root. Core-demo pins the
+workspace `0.0.0-dev` core because it is core's dev environment, so its pin and its HEAD core are the same package until
+a core release is published ([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
 
 Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
 installs that package and points the shared integration helper at it. See
@@ -202,8 +203,10 @@ browser jobs in one PR.
 
 ## Upgrading an app to a new core
 
-Web and editor pin an exact version for `make verify`, automated tests and release builds; their plain dev builds, CI
-artifacts and dev Pages site take the core of their own commit. Each app upgrades in its own change, which changes
+Web and editor pin an exact released version for `make verify`, automated tests and release builds; their plain dev
+builds, CI artifacts and dev Pages site take the core of their own commit. Core-demo stays on the workspace `0.0.0-dev`
+pin: its verification, tests and `build-release` resolve that pin through `tests/pinned-core.mjs`, while plain builds
+and the Pages artifact take `packages/map-core` by path. Each app upgrades in its own change, which changes
 package-lock.json and runs every pipeline:
 
 ```sh
@@ -211,8 +214,9 @@ npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
 ```
 
 To try a release candidate, do the same with its version in a branch, then run `make -C apps/<app> build-release`. A bad
-core merge reaches both apps' dev artifacts but not their release builds or tests; going back means pinning the older
-version.
+core merge reaches all three apps' dev artifacts but not web's or editor's release builds or tests; core-demo's
+`0.0.0-dev` pin follows HEAD, so its verification and release candidate show the change too. Going back for a pinned app
+means pinning the older version.
 
 ## Offline app updates
 
