@@ -122,38 +122,41 @@ settlement, which has at most one area.
 source file. Version 1 holds the original eight files, version 2 thirteen, version 3 every file of an object on the map,
 including `transit-routes.json` and `turn-restrictions.json`, whose records count as features without geometry, and
 version 4 adds `bridges.geojson` and `railways.geojson` but leaves out derived `slopes.geojson`, so it declares 23
-source files. Released versions are frozen; the producer and the Editor keep writing and reading version 3 here. Version
-4 is a pending declaration for the next steps, not an emitted bundle: the Editor first pins this release and reads
-version 4, then data emits it. Data-owned assembly preserves bytes, and the Editor verifies every listed file. It is
-built into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md),
-[decision 0037](../../docs/decisions/0037-every-layer-editable.md) and
-[ADR 0048](../../docs/decisions/0048-ridges-are-drawn-slopes-derived.md).
+source files. Version 5 is version 4 without `ridges.geojson` and `slopes.geojson` (already absent from version 4), so
+it declares 22: shades replace both in `land.geojson`. Versions 1–4 are released and frozen; the producer and the Editor
+keep writing and reading version 3 here. Version 5 is a pending declaration, not an emitted bundle: the Editor first
+pins this release and reads version 5, then data emits it. Data-owned assembly preserves bytes, and the Editor verifies
+every listed file. It is built into dist/editor only. See
+[decision 0024](../../docs/decisions/0024-editor-bundle-versions.md) and
+[decision 0037](../../docs/decisions/0037-every-layer-editable.md).
+[ADR 0048](../../docs/decisions/0048-ridges-are-drawn-slopes-derived.md) records the historical version-4 choice that
+version 5 replaces.
 
-Next release notes: this change is the next `@ivanov-gv/map-contracts` release, but no package is published here.
-Version 4 declares the reviewed bridge outlines, railway tracks, platforms and stations, and owner-drawn ridges in the
-editor's source set; generated slopes leave it. Its `bridges.geojson` rule allows Polygon add, modify and delete; `name`
-and `name:en` are editable text, while `kind`, `method`, `osmTag` and `sourceRoadIds` keep only the values the reviewed
-source uses. The seed provenance from [ADR 0047](../../docs/decisions/0047-bridge-outlines-seeded-once.md) is not
-re-derived or invented: `method` is `osm` or `traced`, an OSM outline carries `man_made=bridge`, and a traced outline
-names sorted source road IDs. A new object may omit those source facts; the importer owns whatever it assigns. The
+The released `0.2.0` package added version 4: bridge outlines, railway tracks, platforms and stations, and owner-drawn
+ridges. Its `bridges.geojson` rule allows Polygon add, modify and delete; `name` and `name:en` are editable text, while
+`kind`, `method`, `osmTag` and `sourceRoadIds` keep only the values the reviewed source uses. The seed provenance from
+[ADR 0047](../../docs/decisions/0047-bridge-outlines-seeded-once.md) is not re-derived or invented: `method` is `osm` or
+`traced`, an OSM outline carries `man_made=bridge`, and a traced outline names sorted source road IDs. The
 `railways.geojson` rule allows Point, LineString and Polygon add, modify and delete, matching the geometries the
 reviewed source stores. `name`, `gauge` and `ref` are editable text; `kind` and `osmTag` keep only the values the source
-uses, and `osmTag` is add-only provenance. The rule lists the three geometries the source stores but cannot limit them
-by kind, so the Editor could draw a station as a polygon until its version-4 step on #489 adds per-kind geometry limits;
-data validation still refuses such a feature. How a new railway receives its source tag belongs to the Editor and data
-steps that follow.
+uses, and `osmTag` is add-only provenance. The `ridges.geojson` rule allows LineString add, modify and delete. `kind` is
+`ridge`, and `summit` and `summitName` stay optional together when a summit is linked. That version has no
+`sunlitSide`/`shadedSide`: all 31 ridges stored the same `south` and `north` text, and the sun's direction belongs to
+the derivation, not to each stored line. Those rules remain in the shared file while versions 3 and 4 remain readable.
 
-The `ridges.geojson` rule allows LineString add, modify and delete. `kind` is `ridge`, and `summit` and `summitName`
-stay optional together when a summit is linked. It does not carry `sunlitSide` or `shadedSide`: all 31 ridges stored the
-same `south` and `north` text, no renderer read those sides, and the sun's direction is already the derivation's one
-`SUN_AZIMUTH_DEGREES` convention. Storing it on each ridge would repeat one fact many times, so the data step stops
-writing both properties when it emits version 4. A new or moved ridge must lie inside one green area, and each end must
-meet that area's outline or another ridge. `editor-layers.schema.json` has no field for that topology, so the contract
-states it here: the data step's `check-data` enforces both rules, and the importer runs `check-data` on every changeset.
-The shared `editor-layers.json` still carries the version-3 slope rule while the producer emits version 3; the Editor's
-version-4 step on #490 removes it, derives slope faces in its preview and stops editing slopes directly. Consumers
-pinned to the previous release keep reading frozen version 3, and this release changes no consumer pin. The Editor reads
-version 4 in its own step before data emits it.
+Next release notes: this change is the next `@ivanov-gv/map-contracts` release, but no package is published here.
+Version 5 declares shades in `land.geojson` instead of `ridges.geojson` and `slopes.geojson`; released versions stay
+frozen and this release changes no consumer pin. The Editor reads version 5 in its own step before data emits it.
+
+A `kind: shade` feature is a MultiPolygon with a required `greenAreaEntityId` using the same entity-ID pattern as
+`summit`. At most one shade belongs to a green area, every shade lies inside its linked green area, and a green area may
+have no shade and keeps its one colour. `editor-layers.schema.json` cannot require one property for a single kind or
+limit one kind's geometry, and its shared land rule uses the file's Polygon/MultiPolygon list for every land kind. The
+data step will add those rules to `check-data`: the link's presence, MultiPolygon geometry, one shade per green area and
+containment. Its importer runs `check-data` on every changeset. `editor-layers.json` is not versioned per bundle
+version: as for the version-4 change, it keeps the ridge and slope rules while the producer still emits version 3, and
+version 5's file set gives them no place. The Editor's version-5 step stops showing those files and edits shades as land
+areas.
 
 `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
 types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
@@ -177,7 +180,7 @@ contour direction and provenance, so a changeset never carries them; an added la
 and property rules; the editor and the importer both test against them, and tests/integration/editor-changeset.test.mjs
 runs one's output through the other. `editor-corrections.schema.json` defines the ledger of what was applied, replayed
 over a fresh extract. For land and water, `properties.kind` repeats `editableKinds`, so an edit can neither remove a
-published kind nor invent one.
+published kind nor invent one; the pending version-5 `shade` is the one deliberate addition ahead of extraction.
 
 `relief.schema.json` describes the published contour, summit, slope, ridge and canyon-rim properties. Features carry
 object facts only: no per-feature `source`, green-kind list, minimum area, ridge radius or other build parameter. Those
