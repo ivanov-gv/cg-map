@@ -6,8 +6,8 @@ import {spawnSync} from 'node:child_process';
 const configFileName = 'eslint.config.mjs';
 const rootFolder = '.';
 
-// A project is the first two segments under a two-level group, or the named single-level service. Other files, including
-// those in a project without its own config, stay with the repository root.
+// A project is the first two segments under a two-level group, or the named single-level service. Files outside those
+// groups stay with the repository root; check-repo rejects new root-level JavaScript.
 export function projectFolder(file) {
   const segments = file.split('/');
   const isTwoLevelGroup = (segments[0] === 'apps' || segments[0] === 'packages') && segments.length > 2;
@@ -17,7 +17,7 @@ export function projectFolder(file) {
   return rootFolder;
 }
 
-// Files in a project without a config keep their repository paths, because ESLint finds the root config from there.
+// An unowned file keeps its repository path so ESLint can find a config from the repository root when one exists.
 export function lintGroups(files, configExists = file => fs.existsSync(file)) {
   const groups = new Map();
   for (const file of files) {
