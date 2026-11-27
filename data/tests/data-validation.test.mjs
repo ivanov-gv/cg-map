@@ -10,6 +10,9 @@ import {
   validateBuildingDetailCounts,
   validateBuildingLabels,
   validateBuildingSources,
+  bridgeMethods,
+  validateBridges,
+  validateBridgeCounts,
   validateCollection,
   validateMunicipalities,
   validateRailwayCounts,
@@ -30,6 +33,7 @@ import {
 import {entranceBearing} from '../tools/building-entrances.mjs';
 import {writeEditorBundle} from '../tools/editor-bundle.mjs';
 import {applyVisibility, resolveLevel, validatePolicy, withoutVisibility, placeFactsHash, serializePlaces, run as applyCommand} from '../tools/apply-place-visibility.mjs';
+import {TILE_LAYERS} from '../tools/tile-layers.mjs';
 const contractsDirectory = 'packages/contracts';
 const fixture = JSON.parse(fs.readFileSync('data/tests/fixtures/podgorica-places.geojson'));
 const identitySources = JSON.parse(fs.readFileSync('packages/contracts/fixtures/entity-identity-cases.json')).sources;
@@ -1133,16 +1137,126 @@ test('check-data rejects an unsupported railway kind from the reviewed source', 
   fs.writeFileSync(sourcePath, originalBytes);
 });
 
-// Railways are display geometry already, but their editor mode arrives in the next stacked step.
-test('the editor bundle excludes only the staged, non-editable railway source', async t => {
+test('bridge sources validate methods, identities, geometry and reviewed counts', () => {
+  const bridges = JSON.parse(fs.readFileSync('data/sources/bridges.geojson'));
+  const roads = JSON.parse(fs.readFileSync('data/sources/roads.geojson'));
+  const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
+  assert.equal(
+    validateBridges(bridges, {contractsDirectory, requireAdopted: true, roads}),
+    provenance.layers['bridges.geojson'].features
+  );
+  validateBridgeCounts(provenance.bridge_counts, bridges, roads);
+  assert.deepEqual([...bridgeMethods].sort(), ['osm', 'traced']);
+  const osmIndex = bridges.features.findIndex(feature => feature.properties.method === 'osm');
+  const tracedIndex = bridges.features.findIndex(feature => feature.properties.method === 'traced');
+  assert.ok(osmIndex >= 0, 'the reviewed bridges include an OSM area');
+  assert.ok(tracedIndex >= 0, 'the reviewed bridges include a traced outline');
+  const mutations = [
+    [osmIndex, 'kind', 'deck', /wrong bridge kind/],
+    [osmIndex, 'method', 'guess', /invalid bridge method/],
+    [osmIndex, 'osmTag', 'bridge=yes', /osmTag must be man_made=bridge/],
+    [osmIndex, 'entityId', 'node/123', /OSM bridge must keep OSM identity/],
+    [tracedIndex, 'entityId', 'way/1', /traced bridge must use derived identity/],
+    [tracedIndex, 'sourceRoadIds', [], /invalid sourceRoadIds/],
+    [tracedIndex, 'sourceRoadIds', ['way/999999999'], /sourceRoadIds must name published roads/]
+  ];
+  for (const [index, field, value, expected] of mutations) {
+    const bad = structuredClone(bridges);
+    bad.features[index].properties[field] = value;
+    assert.throws(() => validateBridges(bad, {contractsDirectory, roads}), expected);
+  }
+  const multiPolygon = structuredClone(bridges);
+  multiPolygon.features[osmIndex].geometry = {
+    type: 'MultiPolygon',
+    coordinates: [multiPolygon.features[osmIndex].geometry.coordinates]
+  };
+  assert.throws(
+    () => validateBridges(multiPolygon, {contractsDirectory}),
+    /geometry type violates layer contract/
+  );
+  const reversedRing = structuredClone(bridges);
+  const reversedGeometry = reversedRing.features[osmIndex].geometry;
+  const exterior = reversedGeometry.type === 'Polygon'
+    ? reversedGeometry.coordinates[0]
+    : reversedGeometry.coordinates[0][0];
+  exterior.reverse();
+  assert.throws(
+    () => validateBridges(reversedRing, {contractsDirectory}),
+    /exterior must be counterclockwise/
+  );
+  const copiedOntoOsm = structuredClone(bridges);
+  copiedOntoOsm.features[tracedIndex].geometry = structuredClone(
+    copiedOntoOsm.features[osmIndex].geometry
+  );
+  assert.throws(
+    () => validateBridges(copiedOntoOsm, {contractsDirectory, roads}),
+    /traced outline overlaps an OSM outline/
+  );
+  assert.throws(
+    () => validateBridgeCounts(
+      {...provenance.bridge_counts, osmAreas: provenance.bridge_counts.osmAreas + 1},
+      bridges, roads
+    ),
+    /bridge_counts.osmAreas/
+  );
+});
+
+test('Most Milenijum stays one OSM outline and is not retraced from its roads', () => {
+  const bridges = JSON.parse(fs.readFileSync('data/sources/bridges.geojson'));
+  const named = bridges.features.filter(feature =>
+    feature.properties.name === 'Most Milenijum'
+  );
+  assert.equal(named.length, 1);
+  assert.equal(named[0].properties.method, 'osm');
+  assert.equal(named[0].properties.entityId, 'relation/3085030');
+  const polygons = named[0].geometry.type === 'Polygon'
+    ? [named[0].geometry.coordinates]
+    : named[0].geometry.coordinates;
+  const ring = polygons[0][0];
+  const longitudes = ring.map(([longitude]) => longitude);
+  const latitudes = ring.map(([, latitude]) => latitude);
+  // The issue's coordinates are approximate; the outline must be in that neighbourhood.
+  const longitudeGap = Math.max(
+    Math.min(...longitudes) - 19.254, 19.254 - Math.max(...longitudes), 0
+  );
+  const latitudeGap = Math.max(
+    Math.min(...latitudes) - 42.437, 42.437 - Math.max(...latitudes), 0
+  );
+  assert.ok(longitudeGap < 0.01, 'outline is near 19.254 E');
+  assert.ok(latitudeGap < 0.01, 'outline is near 42.437 N');
+  const mostRoadIds = new Set([
+    'way/1093058095', 'way/1093058096', 'way/28131312', 'way/736842994'
+  ]);
+  const retraced = bridges.features.filter(feature =>
+    feature.properties.method === 'traced'
+    && feature.properties.sourceRoadIds.some(id => mostRoadIds.has(id))
+  );
+  assert.deepEqual(retraced, []);
+});
+
+test('bridges are published as a detail tile layer with display fields only', () => {
+  const layer = TILE_LAYERS.find(entry => entry.name === 'bridges');
+  assert.deepEqual(layer, {
+    name: 'bridges',
+    sourceFile: 'bridges.geojson',
+    minZoom: 12,
+    fields: ['kind', 'name', 'method']
+  });
+});
+
+// Railways and bridges are display geometry; their editor modes arrive in later stacked steps.
+test('the editor bundle excludes staged, non-editable display sources', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
   const filenames = manifest.layers.map(layer => layer.filename);
   const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
-  const editableGeoJSON = everyGeoJSON.filter(name => name !== 'railways.geojson');
+  const displayOnly = new Set(['railways.geojson', 'bridges.geojson']);
+  const editableGeoJSON = everyGeoJSON.filter(name => !displayOnly.has(name));
   assert.ok(everyGeoJSON.includes('railways.geojson'));
+  assert.ok(everyGeoJSON.includes('bridges.geojson'));
   assert.ok(!filenames.includes('railways.geojson'));
+  assert.ok(!filenames.includes('bridges.geojson'));
   assert.deepEqual([...filenames].sort(), [...editableGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
   assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
   assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());
