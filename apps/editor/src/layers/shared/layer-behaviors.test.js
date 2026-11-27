@@ -31,6 +31,13 @@ test('a behavior context finds an entry by its local key or its source identity'
   assert.deepEqual(context.entriesOf('roads.geojson'), entries);
 });
 
+test('a behavior context says which sources the bundle carries', () => {
+  assert.equal(contextWith().hasFile('slopes.geojson'), true);
+  const withoutSlopes = contextWith({hasFile: filename => filename !== 'slopes.geojson'});
+  assert.equal(withoutSlopes.hasFile('slopes.geojson'), false);
+  assert.equal(withoutSlopes.hasFile('ridges.geojson'), true);
+});
+
 test('a behavior context passes the host state to its hooks', () => {
   let shownLevel = null;
   const context = contextWith({shownLevel: () => shownLevel});

@@ -12,49 +12,58 @@ const version1Files = [
   'transport-stops.geojson',
   'water.geojson'
 ];
+const version2Files = [
+  'border-edges.geojson',
+  'building-entrances.geojson',
+  'building-labels.geojson',
+  'buildings.geojson',
+  'context-countries.geojson',
+  'land.geojson',
+  'municipalities.geojson',
+  'places.geojson',
+  'road-nodes.geojson',
+  'roads.geojson',
+  'settlements.geojson',
+  'transport-stops.geojson',
+  'water.geojson'
+];
+const version3Files = [
+  'border-edges.geojson',
+  'building-entrances.geojson',
+  'building-labels.geojson',
+  'buildings.geojson',
+  'canyon-rims.geojson',
+  'context-countries.geojson',
+  'contours.geojson',
+  'land.geojson',
+  'municipalities.geojson',
+  'places.geojson',
+  'protected-areas.geojson',
+  'ridges.geojson',
+  'road-nodes.geojson',
+  'roads.geojson',
+  'settlement-areas.geojson',
+  'settlements.geojson',
+  'slopes.geojson',
+  'summits.geojson',
+  'transit-routes.json',
+  'transport-stops.geojson',
+  'turn-restrictions.json',
+  'water.geojson'
+];
+// Slopes are derived from ridges and light/shade now, so version 4 carries the two editable source files instead.
+const version4Files = [...version3Files, 'bridges.geojson', 'railways.geojson']
+  .filter(filename => filename !== 'slopes.geojson')
+  .sort();
+
 export const bundleFilesByVersion = {
   1: version1Files,
-  2: [
-    'border-edges.geojson',
-    'building-entrances.geojson',
-    'building-labels.geojson',
-    'buildings.geojson',
-    'context-countries.geojson',
-    'land.geojson',
-    'municipalities.geojson',
-    'places.geojson',
-    'road-nodes.geojson',
-    'roads.geojson',
-    'settlements.geojson',
-    'transport-stops.geojson',
-    'water.geojson'
-  ],
-  3: [
-    'border-edges.geojson',
-    'building-entrances.geojson',
-    'building-labels.geojson',
-    'buildings.geojson',
-    'canyon-rims.geojson',
-    'context-countries.geojson',
-    'contours.geojson',
-    'land.geojson',
-    'municipalities.geojson',
-    'places.geojson',
-    'protected-areas.geojson',
-    'ridges.geojson',
-    'road-nodes.geojson',
-    'roads.geojson',
-    'settlement-areas.geojson',
-    'settlements.geojson',
-    'slopes.geojson',
-    'summits.geojson',
-    'transit-routes.json',
-    'transport-stops.geojson',
-    'turn-restrictions.json',
-    'water.geojson'
-  ]
+  2: version2Files,
+  3: version3Files,
+  4: version4Files
 };
 
+// The reviewed producer still emits version 3; version 4 is ready to read when it emits it.
 export const currentBundleVersion = 3;
 export const sourceFiles = bundleFilesByVersion[currentBundleVersion];
 
