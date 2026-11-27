@@ -54,7 +54,12 @@ test('manifest accepts every bundle version and requires one entry per supported
     'transit-routes.json',
     'turn-restrictions.json'
   ]);
-  for (const version of [1, 2, 3]) {
+  const addedInVersion4 = bundleFilesByVersion[4].filter(filename => !bundleFilesByVersion[3].includes(filename));
+  const leftOutInVersion4 = bundleFilesByVersion[3].filter(filename => !bundleFilesByVersion[4].includes(filename));
+  assert.deepEqual(addedInVersion4, ['bridges.geojson', 'railways.geojson']);
+  assert.deepEqual(leftOutInVersion4, ['slopes.geojson']);
+  assert.equal(bundleFilesByVersion[4].length, 23);
+  for (const version of [1, 2, 3, 4]) {
     assert.equal(
       validateBundleManifest(manifest(version)).layers.length,
       bundleFilesByVersion[version].length
@@ -74,7 +79,8 @@ test('manifest accepts every bundle version and requires one entry per supported
     assert.throws(() => validateBundleManifest(withoutFile(filename)), /exactly the 22/);
   }
   for (const invalid of [
-    {version: 4, layers: sourceFiles.map(metadata)},
+    {version: 5, layers: sourceFiles.map(metadata)},
+    {version: 4, layers: bundleFilesByVersion[4].map(metadata).slice(1)},
     {version: 1, layers: []},
     {version: 1, layers: bundleFilesByVersion[2].map(metadata)}
   ]) {
@@ -124,6 +130,17 @@ test('bundle consumer reports manifest and source HTTP failures', async () => {
     ),
     /HTTP 404/
   );
+});
+
+test('a version 4 bundle loads its bridges and railways without the derived slopes', async () => {
+  const bundle = await loadSourceBundle('https://local.test/v4/', async url => {
+    if (url.pathname.endsWith('manifest.json')) return Response.json(manifest(4));
+    return new Response(bytes);
+  });
+  assert.deepEqual([...bundle.keys()], bundleFilesByVersion[4]);
+  assert.ok(bundle.has('bridges.geojson'));
+  assert.ok(bundle.has('railways.geojson'));
+  assert.equal(bundle.has('slopes.geojson'), false);
 });
 
 test('decoding preserves unknown properties and original upstream identities', async () => {
