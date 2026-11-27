@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {featureFilter} from '@maplibre/maplibre-gl-style-spec';
-import {mapStyle, basemapColors, drawingGroups, drawingGroupKey} from './index.js';
+import {mapStyle, basemapColors, drawingGroups, drawingGroupKey, roadLayerIds} from './index.js';
 
 const walkingLayerIds = ['paths', 'footways', 'park-routes', 'cycleways', 'steps'];
 const walkingStyle = mapStyle('pmtiles://archive', 'https://local.test/');
@@ -31,6 +31,16 @@ test('each walking path class lands in exactly one walking layer', () => {
     assert.deepEqual(walkingLayersFor(properties), [expectedLayer], JSON.stringify(properties));
   }
   assert.deepEqual(walkingLayersFor({kind: 'pedestrian', pathClass: 'trail'}), [], 'a pedestrian street stays a street');
+});
+
+test('roadLayerIds names the published road layers without adding others', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const roadLineIds = style.layers
+    .filter(layer => layer.type === 'line' && layer['source-layer'] === 'roads')
+    .map(layer => layer.id);
+  assert.deepEqual(roadLayerIds(['steps', 'major-roads']), ['steps', 'major-roads']);
+  assert.deepEqual(roadLayerIds(roadLineIds), roadLineIds);
+  assert.throws(() => roadLayerIds(['road-labels']), /Unknown road layer: road-labels/);
 });
 
 for (const prefix of ['/', '/cg-map/']) {
