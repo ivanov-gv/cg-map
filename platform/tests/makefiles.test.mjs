@@ -280,11 +280,14 @@ test('each application owns its build and run targets, and the root Makefile has
   }
 });
 
-test("platform's build-web builds the web artifact from its own pinned data and contracts", () => {
+test("platform's build-web builds the web artifact from pinned roots, never HEAD or a release", () => {
   const makefile = fs.readFileSync(path.join(repoRoot, 'platform/Makefile'), 'utf8');
   assert.match(makefile, /MAP_DATA_ROOT=.*tools\/pinned-data-root\.mjs/);
   assert.match(makefile, /MAP_CONTRACTS_ROOT=.*tools\/pinned-contracts-root\.mjs/);
-  assert.doesNotMatch(makefile, /apps\/web\/node_modules/);
+  assert.match(makefile, /-C .*apps\/web build-pinned-core\b/);
+  assert.doesNotMatch(makefile, /MAP_CORE_ROOT/);
+  assert.doesNotMatch(makefile, /WEB_RELEASE/);
+  assert.doesNotMatch(makefile, /apps\/web\/tests\//);
 });
 
 test('project Makefiles reach other projects only through listed contracts', () => {

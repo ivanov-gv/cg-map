@@ -2,8 +2,7 @@ import fileSystem from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {copyMapCore, copyRuntimeAssets} from '@ivanov-gv/map-core/tools/assemble.mjs';
-import {parseVisibilityConfig, assertPublishedPlaces} from '@ivanov-gv/map-core/src/place-visibility.js';
+import {importCoreModule, resolveCoreRoot} from './core-root.mjs';
 import {resolveContractsRoot} from './contracts-root.mjs';
 import {resolveDataRoot} from './data-root.mjs';
 import {copyRuntimeSource, findRuntimeModules} from './runtime-modules.mjs';
@@ -26,9 +25,14 @@ function relocatePublishedCoreImports(sourceText, corePrefix) {
     return `${beforeSpecifier}${quote}${relativeSpecifier}${quote}`;
   });
 }
-// Dev builds default to the repository's HEAD; a future app production release pins every dependency, data included.
-// Test targets set MAP_DATA_ROOT and MAP_CONTRACTS_ROOT, so tools and contracts come from the pinned releases.
-const dataRoot = resolveDataRoot(path.join(root, 'data'));
+// A build that is not a release takes core, data and contracts from its own commit. Test targets and a release use the
+// pins this app declares; WEB_RELEASE marks the release invocation so another root cannot be substituted.
+const releaseBuild = process.env.WEB_RELEASE === '1';
+const coreRoot = resolveCoreRoot({release: releaseBuild});
+const {copyMapCore, copyRuntimeAssets} = await importCoreModule('tools/assemble.mjs', coreRoot);
+const {parseVisibilityConfig, assertPublishedPlaces} = await importCoreModule('src/place-visibility.js', coreRoot);
+const dataRoot = resolveDataRoot(path.join(root, 'data'), {release: releaseBuild});
+const contractsRoot = resolveContractsRoot({release: releaseBuild});
 const dataToolsURL = pathToFileURL(path.join(dataRoot, 'tools/app-data.mjs')).href;
 const {readVerifiedRelease} = await import(dataToolsURL);
 const {release, archiveBytes} = readVerifiedRelease(dataRoot);
@@ -49,8 +53,6 @@ for (const modulePath of findRuntimeModules(source)) {
 fileSystem.mkdirSync(path.join(output, 'data'), {recursive: true});
 fileSystem.writeFileSync(path.join(output, 'data', release.archive.file), archiveBytes);
 const places = JSON.parse(fileSystem.readFileSync(path.join(dataRoot, 'sources/places.geojson')));
-// Dev builds resolve contracts at HEAD; test targets override the root with this app's pin.
-const contractsRoot = resolveContractsRoot();
 const visibilityContractPath = path.join(contractsRoot, 'place-visibility.json');
 const visibilityConfig = JSON.parse(fileSystem.readFileSync(visibilityContractPath));
 assertPublishedPlaces(places.features, parseVisibilityConfig(visibilityConfig));
@@ -80,4 +82,4 @@ execFileSync(process.execPath, [path.join(root, 'apps/web/tools/finalize.mjs')],
   cwd: root,
   stdio: 'inherit'
 });
-console.log('Built deployable web artifact: dist/web/');
+console.log(`Built deployable web artifact: dist/web/ (core from ${coreRoot})`);

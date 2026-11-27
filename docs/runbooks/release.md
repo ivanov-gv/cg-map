@@ -28,24 +28,27 @@ Every merge to main updates it, with no tags or releases:
    completes successfully on main, [cd-dev-pages](../../.github/workflows/cd-dev-pages.yml) is triggered via
    `workflow_run` — it pulls the image by commit SHA, extracts the site, and deploys. CD only runs for a successful push
    build on main, never for a CI test run or any other run. A deploy replaces the whole site, so it always takes all
-   three.
+   three. Those builds take each app's own commit packages, as described below.
 
 ### Contracts in app builds and tests
 
 Contracts follow the same dependency modes as data:
 
-- **Dev builds:** local `make -C apps/<name> build` and `dev`, plus ci-publish's `pages` build and the site cd-dev-pages
-  deploys, read repository `packages/contracts` at HEAD. Each app has one build resolver that defaults there and honours
-  `MAP_CONTRACTS_ROOT`; do not add another relative contracts path.
+- **Dev builds:** plain local `make -C apps/<name> build` and `dev`, plus ci-publish's image and `pages` builds and the
+  site cd-dev-pages deploys, read repository `packages/contracts` at HEAD. Each app has one build resolver that defaults
+  there and honours `MAP_CONTRACTS_ROOT`; do not add another relative contracts path.
 - **Tests:** unit, built, browser and offline-check targets read the app's exact `@ivanov-gv/map-contracts` pin. The
-  app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT`.
-  Platform's `build-web` does the same from platform's pin. A contract-only change therefore selects no app pipeline.
-- **Future app production release:** every dependency, contracts included, will be pinned. No app production release
-  exists yet, so this is a rule for future CD rather than a current command.
+  app's test targets set `MAP_CONTRACTS_ROOT` from its own `tests/pinned-contracts.mjs`, alongside `MAP_DATA_ROOT` and
+  `MAP_CORE_ROOT`. Platform's `build-web` sets data and contracts from its own pins and calls apps/web's
+  `build-pinned-core` target for Web's core pin. A contract-only change therefore selects no app pipeline.
+- **Release builds:** `make -C apps/web build-release`, `npm run release:prepare` and
+  `make -C apps/editor build-release` pin core, data and contracts. A future app production release will follow the same
+  rule. No production app release exists yet, so these are local release-candidate commands, not CD.
 
-apps/editor's core follows the same split through `tools/core-root.mjs`: non-release builds use this commit's
-`packages/map-core`, while `make -C apps/editor build-release` and automated tests use the exact `@ivanov-gv/map-core`
-pin. The release build refuses another core root ([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
+Both map apps' cores follow the same split through their own `tools/core-root.mjs`: plain local `build`, `dev` and
+ci-publish image/Pages builds use this commit's `packages/map-core`, while `make verify`, the automated tests and
+`build-release` use the exact `@ivanov-gv/map-core` pin. A release refuses another core root
+([ADR 0046](../decisions/0046-editor-builds-take-their-own-core.md)).
 
 Cross-project release candidates are a related but separate mode: `make -C tests verify MAP_CONTRACTS_VERSION=<version>`
 installs that package and points the shared integration helper at it. See
@@ -199,16 +202,17 @@ browser jobs in one PR.
 
 ## Upgrading an app to a new core
 
-web pins an exact version for every build. apps/editor pins one for release builds and automated tests; its dev builds,
-CI artifacts and dev Pages site take the core of their own commit. Each app upgrades in its own change, which changes
+Web and editor pin an exact version for `make verify`, automated tests and release builds; their plain dev builds, CI
+artifacts and dev Pages site take the core of their own commit. Each app upgrades in its own change, which changes
 package-lock.json and runs every pipeline:
 
 ```sh
 npm install --workspace apps/editor --save-exact @ivanov-gv/map-core@0.2.0
 ```
 
-To try a release candidate, do the same with its version in a branch. A bad core merge reaches the editor's dev artifact
-but not its release or tests, and never web: going back means pinning the older version.
+To try a release candidate, do the same with its version in a branch, then run `make -C apps/<app> build-release`. A bad
+core merge reaches both apps' dev artifacts but not their release builds or tests; going back means pinning the older
+version.
 
 ## Offline app updates
 
