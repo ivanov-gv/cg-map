@@ -96,19 +96,25 @@ function fakeMap(styleLayers = defaultLayers) {
     layers,
     sources,
     filters,
+    addLayerCalls: 0,
+    setFilterCalls: 0,
     getStyle: () => ({layers, sources: Object.fromEntries(Object.entries(sources).map(([id, {data}]) => [id, {data}]))}),
     getLayer: id => layers.find(layer => layer.id === id),
     getSource: id => ({setData: data => (sources[id].data = data)}),
     addSource: (id, specification) => (sources[id] = specification),
     removeSource: id => delete sources[id],
     addLayer: (layer, beforeId) => {
+      map.addLayerCalls += 1;
       const index = beforeId ? layers.findIndex(({id}) => id === beforeId) : -1;
       if (index < 0) layers.push(layer);
       else layers.splice(index, 0, layer);
     },
     removeLayer: id => layers.splice(layers.findIndex(layer => layer.id === id), 1),
     getFilter: id => filters.get(id),
-    setFilter: (id, filter) => filters.set(id, filter)
+    setFilter: (id, filter) => {
+      map.setFilterCalls += 1;
+      filters.set(id, filter);
+    }
   };
   return map;
 }
@@ -238,6 +244,31 @@ test('showing again replaces the previous preview instead of drawing it twice', 
   assert.equal(map.layers.filter(({id}) => id === 'edit-preview-minor-roads').length, 1);
   preview.hide();
   assert.deepEqual(map.filters.get('minor-roads'), minorRoads.filter, 'the published filter survives a second show');
+});
+
+test('showing the same files again updates the source without rebuilding the preview layers', () => {
+  const map = fakeMap();
+  const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});
+  const first = road('First', [
+    [19.26, 42.44],
+    [19.27, 42.44]
+  ]);
+  preview.show(new Map([['roads.geojson', [first]]]));
+  const addedLayers = map.addLayerCalls;
+  const filterWrites = map.setFilterCalls;
+
+  const second = road('Second', [
+    [19.26, 42.45],
+    [19.27, 42.45]
+  ]);
+  preview.show(new Map([['roads.geojson', [second]]]));
+  assert.equal(map.addLayerCalls, addedLayers, 'the copied layers are kept');
+  assert.equal(map.setFilterCalls, filterWrites, 'the published filters stay hidden once');
+  assert.deepEqual(map.sources['edit-preview-roads.geojson'].data.features, [second]);
+
+  preview.hide();
+  assert.deepEqual(map.filters.get('minor-roads'), minorRoads.filter);
+  assert.equal(map.getLayer('edit-preview-minor-roads'), undefined);
 });
 
 // The rules are the list of possible edits: every operation and every property change. The pinned core style is the

@@ -49,6 +49,7 @@ export class WorkingMap {
   #previewOriginalIds = new Map();
   #usedPreviewLayerIds = new Set();
   #shownLevel = null;
+  #shownSignature = null;
 
   // basemapLayers maps a source file to the published layers that draw it from the vector archive. By default it comes
   // from the map's own style, so no edit relies on a list of cartographic layers kept in the Editor. publishedPlaces
@@ -79,11 +80,23 @@ export class WorkingMap {
   // Everything that can fail is built before the map changes, so a throw, such as a place
   // the public map would refuse, leaves the published map as it was and the preview hidden.
   show(workingFeaturesByFile, sharedFiles = new Set()) {
+    let placeData;
+    let publishedPlaceData;
+    try {
+      placeData = workingFeaturesByFile.has(placesFile)
+        ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
+        : null;
+      publishedPlaceData = placeData ? this.#publishedData(placesSource) : null;
+    } catch (error) {
+      this.hide();
+      throw error;
+    }
+    const signature = this.#previewSignature(workingFeaturesByFile, sharedFiles);
+    if (this.#shownSignature === signature) {
+      this.#updatePreviewData(workingFeaturesByFile, sharedFiles, placeData);
+      return;
+    }
     this.hide();
-    const placeData = workingFeaturesByFile.has(placesFile)
-      ? placeMarkers(workingFeaturesByFile.get(placesFile), this.#visibilityConfig)
-      : null;
-    const publishedPlaceData = placeData ? this.#publishedData(placesSource) : null;
     if (placeData) {
       this.#replaceSourceData(placesSource, placeData, publishedPlaceData);
       this.#installWorkingPlaceBands(workingFeaturesByFile.get(placesFile));
@@ -94,6 +107,30 @@ export class WorkingMap {
       else if (this.#basemapLayers[filename]) {
         this.#drawInsteadOfBasemap(filename, features, sharedFiles.has(filename));
       }
+    }
+    this.#shownSignature = signature;
+  }
+
+  // The copied layers depend on which files are shown, not on the value of every feature. Place bands are the exception:
+  // their names and icons come from the markers themselves. A repeat with the same signature only needs new source data.
+  #previewSignature(workingFeaturesByFile, sharedFiles) {
+    const files = [...workingFeaturesByFile].map(([filename, features]) => [
+      filename,
+      filename === placesFile ? JSON.stringify(features) : null,
+      sharedFiles.has(filename)
+    ]);
+    return JSON.stringify(files);
+  }
+
+  // Updates the data behind layers that are already on the map. Shared sources are filled by the caller's overlay, so
+  // only a file's own preview source and the two built-in sources need new data here.
+  #updatePreviewData(workingFeaturesByFile, sharedFiles, placeData) {
+    if (placeData) this.#map.getSource(placesSource).setData(placeData);
+    const labels = workingFeaturesByFile.get(labelsFile);
+    if (labels) this.#map.getSource(labelsSource).setData(featureCollection(labels));
+    for (const [filename, features] of workingFeaturesByFile) {
+      if (!this.#basemapLayers[filename] || sharedFiles.has(filename)) continue;
+      this.#map.getSource(previewPrefix + filename).setData(featureCollection(features));
     }
   }
 
@@ -126,6 +163,7 @@ export class WorkingMap {
     this.#replacedSources = new Map();
     this.#previewOriginalIds = new Map();
     this.#usedPreviewLayerIds = new Set();
+    this.#shownSignature = null;
   }
 
   // A move or addition can create a shared marker with a level combination absent from the release. Install its bands

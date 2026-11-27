@@ -282,7 +282,6 @@ function markedFeatures() {
 
 function refreshOverlay() {
   clickCandidates = null;
-  workingMap.hide();
   activeEntries = activeFilter
     ? activeFilter.entries(behaviorContext())
     : shownFiles().flatMap(filename => session.workingEntries(filename));
