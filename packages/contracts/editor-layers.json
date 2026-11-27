@@ -28,7 +28,15 @@
         "cuisine": {"maxLength": 128},
         "wikidata": {"maxLength": 64},
         "wikipedia": {"maxLength": 128},
-        "buildingEntityId": {"maxLength": 64, "reference": "buildings.geojson"}
+        "buildingEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "buildings.geojson"
+        },
+        "addr:streetEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "roads.geojson"
+        },
+        "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5}
       }
     },
     "building-entrances.geojson": {
@@ -56,14 +64,19 @@
     },
     "settlements.geojson": {
       "operations": ["add", "modify", "delete"],
-      "geometries": ["Point"],
+      "geometries": ["Point", "Polygon", "MultiPolygon"],
       "properties": {
-        "kind": {"requiredOnAdd": true, "enum": ["settlement"]},
+        "kind": {"requiredOnAdd": true, "enum": ["settlement", "settlement-area"]},
         "name": {"required": true, "maxLength": 120},
         "name:en": {"maxLength": 120},
         "rank": {"required": true, "enum": ["capital", "city", "town", "village"]},
         "place": {"required": true, "enum": ["city", "town", "village", "hamlet", "suburb", "quarter", "neighbourhood"]},
         "municipality": {"required": true, "pattern": "^ME-[0-9]+$"},
+        "settlementEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "settlements.geojson"
+        },
+        "population": {"type": "integer", "minimum": 0},
         "source": {"required": true, "maxLength": 64},
         "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
       }
@@ -94,10 +107,10 @@
     },
     "buildings.geojson": {
       "operations": ["add", "modify", "delete"],
-      "geometries": ["Polygon"],
+      "geometries": ["Polygon", "Point"],
       "properties": {
-        "kind": {"requiredOnAdd": true, "enum": ["building"]},
-        "building": {"required": true, "enum": [
+        "kind": {"required": true, "enum": ["building", "entrance"]},
+        "building": {"enum": [
           "yes", "apartments", "barn", "bunker", "carport", "cathedral", "chapel", "church", "civic", "clinic",
           "clock_tower", "college", "commercial", "construction", "detached", "dormitory", "fire_station", "garage",
           "garages", "government", "greenhouse", "guardhouse", "hangar", "hospital", "hotel", "house", "hut",
@@ -121,7 +134,35 @@
           "ignoredCharactersPattern": "[\\s./_-]",
           "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
         },
-        "nohousenumber": {"enum": ["yes"]}
+        "nohousenumber": {"enum": ["yes"]},
+        "addr:streetEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "roads.geojson"
+        },
+        "labelPoint": {"type": "position"},
+        "labelBearing": {"type": "number", "minimum": 0, "maximum": 360},
+        "iconPoint": {"type": "position"},
+        "name:en": {"maxLength": 120},
+        "name:sr-Latn": {"maxLength": 120},
+        "phone": {"maxLength": 64},
+        "website": {"maxLength": 512},
+        "email": {"maxLength": 128},
+        "opening_hours": {"maxLength": 256},
+        "wheelchair": {"enum": ["yes", "limited", "no", "designated"]},
+        "cuisine": {"maxLength": 128},
+        "wikidata": {"maxLength": 64},
+        "wikipedia": {"maxLength": 128},
+        "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5},
+        "level": {"maxLength": 16},
+        "entrance": {"enum": ["main", "service", "garage", "emergency", "staircase", "home", "yes"]},
+        "buildingEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "buildings.geojson"
+        },
+        "door": {"enum": [
+          "yes", "no", "hinged", "sliding", "automatic", "revolving", "folding", "overhead", "swinging"
+        ]},
+        "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]}
       }
     },
     "building-labels.geojson": {
@@ -147,7 +188,7 @@
     },
     "roads.geojson": {
       "operations": ["add", "modify", "delete"],
-      "geometries": ["LineString"],
+      "geometries": ["LineString", "Point", "None"],
       "properties": {
         "name": {"maxLength": 120},
         "name:en": {"maxLength": 120},
@@ -172,7 +213,10 @@
             "path",
             "track",
             "cycleway",
-            "steps"
+            "steps",
+            "street",
+            "junction",
+            "restriction"
           ]
         },
         "bridge": {"enum": ["yes", "no", "viaduct", "boardwalk", "cantilever", "covered", "movable", "aqueduct"]},
@@ -216,9 +260,27 @@
         "parking:both": {"enum": ["no", "yes", "lane", "street_side", "on_kerb", "half_on_kerb", "shoulder", "separate"]},
         "junction": {"enum": ["roundabout", "circular", "jughandle", "intersection"]},
         "ref": {"maxLength": 120},
-        "pathClass": {"enum": ["main", "trail"]},
+        "pathClass": {"enum": ["main", "trail", "park", "city"]},
+        "streetEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "roads.geojson"
+        },
+        "level": {"type": "integer", "minimum": -5, "maximum": 5},
         "startLevel": {"type": "integer", "minimum": -5, "maximum": 5},
         "endLevel": {"type": "integer", "minimum": -5, "maximum": 5},
+        "crossing": {"enum": ["uncontrolled", "traffic_signals", "zebra", "marked", "unmarked", "island", "no"]},
+        "traffic_signals": {"enum": [
+          "signal", "traffic_lights", "pedestrian_crossing", "ramp_meter", "emergency", "blinker", "blink_mode",
+          "level_crossing"
+        ]},
+        "restriction": {"enum": [
+          "no_left_turn", "no_right_turn", "no_u_turn", "no_straight_on", "only_left_turn", "only_right_turn",
+          "only_u_turn", "only_straight_on", "no_entry", "no_exit"
+        ]},
+        "from": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$", "reference": "roads.geojson"},
+        "to": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$", "reference": "roads.geojson"},
+        "viaNodes": {"type": "identifiers"},
+        "viaWays": {"type": "identifiers"},
         "startNode": {"type": "identifier"},
         "endNode": {"type": "identifier"},
         "parking:lane:left": {"enum": [
@@ -415,7 +477,108 @@
       "geometries": ["LineString"],
       "properties": {
         "height": {"type": "integer", "minimum": 0, "maximum": 2600},
-        "width": {"type": "integer", "minimum": 0, "maximum": 2000}
+        "width": {"type": "integer", "minimum": 0, "maximum": 2000},
+        "bank": {"enum": ["left", "right"]},
+        "riverEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "surface.geojson"
+        }
+      }
+    },
+    "surface.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon", "MultiPolygon", "LineString"],
+      "editableKinds": [
+        "park", "garden", "woods", "meadow", "grass", "scrub", "sports", "cemetery", "playground", "shade",
+        "lake", "river", "reservoir", "pond", "basin", "water", "stream", "canal", "ditch", "drain",
+        "protected-area"
+      ],
+      "properties": {
+        "kind": {"required": true, "enum": [
+          "municipality", "unassigned-water", "context", "sea",
+          "park", "garden", "woods", "meadow", "grass", "scrub", "sports", "cemetery", "playground", "shade",
+          "lake", "river", "reservoir", "pond", "basin", "water", "stream", "canal", "ditch", "drain",
+          "protected-area"
+        ]},
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "destination": {"type": "boolean"},
+        "greenAreaEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "surface.geojson"
+        },
+        "riverEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "surface.geojson"
+        },
+        "labelPoint": {"type": "position"},
+        "labelLine": {"type": "positions"},
+        "iconPoint": {"type": "position"},
+        "name:sr-Latn": {"maxLength": 120},
+        "addr:streetEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "roads.geojson"
+        },
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "phone": {"maxLength": 64},
+        "website": {"maxLength": 512},
+        "email": {"maxLength": 128},
+        "opening_hours": {"maxLength": 256},
+        "wheelchair": {"enum": ["yes", "limited", "no", "designated"]},
+        "level": {"maxLength": 16},
+        "cuisine": {"maxLength": 128},
+        "wikidata": {"maxLength": 64},
+        "wikipedia": {"maxLength": 128},
+        "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5},
+        "intermittent": {"enum": ["yes", "no"]},
+        "tunnel": {"enum": ["yes", "no", "culvert", "flooded"]},
+        "osmTag": {"maxLength": 64, "addOnly": true}
+      },
+      "limitedKinds": {
+        "municipality": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en", "labelPoint"]},
+        "unassigned-water": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en", "labelPoint"]},
+        "context": {"operations": ["modify"], "geometry": true, "properties": ["name", "name:en"]},
+        "sea": {"operations": ["modify"], "geometry": true, "properties": []}
+      }
+    },
+    "relief.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["LineString", "Point"],
+      "editableKinds": ["contour", "summit"],
+      "properties": {
+        "kind": {"required": true, "enum": ["contour", "summit"]},
+        "elevation": {"type": "integer", "minimum": 0, "maximum": 2600, "multipleOf": 20},
+        "ele": {"type": "number", "minimum": -10, "maximum": 2600, "allowsNull": true},
+        "natural": {"enum": ["peak", "hill"]},
+        "name": {"maxLength": 120},
+        "name:en": {"maxLength": 120},
+        "name:sr-Latn": {"maxLength": 120},
+        "iconPoint": {"type": "position"},
+        "addr:streetEntityId": {
+          "pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$",
+          "reference": "roads.geojson"
+        },
+        "addr:housenumber": {
+          "maxLength": 128,
+          "ignoredCharactersPattern": "[\\s./_-]",
+          "forbiddenValues": ["", "bb", "бб", "bezbroja", "безброја", "na", "?"]
+        },
+        "phone": {"maxLength": 64},
+        "website": {"maxLength": 512},
+        "email": {"maxLength": 128},
+        "opening_hours": {"maxLength": 256},
+        "wheelchair": {"enum": ["yes", "limited", "no", "designated"]},
+        "level": {"maxLength": 16},
+        "cuisine": {"maxLength": 128},
+        "description": {"maxLength": 256},
+        "wikidata": {"maxLength": 64},
+        "wikipedia": {"maxLength": 128},
+        "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5},
+        "minzoom": {"type": "integer", "minimum": 4, "maximum": 16}
       }
     },
     "transit-routes.json": {

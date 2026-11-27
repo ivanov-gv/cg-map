@@ -39,15 +39,18 @@
                 },
                 "forbiddenValues": {"type": "array", "items": {"type": "string"}},
                 "type": {
-                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
-                  "enum": ["integer", "number", "boolean", "list", "identifier", "identifiers", "directions", "entrances"]
+                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; a position is a WGS84 longitude/latitude pair and positions is a line of them; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
+                  "enum": ["integer", "number", "boolean", "list", "position", "positions", "identifier", "identifiers", "directions", "entrances"]
                 },
                 "minimum": {"type": "number"},
                 "maximum": {"type": "number"},
                 "multipleOf": {"type": "number"},
                 "pattern": {"type": "string"},
                 "allowsNull": {"description": "A missing fact is recorded as null.", "type": "boolean"},
-                "reference": {"description": "The value is the entity ID of an object in this file.", "type": "string"},
+                "reference": {
+                  "description": "The named file holds the object whose entity ID is the value.",
+                  "type": "string"
+                },
                 "addOnly": {
                   "description": "Only a new object states it; afterwards it is identity and stays locked.",
                   "type": "boolean"
