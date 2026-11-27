@@ -22,11 +22,10 @@ const majorRoadKinds = [
   'secondary_link'
 ];
 
-// Zoom/width stops of street casings; bridges reuse them so a deck is exactly as wide as its street.
+// Zoom/width stops of street casings.
 const majorCasingWidthStops = [7, 0.7, 12, 2, 16, 9, 20, 65];
 const minorCasingWidthStops = [13, 1.6, 14, 3.2, 17, 10, 20, 38];
-const walkingDeckWidthStops = [13, 2, 17, 5, 20, 12];
-const bridgeDeckEdgePixels = 2.2;
+const bridgeEdgeWidthPixels = 2.2;
 
 const roadKindFilter = roadKinds => ['in', roadKind, ['literal', roadKinds]];
 const majorRoadFilter = roadKindFilter(majorRoadKinds);
@@ -55,12 +54,6 @@ function roadLineLayer({id, color, width, filter, minzoom = 0, dash, cap = dash 
 
 function zoomWidth(widthStops) {
   return ['interpolate', ['exponential', 1.5], ['zoom'], ...widthStops];
-}
-
-// The same stops with a fixed number of pixels added on each side of the line.
-function widenedZoomWidth(widthStops, pixelsPerSide) {
-  const widened = widthStops.map((value, index) => (index % 2 === 0 ? value : value + 2 * pixelsPerSide));
-  return zoomWidth(widened);
 }
 
 // Path widths grow from a thin line at zoom 13 to a street-like stroke at zoom 20.
@@ -216,32 +209,27 @@ function streetLayers() {
   return streets.map(layer => inDrawingGroup('streets', layer));
 }
 
-// Bridges cross over the canyon and the water: a deck as wide as its street's casing, with dark edges on both sides.
-// Walking bridges get a narrow deck; their path pattern is drawn above it by the walking groups.
+// One outline is one deck: the fill carries every road of that crossing, and the closed line draws its dark edge.
+// The group sits below streets, so roads drawn over an outline stay on top of the deck.
 function bridgeLayers() {
-  const isBridge = ['in', ['get', 'bridge'], ['literal', ['yes', 'viaduct']]];
-  const decks = [
-    {name: 'major', filter: majorRoadFilter, widthStops: majorCasingWidthStops, color: colors.majorStreet},
-    {name: 'minor', filter: streetFilter, widthStops: minorCasingWidthStops, color: colors.minorStreet},
-    {name: 'walking', filter: nonStreetFilter, widthStops: walkingDeckWidthStops, color: colors.pedestrianStreet}
-  ];
-  const layers = decks.flatMap(({name, filter, widthStops, color}) => [
-    roadLineLayer({
-      id: `bridge-${name}-edges`,
-      color: colors.bridgeDeckEdge,
-      width: widenedZoomWidth(widthStops, bridgeDeckEdgePixels),
-      filter: ['all', isBridge, filter],
-      minzoom: 13
+  return [
+    inDrawingGroup('bridges', {
+      id: 'bridge-decks',
+      type: 'fill',
+      source,
+      'source-layer': 'bridges',
+      minzoom: 12,
+      paint: {'fill-color': colors.bridgeDeck}
     }),
-    roadLineLayer({
-      id: `bridge-${name}-decks`,
-      color,
-      width: zoomWidth(widthStops),
-      filter: ['all', isBridge, filter],
-      minzoom: 13
+    inDrawingGroup('bridges', {
+      id: 'bridge-deck-edges',
+      type: 'line',
+      source,
+      'source-layer': 'bridges',
+      minzoom: 12,
+      paint: {'line-color': colors.bridgeDeckEdge, 'line-width': bridgeEdgeWidthPixels}
     })
-  ]);
-  return layers.map(layer => inDrawingGroup('bridges', layer));
+  ];
 }
 
 // Walking paths by what they are to a walker (wiki UI 3.Core, Penpot hills rules):
@@ -391,8 +379,8 @@ export function mapStyle(basemapURL, assetBaseURL) {
       ...buildingLayers(),
       ...meadowLayers(),
       ...contourLayers(),
-      ...streetLayers(),
       ...bridgeLayers(),
+      ...streetLayers(),
       ...walkingLayers(),
       ...contourLabelLayers(),
       ...labelLayers(),
