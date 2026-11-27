@@ -55,3 +55,10 @@ resolve the exact `@ivanov-gv/map-contracts` pin and refuse another root. Regula
 bindings and use a fixture copy that `tests/` verifies against its pin, so they need no installed package. CI's backend
 check does not call `generate-check`, so automatic pin enforcement would require installing the pin there; that is
 outside this change. The dev stand and release reasons are unchanged, so this needs no new decision record.
+
+## Outcome: Transit relay has no package to split (2026-11-27, #424)
+
+services/transit-relay's `relay.mjs` and `worker.mjs` import only each other; its tests use local fixtures, its Makefile
+only lints and runs those tests, and the hosted deployment is a recorded manual copy of `relay.mjs`. It resolves no
+map-core, map-data or map-contracts package, path, embed or generated code in dev, CI or tests, so it already follows
+the rule without a code change.
