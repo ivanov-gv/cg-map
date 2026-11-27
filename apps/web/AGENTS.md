@@ -5,6 +5,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
+- This project owns `eslint.config.mjs`: `npm run lint` runs ESLint from here over source, tools, tests and the config,
+  then the runtime module guards. Its patterns and globals consume `platform/eslint-rules.mjs`;
+  tests/lint-config.test.mjs proves them through the real config.
 - tools/runtime-modules.mjs owns this app's runtime import, dynamic-import and MapLibre gesture checks, and supplies the
   module discovery shared by build.mjs and finalize.mjs. New runtime modules need no per-file list and may import any
   runtime module in src/; modules that existed on main keep their reviewed imports transitively, and every module with
