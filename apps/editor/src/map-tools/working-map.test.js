@@ -169,6 +169,19 @@ test('a preview layer draws like the published one, from its own source', () => 
   assert.equal(minorRoads['source-layer'], 'roads', 'the published layer itself is untouched');
 });
 
+test('bridge decks and railways are previewed from the style layers map-core publishes for them', () => {
+  assert.deepEqual(publishedLayerIdsOf('bridges.geojson'), ['bridge-decks', 'bridge-deck-edges']);
+  assert.deepEqual(publishedLayerIdsOf('railways.geojson'), [
+    'platform-areas',
+    'platform-lines',
+    'rail-casing',
+    'rail-ties',
+    'disused-rail',
+    'railway-halts',
+    'railway-stations'
+  ]);
+});
+
 test('a changed file is drawn from its working features below its hidden published layers, and comes back on hide', () => {
   const map = fakeMap();
   const preview = new WorkingMap({map, basemapLayers, visibilityConfig, publishedPlaces: []});

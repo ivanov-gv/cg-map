@@ -84,6 +84,7 @@ const typedNames = new Set([
   'ele',
   'height',
   'width',
+  'gauge',
   'number',
   'ref'
 ]);

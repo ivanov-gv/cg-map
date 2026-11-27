@@ -3,6 +3,7 @@
 // the actual style layers on the map at runtime, so a style change cannot leave an edit without its public look.
 // A file absent from this table has no public vector layer: its inspection layer draws it while it is being edited.
 const sourceLayersByFile = {
+  'bridges.geojson': ['bridges'],
   'buildings.geojson': ['buildings'],
   'canyon-rims.geojson': ['canyon_rims'],
   'contours.geojson': ['contours'],
@@ -10,6 +11,7 @@ const sourceLayersByFile = {
   'context-countries.geojson': ['land'],
   'land.geojson': ['land', 'green_area_labels'],
   'protected-areas.geojson': ['protected_areas', 'green_area_labels'],
+  'railways.geojson': ['railways'],
   'roads.geojson': ['roads'],
   'slopes.geojson': ['slopes'],
   'summits.geojson': ['summits'],

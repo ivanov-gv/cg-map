@@ -30,8 +30,8 @@ export const editorLayers = [
     id: 'roads',
     group: 'Map',
     name: 'Roads & paths',
-    summary: 'Streets, paths, levels, directions',
-    files: ['roads.geojson', 'road-nodes.geojson'],
+    summary: 'Streets, paths, levels, directions, bridge decks',
+    files: ['roads.geojson', 'road-nodes.geojson', 'bridges.geojson'],
     linkedFiles: ['turn-restrictions.json']
   },
   {
@@ -92,6 +92,15 @@ export const editorLayers = [
     linkedFiles: ['transport-stops.geojson'],
     // Shown to pick stops from, and edited on their own layer.
     contextFiles: ['transport-stops.geojson'],
+    guideMinZoom: 13
+  },
+  {
+    id: 'railways',
+    group: 'Transport',
+    name: 'Railways',
+    summary: 'Tracks, platforms, stations',
+    files: ['railways.geojson'],
+    linkedFiles: [],
     guideMinZoom: 13
   }
 ];

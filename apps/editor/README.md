@@ -16,11 +16,12 @@ included in `dist/web`. Pages serves it at [/editor/](https://ivanov-gv.github.i
 place to install it from. It has no access control, and its data is already public.
 
 The build assembles every reviewed source file of bundle version 3 through data-owned tooling. The editor also accepts
-versions 1 and 2 from older reviewed bundles. It verifies the manifest version, filenames, byte sizes, SHA-256 and
-feature counts before enabling source modes. Hashes bind revision-local indices; they are not invented upstream IDs.
-Selecting a feature reads full source geometry/properties, never simplified tiles. Unknown properties, provenance and
-any source feature ID are displayed unchanged. Source files are never written. Hashing needs a secure context, so
-anything but `localhost` must use HTTPS.
+versions 1 and 2 from older reviewed bundles, and version 4: version 3 plus `bridges.geojson` and `railways.geojson`,
+without the derived `slopes.geojson`. The producer still emits version 3, so a version 4 bundle is read only when one is
+published. It verifies the manifest version, filenames, byte sizes, SHA-256 and feature counts before enabling source
+modes. Hashes bind revision-local indices; they are not invented upstream IDs. Selecting a feature reads full source
+geometry/properties, never simplified tiles. Unknown properties, provenance and any source feature ID are displayed
+unchanged. Source files are never written. Hashing needs a secure context, so anything but `localhost` must use HTTPS.
 
 The map fills the window. Layers, Tools and Changes open panels over it; on narrow windows they are in the bottom bar.
 The current-layer button also opens Layers. Select an object to open the inspector, on the right or as a bottom sheet.
@@ -42,12 +43,13 @@ in `tools/`; `npm test` skips `*.browser.test.js`. ESLint uses this app's `eslin
 
 ## Layers
 
-The ten layers are the wiki's ([UI 4.Editor](https://github.com/ivanov-gv/cg-map/wiki/UI---4.Editor)); their files are
-in [editor-layers.js](src/layers/shared/editor-layers.js). Exactly one is active. Its objects have a green outline,
-applied changes of every layer are amber, the picked object is red, an object marked in the field is dashed red with a
-cross. The others stay as context. Guides appear from zoom 15, or earlier on layers edited zoomed out, and can reveal
-POIs below their public threshold; with guides off in Tools, only normally rendered objects can be picked. Country,
-neighbour and sea shapes are drawn and never picked, because they follow from other objects.
+The eleven layers are the wiki's ([UI 4.Editor](https://github.com/ivanov-gv/cg-map/wiki/UI---4.Editor)) with Railways
+added to its Transport group; their files are in [editor-layers.js](src/layers/shared/editor-layers.js). A bundle
+without `bridges.geojson` or `railways.geojson` leaves those layers out. Exactly one layer is active. Its objects have a
+green outline, applied changes of every layer are amber, the picked object is red, and an object marked in the field is
+dashed red with a cross. The others stay as context. Guides appear from zoom 15, or earlier on layers edited zoomed out,
+and can reveal POIs below their public threshold; with guides off in Tools, only normally rendered objects can be
+picked. Country, neighbour and sea shapes are drawn and never picked, because they follow from other objects.
 
 When a tap hits several objects, a named chooser lets you pick one. Objects in view, in Tools, lists what is on screen,
 including co-located places and records without a place on the map; use Tab and Enter or Space. Selecting from a list
@@ -68,24 +70,29 @@ What the layers do beyond shape and fields:
   marks roads that touch, cross or nearly meet without joining. A dot opens its junction: the level of each road there,
   what stands on it, the allowed turns, and joining, disconnecting or splitting roads. Letters A and B name the ends of
   the picked road. A dragged point joins the road it is put on and takes joined roads along until it is disconnected.
-  The level picker shows one level at a time; below the ground rails are dashed, above it strong.
+  The level picker shows one level at a time; below the ground rails are dashed, above it strong. Bridge outlines are
+  edited here too: one deck sits under all the roads marked as bridges, and those roads keep their own bridge tags.
 - **Parks & green** and **Water** have holes and islands. Waterways show their joins with the same dots and keep them
   when either side moves; moving the coastline moves the sea, the country, its border and the municipalities.
-- **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it, a ridge
-  recolours the slopes beside it and its ends slide along the outline of its hill. An end cannot be removed, only moved
-  there. Ridges are derived edges between slopes, so they cannot be added or deleted here.
+- **Relief:** a dragged contour stops at the next line, a summit must be higher than the contours around it. In bundles
+  with `slopes.geojson`, a ridge recolours the slopes beside it and its ends slide along the outline of its hill; an end
+  cannot be removed, only moved there. Version 4 has no slopes file, so moving a ridge neither recolours anything nor
+  slides its ends. Ridges are derived edges between slopes, so they cannot be added or deleted here.
 - **Settlements & borders:** a settlement says its type and opens its area, or draws one. A border changes both sides at
   once. Its ends stay, because more than two municipalities meet there. The coast is moved on Water.
 - **Stops** go to the side of the road that is clicked and follow the road when moved.
 - **Routes** are stops in order; the way along the streets is drawn for the editor and not stored. Turn points force it.
   On a phone they can be read only.
+- **Railways** are tracks, platforms, halts and stations. The kind says whether a new one is a point, a line or an area;
+  tracks and platforms are drawn by the public map style from this file. They are in version 4 bundles.
 
 Sketches, notes and deletion marks from the field travel in the exported file. At the desk they wait in Changes under
 From the field; choosing one opens its layer, over satellite for a sketch, and Apply becomes Apply and resolve.
 
 ## Editing
 
-`packages/contracts/editor-layers.json` says what each file allows; what a layer adds to that is its behavior in
+`packages/contracts/editor-layers.json`, pinned at 0.2.0 for tests and releases, says what each file allows, including
+`addOnly` provenance fields for bridge and railway outlines. What a layer adds to that is its behavior in
 [layer-behaviors.js](src/layers/shared/layer-behaviors.js) and the modules that register one. Nothing is recorded until
 Apply, which validates the result with the same rules as the importer. One Apply is one step, which can change several
 files of the layer and is undone as a whole. After Apply the map shows the result at once, Changes counts it, and a
@@ -135,11 +142,12 @@ The Changes panel compares changed fields beside the change list on wide screens
 narrow screens. Export opens a dialog for the author and reason; import and discard are under Secondary actions.
 
 Changed files are drawn at once with the published layers found in the running map's own style, from their working
-features: a canyon edge gets all of map-core's wall bands and its rim, and protected areas get park names of their own
-alongside land's. The editor copies the style's paint, layout, filters and zoom ranges; it keeps no parallel
-cartography. When two files share a published layer, each gets its own preview and the original is hidden and restored
-once. A file the public style does not draw, such as an entrance or a bus stop, keeps its editor inspection layer. This
-is not a rebuild: below street scale the tiles simplify geometry and drop minor roads, which the editor does not do.
+features: a canyon edge gets all of map-core's wall bands and its rim, a bridge outline gets its deck and edges,
+railways get their tracks and platforms, and protected areas get park names of their own alongside land's. The editor
+copies the style's paint, layout, filters and zoom ranges; it keeps no parallel cartography. When two files share a
+published layer, each gets its own preview and the original is hidden and restored once. A file the public style does
+not draw, such as an entrance or a bus stop, keeps its editor inspection layer. This is not a rebuild: below street
+scale the tiles simplify geometry and drop minor roads, which the editor does not do.
 
 ### Larger datasets
 
@@ -162,6 +170,8 @@ measure a phone, or edits and export at these sizes.
 ### Limits
 
 - Changed files are not a rebuild: see above. The importer says when tiles need one.
+- A version 4 bundle has no slopes file. Moving a ridge changes the ridge alone; recolouring the derived slopes is not
+  possible there, and adding or deleting a ridge stays a later step.
 - Routes have no identity of their own in the data, so a changeset that edits one needs the exact snapshot.
 - Zoom levels of towns and summits, energy classes and stop turn points are recorded but not yet drawn by map-core.
 - A border or coastline edit needs `make -C data check-topology` after it is applied. A coastline that the sea, the

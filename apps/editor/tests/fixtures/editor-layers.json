@@ -235,6 +235,46 @@
         ]}
       }
     },
+    "bridges.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Polygon"],
+      "properties": {
+        "kind": {"requiredOnAdd": true, "enum": ["bridge"]},
+        "name": {"maxLength": 128},
+        "name:en": {"maxLength": 128},
+        "method": {"enum": ["osm", "traced"], "addOnly": true},
+        "osmTag": {"enum": ["man_made=bridge"], "addOnly": true},
+        "sourceRoadIds": {
+          "type": "list",
+          "maxLength": 64,
+          "pattern": "^(way|relation)/[1-9][0-9]*$",
+          "addOnly": true
+        }
+      }
+    },
+    "railways.geojson": {
+      "operations": ["add", "modify", "delete"],
+      "geometries": ["Point", "LineString", "Polygon"],
+      "properties": {
+        "kind": {
+          "requiredOnAdd": true,
+          "enum": ["disused_rail", "halt", "platform", "rail", "station"]
+        },
+        "name": {"maxLength": 128},
+        "osmTag": {
+          "enum": [
+            "disused:railway=rail",
+            "railway=halt",
+            "railway=platform",
+            "railway=rail",
+            "railway=station"
+          ],
+          "addOnly": true
+        },
+        "gauge": {"maxLength": 128},
+        "ref": {"maxLength": 128}
+      }
+    },
     "road-nodes.geojson": {
       "operations": ["add", "modify", "delete"],
       "geometries": ["Point"],
