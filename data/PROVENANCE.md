@@ -12,7 +12,7 @@ water file has 1,122 polygons (including one derived ocean polygon) and 673 wate
 protected-area boundary or `place=locality` tag alone is not published as green cover. Minor stream, ditch and drain
 lines are clipped to the detail box; river and canal lines stay countrywide. Unmapped or blank OSM `name` and `name:en`
 tags are omitted rather than published as empty strings. The place snapshot has 1,977 entries, including named
-standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,790,824
+standalone OSM points outside building footprints. No source file exceeds 40 MB; the reviewed archive is 23,790,415
 bytes.
 
 The current version-2 reviewed source bundle has thirteen GeoJSON files; the frozen version-1 bundle has the original
