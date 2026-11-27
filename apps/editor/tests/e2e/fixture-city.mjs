@@ -1,7 +1,7 @@
 // A city of a few objects per layer, small enough to read, with everything the current bundle version holds. A caller
-// can also ask for version 4, which has bridge outlines and railways instead of derived slopes. Layers that the pinned
-// reviewed data does not have yet are tested on it. The rules beside it are this app's own copy for tests: they match
-// the pinned contracts for new files, while ridges still follow the editor's older, view-only rule.
+// can also ask for version 4, which has bridge outlines and railways instead of derived slopes. Layers the pinned
+// reviewed bundle does not emit yet are tested on it. The rules beside it are this app's own copy for tests: they match
+// the pinned contracts for new files, while ridges stay view-only here until #490.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-data/source-bundle.js';

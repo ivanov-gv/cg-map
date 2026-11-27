@@ -5,7 +5,6 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {resolveContractsRoot} from './contracts-root.mjs';
 import {importCoreModule, resolveCoreRoot} from './core-root.mjs';
 import {writeOfflineManifest} from './offline-manifest.mjs';
-import {writeProducerBundleSchema} from './producer-schema.mjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const outputDirectory = fileURLToPath(new URL('../../../dist/editor/', import.meta.url));
@@ -70,14 +69,10 @@ copyMapData(outputDirectory, {
   dataRoot,
   contractPath: path.join(contractsRoot, 'place-visibility.json')
 });
-const producerSchema = writeProducerBundleSchema(
-  path.join(repositoryRoot, '.build'),
-  path.join(dataRoot, 'sources')
-);
 await writeEditorBundle(
   path.join(dataRoot, 'sources'),
   path.join(outputDirectory, 'sources'),
-  pathToFileURL(producerSchema)
+  path.join(contractsRoot, 'editor-bundle.schema.json')
 );
 // The editing rules are a shared contract: the importer reads the same file.
 fileSystem.copyFileSync(

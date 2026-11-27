@@ -9,8 +9,9 @@ import {WorkingMap, hiddenLayerFilter, previewLayers} from './working-map.js';
 const visibilityConfig = parseVisibilityConfig(
   JSON.parse(fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json'))))
 );
-// The fixture is this app's copy of the rules for layers the pinned contracts package does not have yet. It is the
-// source of the file, operation and property list below, never a fixture of the cartography under test.
+// The fixture is this app's copy of the rules used by the fixture city: it matches the pinned contracts for the new
+// files and keeps ridges view-only until #490. It is the source of the file, operation and property list below, never
+// a fixture of the cartography under test.
 const editorRules = JSON.parse(fs.readFileSync(new URL('../../tests/fixtures/editor-layers.json', import.meta.url)));
 const publishedStyle = mapStyle('pmtiles://fixture', 'https://example.test/');
 // The same derivation the runtime uses: one fact about which source layer draws a file, no second table to drift.
