@@ -1,4 +1,4 @@
-# 0047: Ridges are drawn facts, and slopes are derived from them
+# 0048: Ridges are drawn facts, and slopes are derived from them
 
 ## Status
 
