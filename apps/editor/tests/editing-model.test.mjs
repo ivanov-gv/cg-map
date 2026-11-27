@@ -60,7 +60,7 @@ const placeFeature = (name = 'Cafe') => ({
 });
 const footprintFeature = () => ({
   type: 'Feature',
-  properties: {kind: 'building'},
+  properties: {kind: 'building', building: 'yes'},
   geometry: {type: 'Polygon', coordinates: [square]}
 });
 const labelFeature = () => ({
@@ -116,17 +116,26 @@ test('invalid details are refused by the rules of their file', () => {
 });
 
 test('files and kinds outside the rules stay inspect-only, with a reason', () => {
-  assert.match(layerLockReason(rules.layers['transport-stops.geojson']), /transit import/);
+  const readOnly = {operations: [], readOnlyReason: 'Dated ePodgorica data. Change it through the transit import.'};
+  assert.match(layerLockReason(readOnly), /transit import/);
+  assert.equal(layerLockReason(rules.layers['transport-stops.geojson']), null, 'stops are editable in the pinned rules');
   assert.equal(layerLockReason(rules.layers['places.geojson']), null);
   const country = {type: 'Feature', properties: {kind: 'context'}, geometry: {type: 'Polygon', coordinates: [square]}};
-  const land = featureCapabilities(country, rules.layers['land.geojson']);
-  assert.equal(land.canModify, false);
-  assert.match(land.lockReason, /Country shapes/);
+  const contextLand = featureCapabilities(country, rules.layers['land.geojson']);
+  assert.equal(contextLand.canModify, true, 'context land can still be renamed');
+  assert.equal(contextLand.canReshape, false);
+  assert.equal(contextLand.canDelete, false);
+  const unlisted = {...country, properties: {kind: 'not-a-kind'}};
+  assert.equal(featureCapabilities(unlisted, rules.layers['land.geojson']).canModify, false);
+  assert.match(featureCapabilities(unlisted, rules.layers['land.geojson']).lockReason, /inspect-only/);
   const park = {...country, properties: {kind: 'park'}};
   assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canModify, true);
+  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canDelete, true);
   const ocean = {type: 'Feature', properties: {kind: 'ocean'}, geometry: {type: 'MultiPolygon', coordinates: []}};
-  assert.equal(featureCapabilities(ocean, rules.layers['water.geojson']).canModify, false);
-  assert.equal(featureCapabilities(park, rules.layers['land.geojson']).canDelete, false);
+  const oceanWater = featureCapabilities(ocean, rules.layers['water.geojson']);
+  assert.equal(oceanWater.canModify, true, 'the derived ocean can still be renamed');
+  assert.equal(oceanWater.canReshape, false);
+  assert.equal(oceanWater.canDelete, false);
 });
 
 test('an edit keeps unknown fields, and returning to the source state leaves no change', () => {
@@ -515,13 +524,17 @@ test('an operation that breaks identity or the rules is refused like the importe
   assert.match(operationProblem(modify({...placeFeature(), foo: 1}), rules, levels), /feature foo is not editable/);
   const deletion = {...modify(placeFeature()), operation: 'delete'};
   assert.match(operationProblem(deletion, rules, levels), /a deletion has no after state/);
-  const country = {type: 'Feature', properties: {kind: 'context'}, geometry: {type: 'Polygon', coordinates: [square]}};
+  const unlisted = {
+    type: 'Feature',
+    properties: {kind: 'not-a-kind'},
+    geometry: {type: 'Polygon', coordinates: [square]}
+  };
   const inspectOnly = {
     filename: 'land.geojson',
     operation: 'modify',
     reference: {featureIndex: 0},
-    before: country,
-    after: {...country, properties: {kind: 'context', name: 'Renamed'}}
+    before: unlisted,
+    after: {...unlisted, properties: {kind: 'not-a-kind', name: 'Renamed'}}
   };
   assert.match(operationProblem(inspectOnly, rules, levels), /inspect-only/);
   const added = {
@@ -533,7 +546,14 @@ test('an operation that breaks identity or the rules is refused like the importe
   };
   assert.match(operationProblem(added, rules, levels), /needs a local ID/);
   const fabricated = {...added, reference: {localId: 'local:1'}};
-  assert.match(operationProblem(fabricated, rules, levels), /must not claim wikidata/);
+  assert.match(operationProblem(fabricated, rules, levels), /must use its local ID as its id/);
+  const localPlace = placeFeature();
+  delete localPlace.id;
+  localPlace.properties.id = 'local:1';
+  const ownId = {...fabricated, after: localPlace};
+  assert.match(operationProblem(ownId, rules, levels), /must have source "Local correction"/);
+  const localSource = {...ownId, after: {...localPlace, properties: {...localPlace.properties, source: rules.localPlaceSource}}};
+  assert.equal(operationProblem(localSource, rules, levels), null, 'listed place facts stay editable');
 });
 
 test('import refuses duplicate references', async () => {

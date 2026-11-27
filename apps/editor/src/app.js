@@ -30,6 +30,7 @@ import {
   registerBehaviors
 } from './layers/shared/layer-behaviors.js';
 import {buildingBehaviors} from './layers/buildings/layer-buildings.js';
+import {bridgeBehaviors} from './layers/roads/layer-bridges.js';
 import {featureForEntry, junctionBehaviors, junctionFile, junctionRule} from './layers/roads/layer-junctions.js';
 import {buildingAt, placeBehaviors} from './layers/places/layer-places.js';
 import {greenBehaviors} from './layers/green/layer-green.js';
@@ -38,6 +39,7 @@ import {layerJoints, levelFacts} from './layers/shared/layer-joints.js';
 import {roadBehaviors} from './layers/roads/layer-roads.js';
 import {isPickableEntry, roadsClickTarget, roadsJointsToShow, roadsPickableEntries} from './layers/roads/roads-host.js';
 import {routeBehaviors} from './layers/routes/layer-routes.js';
+import {railwayBehaviors} from './layers/transport/layer-railways.js';
 import {settlementBehaviors} from './layers/settlements/layer-settlements.js';
 import {layerForSketch, sketchBehaviors, sketchChoices, sketchFile, sketchRule} from './layers/shared/layer-sketches.js';
 import {stopBehaviors} from './layers/stops/layer-stops.js';
@@ -68,12 +70,14 @@ registerBehaviors(buildingBehaviors);
 registerBehaviors(addressBehaviors);
 registerBehaviors(placeBehaviors);
 registerBehaviors(roadBehaviors);
+registerBehaviors(bridgeBehaviors);
 registerBehaviors(greenBehaviors);
 registerBehaviors(waterBehaviors);
 registerBehaviors(reliefBehaviors);
 registerBehaviors(settlementBehaviors);
 registerBehaviors(stopBehaviors);
 registerBehaviors(routeBehaviors);
+registerBehaviors(railwayBehaviors);
 registerBehaviors(sketchBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
@@ -164,6 +168,8 @@ function behaviorContext() {
     isPhone: () => phoneLayout.matches,
     isMagnetOn,
     entriesOf,
+    // A version 4 bundle has no derived slopes, so their behavior cannot follow a moved ridge there.
+    hasFile: filename => sources.has(filename),
     // The one level of the road graph that is shown, or null for all.
     shownLevel: () => shownLevel,
     select: entry => selectObject(entry, true),

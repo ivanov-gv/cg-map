@@ -84,7 +84,8 @@ export const behaviorOf = (filename, layerId = null) => ({
 });
 
 // What every behavior hook may read. The host supplies the session, rules and callbacks; findEntity stays here so a
-// behavior never has to know how a source entry keeps its identity.
+// behavior never has to know how a source entry keeps its identity. hasFile tells hooks which sources a bundle carries;
+// it defaults to true so a behavior tested on its own still sees the files it asks about.
 export function createBehaviorContext({
   session,
   rules,
@@ -94,6 +95,7 @@ export function createBehaviorContext({
   isPhone,
   isMagnetOn,
   entriesOf,
+  hasFile = () => true,
   shownLevel,
   select,
   startNew,
@@ -112,6 +114,7 @@ export function createBehaviorContext({
     isPhone,
     isMagnetOn,
     entriesOf,
+    hasFile,
     findEntity: (filename, entityId) =>
       entriesOf(filename).find(({key, feature}) => key === entityId || feature.properties.entityId === entityId),
     shownLevel,
@@ -138,7 +141,14 @@ const drawChoices = {
   places: [{label: 'Add place', filename: 'places.geojson', shape: 'Point', properties: {}}],
   roads: [
     {label: 'Draw road', filename: 'roads.geojson', shape: 'LineString', properties: {}},
-    {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}}
+    {label: 'Draw path', filename: 'roads.geojson', shape: 'LineString', properties: {kind: 'path'}},
+    {
+      label: 'Draw bridge',
+      filename: 'bridges.geojson',
+      shape: 'Polygon',
+      // An outline drawn here is traced, not imported from OpenStreetMap.
+      properties: {kind: 'bridge', method: 'traced'}
+    }
   ],
   green: [
     {label: 'Draw area', filename: 'land.geojson', shape: 'Polygon', properties: {}},
@@ -169,6 +179,38 @@ const drawChoices = {
     }
   ],
   stops: [{label: 'Add stop', filename: 'transport-stops.geojson', shape: 'Point', properties: {}}],
+  railways: [
+    {
+      label: 'Add station',
+      filename: 'railways.geojson',
+      shape: 'Point',
+      properties: {kind: 'station', osmTag: 'railway=station'}
+    },
+    {
+      label: 'Add halt',
+      filename: 'railways.geojson',
+      shape: 'Point',
+      properties: {kind: 'halt', osmTag: 'railway=halt'}
+    },
+    {
+      label: 'Draw rail',
+      filename: 'railways.geojson',
+      shape: 'LineString',
+      properties: {kind: 'rail', osmTag: 'railway=rail'}
+    },
+    {
+      label: 'Draw disused rail',
+      filename: 'railways.geojson',
+      shape: 'LineString',
+      properties: {kind: 'disused_rail', osmTag: 'disused:railway=rail'}
+    },
+    {
+      label: 'Draw platform',
+      filename: 'railways.geojson',
+      shape: 'Polygon',
+      properties: {kind: 'platform', osmTag: 'railway=platform'}
+    }
+  ],
   routes: [
     {
       label: 'New line',
