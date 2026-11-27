@@ -1,4 +1,5 @@
 import {buildPlaceMarkers, markerKeys, normalizePlaces, placeBands, placeLayers} from '@ivanov-gv/map-core';
+import {basemapLayersFromStyle} from './basemap-layers.js';
 
 // Draws changed files, and the files of the active layer, with the public cartography from their working features. It is
 // not a rebuild: tiles simplify geometry and leave out minor roads at low zoom, which this does not, so it shows
@@ -45,11 +46,20 @@ export class WorkingMap {
   #addedLayerIds = [];
   #addedSourceIds = [];
   #replacedSources = new Map();
+  #previewOriginalIds = new Map();
+  #usedPreviewLayerIds = new Set();
   #shownLevel = null;
 
-  // basemapLayers maps a source file to the published layers that draw it from the vector archive. publishedPlaces are
-  // the places as released, to put back when the preview ends.
-  constructor({map, basemapLayers, visibilityConfig, publishedPlaces, sharedSource = null}) {
+  // basemapLayers maps a source file to the published layers that draw it from the vector archive. By default it comes
+  // from the map's own style, so no edit relies on a list of cartographic layers kept in the Editor. publishedPlaces
+  // are the places as released, to put back when the preview ends.
+  constructor({
+    map,
+    basemapLayers = basemapLayersFromStyle(map.getStyle().layers),
+    visibilityConfig,
+    publishedPlaces,
+    sharedSource = null
+  }) {
     this.#map = map;
     this.#basemapLayers = basemapLayers;
     this.#visibilityConfig = visibilityConfig;
@@ -97,7 +107,8 @@ export class WorkingMap {
   }
 
   #opacityOf(layerId) {
-    const published = this.#map.getPaintProperty(layerId.slice(previewPrefix.length), 'line-opacity');
+    const originalId = this.#previewOriginalIds.get(layerId);
+    const published = this.#map.getPaintProperty(originalId, 'line-opacity');
     if (this.#shownLevel === null) return published;
     const isOnLevel = ['any', ['!', ['has', 'levelKeys']], ['in', `,${this.#shownLevel},`, ['get', 'levelKeys']]];
     return ['case', isOnLevel, published ?? 1, fadedOpacity];
@@ -113,6 +124,8 @@ export class WorkingMap {
     this.#addedSourceIds = [];
     this.#hiddenFilters = new Map();
     this.#replacedSources = new Map();
+    this.#previewOriginalIds = new Map();
+    this.#usedPreviewLayerIds = new Set();
   }
 
   // A move or addition can create a shared marker with a level combination absent from the release. Install its bands
@@ -141,6 +154,18 @@ export class WorkingMap {
     return this.#map.getStyle().sources[sourceId].data;
   }
 
+  // Two files can share a published layer, such as land and protected areas sharing park names. Each working copy
+  // needs its own id, but the published layer is hidden and restored only once.
+  #previewIdFor(layerId, filename) {
+    const sharedId = `${previewPrefix}${layerId}`;
+    if (!this.#usedPreviewLayerIds.has(sharedId)) return sharedId;
+    const withFilename = `${sharedId}-${filename}`;
+    if (!this.#usedPreviewLayerIds.has(withFilename)) return withFilename;
+    let number = 2;
+    while (this.#usedPreviewLayerIds.has(`${withFilename}-${number}`)) number += 1;
+    return `${withFilename}-${number}`;
+  }
+
   // Each copy goes directly below its hidden original, so the drawing order stays the published one.
   #drawInsteadOfBasemap(filename, features, isShared) {
     const sourceId = isShared ? this.#sharedSource : previewPrefix + filename;
@@ -150,12 +175,16 @@ export class WorkingMap {
     }
     const layerIds = this.#basemapLayers[filename];
     const publishedLayers = this.#map.getStyle().layers.filter(layer => layerIds.includes(layer.id));
-    for (const layer of previewLayers(publishedLayers, sourceId, isShared ? filename : null)) {
-      const originalId = layer.id.slice(previewPrefix.length);
-      this.#map.addLayer(layer, originalId);
-      this.#addedLayerIds.push(layer.id);
-      this.#hiddenFilters.set(originalId, this.#map.getFilter(originalId) ?? null);
-      this.#map.setFilter(originalId, hiddenLayerFilter);
+    for (const published of publishedLayers) {
+      const [copy] = previewLayers([published], sourceId, isShared ? filename : null);
+      copy.id = this.#previewIdFor(published.id, filename);
+      this.#usedPreviewLayerIds.add(copy.id);
+      this.#previewOriginalIds.set(copy.id, published.id);
+      this.#map.addLayer(copy, published.id);
+      this.#addedLayerIds.push(copy.id);
+      if (this.#hiddenFilters.has(published.id)) continue;
+      this.#hiddenFilters.set(published.id, this.#map.getFilter(published.id) ?? null);
+      this.#map.setFilter(published.id, hiddenLayerFilter);
     }
   }
 }

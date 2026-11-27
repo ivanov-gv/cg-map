@@ -78,24 +78,6 @@ registerBehaviors(sketchBehaviors);
 registerBehaviors(junctionBehaviors);
 registerBehaviors(gapBehaviors, 'addresses');
 
-const basemapLayers = {
-  'buildings.geojson': ['buildings'],
-  'building-labels.geojson': ['building-numbers'],
-  'land.geojson': ['land'],
-  'water.geojson': ['water', 'rivers'],
-  'roads.geojson': [
-    'road-casing',
-    'minor-casing',
-    'minor-roads',
-    'pedestrian-streets',
-    'footways',
-    'paths',
-    'cycleways',
-    'steps',
-    'major-roads',
-    'road-labels'
-  ]
-};
 const applyOrCancelMessage = 'Apply or Cancel the current edit first.';
 // The width at which the workspace becomes the phone one, as in style.css.
 const phoneLayout = matchMedia('(max-width: 720px)');
@@ -984,7 +966,6 @@ function installMapLayers(visibilityConfig) {
   installPlaces(map, publishedPlaces, placeVisibility);
   workingMap = new WorkingMap({
     map,
-    basemapLayers,
     visibilityConfig: placeVisibility,
     publishedPlaces,
     sharedSource: 'editor-source'
