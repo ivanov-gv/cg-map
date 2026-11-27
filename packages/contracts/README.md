@@ -185,11 +185,20 @@ split into parts.
 
 The field pattern for a link is `node/N`, `way/N`, `relation/N` or `local:<uuid>`; `reference` in `editor-layers.json`
 names the file that holds the target. `position` is a WGS84 longitude/latitude pair and `positions` is a line of them.
-The shared rules are not versioned: they keep released-only properties while the producer still emits version 3,
-including places' `category`, `visibilityLevel` and `addr:street`, settlement `rank` and `municipality`, roads'
-`startLevel`, `endLevel` and `pathClass: main`, and stops' `lines` and `side`. Version 5 replaces them with the values
-and links above; its file set gives the old split files no place. The Editor's version-5 step stops showing those files
-and edits the merged ones.
+Version 5 keeps a municipality's `name`, `name:en`, `ISO3166-2`, `population` and `labelPoint`; a neighbour country
+keeps only `name`; the sea has no editable property beyond its geometry and locked identity. No version-5 rule has
+`minzoom`: no current source stores it, and zoom is a style choice.
+
+`editor-layers.json` is versioned by the bundle version that loads it. The top-level rule set is the frozen set for
+released bundle versions 1–4. While the producer still emits version 3, it keeps released-only properties such as
+places' `category`, `visibilityLevel` and `addr:street`, settlement `rank`, `municipality` and `minzoom`, roads'
+`startLevel`, `endLevel` and `pathClass: main`, stops' `lines` and `side`, and summits' `minzoom`. `bundleRules["5"]` is
+a separate, complete rule set for pending version 5 that lists exactly the model's fields above and gives the old split
+files no place. The `version` inside a rule set is the editing-rules format version (2), not the bundle version; the key
+names the bundle version. An Editor that loads a bundle must select the rules for that bundle version —
+`bundleRules[version]` when present, otherwise the top-level set — and validate and export every edit with the selected
+set. It must not apply released-only top-level fields to version 5. This contract step states that requirement; the
+Editor's own step implements it.
 
 ### Links across files
 
@@ -208,20 +217,21 @@ not cross-file rules. A cross-file check confirms only that the target exists. I
 polygon membership or a copied value. The build and the Editor may follow a link to copy a displayed value, such as a
 street name onto its roads or a river name onto an area card, but neither stores that copy as a source fact.
 
-`editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows: operations, geometry
-types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder values and the
-source value of a new place. Anything unlisted is locked, which preserves unknown fields, attribution and identity.
-`limitedKinds` narrows kinds that are derived or only frame the map; `derivedGeometry` marks shapes the editor computes
-from another edit; `addOnly` values become identity once written; a label's located `entrances` may only move with their
-building. `editor-changeset.schema.json` defines the export. Version 2 names an existing object by `entityId` (and
-`entityPart`) with a fingerprint and full before/after features; a new object keeps its `local:` ID as its entity ID.
-`featureIndex`, bound to one snapshot, remains for routes and for version 1. `fieldItems` carry rough work from the
-field, which the importer never writes. Canyon rims accept add, change and delete: a new rim may state optional
-whole-metre `height` and `width`. The build measures height; the owner paints width. Width is the horizontal distance
-seen from above, from the rim to the slope foot, in whole metres, and no edge has one until then. An omitted width means
-`0 m`, a vertical edge. The height range is a contract limit because a sampled value outside it is a bad build, not a
-missing measurement. Width runs from `0` to `2000` m because zero is a real edge and a local canyon is far below two
-kilometres wide; a larger typed value is a units or typing mistake
+Each rule set in `editor-layers.json` (shape in `editor-layers.schema.json`) lists what each bundled file allows:
+operations, geometry types, properties with their types and limits, kinds, the level reserved for landmarks, placeholder
+values and the source value of a new place. The schema gives the top-level set and each versioned set the same shape, so
+a consumer validates the selected object the same way. Anything unlisted is locked, which preserves unknown fields,
+attribution and identity. `limitedKinds` narrows kinds that are derived or only frame the map; `derivedGeometry` marks
+shapes the editor computes from another edit; `addOnly` values become identity once written; a label's located
+`entrances` may only move with their building. `editor-changeset.schema.json` defines the export. Version 2 names an
+existing object by `entityId` (and `entityPart`) with a fingerprint and full before/after features; a new object keeps
+its `local:` ID as its entity ID. `featureIndex`, bound to one snapshot, remains for routes and for version 1.
+`fieldItems` carry rough work from the field, which the importer never writes. Canyon rims accept add, change and
+delete: a new rim may state optional whole-metre `height` and `width`. The build measures height; the owner paints
+width. Width is the horizontal distance seen from above, from the rim to the slope foot, in whole metres, and no edge
+has one until then. An omitted width means `0 m`, a vertical edge. The height range is a contract limit because a
+sampled value outside it is a bad build, not a missing measurement. Width runs from `0` to `2000` m because zero is a
+real edge and a local canyon is far below two kilometres wide; a larger typed value is a units or typing mistake
 ([ADR 0044](../../docs/decisions/0044-owner-painted-canyon-width.md)). `method` is not editable. At released versions
 `river` is text and `bank` is locked; version 5 replaces the text with the `riverEntityId` link above and states `bank`.
 The importer assigns its `local:` ID, `canyon-rim` kind and `editor-drawn` method, and refuses a changeset that states

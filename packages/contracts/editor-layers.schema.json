@@ -1,17 +1,40 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Editing rules per source file",
+  "title": "Editing rules per source file and bundle version",
+  "description": "The top-level rule set serves released bundle versions 1–4. bundleRules holds a complete rule set for a pending bundle version: the key is the bundle version, while version is the editing-rules format.",
   "type": "object",
-  "required": ["version", "localPlaceSource", "layers"],
+  "required": ["version", "localPlaceSource", "layers", "bundleRules"],
   "additionalProperties": false,
   "properties": {
     "version": {"const": 2},
+    "localPlaceSource": {"$ref": "#/$defs/localPlaceSource"},
+    "layers": {"$ref": "#/$defs/layerRules"},
+    "bundleRules": {
+      "description": "Rules selected by the bundle version the Editor loads. A listed version uses its own rules; other versions use the top-level rules.",
+      "type": "object",
+      "required": ["5"],
+      "additionalProperties": false,
+      "properties": {
+        "5": {
+          "type": "object",
+          "required": ["version", "localPlaceSource", "layers"],
+          "additionalProperties": false,
+          "properties": {
+            "version": {"const": 2},
+            "localPlaceSource": {"$ref": "#/$defs/localPlaceSource"},
+            "layers": {"$ref": "#/$defs/layerRules"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
     "localPlaceSource": {
       "description": "The source property of a place created in the editor.",
       "type": "string",
       "minLength": 1
     },
-    "layers": {
+    "layerRules": {
       "type": "object",
       "additionalProperties": {
         "type": "object",

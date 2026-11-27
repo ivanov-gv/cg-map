@@ -20,6 +20,9 @@ const poiProperties = [
   'wikidata',
   'wikipedia'
 ];
+const readEditorLayers = () => readJSON('editor-layers.json');
+const releasedLayerRules = () => readEditorLayers().layers;
+const version5LayerRules = () => readEditorLayers().bundleRules['5'].layers;
 
 // Producers and consumers test their own use of these files; this project only guards the files themselves.
 test('every published schema declares its dialect, title and shape', () => {
@@ -120,15 +123,46 @@ test('editor bundle versions freeze each version and add to the one before', () 
     previousFiles = files;
   }
   // A bundled file without rules could be shown and never edited, and rules without a file could never be reached.
-  // The rules are not versioned: they keep the files of released versions while adding the pending version-5 files.
-  const declaredFiles = [
-    ...new Set([...branches.values()].flatMap(branch => branch.properties.layers.items.properties.filename.enum))
+  // The top-level rules keep the released files; version 5 selects its own set when its bundle is loaded.
+  const releasedFiles = [
+    ...new Set(
+      [...branches.values()]
+        .filter(branch => branch.properties.version.const <= 4)
+        .flatMap(branch => branch.properties.layers.items.properties.filename.enum)
+    )
   ].sort();
-  assert.deepEqual(Object.keys(readJSON('editor-layers.json').layers).sort(), declaredFiles);
+  const version5Files = [...branches.get(5).properties.layers.items.properties.filename.enum].sort();
+  const editorLayers = readEditorLayers();
+  assert.deepEqual(Object.keys(editorLayers.layers).sort(), releasedFiles);
+  assert.deepEqual(Object.keys(editorLayers.bundleRules).sort(), ['5']);
+  assert.deepEqual(Object.keys(editorLayers.bundleRules['5'].layers).sort(), version5Files);
+});
+
+test('editing rules are versioned by the bundle version the Editor loads', () => {
+  const schema = readJSON('editor-layers.schema.json');
+  const editorLayers = readEditorLayers();
+  assert.deepEqual([...schema.required].sort(), ['bundleRules', 'layers', 'localPlaceSource', 'version']);
+  assert.equal(schema.properties.layers.$ref, '#/$defs/layerRules');
+  assert.deepEqual(Object.keys(schema.properties.bundleRules.properties).sort(), ['5']);
+  assert.deepEqual(schema.properties.bundleRules.required, ['5']);
+  const version5Schema = schema.properties.bundleRules.properties['5'];
+  assert.deepEqual([...version5Schema.required].sort(), ['layers', 'localPlaceSource', 'version']);
+  assert.equal(version5Schema.properties.layers.$ref, '#/$defs/layerRules');
+  assert.equal(editorLayers.version, 2);
+  assert.equal(editorLayers.bundleRules['5'].version, editorLayers.version);
+  assert.equal(editorLayers.bundleRules['5'].localPlaceSource, editorLayers.localPlaceSource);
+});
+
+test('version 5 keeps the released rules for files the model does not change', () => {
+  const version5 = version5LayerRules();
+  const released = releasedLayerRules();
+  for (const filename of ['bridges.geojson', 'railways.geojson', 'transit-routes.json']) {
+    assert.deepEqual(version5[filename], released[filename], filename);
+  }
 });
 
 test('bridges are an editable polygon layer with only reviewed property rules', () => {
-  assert.deepEqual(readJSON('editor-layers.json').layers['bridges.geojson'], {
+  assert.deepEqual(releasedLayerRules()['bridges.geojson'], {
     operations: ['add', 'modify', 'delete'],
     geometries: ['Polygon'],
     properties: {
@@ -143,7 +177,7 @@ test('bridges are an editable polygon layer with only reviewed property rules', 
 });
 
 test('railways are editable as stored, with only the reviewed property rules', () => {
-  assert.deepEqual(readJSON('editor-layers.json').layers['railways.geojson'], {
+  assert.deepEqual(releasedLayerRules()['railways.geojson'], {
     operations: ['add', 'modify', 'delete'],
     geometries: ['Point', 'LineString', 'Polygon'],
     properties: {
@@ -161,7 +195,7 @@ test('railways are editable as stored, with only the reviewed property rules', (
 
 // The sun's direction is one derivation convention, not a fact repeated on each ridge.
 test('ridges are drawn facts with only the reviewed property rules', () => {
-  const layers = readJSON('editor-layers.json').layers;
+  const layers = releasedLayerRules();
   assert.deepEqual(layers['ridges.geojson'], {
     operations: ['add', 'modify', 'delete'],
     geometries: ['LineString'],
@@ -176,7 +210,7 @@ test('ridges are drawn facts with only the reviewed property rules', () => {
 
 // A limited kind cannot be added, so the shade link is an editable land kind with an entity-ID pattern.
 test('land rules offer a shade kind with a green-area entity-ID pattern', () => {
-  const land = readJSON('editor-layers.json').layers['land.geojson'];
+  const land = releasedLayerRules()['land.geojson'];
   assert.deepEqual(land.operations, ['add', 'modify', 'delete']);
   assert.deepEqual(land.geometries, ['Polygon', 'MultiPolygon']);
   assert.ok(land.editableKinds.includes('shade'));
@@ -187,9 +221,9 @@ test('land rules offer a shade kind with a green-area entity-ID pattern', () => 
   });
 });
 
-// One surface holds the areas that share borders; the editor rules describe the file's kinds and stored labels.
-test('version 5 surface rules carry shared-area kinds, links and movable labels', () => {
-  const surface = readJSON('editor-layers.json').layers['surface.geojson'];
+// One surface holds the areas that share borders; version 5 describes its stored kinds and labels.
+test('version 5 surface rules carry shared-area kinds, links and stored frame facts', () => {
+  const surface = version5LayerRules()['surface.geojson'];
   assert.deepEqual(surface.geometries, ['Polygon', 'MultiPolygon', 'LineString']);
   for (const kind of [
     'park', 'garden', 'woods', 'meadow', 'grass', 'scrub', 'sports', 'cemetery', 'playground', 'shade',
@@ -216,20 +250,31 @@ test('version 5 surface rules carry shared-area kinds, links and movable labels'
   for (const name of poiProperties) {
     assert.ok(Object.hasOwn(surface.properties, name), name);
   }
-  const propertyTypes = readJSON('editor-layers.schema.json').properties.layers.additionalProperties.properties.properties
-    .additionalProperties.properties.type.enum;
+  assert.deepEqual(surface.properties['ISO3166-2'], {pattern: '^ME-[0-9]+$'});
+  assert.deepEqual(surface.properties.population, {type: 'integer', minimum: 0});
+  assert.deepEqual(surface.limitedKinds.municipality.properties, [
+    'name', 'name:en', 'ISO3166-2', 'population', 'labelPoint'
+  ]);
+  assert.deepEqual(surface.limitedKinds['unassigned-water'].properties, ['labelPoint']);
+  assert.deepEqual(surface.limitedKinds.context.properties, ['name']);
+  assert.deepEqual(surface.limitedKinds.sea.properties, []);
+  assert.equal(Object.hasOwn(surface.properties, 'country'), false);
+  const propertyTypes =
+    readJSON('editor-layers.schema.json').$defs.layerRules.additionalProperties.properties.properties
+      .additionalProperties.properties.type.enum;
   assert.ok(propertyTypes.includes('position') && propertyTypes.includes('positions'));
 });
 
-// Streets, junctions and turn rules are objects in roads.geojson; released level facts stay in the shared rules.
-test('version 5 roads hold streets, junctions and turn restrictions', () => {
-  const roads = readJSON('editor-layers.json').layers['roads.geojson'];
+// Streets, junctions and turn rules are objects in roads.geojson; end levels are released-only facts.
+test('version 5 roads hold streets, junctions and turn restrictions without end levels', () => {
+  const roads = version5LayerRules()['roads.geojson'];
+  const releasedRoads = releasedLayerRules()['roads.geojson'];
   assert.deepEqual(roads.geometries, ['LineString', 'Point', 'None']);
-  for (const kind of ['park', 'city', 'trail']) {
-    assert.ok(roads.properties.pathClass.enum.includes(kind), kind);
-  }
+  assert.deepEqual(roads.properties.pathClass.enum, ['park', 'city', 'trail']);
+  assert.ok(releasedRoads.properties.pathClass.enum.includes('main'), 'released rules stay frozen');
   for (const name of ['startLevel', 'endLevel']) {
-    assert.deepEqual(roads.properties[name], {type: 'integer', minimum: -5, maximum: 5}, name);
+    assert.equal(Object.hasOwn(roads.properties, name), false, name);
+    assert.deepEqual(releasedRoads.properties[name], {type: 'integer', minimum: -5, maximum: 5}, name);
   }
   assert.deepEqual(roads.properties.streetEntityId, {pattern: entityIdPattern, reference: 'roads.geojson'});
   assert.deepEqual(roads.properties.level, {type: 'integer', minimum: -5, maximum: 5});
@@ -243,7 +288,8 @@ test('version 5 roads hold streets, junctions and turn restrictions', () => {
 
 // Entrances and labels live on buildings; a business POI is the building's own tags and icon point.
 test('version 5 buildings carry entrances, labels and business tags in one file', () => {
-  const buildings = readJSON('editor-layers.json').layers['buildings.geojson'];
+  const buildings = version5LayerRules()['buildings.geojson'];
+  const releasedBuildings = releasedLayerRules()['buildings.geojson'];
   assert.deepEqual(buildings.geometries, ['Polygon', 'Point']);
   assert.deepEqual(buildings.properties.kind.enum, ['building', 'entrance']);
   assert.deepEqual(buildings.properties['addr:streetEntityId'], {pattern: entityIdPattern, reference: 'roads.geojson'});
@@ -255,11 +301,16 @@ test('version 5 buildings carry entrances, labels and business tags in one file'
   for (const name of poiProperties) {
     assert.ok(Object.hasOwn(buildings.properties, name), name);
   }
+  for (const name of ['addr:street', 'energy_class']) {
+    assert.equal(Object.hasOwn(buildings.properties, name), false, name);
+    assert.ok(Object.hasOwn(releasedBuildings.properties, name), `${name} stays in released rules`);
+  }
 });
 
 // Places keep stand-alone and inside-building POIs; their visibility is a policy choice, not a stored copy.
 test('version 5 places and settlements follow links instead of storing derived facts', () => {
-  const layers = readJSON('editor-layers.json').layers;
+  const layers = version5LayerRules();
+  const released = releasedLayerRules();
   assert.deepEqual(layers['places.geojson'].properties.buildingEntityId, {
     pattern: entityIdPattern,
     reference: 'buildings.geojson'
@@ -269,20 +320,31 @@ test('version 5 places and settlements follow links instead of storing derived f
     reference: 'roads.geojson'
   });
   assert.deepEqual(layers['places.geojson'].properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
+  for (const name of ['category', 'standalone', 'visibilityLevel', 'addr:street']) {
+    assert.equal(Object.hasOwn(layers['places.geojson'].properties, name), false, name);
+    assert.ok(Object.hasOwn(released['places.geojson'].properties, name), `${name} stays in released rules`);
+  }
   assert.deepEqual(layers['settlements.geojson'].geometries, ['Point', 'Polygon', 'MultiPolygon']);
   assert.deepEqual(layers['settlements.geojson'].properties.settlementEntityId, {
     pattern: entityIdPattern,
     reference: 'settlements.geojson'
   });
+  for (const name of ['rank', 'municipality', 'minzoom']) {
+    assert.equal(Object.hasOwn(layers['settlements.geojson'].properties, name), false, name);
+    assert.ok(Object.hasOwn(released['settlements.geojson'].properties, name), `${name} stays in released rules`);
+  }
 });
 
-// Relief and rims store only facts; released stop facts stay in the shared rules until data emits version 5.
+// Relief and rims store only facts; a zoom threshold is a style choice, not a source fact.
 test('version 5 relief and rims leave derived values out', () => {
-  const layers = readJSON('editor-layers.json').layers;
+  const layers = version5LayerRules();
+  const released = releasedLayerRules();
   assert.deepEqual(layers['relief.geojson'].geometries, ['LineString', 'Point']);
   assert.deepEqual(layers['relief.geojson'].editableKinds, ['contour', 'summit']);
-  assert.equal(Object.hasOwn(layers['relief.geojson'].properties, 'index'), false);
-  assert.equal(Object.hasOwn(layers['relief.geojson'].properties, 'demElevation'), false);
+  for (const name of ['index', 'demElevation', 'minzoom']) {
+    assert.equal(Object.hasOwn(layers['relief.geojson'].properties, name), false, name);
+  }
+  assert.ok(Object.hasOwn(released['summits.geojson'].properties, 'minzoom'), 'released summits stay frozen');
   assert.deepEqual(layers['relief.geojson'].properties.iconPoint, {type: 'position'});
   assert.deepEqual(layers['relief.geojson'].properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
   for (const name of poiProperties) {
@@ -296,18 +358,20 @@ test('version 5 relief and rims leave derived values out', () => {
   assert.equal(layers['canyon-rims.geojson'].properties.lengthMetres, undefined);
 });
 
-test('released stop facts stay in the shared rules while version 5 drops them', () => {
-  const properties = readJSON('editor-layers.json').layers['transport-stops.geojson'].properties;
+test('released stop facts stay in the top-level rules while version 5 drops them', () => {
+  const properties = releasedLayerRules()['transport-stops.geojson'].properties;
   assert.deepEqual(properties.stopId, {required: true, maxLength: 64, addOnly: true});
   assert.deepEqual(properties.side, {enum: ['left', 'right']});
   assert.deepEqual(properties.lines, {type: 'list', maxLength: 64});
+  const version5Properties = version5LayerRules()['transport-stops.geojson'].properties;
+  assert.deepEqual(Object.keys(version5Properties).sort(), ['name', 'name:en', 'stopId']);
 });
 
 test('canyon rims state one optional whole-metre width beside their height', () => {
   const rimProperties = readJSON('relief.schema.json').$defs.canyonRim.then.properties;
   assert.equal(rimProperties.width.type, 'integer');
   assert.match(rimProperties.width.description, /omitted width means 0 m: a vertical edge/);
-  const layerRules = readJSON('editor-layers.json').layers['canyon-rims.geojson'].properties;
+  const layerRules = releasedLayerRules()['canyon-rims.geojson'].properties;
   assert.deepEqual(layerRules.width, {type: 'integer', minimum: 0, maximum: 2000});
   const widthCases = readJSON('fixtures/editor-property-cases.json').cases.filter(
     ({properties}) => Object.hasOwn(properties, 'width')

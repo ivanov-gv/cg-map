@@ -34,7 +34,7 @@ const releasedFiles = new Set(
     .filter(branch => branch.properties.version.const <= 4)
     .flatMap(branch => branch.properties.layers.items.properties.filename.enum)
 );
-// The shared rules already name version-5 files; HEAD data still holds the sources it releases.
+// The released rules name only files today's sources hold; version-5 files have no reviewed source yet.
 const pendingFiles = new Set(
   bundleBranches
     .find(branch => branch.properties.version.const === 5)
