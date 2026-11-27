@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {dataSourceURL} from '../data-root.mjs';
+import {readContractJSON} from '../contracts-root.mjs';
 import {HeadlessEditor, newLocalId} from '../editor-exports.mjs';
 import {behaviorOf} from '../../apps/editor/src/layers/shared/layer-behaviors.js';
 import {disconnectEdits, junctionEdits, splitEdits} from '../../apps/editor/src/layers/roads/road-edits.js';
@@ -10,6 +13,8 @@ import {turnKey, turnsAt} from '../../apps/editor/src/layers/roads/road-junction
 const roundDegrees = value => Number(value.toFixed(6));
 const filesOf = operations => [...new Set(operations.map(({filename}) => filename))].toSorted();
 const shiftedRings = (rings, offset) => rings.map(ring => ring.map(point => point.map(value => roundDegrees(value + offset))));
+const readSource = filename => JSON.parse(readFileSync(dataSourceURL(filename), 'utf8'));
+const identityFields = new Set(['entityId', 'entityVersion', 'entityPart']);
 
 test('a moved building takes its address and entrances along and stays importable', async testContext => {
   const editor = new HeadlessEditor(testContext);
@@ -423,4 +428,94 @@ test('a deleted stop leaves its lines', async testContext => {
   await editor.exportAndImport();
   const routes = JSON.stringify(editor.written('transit-routes.json').map(({properties}) => properties.directions));
   assert.ok(!routes.includes(`"${removed.feature.properties.stopId}"`));
+});
+
+// The pending rules must carry facts that exist in today's split sources into the merged version-5 files.
+test('version 5 rules keep the reviewed entrance facts, junction subtypes and POI kinds', () => {
+  const layers = readContractJSON('editor-layers.json').bundleRules['5'].layers;
+  const entranceProperties = new Set(
+    readSource('building-entrances.geojson').features.flatMap(({properties}) => Object.keys(properties))
+  );
+  const buildingProperties = layers['buildings.geojson'].properties;
+  for (const name of entranceProperties) {
+    if (identityFields.has(name) || name === 'addr:street') continue;
+    assert.ok(Object.hasOwn(buildingProperties, name), `${name} survives on a merged entrance`);
+  }
+  assert.deepEqual(buildingProperties['addr:streetEntityId'], {
+    pattern: '^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$',
+    reference: 'roads.geojson'
+  });
+
+  const junctionKinds = [...new Set(readSource('road-nodes.geojson').features.map(({properties}) => properties.kind))].sort();
+  assert.deepEqual(junctionKinds, ['crossing', 'give_way', 'mini_roundabout', 'stop', 'traffic_signals', 'turning_circle']);
+  for (const kind of junctionKinds) {
+    assert.ok(layers['roads.geojson'].properties.junctionKind.enum.includes(kind), kind);
+  }
+
+  const placeKinds = [...new Set(readSource('places.geojson').features.map(({properties}) => properties.kind))].sort();
+  assert.deepEqual(layers['places.geojson'].properties.kind.enum, placeKinds);
+  for (const filename of ['surface.geojson', 'buildings.geojson', 'relief.geojson']) {
+    assert.deepEqual(layers[filename].properties.poiKind.enum, placeKinds, filename);
+  }
+});
+
+// An entrance shares level and wheelchair with a POI, but it is not the POI that owns the building.
+test('reviewed entrance facts do not require a POI kind in version 5', () => {
+  const layers = readContractJSON('editor-layers.json').bundleRules['5'].layers;
+  const entrancesWithSharedFacts = readSource('building-entrances.geojson').features.filter(({properties}) =>
+    ['level', 'wheelchair'].some(name => Object.hasOwn(properties, name))
+  );
+  assert.ok(entrancesWithSharedFacts.length > 0, 'reviewed entrances state level or wheelchair');
+
+  const scopes = {
+    'buildings.geojson': 'building',
+    'relief.geojson': 'summit',
+    'surface.geojson': 'lake'
+  };
+  for (const [filename, kind] of Object.entries(scopes)) {
+    const poiKind = layers[filename].properties.poiKind;
+    assert.deepEqual(poiKind.allowedForKinds, [kind], filename);
+    assert.deepEqual(poiKind.requiredWithAnyForKinds, {
+      kinds: [kind],
+      any: [
+        'iconPoint',
+        'name:sr-Latn',
+        'phone',
+        'website',
+        'email',
+        'opening_hours',
+        'wheelchair',
+        'cuisine',
+        'wikidata',
+        'wikipedia',
+        'level'
+      ]
+    }, filename);
+  }
+});
+
+test('the version-5 network rules and reviewed sources name the same stops', () => {
+  const layers = readContractJSON('editor-layers.json').bundleRules['5'].layers;
+  assert.deepEqual(layers['transit-network.json'].properties.stopId.reference, 'transport-stops.geojson');
+  assert.deepEqual(layers['transit-network.json'].properties.stops, {
+    type: 'stopIds',
+    reference: 'transport-stops.geojson'
+  });
+  assert.deepEqual(layers['transit-routes.json'].properties.directions.reference, 'transport-stops.geojson');
+
+  const network = readSource('transit-network.json');
+  const dictionary = new Set(Object.keys(network.stops));
+  const reviewedStops = new Set(readSource('transport-stops.geojson').features.map(({properties}) => properties.stopId));
+  assert.deepEqual([...dictionary].sort(), [...reviewedStops].sort());
+  const referencedStops = new Set(network.patterns.flatMap(({stops}) => stops));
+  assert.ok(referencedStops.size > 0, 'patterns name stops');
+  for (const stopId of referencedStops) {
+    assert.ok(dictionary.has(stopId), `${stopId} is in the network dictionary`);
+    assert.ok(reviewedStops.has(stopId), `${stopId} is a reviewed stop`);
+  }
+  for (const {stops, offsets} of network.patterns) assert.equal(offsets.length, stops.length);
+});
+
+test('the headless editor refuses a staged bundle missing a required source', testContext => {
+  assert.throws(() => new HeadlessEditor(testContext, {omitSource: 'roads.geojson'}), /bundle version 3 has every source: roads.geojson/);
 });

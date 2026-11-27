@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pinned editor source bundle",
-  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle; version 4 adds editable bridge outlines and railways but leaves derived slopes to the editor's preview; version 5 holds the agreed data model: surface, roads, buildings, places, settlements and relief carry the objects that share rules, beside the unchanged bridge, railway, rim, stop and route files. Versions are frozen once released.",
+  "description": "Version 1 pins the original eight source files; version 2 the thirteen of the OSM sources; version 3 adds relief, protected areas, routes and turn restrictions, so every object on the map has its source in the bundle; version 4 adds editable bridge outlines and railways but leaves derived slopes to the editor's preview; version 5 holds the agreed data model: surface, roads, buildings, places, settlements and relief carry the objects that share rules, beside the unchanged bridge, railway, rim, stop and transit files. Each version lists its filenames once. Versions are frozen once released.",
   "type": "object",
   "required": ["version", "layers"],
   "additionalProperties": false,
@@ -28,8 +28,8 @@
       "properties": {
         "version": {"const": 5},
         "layers": {
-          "minItems": 11,
-          "maxItems": 11,
+          "minItems": 12,
+          "maxItems": 12,
           "items": {
             "properties": {
               "filename": {
@@ -43,12 +43,27 @@
                   "roads.geojson",
                   "settlements.geojson",
                   "surface.geojson",
+                  "transit-network.json",
                   "transit-routes.json",
                   "transport-stops.geojson"
                 ]
               }
             }
-          }
+          },
+          "allOf": [
+            {"contains": {"properties": {"filename": {"const": "bridges.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "buildings.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "canyon-rims.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "places.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "railways.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "relief.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "roads.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "settlements.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "surface.geojson"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "transit-network.json"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "transit-routes.json"}}}, "minContains": 1, "maxContains": 1},
+            {"contains": {"properties": {"filename": {"const": "transport-stops.geojson"}}}, "minContains": 1, "maxContains": 1}
+          ]
         }
       }
     },

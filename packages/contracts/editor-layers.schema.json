@@ -3,7 +3,7 @@
   "title": "Editing rules per source file and bundle version",
   "description": "The top-level rule set serves released bundle versions 1–4. bundleRules holds a complete rule set for a pending bundle version: the key is the bundle version, while version is the editing-rules format.",
   "type": "object",
-  "required": ["version", "localPlaceSource", "layers", "bundleRules"],
+  "required": ["version", "localPlaceSource", "layers"],
   "additionalProperties": false,
   "properties": {
     "version": {"const": 2},
@@ -62,8 +62,8 @@
                 },
                 "forbiddenValues": {"type": "array", "items": {"type": "string"}},
                 "type": {
-                  "description": "Text when absent. directions is the ordered stop list of a route; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; a position is a WGS84 longitude/latitude pair and positions is a line of them; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
-                  "enum": ["integer", "number", "boolean", "list", "position", "positions", "identifier", "identifiers", "directions", "entrances"]
+                  "description": "Text when absent. directions is the released ordered stop list of a route; directions-v5 is the version-5 stop-ID list with genuine turn points; stopIds is a list of transport stop IDs; entrances are the located entrances of a label, which follow the walls of their building; list is an array of texts; a position is a WGS84 longitude/latitude pair and positions is a line of them; an identifier is an OSM number or the local ID of an object added in the editor, and identifiers are a list of them.",
+                  "enum": ["integer", "number", "boolean", "list", "position", "positions", "identifier", "identifiers", "directions", "directions-v5", "stopIds", "entrances"]
                 },
                 "minimum": {"type": "number"},
                 "maximum": {"type": "number"},
@@ -71,14 +71,45 @@
                 "pattern": {"type": "string"},
                 "allowsNull": {"description": "A missing fact is recorded as null.", "type": "boolean"},
                 "reference": {
-                  "description": "The named file holds the object whose entity ID is the value.",
+                  "description": "The named file holds the object identified by the value: an entity ID, a stop ID or a list of either.",
                   "type": "string"
                 },
                 "addOnly": {
                   "description": "Only a new object states it; afterwards it is identity and stays locked.",
                   "type": "boolean"
                 },
-                "requiredOnAdd": {"type": "boolean"}
+                "requiredOnAdd": {"type": "boolean"},
+                "requiredForKinds": {
+                  "description": "The property is required when the feature's kind is one of these values.",
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "allowedForKinds": {
+                  "description": "Only a feature whose kind is one of these values may state the property.",
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "requiredWithAny": {
+                  "description": "The property is required when the feature states any of these other properties.",
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "requiredWithAnyForKinds": {
+                  "description": "For a feature whose kind is one of `kinds`, the property is required when it states any property in `any`. Facts shared with other kinds do not trigger the requirement there.",
+                  "type": "object",
+                  "required": ["kinds", "any"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "kinds": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+                    "any": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true}
+                  }
+                }
               }
             }
           },
