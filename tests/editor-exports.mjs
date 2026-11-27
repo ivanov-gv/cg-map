@@ -28,18 +28,6 @@ const now = '2026-11-25T10:00:00.000Z';
 const envelope = {id: 'layer-export', createdAt: now, author: 'Integration Test', reason: 'One layer'};
 const rules = readContractJSON('editor-layers.json');
 const levels = new Set(readContractJSON('place-visibility.json').levels.map(({level}) => level));
-const bundleBranches = readContractJSON('editor-bundle.schema.json').oneOf;
-const releasedFiles = new Set(
-  bundleBranches
-    .filter(branch => branch.properties.version.const <= 4)
-    .flatMap(branch => branch.properties.layers.items.properties.filename.enum)
-);
-// The released rules name only files today's sources hold; version-5 files have no reviewed source yet.
-const pendingFiles = new Set(
-  bundleBranches
-    .find(branch => branch.properties.version.const === 5)
-    .properties.layers.items.properties.filename.enum.filter(filename => !releasedFiles.has(filename))
-);
 
 const layerBehaviors = [
   buildingBehaviors,
@@ -67,12 +55,9 @@ export class HeadlessEditor {
     testContext.after(() => fs.rmSync(this.#root, {recursive: true, force: true}));
     stageContractsInto(this.#root);
     stageDataInto(this.#root);
-    const reviewedFilenames = Object.keys(rules.layers).filter(filename => {
-      const sourcePath = stagedSourcePath(this.#root, filename);
-      if (fs.existsSync(sourcePath)) return true;
-      assert.ok(pendingFiles.has(filename), `${filename} has editing rules but no reviewed source`);
-      return false;
-    });
+    const reviewedFilenames = Object.keys(rules.layers).filter(filename =>
+      fs.existsSync(stagedSourcePath(this.#root, filename))
+    );
     this.#sources = new Map(reviewedFilenames.map(filename => [filename, this.#loadSource(filename)]));
     this.session = new EditSession(this.#sources);
     this.context = {

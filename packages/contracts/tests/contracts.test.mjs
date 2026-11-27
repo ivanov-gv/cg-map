@@ -296,6 +296,8 @@ test('version 5 buildings carry entrances, labels and business tags in one file'
   assert.deepEqual(buildings.properties.labelPoint, {type: 'position'});
   assert.deepEqual(buildings.properties.labelBearing, {type: 'number', minimum: 0, maximum: 360});
   assert.deepEqual(buildings.properties.iconPoint, {type: 'position'});
+  assert.deepEqual(buildings.properties.ref, {maxLength: 128});
+  assert.deepEqual(buildings.properties.ref, releasedLayerRules()['building-entrances.geojson'].properties.ref);
   assert.deepEqual(buildings.properties.buildingEntityId, {pattern: entityIdPattern, reference: 'buildings.geojson'});
   assert.deepEqual(buildings.properties.visibilityOverride, {type: 'integer', minimum: 1, maximum: 5});
   for (const name of poiProperties) {
@@ -341,7 +343,7 @@ test('version 5 relief and rims leave derived values out', () => {
   const released = releasedLayerRules();
   assert.deepEqual(layers['relief.geojson'].geometries, ['LineString', 'Point']);
   assert.deepEqual(layers['relief.geojson'].editableKinds, ['contour', 'summit']);
-  for (const name of ['index', 'demElevation', 'minzoom']) {
+  for (const name of ['index', 'demElevation', 'minzoom', 'description']) {
     assert.equal(Object.hasOwn(layers['relief.geojson'].properties, name), false, name);
   }
   assert.ok(Object.hasOwn(released['summits.geojson'].properties, 'minzoom'), 'released summits stay frozen');

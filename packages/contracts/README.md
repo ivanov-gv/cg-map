@@ -133,7 +133,8 @@ an emitted bundle: the Editor first pins this release and reads version 5, then 
 today's data and emits it. Data-owned assembly preserves bytes, and the Editor verifies every listed file. It is built
 into dist/editor only. See [decision 0024](../../docs/decisions/0024-editor-bundle-versions.md),
 [decision 0037](../../docs/decisions/0037-every-layer-editable.md),
-[ADR 0048](../../docs/decisions/0048-ridges-are-drawn-slopes-derived.md) and ADR 0049.
+[ADR 0048](../../docs/decisions/0048-ridges-are-drawn-slopes-derived.md) and
+[ADR 0049](../../docs/decisions/0049-data-stored-as-shown.md).
 
 The released `0.2.0` package added version 4: bridge outlines, railway tracks, platforms and stations, and owner-drawn
 ridges. Its `bridges.geojson` rule allows Polygon add, modify and delete; `name` and `name:en` are editable text, while
@@ -150,8 +151,9 @@ the derivation, not to each stored line. Those rules remain in the shared file w
 ## Pending version 5: the agreed data model
 
 This change is the next `@ivanov-gv/map-contracts` release, but no package is published here and no consumer pin
-changes. The model is the owner's 2026-11-27 decision in ADR 0049 and issues
-[#514](https://github.com/ivanov-gv/cg-map/issues/514) to [#518](https://github.com/ivanov-gv/cg-map/issues/518).
+changes. The model is the owner's 2026-11-27 decision in [ADR 0049](../../docs/decisions/0049-data-stored-as-shown.md)
+and issues [#514](https://github.com/ivanov-gv/cg-map/issues/514) to
+[#518](https://github.com/ivanov-gv/cg-map/issues/518).
 
 An object is stored as it is shown, with one `entityId` and no copy of it in `osm_id`, `id` or `footprintIndex`. No
 source stores a derived value: new structures are seeded once from today's map, and a value the sources do not have

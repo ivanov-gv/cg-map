@@ -971,6 +971,7 @@
             "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5},
             "level": {"maxLength": 16},
             "entrance": {"enum": ["main", "service", "garage", "emergency", "staircase", "home", "yes"]},
+            "ref": {"maxLength": 128},
             "buildingEntityId": {"pattern": "^((node|way|relation)/[1-9][0-9]*|local:[0-9a-f-]{36})$", "reference": "buildings.geojson"},
             "door": {"enum": ["yes", "no", "hinged", "sliding", "automatic", "revolving", "folding", "overhead", "swinging"]},
             "opens_onto": {"enum": ["street", "courtyard", "passage", "parking"]}
@@ -1042,7 +1043,6 @@
             "wheelchair": {"enum": ["yes", "limited", "no", "designated"]},
             "level": {"maxLength": 16},
             "cuisine": {"maxLength": 128},
-            "description": {"maxLength": 256},
             "wikidata": {"maxLength": 64},
             "wikipedia": {"maxLength": 128},
             "visibilityOverride": {"type": "integer", "minimum": 1, "maximum": 5}
