@@ -14,6 +14,8 @@ deletes it. Git history keeps deleted plans.
   5-minute full suite locally.
 - [Editor roads component tests](editor-roads-component-tests.md): issue #476; colocated browser cases for roads and
   junctions, with one whole-app journey retained.
+- [Editor buildings component tests](editor-buildings-component-tests.md): issue #455; colocated browser cases for
+  buildings, entrances and places, with one whole-app journey retained.
 - [Web tests next to their components](web-tests-next-to-the-components.md): issue #456; test relocation, build-derived
   lists and browser reduction, with the lists/harness step recorded.
 - [Automatic workflow test runs](auto-workflow-test-runs.md): issue #334; planned move from manual test-run evidence to
