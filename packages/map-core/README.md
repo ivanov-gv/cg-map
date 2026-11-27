@@ -24,7 +24,8 @@ wall at low zoom; a painted width narrower than that no-width edge draws as the 
 lightest at the rim to darkest at the foot, using the full depth range at 9 m or more, a shorter lighter range below,
 and the full range when `height` is absent. Each outline in the `bridges` tile layer draws one grey deck under all the
 roads of that crossing, with a dark line on its edge. Decks sit above water, canyon and ground, but below the roads that
-cross them.
+cross them. An application that hit-tests roads by layer id passes its ids to `roadLayerIds([...])` instead of keeping
+its own list.
 
 The `railways` tile layer draws platforms as light fills or narrow strokes, active tracks as a thin, soft grey bed with
 fine dashed ties, and disused tracks as one faint dashed line. Their greys sit near land and minor-road casings, so
