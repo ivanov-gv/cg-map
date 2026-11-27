@@ -1,25 +1,39 @@
 import {test, expect} from '@playwright/test';
+import fileSystem from 'node:fs';
+import path from 'node:path';
+import {availableLayers, layerIdOfFile} from '../../src/layers/shared/editor-layers.js';
+import {pinnedContractsRoot} from '../pinned-contracts.mjs';
 import {waitForRepaint} from './city-steps.mjs';
-import {browseStatus, drawChoice, layerButton, layerNameOf, openObjects, openTools} from './workspace.mjs';
+import {browseStatus, drawChoice, layerButton, openObjects, openTools} from './workspace.mjs';
+
+const pinnedRules = JSON.parse(fileSystem.readFileSync(path.join(pinnedContractsRoot, 'editor-layers.json'), 'utf8'));
+
+// Shapes that only frame the map, such as neighbour countries, are drawn and never counted as objects.
+const framingCounts = {'land.geojson': 7, 'water.geojson': 1};
+const sourceFilenames = manifest => manifest.layers.map(({filename}) => filename);
+const layerOfFile = (manifest, filename) =>
+  availableLayers(sourceFilenames(manifest)).find(({id}) => id === layerIdOfFile(filename));
+const modeStatus = (page, manifest, filename) => {
+  const layer = layerOfFile(manifest, filename);
+  const isPhone = page.viewportSize().width <= 720;
+  // A phone shows the files a layer names for it, not the whole layer.
+  const shownFiles = isPhone && layer.phoneFiles ? layer.phoneFiles : layer.files;
+  const countOf = sourceFile => {
+    const {featureCount} = manifest.layers.find(source => source.filename === sourceFile);
+    return featureCount - (framingCounts[sourceFile] ?? 0);
+  };
+  const objectCount = shownFiles.reduce((total, sourceFile) => total + countOf(sourceFile), 0);
+  const isEditable = layer.files.some(sourceFile => pinnedRules.layers[sourceFile].operations.length > 0);
+  return `${layer.name} · ${objectCount} objects · ${isEditable ? 'editable' : 'read-only'}`;
+};
+
+const fetchSource = async (page, filename) => {
+  const response = await page.request.get(new URL(`sources/${filename}`, page.url()).href);
+  return response.json();
+};
 
 // Asserts source inspection against this app's own built artifact. Editing has its own spec.
 test.describe('source viewer', () => {
-  // Shapes that only frame the map, such as neighbour countries, are drawn and never counted as objects.
-  const framingCounts = {'land.geojson': 7, 'water.geojson': 1};
-  const modeStatus = (manifest, filename) => {
-    const {featureCount} = manifest.layers.find(layer => layer.filename === filename);
-    const objectCount = featureCount - (framingCounts[filename] ?? 0);
-    const access = ['context-countries.geojson', 'transport-stops.geojson'].includes(filename)
-      ? 'read-only'
-      : 'editable';
-    return `${layerNameOf(filename)} · ${objectCount} objects · ${access}`;
-  };
-
-  const fetchSource = async (page, filename) => {
-    const response = await page.request.get(new URL(`sources/${filename}`, page.url()).href);
-    return response.json();
-  };
-
   // No neighbour shares the click target, so the selection can only be this point.
   const isIsolatedPoint = (feature, features) => {
     const sourcePointSeparationDegrees = 0.0004;
@@ -71,18 +85,19 @@ test.describe('source viewer', () => {
     page.on('pageerror', error => scriptErrors.push(error.message));
     await page.goto('./');
     await expect(page.locator('#status')).toHaveText(browseStatus);
-    await expect(page.locator('[data-layer]')).toHaveCount(8);
-    await expect(page.locator('[data-source]')).toHaveCount(8);
     const manifest = await fetchSource(page, 'manifest.json');
-    for (const layer of manifest.layers) {
+    const layers = availableLayers(sourceFilenames(manifest));
+    await expect(page.locator('[data-layer]')).toHaveCount(layers.length);
+    await expect(page.locator('[data-source]')).toHaveCount(sourceFilenames(manifest).length);
+    for (const layer of layers) {
       await page.getByRole('button', {name: 'Layers', exact: true}).click();
-      await layerButton(page, layer.filename).click();
-      await expect(page.locator('#status')).toHaveText(modeStatus(manifest, layer.filename));
+      await layerButton(page, layer.files[0]).click();
+      await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, layer.files[0]));
       await expect(page.locator('[data-layer][aria-pressed="true"]')).toHaveCount(1);
     }
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await layerButton(page, 'places.geojson').click();
-    await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'places.geojson'));
+    await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, 'places.geojson'));
     const places = await fetchSource(page, 'places.geojson');
     const place = places.features.find(
       feature =>
@@ -117,7 +132,7 @@ test.describe('source viewer', () => {
     await expect(page.locator('.inspector')).toBeVisible();
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await layerButton(page, 'transport-stops.geojson').click();
-    await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'transport-stops.geojson'));
+    await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, 'transport-stops.geojson'));
     const stops = await fetchSource(page, 'transport-stops.geojson');
     const stop = stops.features.find(feature => isIsolatedPoint(feature, stops.features));
     await centerSourceMap(page, stop.geometry.coordinates, 15);
@@ -149,7 +164,7 @@ test.describe('source viewer', () => {
     expect(scriptErrors).toEqual([]);
   });
 
-  test('source viewer selects polygons and lines from full source geometry, and toggles satellite', async ({page}) => {
+  test('source viewer selects polygons and lines from full source geometry, and toggles satellite', {tag: '@phone'}, async ({page}) => {
     await page.goto('./');
     await expect(page.locator('#status')).toHaveText(browseStatus);
     const manifest = await fetchSource(page, 'manifest.json');
@@ -157,7 +172,7 @@ test.describe('source viewer', () => {
 
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await layerButton(page, 'buildings.geojson').click();
-    await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'buildings.geojson'));
+    await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, 'buildings.geojson'));
     const buildings = await fetchSource(page, 'buildings.geojson');
     // A four-corner footprint is taken to be convex, so the average of its corners lies inside it.
     const quadrilateral = buildings.features.find(feature => feature.geometry.coordinates[0].length === 5);
@@ -170,7 +185,7 @@ test.describe('source viewer', () => {
 
     await page.getByRole('button', {name: 'Layers', exact: true}).click();
     await layerButton(page, 'roads.geojson').click();
-    await expect(page.locator('#status')).toHaveText(modeStatus(manifest, 'roads.geojson'));
+    await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, 'roads.geojson'));
     const roads = await fetchSource(page, 'roads.geojson');
     const straightRoad = roads.features.find(feature => feature.geometry.coordinates.length === 2);
     await centerSourceMap(page, averageCoordinate(straightRoad.geometry.coordinates), closeZoom);
@@ -281,14 +296,19 @@ async function clickCoordinate(page, coordinate) {
   await page.mouse.click(point.x, point.y);
 }
 
-// Select an isolated low-priority POI so a hidden-object tap cannot accidentally hit a neighbouring visible marker.
+// An isolated low-priority POI cannot have its tap taken by a neighbouring visible marker.
+const isolatedPlaceIn = features =>
+  features.find(candidate => candidate.properties.visibilityLevel === 4 && features.every(other => {
+    const distance = Math.hypot(
+      ...candidate.geometry.coordinates.map((value, axis) => value - other.geometry.coordinates[axis])
+    );
+    return candidate === other || distance > 0.001;
+  }));
+
 async function isolatedPlace(page) {
   const response = await page.request.get(new URL('sources/places.geojson', page.url()).href);
   const {features} = await response.json();
-  const feature = features.find(candidate => candidate.properties.visibilityLevel === 4 && features.every(other => {
-    const distance = Math.hypot(...candidate.geometry.coordinates.map((value, axis) => value - other.geometry.coordinates[axis]));
-    return candidate === other || distance > 0.001;
-  }));
+  const feature = isolatedPlaceIn(features);
   expect(feature).toBeTruthy();
   return feature;
 }
@@ -371,9 +391,10 @@ test('applied changes use amber guides, refresh normal rendering, and undo resto
   await expect.poll(changedState).toEqual({guide: 'editable', label: feature.properties['name:en'] ?? feature.properties.name});
 });
 
-test('every file keeps normal cartography and guide-off hits require rendered geometry', async ({page}, testInfo) => {
+test('every file keeps normal cartography and guide-off hits require rendered geometry', {tag: '@phone'}, async ({page}, testInfo) => {
   await page.goto('./');
   await expect(page.locator('#status')).toHaveText(browseStatus);
+  const manifest = await fetchSource(page, 'manifest.json');
   for (const filename of ['buildings.geojson', 'roads.geojson', 'land.geojson', 'water.geojson', 'building-labels.geojson']) {
     const normal = await page.evaluate(filename => {
       const {map} = window.editorDebug;
@@ -398,13 +419,15 @@ test('every file keeps normal cartography and guide-off hits require rendered ge
   await clickCoordinate(page, [19.2594, 42.4411]);
   await expect(page.locator('#selection-title')).toHaveText('Select an object');
   await chooseMode(page, 'transport-stops.geojson');
+  await expect(page.locator('#status')).toHaveText(modeStatus(page, manifest, 'transport-stops.geojson'));
   const response = await page.request.get(new URL('sources/transport-stops.geojson', page.url()).href);
   const {features} = await response.json();
   const stop = features[0];
   await setView(page, stop.geometry.coordinates, 17);
   await clickCoordinate(page, stop.geometry.coordinates);
   await expect(page.locator('#selection-title')).toHaveText(stop.properties.name);
-  await expect(page.locator('#lock-reason')).toContainText('transit import');
+  await expect(page.locator('#lock-reason')).toBeHidden();
+  await expect(page.locator('#editor')).toBeVisible();
   await expect(page.locator('#error')).toBeHidden();
 });
 
@@ -418,7 +441,8 @@ test('a resumed shared-location move installs its public zoom bands with guides 
   const {features} = await sourceResponse.json();
   const manifest = await manifestResponse.json();
   const index = features.findIndex(feature => feature.properties.visibilityLevel === 3);
-  const destination = features.find(feature => feature.properties.visibilityLevel === 4);
+  const destination = isolatedPlaceIn(features);
+  expect(destination).toBeTruthy();
   const before = features[index];
   const after = {...before, geometry: destination.geometry};
   const base = manifest.layers.find(layer => layer.filename === 'places.geojson').sha256;

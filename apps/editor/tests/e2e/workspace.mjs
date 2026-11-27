@@ -1,31 +1,14 @@
 // How a browser test finds its way around the workspace. Tests name the source file they care about; the layer that
 // holds it is an implementation detail of these helpers.
+import {editorLayers, layerIdOfFile} from '../../src/layers/shared/editor-layers.js';
+
 export const browseStatus = 'Browse · choose a layer to edit';
 
-const layerIdByFile = {
-  'buildings.geojson': 'buildings',
-  'building-labels.geojson': 'addresses',
-  'places.geojson': 'places',
-  'roads.geojson': 'roads',
-  'land.geojson': 'green',
-  'water.geojson': 'water',
-  'context-countries.geojson': 'settlements',
-  'transport-stops.geojson': 'stops'
-};
-const layerNames = {
-  buildings: 'Buildings',
-  addresses: 'Addresses',
-  places: 'Places & points',
-  roads: 'Roads & paths',
-  green: 'Parks & green',
-  water: 'Water',
-  settlements: 'Settlements & borders',
-  stops: 'Stops'
-};
+const layerOfFile = filename => editorLayers.find(({id}) => id === layerIdOfFile(filename));
 
-export const layerNameOf = filename => layerNames[layerIdByFile[filename]];
+export const layerNameOf = filename => layerOfFile(filename).name;
 
-export const layerButton = (page, filename) => page.locator(`[data-layer="${layerIdByFile[filename]}"]`);
+export const layerButton = (page, filename) => page.locator(`[data-layer="${layerIdOfFile(filename)}"]`);
 
 // The first thing that can be added on the active layer.
 export const drawChoice = page => page.locator('#draw-choices button').first();
