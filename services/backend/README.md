@@ -74,11 +74,11 @@ process manager, so that switchover belongs to the hosting setup.
 
 ## Protobuf transport API
 
-`cgmap.transport.v1.TransportService/ListVehicles` is the read-only ConnectRPC API. Its definition comes from the exact
-`@ivanov-gv/map-contracts` pin at the repository root
-([source](../../packages/contracts/proto/cgmap/transport/v1/transport.proto)); generated Go types, handler registration
-and clients live in `gen/`. ConnectRPC replaces hand-written RPC routing and serialization. It uses Go's HTTP server
-alongside the map's existing tile, asset and health handlers.
+`cgmap.transport.v1.TransportService/ListVehicles` is the read-only ConnectRPC API. Its definition comes from this
+commit's shared contracts ([source](../../packages/contracts/proto/cgmap/transport/v1/transport.proto)); generated Go
+types, handler registration and clients live in `gen/`. A release checks those bindings against the exact pinned
+contracts package. ConnectRPC replaces hand-written RPC routing and serialization. It uses Go's HTTP server alongside
+the map's existing tile, asset and health handlers.
 
 Requests use the Connect, gRPC or gRPC-Web protocol at `/cgmap.transport.v1.TransportService/ListVehicles`. Connect
 supports binary protobuf and protobuf JSON. The listener accepts HTTP/1.1 and cleartext HTTP/2; behind a proxy,
@@ -94,21 +94,25 @@ within the stale window they receive the existing snapshot with `stale: true`. R
 
 ### Regenerate bindings
 
-Install Buf CLI 1.75.0 and use the backend module's pinned generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11).
-`generate` and `generate-check` read the proto from the root's pinned `@ivanov-gv/map-contracts` package, so install
-that dependency once from the repository root first:
+Install Buf CLI 1.75.0 and use the backend module's pinned generators (ConnectRPC 2.0.2 and protobuf Go 1.36.11). Dev
+generation reads the proto from this commit; `generate-check` and releases read the exact `@ivanov-gv/map-contracts` pin
+installed at the repository root:
 
 ```sh
-make setup
-make -C services/backend generate
-make -C services/backend generate-check
+make setup                                        # installs the pin used by the commands below
+make -C services/backend generate                 # this commit's proto; MAP_CONTRACTS_ROOT overrides it
+make -C services/backend generate-check           # compares committed bindings with the pin
+make -C services/backend generate-release         # writes gen/ from the pin; refuses another root
+make -C services/backend build-release            # generate-check, then build the server
 ```
 
-Run these from the repository root. `generate` lints the pinned proto package and writes `gen/`; `generate-check`
-generates into a temporary directory and compares it with the committed bindings. Do not edit generated files. Regular
-Go builds and tests consume those bindings and need neither Buf nor raw geography; they still need no npm. The explicit
-ConnectRPC dependency follows the requirement for a protobuf-defined server API; its Go 1.26 minimum is also the
-module's minimum.
+Run these from the repository root. `tools/contracts-root.sh` is the only resolver: it rejects an empty override, and a
+release refuses any override, including an empty one. `generate` lints this commit's proto and writes `gen/`;
+`generate-check` generates into a temporary directory and compares it with the committed bindings. Regular `check` and
+CI compile the committed bindings without calling `generate-check`; run it (or `build-release`) after a contracts pin
+bump when that comparison is wanted. Do not edit generated files. Regular Go builds and tests consume those bindings and
+need neither Buf nor raw geography; they still need no npm. The explicit ConnectRPC dependency follows the requirement
+for a protobuf-defined server API; its Go 1.26 minimum is also the module's minimum.
 
 ## Layout
 

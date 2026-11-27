@@ -28,6 +28,11 @@ test('every property that can be filled in has a list, a control of its own, or 
   assert.deepEqual(undecided, []);
 });
 
+test('a track gauge and a railway number are typed, like other measured values and numbers', () => {
+  assert.ok(isTyped('railways.geojson', 'gauge'));
+  assert.ok(isTyped('railways.geojson', 'ref'));
+});
+
 test('a whole number with few possible values is picked', () => {
   const {minzoom, ele} = rules.layers['summits.geojson'].properties;
   assert.ok(hasClosedList(minzoom));
