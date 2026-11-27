@@ -11,12 +11,15 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   behavior (`src/layers/shared/layer-behaviors.js`), never in `app.js`.
 - Consume the verified data-owned source bundle and public map-core entry; never import web implementation or pipeline
   code at runtime. Keep unknown properties, attribution and source identity intact.
-- Dev builds on main use the repository data root and the one tools/contracts-root.mjs default for contracts. A future
-  app production release pins every dependency (no production release exists yet).
-- tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
-  `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts` pins. Bump a pin only in its own change after a release; never
-  point tests at repository data/ or packages/contracts/. Test targets set both roots. Layers the pins lack are tested
-  on the fixture city (tests/e2e/fixture-city.mjs), the app's own files.
+- Local `build`, `dev` and `lan`, plus ci-publish's dev-image and Pages builds, bundle this commit's core through the
+  one tools/core-root.mjs default, with repository data and contracts roots. `make verify`, whose `dist/editor`
+  ci-apps-editor uploads, uses this app's pinned core, data and contracts; `test`, `e2e`, `e2e-built` and
+  `build-release` use those pins too, and a release refuses another core
+  ([ADR 0046](../../docs/decisions/0046-editor-builds-take-their-own-core.md)).
+- tests/ reads core through tests/pinned-core.mjs, data through tests/pinned-data.mjs and contracts through
+  tests/pinned-contracts.mjs, using the exact pins in package.json. Bump a pin only in its own change after a release;
+  never point tests at repository data/ or packages/contracts/. Test targets set all three roots. Layers the pins lack
+  are tested on the fixture city (tests/e2e/fixture-city.mjs), the app's own files.
 - Edits stay in the browser until exported as a changeset; only data/tools/apply-changeset.mjs writes reviewed sources.
   What each file allows comes from the contracts selected for the run: repository HEAD in a dev build, the app pin in
   tests. Never use a copy here or another relative path into `packages/contracts`. Keep editor validation in step with

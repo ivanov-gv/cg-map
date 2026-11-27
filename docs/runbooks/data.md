@@ -170,7 +170,7 @@ outlines with that same 1 m clearance so no traced deck overlaps a mapped one, t
 decimals. Each traced outline records its source road IDs, uses `derived:bridge-*` identity with a content-hash version,
 and is marked `method: traced`. OSM areas keep `method: osm` and their OSM identity. Review the counts in
 `bridge_counts` and the parameters in `bridge_seed` in `sources/provenance.json`, then rebuild the archive because the
-geometry changed. See [decision 0046](../decisions/0046-bridge-outlines-seeded-once.md). Like railways, this source is
+geometry changed. See [decision 0047](../decisions/0047-bridge-outlines-seeded-once.md). Like railways, this source is
 staged display geometry outside the pinned editor bundle until a later step defines its editor mode.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is

@@ -96,7 +96,7 @@ buffered by 10 m, cleared of OSM outlines with that same 1 m tolerance, simplifi
 WGS84. Traced features use `derived:bridge-*` identity with a content-hash version, list their `sourceRoadIds` and carry
 `method: traced`. Later `bridges` extractions carry those reviewed outlines forward unchanged rather than deriving them
 again. Counts and seed parameters live under `bridge_counts` and `bridge_seed` in `sources/provenance.json`; see
-[decision 0046](../docs/decisions/0046-bridge-outlines-seeded-once.md). This is display geometry only, so the source
+[decision 0047](../docs/decisions/0047-bridge-outlines-seeded-once.md). This is display geometry only, so the source
 stays outside the pinned editor bundle until a later step defines its editor mode.
 
 Issue #328 adds three OSM-derived sources from the same reviewed PBF: `sources/settlements.geojson` has 4,009 named
