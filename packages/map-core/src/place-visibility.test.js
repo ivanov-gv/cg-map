@@ -13,7 +13,7 @@ import {
   requestedPlaceMarker,
   placeLayers,
   listingsAtHits
-} from '../src/place-visibility.js';
+} from './place-visibility.js';
 
 const rawConfig = JSON.parse(
   fs.readFileSync(new URL(import.meta.resolve('@ivanov-gv/map-contracts/place-visibility.json')))

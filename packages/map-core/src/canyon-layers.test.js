@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createPropertyExpression, latest} from '@maplibre/maplibre-gl-style-spec';
-import {mapStyle} from '../src/map-style.js';
+import {mapStyle} from './map-style.js';
 
 const referenceZoom = 16;
 const tileSizePixels = 512;

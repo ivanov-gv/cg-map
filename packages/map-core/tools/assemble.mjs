@@ -7,10 +7,15 @@ import {fileURLToPath} from 'node:url';
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url));
 const packageName = '@ivanov-gv/map-core';
+// Tests live beside the runtime, but an artifact carries only the runtime it serves.
+const isRuntimeFile = sourcePath => !sourcePath.endsWith('.test.js');
 
 // Each artifact carries its own copy of the runtime, under map-core/.
 export function copyMapCore(outputDirectory) {
-  fs.cpSync(path.join(packageRoot, 'src'), path.join(outputDirectory, 'map-core'), {recursive: true});
+  fs.cpSync(path.join(packageRoot, 'src'), path.join(outputDirectory, 'map-core'), {
+    recursive: true,
+    filter: isRuntimeFile
+  });
 }
 
 // Libraries and fonts are local runtime assets, served beside each application's own files.
@@ -33,7 +38,7 @@ export function assembleStaticApplication(applicationDirectory, outputDirectory)
   fs.rmSync(outputDirectory, {recursive: true, force: true});
   fs.cpSync(path.join(applicationDirectory, 'public'), outputDirectory, {recursive: true});
   const sourceDirectory = path.join(applicationDirectory, 'src');
-  const modules = fs.readdirSync(sourceDirectory).filter(filename => filename.endsWith('.js'));
+  const modules = fs.readdirSync(sourceDirectory).filter(filename => filename.endsWith('.js') && isRuntimeFile(filename));
   for (const filename of modules) {
     const source = fs.readFileSync(path.join(sourceDirectory, filename), 'utf8');
     fs.writeFileSync(path.join(outputDirectory, filename), relocateCoreImports(source));
