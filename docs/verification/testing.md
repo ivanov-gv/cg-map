@@ -14,11 +14,13 @@ On Ubuntu 26.04, Playwright 1.56 has no Chromium build; install the 24.04 one wi
 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright install chromium` (see
 [technical debt](../system-architecture/technical-debt.md)).
 
-The pre-push hook's `make check` is required (builds and non-browser checks, no browser suites); the browser suites and
-`act` runs shown here are optional for iterating, except `make test-cd-dev-pages` when changing ci-publish or
-cd-dev-pages ([Pages recipe](../../.github/TESTING.md#pages-path-recipe)). A PR merges only when its `CI gate` passes on
-GitHub: for a workflow change, the gate itself calls changed `ci-*` workflows in test-run mode and dispatches and waits
-for changed `cd-*` workflows, as [the workflow rule](../../.github/TESTING.md) describes.
+The pre-push hook runs the checks selected from the pushed refs (`make verify PKG=<folder>`, plus `make check-go` for
+backend), with no browser suites; an unreadable diff or planner failure falls back to `make check` and, when Go is
+available, `make check-go`. The browser suites and `act` runs shown here are optional for iterating, except
+`make test-cd-dev-pages` when changing ci-publish or cd-dev-pages
+([Pages recipe](../../.github/TESTING.md#pages-path-recipe)). A PR merges only when its `CI gate` passes on GitHub: for
+a workflow change, the gate itself calls changed `ci-*` workflows in test-run mode and dispatches and waits for changed
+`cd-*` workflows, as [the workflow rule](../../.github/TESTING.md) describes.
 
 Frontend iteration commands and measured check durations live with the
 [web application](../../apps/web/README.md#focused-browser-checks).

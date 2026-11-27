@@ -10,7 +10,7 @@ BROWSER_PROJECTS := apps/web apps/editor apps/core-demo
 setup: hooks
 	NODE_AUTH_TOKEN="$$(gh auth token)" npm ci --ignore-scripts
 
-# Point git at the repository hooks (pre-commit: fast checks; pre-push: make check).
+# Point git at the repository hooks (pre-commit: fast checks; pre-push: planner-selected checks).
 hooks:
 	git config core.hooksPath platform/git-hooks
 

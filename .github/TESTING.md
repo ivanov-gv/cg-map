@@ -31,11 +31,12 @@ A fix to a bug found after a merge follows the same rule: its own PR must run th
 **A PR merges only when its tests pass on GitHub**: its PR run (`CI gate`). A change to `.github/**` makes the gate call
 every changed `ci-*` workflow in `test_run` mode and dispatch/wait for every changed `cd-*` workflow, using a real
 commit and a collision-free test version. There is no evidence job to re-run: the gate fails if a proved workflow fails.
-The pre-push hook runs required `make check` (builds and non-browser checks, no browser suites) and, for
-services/backend changes, `make check-go`. Browser suites (`make -C apps/<x> e2e`, `make test-e2e`) and `act` runs are
-optional, for iterating, except `make test-cd-dev-pages` when changing ci-publish or cd-dev-pages
-([Pages recipe](#pages-path-recipe)). A change to `.github/**` also needs `make lint-workflows` locally. After a fix,
-push again and let the gate prove the new commit.
+The pre-push hook selects its checks from the pushed refs with the same planner: `make verify PKG=<project>` per
+distinct local project, `make check-go` for backend, and `make check` plus `make check-go` when Go is available if the
+diff cannot be read or the planner fails. It runs no browser suites; `make check` remains the full local run. Browser
+suites (`make -C apps/<x> e2e`, `make test-e2e`) and `act` runs are optional, for iterating, except
+`make test-cd-dev-pages` when changing ci-publish or cd-dev-pages ([Pages recipe](#pages-path-recipe)). A change to
+`.github/**` also needs `make lint-workflows` locally. After a fix, push again and let the gate prove the new commit.
 
 Running a workflow is the only way to know it works, so every workflow keeps three ways to run it: locally under `act`
 (`test_run`), a manual `workflow_dispatch` with `test_run`, and the default production run. A local dry run is a parse
