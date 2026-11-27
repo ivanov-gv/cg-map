@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {roadLayerIds} from '@ivanov-gv/map-core';
+import {roadLayerIds} from '../pinned-core.mjs';
 import {matchesStreetName, normalizeSearchText} from '../../src/core.js';
 import {
   CAMERA_HOLD_MILLISECONDS,
@@ -146,12 +146,15 @@ const expectQueryHighlights = async page => {
   await expect.poll(async () => (await highlightState(page)).rings.sort()).toEqual(QUERY_RESULT_IDS);
   await expect.poll(() => renderedPlaceIds(page)).toEqual(FOOD_PLACE_IDS);
 };
-// The published core names every road line layer, including any bridge copies added in a later release.
+// The published core names the selectable road lines; a later release can add '-on-bridge' copies
+// without changing this list. Park-route casing is only the wider underlay of the cream 'park-routes'
+// line, so it adds no separate street name.
 const ROAD_LAYERS = roadLayerIds([
   'steps',
   'cycleways',
   'paths',
   'footways',
+  'park-routes',
   'pedestrian-streets',
   'minor-roads',
   'major-roads'

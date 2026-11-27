@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {roadLayerIds} from '@ivanov-gv/map-core';
+import {roadLayerIds} from './pinned-core.mjs';
 import {selectTappedFeature} from '../src/map-selection.js';
 
 const roadLayers = roadLayerIds([
@@ -8,6 +8,7 @@ const roadLayers = roadLayerIds([
   'cycleways',
   'paths',
   'footways',
+  'park-routes',
   'pedestrian-streets',
   'minor-roads',
   'major-roads'
