@@ -914,4 +914,103 @@
     <tag k="name:en" v="Lake With Island EN"/>
   </relation>
 
+  <!-- Railways: tracks, platforms and stations inside the detail box. -->
+  <node id="9501" version="5" lat="42.44" lon="19.255">
+    <tag k="railway" v="station"/>
+    <tag k="name" v="Test Central"/>
+    <tag k="name:en" v="Test Central EN"/>
+    <tag k="ref" v="TC"/>
+  </node>
+  <node id="9502" version="2" lat="42.47" lon="19.29">
+    <tag k="railway" v="halt"/>
+    <tag k="name" v="Test Halt"/>
+  </node>
+  <node id="9503" version="1" lat="42.455" lon="19.285">
+    <tag k="railway" v="disused"/>
+    <tag k="disused:railway" v="halt"/>
+    <tag k="name" v="Old Halt"/>
+  </node>
+  <node id="9504" version="1" lat="42.462" lon="19.287">
+    <tag k="railway" v="abandoned"/>
+    <tag k="abandoned:railway" v="station"/>
+    <tag k="name" v="Old Station"/>
+  </node>
+  <node id="9505" version="1" lat="42.60" lon="19.25">
+    <tag k="railway" v="station"/>
+    <tag k="name" v="Outside Station"/>
+  </node>
+
+  <node id="9511" version="1" lat="42.445" lon="19.26"/>
+  <node id="9512" version="1" lat="42.446" lon="19.262"/>
+  <way id="9501" version="3">
+    <nd ref="9511"/><nd ref="9512"/>
+    <tag k="railway" v="rail"/>
+    <tag k="name" v="Test Rail"/>
+    <tag k="gauge" v="1435"/>
+  </way>
+  <node id="9513" version="1" lat="42.447" lon="19.26"/>
+  <node id="9514" version="1" lat="42.448" lon="19.262"/>
+  <way id="9502" version="2">
+    <nd ref="9513"/><nd ref="9514"/>
+    <tag k="railway" v="narrow_gauge"/>
+  </way>
+  <node id="9515" version="1" lat="42.449" lon="19.26"/>
+  <node id="9516" version="1" lat="42.450" lon="19.262"/>
+  <way id="9503" version="4">
+    <nd ref="9515"/><nd ref="9516"/>
+    <tag k="railway" v="light_rail"/>
+  </way>
+  <node id="9517" version="1" lat="42.451" lon="19.26"/>
+  <node id="9518" version="1" lat="42.452" lon="19.262"/>
+  <way id="9504" version="1">
+    <nd ref="9517"/><nd ref="9518"/>
+    <tag k="railway" v="disused"/>
+    <tag k="disused:railway" v="rail"/>
+    <tag k="gauge" v="750"/>
+  </way>
+  <node id="9519" version="1" lat="42.453" lon="19.26"/>
+  <node id="9520" version="1" lat="42.454" lon="19.262"/>
+  <way id="9505" version="1">
+    <nd ref="9519"/><nd ref="9520"/>
+    <tag k="railway" v="abandoned"/>
+    <tag k="abandoned:railway" v="rail"/>
+  </way>
+  <node id="9521" version="1" lat="42.520" lon="19.28"/>
+  <node id="9522" version="1" lat="42.530" lon="19.28"/>
+  <way id="9506" version="6">
+    <nd ref="9521"/><nd ref="9522"/>
+    <tag k="railway" v="rail"/>
+    <tag k="name" v="North Rail"/>
+  </way>
+
+  <node id="9531" version="1" lat="42.448" lon="19.27"/>
+  <node id="9532" version="1" lat="42.448" lon="19.272"/>
+  <node id="9533" version="1" lat="42.449" lon="19.272"/>
+  <node id="9534" version="1" lat="42.449" lon="19.27"/>
+  <way id="9510" version="7">
+    <nd ref="9531"/><nd ref="9532"/><nd ref="9533"/><nd ref="9534"/><nd ref="9531"/>
+    <tag k="railway" v="platform"/>
+    <tag k="ref" v="1"/>
+  </way>
+  <node id="9535" version="1" lat="42.451" lon="19.27"/>
+  <node id="9536" version="1" lat="42.452" lon="19.272"/>
+  <way id="9511" version="2">
+    <nd ref="9535"/><nd ref="9536"/>
+    <tag k="public_transport" v="platform"/>
+    <tag k="train" v="yes"/>
+    <tag k="name" v="Train Platform"/>
+  </way>
+  <node id="9537" version="1" lat="42.453" lon="19.27"/>
+  <node id="9538" version="1" lat="42.454" lon="19.272"/>
+  <way id="9512" version="1">
+    <nd ref="9537"/><nd ref="9538"/>
+    <tag k="public_transport" v="platform"/>
+  </way>
+  <node id="9539" version="1" lat="42.60" lon="19.25"/>
+  <node id="9540" version="1" lat="42.61" lon="19.25"/>
+  <way id="9513" version="1">
+    <nd ref="9539"/><nd ref="9540"/>
+    <tag k="railway" v="rail"/>
+  </way>
+
 </osm>

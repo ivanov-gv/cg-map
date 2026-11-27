@@ -14,6 +14,13 @@ test('a canyon rim with its river on the left is reported', () => {
   assert.deepEqual(reversedCanyonRims(collection([eastward, westward]), water), [westward]);
 });
 
+// A drawn rim names no river, so no centreline can judge it
+test('a drawn rim without a river is not judged for direction', () => {
+  const water = collection([]);
+  const drawn = line([[19.002, 42.0003], [19.008, 42.0003]], {method: 'editor-drawn'});
+  assert.deepEqual(reversedCanyonRims(collection([drawn]), water), []);
+});
+
 // Around a hill, rings run counter-clockwise; around a hollow, clockwise. The innermost ring is judged by its summit.
 test('closed contours with higher ground on their right are reported', () => {
   const square = size => [[19 - size, 42 - size], [19 + size, 42 - size], [19 + size, 42 + size], [19 - size, 42 + size], [19 - size, 42 - size]];

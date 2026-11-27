@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {objectLabel, objectName} from '../src/object-names.js';
-import {stateColors} from '../src/object-states.js';
-import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from '../src/source-overlay.js';
+import {objectLabel, objectName} from '../src/layers/shared/object-names.js';
+import {stateColors} from '../src/layers/shared/object-states.js';
+import {createSourceOverlay, guideMinZoom, overlayCollection, sourceEntriesForHits} from '../src/source-data/source-overlay.js';
 
 const point = {type: 'Point', coordinates: [19.2, 42.4]};
 const stopsFile = 'transport-stops.geojson';

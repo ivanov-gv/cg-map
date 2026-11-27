@@ -5,7 +5,19 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
+- tools/runtime-modules.mjs owns this app's runtime import, dynamic-import and MapLibre gesture checks, and supplies the
+  module discovery shared by build.mjs and finalize.mjs. New runtime modules need no per-file list and may import any
+  runtime module in src/; modules that existed on main keep their reviewed imports transitively, and every module with
+  no local imports on main (for example core.js and dom.js) may not gain any. Moving a reviewed module fails until its
+  rule moves into #456's per-folder rules. The build keeps each path and the offline shell is derived from the artifact.
+  Colocated tests and support files never reach either.
 - tests/ owns component tests and tests/e2e browser acceptance; playwright.config.mjs owns browser projects and ports.
+- The browser suite is split into the shards counted in `browser-jobs.json`; `tools/browser-matrix.mjs` builds the CI
+  matrix from that one number. Keep the number in web, never in platform tooling. Any web change runs all shards;
+  [workflow testing](../../.github/TESTING.md#on-github) owns the smoke and full-run rule. Keep specs and per-file area
+  lists out of the platform planner; prove a changed job count for the tagged phone tests with
+  `E2E_WORKERS=2 npx playwright test --list --shard=i/N` for every shard, matching CI's worker count. Web runs only
+  tagged phone tests, in PRs and nightly alike.
 - Data inputs belong to data/, not this component. Dev builds on main read repository data and contracts at HEAD through
   tools/data-root.mjs and tools/contracts-root.mjs; no other file here may name a repository contracts path.
 - tests/ reads data through tests/pinned-data.mjs and contracts through tests/pinned-contracts.mjs, using the exact
@@ -22,7 +34,7 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 - The complete frontend CI verification job took **6m 38s**, including setup, repository checks, Chromium installation,
   browser acceptance, and artifact upload. Baseline reviewed 2026-11-03; browser tests alone took 5m 54s in CI and 5m
   40s locally (49 passed, one expected desktop touch skip). These are observations, not time limits. The suite has grown
-  since; CI now runs it as [separate jobs by area](../../docs/verification/testing.md#browser-test-areas).
+  since; CI now runs it as [separate shards](../../docs/verification/testing.md#browser-test-shards).
 - For optional local iteration, start with `make verify PKG=apps/web` from the repository root (about 3s locally). Run
   only affected browser scenarios using project, file, and title filters; confirm the selection with `--list`. See
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web

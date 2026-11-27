@@ -1,15 +1,15 @@
 name: Plan
 description: >-
   Runs the CI planner (platform/tools/ci-plan.mjs) and outputs which folder pipelines
-  and browser areas a change needs. Inputs control the base ref and whether to run
-  everything. Used by ci-pr-checks and ci-publish so the planner logic is not duplicated.
+  a change needs. Inputs control the base ref and whether to run everything. Used by
+  ci-pr-checks and ci-publish so the planner logic is not duplicated.
 inputs:
   base:
     description: 'Base ref for diff comparison (default: origin/main).'
     required: false
     default: 'origin/main'
   run_all:
-    description: 'true to run every folder and browser area regardless of diff.'
+    description: 'true to run every folder regardless of diff.'
     required: false
     default: 'false'
 outputs:
@@ -52,12 +52,6 @@ outputs:
   apps-core-demo:
     description: Run the apps-core-demo pipeline.
     value: ${{ steps.plan.outputs.apps-core-demo }}
-  browser_matrix:
-    description: Browser test matrix for apps-web; an in-place workflow with no area uses the smoke matrix.
-    value: ${{ steps.plan.outputs.browser_matrix }}
-  editor_browser_matrix:
-    description: Browser test matrix for apps-editor; an in-place workflow with no area uses the smoke matrix.
-    value: ${{ steps.plan.outputs.editor_browser_matrix }}
   image_matrix:
     description: Image build matrix for publishing.
     value: ${{ steps.plan.outputs.image_matrix }}
@@ -76,12 +70,6 @@ outputs:
   manual_test_runs:
     description: Workflows that still need a manual test run.
     value: ${{ steps.plan.outputs.manual_test_runs }}
-  smoke_browser_matrix:
-    description: One short web browser area, for a workflow test-run call.
-    value: ${{ steps.plan.outputs.smoke_browser_matrix }}
-  smoke_editor_browser_matrix:
-    description: One short editor browser area, for a workflow test-run call.
-    value: ${{ steps.plan.outputs.smoke_editor_browser_matrix }}
 runs:
   using: composite
   steps:

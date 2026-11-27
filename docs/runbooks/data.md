@@ -52,24 +52,32 @@ between adjacent sunlit and shaded slope polygons: one simplified, connected `Li
 under 100 m. A summit is linked through `summit`/`summitName` only when the final ridge passes within 50 m of it; an
 unlinked ridge has no summit fields. Canyon rims are one `LineString` per segment with numbered `entityPart` values on
 one derived identity; gaps under 60 m on one bank are joined before parts under 100 m are dropped. Every rim runs with
-the river on its right, OSM cliffs included: the nearest river line decides, because a style offsets the canyon wall
-from the rim toward the water. Derived IDs are deterministic for the pinned inputs but are not stable across a DEM or
-green-area change.
+its river, the low side, on its right, including a rim drawn in the editor; the nearest centreline of a named river
+decides. A rim without a river is not compared with a centreline. Derived IDs are deterministic for the pinned inputs
+but are not stable across a DEM or green-area change.
 
 Canyon rims keep only samples where the bank rises at least 8 m above the river surface within 60 m of the channel
 (`CANYON_BANK_RISE_METRES` and `CANYON_SEARCH_DISTANCE_METRES` in `data/tools/relief/terrain.py`). The thresholds
 exclude ordinary shallow banks; a 30 m DEM cannot reliably separate smaller rises from bank roughness. The join and
 minimum-length constants in the same module exist because a 60 m gap is usually one bad pixel or small bend, while a
 sub-100 m line after joining reads as speckle. Slope aspect and flat-ground rules live in that module too, with unit
-tests run by plain `python3`. Green kinds come from the single `GREEN_KINDS` constant in
+tests run by plain `python3`. Cliff-part selection and height association share the half-search-reach constant, and
+height association measures it in metres in both directions, so an east offset and a north offset of the same length are
+judged alike. Each finished rim publishes the median of its samples as one whole-metre `height`, rounded with halves
+upward; an OSM cliff takes that value only from DEM samples measured beside that cliff part, not from a distant rise
+elsewhere on a joined bank, and otherwise carries no height. The statistic and rounding are described by
+[ADR 0042](../decisions/0042-one-measured-canyon-rim-height.md). The contract owns which facts an editor may state; see
+the [shared contracts](../../packages/contracts/README.md). Green kinds come from the single `GREEN_KINDS` constant in
 `data/tools/relief/derivations.py`, aligned with the land-kind enum in `source-land-water.schema.json`; eight of the
 nine configured kinds occur in the current `land.geojson` (`garden` is absent). Green kinds, minimum slope area, the
-retired ridge radius, layer sources and the ridge/rim thresholds are recorded in the `relief` block of
-`data/sources/provenance.json`; features carry object facts only.
+retired ridge radius, layer sources, the ridge/rim thresholds and the height statistic are recorded in the `relief`
+block of `data/sources/provenance.json`; features carry object facts only.
 
-Relief files are not editing modes. `data/tools/editor-bundle.mjs` filters the bundle to the versioned exact file set in
-`editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must not change browser editing
-tests. See [data licensing](../map-data/data-license.md) for the required Copernicus attribution.
+Relief files are edited under their own modes; canyon rims allow add, change and delete
+([ADR 0037](../decisions/0037-every-layer-editable.md) outcome). `data/tools/editor-bundle.mjs` filters the bundle to
+the versioned exact file set in `editor-bundle.schema.json` (version 2: thirteen files), so adding a relief source must
+not change browser editing tests. See [data licensing](../map-data/data-license.md) for the required Copernicus
+attribution.
 
 ## Archive layers
 
@@ -88,11 +96,12 @@ already shows.
 | land              | `land.geojson`                                      | 0–17                                          | `kind`, `name`, `name:en`, `destination`                                                                                      |
 | water             | `water.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `tunnel`                                                                                           |
 | roads             | `roads.geojson`                                     | 0–17                                          | `kind`, `name`, `name:en`, `bridge`, `tunnel`, `layer`, `oneway`, `pathClass`, `lit`, `startLevel`, `endLevel`, `inGreenArea` |
+| railways          | `railways.geojson`                                  | 12–17                                         | `kind`, `name`, `name:en`, `ref`                                                                                              |
 | buildings         | `buildings.geojson`                                 | 13–17                                         | `kind`, `building:levels`                                                                                                     |
 | contours          | `contours.geojson`                                  | index 12–13, all lines 14–17                  | `elevation`, `index`                                                                                                          |
 | slopes            | `slopes.geojson`                                    | 12–17                                         | `aspect`                                                                                                                      |
 | ridges            | `ridges.geojson`                                    | 14–17                                         | `sunlitSide`, `shadedSide`, `summitName`                                                                                      |
-| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`                                                                                                               |
+| canyon_rims       | `canyon-rims.geojson`                               | 13–17                                         | `river`, `bank`, `height`, `width`                                                                                            |
 | summits           | `summits.geojson`                                   | named 9–12, all 13–17                         | `name`, `name:en`, `ele`, `demElevation`, `heightCheck`                                                                       |
 | protected_areas   | `protected-areas.geojson`                           | 10–17                                         | `kind`, `name`, `name:en`                                                                                                     |
 | green_area_labels | `land.geojson`, `protected-areas.geojson` (derived) | 13–17                                         | `name`, `name:en`                                                                                                             |
@@ -112,6 +121,28 @@ Change a source in this table, or a field or zoom rule, and rebuild the archive 
 reports encoded bytes per layer and zoom band; if the release exceeds 45 MB, raise the relevant minimum zoom or simplify
 that layer rather than dropping its metadata. Archive acceptance checks the zooms and fields against the same definition
 in `tests/integration/archive-layers.test.mjs`.
+
+A rebuild writes a new content-hash archive and `data/artifacts/release.json`. Review `.build/tiles/layer-stats.json`
+and that release file, update the `archive` block of `data/sources/provenance.json` to match, and remove the superseded
+`.pmtiles` from `data/artifacts` in the same change. `make -C data check` compares the reviewed archive with those
+facts.
+
+## Railways
+
+`railways.geojson` comes from the reviewed PBF with `--layers railways`; that partial run replaces only this source and
+its layer checksum and lifecycle counts in provenance:
+
+```sh
+python3 data/tools/extract-osm.py <reviewed-pbf> --root . --layers railways \
+  --source-url https://download.geofabrik.de/europe/montenegro/montenegro-latest.osm.pbf \
+  --source-date 2026-11-21
+```
+
+Inside the detail box the extractor publishes `railway=rail|narrow_gauge|light_rail` lines, station and halt nodes from
+`railway=station|halt`, and platform ways selected from `railway=platform` or `public_transport=platform` with
+`train=yes`. Disused and abandoned objects keep their status in the published kind, and provenance records candidate and
+imported counts for both states, including zeros. Features keep their OSM identity and version. The source is staged
+display geometry: it is not in the version-2 editor bundle until a later step adds an editor mode.
 
 The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
 an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
@@ -175,15 +206,15 @@ data/tools/extract-osm.py replaces places.geojson and then reapplies the policy,
 override whose place disappeared stops that step with an error. `--source-url` and `--source-date` are required on every
 run, including partial ones, so provenance records the exact reviewed input. The `--layers` groups are `buildings`,
 `roads`, `water`, `land` (land.geojson, including its country geometry), `borders` (border-edges.geojson and
-municipalities.geojson), `settlements`, `places`, and `protected-areas` (protected-areas.geojson); each group replaces
-only its own source files. A partial run must use the PBF whose SHA-256 is in provenance.json; a different input fails
-and asks for a full extract. The `buildings` group writes both `buildings.geojson` and `building-entrances.geojson`, and
-supplies footprint geometry to a `places` group in the same run for its `buildingEntityId` joins. Run both groups
-together when refreshing either side of that join; this Feature does not refresh places, so the published snapshot has
-no such joins. A `borders` run uses reviewed `land.geojson` as its country outline; a `settlements` run uses reviewed
-`municipalities.geojson` to assign each point. Run them together when refreshing either source.
-`context-countries.geojson` is a preserved input to the land and water layers, refreshed only on a full run. Fix the
-policy, then review the new facts as above.
+municipalities.geojson), `settlements`, `places`, `protected-areas` (protected-areas.geojson), and `railways`
+(railways.geojson); each group replaces only its own source files. A partial run must use the PBF whose SHA-256 is in
+provenance.json; a different input fails and asks for a full extract. The `buildings` group writes both
+`buildings.geojson` and `building-entrances.geojson`, and supplies footprint geometry to a `places` group in the same
+run for its `buildingEntityId` joins. Run both groups together when refreshing either side of that join; this Feature
+does not refresh places, so the published snapshot has no such joins. A `borders` run uses reviewed `land.geojson` as
+its country outline; a `settlements` run uses reviewed `municipalities.geojson` to assign each point. Run them together
+when refreshing either source. `context-countries.geojson` is a preserved input to the land and water layers, refreshed
+only on a full run. Fix the policy, then review the new facts as above.
 
 The extractor applies the reviewed visibility policy without updating provenance, so `make -C data check` fails when an
 import changes place facts. Review the diff and then pass `--accept-new-place-facts` to a new extract, or run the

@@ -103,7 +103,29 @@ test('repo boundary rejects forbidden imports whose list spans several lines', t
   assert.match(result.stderr, /forbidden dependency \.\.\/\.\.\/web\/src\/core\.js/);
 });
 
-for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+test('editor import boundary allows relative imports inside src and skips test files', t => {
+  const dir = path.join(repoRoot, 'apps/editor/src', `__boundary-dir-${process.pid}`);
+  const nested = path.join(dir, 'nested');
+  const dep = path.join(nested, 'dep.js');
+  const main = path.join(dir, 'main.js');
+  const testFile = path.join(dir, 'main.test.js');
+  const escape = path.join(nested, 'escape.js');
+  fs.mkdirSync(nested, {recursive: true});
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  fs.writeFileSync(dep, 'export const value = 1;\n');
+  fs.writeFileSync(main, "import {value} from './nested/dep.js';\nexport {value};\n");
+  fs.writeFileSync(testFile, "import {bad} from '../../../web/src/core.js';\n");
+  const allowed = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.equal(allowed.status, 0, `${allowed.stdout ?? ''}${allowed.stderr ?? ''}`);
+
+  fs.writeFileSync(escape, "import {bad} from '../../../../../web/src/core.js';\n");
+  const rejected = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
+  assert.notEqual(rejected.status, 0);
+  assert.match(`${rejected.stdout ?? ''}${rejected.stderr ?? ''}`, /forbidden dependency/);
+});
+
+// Core-demo keeps this guard in the platform check; web and editor own it in their own tests/pinned-data.test.mjs.
+for (const application of ['apps/core-demo']) {
   test(`${application} repo boundary rejects repository data paths in tests`, t => {
     const probe = path.join(repoRoot, application, 'tests', `__data-probe-${process.pid}.mjs`);
     t.after(() => fs.rmSync(probe, {force: true}));
@@ -239,17 +261,6 @@ test('the published data root resolves an installed package and rejects reposito
   const repositoryData = spawnSync('node', [helper, '--published'], {cwd: repoRoot, encoding: 'utf8'});
   assert.notEqual(repositoryData.status, 0);
   assert.match(repositoryData.stderr, /must resolve an installed @ivanov-gv\/map-data package, not repository data/);
-});
-
-test('repo boundary rejects path builders that target repository data', t => {
-  const probe = path.join(repoRoot, 'apps/web/tests', `__data-join-probe-${process.pid}.mjs`);
-  t.after(() => fs.rmSync(probe, {force: true}));
-  fs.writeFileSync(probe, "export const source = path.join(repositoryRoot, 'data', 'sources', 'places.geojson');\n");
-  const result = spawnSync('node', ['platform/tools/check-repo.mjs'], {cwd: repoRoot, encoding: 'utf8'});
-  assert.notEqual(result.status, 0);
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  assert.ok(output.includes(path.basename(probe)), output);
-  assert.match(output, /pinned @ivanov-gv\/map-data package/, output);
 });
 
 test('each application owns its build and run targets, and the root Makefile has neither', () => {

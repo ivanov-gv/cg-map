@@ -9,11 +9,16 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
   contracts path.
 - tests/pinned-data.mjs and tests/pinned-contracts.mjs read the exact `@ivanov-gv/map-data` and
   `@ivanov-gv/map-contracts` pins. Their paths stay in tests/ because platform's pin checks name that folder; the other
-  unit tests sit next to their src/ and tools/ code. Bump a pin only in its own change after a release; never point
-  tests at repository data/ or packages/contracts/. Test targets set both roots. A future app production release pins
-  every dependency (no production release exists yet).
+  unit tests sit next to their src/ and tools/ code. tests/lint-config.test.mjs also stays there because it checks the
+  app-owned lint config. Bump a pin only in its own change after a release; never point tests at repository data/ or
+  packages/contracts/. Test targets set both roots. A future app production release pins every dependency (no production
+  release exists yet).
 - Browser journeys are e2e/*.spec.js beside src. Build artifacts carry neither tests nor the pinned helpers.
 - Use local assets and relative URLs; show async and map failures. Keep touch targets and visible keyboard focus.
+- This project owns `eslint.config.mjs`: lint runs from here over source, tools, tests, journeys and app config files
+  recursively. Current journeys live in `e2e` beside src and are covered by that recursive glob. Runtime and tool
+  helpers keep the 80-line function budget for both `.js` and `.mjs`; Node globals cover `.mjs` tools, tests and
+  journeys. Only `*.test.js` paths take the documented long-test exception.
 - This is an independent project: its Makefile, e2e and ci-apps-core-demo pipeline are its own. Local
   `make verify PKG=apps/core-demo` and `make -C apps/core-demo e2e` are optional for iterating; the pre-push
   `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect

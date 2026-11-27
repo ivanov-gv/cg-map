@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {featureCapabilities, operationProblem, propertyProblem} from '../src/layer-rules.js';
-import {collectionOf} from '../src/source-records.js';
+import {featureCapabilities, operationProblem, propertyProblem} from '../src/layers/shared/layer-rules.js';
+import {collectionOf} from '../src/source-data/source-records.js';
 
 const levels = new Set([1, 2, 3]);
 const problemOf = (value, rule, previous) =>

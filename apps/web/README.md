@@ -583,15 +583,19 @@ adding a separate Playwright project; pass a viewport object for a real cover sc
 | Change when a place appears | ../../data/sources/place-visibility-policy.json               | Follow the data runbook's level steps              |
 | Change building footprint   | ../../data/sources/buildings.geojson                          | Rebuild vector tiles, then publish                 |
 | Expand satellite coverage   | map-core/satellite.js, tiles, preview, provenance             | Keep bounds, corners and tile inventory consistent |
-| Change offline assets       | tools/finalize.mjs                                            | Regenerate both manifests                          |
+| Change offline assets       | public/, src/, or map-core assets                             | Rebuild; both manifests are generated              |
 
-A new module imported by app.js must also be added to the shell list in finalize.mjs (including interface.js). The
-current tooling does not discover JavaScript imports automatically.
+A new module under src/ needs no per-file list: build.mjs copies it at its own path and finalize.mjs derives the offline
+shell from the built artifact. Modules that existed on main keep their reviewed imports transitively; every module with
+no local imports on main (for example core.js and dom.js) may not gain any. Moving a reviewed module fails until its
+rule moves into #456's per-folder rules. New modules may import any runtime module inside src/ and the published
+map-core entry. Colocated tests and support files stay out. config.json, generated manifests and archive/range responses
+are never shell-cached.
 
 ## 13. Local development and publication
 
-The source layout separates src/ runtime modules, public/ static assets, tools/ assembly, and tests/. The built runtime
-is flat inside dist/web, so the module URLs described above are unchanged.
+The source layout separates src/ runtime modules, public/ static assets, tools/ assembly, and tests/. The build keeps
+runtime paths under src/, so a nested module keeps its path in dist/web; index.html still loads ./app.js.
 
 Run commands from repository root:
 
@@ -664,12 +668,12 @@ CI. Root package.json and package-lock.json remain the shared workspace manifest
 checks, browser setup, browser journeys, and static preview are owned here; repository checks aggregate component
 commands. Cross-component contract/artifact tests remain in tests/integration.
 
-GitHub runs the full acceptance suite by area for web/UI, offline, and release behavior changes. A local full run is
-optional for iterating; targeted results do not establish that the full suite passed. Documentation-only changes do not
-need browser tests.
+GitHub runs the full acceptance suite as app-owned shards for web/UI, offline, and release behavior changes. A local
+full run is optional for iterating; targeted results do not establish that the full suite passed. Documentation-only
+changes do not need browser tests.
 
-Browser specs are split by area, and CI runs each area as its own job; see
-[browser test areas](../../docs/verification/testing.md#browser-test-areas). Shared helpers are in
+CI splits the browser suite into shards counted in `browser-jobs.json`; see
+[browser test shards](../../docs/verification/testing.md#browser-test-shards). Shared helpers are in
 tests/e2e/helpers.mjs.
 
 Card gesture specs size step swipes from the measured card box and viewport edge, so distance alone crosses the settle

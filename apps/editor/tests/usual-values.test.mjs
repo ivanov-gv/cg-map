@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {valueLabel} from '../src/field-catalog.js';
-import {hasClosedList, isFormField} from '../src/property-form.js';
-import {byFrequency, hasUsualValues, isTyped, lineColours, usualValuesOf} from '../src/usual-values.js';
+import {valueLabel} from '../src/inspector/field-catalog.js';
+import {hasClosedList, isFormField, propertiesFromForm} from '../src/inspector/property-form.js';
+import {byFrequency, hasUsualValues, isTyped, lineColours, usualValuesOf} from '../src/inspector/usual-values.js';
 
 const rules = JSON.parse(fs.readFileSync(new URL('fixtures/editor-layers.json', import.meta.url), 'utf8'));
 
@@ -50,6 +50,20 @@ test('a road is offered the names of the streets around it and the numbers roads
   assert.deepEqual(values.name, ['Njegoševa', 'Slovenska']);
   assert.deepEqual(values.ref, ['M-2', 'M-1']);
   assert.deepEqual(usualValuesOf('roads.geojson', {geometry: null}, {entriesOf: () => entries}).name, []);
+});
+
+const entrance = ref => ({
+  filename: 'building-entrances.geojson',
+  key: '0',
+  feature: {type: 'Feature', properties: {kind: 'entrance', ref}, geometry: {type: 'Point', coordinates: [19.25, 42.44]}}
+});
+
+test("an entrance's number is typed, not offered from the numbers other entrances use", () => {
+  const entry = entrance('1');
+  const values = usualValuesOf('building-entrances.geojson', entry.feature, {entriesOf: () => [entry]});
+  assert.equal(values.ref, undefined);
+  const {properties} = rules.layers['building-entrances.geojson'];
+  assert.deepEqual(propertiesFromForm({ref: '1'}, {ref: '2a'}, properties), {ref: '2a'});
 });
 
 test('values are offered most common first, and colours by their names', () => {

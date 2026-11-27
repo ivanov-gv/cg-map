@@ -3,7 +3,7 @@
   "version": "0.0.0-dev",
   "type": "module",
   "scripts": {
-    "lint": "eslint src tools",
+    "lint": "eslint src tools eslint.config.mjs",
     "test": "node --test 'src/!(*.browser).test.js' 'tools/!(*.browser).test.js'"
   },
   "exports": {

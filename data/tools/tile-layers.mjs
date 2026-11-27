@@ -63,6 +63,13 @@ export const TILE_LAYERS = [
     keep: keepRoad
   },
   {
+    name: 'railways',
+    sourceFile: 'railways.geojson',
+    minZoom: 12,
+    // kind separates tracks, platforms and stations; names label them, and ref carries an OSM reference where mapped.
+    fields: ['kind', 'name', 'name:en', 'ref']
+  },
+  {
     name: 'buildings',
     sourceFile: 'buildings.geojson',
     minZoom: 13,
@@ -95,8 +102,8 @@ export const TILE_LAYERS = [
     name: 'canyon_rims',
     sourceFile: 'canyon-rims.geojson',
     minZoom: 13,
-    // river and bank identify the canyon edge without publishing build parameters or OSM way lists.
-    fields: ['river', 'bank']
+    // river and bank identify the canyon edge; height and width are optional properties.
+    fields: ['river', 'bank', 'height', 'width']
   },
   {
     name: 'summits',

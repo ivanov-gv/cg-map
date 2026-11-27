@@ -3,7 +3,7 @@
 // pinned contracts package gets them with its next release, and tests/ checks the real files at HEAD until then.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-bundle.js';
+import {bundleFilesByVersion, currentBundleVersion} from '../../src/source-data/source-bundle.js';
 
 const rules = JSON.parse(readFileSync(new URL('../fixtures/editor-layers.json', import.meta.url)));
 export const cityCentre = [19.26, 42.44];

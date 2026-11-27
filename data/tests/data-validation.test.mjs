@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import Ajv2020 from 'ajv/dist/2020.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,10 @@ import {
   validateBuildingSources,
   validateCollection,
   validateMunicipalities,
+  validateRailwayCounts,
+  validateRailways,
+  railwayKinds,
+  railwayTags,
   validateRelief,
   validateProtectedAreas,
   protectedAreaTags,
@@ -869,8 +874,17 @@ test('every relief collection satisfies its read-only domain contract', () => {
     'ridge boundaries must stay in the tens, not thousands');
   const rims = readRelief('canyon-rims.geojson');
   assert.ok(rims.features.length > 0);
-  assert.ok(rims.features.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
+  const measured = rims.features.filter(feature => feature.properties.method !== 'editor-drawn');
+  assert.ok(measured.length > 0);
+  assert.ok(measured.every(feature => ['Morača:left', 'Morača:right', 'Ribnica:left', 'Ribnica:right']
     .includes(`${feature.properties.river}:${feature.properties.bank}`)));
+  assert.ok(rims.features.filter(feature => feature.properties.method === 'editor-drawn').every(feature =>
+    !('river' in feature.properties) && !('bank' in feature.properties)));
+  assert.ok(rims.features.some(feature => Number.isInteger(feature.properties.height)),
+    'derived rims carry a measured height');
+  assert.ok(rims.features.every(feature =>
+    feature.properties.height === undefined || Number.isInteger(feature.properties.height)
+  ), 'a rim height is one whole number of metres');
 });
 
 test('relief features carry facts only and build parameters live in provenance', () => {
@@ -884,6 +898,8 @@ test('relief features carry facts only and build parameters live in provenance',
   assert.equal(parameters.summitLinkDistanceMetres, 50);
   assert.equal(parameters.canyonRimJoinGapMetres, 60);
   assert.equal(parameters.canyonRimMinimumLengthMetres, 100);
+  assert.equal(parameters.canyonRimHeightStatistic, 'median of sampled bank rise');
+  assert.equal(parameters.canyonRimHeightRounding, 'nearest metre, halves upward');
   assert.equal(provenance.relief.retiredBuildParameters.radiusMetres, 400);
   for (const filename of reliefFiles) {
     for (const feature of readRelief(filename).features) {
@@ -922,7 +938,7 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
     'summits.geojson': [data => {data.features[0].properties.heightCheck = 'unknown';}, data => {data.features[0].properties.mismatch = !data.features[0].properties.mismatch;}, data => {data.features[0].properties.demElevation = 'high';}],
     'slopes.geojson': [data => {data.features[0].properties.aspect = 'unknown';}, data => {data.features[0].properties.greenKinds = ['park'];}],
     'ridges.geojson': [data => {delete data.features[0].properties.sunlitSide;}, data => {data.features[0].properties.radiusMetres = 400;}],
-    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}]
+    'canyon-rims.geojson': [data => {data.features[0].properties.bank = 'middle';}, data => {data.features[0].properties.minimumBankRiseMetres = 1;}, data => {data.features[0].properties.source = 'Copernicus DEM GLO-30';}, data => {data.features[0].properties.height = 12.5;}, data => {data.features[0].properties.height = -1;}, data => {data.features[0].properties.height = 2601;}, data => {data.features[0].properties.width = 8.5;}, data => {data.features[0].properties.width = -1;}, data => {data.features[0].properties.width = 2001;}]
   };
   for (const [filename, changes] of Object.entries(mutations)) {
     for (const change of changes) {
@@ -930,6 +946,87 @@ test('relief validation rejects broken contour, summit and rim facts', () => {
       change(bad);
       assert.throws(() => validateRelief(bad, {label: filename, contractsDirectory}), undefined, filename);
     }
+  }
+});
+
+test('canyon rim validation keeps derived facts with the build and off drawn edges', () => {
+  const schema = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'relief.schema.json')));
+  const rimProperties = schema.$defs.canyonRim.then.properties;
+  const river = rimProperties.river.enum[0];
+  const bank = rimProperties.bank.enum[0];
+  const validate = new Ajv2020({strict: false}).compile(schema);
+  const collection = properties => ({
+    type: 'FeatureCollection',
+    entitySchemaVersion: 1,
+    features: [{
+      type: 'Feature',
+      geometry: {type: 'LineString', coordinates: [[19.4, 42.5], [19.41, 42.51]]},
+      properties
+    }]
+  });
+  const isValid = properties => validate(collection(properties));
+  const check = properties => validateRelief(collection(properties), {
+    label: 'canyon-rims.geojson',
+    contractsDirectory
+  });
+  const drawn = {
+    entityId: 'local:00000000-0000-4000-8000-000000000001',
+    entityVersion: `sha256:${'a'.repeat(64)}`,
+    kind: 'canyon-rim',
+    method: 'editor-drawn',
+    lengthMetres: 120,
+    height: 77
+  };
+
+  assert.equal(check(drawn), 1);
+  assert.equal(isValid(drawn), true);
+  assert.equal(check({...drawn, width: 12}), 1);
+  assert.equal(isValid({...drawn, width: 12}), true);
+  assert.equal(check({...drawn, width: 0}), 1);
+  assert.equal(isValid({...drawn, width: 0}), true);
+  assert.equal(isValid({...drawn, width: 12.5}), false);
+  assert.equal(isValid({...drawn, width: '12'}), false);
+  assert.throws(() => check({...drawn, river}), /a drawn rim cannot name a river/);
+  assert.throws(() => check({...drawn, bank}), /a drawn rim cannot name a bank/);
+  assert.equal(isValid({...drawn, river}), false);
+  assert.equal(isValid({...drawn, bank}), false);
+
+  const derived = {...drawn, entityId: 'way/1', entityVersion: 3, method: 'osm-cliff', river, bank};
+  assert.equal(check(derived), 1);
+  assert.equal(isValid(derived), true);
+  const missingRiver = {...derived};
+  delete missingRiver.river;
+  assert.throws(() => check(missingRiver), /invalid river bank/);
+  assert.equal(isValid(missingRiver), false);
+
+  assert.throws(() => check({...drawn, entityId: 'way/2'}), /a drawn rim must use local identity/);
+  assert.throws(
+    () => check({...drawn, method: 'osm-cliff', river, bank}),
+    /a local rim must be editor-drawn/
+  );
+});
+
+test('relief validation reads the rim height range from the editor rule', () => {
+  const bad = readRelief('canyon-rims.geojson');
+  const maximum = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'editor-layers.json')))
+    .layers['canyon-rims.geojson'].properties.height.maximum;
+  bad.features[0].properties.height = maximum + 1;
+  assert.throws(
+    () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
+    error => error.message === 'canyon-rims.geojson: invalid rim height'
+  );
+});
+
+test('relief validation reads the rim width range from the editor rule and names the file', () => {
+  const widthRule = JSON.parse(fs.readFileSync(path.join(contractsDirectory, 'editor-layers.json')))
+    .layers['canyon-rims.geojson'].properties.width;
+  for (const width of [widthRule.minimum - 1, widthRule.maximum + 1, 8.5]) {
+    const bad = readRelief('canyon-rims.geojson');
+    bad.features[0].properties.width = width;
+    assert.throws(
+      () => validateRelief(bad, {label: 'canyon-rims.geojson', contractsDirectory}),
+      error => error.message === `canyon-rims.geojson: invalid rim width: expected a whole number of metres from ${widthRule.minimum} to ${widthRule.maximum}`
+    );
   }
 });
 
@@ -957,13 +1054,96 @@ test('the extractor and check-data accept the same protected-area tags', () => {
   assert.deepEqual(extractorTags.sort(), [...protectedAreaTags].sort());
 });
 
-test('the editor bundle holds the source of every object on the map, relief and transit records included', async t => {
+test('railway sources validate copied facts, geometry and lifecycle counts', () => {
+  const railways = JSON.parse(fs.readFileSync('data/sources/railways.geojson'));
+  const provenance = JSON.parse(fs.readFileSync('data/sources/provenance.json'));
+  const counts = provenance.railway_counts;
+  assert.equal(
+    validateRailways(railways, {contractsDirectory, requireAdopted: true}),
+    provenance.layers['railways.geojson'].features
+  );
+  validateRailwayCounts(counts, railways);
+  const trackIndex = railways.features.findIndex(feature => feature.properties.kind === 'rail');
+  const stationIndex = railways.features.findIndex(feature => feature.properties.kind === 'station');
+  const namedIndex = railways.features.findIndex(feature => feature.properties.name);
+  const platformAreaIndex = railways.features.findIndex(feature =>
+    feature.properties.kind === 'platform' && feature.geometry.type === 'Polygon'
+  );
+  assert.ok(trackIndex >= 0, 'the reviewed railways include a track');
+  assert.ok(stationIndex >= 0, 'the reviewed railways include a station');
+  assert.ok(namedIndex >= 0, 'the reviewed railways include a name');
+  assert.ok(platformAreaIndex >= 0, 'the reviewed railways include a platform area');
+  const mutations = [
+    [trackIndex, 'kind', 'maglev', /unsupported railway kind/],
+    [trackIndex, 'osmTag', 'railway=station', /osmTag disagrees with kind/],
+    [trackIndex, 'osmTag', 'railway=maglev', /unsupported osmTag/],
+    [namedIndex, 'name', ' ', /invalid name/]
+  ];
+  for (const [index, field, value, expected] of mutations) {
+    const bad = structuredClone(railways);
+    bad.features[index].properties[field] = value;
+    assert.throws(() => validateRailways(bad, {contractsDirectory}), expected);
+  }
+  const wrongGeometry = structuredClone(railways);
+  wrongGeometry.features[stationIndex].geometry = {
+    type: 'LineString', coordinates: [[19.2, 42.4], [19.21, 42.41]]
+  };
+  assert.throws(
+    () => validateRailways(wrongGeometry, {contractsDirectory}),
+    /geometry type violates railway kind/
+  );
+  const reversedRing = structuredClone(railways);
+  reversedRing.features[platformAreaIndex].geometry.coordinates[0].reverse();
+  assert.throws(
+    () => validateRailways(reversedRing, {contractsDirectory}),
+    /exterior must be counterclockwise/
+  );
+  assert.throws(
+    () => validateRailwayCounts(
+      {...counts, importedDisused: counts.importedDisused + 1}, railways
+    ),
+    /railway_counts.importedDisused/
+  );
+});
+
+test('the extractor and check-data accept the same railway kinds and tags', () => {
+  const extractor = fs.readFileSync('data/tools/osm_extract/railways.py', 'utf8');
+  const declared = name => {
+    const match = new RegExp(`${name} = \\(([\\s\\S]*?)\\n\\)`).exec(extractor);
+    assert.ok(match, `${name} is declared by the extractor`);
+    return [...match[1].matchAll(/'([^']+)'/g)].map(([, value]) => value);
+  };
+  assert.deepEqual(declared('RAILWAY_KINDS').sort(), [...railwayKinds].sort());
+  assert.deepEqual(declared('RAILWAY_TAGS').sort(), [...railwayTags].sort());
+});
+
+test('check-data rejects an unsupported railway kind from the reviewed source', t => {
+  const root = reviewedCheckRoot(t);
+  const sourcePath = path.join(root, 'data/sources/railways.geojson');
+  const originalBytes = fs.readFileSync(sourcePath);
+  const railways = JSON.parse(originalBytes);
+  railways.features[0].properties.kind = 'maglev';
+  fs.unlinkSync(sourcePath);
+  fs.writeFileSync(sourcePath, JSON.stringify(railways));
+  assert.throws(
+    () => checkData(root, {contractsDirectory}),
+    /unsupported railway kind maglev/
+  );
+  fs.unlinkSync(sourcePath);
+  fs.writeFileSync(sourcePath, originalBytes);
+});
+
+// Railways are display geometry already, but their editor mode arrives in the next stacked step.
+test('the editor bundle excludes only the staged, non-editable railway source', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'editor-bundle-'));
   t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
   const manifest = await writeEditorBundle('data/sources', directory, 'packages/contracts/editor-bundle.schema.json');
   const filenames = manifest.layers.map(layer => layer.filename);
   const everyGeoJSON = fs.readdirSync('data/sources').filter(name => name.endsWith('.geojson'));
-  assert.deepEqual([...filenames].sort(), [...everyGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
+  const editableGeoJSON = everyGeoJSON.filter(name => name !== 'railways.geojson');
+  assert.ok(everyGeoJSON.includes('railways.geojson'));
+  assert.ok(!filenames.includes('railways.geojson'));
+  assert.deepEqual([...filenames].sort(), [...editableGeoJSON, 'transit-routes.json', 'turn-restrictions.json'].sort());
   assert.ok(reliefFiles.every(filename => filenames.includes(filename)));
   assert.deepEqual(fs.readdirSync(directory).sort(), [...filenames, 'manifest.json'].sort());
 });

@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {findLogProblems, readLog} from './decision-log.mjs';
 import {unreachableInstructions} from './instruction-reach.mjs';
+import {assertSharedRulesHaveNoProjectFiles} from './shared-rule-boundary.mjs';
 
 function walk(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
@@ -41,80 +42,15 @@ for (const file of docs) {
     assert.ok(fs.existsSync(path.resolve(path.dirname(file), target)), `${file}: broken link ${target}`);
   }
 }
+assertSharedRulesHaveNoProjectFiles();
 // Import lists may span lines, so the clause between the keyword and `from` must accept newlines.
 const moduleDependencyPattern = /\b(?:import|export)\s+(?:[^;'"]*?\s+from\s*)?['"]([^'"]+)['"]/g;
-const imports = {
-  'app-updates.js': [],
-  'object-selection.js': [],
-  'app.js': [
-    '@ivanov-gv/map-core',
-    './object-selection.js',
-    './app-updates.js',
-    './attribution.js',
-    './core.js',
-    './device-class.js',
-    './offline.js',
-    './transport.js',
-    './point-selection.js',
-    './route-planner.js',
-    './map-taps.js',
-    './data-mode.js',
-    './position.js',
-    './interface.js',
-    './dom.js',
-    './place-details.js',
-    './public-map-layers.js',
-    './map-selection.js',
-    './offline-controls.js',
-    './status-messages.js',
-    './place-selection.js',
-    './location-controls.js'
-  ],
-  'location-controls.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './position.js', './status-messages.js'],
-  'dom.js': [],
-  'place-details.js': ['@ivanov-gv/map-core', './core.js', './dom.js'],
-  'public-map-layers.js': ['@ivanov-gv/map-core', './core.js'],
-  'map-selection.js': ['@ivanov-gv/map-core', './point-selection.js'],
-  'offline-controls.js': ['./data-mode.js', './dom.js', './offline.js'],
-  'status-messages.js': ['./core.js'],
-  'place-selection.js': ['@ivanov-gv/map-core', './core.js', './dom.js', './place-details.js', './interface.js'],
-  'attribution.js': [],
-  'device-class.js': [],
-  'history-steps.js': [],
-  'interface.js': ['./device-class.js', './history-steps.js'],
-  'core.js': [],
-  'offline.js': ['./core.js'],
-  'transport.js': ['./vehicle-direction.js', './data-mode.js'],
-  'vehicle-direction.js': [],
-  'data-mode.js': [],
-  'point-selection.js': [],
-  'map-taps.js': [],
-  'position.js': ['./core.js'],
-  'routing.js': [],
-  'transit-routing.js': ['./core.js'],
-  'route-planner.js': ['./dom.js', './routing.js', './transit-routing.js', './core.js']
-};
-for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
-  if (file === 'sw.js') continue;
-  assert.ok(Object.hasOwn(imports, file), `Document boundaries for new web module ${file} in platform/tools/check-repo.mjs`);
-  const text = fs.readFileSync(path.join('apps/web/src', file), 'utf8');
-  assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need an explicit boundary check`);
-  for (const match of text.matchAll(moduleDependencyPattern)) {
-    assert.ok(imports[file].includes(match[1]), `${file}: forbidden dependency ${match[1]}. Consume published data/contracts, not pipeline or server code.`);
-  }
-}
-// ADR 0015: map gestures are MapLibre's own. A web module that reconfigures or replaces a gesture handler needs a new
-// decision first, because #78 did that from synthetic tests and broke touchpad zoom.
-const gestureHandlerPattern = /\.(?:scrollZoom|touchZoomRotate|doubleClickZoom|dragPan|dragRotate|keyboard|boxZoom|touchPitch|cooperativeGestures)\b/;
-for (const file of fs.readdirSync('apps/web/src').filter(file => file.endsWith('.js'))) {
-  const text = fs.readFileSync(path.join('apps/web/src', file), 'utf8');
-  assert.ok(!gestureHandlerPattern.test(text), `${file}: map gestures stay MapLibre's own (docs/decisions/0015-maplibre-gestures-unchanged.md)`);
-}
 for (const file of walk('data/tools').filter(file => file.endsWith('.mjs'))) {
   assert.ok(!/from\s*['"][^'"]*(?:apps\/web|services\/backend)/.test(fs.readFileSync(file, 'utf8')), `${file}: data pipelines must not import application implementation`);
 }
-// App tests, their browser configuration and tools written only for tests read data from the pinned package. Register a
-// new test-only tool here; a tool used by a build stays out, because dev and release builds read the repository's data.
+// Core-demo tests, their browser configuration and tools written only for tests read data from the pinned package.
+// Web and editor own the same guard in their own tests/pinned-data.test.mjs. Register a new core-demo test-only tool
+// here; a tool used by a build stays out, because dev and release builds read the repository's data.
 const TEST_ONLY_APP_TOOLS = [];
 const testFilePattern = /\.(?:test|spec)\.m?js$/;
 const pinnedDataRule = 'app tests must read data and data tools from the pinned @ivanov-gv/map-data package, not the repository data folder';
@@ -125,7 +61,7 @@ const repositoryDataPattern = new RegExp(
     '(?:join|resolve)\\s*\\([^)]*[\'"]data[\'"]\\s*,\\s*[\'"](?:sources|tools|artifacts|imagery)[\'"]'
   ].join('|')
 );
-for (const application of ['apps/web', 'apps/editor', 'apps/core-demo']) {
+for (const application of ['apps/core-demo']) {
   const configFile = `${application}/playwright.config.mjs`;
   const testFiles = [...new Set([
     ...walk(`${application}/tests`).filter(file => /\.(?:mjs|js|json)$/.test(file)),
@@ -212,8 +148,10 @@ for (const component of ['apps/web', 'services/backend', 'services/transit-relay
   assert.ok(fs.existsSync(`${component}/AGENTS.md`), `Missing component instructions: ${component}`);
 }
 
-// Keep shared runtime independent, and keep the concept consumer honest about its public-only imports.
+// Runtime modules may use only their own component's files and the published map-core entry. Web owns this guard for
+// itself in apps/web/tools/runtime-modules.mjs, including nested modules and the ADR 0015 gesture rule.
 for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) {
+  // Source-owned unit tests live next to code in these components; boundary checks apply to runtime modules only.
   for (const file of walk(`${component}/src`).filter(file => file.endsWith('.js') && !testFilePattern.test(file))) {
     const text = fs.readFileSync(file, 'utf8');
     assert.ok(!/\bimport\s*\(/.test(text), `${file}: dynamic imports need a declared boundary`);
@@ -221,10 +159,12 @@ for (const component of ['packages/map-core', 'apps/core-demo', 'apps/editor']) 
       const dependency = match[1];
       const isCoreEntry = dependency === '@ivanov-gv/map-core';
       const isSibling = /^\.\/[^/]+\.js$/.test(dependency);
+      const isRelativeInsideSrc = /^\.\.?\/.*\.js$/.test(dependency) &&
+        !path.relative(`${component}/src`, path.resolve(path.dirname(file), dependency)).startsWith('..');
       const allowedByComponent = {
         'apps/core-demo': isCoreEntry,
         'packages/map-core': isSibling,
-        'apps/editor': isCoreEntry || isSibling
+        'apps/editor': isCoreEntry || isRelativeInsideSrc
       };
       const isAllowed = allowedByComponent[component];
       assert.ok(isAllowed, `${file}: forbidden dependency ${dependency}`);

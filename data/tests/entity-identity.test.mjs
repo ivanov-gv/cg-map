@@ -110,7 +110,7 @@ test('every source layer can adopt identity without changing its existing domain
 });
 
 // Exercise the real check-data entry point: no source is missed just because it has independent provenance.
-test('check-data enforces adopted metadata in all thirteen source files before provenance checks', testContext => {
+test('check-data enforces adopted metadata in all published source files before provenance checks', testContext => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'cg-map-entity-check-'));
   testContext.after(() => rmSync(root, {recursive: true, force: true}));
   const sourceDirectory = path.join(root, 'data/sources');
@@ -127,7 +127,8 @@ test('check-data enforces adopted metadata in all thirteen source files before p
     'provenance.json', 'place-visibility-policy.json',
     'turn-restrictions.json',
     'contours.geojson', 'summits.geojson', 'slopes.geojson', 'ridges.geojson',
-    'canyon-rims.geojson', 'protected-areas.geojson', 'settlement-areas.geojson'
+    'canyon-rims.geojson', 'protected-areas.geojson', 'settlement-areas.geojson',
+    'railways.geojson'
   ];
   for (const filename of [...sourceFiles, ...supportingFiles]) {
     symlinkSync(path.join(repositoryRoot, 'data/sources', filename), path.join(sourceDirectory, filename));
