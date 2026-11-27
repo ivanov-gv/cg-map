@@ -1365,15 +1365,16 @@ test.describe('source editing', () => {
     await drawLine(page, center);
     await applyAndWait(page);
     await expect(page.locator('#toast')).toContainText('Applied');
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    // A newly drawn footway has no pathClass: map-core draws it with paths, not footways (those need pathClass main).
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
 
     await chooseMode(page, placesFile);
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
     await expect.poll(() => renderedCount('editor-applied-line', center)).toBeGreaterThan(0);
     await openPanel(page, 'Layers');
     await page.locator('#browse').click();
     await expect(page.locator('#status')).toHaveText(browseStatus);
-    await expect.poll(() => renderedCount('edit-preview-footways', center)).toBeGreaterThan(0);
+    await expect.poll(() => renderedCount('edit-preview-paths', center)).toBeGreaterThan(0);
     // The source holds only what the tiles around the view need, so look where the place is.
     await centerMapOn(page, feature.geometry.coordinates);
     const shownPlaceName = () =>
