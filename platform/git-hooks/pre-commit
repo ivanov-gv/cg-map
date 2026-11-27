@@ -15,7 +15,7 @@ staged=$(git diff --cached --name-only --diff-filter=ACMR)
 
 js=$(printf '%s\n' "$staged" | grep -E '\.m?js$' || true)
 
-# A project's own config lints from its folder; files without one keep using the root config.
+# A project's own config lints from its folder; check-repo rejects root-level JavaScript before this point.
 if [ -n "$js" ]; then
   # shellcheck disable=SC2086
   node platform/tools/staged-lint.mjs $js || exit 1
