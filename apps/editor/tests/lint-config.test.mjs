@@ -5,7 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ESLint} from 'eslint';
 
-// Repeats platform/tests/eslint-readability.test.mjs until the shared probe helper lands (ADR 0043).
+// Repeats the shared probe samples until the probe helper lands; each app now owns these assertions (ADR 0043).
 const editorRoot = fileURLToPath(new URL('..', import.meta.url));
 const productionPath = 'src/layers/roads/readability-probe.js';
 const unitTestPath = 'src/layers/roads/road-graph.test.js';

@@ -105,7 +105,7 @@ the shared probe helper against its own config. A project's config selects that 
 - With the Editor migration (#478, merged in #473) on main, the consumers are the six non-app projects, apps/editor and
   apps/core-demo. Only apps/web still uses the root file.
 
-### Outcome note: Web migration (2026-11-27)
+### Outcome note: Web migration and root retirement (2026-11-27)
 
 - Task #456 gives apps/web its own `eslint.config.mjs`. It consumes the shared exports and keeps the root config's
   globals and rules for every file Web lints: browser and vendored globals for runtime, worker globals and a script
@@ -113,8 +113,9 @@ the shared probe helper against its own config. A project's config selects that 
   modules, both mechanical rule sets and the 80-line production/tool budget. The documented exception lets long linear
   `*.test.js` scenarios exceed that budget. No existing file loses a rule.
 - `npm run lint` now runs `eslint .` from apps/web and then Web's runtime module guards. A Web-owned test lints samples
-  through that real config at nested runtime, tool, unit-test and browser-test paths, so Web proves its own patterns
-  without changing Platform's root-config probe.
-- The root `eslint.config.mjs` remains while repository-level files and the pre-commit fallback still use it. Its
-  retirement, Platform's probe move and the planner narrowing are a separate follow-up, so this change selects only
-  Web's browser suite among the apps.
+  through that real config at nested runtime, tool, unit-test and browser-test paths; it replaces Platform's root-config
+  readability probe, which is repointed to Platform's own config and the shared common rules.
+- The root `eslint.config.mjs` is deleted: no app reads it, and `check-repo` rejects a new root-level config. The
+  planner maps a change to that retired path to platform only, since the pre-commit hook and layout check own it; app
+  configs keep selecting their own verify and workflow.
+- `make ci-plan BASE=origin/main` selects a subset with docs, platform and apps-web, with no whole-plan selection.
