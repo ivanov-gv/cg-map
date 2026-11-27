@@ -36,3 +36,13 @@ image/Pages builds take map-core, data and contracts from the checked-out commit
 Automated Web tests keep reading the pins, so a package change cannot change a test without an intentional bump. The
 reason is unchanged — the dev stand previews main, while a release ships exactly what the project pins — so this needs
 no new decision record. Selecting consumer pipelines when a producer changes remains a later step of #424.
+
+## Outcome: Core Demo follows the same split (2026-11-27, #424)
+
+Core-demo takes map-core from `packages/map-core` by path in plain `build`, `dev`, ci-publish image/Pages builds, while
+`make verify`, its test targets and `make -C apps/core-demo build-release` resolve the pin in `package.json` through
+`tests/pinned-core.mjs`. Its release refuses a substituted core, data or contracts root; data and contracts keep their
+existing HEAD default outside tests and releases. Core-demo pins workspace `0.0.0-dev` because it is core's dev
+environment, so the pin and the repository path name the same core until a release is published — the explicit pin path
+still makes the release declaration checkable. Automated tests keep reading pins, and the reason is the same as for
+Editor and Web, so this needs no new decision record.
