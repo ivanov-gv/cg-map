@@ -1432,7 +1432,7 @@ test('the plan action and both plan jobs expose the same test-run outputs', () =
   }
   assert.deepEqual(
     Object.keys(action.outputs).toSorted(),
-    [...FOLDERS, 'image_matrix', ...outputNames, 'cd_test_runs', 'manual_test_runs'].toSorted()
+    [...FOLDERS, 'image_matrix', ...outputNames, 'cd_test_runs', 'manual_test_runs', 'proofs_determined'].toSorted()
   );
   const text = fs.readFileSync(path.join(workflowDir, 'ci-pr-checks.yml'), 'utf8');
   assert.match(text, /outputs: &plan-outputs/);
@@ -1450,7 +1450,8 @@ test('the planner has an output on the plan job for every folder and every test-
       'ci_test_runs',
       'cd_test_runs',
       'prove_cd_test_runs',
-      'manual_test_runs'
+      'manual_test_runs',
+      'proofs_determined'
     ])
   );
 });
@@ -2036,6 +2037,16 @@ test('ci-publish test call plans what the PR changes, not everything', () => {
   assert.equal(dispatchInput.type, 'boolean');
   assert.equal(dispatchInput.default, true, 'manual dispatch keeps the run-everything option');
 
-  const planBase = String(workflow.jobs.plan.env.PLAN_BASE);
-  assert.match(planBase, /pull_request\.base\.sha/, 'a PR test call must diff against the PR base');
+  const env = workflow.jobs.plan.env;
+  assert.equal(
+    env.PLAN_BASE_REF,
+    "${{ github.event_name == 'pull_request' && github.base_ref || '' }}",
+    'a PR test call must plan against the current base branch, not a recorded base SHA'
+  );
+  assert.equal(
+    env.PLAN_HEAD,
+    "${{ github.event.pull_request.head.sha || github.sha }}",
+    'a PR test call must plan the PR head, not the synthetic merge checkout'
+  );
+  assert.doesNotMatch(String(env.PLAN_BASE), /pull_request\.base\.sha/, 'stale PR base SHA must not be used');
 });

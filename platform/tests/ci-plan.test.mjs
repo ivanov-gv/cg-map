@@ -19,7 +19,8 @@ const OUTPUT_NAMES = [
   'ci_test_runs',
   'cd_test_runs',
   'prove_cd_test_runs',
-  'manual_test_runs'
+  'manual_test_runs',
+  'proofs_determined'
 ];
 
 // A scratch checkout lets the discovery test own its config set. Adding a real app config must not change this file.
@@ -326,13 +327,14 @@ test('the retired root lint config selects only platform tooling', () => {
 test('outputs give every folder a value and the selected test runs', () => {
   const changedFiles = ['apps/web/src/interface.js', '.github/workflows/cd-map-core.yml'];
   const lines = formatOutputs(planChanges(changedFiles), changedFiles).split('\n');
-  assert.equal(lines.length, FOLDERS.length + 6);
+  assert.equal(lines.length, FOLDERS.length + 7);
   assert.ok(lines.includes('apps-web=true'));
   assert.ok(lines.includes('docs=false'));
   assert.ok(lines.includes('cd_test_runs=["cd-map-core.yml"]'));
   assert.ok(lines.includes('prove_cd_test_runs=false'));
   assert.ok(lines.includes('ci_in_place_test_runs=[]'));
   assert.ok(lines.includes('ci_test_runs=[]'));
+  assert.ok(lines.includes('proofs_determined=true'));
   assert.deepEqual(lines.slice(FOLDERS.length).map(line => line.split('=')[0]), OUTPUT_NAMES);
 });
 
@@ -384,7 +386,8 @@ test('summary splits CI test-run calls and shows the CD proof flag', () => {
       '- CI test runs in place: ci-workflows.yml',
       '- CD proof flag: true',
       '- CD test-run dispatches: none',
-      '- Manual test runs: none'
+      '- Manual test runs: none',
+      '- Workflow proofs determined: true'
     ].join('\n')
   );
 
@@ -557,88 +560,57 @@ test('outputs: an empty CD selection is the exact [] the dispatcher compares', (
   assert.ok(lines.includes('ci_test_runs=[]'));
 });
 
-test('resolveBaseRef returns the merge base with the current base branch, not the stale recorded base', t => {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-base-ref-'));
-  t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
-  const git = (...args) =>
+test('a PR plans only its own changes against the current base branch, even when the tracking ref is stale', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-pr-head-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
     execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
-      cwd: repo,
+      cwd,
       encoding: 'utf8'
     });
-  git('init', '-q', '-b', 'main');
-  fs.mkdirSync(path.join(repo, 'docs'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'docs/readme.md'), 'base\n');
-  git('add', '.');
-  git('commit', '-qm', 'base');
-  const staleBase = git('rev-parse', 'HEAD').trim();
-  git('checkout', '-qb', 'pr');
-  fs.writeFileSync(path.join(repo, 'docs/readme.md'), 'pr change\n');
-  git('add', '.');
-  git('commit', '-qm', 'pr change');
-  git('checkout', '-q', 'main');
-  fs.mkdirSync(path.join(repo, 'services/backend/cmd/server'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'services/backend/cmd/server/main.go'), 'package main\n');
-  git('add', '.');
-  git('commit', '-qm', 'main advances');
-  const currentMain = git('rev-parse', 'HEAD').trim();
-  git('checkout', '-q', 'pr');
-  git('merge', '-qm', 'merge main', 'main');
-  const head = git('rev-parse', 'HEAD').trim();
 
-  // Make origin/main visible to resolveBaseRef's fetch.
-  git('remote', 'add', 'origin', repo);
-  git('fetch', '-q', 'origin');
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
 
-  const resolved = resolveBaseRef('main', head, {cwd: repo});
-  assert.equal(resolved, currentMain);
-  assert.notEqual(resolved, staleBase);
-});
+  git(root, 'clone', '-q', origin, local);
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
 
-test('a PR merged with main plans only its own changes when using --base-ref', t => {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-pr-merge-'));
-  t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
-  const git = (...args) =>
-    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
-      cwd: repo,
-      encoding: 'utf8'
-    });
+  // Advance the remote base branch but leave the local tracking ref stale.
+  git(origin, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(origin, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'main adds backend work');
+  const currentMain = git(origin, 'rev-parse', 'HEAD').trim();
+  const staleTracking = git(local, 'rev-parse', 'refs/remotes/origin/main').trim();
+  git(local, 'fetch', '-q', 'origin', 'refs/heads/main:refs/tmp/main');
+  git(local, 'update-ref', 'refs/remotes/origin/main', staleTracking);
+  assert.notEqual(git(local, 'rev-parse', 'refs/remotes/origin/main').trim(), currentMain);
+
+  // Merging main into the PR makes the PR head contain main's own change.
+  git(local, 'merge', '-qm', 'merge main', 'refs/tmp/main');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
   const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
-  git('init', '-q', '-b', 'main');
-  fs.mkdirSync(path.join(repo, 'docs'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'docs/readme.md'), 'base\n');
-  git('add', '.');
-  git('commit', '-qm', 'base');
-  const staleBase = git('rev-parse', 'HEAD').trim();
-
-  git('checkout', '-qb', 'pr');
-  fs.writeFileSync(path.join(repo, 'docs/readme.md'), 'pr change\n');
-  git('add', '.');
-  git('commit', '-qm', 'pr docs change');
-
-  git('checkout', '-q', 'main');
-  fs.mkdirSync(path.join(repo, 'services/backend/cmd/server'), {recursive: true});
-  fs.writeFileSync(path.join(repo, 'services/backend/cmd/server/main.go'), 'package main\n');
-  git('add', '.');
-  git('commit', '-qm', 'main adds backend work');
-
-  git('checkout', '-q', 'pr');
-  git('merge', '-qm', 'merge main', 'main');
-
-  git('remote', 'add', 'origin', repo);
-  git('fetch', '-q', 'origin');
-
-  // The stale recorded PR base includes main's newer commit and wrongly selects backend.
-  const stalePlan = execFileSync('node', [planner, '--base', staleBase], {cwd: repo, encoding: 'utf8', env: plannerEnv});
-  assert.match(stalePlan, /Folders: .*backend/);
-
-  // Planning against the current base branch's merge base keeps only the PR's own change.
-  const currentPlan = execFileSync('node', [planner, '--base-ref', 'main'], {cwd: repo, encoding: 'utf8', env: plannerEnv});
-  assert.match(currentPlan, /^Selected a subset of pipelines\.$/m, currentPlan);
-  assert.match(currentPlan, /^- Folders: docs$/m, currentPlan);
-  assert.doesNotMatch(currentPlan, /\bbackend\b/, currentPlan);
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
 });
 
-test('a base ref that cannot be resolved selects everything with a reason', t => {
+test('a base ref that cannot be resolved selects everything with a reason and unknown proofs', t => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-bad-ref-'));
   t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
   const git = (...args) =>
@@ -651,13 +623,16 @@ test('a base ref that cannot be resolved selects everything with a reason', t =>
   fs.writeFileSync(path.join(repo, 'readme.md'), 'base\n');
   git('add', '.');
   git('commit', '-qm', 'base');
+  const output = path.join(repo, 'output.txt');
 
   const result = execFileSync('node', [planner, '--base-ref', 'missing-branch'], {
     cwd: repo,
     encoding: 'utf8',
-    env: plannerEnv
+    env: {...plannerEnv, GITHUB_OUTPUT: output}
   });
   assert.match(result, /Selected everything \(base ref failed\)\./, result);
+  assert.match(result, /- Workflow proofs determined: false/m, result);
+  assert.match(fs.readFileSync(output, 'utf8'), /^proofs_determined=false$/m);
 });
 
 test('an invalid base ref is rejected before git and selects everything with a visible reason', t => {
@@ -674,8 +649,18 @@ test('an invalid base ref is rejected before git and selects everything with a v
   git('add', '.');
   git('commit', '-qm', 'base');
 
-  for (const baseRef of ['--upload-pack=evil', '../evil', 'main..other', 'name with space']) {
-    assert.throws(() => resolveBaseRef(baseRef, 'HEAD', {cwd: repo}), /invalid base ref/);
+  for (const baseRef of [
+    '--upload-pack=evil',
+    '../evil',
+    'main..other',
+    'name with space',
+    'a//b',
+    'trailing/',
+    'bad.lock',
+    'bad@{1}',
+    'bad\u0001ctrl'
+  ]) {
+    assert.throws(() => resolveBaseRef(baseRef, 'HEAD', {cwd: repo}), /invalid base ref/, baseRef);
     const result = execFileSync('node', [planner, '--base-ref', baseRef], {
       cwd: repo,
       encoding: 'utf8',
@@ -683,5 +668,49 @@ test('an invalid base ref is rejected before git and selects everything with a v
     });
     assert.match(result, /Selected everything \(base ref failed\)\./, `${baseRef}: ${result}`);
     assert.match(result, /invalid base ref/, `${baseRef}: ${result}`);
+    assert.match(result, /- Workflow proofs determined: false/m, `${baseRef}: ${result}`);
   }
+});
+
+test('a tag with the same name as the base branch does not shadow the fetched branch', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-plan-tag-shadow-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const origin = path.join(root, 'origin');
+  const local = path.join(root, 'local');
+  const git = (cwd, ...args) =>
+    execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
+      cwd,
+      encoding: 'utf8'
+    });
+
+  git(root, 'init', '-q', '-b', 'main', origin);
+  fs.mkdirSync(path.join(origin, 'docs'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'docs/readme.md'), 'base\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'base');
+
+  git(root, 'clone', '-q', origin, local);
+  git(local, 'checkout', '-qb', 'pr');
+  fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
+  git(local, 'add', '.');
+  git(local, 'commit', '-qm', 'pr docs change');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
+
+  // Advance main on origin, then create a tag named "main" at the old base commit.
+  git(origin, 'checkout', '-q', 'main');
+  fs.mkdirSync(path.join(origin, 'services/backend/cmd/server'), {recursive: true});
+  fs.writeFileSync(path.join(origin, 'services/backend/cmd/server/main.go'), 'package main\n');
+  git(origin, 'add', '.');
+  git(origin, 'commit', '-qm', 'main advances backend');
+  git(origin, 'tag', 'main', 'HEAD~1');
+
+  const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
+  const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
+    cwd: local,
+    encoding: 'utf8',
+    env: plannerEnv
+  });
+  assert.match(plan, /^Selected a subset of pipelines\.$/m, plan);
+  assert.match(plan, /^- Folders: docs$/m, plan);
+  assert.doesNotMatch(plan, /\bbackend\b/, plan);
 });

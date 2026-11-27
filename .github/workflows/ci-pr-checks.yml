@@ -97,11 +97,13 @@ jobs:
       cd_test_runs: ${{ steps.plan.outputs.cd_test_runs }}
       prove_cd_test_runs: ${{ steps.plan.outputs.prove_cd_test_runs }}
       manual_test_runs: ${{ steps.plan.outputs.manual_test_runs }}
+      proofs_determined: ${{ steps.plan.outputs.proofs_determined }}
     env: &plan-env
       PLAN_BASE: ${{ github.event.before || format('origin/{0}', github.base_ref || 'main') }}
       # A PR's recorded base SHA goes stale after merging main; merge-base with the current base branch keeps the plan
-      # scoped to the PR's own changes.
+      # scoped to the PR head's own changes, not the synthetic merge checkout.
       PLAN_BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+      PLAN_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       RUN_ALL: ${{ inputs.run_all == true || inputs.run_all == 'true' }}
     steps: &plan-steps
       - uses: actions/checkout@v7
@@ -112,6 +114,7 @@ jobs:
         with:
           base: ${{ env.PLAN_BASE }}
           base_ref: ${{ env.PLAN_BASE_REF }}
+          head: ${{ env.PLAN_HEAD }}
           run_all: ${{ env.RUN_ALL }}
   plan-test-run:
     name: (test-run) Plan
@@ -365,6 +368,7 @@ jobs:
       PLAN_RESULT: ${{ needs.plan.result }}
       PLAN_TEST_RUN_RESULT: ${{ needs.plan-test-run.result }}
       CD_TEST_RUNS: ${{ needs.plan.outputs.cd_test_runs || needs.plan-test-run.outputs.cd_test_runs || '[]' }}
+      PROOFS_DETERMINED: ${{ needs.plan.outputs.proofs_determined || needs.plan-test-run.outputs.proofs_determined || 'true' }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN_ID: ${{ github.run_id }}
@@ -384,6 +388,10 @@ jobs:
           fi
           if [ "$PLAN_RESULT" != success ] && [ "$PLAN_TEST_RUN_RESULT" != success ]; then
             echo "::error::Nothing planned this run, so nothing was checked."
+            exit 1
+          fi
+          if [ "$PROOFS_DETERMINED" != true ]; then
+            echo "::error::Changed files could not be determined, so required workflow proofs are unknown."
             exit 1
           fi
           echo "CI gate passed." | tee -a "$GITHUB_STEP_SUMMARY"
