@@ -1,6 +1,6 @@
 {
   "archive": {
-    "bytes": 23608626,
+    "bytes": 23790415,
     "encodedLayerBytes": {
       "borders": {
         "byZoomBand": {
@@ -9,6 +9,14 @@
           "9-12": 255365
         },
         "bytes": 1583122
+      },
+      "bridges": {
+        "byZoomBand": {
+          "0-8": 0,
+          "13-16": 241422,
+          "9-12": 36598
+        },
+        "bytes": 278020
       },
       "buildings": {
         "byZoomBand": {
@@ -139,9 +147,32 @@
         "bytes": 6020713
       }
     },
-    "file": "montenegro-e8882b5ea0e21c19.pmtiles",
-    "sha256": "e8882b5ea0e21c19a2f5fe23ad0fcea434db947a105e9bd6e229a0e7cdbc6ec7",
+    "file": "montenegro-7c60358ac9961a75.pmtiles",
+    "sha256": "7c60358ac9961a7534295aa1013be96170642a1967dad35e6471c00197397043",
     "tiles": 229422
+  },
+  "bridge_counts": {
+    "bridgeRoadFeatures": 689,
+    "coveredByOsm": 35,
+    "osmAreas": 12,
+    "tracedOutlines": 599,
+    "tracedRoadFeatures": 654
+  },
+  "bridge_seed": {
+    "joinDistanceMetres": 15,
+    "osmOutlineToleranceMetres": 1,
+    "outlineHalfWidthMetres": 10,
+    "referenceLatitude": 42.44,
+    "simplificationMetres": 1,
+    "sourceFile": "roads.geojson",
+    "walkingKinds": [
+      "bridleway",
+      "cycleway",
+      "footway",
+      "path",
+      "pedestrian",
+      "track"
+    ]
   },
   "building_details": {
     "addr:housenumber": 1003,
@@ -178,7 +209,7 @@
     "roof:levels": 142,
     "start_date": 1
   },
-  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline, railways and water.",
+  "coverage": "Whole-city Podgorica detail; Montenegro major roads, attractions, settlements, municipality borders, country outline, bridges, railways and water.",
   "detail_bbox": [
     19.15,
     42.37,
@@ -208,6 +239,11 @@
       "bytes": 624849,
       "features": 141,
       "sha256": "828f4be005a96e1d5217fea1ad454b5bcfa69b5755e191772cdbf3ac8d9c95bf"
+    },
+    "bridges.geojson": {
+      "bytes": 332100,
+      "features": 611,
+      "sha256": "741c857076f6bb282271e91f8e60ba92e5bdd05e3e6eef01502acaa4f18cc947"
     },
     "building-entrances.geojson": {
       "bytes": 41359,
