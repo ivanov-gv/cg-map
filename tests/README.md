@@ -5,8 +5,9 @@
   [web testing](../apps/web/AGENTS.md#testing).
 
 Component-specific tests live with their components. `make verify PKG=tests` from the root is optional for iterating;
-the pre-push hook's `make check` is required (builds and non-browser checks, no browser suites). GitHub's tests pipeline
-and `CI gate` are the merge gate. Browser tests do not establish phone GPU performance or long-term storage retention.
+the pre-push hook runs the checks selected by the pushed diff (no browser suites, `make check` on failure). GitHub's
+tests pipeline and `CI gate` are the merge gate. Browser tests do not establish phone GPU performance or long-term
+storage retention.
 
 ## Data version
 

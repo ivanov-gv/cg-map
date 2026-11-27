@@ -83,8 +83,8 @@ layers and closes stop details.
 The snapshot is data/sources/transport-stops.geojson with its own provenance JSON, source URL, count, byte size, and
 SHA-256. It is copied into the web artifact and offline shell; vehicle positions remain excluded. To refresh
 deliberately, fetch /api/gtfs/stops/all, preserve stopId/name/longitude/latitude, validate unique IDs and coordinates,
-and update provenance/date UI. GitHub's checks and browser acceptance gate the merge; the pre-push `make check` is
-required (builds and non-browser checks, no browser suites), while browser runs are optional for iterating:
+and update provenance/date UI. GitHub's checks and browser acceptance gate the merge; the pre-push hook checks the
+pushed folders, with no browser suites and `make check` as the fail-safe, while browser runs are optional for iterating:
 [the rule](../../../.github/TESTING.md). This refresh does not require rebuilding the basemap archive. Stop details do
 not imply live arrival predictions.
 

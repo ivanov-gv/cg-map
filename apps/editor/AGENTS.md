@@ -33,6 +33,6 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   `E2E_WORKERS=2 E2E_PHONE=tagged npx playwright test --list --shard=i/N` and
   `E2E_WORKERS=2 E2E_PHONE=all npx playwright test --list --shard=i/N` for every shard, matching CI's worker count.
 - This is an independent project: its Makefile, tests/e2e and ci-apps-editor pipeline are its own. Local
-  `make verify PKG=apps/editor` and `make -C apps/editor e2e` are optional for iterating; the pre-push `make check` is
-  required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect desktop and
-  phone previews through `make -C apps/editor dev` while iterating.
+  `make verify PKG=apps/editor` and `make -C apps/editor e2e` are optional for iterating; the pre-push hook runs the
+  checks selected by the pushed diff (no browser suites, `make check` on failure). GitHub's PR run gates the merge.
+  Inspect desktop and phone previews through `make -C apps/editor dev` while iterating.

@@ -26,10 +26,10 @@ Address metadata is OSM/ODbL data, not inferred or Google-derived.
 To reproduce, install data/tools/requirements.txt, then run
 `python data/tools/build-building-labels.py /path/to/reviewed/montenegro.osm.pbf`. A different source PBF requires
 explicit provenance review and an updated hash gate. GitHub's checks and browser acceptance gate the merge; the pre-push
-`make check` is required (builds and non-browser checks, no browser suites), while browser runs are optional for
-iterating: [the rule](../../.github/TESTING.md). Fresh full extraction also now retains OSM building identity, name, and
-address tags rather than discarding them. This feature does not promise unrecorded numbers or building coverage outside
-the existing detailed area.
+hook checks the pushed folders, with `make check` as the fail-safe, while browser runs are optional for iterating:
+[the rule](../../.github/TESTING.md). Fresh full extraction also now retains OSM building identity, name, and address
+tags rather than discarding them. This feature does not promise unrecorded numbers or building coverage outside the
+existing detailed area.
 
 ## OSM building source details
 
@@ -84,9 +84,9 @@ building. The producer computes it in the map's Mercator plane; validation check
 including reversed rings and courtyard walls. The arrow rotates and pitches with the map, retaining its wall alignment.
 The validator allows the existing six-decimal coordinate precision at edges. Update the label provenance's hash, bytes,
 counts and method after reviewing the source facts. GitHub's data and browser pipelines gate the merge;
-`make verify PKG=data` and `make test-e2e` are optional for iterating, while the pre-push `make check` is required
-(builds and non-browser checks, no browser suites). Changes to footprint geometry still require the geography rebuild
-described in the data runbook.
+`make verify PKG=data` and `make test-e2e` are optional for iterating, while the pre-push hook checks the pushed folders
+with `make check` as the fail-safe. Changes to footprint geometry still require the geography rebuild described in the
+data runbook.
 
 A deliberate run of `build-building-labels.py` still preserves explicitly tagged OSM entrance nodes, their house numbers
 and `ref` separately from a way's building number. It retains only unambiguous footprint associations. Address nodes

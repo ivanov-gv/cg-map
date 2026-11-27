@@ -173,9 +173,9 @@ and is marked `method: traced`. OSM areas keep `method: osm` and their OSM ident
 geometry changed. See [decision 0047](../decisions/0047-bridge-outlines-seeded-once.md). Like railways, this source is
 staged display geometry outside the pinned editor bundle until a later step defines its editor mode.
 
-The pre-push hook's root `make check` is required (builds and non-browser checks, no browser suites); `make test-e2e` is
-an optional local check for iterating. A PR merges only when its tests pass on GitHub: its PR run (`CI gate`), or a
-`workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on the branch:
+The pre-push hook runs the checks selected from the pushed refs, with no browser suites and `make check` as the
+fail-safe; `make test-e2e` is an optional local check for iterating. A PR merges only when its tests pass on GitHub: its
+PR run (`CI gate`), or a `workflow_dispatch` of the pipelines `make ci-plan BASE=origin/main` selects, on the branch:
 [the rule](../../.github/TESTING.md).
 
 ## Place-only edits
