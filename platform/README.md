@@ -17,7 +17,8 @@ Ownership: platform/reliability team.
   them. There are no agent hooks; the compliance reviewer comes from the personal agents plugin. See
   [engineering guidelines](../docs/engineering/README.md).
 - `git-hooks/`: pre-commit and pre-push backstops, enabled by `make setup`. Pre-commit rejects commits in the main
-  checkout (`tools/require-worktree.sh`).
+  checkout (`tools/require-worktree.sh`). Pre-push uses `tools/pre-push-plan.mjs` with `tools/ci-plan.mjs` to check only
+  the pushed folders, and falls back to `make check` plus Go checks if the diff or planner fails.
 - `hosting/`: Caddy examples for standalone artifact hosting.
 - `pages/`: compatibility redirects and old-worker retirement shipped with the web artifact.
 - `tests/`: HTTP transport, deployment compatibility, agent harness, git hooks, and Markdown tooling tests.

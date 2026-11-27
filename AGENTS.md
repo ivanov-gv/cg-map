@@ -34,8 +34,8 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - `make setup`: install pinned npm dependencies (Node 24; `gh` needs `read:packages`) and enable git hooks.
 - `npm run lint:md` / `npm run format:md`: check all Markdown / fix authored sources and regenerate .claude/rules.
 - `make verify PKG=<path>`: lint and test the component that owns a path; without PKG it runs everything.
-- `make check` (the pre-push hook): `verify` in every project but services/backend, no browser suites; `make check-go`
-  checks that Go module. `make check-docs`: all Markdown, repository checks, and agent rules, with no web build.
+- `make check`: full local `verify` excluding backend, no browser suites; `make check-go` checks the Go module. Pre-push
+  runs `ci-plan`-selected checks for the pushed diff (or `make check` on failure); `make check-docs` checks docs/rules.
 - `make ci-plan BASE=origin/main`: show which CI pipelines a branch selects.
 - `make lint-workflows` (required for `.github/**`), `make test-<workflow>` / `make test-all-workflows`: lint, act run.
 - `gh pr merge --auto --squash`: merge when `CI gate` passes, which `main` requires and needs an approved run.
@@ -53,7 +53,7 @@ How the harness loads rules and how to add a language: [docs/engineering/README.
 - **Before v1, break compatibility for the right structure**
   ([why](docs/decisions/0039-strong-foundation-before-v1.md)): store each fact once, link by ID, derive the rest. A
   country links to its border lines; no check stands in for that, no override or view-only field hides a wrong value.
-- **Merge only when [tests pass on GitHub](.github/TESTING.md)**; locally the pre-push `make check` is required.
+- **Merge only when [tests pass on GitHub](.github/TESTING.md)**; pre-push checks the pushed diff.
 - **No CI/CD change reaches main unproved:** [prove it on the branch](.github/TESTING.md#prove-cicd-before-main).
 - Never delete, skip, or loosen a failing test, check, or provenance record for green output. Never use `--no-verify`.
 - Never edit or commit in the main checkout (for reading and pulling main only); use `make worktree NAME=<branch>`.

@@ -137,10 +137,11 @@ for (const component of contractConsumers) {
     assert.ok(!repositoryContractsPattern.test(fs.readFileSync(file, 'utf8')), `${file}: ${pinnedContractsRule}`);
   }
 }
-const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json', 'eslint.config.mjs']);
+const rootFiles = new Set(['README.md', 'AGENTS.md', 'LICENSE', 'Makefile', 'package.json', 'package-lock.json']);
 for (const entry of fs.readdirSync('.', {withFileTypes: true})) {
   if (entry.isFile() && !entry.name.startsWith('.')) assert.ok(rootFiles.has(entry.name), `Root clutter: ${entry.name}. Put code under its owning component.`);
 }
+assert.ok(!fs.existsSync('eslint.config.mjs'), 'The root ESLint config was retired; every linting project owns its config.');
 for (const old of ['web', 'source-data', 'cmd', 'tools', 'deployment', 'go.mod', 'index.html', 'sw.js', '.pages-manifest.json']) {
   assert.ok(!fs.existsSync(old), `Obsolete layout: ${old}`);
 }

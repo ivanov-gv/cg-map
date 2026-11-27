@@ -24,6 +24,6 @@ Read [README.md](README.md), [JavaScript](../../docs/engineering/javascript.md),
   helpers keep the 80-line function budget for both `.js` and `.mjs`; Node globals cover `.mjs` tools, tests and
   journeys. Only `*.test.js` paths take the documented long-test exception.
 - This is an independent project: its Makefile, e2e and ci-apps-core-demo pipeline are its own. Local
-  `make verify PKG=apps/core-demo` and `make -C apps/core-demo e2e` are optional for iterating; the pre-push
-  `make check` is required (builds and non-browser checks, no browser suites). GitHub's PR run gates the merge. Inspect
-  desktop and phone previews through `make -C apps/core-demo dev` while iterating.
+  `make verify PKG=apps/core-demo` and `make -C apps/core-demo e2e` are optional for iterating; the pre-push hook runs
+  the checks selected by the pushed diff (no browser suites, `make check` on failure). GitHub's PR run gates the merge.
+  Inspect desktop and phone previews through `make -C apps/core-demo dev` while iterating.

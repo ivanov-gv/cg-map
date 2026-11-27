@@ -5,6 +5,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
 
 - src/ owns runtime JavaScript; public/ owns HTML/CSS/icons. Fonts and vendored bundles come from packages/map-core.
 - tools/ assembles the app with published data into dist/web; do not commit generated output.
+- This project owns `eslint.config.mjs`: `npm run lint` runs ESLint from here over source, tools, tests and the config,
+  then the runtime module guards. Its patterns and globals consume `platform/eslint-rules.mjs`;
+  tests/lint-config.test.mjs proves them through the real config.
 - tools/runtime-modules.mjs owns this app's runtime import, dynamic-import and MapLibre gesture checks, and supplies the
   module discovery shared by build.mjs and finalize.mjs. New runtime modules need no per-file list and may import any
   runtime module in src/; modules that existed on main keep their reviewed imports transitively, and every module with
@@ -48,9 +51,9 @@ Read [README.md](README.md), [architecture](../../docs/system-architecture/archi
   [focused browser commands](README.md#focused-browser-checks). npm test in this workspace builds before local web
   tests. Run `make verify` or `npm run verify` from apps/web for the same component checks.
 - Full `make -C apps/web e2e` is optional for iterating after a web/UI, offline, or release behavior change, covering
-  both deployment projects; the pre-push `make check` is required (builds and non-browser checks, no browser suites).
-  GitHub's PR run gates the merge. Install Chromium first with `npm run browser:install -- chromium` from apps/web if
-  needed.
+  both deployment projects; the pre-push hook runs the checks selected by the pushed diff (no browser suites,
+  `make check` on failure). GitHub's PR run gates the merge. Install Chromium first with
+  `npm run browser:install -- chromium` from apps/web if needed.
 - Standalone browser commands build first. Use `make -C apps/web e2e-built` only after a successful web build (as CI
   does after building the artifact); the built-artifact variant never refreshes the artifact. Browser output stays in
   test-results/ inside this component.
