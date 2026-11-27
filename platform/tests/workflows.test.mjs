@@ -1501,7 +1501,16 @@ test('PR planning forwards PR head through the plan action and ci-pr-checks wiri
   assert.ok(action.inputs.head, 'plan action must expose a head input');
   const step = action.runs.steps.find(s => s.id === 'plan');
   assert.equal(step.env.PLAN_HEAD, '${{ inputs.head }}');
-  assert.match(step.run, /--head "\$PLAN_HEAD"/, 'plan action must forward --head to ci-plan');
+  assert.match(
+    step.run,
+    /node platform\/tools\/ci-plan\.mjs --base-ref "\$PLAN_BASE_REF" --head "\$PLAN_HEAD"/,
+    'plan action must forward --head on the PR base-ref command'
+  );
+  assert.match(
+    step.run,
+    /node platform\/tools\/ci-plan\.mjs --base "\$PLAN_BASE" --head "\$PLAN_HEAD"/,
+    'plan action must forward --head on the fallback base command'
+  );
 
   const workflow = load('ci-pr-checks.yml');
   assert.equal(
@@ -2122,4 +2131,9 @@ test('ci-publish test call plans what the PR changes, not everything', () => {
     'a PR test call must plan the PR head, not the synthetic merge checkout'
   );
   assert.doesNotMatch(String(env.PLAN_BASE), /pull_request\.base\.sha/, 'stale PR base SHA must not be used');
+
+  const planStep = workflow.jobs.plan.steps.find(step => step.uses === './.github/actions/plan');
+  assert.equal(planStep.with.base, '${{ env.PLAN_BASE }}');
+  assert.equal(planStep.with.base_ref, '${{ env.PLAN_BASE_REF }}');
+  assert.equal(planStep.with.head, '${{ env.PLAN_HEAD }}', 'publish plan must forward PR head to the planner');
 });

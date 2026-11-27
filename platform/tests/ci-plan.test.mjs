@@ -739,7 +739,6 @@ test('a tag with the same name as the base branch does not shadow the fetched br
   fs.writeFileSync(path.join(local, 'docs/readme.md'), 'pr change\n');
   git(local, 'add', '.');
   git(local, 'commit', '-qm', 'pr docs change');
-  const prHead = git(local, 'rev-parse', 'HEAD').trim();
 
   // Advance main on origin, then create a tag named "main" at the old base commit.
   git(origin, 'checkout', '-q', 'main');
@@ -747,7 +746,13 @@ test('a tag with the same name as the base branch does not shadow the fetched br
   fs.writeFileSync(path.join(origin, 'services/backend/cmd/server/main.go'), 'package main\n');
   git(origin, 'add', '.');
   git(origin, 'commit', '-qm', 'main advances backend');
-  git(origin, 'tag', 'main', 'HEAD~1');
+  const oldBase = git(origin, 'rev-parse', 'HEAD~1').trim();
+  git(origin, 'tag', 'main', oldBase);
+
+  // Merge the advanced main into the PR so the branch and tag would produce different selections.
+  git(local, 'fetch', '-q', 'origin', 'refs/heads/main:refs/tmp/main');
+  git(local, 'merge', '-qm', 'merge main', 'refs/tmp/main');
+  const prHead = git(local, 'rev-parse', 'HEAD').trim();
 
   const planner = path.join(repoRoot, 'platform/tools/ci-plan.mjs');
   const plan = execFileSync('node', [planner, '--base-ref', 'main', '--head', prHead], {
