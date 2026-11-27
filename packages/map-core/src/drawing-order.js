@@ -15,6 +15,8 @@ export const drawingGroups = [
   'meadows',
   'contour-lines',
   'bridges',
+  // Tracks cover land use and bridge decks, but roads crossing a track cover it; names stay with the labels.
+  'railways',
   'streets',
   'trails',
   'main-routes',

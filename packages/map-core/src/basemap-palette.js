@@ -25,6 +25,11 @@ export const basemapColors = {
   // Neutral grey deck surface, kept distinct from the warm building fill and from water and ground.
   bridgeDeck: '#c9c9c6',
   bridgeDeckEdge: '#4e463c',
+  // Soft greys near land and minor-road casings keep tracks visible without competing with streets or labels.
+  railwayTrack: '#b0ada4',
+  railwayTie: '#e6e4db',
+  railwayPlatform: '#e2e1da',
+  railwaySymbol: '#454d4c',
   building: '#d9d0c9',
   buildingOutline: '#c7bcb1',
   majorStreet: '#e8c27c',
