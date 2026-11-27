@@ -79,3 +79,48 @@ test('coastline lines are not styled as waterways', () => {
     ['!=', ['get', 'kind'], 'coastline']
   ]);
 });
+
+// One outline carries every road of a crossing, so the deck must not come back as a widened road stroke.
+test('one bridge outline draws a grey deck fill with a dark edge from the bridges layer', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const deck = style.layers.find(layer => layer.id === 'bridge-decks');
+  const edge = style.layers.find(layer => layer.id === 'bridge-deck-edges');
+  assert.ok(deck, 'bridge-decks is missing');
+  assert.ok(edge, 'bridge-deck-edges is missing');
+  assert.equal(deck.type, 'fill');
+  assert.equal(edge.type, 'line');
+  assert.equal(deck.source, 'basemap');
+  assert.equal(edge.source, 'basemap');
+  assert.equal(deck['source-layer'], 'bridges');
+  assert.equal(edge['source-layer'], 'bridges');
+  assert.equal(deck.paint['fill-color'], basemapColors.bridgeDeck);
+  assert.equal(edge.paint['line-color'], basemapColors.bridgeDeckEdge);
+  assert.ok(edge.paint['line-width'] > 0);
+});
+
+test('bridge decks sit above ground and water but below every road', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const positionOf = id => style.layers.findIndex(layer => layer.id === id);
+  const deck = positionOf('bridge-decks');
+  const edge = positionOf('bridge-deck-edges');
+  const belowDeck = ['land', 'canyon-rims', 'water', 'buildings'].map(positionOf);
+  const roads = [
+    'road-casing', 'minor-casing', 'minor-roads', 'pedestrian-streets', 'major-roads',
+    'paths', 'footways', 'park-routes', 'cycleways', 'steps'
+  ].map(positionOf);
+  assert.ok(deck >= 0 && edge > deck, `deck ${deck}, edge ${edge}`);
+  for (const index of belowDeck) assert.ok(index >= 0 && index < deck, `layer ${index} is not below the deck`);
+  for (const index of roads) assert.ok(index > edge, `road ${index} is not above the deck`);
+  assert.ok(drawingGroups.indexOf('bridges') < drawingGroups.indexOf('streets'));
+});
+
+test('bridge drawing uses outlines instead of bridge-tagged roads', () => {
+  const style = mapStyle('pmtiles://archive', 'https://local.test/');
+  const bridgeGroup = style.layers
+    .filter(layer => layer.metadata?.[drawingGroupKey] === 'bridges')
+    .map(layer => layer.id);
+  assert.deepEqual(bridgeGroup, ['bridge-decks', 'bridge-deck-edges']);
+  for (const layer of style.layers) {
+    assert.ok(!JSON.stringify(layer.filter ?? []).includes('"bridge"'), `${layer.id} still selects bridge roads`);
+  }
+});
