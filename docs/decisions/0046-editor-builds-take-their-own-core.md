@@ -57,3 +57,12 @@ site and `tools/serve.py` only serves an existing artifact. Platform has no rele
 pins `@ivanov-gv/map-data` and `@ivanov-gv/map-contracts`, so tests resolve installed packages outside repository
 sources. No code change is needed here; selecting consumer pipelines when a producer changes remains a separate step of
 issue 424.
+
+## Outcome: Data has no consumer package to split (2026-11-27, #424)
+
+data reads only shared contracts, through the producer-validation exception in
+[ADR 0021](0021-shared-contracts-as-a-versioned-package.md): `make -C data check`, the importer targets and data's tests
+use this commit's `packages/contracts`, while packaged tools take the contracts directory from their caller. It resolves
+no map-core, map-data or built web artifact in dev, CI, tests or release; `cd-map-data` promotes the package built from
+that same commit without rebuilding. There is no consumer pin for a data release or test to substitute, so data already
+follows the rule without a code change.
