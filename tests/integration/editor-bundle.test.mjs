@@ -4,13 +4,15 @@ import {existsSync} from 'node:fs';
 import {copyFile, mkdtemp, rm, readFile, readdir, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {dataSourceDirectory, dataSourceURL, dataToolURL} from '../data-root.mjs';
 import {contractURL, readContractJSON} from '../contracts-root.mjs';
 import {
   bundleFilesByVersion,
   sourceFiles,
   validateBundleManifest,
-  decodeSource
+  decodeSource,
+  loadSourceBundle
 } from '../../apps/editor/src/source-data/source-bundle.js';
 import {collectionOf} from '../../apps/editor/src/source-data/source-records.js';
 
@@ -19,10 +21,33 @@ const editorBundleContractURL = contractURL('editor-bundle.schema.json');
 // What the producer of this commit writes. The editor can read it, and may already read a later one.
 const producedVersion = readContractJSON('editor-bundle.schema.json').oneOf.at(-1).properties.version.const;
 
-// Real producer/consumer integration proves that revision-bound indices refer to unchanged source bytes.
+// Serve a produced directory to the unmodified reader without a running server.
+async function bundleFileRequest(directory, url) {
+  const filename = path.basename(new URL(url).pathname);
+  const bytes = await readFile(path.join(directory, filename));
+  return {
+    ok: true,
+    status: 200,
+    json: async () => JSON.parse(bytes.toString('utf8')),
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  };
+}
+
+// The pending version changes the contract, not the bundle the current producer writes. Real producer/consumer
+// integration proves that the reader still loads every revision-bound source unchanged.
 test('reviewed source bundle round trips byte-for-byte through the editor consumer', async t => {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'cg-map-editor-bundle-'));
   t.after(() => rm(outputDirectory, {recursive: true, force: true}));
+  const schema = readContractJSON('editor-bundle.schema.json');
+  const version3Files = schema.oneOf
+    .find(branch => branch.properties.version.const === 3)
+    .properties.layers.items.properties.filename.enum;
+  const version4 = schema.oneOf.find(branch => branch.properties.version.const === 4);
+  assert.ok(version4, 'the contract declares version 4');
+  const version4Files = version4.properties.layers.items.properties.filename.enum;
+  assert.deepEqual(version4Files, [...version3Files, 'bridges.geojson'].sort());
+  assert.equal(producedVersion, 3);
+
   const manifest = validateBundleManifest(
     await writeEditorBundle(dataSourceDirectory, outputDirectory, editorBundleContractURL)
   );
@@ -31,11 +56,16 @@ test('reviewed source bundle round trips byte-for-byte through the editor consum
     manifest.layers.map(layer => layer.filename),
     bundleFilesByVersion[producedVersion]
   );
+  const sources = await loadSourceBundle(
+    pathToFileURL(outputDirectory + path.sep),
+    url => bundleFileRequest(outputDirectory, url)
+  );
+  assert.equal(sources.size, manifest.layers.length);
   for (const metadata of manifest.layers) {
     const original = await readFile(dataSourceURL(metadata.filename));
     const bundled = await readFile(path.join(outputDirectory, metadata.filename));
     assert.deepEqual(bundled, original);
-    const decoded = await decodeSource(bundled, metadata);
+    const decoded = sources.get(metadata.filename).collection;
     assert.equal(decoded.features.length, metadata.featureCount);
     assert.deepEqual(decoded, collectionOf(metadata.filename, JSON.parse(original)));
   }
